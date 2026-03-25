@@ -35,6 +35,7 @@
         loadReciters();
         loadProcessed();
         loadRequests();
+        loadGuide();
     }
 
     // ── Reciter dropdown ────────────────────────────────────────────
@@ -230,6 +231,61 @@
             submitBtn.disabled = false;
             submitBtn.textContent = 'Submit Request';
         }
+    }
+
+    // ── Guide ────────────────────────────────────────────────────────
+    async function loadGuide() {
+        const el = document.getElementById('req-guide-content');
+        if (!el) return;
+        try {
+            const resp = await fetch(SPACE_URL + '/api/guide', {
+                signal: AbortSignal.timeout(60000),
+            });
+            const data = await resp.json();
+            el.innerHTML = simpleMarkdown(data.markdown || '');
+        } catch (e) {
+            el.innerHTML = '<p style="color:#888">Failed to load guide</p>';
+        }
+    }
+
+    function simpleMarkdown(md) {
+        // Strip the top-level title (rendered by the details/summary)
+        md = md.replace(/^#\s+.+\n+/, '');
+        return md
+            // Code blocks
+            .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+            // Inline code
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            // Tables
+            .replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)*)/gm, (_, hdr, _sep, body) => {
+                const heads = hdr.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`);
+                const rows = body.trim().split('\n').map(row => {
+                    const cells = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`);
+                    return `<tr>${cells.join('')}</tr>`;
+                });
+                return `<table class="req-table"><thead><tr>${heads.join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+            })
+            // Headers
+            .replace(/^####\s+(.+)$/gm, '<h6>$1</h6>')
+            .replace(/^###\s+(.+)$/gm, '<h5>$1</h5>')
+            .replace(/^##\s+(.+)$/gm, '<h4>$1</h4>')
+            // Bold and italic
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            // Links
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+            // Unordered lists
+            .replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>')
+            .replace(/((?:<li>.+<\/li>\n?)+)/g, '<ul>$1</ul>')
+            // Ordered lists
+            .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>')
+            // Paragraphs (double newlines)
+            .replace(/\n{2,}/g, '</p><p>')
+            .replace(/^/, '<p>')
+            .replace(/$/, '</p>')
+            // Clean up empty paragraphs around block elements
+            .replace(/<p>\s*(<h[4-6]|<ul|<pre|<table)/g, '$1')
+            .replace(/(<\/h[4-6]>|<\/ul>|<\/pre>|<\/table>)\s*<\/p>/g, '$1');
     }
 
     // ── Helpers ─────────────────────────────────────────────────────

@@ -1634,6 +1634,53 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 }
 .req-link:hover { text-decoration: underline; }
 
+/* Guide section */
+.req-guide-section {
+    background: #16213e;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.req-guide-section[open] { border-color: #3a3a5a; }
+
+.req-guide-section > summary {
+    padding: 12px 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #4cc9f0;
+    font-weight: 600;
+    user-select: none;
+    list-style: none;
+}
+
+.req-guide-section > summary::before {
+    content: '\25B6';
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 0.65rem;
+    transition: transform 0.15s;
+}
+
+.req-guide-section[open] > summary::before { transform: rotate(90deg); }
+
+#req-guide-content {
+    padding: 4px 24px 20px;
+    color: #ccc;
+    font-size: 0.85rem;
+    line-height: 1.7;
+}
+
+#req-guide-content h4 { color: #4cc9f0; margin: 18px 0 8px; }
+#req-guide-content h5 { color: #8ab4f8; margin: 14px 0 6px; }
+#req-guide-content h6 { color: #aaa; margin: 10px 0 4px; }
+#req-guide-content a { color: #4cc9f0; }
+#req-guide-content code { background: #0f0f23; padding: 1px 5px; border-radius: 3px; font-size: 0.85em; }
+#req-guide-content pre { background: #0f0f23; padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
+#req-guide-content pre code { padding: 0; background: none; }
+#req-guide-content ul { padding-left: 20px; }
+#req-guide-content li { margin-bottom: 4px; }
+
 /* ============ Audio tab ============ */
 #aud-player {
     width: 500px;
