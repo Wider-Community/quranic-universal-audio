@@ -72,7 +72,6 @@ Subset (config) is the riwayah, split is the reciter.
 | Column | Type | Description |
 |--------|------|-------------|
 | `audio` | `Audio` | Verse audio clip, trimmed to speech boundaries |
-| `reciter` | `string` | Reciter identifier |
 | `surah` | `int32` | Surah number (1-114) |
 | `ayah` | `int32` | Verse number within surah |
 | `text` | `string` | Arabic text of the verse from alignment |

@@ -130,7 +130,6 @@ def build_rows(ts_full, detailed_by_ref, segments, surah_info):
                     ])
 
             rows.append({
-                "reciter": RECITER,
                 "surah": int(surah_num),
                 "ayah": ayah,
                 "text": text,
@@ -193,7 +192,6 @@ def main():
     # Build dataset dict (skip failed downloads)
     data = {
         "audio": [],
-        "reciter": [],
         "surah": [],
         "ayah": [],
         "text": [],
@@ -210,7 +208,6 @@ def main():
             "bytes": audio_bytes_list[i],
             "path": f"{row['surah']:03d}{row['ayah']:03d}.mp3",
         })
-        data["reciter"].append(row["reciter"])
         data["surah"].append(row["surah"])
         data["ayah"].append(row["ayah"])
         data["text"].append(row["text"])
@@ -223,7 +220,6 @@ def main():
     log.info("Creating dataset with %d rows...", len(data["audio"]))
     features = Features({
         "audio": Audio(),
-        "reciter": Value("string"),
         "surah": Value("int32"),
         "ayah": Value("int32"),
         "text": Value("string"),
