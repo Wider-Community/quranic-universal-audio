@@ -14,6 +14,7 @@
                 <button class="tab-btn active" data-tab="timestamps">Timestamps</button>
                 <button class="tab-btn" data-tab="segments">Segments</button>
                 <button class="tab-btn" data-tab="audio">Audio</button>
+                <button class="tab-btn" data-tab="requests">Requests</button>
             </div>
         </header>
 
@@ -247,6 +248,52 @@
             </div>
         </div>
 
+        <!-- ============ Requests Tab ============ -->
+        <div id="requests-panel" hidden>
+            <div class="info-bar">
+                <h3 style="color:#4cc9f0; margin:0;">Reciter Segmentation Requests</h3>
+            </div>
+
+            <div class="req-layout">
+                <!-- Request Form -->
+                <div class="req-form-section">
+                    <h4>Submit New Request</h4>
+                    <div class="req-form">
+                        <label>Reciter:
+                            <select id="req-reciter-select"><option value="">Loading...</option></select>
+                        </label>
+                        <label>Min Silence (ms):
+                            <input type="number" id="req-min-silence" value="500" min="100" max="2000" step="50">
+                        </label>
+                        <label>Your Name:
+                            <input type="text" id="req-name" placeholder="Enter your name">
+                        </label>
+                        <label>Your Email:
+                            <input type="email" id="req-email" placeholder="For notification when complete">
+                        </label>
+                        <label>Notes (optional):
+                            <textarea id="req-notes" rows="2" placeholder="Any notes about this reciter"></textarea>
+                        </label>
+                        <button id="req-submit-btn" class="btn btn-save">Submit Request</button>
+                        <div id="req-submit-status" hidden></div>
+                    </div>
+                </div>
+
+                <!-- Reference: Completed Reciters -->
+                <div class="req-reference-section">
+                    <h4>Parameter Reference</h4>
+                    <p class="req-hint">VAD parameters used for already-processed reciters. Use as a guide.</p>
+                    <div id="req-processed-table"></div>
+                </div>
+            </div>
+
+            <!-- Status Dashboard -->
+            <div class="req-status-section">
+                <h4>Request Pipeline Status</h4>
+                <div id="req-status-table">Loading...</div>
+            </div>
+        </div>
+
         <footer></footer>
     </div>
 
@@ -255,5 +302,6 @@
     <script src="/static/app.js"></script>
     <script src="/static/segments.js"></script>
     <script src="/static/audio.js"></script>
+    <script src="/static/requests.js"></script>
 </body>
 </html>

@@ -30,6 +30,7 @@ from config import (
     ANIM_WORD_SPACING, ANIM_LINE_HEIGHT, ANIM_FONT_SIZE,
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
     SEG_FONT_SIZE, SEG_WORD_SPACING,
+    REQUEST_SPACE_URL,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -1803,6 +1804,16 @@ def get_audio_surahs(category, source, slug):
     surahs.pop("_meta", None)
     _AUDIO_URL_CACHE[key] = surahs
     return jsonify({"surahs": surahs})
+
+
+# ---------------------------------------------------------------------------
+# Requests tab
+# ---------------------------------------------------------------------------
+
+@app.route("/api/req/config")
+def req_config():
+    """Return request space configuration for the Requests tab."""
+    return jsonify({"space_url": REQUEST_SPACE_URL})
 
 
 # ---------------------------------------------------------------------------
