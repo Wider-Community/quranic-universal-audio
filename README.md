@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/d6bffa29-5e71-492b-b0ec-b6a34c19a693
 
 | Component | Description |
 |-----------|-------------|
-| [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps |
+| [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
 | [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](quran_multi_aligner/docs/client_api.md) |
 | [`mfa_aligner/`](mfa_aligner/) | MFA forced alignment service for timestamps computation |
 | [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
