@@ -22,7 +22,7 @@
 - **Word-highlighted recitation** — Accurate word and letter timestamps for highlighting in Qur'an apps, learning tools, and educational platforms.
 - **Generate EveryAyah style audio from surah recordings** — Extract per-ayah audio clips from full-surah recordings, producing verse-by-verse files for any reciter even when only surah-level audio exists.
 - **Tajweed timing analysis** — Subword-level timestamps let you measure durations of tajweed rules (e.g. madd and ghunnah lengths) across expert reciters.
-- **Unified multi-reciter audio access** — Browse and access audio from hundreds of reciters across multiple sources through a single unified format with consistent schemas.
+- **Unified multi-reciter audio access** — Browse and access audio from hundreds of reciters across multiple sources through a single unified format with consistent JSON schemas.
 
 ## Components
 
@@ -58,7 +58,7 @@ See the [detailed comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md)
 
 If you're just here for the audio, timestamps or segment data, you can access them as follows:
 
-1. **Direct download** — JSON files in [`data/`](data/) ([format documentation](data/README.md)), or packaged in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
+1. **Direct download** — JSON files in [`data/`](data/), or packaged in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
 2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/Wider-hetchyy/quranic-universal-audio)
 3. **QUD API** — *(coming soon)*
 
