@@ -69,27 +69,63 @@ If the reciter you want is not in the dropdown, their audio manifest hasn't been
 
 ## Step 3: Review segments in the Inspector
 
-Once the segments are extracted, you'll receive an email notification. The segments will be available in the Inspector for review.
+Once the segments are extracted, you'll receive an email notification with a link to a **draft pull request**. Each reciter gets its own PR so you can review and fix independently. The PR stays in draft while you're editing — mark it ready when you're done.
 
-1. Pull the latest changes from the repository
-2. Run the inspector and edit segments. See the [inspector README](../inspector/README.md) for setup instructions, video guides, and detailed documentation on the editing tools.
+### Claim the PR
+
+Assign yourself to the PR so others know you're working on it and avoid duplicate edits:
+
+```bash
+gh pr edit <PR_NUMBER> --add-assignee @me
+```
+
+Or click **"assign yourself"** on the PR page in GitHub.
+
+### Checkout the PR branch
+
+```bash
+# Fetch and checkout the PR branch (easiest method)
+gh pr checkout <PR_NUMBER>
+
+# Or manually:
+git fetch origin feat/add-segments-<reciter_slug>
+git checkout feat/add-segments-<reciter_slug>
+```
+
+### Run the Inspector
+
+```bash
+python inspector/server.py
+```
+
+Open http://localhost:5000, go to the **Segments** tab, select the reciter, and work through the validation issues. See the [inspector README](../inspector/README.md) for setup instructions, video guides, and detailed documentation on the editing tools.
+
+### Push fixes to the PR
+
+All your corrections go directly on the PR branch — no need to open a separate PR:
+
+```bash
+git add data/recitation_segments/<reciter>/segments.json data/recitation_segments/<reciter>/detailed.json
+git commit -m "fix: correct segmentation errors for <reciter>"
+git push
+```
+
+You can push multiple rounds of fixes. The PR stays open until you're satisfied with the quality.
 
 ### Optional: Re-align with different parameters
 
-After reviewing the segments in the Inspector, you may find that the number of issues is very high — for example, widespread over-segmentation or under-segmentation across many chapters. In this case, it may be more efficient to re-run the pipeline with a different min silence value rather than manually fixing hundreds of segments.
+After reviewing the segments, you may find that the number of issues is very high — for example, widespread over-segmentation or under-segmentation across many chapters. In this case, it may be more efficient to re-run the pipeline with a different min silence value rather than manually fixing hundreds of segments.
 
 To do this, submit a new request for the same reciter using **"Re-align"** as the request type, with an adjusted min silence value. The previous segments will be replaced with the new run.
 
-## Step 4: Submit a pull request
+## Step 4: Mark ready and merge
 
-Once you've reviewed and fixed the segments:
+Once you're satisfied with the segment quality:
 
-1. Commit the updated segment files:
+1. Mark the draft PR as ready for review — either click **"Ready for review"** on the PR page in GitHub, or run:
    ```bash
-   git add data/recitation_segments/<reciter>/segments.json data/recitation_segments/<reciter>/detailed.json
-   git commit -m "fix: correct segmentation errors for <reciter>"
+   gh pr ready
    ```
-2. Push and open a pull request against `main`
-3. The PR will be reviewed and merged
-4. After merging, the timestamp extraction pipeline will run automatically
-5. You will be notified by email once the timestamps are complete and the data is published
+2. The PR will be reviewed and merged
+3. After merging, the timestamp extraction pipeline will run automatically
+4. You will be notified by email once the timestamps are complete and the data is published

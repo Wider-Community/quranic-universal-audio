@@ -4,23 +4,38 @@ Thank you for your interest in contributing to Qur'anic Universal Audio. This is
 
 ## Getting started
 
-1. **Fork** the repository on GitHub
-2. **Clone** your fork locally:
+### For segment review (most common)
+
+When segments are extracted for a reciter, a **draft PR** is opened automatically. To review and fix:
+
+1. **Clone** the repository:
    ```bash
-   git clone https://github.com/<your-username>/quranic-universal-audio.git
+   git clone https://github.com/Wider-Community/quranic-universal-audio.git
    cd quranic-universal-audio
    ```
-3. Make your changes (see below for what you can contribute)
-4. **Commit** the updated JSON files:
+2. **Assign yourself** to the PR so others know you're working on it:
+   ```bash
+   gh pr edit <PR_NUMBER> --add-assignee @me
+   ```
+3. **Checkout the PR branch**:
+   ```bash
+   gh pr checkout <PR_NUMBER>
+   ```
+4. **Run the Inspector** and fix segments:
+   ```bash
+   python inspector/server.py
+   ```
+5. **Commit and push** your corrections directly to the PR branch:
    ```bash
    git add data/recitation_segments/<reciter>/segments.json data/recitation_segments/<reciter>/detailed.json
    git commit -m "fix: correct segmentation errors for <reciter>"
+   git push
    ```
-5. **Push** and open a pull request:
-   ```bash
-   git push origin main
-   ```
-   Then open a PR against `main` on the [upstream repository](https://github.com/Wider-Community/quranic-universal-audio/pulls).
+
+### For other contributions
+
+1. **Fork** the repository on GitHub
+2. **Clone** your fork, make changes, and open a PR against `main` on the [upstream repository](https://github.com/Wider-Community/quranic-universal-audio/pulls)
 
 ## Ways to contribute
 
@@ -44,11 +59,13 @@ The most impactful contribution is reviewing alignment results and fixing errors
 
 **Workflow:**
 
-1. Set up and run the inspector — see the [inspector README](inspector/README.md) for setup instructions and video guides on editing segments
-2. Select a reciter and review the validation panel for flagged issues
-3. Fix errors using the editing tools (adjust boundaries, split, merge, re-reference)
-4. Validation re-runs automatically after each save — keep going until all errors and warnings are resolved
-5. Submit a PR with the updated JSON files
+1. Checkout the reciter's PR branch: `gh pr checkout <PR_NUMBER>`
+2. Run the inspector: `python inspector/server.py` — see the [inspector README](inspector/README.md) for setup instructions and video guides
+3. Select the reciter and review the validation panel for flagged issues
+4. Fix errors using the editing tools (adjust boundaries, split, merge, re-reference)
+5. Validation re-runs automatically after each save — keep going until all errors and warnings are resolved
+6. Commit and push your fixes directly to the PR branch
+7. When done, mark the PR as ready — click **"Ready for review"** on GitHub or run `gh pr ready`
 
 ### Report issues
 
