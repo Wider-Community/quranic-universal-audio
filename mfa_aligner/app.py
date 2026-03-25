@@ -1,6 +1,7 @@
 """
 MFA Aligner — Gradio app for Montreal Forced Aligner on Quranic recitation audio.
 Copyright 2026 Wider Community. Licensed under Apache 2.0.
+See LICENSE in the repository root.
 """
 
 import json
