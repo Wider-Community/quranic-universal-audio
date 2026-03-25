@@ -17,6 +17,14 @@ jobs/
 extract_segments.py
 extract_timestamps.py
 
+# Summary-level validation logs (reciter-specific ones are kept)
+data/recitation_segments/validation.log
+data/timestamps/by_ayah_audio/validation.log
+data/timestamps/by_surah_audio/validation.log
+
+# Large files
+data/timestamps/**/timestamps_full.json
+
 # Large binaries tracked in HF Spaces but not in parent repo
 mfa_aligner/quran_aligner_model.zip
 quran_multi_aligner/data/*.pkl
