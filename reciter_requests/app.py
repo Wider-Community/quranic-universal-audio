@@ -350,7 +350,8 @@ REQUEST_TYPES = ["New reciter", "Re-align"]
 def submit_request(
     reciter_slug, reciter_name, audio_source,
     request_type, riwayah, min_silence_ms,
-    requester_name, requester_email, notes
+    requester_name, requester_email, notes,
+    github_username="",
 ):
     """Create GitHub Issue + Notion row for a new reciter request."""
     # Validate
@@ -406,6 +407,8 @@ def submit_request(
         f"**Suggested Min Silence:** {min_silence_ms}ms\n"
         f"**Requester:** {requester_id}\n"
     )
+    if github_username and github_username.strip():
+        issue_body += f"**GitHub:** @{github_username.strip().lstrip('@')}\n"
     if notes and notes.strip():
         issue_body += f"**Notes:** {notes.strip()}\n"
 
@@ -438,6 +441,8 @@ def submit_request(
             "Audio Source": {"rich_text": [{"text": {"content": audio_source}}]},
             "Request Type": {"select": {"name": request_type}},
             "Riwayah": {"rich_text": [{"text": {"content": riwayah}}]},
+            "Min Silence": {"number": min_silence_ms},
+            "GitHub Username": {"rich_text": [{"text": {"content": (github_username or "").strip().lstrip("@")[:100]}}]},
             "Status": {"select": {"name": "Pending"}},
             "GitHub Issue": {"url": issue_url},
             "Issue Number": {"number": issue_number},
@@ -528,7 +533,7 @@ def get_processed_markdown():
     return "\n".join(lines)
 
 
-def handle_submit(reciter_json, request_type, riwayah, min_silence, name, email, notes):
+def handle_submit(reciter_json, request_type, riwayah, min_silence, name, email, github_username, notes):
     """Handle form submission from Gradio UI."""
     if not reciter_json:
         return "Error: Please select a reciter."
@@ -548,6 +553,7 @@ def handle_submit(reciter_json, request_type, riwayah, min_silence, name, email,
         requester_name=name,
         requester_email=email,
         notes=notes,
+        github_username=github_username,
     )
 
 
@@ -629,6 +635,10 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         placeholder="For notification when processing is complete",
                         type="email",
                     )
+                    req_github = gr.Textbox(
+                        label="GitHub Username (optional)",
+                        placeholder="For write access to the review PR",
+                    )
                     req_notes = gr.Textbox(
                         label="Notes (optional)",
                         placeholder="Any additional notes about this reciter",
@@ -660,7 +670,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
             submit_btn.click(
                 fn=handle_submit,
                 inputs=[reciter_dd, request_type_dd, riwayah_dd,
-                        min_silence, req_name, req_email, req_notes],
+                        min_silence, req_name, req_email, req_github, req_notes],
                 outputs=result_box,
             )
 
@@ -721,6 +731,7 @@ async def api_request(request: Request):
         requester_name=req.get("requester_name", ""),
         requester_email=req.get("requester_email", ""),
         notes=req.get("notes", ""),
+        github_username=req.get("github_username", ""),
     )
 
     if result.startswith("Error:"):

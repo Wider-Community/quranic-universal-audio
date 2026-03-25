@@ -10,6 +10,7 @@
     const minSilenceInput = document.getElementById('req-min-silence');
     const nameInput = document.getElementById('req-name');
     const emailInput = document.getElementById('req-email');
+    const githubInput = document.getElementById('req-github');
     const notesInput = document.getElementById('req-notes');
     const submitBtn = document.getElementById('req-submit-btn');
     const submitStatus = document.getElementById('req-submit-status');
@@ -233,6 +234,7 @@
                     min_silence_ms: parseInt(minSilenceInput.value) || 500,
                     requester_name: name,
                     requester_email: email,
+                    github_username: githubInput.value.trim(),
                     notes: notesInput.value.trim(),
                 }),
                 signal: AbortSignal.timeout(60000),
