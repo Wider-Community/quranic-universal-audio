@@ -6,10 +6,13 @@ Full list of available reciters. Generated from `scripts/list_reciters.py`.
 
 Reciters that have been through the alignment and timestamp pipelines.
 
-| Reciter | Coverage | Segmented | Timestamped | Manually Validated |
-|---------|----------|-----------|-------------|--------------------|
-| Minshawy Murattal | 114 surahs, 6236 ayahs | Y | Y | Y |
-| Minshawy Mujawwad | 114 surahs, 6236 ayahs | Y | Y | - |
+Timestamps column: `✓✓` = words + letters/phonemes, `✓` = words only.
+
+
+| Reciter | Coverage | Segmented | Manually Validated | Timestamped |
+|---------|----------|:---------:|:------------------:|:-----------:|
+| Minshawy Murattal | 114 surahs, 6236 ayahs | ✓ | ✓ | ✓✓ |
+| Minshawy Mujawwad | 114 surahs, 6236 ayahs | ✓ | ✗ | ✗ |
 
 ---
 
