@@ -1,7 +1,7 @@
 # Qur'anic Universal Audio
 
 [![Demo - Quran Multi-Aligner](https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow)](https://huggingface.co/spaces/hetchyy/Quran-multi-aligner)
-[![Dataset - Qur'anic Universal Ayahs](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Quranic%20Universal%20Ayahs-blue)](https://huggingface.co/datasets/Wider-hetchyy/quranic-universal-audio)
+[![Dataset - Qur'anic Universal Ayahs](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Quranic%20Universal%20Ayahs-blue)](https://huggingface.co/datasets/hetchyy/quranic-universal-audio)
 [![Reciters](https://img.shields.io/badge/Reciters-205-green)](data/audio/by_surah/qul/)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab)](https://www.python.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange)](LICENSE)
@@ -9,9 +9,9 @@
 
 A large-scale database of Qur'an recitation audio with precise word-level and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the known Qur'anic text.
 
-```mermaid
-graph LR
-    A[Audio] --> B[Silence Detection] --> C[Phoneme ASR] --> D[Text Alignment] --> E[Forced Alignment] --> F[Timestamps]
+```
+Audio → Silence Detection → Phoneme Speech Recognition ↴
+Word/Letter/Phoneme Timestamps ← Forced Alignment on Pause Segments ← Qur'an Text Alignment
 ```
 
 **205 reciters available, 2 fully processed so far**.
