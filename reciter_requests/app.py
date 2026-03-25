@@ -305,9 +305,25 @@ def fetch_request_issues():
 # ---------------------------------------------------------------------------
 # Submit request
 # ---------------------------------------------------------------------------
+RIWAYAT = [
+    "Hafs an Asim",
+    "Warsh an Nafi",
+    "Qalun an Nafi",
+    "Al-Duri an Abu Amr",
+    "Shubah an Asim",
+    "Ibn Amir ad-Dimashqi",
+    "Al-Kisai",
+    "Abu Amr al-Basri",
+    "Nafi al-Madani",
+    "Ibn Kathir al-Makki",
+]
+
+REQUEST_TYPES = ["New reciter", "Re-align"]
+
+
 def submit_request(
     reciter_slug, reciter_name, audio_source,
-    min_silence_ms,
+    request_type, riwayah, min_silence_ms,
     requester_name, requester_email, notes
 ):
     """Create GitHub Issue + Notion row for a new reciter request."""
@@ -318,37 +334,49 @@ def submit_request(
         return "Error: Please enter your name."
     if not requester_email or "@" not in requester_email:
         return "Error: Please enter a valid email address."
+    if not request_type:
+        return "Error: Please select a request type."
+    if not riwayah:
+        return "Error: Please select a riwayah."
 
     min_silence_ms = int(min_silence_ms or 500)
+    request_type = request_type or "New reciter"
+    riwayah = riwayah or "Hafs an Asim"
 
-    # Check for duplicate
-    try:
-        issues = _gh_get("issues", params={
-            "labels": "request",
-            "state": "open",
-            "per_page": 100,
-        })
-        for iss in issues:
-            body = iss.get("body", "")
-            if f"**Slug:** {reciter_slug}" in body:
-                url = iss["html_url"]
-                return (
-                    f"This reciter already has a pending request.\n\n"
-                    f"Track status: {url}"
-                )
-    except Exception as e:
-        logger.warning(f"Duplicate check failed: {e}")
+    # Check for duplicate (only for "New reciter" — re-align is allowed)
+    if request_type == "New reciter":
+        try:
+            issues = _gh_get("issues", params={
+                "labels": "request",
+                "state": "open",
+                "per_page": 100,
+            })
+            for iss in issues:
+                body = iss.get("body", "")
+                if f"**Slug:** {reciter_slug}" in body:
+                    url = iss["html_url"]
+                    return (
+                        f"This reciter already has a pending request.\n\n"
+                        f"Track status: {url}"
+                    )
+        except Exception as e:
+            logger.warning(f"Duplicate check failed: {e}")
 
     # Generate requester_id (no PII in public issue)
     requester_id = hashlib.sha256(
         requester_email.strip().lower().encode()
     ).hexdigest()[:8]
 
+    # Build title prefix
+    title_prefix = "[request]" if request_type == "New reciter" else "[re-align]"
+
     # Create GitHub Issue
     issue_body = (
+        f"**Request Type:** {request_type}\n"
         f"**Reciter:** {reciter_name}\n"
         f"**Slug:** {reciter_slug}\n"
         f"**Audio Source:** {audio_source}\n"
+        f"**Riwayah:** {riwayah}\n"
         f"**Suggested Min Silence:** {min_silence_ms}ms\n"
         f"**Requester:** {requester_id}\n"
     )
@@ -360,7 +388,7 @@ def submit_request(
             f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues",
             headers=_gh_headers(),
             json={
-                "title": f"[request] {reciter_name}",
+                "title": f"{title_prefix} {reciter_name}",
                 "body": issue_body,
                 "labels": ["request", "status:pending"],
             },
@@ -382,6 +410,8 @@ def submit_request(
             "Reciter": {"rich_text": [{"text": {"content": reciter_name}}]},
             "Slug": {"rich_text": [{"text": {"content": reciter_slug}}]},
             "Audio Source": {"rich_text": [{"text": {"content": audio_source}}]},
+            "Request Type": {"select": {"name": request_type}},
+            "Riwayah": {"rich_text": [{"text": {"content": riwayah}}]},
             "Status": {"select": {"name": "Pending"}},
             "GitHub Issue": {"url": issue_url},
             "Issue Number": {"number": issue_number},
@@ -452,7 +482,7 @@ def get_processed_markdown():
     return "\n".join(lines)
 
 
-def handle_submit(reciter_json, min_silence, name, email, notes):
+def handle_submit(reciter_json, request_type, riwayah, min_silence, name, email, notes):
     """Handle form submission from Gradio UI."""
     if not reciter_json:
         return "Error: Please select a reciter."
@@ -466,6 +496,8 @@ def handle_submit(reciter_json, min_silence, name, email, notes):
         reciter_slug=info["slug"],
         reciter_name=info["name"],
         audio_source=info["source"],
+        request_type=request_type,
+        riwayah=riwayah,
         min_silence_ms=min_silence,
         requester_name=name,
         requester_email=email,
@@ -514,12 +546,26 @@ with gr.Blocks(title="Reciter Requests") as demo:
         with gr.Tab("Submit Request"):
             with gr.Row():
                 with gr.Column(scale=2):
+                    request_type_dd = gr.Dropdown(
+                        choices=REQUEST_TYPES,
+                        value="New reciter",
+                        label="Request Type",
+                        info="New reciter = first-time processing. "
+                             "Re-align = re-run with different parameters.",
+                    )
                     reciter_dd = gr.Dropdown(
                         choices=get_reciter_choices(),
                         label="Reciter",
                         info="Select a reciter to request segmentation for. "
                              "Already-processed and pending reciters are excluded.",
                         filterable=True,
+                    )
+                    riwayah_dd = gr.Dropdown(
+                        choices=RIWAYAT,
+                        value="Hafs an Asim",
+                        label="Riwayah",
+                        info="Quranic reading tradition. Most existing reciters "
+                             "use Hafs an Asim — verify by listening.",
                     )
                     min_silence = gr.Number(
                         value=500, label="Min Silence (ms)",
@@ -559,8 +605,8 @@ with gr.Blocks(title="Reciter Requests") as demo:
 
             submit_btn.click(
                 fn=handle_submit,
-                inputs=[reciter_dd, min_silence,
-                        req_name, req_email, req_notes],
+                inputs=[reciter_dd, request_type_dd, riwayah_dd,
+                        min_silence, req_name, req_email, req_notes],
                 outputs=result_box,
             )
 
@@ -615,6 +661,8 @@ async def api_request(request: Request):
         reciter_slug=req.get("reciter_slug", ""),
         reciter_name=req.get("reciter_name", ""),
         audio_source=req.get("audio_source", ""),
+        request_type=req.get("request_type", "New reciter"),
+        riwayah=req.get("riwayah", "Hafs an Asim"),
         min_silence_ms=req.get("min_silence_ms", 500),
         requester_name=req.get("requester_name", ""),
         requester_email=req.get("requester_email", ""),

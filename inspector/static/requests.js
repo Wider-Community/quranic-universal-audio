@@ -4,7 +4,9 @@
  */
 
 (function () {
+    const requestTypeSelect = document.getElementById('req-type-select');
     const reciterSelect = document.getElementById('req-reciter-select');
+    const riwayahSelect = document.getElementById('req-riwayah-select');
     const minSilenceInput = document.getElementById('req-min-silence');
     const nameInput = document.getElementById('req-name');
     const emailInput = document.getElementById('req-email');
@@ -191,6 +193,8 @@
                     reciter_slug: info.slug,
                     reciter_name: info.name,
                     audio_source: info.source,
+                    request_type: requestTypeSelect.value,
+                    riwayah: riwayahSelect.value,
                     min_silence_ms: parseInt(minSilenceInput.value) || 500,
                     requester_name: name,
                     requester_email: email,

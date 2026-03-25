@@ -259,8 +259,28 @@
                 <div class="req-form-section">
                     <h4>Submit New Request</h4>
                     <div class="req-form">
+                        <label>Request Type:
+                            <select id="req-type-select">
+                                <option value="New reciter">New reciter</option>
+                                <option value="Re-align">Re-align (different parameters)</option>
+                            </select>
+                        </label>
                         <label>Reciter:
                             <select id="req-reciter-select"><option value="">Loading...</option></select>
+                        </label>
+                        <label>Riwayah:
+                            <select id="req-riwayah-select">
+                                <option value="Hafs an Asim" selected>Hafs an Asim</option>
+                                <option value="Warsh an Nafi">Warsh an Nafi</option>
+                                <option value="Qalun an Nafi">Qalun an Nafi</option>
+                                <option value="Al-Duri an Abu Amr">Al-Duri an Abu Amr</option>
+                                <option value="Shubah an Asim">Shubah an Asim</option>
+                                <option value="Ibn Amir ad-Dimashqi">Ibn Amir ad-Dimashqi</option>
+                                <option value="Al-Kisai">Al-Kisai</option>
+                                <option value="Abu Amr al-Basri">Abu Amr al-Basri</option>
+                                <option value="Nafi al-Madani">Nafi al-Madani</option>
+                                <option value="Ibn Kathir al-Makki">Ibn Kathir al-Makki</option>
+                            </select>
                         </label>
                         <label>Min Silence (ms):
                             <input type="number" id="req-min-silence" value="500" min="100" max="2000" step="50">
