@@ -1618,13 +1618,10 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     text-transform: capitalize;
 }
 
-.req-badge-pending   { background: #f0a50033; color: #f0a500; }
-.req-badge-approved  { background: #4cc9f033; color: #4cc9f0; }
-.req-badge-running   { background: #4361ee33; color: #4361ee; }
-.req-badge-fetched   { background: #1d76db33; color: #5dade2; }
-.req-badge-editing   { background: #e4e66933; color: #e4e669; }
-.req-badge-timestamps{ background: #bfd4f233; color: #bfd4f2; }
-.req-badge-complete  { background: #2ec4b633; color: #2ec4b6; }
+.req-badge-pending         { background: #f0a50033; color: #f0a500; }
+.req-badge-rejected        { background: #d73a4a33; color: #d73a4a; }
+.req-badge-awaiting-review { background: #f9d71c33; color: #f0a500; }
+.req-badge-completed       { background: #0e8a1633; color: #2ec4b6; }
 
 /* View link */
 .req-link {
