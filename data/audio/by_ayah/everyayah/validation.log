@@ -1,0 +1,27 @@
+Generated: 2026-03-25 16:04:16
+
+========================================================================
+  Audio Validation: data/audio/by_ayah/everyayah/alafasy.json
+  Format: verse_json (verse-level)
+========================================================================
+
+--- Metadata ---
+  reciter            alafasy
+  qiraah             hafs_an_asim
+  audio_category     by_ayah
+  source             https://everyayah.com/
+  country              (empty)
+
+--- Coverage ---
+  Verses found:       6236 / 6236  (100.0%)
+  Missing verses:     0  (0 fully missing surahs, 0 partial)
+
+--- Source Validation ---
+  (skipped)
+
+--- Summary ---
+  Total sources:  6236
+  Source type:    url
+  Errors:         0
+  Warnings:       1
+

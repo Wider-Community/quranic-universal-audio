@@ -1,0 +1,28 @@
+Generated: 2026-03-01 13:22:09
+
+=== Timestamp Coverage ===
+
+Reciter                        Verses Missing   Words Cov Issues Fwd Gaps MFA Fail Errors Warnings
+--------------------------------------------------------------------------------------------------
+minshawy_mujawwad                6221      15   85119         64        3        0      0      231
+minshawy_murattal                6236       0   79538          1        0        2      2        7
+--------------------------------------------------------------------------------------------------
+TOTAL (2 reciters)              12457      15  164657         65        3        2      2      238
+
+
+=== Word Duration (ms) ===
+
+Reciter                             Min   Median     Mean      Max Zero-Dur Negative
+------------------------------------------------------------------------------------
+minshawy_mujawwad                    30     1870     2013    11590        0        0
+minshawy_murattal                    40     1070     1161    10380        0        0
+------------------------------------------------------------------------------------
+TOTAL (2 reciters)                          1470                                    
+
+
+=== Consistency ===
+
+Reciter                        Full File Ltr Errors Ph Issues Seg File Boundary MM
+----------------------------------------------------------------------------------
+minshawy_mujawwad                    yes          0         0      yes         164
+minshawy_murattal                    yes          0         0      yes           6

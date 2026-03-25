@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+models/
+test_audio.wav

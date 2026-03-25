@@ -1,0 +1,27 @@
+Generated: 2026-03-25 16:05:15
+
+========================================================================
+  Audio Validation: data/audio/by_surah/surah-quran/abdallah_kamel.json
+  Format: sura_json (sura-level)
+========================================================================
+
+--- Metadata ---
+  reciter            abdallah_kamel
+  riwayah            hafs_an_asim
+  audio_category     by_surah
+  source             https://surahquran.com/quran-mp3-english.html
+  country            Egypt
+
+--- Coverage ---
+  Surahs found:       114 / 114  (100.0%)
+  Missing surahs:     0
+
+--- Source Validation ---
+  (skipped)
+
+--- Summary ---
+  Total sources:  114
+  Source type:    url
+  Errors:         0
+  Warnings:       0
+

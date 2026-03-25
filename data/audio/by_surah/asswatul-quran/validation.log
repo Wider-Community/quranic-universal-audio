@@ -1,0 +1,80 @@
+Generated: 2026-03-25 15:06:30
+
+========================================================================
+  Audio Validation: data/audio/by_surah/asswatul-quran/abdul_karim_al_daghosh.json
+  Format: sura_json (sura-level)
+========================================================================
+
+--- Coverage ---
+  Surahs found:       114 / 114  (100.0%)
+  Missing surahs:     0
+
+--- Source Validation (URLs) ---
+  Reachable:      85 / 114
+  Unreachable:    29
+
+  ERROR  13            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/013.mp3
+  ERROR  14            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/014.mp3
+  ERROR  15            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/015.mp3
+  ERROR  1             HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/001.mp3
+  ERROR  43            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/043.mp3
+  ERROR  58            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/058.mp3
+  ERROR  57            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/057.mp3
+  ERROR  56            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/056.mp3
+  ERROR  59            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/059.mp3
+  ERROR  60            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/060.mp3
+  ERROR  61            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/061.mp3
+  ERROR  66            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/066.mp3
+  ERROR  70            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/070.mp3
+  ERROR  74            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/074.mp3
+  ERROR  76            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/076.mp3
+  ERROR  77            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/077.mp3
+  ERROR  78            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/078.mp3
+  ERROR  81            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/081.mp3
+  ERROR  86            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/086.mp3
+  ERROR  87            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/087.mp3
+  ERROR  90            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/090.mp3
+  ERROR  95            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/095.mp3
+  ERROR  96            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/096.mp3
+  ERROR  99            HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/099.mp3
+  ERROR  104           HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/104.mp3
+  ERROR  105           HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/105.mp3
+  ERROR  108           HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/108.mp3
+  ERROR  113           HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/113.mp3
+  ERROR  114           HTTP 404
+         http://www.aswaatulqurraa.com/files/Surahs/Abdul%20Karim%20Al%20Daghosh/114.mp3
+
+--- Summary ---
+  Total sources:  114
+  Source type:    url
+  Errors:         29
+  Warnings:       0
+

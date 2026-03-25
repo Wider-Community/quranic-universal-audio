@@ -1,0 +1,26 @@
+Generated: 2026-03-25 16:01:55
+
+========================================================================
+  Audio Validation: data/audio/by_surah/qul/abdul_basit_abdul_samad_mujawwad.json
+  Format: sura_json (sura-level)
+========================================================================
+
+--- Metadata ---
+  reciter            abdul_basit_abdul_samad_mujawwad
+  qiraah             hafs_an_asim
+  audio_category     by_surah
+  source             https://qul.tarteel.ai/resources/recitation
+
+--- Coverage ---
+  Surahs found:       114 / 114  (100.0%)
+  Missing surahs:     0
+
+--- Source Validation ---
+  (skipped)
+
+--- Summary ---
+  Total sources:  114
+  Source type:    url
+  Errors:         0
+  Warnings:       0
+

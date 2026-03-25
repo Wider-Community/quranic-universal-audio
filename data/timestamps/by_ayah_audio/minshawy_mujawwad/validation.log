@@ -1,0 +1,67 @@
+Generated: 2026-03-25 17:40:26
+
+========================================================================
+  Timestamps: minshawy_mujawwad
+  data/timestamps/by_ayah_audio/minshawy_mujawwad
+========================================================================
+
+--- MFA Settings ---
+  Audio source:  by_ayah/everyayah
+  Method:        kalpy
+  Beam:          15
+  Retry beam:    50
+  Shared CMVN:   False
+
+--- Coverage ---
+  Verses found:       6165 / 6236
+  Missing verses:     71
+  Total words:        84453
+  Coverage issues:    64
+  Forward gap verses: 32
+
+--- Word Duration ---
+  Min:      0.03s
+  Median:   1.89s
+  Mean:     2.04s
+  Max:      11.59s
+
+--- Temporal Issues ---
+  Negative timestamps:  0
+  Zero-duration words:  0
+
+--- Verse Timestamps ---
+  Duration min:     1.08s
+  Duration median:  22.64s
+  Duration mean:    31.28s
+  Duration max:     394.13s
+  Short (<500ms):   0
+
+--- Full Format (letters/phones) ---
+  Negative/inverted letters:  0
+  Phone issues:              0
+
+--- Cross-file Consistency (segments.json) ---
+  Boundary mismatches (>1000ms):  163
+
+  Top 3 boundary violations (by diff):
+    16:73        start mismatch: timestamps 0:02.1 vs segments 1:09.0 (diff 66975ms)
+    89:23        start mismatch: timestamps 0:02.3 vs segments 0:57.9 (diff 55570ms)
+    89:26        start mismatch: timestamps 0:00.0 vs segments 0:48.5 (diff 48510ms)
+    ... and 160 more
+
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   259
+
+  Missing verses (first 3 of 71):
+    MISS   2:1  (1 words)
+    MISS   3:1  (1 words)
+    MISS   10:25  (11 words)
+    ... and 68 more
+
+  Warnings (first 3 of 259):
+    WARN   2:68  forward gaps in word indices: 7→9
+    WARN   2:102  forward gaps in word indices: 50→52
+    WARN   2:184  forward gaps in word indices: 13→15
+    ... and 256 more
+

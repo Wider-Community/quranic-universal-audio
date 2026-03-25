@@ -1,0 +1,3714 @@
+/**
+ * Segments Tab — visualize VAD-aligned segment data from extract_segments.py.
+ */
+
+// State
+let segData = null;          // { audio_url, summary, verse_word_counts, segments } — chapter-specific
+let segAllData = null;       // { segments, audio_by_chapter, verse_word_counts } — reciter-level
+let segActiveFilters = [];   // [{ field, op, value }, ...]
+let segAvgSpeechRate = 0;    // computed from currently visible segments
+let segAudioCtx = null;      // AudioContext for waveform decoding
+let segAudioBuffer = null;   // decoded full-chapter audio buffer
+let segAudioBufferUrl = '';  // URL of the currently decoded audio buffer
+let segAnimId = null;        // animation frame ID for playback
+let segCurrentIdx = -1;      // currently playing segment index
+let segDisplayedSegments = null; // segments currently shown (may be filtered)
+let segDirtyIndices = new Set(); // indices of segments with unsaved edits
+let segEditMode = null;          // null | 'trim' | 'split'
+let segEditIndex = -1;           // index of segment being edited
+// (merge is now button-driven, no merge selection state needed)
+let segStructuralChange = false; // true if split/merge/adjust changed the segment array
+let segDirtyChapters = new Set(); // chapters modified via error card edits (cross-chapter)
+let segAudioBuffers = new Map();  // chapter → AudioBuffer for multi-chapter waveform support
+let _segPrefetchCache = {};      // url → Promise<void> for prefetched audio
+let _segContinuousPlay = false;  // true while continuous playback is active across audio files
+let _segPlayEndMs = 0;           // time_end (ms) of the currently playing displayed segment
+let segValidation = null;        // cached validation data for current reciter
+let segAllReciters = [];         // full list from /api/seg/reciters
+let segStatsData = null;         // cached stats data for current reciter
+let _segFilterDebounceTimer = null; // debounce timer for filter value input
+let _activeAudioSource = null;      // 'main' | 'error' | null — which audio is active
+let _segIndexMap = null;         // Map<index, segment> for O(1) lookups
+let _waveformObserver = null;    // IntersectionObserver for lazy waveform drawing
+
+// Filter constants
+const SEG_FILTER_FIELDS = [
+    { value: 'duration_s',         label: 'Duration (s)',        type: 'float' },
+    { value: 'num_words',          label: 'Word count',          type: 'int'   },
+    { value: 'num_verses',         label: 'Verses spanned',      type: 'int'   },
+    { value: 'confidence_pct',     label: 'Confidence (%)',      type: 'float' },
+    { value: 'speech_rate_factor', label: 'Speech rate (× avg)', type: 'float' },
+    { value: 'silence_after_ms',  label: 'Silence after (ms)',   type: 'float', neighbour: true },
+];
+const SEG_FILTER_OPS = ['>', '>=', '<', '<=', '='];
+
+// DOM refs
+const segReciterSelect = document.getElementById('seg-reciter-select');
+const segChapterSelect = document.getElementById('seg-chapter-select');
+const segVerseSelect = document.getElementById('seg-verse-select');
+const segListEl = document.getElementById('seg-list');
+const segAudioEl = document.getElementById('seg-audio-player');
+const segPlayBtn = document.getElementById('seg-play-btn');
+const segSpeedSelect = document.getElementById('seg-speed-select');
+const segSaveBtn = document.getElementById('seg-save-btn');
+const segUndoBtn = document.getElementById('seg-undo-btn');
+const segPlayStatus = document.getElementById('seg-play-status');
+const segValidationGlobalEl = document.getElementById('seg-validation-global');
+const segValidationEl = document.getElementById('seg-validation');
+const segStatsPanel     = document.getElementById('seg-stats-panel');
+const segStatsCharts    = document.getElementById('seg-stats-charts');
+const segFilterBarEl    = document.getElementById('seg-filter-bar');
+const segFilterRowsEl   = document.getElementById('seg-filter-rows');
+const segFilterAddBtn   = document.getElementById('seg-filter-add-btn');
+const segFilterClearBtn = document.getElementById('seg-filter-clear-btn');
+const segFilterCountEl  = document.getElementById('seg-filter-count');
+const segFilterStatusEl = document.getElementById('seg-filter-status');
+
+// SearchableSelect instance for segments chapter dropdown
+let segChapterSS = null;
+
+// Init
+document.addEventListener('DOMContentLoaded', async () => {
+    segReciterSelect.addEventListener('change', onSegReciterChange);
+    segChapterSelect.addEventListener('change', onSegChapterChange);
+    segVerseSelect.addEventListener('change', applyFiltersAndRender);
+    segPlayBtn.addEventListener('click', onSegPlayClick);
+    segSaveBtn.addEventListener('click', onSegSaveClick);
+    segUndoBtn.addEventListener('click', onSegUndoClick);
+    segSpeedSelect.addEventListener('change', () => {
+        const rate = parseFloat(segSpeedSelect.value);
+        segAudioEl.playbackRate = rate;
+        if (valCardAudio) valCardAudio.playbackRate = rate;
+    });
+
+    segAudioEl.addEventListener('play', startSegAnimation);
+    segAudioEl.addEventListener('pause', stopSegAnimation);
+    segAudioEl.addEventListener('ended', onSegAudioEnded);
+    segAudioEl.addEventListener('timeupdate', onSegTimeUpdate);
+
+    document.addEventListener('keydown', handleSegKeydown);
+
+    segFilterAddBtn.addEventListener('click', addSegFilterCondition);
+    segFilterClearBtn.addEventListener('click', clearAllSegFilters);
+
+    // Delegated event listeners for segment card actions — shared across main & error sections
+    [segListEl, segValidationEl, segValidationGlobalEl].forEach(el => {
+        el.addEventListener('click', handleSegRowClick);
+    });
+
+    // Load display config
+    try {
+        const cfgResp = await fetch('/api/seg/config');
+        if (cfgResp.ok) {
+            const cfg = await cfgResp.json();
+            const root = document.documentElement.style;
+            if (cfg.seg_font_size) root.setProperty('--seg-font-size', cfg.seg_font_size);
+            if (cfg.seg_word_spacing) root.setProperty('--seg-word-spacing', cfg.seg_word_spacing);
+        }
+    } catch (_) { /* use CSS defaults */ }
+
+    await surahInfoReady;
+    segChapterSS = new SearchableSelect(segChapterSelect);
+    loadSegReciters();
+});
+
+
+// ---------------------------------------------------------------------------
+// Data loading
+// ---------------------------------------------------------------------------
+
+async function loadSegReciters() {
+    try {
+        const resp = await fetch('/api/seg/reciters');
+        segAllReciters = await resp.json();
+        filterAndRenderReciters();
+    } catch (e) {
+        console.error('Error loading seg reciters:', e);
+    }
+}
+
+function filterAndRenderReciters() {
+    segReciterSelect.innerHTML = '<option value="">-- select --</option>';
+    clearSegDisplay();
+
+    // Group by audio_source
+    const grouped = {};  // source -> [reciter, ...]
+    const uncategorized = [];
+
+    for (const r of segAllReciters) {
+        const src = r.audio_source || '';
+        if (src) {
+            if (!grouped[src]) grouped[src] = [];
+            grouped[src].push(r);
+        } else {
+            uncategorized.push(r);
+        }
+    }
+
+    for (const source of Object.keys(grouped).sort()) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = source;
+        for (const r of grouped[source]) {
+            const opt = document.createElement('option');
+            opt.value = r.slug;
+            opt.textContent = r.name;
+            optgroup.appendChild(opt);
+        }
+        segReciterSelect.appendChild(optgroup);
+    }
+
+    if (uncategorized.length > 0) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = '(uncategorized)';
+        for (const r of uncategorized) {
+            const opt = document.createElement('option');
+            opt.value = r.slug;
+            opt.textContent = r.name;
+            optgroup.appendChild(opt);
+        }
+        segReciterSelect.appendChild(optgroup);
+    }
+}
+
+async function onSegReciterChange() {
+    const reciter = segReciterSelect.value;
+    segChapterSelect.innerHTML = '<option value="">-- select --</option>';
+    if (segChapterSS) segChapterSS.refresh();
+    segVerseSelect.innerHTML = '<option value="">All</option>';
+    clearSegDisplay();
+    segUndoBtn.hidden = true;
+    // Hide validation and stats when reciter changes
+    segValidationGlobalEl.hidden = true;
+    segValidationGlobalEl.innerHTML = '';
+    segValidationEl.hidden = true;
+    segValidationEl.innerHTML = '';
+    segValidation = null;
+    segStatsPanel.hidden = true;
+    segStatsPanel.removeAttribute('open');
+    segStatsData = null;
+    if (!reciter) return;
+
+    try {
+        const resp = await fetch(`/api/seg/chapters/${reciter}`);
+        const chapters = await resp.json();
+        chapters.forEach(ch => {
+            const opt = document.createElement('option');
+            opt.value = ch;
+            opt.textContent = surahOptionText(ch);
+            segChapterSelect.appendChild(opt);
+        });
+        if (segChapterSS) segChapterSS.refresh();
+    } catch (e) {
+        console.error('Error loading chapters:', e);
+    }
+
+    // Fetch validation, stats, and all segments in parallel
+    const [valResult, statsResult, allResult] = await Promise.allSettled([
+        fetch(`/api/seg/validate/${reciter}`).then(r => r.json()),
+        fetch(`/api/seg/stats/${reciter}`).then(r => r.json()),
+        fetch(`/api/seg/all/${reciter}`).then(r => r.json()),
+    ]);
+
+    if (valResult.status === 'fulfilled') {
+        segValidation = valResult.value;
+        renderValidationPanel(segValidation);
+    } else {
+        console.error('Error loading validation:', valResult.reason);
+    }
+
+    if (statsResult.status === 'fulfilled') {
+        segStatsData = statsResult.value;
+        if (!segStatsData.error) renderStatsPanel(segStatsData);
+    } else {
+        console.error('Error loading stats:', statsResult.reason);
+    }
+
+    if (allResult.status === 'fulfilled') {
+        segAllData = allResult.value;
+        computeSilenceAfter();
+        if (segFilterBarEl) segFilterBarEl.hidden = false;
+        applyFiltersAndRender();
+    } else {
+        console.error('Error loading all segments:', allResult.reason);
+    }
+}
+
+async function onSegChapterChange() {
+    const reciter = segReciterSelect.value;
+    const chapter = segChapterSelect.value;
+    segVerseSelect.innerHTML = '<option value="">All</option>';
+
+    // Clear audio/waveform state
+    segAudioBuffer = null;
+    segAudioBufferUrl = '';
+    segAudioEl.src = '';
+    segPlayBtn.disabled = true;
+    stopSegAnimation();
+
+    // Stats panel: leave open/closed state as user left it
+
+    // Update validation panel chapter filter (deferred to avoid blocking segment render)
+    if (segValidation) {
+        requestAnimationFrame(() => {
+            const globalState = captureValPanelState(segValidationGlobalEl);
+            const chState = captureValPanelState(segValidationEl);
+            const ch = chapter ? parseInt(chapter) : null;
+            if (ch !== null) {
+                renderValidationPanel(segValidation, null, segValidationGlobalEl, 'All Chapters');
+                renderValidationPanel(segValidation, ch, segValidationEl, `Chapter ${ch}`);
+                restoreValPanelState(segValidationGlobalEl, globalState);
+                restoreValPanelState(segValidationEl, chState);
+            } else {
+                segValidationGlobalEl.hidden = true;
+                segValidationGlobalEl.innerHTML = '';
+                renderValidationPanel(segValidation, null, segValidationEl);
+                restoreValPanelState(segValidationEl, chState);
+            }
+        });
+    }
+
+    // Re-compute avg speech rate and re-render (chapter filter changes the set)
+    applyFiltersAndRender();
+
+    if (!reciter || !chapter) return;
+    segPlayBtn.disabled = false;  // Enable early — playFromSegment loads audio on demand
+
+    // Fetch chapter-specific audio URL + summary (reuse existing endpoint)
+    try {
+        const resp = await fetch(`/api/seg/data/${reciter}/${chapter}`);
+        segData = await resp.json();
+        if (segData.error) return;
+
+        // Populate verse filter from segAllData (not segData.segments)
+        const verses = new Set();
+        (segAllData?.segments || [])
+            .filter(s => s.chapter === parseInt(chapter) && s.matched_ref)
+            .forEach(s => {
+                const start = s.matched_ref.split('-')[0]?.split(':');
+                if (start?.length >= 2) verses.add(parseInt(start[1]));
+            });
+        [...verses].sort((a, b) => a - b).forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            segVerseSelect.appendChild(opt);
+        });
+
+        // Populate segData.segments from segAllData for edit operations
+        const chNum = parseInt(chapter);
+        segData.segments = (segAllData?.segments || []).filter(s => s.chapter === chNum);
+
+        // Check if all segments share the same audio URL (by_surah) or differ (by_ayah)
+        const audioUrls = new Set(
+            segData.segments.filter(s => s.audio_url).map(s => s.audio_url)
+        );
+        const singleAudio = audioUrls.size <= 1;
+
+        if (singleAudio && segData.audio_url) {
+            // by_surah: one audio per chapter — load eagerly
+            segAudioEl.src = segData.audio_url;
+            decodeSegAudio(segData.audio_url).then(() => {
+                if (segAudioBuffer) drawAllSegWaveforms();
+            });
+        }
+
+    } catch (e) {
+        console.error('Error loading chapter data:', e);
+    }
+}
+
+function isCrossVerse(ref) {
+    if (!ref) return false;
+    const parts = ref.split('-');
+    if (parts.length !== 2) return false;
+    const startAyah = parts[0].split(':')[1];
+    const endAyah = parts[1].split(':')[1];
+    return startAyah !== endAyah;
+}
+
+
+// ---------------------------------------------------------------------------
+// Derived-property helpers for filtering
+// ---------------------------------------------------------------------------
+
+function parseSegRef(ref) {
+    if (!ref) return null;
+    const parts = ref.split('-');
+    if (parts.length !== 2) return null;
+    const s = parts[0].split(':'), e = parts[1].split(':');
+    if (s.length < 3 || e.length < 3) return null;
+    return { surah: +s[0], ayah_from: +s[1], word_from: +s[2], ayah_to: +e[1], word_to: +e[2] };
+}
+
+function countSegWords(ref) {
+    const p = parseSegRef(ref);
+    if (!p) return 0;
+    if (p.ayah_from === p.ayah_to) return p.word_to - p.word_from + 1;
+    // Cross-verse: use verse_word_counts
+    const vwc = segAllData && segAllData.verse_word_counts;
+    let total = 0;
+    for (let a = p.ayah_from; a <= p.ayah_to; a++) {
+        const key = `${p.surah}:${a}`;
+        if (a === p.ayah_from)      total += (vwc?.[key] ?? p.word_from) - p.word_from + 1;
+        else if (a === p.ayah_to)   total += p.word_to;
+        else                        total += vwc?.[key] ?? 0;
+    }
+    return total;
+}
+
+function segDerivedProps(seg) {
+    if (seg._derived && seg._derivedAvgRate === segAvgSpeechRate) return seg._derived;
+    const duration_s         = (seg.time_end - seg.time_start) / 1000;
+    const num_words          = countSegWords(seg.matched_ref);
+    const p                  = parseSegRef(seg.matched_ref);
+    const num_verses         = p ? p.ayah_to - p.ayah_from + 1 : 0;
+    const confidence_pct     = (seg.confidence || 0) * 100;
+    const rate               = duration_s > 0 && num_words > 0 ? num_words / duration_s : 0;
+    const speech_rate_factor = segAvgSpeechRate > 0 ? rate / segAvgSpeechRate : 0;
+    const silence_after_ms = seg.silence_after_ms;
+    seg._derived = { duration_s, num_words, num_verses, confidence_pct, speech_rate_factor, silence_after_ms };
+    seg._derivedAvgRate = segAvgSpeechRate;
+    return seg._derived;
+}
+
+function computeAvgSpeechRate(segs) {
+    const rates = (segs || [])
+        .filter(s => s.matched_ref)
+        .map(s => {
+            const d = (s.time_end - s.time_start) / 1000;
+            const w = countSegWords(s.matched_ref);
+            return d > 0 && w > 0 ? w / d : 0;
+        }).filter(r => r > 0);
+    segAvgSpeechRate = rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
+}
+
+function computeSilenceAfter() {
+    if (!segAllData) return;
+    const pad = segAllData.pad_ms || 0;
+    const segs = segAllData.segments;
+    for (let i = 0; i < segs.length; i++) {
+        const next = segs[i + 1];
+        const sameEntry = next && segs[i].audio_url === next.audio_url
+                               && segs[i].entry_idx === next.entry_idx;
+        if (sameEntry) {
+            segs[i].silence_after_ms = (next.time_start - segs[i].time_end) + 2 * pad;
+            segs[i].silence_after_raw_ms = next.time_start - segs[i].time_end;
+        } else {
+            segs[i].silence_after_ms = null;
+            segs[i].silence_after_raw_ms = null;
+        }
+    }
+}
+
+function _compareFilter(actual, op, value) {
+    if (actual == null) return false;
+    switch (op) {
+        case '>':  return actual >  value;
+        case '>=': return actual >= value;
+        case '<':  return actual <  value;
+        case '<=': return actual <= value;
+        case '=':  return actual === value;
+        default:   return true;
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Filter application
+// ---------------------------------------------------------------------------
+
+function applyFiltersAndRender() {
+    if (!segAllData) return;
+    const chapter = segChapterSelect.value;
+
+    // Check if any filter conditions are active
+    const activeValid = segActiveFilters.filter(f => f.value !== null);
+
+    // No chapter and no filters — prompt user instead of loading everything
+    if (!chapter && activeValid.length === 0) {
+        segDisplayedSegments = [];
+        segListEl.innerHTML = '<div class="seg-loading">Select a chapter or add a filter to view segments</div>';
+        if (segFilterStatusEl) segFilterStatusEl.textContent = '';
+        return;
+    }
+
+    let segs = segAllData.segments;
+
+    // 1. Chapter filter (optional — show all chapters when filters are active)
+    if (chapter) {
+        segs = segs.filter(s => s.chapter === parseInt(chapter));
+    }
+
+    // 2. Verse filter (only meaningful when chapter is set)
+    const verse = segVerseSelect.value;
+    if (verse && chapter) {
+        const prefix = `${chapter}:${verse}:`;
+        segs = segs.filter(s => s.matched_ref && s.matched_ref.startsWith(prefix));
+    }
+
+    // 3. Compute avg speech rate from current chapter/global set (before condition filter)
+    computeAvgSpeechRate(segs);
+
+    // 4. Active filter conditions (AND logic; skip conditions with null value)
+    // Clear stale neighbour tags
+    segAllData.segments.forEach(s => delete s._isNeighbour);
+
+    if (activeValid.length > 0) {
+        // First pass: find segments matching ALL filters
+        const matched = segs.filter(seg =>
+            activeValid.every(f => {
+                const actual = segDerivedProps(seg)[f.field];
+                return _compareFilter(actual, f.op, f.value);
+            })
+        );
+
+        // Second pass: if any neighbour-type filter is active, expand with next segment
+        const hasNeighbourFilter = activeValid.some(f =>
+            SEG_FILTER_FIELDS.find(fd => fd.value === f.field)?.neighbour
+        );
+
+        if (hasNeighbourFilter) {
+            const posMap = new Map(segs.map((s, i) => [s, i]));
+            const resultSet = new Set(matched);
+            matched.forEach(seg => {
+                const idx = posMap.get(seg);
+                const next = segs[idx + 1];
+                if (next && next.audio_url === seg.audio_url) {
+                    next._isNeighbour = true;
+                    resultSet.add(next);
+                }
+            });
+            segs = segs.filter(seg => resultSet.has(seg));
+
+            // Sort by silence duration (shortest first), keeping pairs grouped
+            const groups = [];
+            for (let i = 0; i < segs.length; i++) {
+                if (!segs[i]._isNeighbour) {
+                    const group = [segs[i]];
+                    if (segs[i + 1] && segs[i + 1]._isNeighbour) {
+                        group.push(segs[++i]);
+                    }
+                    groups.push(group);
+                }
+            }
+            groups.sort((a, b) => (a[0].silence_after_ms ?? Infinity) - (b[0].silence_after_ms ?? Infinity));
+            segs = groups.flat();
+        } else {
+            segs = matched;
+        }
+    }
+
+    // Update status counter
+    const total = chapter
+        ? segAllData.segments.filter(s => s.chapter === parseInt(chapter)).length
+        : segAllData.segments.length;
+    if (segFilterStatusEl) {
+        segFilterStatusEl.textContent = (activeValid.length > 0 || verse)
+            ? `${segs.length} / ${total}` : '';
+    }
+
+    segDisplayedSegments = segs;
+    _segIndexMap = new Map(segs.map(s => [`${s.chapter}:${s.index}`, s]));
+    renderSegList(segDisplayedSegments);
+}
+
+/**
+ * Get the current chapter's segments from segData (preferred) or segAllData.
+ * Falls back gracefully if segData hasn't loaded yet.
+ */
+function _getChapterSegs() {
+    if (segData?.segments?.length) return segData.segments;
+    const ch = parseInt(segChapterSelect.value);
+    if (ch && segAllData?.segments) return segAllData.segments.filter(s => s.chapter === ch);
+    return [];
+}
+
+/**
+ * Sync segData.segments (chapter-specific edits) back into segAllData.segments.
+ * Called after structural changes (split/merge/delete/trim) before re-render.
+ */
+function syncChapterSegsToAll() {
+    if (!segAllData || !segData || !segData.segments) return;
+    const chapter = parseInt(segChapterSelect.value);
+    if (!chapter) return;
+    const other = segAllData.segments.filter(s => s.chapter !== chapter);
+    const updated = segData.segments.map(s => ({ ...s, chapter }));
+    // Re-insert in chapter order
+    const insertIdx = other.findIndex(s => s.chapter > chapter);
+    if (insertIdx === -1) {
+        segAllData.segments = [...other, ...updated];
+    } else {
+        segAllData.segments = [
+            ...other.slice(0, insertIdx),
+            ...updated,
+            ...other.slice(insertIdx),
+        ];
+    }
+    segAllData._byChapter = null; segAllData._byChapterIndex = null;  // invalidate chapter lookup cache
+}
+
+
+// ---------------------------------------------------------------------------
+// Audio decoding
+// ---------------------------------------------------------------------------
+
+async function decodeSegAudio(url) {
+    try {
+        if (!segAudioCtx) {
+            segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const resp = await fetch(url);
+        const buf = await resp.arrayBuffer();
+        segAudioBuffer = await segAudioCtx.decodeAudioData(buf);
+        segAudioBufferUrl = url;
+        // Also cache in per-chapter map
+        const ch = parseInt(segChapterSelect.value);
+        if (ch) segAudioBuffers.set(ch, segAudioBuffer);
+    } catch (e) {
+        console.error('Seg audio decode failed:', e);
+        segAudioBuffer = null;
+        segAudioBufferUrl = '';
+    }
+}
+
+/** Decode and cache audio buffer for a specific chapter. Returns the AudioBuffer or null. */
+async function ensureChapterAudioBuffer(chapter) {
+    if (segAudioBuffers.has(chapter)) return segAudioBuffers.get(chapter);
+    const url = segAllData?.audio_by_chapter?.[chapter];
+    if (!url) return null;
+    try {
+        if (!segAudioCtx) {
+            segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const resp = await fetch(url);
+        const buf = await resp.arrayBuffer();
+        const decoded = await segAudioCtx.decodeAudioData(buf);
+        segAudioBuffers.set(chapter, decoded);
+        return decoded;
+    } catch (e) {
+        console.error(`Audio decode failed for chapter ${chapter}:`, e);
+        return null;
+    }
+}
+
+function _ensureWaveformObserver() {
+    if (_waveformObserver) return _waveformObserver;
+    _waveformObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            const canvas = entry.target;
+            const row = canvas.closest('.seg-row');
+            if (!row) return;
+            const idx = parseInt(row.dataset.segIndex);
+            const chapter = parseInt(row.dataset.segChapter);
+
+            // Resolve segment: try index map first, fall back to global lookup
+            const seg = (_segIndexMap ? _segIndexMap.get(`${chapter}:${idx}`) : null) || (chapter ? getSegByChapterIndex(chapter, idx) : null);
+            if (!seg) return;
+
+            // Determine which audio buffer to use
+            const currentChapter = parseInt(segChapterSelect.value);
+            let buffer = null;
+
+            if (seg.audio_url) {
+                // By-ayah: each segment has its own audio URL — look up or load it
+                buffer = segAudioBuffers.get(seg.audio_url) || null;
+                if (!buffer) {
+                    const segUrl = seg.audio_url;
+                    if (!segAudioBuffers.has(segUrl)) {
+                        // Start loading — use null sentinel to prevent duplicate fetches
+                        segAudioBuffers.set(segUrl, null);
+                        (async () => {
+                            try {
+                                if (!segAudioCtx) segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                                const resp = await fetch(segUrl);
+                                const buf = await resp.arrayBuffer();
+                                const decoded = await segAudioCtx.decodeAudioData(buf);
+                                segAudioBuffers.set(segUrl, decoded);
+                            } catch (e) { segAudioBuffers.delete(segUrl); }
+                            if (canvas.hasAttribute('data-needs-waveform') && _waveformObserver) {
+                                _waveformObserver.observe(canvas);
+                            }
+                        })();
+                    }
+                    // else: null sentinel = already loading, re-observe will fire when done
+                    return;
+                }
+            } else if (chapter && chapter !== currentChapter) {
+                // Error card from different chapter — use cached chapter buffer
+                buffer = segAudioBuffers.get(chapter) || null;
+                if (!buffer) {
+                    ensureChapterAudioBuffer(chapter).then(buf => {
+                        if (buf && canvas.hasAttribute('data-needs-waveform')) {
+                            _waveformObserver.observe(canvas);
+                        }
+                    });
+                    return;
+                }
+            } else {
+                // Same-chapter by-surah
+                buffer = segAudioBuffer;
+                if (!buffer) {
+                    ensureChapterAudioBuffer(chapter).then(buf => {
+                        if (buf && canvas.hasAttribute('data-needs-waveform')) {
+                            _waveformObserver.observe(canvas);
+                        }
+                    });
+                    return;
+                }
+            }
+
+            // Temporarily swap buffer for drawing if needed
+            const savedBuffer = segAudioBuffer;
+            segAudioBuffer = buffer;
+            drawSegmentWaveform(canvas, seg.time_start, seg.time_end);
+            segAudioBuffer = savedBuffer;
+
+            _waveformObserver.unobserve(canvas);
+            canvas.removeAttribute('data-needs-waveform');
+        });
+    }, { rootMargin: '200px' });
+    return _waveformObserver;
+}
+
+function drawAllSegWaveforms() {
+    if (!segAudioBuffer || !segDisplayedSegments) return;
+    const observer = _ensureWaveformObserver();
+    segListEl.querySelectorAll('canvas[data-needs-waveform]').forEach(canvas => {
+        observer.observe(canvas);
+    });
+}
+
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+function clearSegDisplay() {
+    if (_waveformObserver) { _waveformObserver.disconnect(); _waveformObserver = null; }
+    _segIndexMap = null;
+    segAllData = null;
+    segAudioBuffers.clear();
+    segActiveFilters = [];
+    segAvgSpeechRate = 0;
+    if (segFilterBarEl) { segFilterBarEl.hidden = true; segFilterRowsEl.innerHTML = ''; }
+    if (segFilterCountEl) segFilterCountEl.textContent = '';
+    if (segFilterClearBtn) segFilterClearBtn.hidden = true;
+    if (segFilterStatusEl) segFilterStatusEl.textContent = '';
+    segData = null;
+    segAudioBuffer = null;
+    segAudioBufferUrl = '';
+    segDisplayedSegments = null;
+    segCurrentIdx = -1;
+    segDirtyIndices.clear();
+    segEditMode = null;
+    segEditIndex = -1;
+    segStatsData = null;
+    if (segStatsPanel) { segStatsPanel.hidden = true; segStatsCharts.innerHTML = ''; }
+
+    segStructuralChange = false;
+    _segPrefetchCache = {};
+    _segContinuousPlay = false;
+    _segPlayEndMs = 0;
+    segListEl.innerHTML = '';
+    segPlayBtn.disabled = true;
+    segSaveBtn.disabled = true;
+    segPlayStatus.textContent = '';
+    stopSegAnimation();
+}
+
+// ---------------------------------------------------------------------------
+// Unified event delegation
+// ---------------------------------------------------------------------------
+
+/** Resolve a segment object from a .seg-row element. Tries _segIndexMap first, falls back to global lookup. */
+function resolveSegFromRow(row) {
+    if (!row) return null;
+    const idx = parseInt(row.dataset.segIndex);
+    const chapter = parseInt(row.dataset.segChapter);
+    // Try the fast index map (populated for main section displayed segments)
+    const fromMap = _segIndexMap?.get(`${chapter}:${idx}`);
+    if (fromMap) return fromMap;
+    // Fall back to global chapter/index lookup (error section cards)
+    if (chapter) return getSegByChapterIndex(chapter, idx);
+    return null;
+}
+
+function handleSegRowClick(e) {
+    // Ref edit
+    const refSpan = e.target.closest('.seg-text-ref');
+    if (refSpan) {
+        e.stopPropagation();
+        const row = refSpan.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg && row) startRefEdit(refSpan, seg, row);
+        return;
+    }
+    // Play button (error cards)
+    const playBtn = e.target.closest('.seg-card-play-btn');
+    if (playBtn) {
+        e.stopPropagation();
+        const row = playBtn.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg) playErrorCardAudio(seg, playBtn);
+        return;
+    }
+    // Go To button (error cards)
+    const gotoBtn = e.target.closest('.seg-card-goto-btn');
+    if (gotoBtn) {
+        e.stopPropagation();
+        const row = gotoBtn.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg) jumpToSegment(seg.chapter, seg.index);
+        return;
+    }
+    // Adjust button
+    const adjustBtn = e.target.closest('.btn-adjust');
+    if (adjustBtn) {
+        e.stopPropagation();
+        const row = adjustBtn.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg && row) enterEditWithBuffer(seg, row, 'trim');
+        return;
+    }
+    // Split button
+    const splitBtn = e.target.closest('.btn-split');
+    if (splitBtn) {
+        e.stopPropagation();
+        const row = splitBtn.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg && row) enterEditWithBuffer(seg, row, 'split');
+        return;
+    }
+    // Merge prev/next buttons
+    const mergePrev = e.target.closest('.btn-merge-prev');
+    if (mergePrev) {
+        e.stopPropagation();
+        const row = mergePrev.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg) mergeAdjacent(seg, 'prev');
+        return;
+    }
+    const mergeNext = e.target.closest('.btn-merge-next');
+    if (mergeNext) {
+        e.stopPropagation();
+        const row = mergeNext.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg) mergeAdjacent(seg, 'next');
+        return;
+    }
+    // Delete button
+    const deleteBtn = e.target.closest('.btn-delete');
+    if (deleteBtn) {
+        e.stopPropagation();
+        const row = deleteBtn.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg) deleteSegment(seg, row);
+        return;
+    }
+    // Row click to play (ignore if clicking on actions)
+    const row = e.target.closest('.seg-row');
+    if (row && !e.target.closest('.seg-actions')) {
+        if (segEditMode) return;
+        if (segListEl.contains(row)) {
+            const idx = parseInt(row.dataset.segIndex);
+            playFromSegment(idx, parseInt(row.dataset.segChapter));
+        } else {
+            // Error section card — play via error card handler
+            const seg = resolveSegFromRow(row);
+            const playBtn = row.querySelector('.seg-card-play-btn');
+            if (seg && playBtn) playErrorCardAudio(seg, playBtn);
+        }
+    }
+}
+
+/**
+ * Render a single segment card (.seg-row) usable in both main and error sections.
+ * @param {object} seg — segment object
+ * @param {object} options
+ *   - showChapter: prefix index with chapter number (error cards)
+ *   - showPlayBtn: show play button in actions (error cards)
+ *   - showGotoBtn: show Go To button in actions (error cards)
+ *   - isContext: dimmed non-editable context card
+ *   - contextLabel: label for context cards (e.g. 'Previous', 'Next')
+ *   - missingWordSegIndices: Set of indices with missing words (main section)
+ */
+function renderSegCard(seg, options = {}) {
+    const {
+        showChapter = false,
+        showPlayBtn = false,
+        showGotoBtn = false,
+        isContext = false,
+        contextLabel = '',
+        missingWordSegIndices = null,
+    } = options;
+
+    const row = document.createElement('div');
+    row.className = 'seg-row' + (segDirtyIndices.has(seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
+    row.dataset.segIndex = seg.index;
+    row.dataset.segChapter = seg.chapter;
+
+    // Canvas for waveform
+    const canvas = document.createElement('canvas');
+    canvas.width = 300;
+    canvas.height = 60;
+    canvas.setAttribute('data-needs-waveform', '');
+    row.appendChild(canvas);
+
+    // Text box
+    const textBox = document.createElement('div');
+    const confClass = getConfClass(seg);
+    textBox.className = `seg-text ${confClass}`;
+
+    // Header row: index + ref (clickable) + confidence
+    const header = document.createElement('div');
+    header.className = 'seg-text-header';
+
+    const indexSpan = document.createElement('span');
+    indexSpan.className = 'seg-text-index';
+    indexSpan.textContent = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
+
+    const refSpan = document.createElement('span');
+    refSpan.className = 'seg-text-ref';
+    refSpan.textContent = formatRef(seg.matched_ref);
+
+    const confSpan = document.createElement('span');
+    confSpan.className = `seg-text-conf ${confClass}`;
+    confSpan.textContent = seg.matched_ref ? (seg.confidence * 100).toFixed(1) + '%' : 'FAIL';
+
+    header.append(indexSpan, refSpan, confSpan);
+    textBox.appendChild(header);
+
+    // Context label (for context cards)
+    if (contextLabel) {
+        const lbl = document.createElement('div');
+        lbl.className = 'seg-text-label';
+        lbl.textContent = contextLabel;
+        textBox.appendChild(lbl);
+    }
+
+    // Arabic text
+    const body = document.createElement('div');
+    body.className = 'seg-text-body';
+    body.textContent = seg.display_text || seg.matched_text || '(alignment failed)';
+    textBox.appendChild(body);
+
+    // Time info + missing words tag
+    const timeInfo = document.createElement('div');
+    timeInfo.className = 'seg-text-time';
+    timeInfo.textContent = `${formatTimeMs(seg.time_start)} - ${formatTimeMs(seg.time_end)} (${((seg.time_end - seg.time_start) / 1000).toFixed(1)}s)`;
+    if (missingWordSegIndices && missingWordSegIndices.has(seg.index)) {
+        const tag = document.createElement('span');
+        tag.className = 'seg-tag seg-tag-missing';
+        tag.textContent = 'Missing words';
+        timeInfo.appendChild(tag);
+    }
+    textBox.appendChild(timeInfo);
+
+    // Action buttons
+    if (!isContext) {
+        const actions = document.createElement('div');
+        actions.className = 'seg-actions';
+
+        if (showPlayBtn) {
+            const playBtn = document.createElement('button');
+            playBtn.className = 'btn btn-sm seg-card-play-btn';
+            playBtn.textContent = '\u25B6';
+            playBtn.title = 'Play segment audio';
+            actions.appendChild(playBtn);
+        }
+
+        const trimBtn = document.createElement('button');
+        trimBtn.className = 'btn btn-sm btn-adjust';
+        trimBtn.textContent = 'Adjust';
+
+        const splitBtn = document.createElement('button');
+        splitBtn.className = 'btn btn-sm btn-split';
+        splitBtn.textContent = 'Split';
+
+        const mergePrevBtn = document.createElement('button');
+        mergePrevBtn.className = 'btn btn-sm btn-merge-prev';
+        mergePrevBtn.textContent = 'Merge \u2191';
+
+        const mergeNextBtn = document.createElement('button');
+        mergeNextBtn.className = 'btn btn-sm btn-merge-next';
+        mergeNextBtn.textContent = 'Merge \u2193';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-sm btn-delete';
+        deleteBtn.textContent = 'Delete';
+
+        actions.append(trimBtn, splitBtn, mergePrevBtn, mergeNextBtn, deleteBtn);
+
+        if (showGotoBtn) {
+            const gotoBtn = document.createElement('button');
+            gotoBtn.className = 'btn btn-sm seg-card-goto-btn';
+            gotoBtn.textContent = 'Go to';
+            actions.appendChild(gotoBtn);
+        }
+
+        textBox.appendChild(actions);
+    }
+
+    row.appendChild(textBox);
+    return row;
+}
+
+function renderSegList(segments) {
+    // Invalidate cached row references (DOM nodes are about to be replaced)
+    _prevHighlightedRow = null; _prevHighlightedIdx = -1;
+    _prevPlayheadRow = null; _currentPlayheadRow = null; _prevPlayheadIdx = -1;
+    segListEl.innerHTML = '';
+    if (!segments || segments.length === 0) {
+        segListEl.innerHTML = '<div class="seg-loading">No segments to display</div>';
+        return;
+    }
+
+    // Build set of segment indices with missing words (from server validation data)
+    const missingWordSegIndices = new Set();
+    if (segValidation && segValidation.missing_words) {
+        const chapter = parseInt(segChapterSelect.value) || 0;
+        segValidation.missing_words.forEach(mw => {
+            if (mw.chapter === chapter && mw.seg_indices) {
+                mw.seg_indices.forEach(idx => missingWordSegIndices.add(idx));
+            }
+        });
+    }
+
+    const fragment = document.createDocumentFragment();
+    const observer = _ensureWaveformObserver();
+
+    segments.forEach((seg, displayIdx) => {
+        const row = renderSegCard(seg, {
+            missingWordSegIndices,
+        });
+
+        // Neighbour styling and silence gap indicator
+        if (seg._isNeighbour) row.classList.add('seg-neighbour');
+
+        fragment.appendChild(row);
+
+        // Silence gap badge between consecutive segments
+        if (seg.silence_after_ms != null) {
+            const nextDisplayed = segments[displayIdx + 1];
+            if (nextDisplayed && nextDisplayed.index === seg.index + 1) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'seg-silence-gap-wrapper';
+                const gapDiv = document.createElement('div');
+                gapDiv.className = 'seg-silence-gap';
+                gapDiv.textContent = `\u23F8 ${Math.round(seg.silence_after_ms)}ms (raw: ${Math.round(seg.silence_after_raw_ms)}ms)`;
+                wrapper.appendChild(gapDiv);
+                fragment.appendChild(wrapper);
+            }
+        }
+    });
+
+    segListEl.appendChild(fragment);
+
+    // Observe canvases for lazy waveform drawing
+    segListEl.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+
+}
+
+function getConfClass(seg) {
+    if (!seg.matched_ref) return 'conf-fail';
+    if (seg.confidence >= 0.80) return 'conf-high';
+    if (seg.confidence >= 0.60) return 'conf-mid';
+    return 'conf-low';
+}
+
+
+// ---------------------------------------------------------------------------
+// Waveform drawing
+// ---------------------------------------------------------------------------
+
+function drawSegmentWaveform(canvas, startMs, endMs) {
+    if (!segAudioBuffer) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+
+    // Clear
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, width, height);
+
+    // Extract samples for this segment (convert ms to seconds for sample math)
+    const sampleRate = segAudioBuffer.sampleRate;
+    const rawData = segAudioBuffer.getChannelData(0);
+    const startSample = Math.floor((startMs / 1000) * sampleRate);
+    const endSample = Math.min(Math.floor((endMs / 1000) * sampleRate), rawData.length);
+    const totalSamples = endSample - startSample;
+
+    if (totalSamples <= 0) return;
+
+    const buckets = width;
+    const blockSize = Math.max(1, Math.floor(totalSamples / buckets));
+    const scale = height / 2 * 0.9;
+
+    // Draw filled waveform
+    ctx.beginPath();
+    for (let i = 0; i < buckets; i++) {
+        const offset = startSample + i * blockSize;
+        let max = -1.0;
+        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
+            const val = rawData[offset + j];
+            if (val > max) max = val;
+        }
+        const x = (i / buckets) * width;
+        const y = centerY - max * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    for (let i = buckets - 1; i >= 0; i--) {
+        const offset = startSample + i * blockSize;
+        let min = 1.0;
+        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
+            const val = rawData[offset + j];
+            if (val < min) min = val;
+        }
+        const x = (i / buckets) * width;
+        const y = centerY - min * scale;
+        ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+    ctx.fill();
+
+    // Waveform outline
+    ctx.strokeStyle = '#4361ee';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < buckets; i++) {
+        const offset = startSample + i * blockSize;
+        let max = -1.0;
+        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
+            const val = rawData[offset + j];
+            if (val > max) max = val;
+        }
+        const x = (i / buckets) * width;
+        const y = centerY - max * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+}
+
+function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs) {
+    // Redraw waveform first
+    drawSegmentWaveform(canvas, startMs, endMs);
+
+    if (currentTimeMs < startMs || currentTimeMs > endMs) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const progress = (currentTimeMs - startMs) / (endMs - startMs);
+    const x = progress * width;
+
+    // Playhead line
+    ctx.strokeStyle = '#f72585';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+
+    // Small triangle
+    ctx.fillStyle = '#f72585';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, 0);
+    ctx.lineTo(x + 4, 0);
+    ctx.lineTo(x, 6);
+    ctx.closePath();
+    ctx.fill();
+}
+
+
+// ---------------------------------------------------------------------------
+// Playback
+// ---------------------------------------------------------------------------
+
+function playFromSegment(segIndex, chapterOverride) {
+    if (!segAllData) return;
+    stopErrorCardAudio();
+    _activeAudioSource = 'main';
+    const chapter = chapterOverride ?? (segChapterSelect.value ? parseInt(segChapterSelect.value) : null);
+    const seg = chapter != null
+        ? getSegByChapterIndex(chapter, segIndex)
+        : (segDisplayedSegments ? segDisplayedSegments.find(s => s.index === segIndex) : null);
+    if (!seg) return;
+
+    _segContinuousPlay = true;
+    _segPlayEndMs = seg.time_end;
+
+    // Switch audio source if needed (by_ayah has different audio per verse)
+    const segAudioUrl = seg.audio_url || '';
+    const needsSwitch = segAudioUrl && segAudioUrl !== segAudioBufferUrl;
+
+    if (needsSwitch) {
+        segAudioEl.src = segAudioUrl;
+        segAudioBuffer = null;
+        segAudioBufferUrl = '';
+        decodeSegAudio(segAudioUrl).then(() => {
+            if (segAudioBuffer) drawAllSegWaveforms();
+        });
+    }
+
+    segAudioEl.playbackRate = parseFloat(segSpeedSelect.value);
+    segAudioEl.currentTime = seg.time_start / 1000;
+    segAudioEl.play();
+    segCurrentIdx = segIndex;
+    updateSegPlayStatus();
+
+    // Prefetch next segment's audio if it differs
+    _prefetchNextSegAudio(segIndex);
+
+}
+
+/**
+ * Find the next displayed segment after the given index.
+ */
+function _nextDisplayedSeg(afterIndex) {
+    if (!segDisplayedSegments) return null;
+    const pos = segDisplayedSegments.findIndex(s => s.index === afterIndex);
+    if (pos >= 0 && pos < segDisplayedSegments.length - 1) {
+        return segDisplayedSegments[pos + 1];
+    }
+    return null;
+}
+
+/**
+ * Prefetch the next segment's audio into the browser cache if it has a different URL.
+ */
+function _prefetchNextSegAudio(currentIndex) {
+    const next = _nextDisplayedSeg(currentIndex);
+    if (!next || !next.audio_url) return;
+    const currentUrl = segAudioBufferUrl || (segAudioEl.src || '');
+    if (next.audio_url === currentUrl) return;
+    if (_segPrefetchCache[next.audio_url]) return; // already prefetching/prefetched
+    // Prefetch: download into browser cache so the <audio> src switch is instant
+    _segPrefetchCache[next.audio_url] = fetch(next.audio_url)
+        .then(r => r.blob())
+        .catch(() => {});
+}
+
+function onSegPlayClick() {
+    // If error card audio is playing, pause it (don't also start main)
+    if (valCardAudio && !valCardAudio.paused) {
+        stopErrorCardAudio();
+        return;
+    }
+    // Otherwise toggle main audio
+    if (segAudioEl.paused) {
+        if (segDisplayedSegments && segDisplayedSegments.length > 0 && segCurrentIdx < 0) {
+            const first = segDisplayedSegments[0];
+            playFromSegment(first.index, first.chapter);
+        } else {
+            _segContinuousPlay = true;
+            _activeAudioSource = 'main';
+            segAudioEl.playbackRate = parseFloat(segSpeedSelect.value);
+            segAudioEl.play();
+        }
+    } else {
+        _segContinuousPlay = false;
+        segAudioEl.pause();
+    }
+}
+
+function onSegTimeUpdate() {
+    const timeMs = segAudioEl.currentTime * 1000;
+    const currentSrc = segAudioEl.src || segAudioBufferUrl || '';
+
+    // Find the last displayed segment on the *current* audio file
+    let lastSegOnAudio = null;
+    if (segDisplayedSegments && segDisplayedSegments.length > 0) {
+        for (let i = segDisplayedSegments.length - 1; i >= 0; i--) {
+            const s = segDisplayedSegments[i];
+            if (!s.audio_url || s.audio_url === currentSrc) {
+                lastSegOnAudio = s;
+                break;
+            }
+        }
+        // Fallback for by_surah (no per-segment audio_url)
+        if (!lastSegOnAudio) lastSegOnAudio = segDisplayedSegments[segDisplayedSegments.length - 1];
+    }
+
+    // At end of last segment on this audio file: auto-advance or stop
+    if (lastSegOnAudio && timeMs >= lastSegOnAudio.time_end) {
+        const nextSeg = _nextDisplayedSeg(lastSegOnAudio.index);
+        const isConsecutive = nextSeg && nextSeg.index === lastSegOnAudio.index + 1;
+        if (_segContinuousPlay && isConsecutive && nextSeg.audio_url && nextSeg.audio_url !== currentSrc) {
+            // Auto-advance to next segment on a different audio file (only if consecutive)
+            playFromSegment(nextSeg.index, nextSeg.chapter);
+            return;
+        }
+        // No more segments or same audio — stop
+        segAudioEl.pause();
+        stopSegAnimation();
+        _segContinuousPlay = false;
+        _segPlayEndMs = 0;
+        return;
+    }
+
+    // Find current segment from displayed segments only (not all segments)
+    const prevIdx = segCurrentIdx;
+    segCurrentIdx = -1;
+    if (segDisplayedSegments) {
+        for (const seg of segDisplayedSegments) {
+            if (timeMs >= seg.time_start && timeMs < seg.time_end) {
+                if (seg.audio_url && segAudioBufferUrl && seg.audio_url !== segAudioBufferUrl) continue;
+                segCurrentIdx = seg.index;
+                break;
+            }
+        }
+    }
+
+    // Stop if we've passed the end of the active displayed segment and entered a gap
+    if (segCurrentIdx === -1 && _segPlayEndMs > 0 && timeMs >= _segPlayEndMs) {
+        // In continuous play on same audio, don't stop in gaps — let audio play through
+        if (_segContinuousPlay && segDisplayedSegments) {
+            // Find the next segment after the one that just ended
+            const justEnded = segDisplayedSegments.find(s => s.time_end === _segPlayEndMs
+                && (!s.audio_url || s.audio_url === currentSrc));
+            if (justEnded) {
+                const nextSeg2 = _nextDisplayedSeg(justEnded.index);
+                if (nextSeg2 && (!nextSeg2.audio_url || nextSeg2.audio_url === currentSrc)) {
+                    return; // same audio file — wait for next segment to start
+                }
+            }
+        }
+        segAudioEl.pause();
+        stopSegAnimation();
+        _segContinuousPlay = false;
+        _segPlayEndMs = 0;
+        return;
+    }
+
+    if (segCurrentIdx !== prevIdx) {
+        if (segCurrentIdx >= 0) {
+            const curSeg = segDisplayedSegments.find(s => s.index === segCurrentIdx);
+            if (curSeg) _segPlayEndMs = curSeg.time_end;
+        }
+        updateSegHighlight();
+        updateSegPlayStatus();
+        // Prefetch next segment's audio when we enter a new segment
+        if (segCurrentIdx >= 0) _prefetchNextSegAudio(segCurrentIdx);
+    }
+}
+
+function startSegAnimation() {
+    segPlayBtn.textContent = 'Pause';
+    _activeAudioSource = 'main';
+    animateSeg();
+}
+
+function stopSegAnimation() {
+    // Only reset to "Play" if error card audio is also not playing
+    if (!valCardAudio || valCardAudio.paused) {
+        segPlayBtn.textContent = 'Play';
+    }
+    if (_activeAudioSource === 'main') _activeAudioSource = null;
+    if (segAnimId) {
+        cancelAnimationFrame(segAnimId);
+        segAnimId = null;
+    }
+}
+
+function onSegAudioEnded() {
+    // For by_ayah: when an audio file ends, auto-advance to next segment if continuous
+    if (_segContinuousPlay && segCurrentIdx >= 0) {
+        const next = _nextDisplayedSeg(segCurrentIdx);
+        if (next && next.audio_url) {
+            playFromSegment(next.index, next.chapter);
+            return;
+        }
+    }
+    _segContinuousPlay = false;
+    stopSegAnimation();
+}
+
+function animateSeg() {
+    updateSegHighlight();
+    drawActivePlayhead();
+    segAnimId = requestAnimationFrame(animateSeg);
+}
+
+let _prevHighlightedRow = null;
+let _prevHighlightedIdx = -1;
+
+function updateSegHighlight() {
+    if (segCurrentIdx === _prevHighlightedIdx) return;
+    if (_prevHighlightedRow) {
+        _prevHighlightedRow.classList.remove('playing');
+    }
+    _prevHighlightedRow = null;
+    _prevHighlightedIdx = segCurrentIdx;
+    if (segCurrentIdx >= 0) {
+        const row = segListEl.querySelector(`.seg-row[data-seg-index="${segCurrentIdx}"]`);
+        if (row) {
+            row.classList.add('playing');
+            _prevHighlightedRow = row;
+        }
+    }
+}
+
+let _prevPlayheadIdx = -1;
+let _prevPlayheadRow = null;
+let _currentPlayheadRow = null;
+
+function drawActivePlayhead() {
+    if (!segAllData || !segChapterSelect.value) return;
+    const chapter = parseInt(segChapterSelect.value);
+    const time = segAudioEl.currentTime * 1000; // convert to ms
+
+    const indexChanged = _prevPlayheadIdx !== segCurrentIdx;
+
+    // Clear playhead from previously active canvas (if it changed)
+    if (_prevPlayheadIdx >= 0 && indexChanged) {
+        const prevRow = _prevPlayheadRow || segListEl.querySelector(`.seg-row[data-seg-index="${_prevPlayheadIdx}"]`);
+        if (prevRow) {
+            const canvas = prevRow.querySelector('canvas');
+            const seg = getSegByChapterIndex(chapter, _prevPlayheadIdx);
+            if (canvas && seg) drawSegmentWaveform(canvas, seg.time_start, seg.time_end);
+        }
+    }
+
+    if (indexChanged) {
+        _prevPlayheadRow = _currentPlayheadRow;
+        _currentPlayheadRow = segCurrentIdx >= 0
+            ? segListEl.querySelector(`.seg-row[data-seg-index="${segCurrentIdx}"]`)
+            : null;
+    }
+    _prevPlayheadIdx = segCurrentIdx;
+
+    // Draw playhead on current segment only
+    if (segCurrentIdx >= 0) {
+        const row = _currentPlayheadRow;
+        if (row) {
+            const canvas = row.querySelector('canvas');
+            const seg = getSegByChapterIndex(chapter, segCurrentIdx);
+            if (canvas && seg) drawSegPlayhead(canvas, seg.time_start, seg.time_end, time);
+        }
+    }
+}
+
+function updateSegPlayStatus() {
+    if (segCurrentIdx >= 0 && segAllData && segChapterSelect.value) {
+        const chapter = parseInt(segChapterSelect.value);
+        const seg = getSegByChapterIndex(chapter, segCurrentIdx);
+        if (seg) {
+            segPlayStatus.textContent = `Segment #${seg.index} — ${formatTimeMs(segAudioEl.currentTime * 1000)}`;
+        }
+    } else {
+        segPlayStatus.textContent = '';
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Inline ref editing
+// ---------------------------------------------------------------------------
+
+function startRefEdit(refSpan, seg, row) {
+    // Already editing
+    if (refSpan.querySelector('input')) return;
+
+    const originalRef = seg.matched_ref || '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'seg-text-ref-input';
+    input.value = originalRef;
+
+    refSpan.textContent = '';
+    refSpan.appendChild(input);
+    input.focus();
+    input.select();
+
+    let committed = false;
+
+    function commit() {
+        if (committed) return;
+        committed = true;
+        const newRef = input.value.trim();
+        commitRefEdit(seg, newRef, row);
+    }
+
+    input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            committed = true;
+            refSpan.textContent = formatRef(originalRef);
+        }
+    });
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('click', (e) => e.stopPropagation());
+}
+
+async function commitRefEdit(seg, newRef, row) {
+    const oldRef = seg.matched_ref || '';
+    if (newRef === oldRef) {
+        // Same ref confirmed — mark as validated (100% confidence)
+        if (seg.confidence < 1.0) {
+            seg.confidence = 1.0;
+            delete seg._derived;
+            segDirtyIndices.add(seg.index);
+            segSaveBtn.disabled = false;
+            syncAllCardsForSegment(seg);
+        } else {
+            const refSpan = row.querySelector('.seg-text-ref');
+            if (refSpan) refSpan.textContent = formatRef(oldRef);
+        }
+        return;
+    }
+
+    // Update in-memory data
+    seg.matched_ref = newRef;
+    seg.confidence = 1.0;
+
+    if (newRef) {
+        // Resolve text from backend
+        try {
+            const resp = await fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(newRef)}`);
+            const data = await resp.json();
+            if (data.text) {
+                seg.matched_text = data.text;
+                seg.display_text = data.display_text || data.text;
+            } else if (data.error) {
+                console.warn('resolve_ref error:', data.error);
+                seg.matched_text = '(invalid ref)';
+                seg.display_text = '';
+            }
+        } catch (e) {
+            console.error('Failed to resolve ref:', e);
+            seg.matched_text = '(resolve failed)';
+            seg.display_text = '';
+        }
+    } else {
+        seg.matched_text = '';
+        seg.display_text = '';
+    }
+
+    delete seg._derived;
+    segDirtyIndices.add(seg.index);
+    segSaveBtn.disabled = false;
+
+    // Track cross-chapter edits
+    if (seg.chapter && seg.chapter !== parseInt(segChapterSelect.value)) {
+        segDirtyChapters.add(seg.chapter);
+    }
+
+    // Update all matching cards globally (both main and error sections)
+    syncAllCardsForSegment(seg);
+}
+
+/** Update a single .seg-row card in-place (works for both main and error section cards). */
+function updateSegCard(row, seg) {
+    row.classList.add('dirty');
+
+    const confClass = getConfClass(seg);
+    const textBox = row.querySelector('.seg-text');
+    if (textBox) textBox.className = `seg-text ${confClass}`;
+
+    const refSpan = row.querySelector('.seg-text-ref');
+    if (refSpan) refSpan.textContent = formatRef(seg.matched_ref);
+
+    const confSpan = row.querySelector('.seg-text-conf');
+    if (confSpan) {
+        confSpan.className = `seg-text-conf ${confClass}`;
+        confSpan.textContent = seg.matched_ref ? (seg.confidence * 100).toFixed(1) + '%' : 'FAIL';
+    }
+
+    const body = row.querySelector('.seg-text-body');
+    if (body) body.textContent = seg.display_text || seg.matched_text || '(alignment failed)';
+
+    const timeInfo = row.querySelector('.seg-text-time');
+    if (timeInfo) {
+        // Preserve any tags (e.g. missing words)
+        const tags = timeInfo.querySelectorAll('.seg-tag');
+        timeInfo.textContent = `${formatTimeMs(seg.time_start)} - ${formatTimeMs(seg.time_end)} (${((seg.time_end - seg.time_start) / 1000).toFixed(1)}s)`;
+        tags.forEach(t => timeInfo.appendChild(t));
+    }
+}
+
+/** Sync all .seg-row cards matching this segment across the entire page. */
+function syncAllCardsForSegment(seg) {
+    document.querySelectorAll(
+        `.seg-row[data-seg-chapter="${seg.chapter}"][data-seg-index="${seg.index}"]`
+    ).forEach(row => {
+        if (!row.classList.contains('seg-row-context')) {
+            updateSegCard(row, seg);
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------------------
+// Save
+// ---------------------------------------------------------------------------
+
+async function onSegSaveClick() {
+    const hasDirty = segDirtyIndices.size > 0 || segStructuralChange || segDirtyChapters.size > 0;
+    if (!hasDirty) return;
+
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+
+    segSaveBtn.disabled = true;
+    segSaveBtn.textContent = 'Saving...';
+
+    let allOk = true;
+
+    try {
+        // 1) Save cross-chapter edits (from error card edits)
+        if (segDirtyChapters.size > 0) {
+            for (const ch of segDirtyChapters) {
+                const chSegs = getChapterSegments(ch);
+                const payload = {
+                    full_replace: true,
+                    segments: chSegs.map(s => ({
+                        time_start: s.time_start,
+                        time_end: s.time_end,
+                        matched_ref: s.matched_ref,
+                        matched_text: s.matched_text,
+                        confidence: s.confidence,
+                        phonemes_asr: s.phonemes_asr || '',
+                    })),
+                };
+                const resp = await fetch(`/api/seg/save/${reciter}/${ch}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const result = await resp.json();
+                if (!result.ok) {
+                    segPlayStatus.textContent = `Save error (ch ${ch}): ${result.error}`;
+                    allOk = false;
+                    break;
+                }
+            }
+            segDirtyChapters.clear();
+        }
+
+        // 2) Save current chapter edits (existing logic)
+        const chapter = segChapterSelect.value;
+        if (allOk && segData && chapter && (segDirtyIndices.size > 0 || segStructuralChange)) {
+            let payload;
+            // Always read from segAllData (canonical source) — segData.segments can desync
+            // after structural changes like split/merge due to shallow copies in syncChapterSegsToAll
+            const chSegs = getChapterSegments(parseInt(chapter));
+            if (segStructuralChange) {
+                payload = {
+                    full_replace: true,
+                    segments: chSegs.map(s => ({
+                        time_start: s.time_start,
+                        time_end: s.time_end,
+                        matched_ref: s.matched_ref,
+                        matched_text: s.matched_text,
+                        confidence: s.confidence,
+                        phonemes_asr: s.phonemes_asr || '',
+                    })),
+                };
+            } else {
+                const updates = [];
+                for (const idx of segDirtyIndices) {
+                    const seg = chSegs.find(s => s.index === idx);
+                    if (seg) {
+                        updates.push({
+                            index: seg.index,
+                            matched_ref: seg.matched_ref,
+                            matched_text: seg.matched_text,
+                            confidence: seg.confidence,
+                        });
+                    }
+                }
+                payload = { segments: updates };
+            }
+
+            const resp = await fetch(`/api/seg/save/${reciter}/${chapter}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const result = await resp.json();
+            if (!result.ok) {
+                segPlayStatus.textContent = `Save error: ${result.error}`;
+                allOk = false;
+            }
+        }
+
+        if (allOk) {
+            segDirtyIndices.clear();
+            segStructuralChange = false;
+            segSaveBtn.textContent = 'Saved';
+            // Clear dirty indicators on all cards (main + error sections)
+            document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
+            setTimeout(() => { segSaveBtn.textContent = 'Save'; }, 1500);
+            segUndoBtn.hidden = false;
+            // Delay validation refresh to let server background thread finish
+            setTimeout(refreshValidation, 1500);
+        } else {
+            segSaveBtn.disabled = false;
+            segSaveBtn.textContent = 'Save';
+        }
+    } catch (e) {
+        console.error('Save failed:', e);
+        segPlayStatus.textContent = 'Save failed';
+        segSaveBtn.disabled = false;
+        segSaveBtn.textContent = 'Save';
+    }
+}
+
+
+async function onSegUndoClick() {
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+    if (!confirm('Undo last save? This will restore the previous version.')) return;
+
+    segUndoBtn.disabled = true;
+    segUndoBtn.textContent = 'Undoing...';
+
+    try {
+        const resp = await fetch(`/api/seg/undo/${reciter}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const result = await resp.json();
+        if (result.ok) {
+            segUndoBtn.hidden = true;
+            segUndoBtn.disabled = false;
+            segUndoBtn.textContent = 'Undo Save';
+            // Reload data for the current reciter
+            onSegReciterChange();
+        } else {
+            segPlayStatus.textContent = `Undo error: ${result.error}`;
+            segUndoBtn.disabled = false;
+            segUndoBtn.textContent = 'Undo Save';
+        }
+    } catch (e) {
+        console.error('Undo failed:', e);
+        segPlayStatus.textContent = 'Undo failed';
+        segUndoBtn.disabled = false;
+        segUndoBtn.textContent = 'Undo Save';
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Keyboard
+// ---------------------------------------------------------------------------
+
+const SEG_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
+
+function handleSegKeydown(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (typeof activeTab !== 'undefined' && activeTab !== 'segments') return;
+
+    switch (e.code) {
+        case 'Space':
+            e.preventDefault();
+            onSegPlayClick();
+            break;
+        case 'ArrowLeft': {
+            e.preventDefault();
+            const el = (_activeAudioSource === 'error' && valCardAudio) ? valCardAudio : segAudioEl;
+            el.currentTime = Math.max(0, el.currentTime - 3);
+            break;
+        }
+        case 'ArrowRight': {
+            e.preventDefault();
+            const el = (_activeAudioSource === 'error' && valCardAudio) ? valCardAudio : segAudioEl;
+            el.currentTime = Math.min(el.duration || 0, el.currentTime + 3);
+            break;
+        }
+        case 'ArrowUp': {
+            e.preventDefault();
+            if (!segDisplayedSegments || segDisplayedSegments.length === 0) break;
+            const curPos = segDisplayedSegments.findIndex(s => s.index === segCurrentIdx);
+            const prevPos = curPos > 0 ? curPos - 1 : 0;
+            const prev = segDisplayedSegments[prevPos];
+            playFromSegment(prev.index, prev.chapter);
+            break;
+        }
+        case 'ArrowDown': {
+            e.preventDefault();
+            if (!segDisplayedSegments || segDisplayedSegments.length === 0) break;
+            const curPos = segDisplayedSegments.findIndex(s => s.index === segCurrentIdx);
+            const nextPos = curPos >= 0 && curPos < segDisplayedSegments.length - 1 ? curPos + 1 : (curPos === -1 ? 0 : curPos);
+            const nxt = segDisplayedSegments[nextPos];
+            playFromSegment(nxt.index, nxt.chapter);
+            break;
+        }
+        case 'Period': // > speed up
+        case 'Comma': { // < speed down
+            e.preventDefault();
+            const opts = Array.from(segSpeedSelect.options).map(o => parseFloat(o.value));
+            const curRate = parseFloat(segSpeedSelect.value);
+            const curIdx = opts.findIndex(s => Math.abs(s - curRate) < 0.01);
+            const idx = curIdx === -1 ? opts.indexOf(1) : curIdx;
+            const newIdx = e.code === 'Period'
+                ? Math.min(idx + 1, opts.length - 1)
+                : Math.max(idx - 1, 0);
+            segSpeedSelect.value = opts[newIdx];
+            segAudioEl.playbackRate = opts[newIdx];
+            if (valCardAudio) valCardAudio.playbackRate = opts[newIdx];
+            break;
+        }
+        case 'KeyJ': {
+            e.preventDefault();
+            const row = segListEl.querySelector(`.seg-row[data-seg-index="${segCurrentIdx}"]`);
+            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            break;
+        }
+        case 'KeyS': {
+            if (segDirtyIndices.size > 0 || segStructuralChange || segDirtyChapters.size > 0) {
+                e.preventDefault();
+                onSegSaveClick();
+            }
+            break;
+        }
+        case 'KeyZ': {
+            if (e.ctrlKey && !segUndoBtn.hidden) {
+                e.preventDefault();
+                onSegUndoClick();
+            }
+            break;
+        }
+        case 'Escape':
+            if (segEditMode) {
+                e.preventDefault();
+                exitEditMode();
+            }
+            break;
+
+        case 'Enter':
+            if (segEditMode && segCurrentIdx >= 0) {
+                e.preventDefault();
+                const seg = segDisplayedSegments
+                    ? segDisplayedSegments.find(s => s.index === segCurrentIdx)
+                    : null;
+                if (seg) {
+                    if (segEditMode === 'trim') confirmTrim(seg);
+                    else if (segEditMode === 'split') confirmSplit(seg);
+                }
+            }
+            break;
+
+        case 'KeyE': {
+            if (segEditMode || segCurrentIdx < 0) break;
+            e.preventDefault();
+            const row = segListEl.querySelector(`.seg-row[data-seg-index="${segCurrentIdx}"]`);
+            const seg = segDisplayedSegments
+                ? segDisplayedSegments.find(s => s.index === segCurrentIdx)
+                : null;
+            if (row && seg) {
+                const refSpan = row.querySelector('.seg-text-ref');
+                if (refSpan) startRefEdit(refSpan, seg, row);
+            }
+            break;
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Adjust mode
+// ---------------------------------------------------------------------------
+
+/**
+ * Enter trim or split mode, ensuring the audio buffer is available.
+ * For error cards from different chapters, loads the chapter's audio first.
+ */
+async function enterEditWithBuffer(seg, row, mode) {
+    if (segEditMode) return;
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    const currentChapter = parseInt(segChapterSelect.value);
+    const isErrorCard = !segListEl.contains(row);
+
+    if (isErrorCard && chapter !== currentChapter) {
+        // Cross-chapter error card: need to load the other chapter's audio
+        const buffer = await ensureChapterAudioBuffer(chapter);
+        if (!buffer) {
+            segPlayStatus.textContent = 'Could not load audio for chapter ' + chapter;
+            return;
+        }
+        // Temporarily swap segAudioBuffer for edit mode
+        row._savedAudioBuffer = segAudioBuffer;
+        row._savedAudioBufferUrl = segAudioBufferUrl;
+        segAudioBuffer = buffer;
+        segAudioBufferUrl = segAllData?.audio_by_chapter?.[chapter] || '';
+    } else if (isErrorCard && !segAudioBuffer) {
+        // Same chapter but no buffer yet
+        const buffer = await ensureChapterAudioBuffer(chapter);
+        if (buffer) {
+            segAudioBuffer = buffer;
+            segAudioBufferUrl = segAllData?.audio_by_chapter?.[chapter] || '';
+        }
+    } else if (!segAudioBuffer || (seg.audio_url && seg.audio_url !== segAudioBufferUrl)) {
+        // Main section segment: no buffer, or wrong buffer for this segment's audio
+        const segUrl = seg.audio_url;
+        if (segUrl) {
+            // by_ayah: check URL-keyed cache first (populated by IntersectionObserver)
+            const cached = segAudioBuffers.get(segUrl);
+            if (cached) {
+                segAudioBuffer = cached;
+                segAudioBufferUrl = segUrl;
+            } else {
+                await decodeSegAudio(segUrl);
+            }
+        } else {
+            // by_surah: ensure chapter buffer
+            const buffer = await ensureChapterAudioBuffer(chapter);
+            if (buffer) {
+                segAudioBuffer = buffer;
+                segAudioBufferUrl = segAllData?.audio_by_chapter?.[chapter] || '';
+            }
+        }
+    }
+
+    try {
+        if (mode === 'trim') enterTrimMode(seg, row);
+        else if (mode === 'split') enterSplitMode(seg, row);
+    } catch (e) {
+        console.error(`[${mode}] error entering edit mode:`, e);
+        segEditMode = null;
+        segEditIndex = -1;
+        document.body.classList.remove('seg-edit-active');
+        document.querySelector('.seg-row.seg-edit-target')?.classList.remove('seg-edit-target');
+    }
+}
+
+function enterTrimMode(seg, row) {
+    if (segEditMode) {
+        console.warn('[trim] blocked: already in edit mode:', segEditMode);
+        return;
+    }
+    segEditMode = 'trim';
+    segEditIndex = seg.index;
+
+    // Dim other rows via CSS (O(1) instead of per-element mutation)
+    row.classList.add('seg-edit-target');
+    document.body.classList.add('seg-edit-active');
+
+    // Create edit panel
+    const panel = document.createElement('div');
+    panel.className = 'seg-edit-panel';
+    panel.id = 'seg-edit-panel';
+
+    // Expanded waveform canvas
+    const trimCanvas = document.createElement('canvas');
+    trimCanvas.width = 600;
+    trimCanvas.height = 80;
+    trimCanvas.id = 'seg-trim-canvas';
+    panel.appendChild(trimCanvas);
+
+    // Time inputs
+    const inputRow = document.createElement('div');
+    inputRow.className = 'seg-trim-inputs';
+    inputRow.innerHTML = `
+        <label>Start (ms): <input type="number" id="trim-start" value="${seg.time_start}" step="10" min="0"></label>
+        <label>End (ms): <input type="number" id="trim-end" value="${seg.time_end}" step="10" min="0"></label>
+        <span class="seg-trim-duration" id="trim-duration">Duration: ${((seg.time_end - seg.time_start) / 1000).toFixed(2)}s</span>
+    `;
+    panel.appendChild(inputRow);
+
+    // Buttons
+    const btnRow = document.createElement('div');
+    btnRow.className = 'seg-edit-buttons';
+    btnRow.innerHTML = `
+        <button class="btn btn-sm btn-confirm" id="trim-confirm">Apply</button>
+        <button class="btn btn-sm btn-cancel" id="trim-cancel">Cancel</button>
+        <button class="btn btn-sm btn-preview" id="trim-preview">Preview</button>
+        <span class="seg-trim-status" id="trim-status"></span>
+    `;
+    panel.appendChild(btnRow);
+
+    row.after(panel);
+
+    // Compute context window: extend to adjacent segment boundaries (or audio edges)
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    const currentChapter = parseInt(segChapterSelect.value);
+    const chapterSegs = (chapter === currentChapter) ? _getChapterSegs() : getChapterSegments(chapter);
+    const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
+    const prevEnd = segIdx > 0 ? chapterSegs[segIdx - 1].time_end : 0;
+    const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
+        ? chapterSegs[segIdx + 1].time_start
+        : (segAudioBuffer ? segAudioBuffer.duration * 1000 : seg.time_end + 1000);
+    const windowStart = prevEnd;
+    const windowEnd = nextStart;
+    trimCanvas._trimWindow = { windowStart, windowEnd, currentStart: seg.time_start, currentEnd: seg.time_end };
+
+    drawTrimWaveform(trimCanvas);
+    setupTrimDragHandles(trimCanvas, seg);
+
+    document.getElementById('trim-start').addEventListener('input', () => {
+        const val = parseInt(document.getElementById('trim-start').value);
+        if (!isNaN(val)) {
+            trimCanvas._trimWindow.currentStart = val;
+            drawTrimWaveform(trimCanvas);
+            updateTrimDuration();
+        }
+    });
+    document.getElementById('trim-end').addEventListener('input', () => {
+        const val = parseInt(document.getElementById('trim-end').value);
+        if (!isNaN(val)) {
+            trimCanvas._trimWindow.currentEnd = val;
+            drawTrimWaveform(trimCanvas);
+            updateTrimDuration();
+        }
+    });
+
+    document.getElementById('trim-confirm').addEventListener('click', () => confirmTrim(seg));
+    document.getElementById('trim-cancel').addEventListener('click', exitEditMode);
+    document.getElementById('trim-preview').addEventListener('click', previewTrimAudio);
+}
+
+function drawTrimWaveform(canvas) {
+    if (!segAudioBuffer) return;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+    const tw = canvas._trimWindow;
+
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw waveform for the full window
+    const sampleRate = segAudioBuffer.sampleRate;
+    const rawData = segAudioBuffer.getChannelData(0);
+    const startSample = Math.floor((tw.windowStart / 1000) * sampleRate);
+    const endSample = Math.min(Math.floor((tw.windowEnd / 1000) * sampleRate), rawData.length);
+    const totalSamples = endSample - startSample;
+    if (totalSamples <= 0) return;
+
+    const buckets = width;
+    const blockSize = Math.max(1, Math.floor(totalSamples / buckets));
+    const scale = height / 2 * 0.9;
+
+    // Filled waveform
+    ctx.beginPath();
+    for (let i = 0; i < buckets; i++) {
+        const offset = startSample + i * blockSize;
+        let max = -1.0;
+        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
+            const val = rawData[offset + j];
+            if (val > max) max = val;
+        }
+        const x = (i / buckets) * width;
+        const y = centerY - max * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    for (let i = buckets - 1; i >= 0; i--) {
+        const offset = startSample + i * blockSize;
+        let min = 1.0;
+        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
+            const val = rawData[offset + j];
+            if (val < min) min = val;
+        }
+        const x = (i / buckets) * width;
+        const y = centerY - min * scale;
+        ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+    ctx.fill();
+    ctx.strokeStyle = '#4361ee';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Dim outside the trim region
+    const startX = ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
+    const endX = ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, startX, height);
+    ctx.fillRect(endX, 0, width - endX, height);
+
+    // Start handle (green)
+    ctx.strokeStyle = '#4caf50';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(startX, 0);
+    ctx.lineTo(startX, height);
+    ctx.stroke();
+    // Handle grip
+    ctx.fillStyle = '#4caf50';
+    ctx.fillRect(startX - 4, height / 2 - 10, 8, 20);
+
+    // End handle (red)
+    ctx.strokeStyle = '#f44336';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(endX, 0);
+    ctx.lineTo(endX, height);
+    ctx.stroke();
+    ctx.fillStyle = '#f44336';
+    ctx.fillRect(endX - 4, height / 2 - 10, 8, 20);
+}
+
+function setupTrimDragHandles(canvas, seg) {
+    let dragging = null;
+    const HANDLE_THRESHOLD = 12;
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const tw = canvas._trimWindow;
+        const width = canvas.width;
+        const startX = ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
+        const endX = ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
+
+        if (Math.abs(x - startX) < HANDLE_THRESHOLD) dragging = 'start';
+        else if (Math.abs(x - endX) < HANDLE_THRESHOLD) dragging = 'end';
+        if (dragging) canvas.style.cursor = 'col-resize';
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const tw = canvas._trimWindow;
+        const width = canvas.width;
+        const timeAtX = tw.windowStart + (x / width) * (tw.windowEnd - tw.windowStart);
+        const snapped = Math.round(timeAtX / 10) * 10;
+
+        if (dragging === 'start') {
+            tw.currentStart = Math.max(0, Math.min(snapped, tw.currentEnd - 50));
+            document.getElementById('trim-start').value = tw.currentStart;
+        } else {
+            tw.currentEnd = Math.max(tw.currentStart + 50, snapped);
+            document.getElementById('trim-end').value = tw.currentEnd;
+        }
+        updateTrimDuration();
+        drawTrimWaveform(canvas);
+    });
+
+    canvas.addEventListener('mouseup', () => { dragging = null; canvas.style.cursor = 'col-resize'; });
+    canvas.addEventListener('mouseleave', () => { dragging = null; canvas.style.cursor = 'col-resize'; });
+}
+
+function updateTrimDuration() {
+    const s = parseInt(document.getElementById('trim-start').value);
+    const e = parseInt(document.getElementById('trim-end').value);
+    const el = document.getElementById('trim-duration');
+    if (el && !isNaN(s) && !isNaN(e)) {
+        el.textContent = `Duration: ${((e - s) / 1000).toFixed(2)}s`;
+    }
+}
+
+function confirmTrim(seg) {
+    const trimStatus = document.getElementById('trim-status');
+    const newStart = parseInt(document.getElementById('trim-start').value);
+    const newEnd = parseInt(document.getElementById('trim-end').value);
+    if (isNaN(newStart) || isNaN(newEnd) || newStart >= newEnd) {
+        if (trimStatus) trimStatus.textContent = 'Invalid time range';
+        return;
+    }
+
+    // Use chapter segments for overlap checks
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    const currentChapter = parseInt(segChapterSelect.value);
+    const chapterSegs = chapter === currentChapter ? _getChapterSegs() : getChapterSegments(chapter);
+    const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
+    const prevSeg = segIdx > 0 ? chapterSegs[segIdx - 1] : null;
+    const nextSeg = (segIdx >= 0 && segIdx < chapterSegs.length - 1) ? chapterSegs[segIdx + 1] : null;
+
+    // Only check overlap when segments share the same audio file
+    if (prevSeg && prevSeg.audio_url === seg.audio_url && newStart < prevSeg.time_end) {
+        if (trimStatus) trimStatus.textContent = 'Start overlaps with previous segment';
+        return;
+    }
+    if (nextSeg && nextSeg.audio_url === seg.audio_url && newEnd > nextSeg.time_start) {
+        if (trimStatus) trimStatus.textContent = 'End overlaps with next segment';
+        return;
+    }
+
+    // Update in-memory
+    seg.time_start = newStart;
+    seg.time_end = newEnd;
+    segSaveBtn.disabled = false;
+
+
+    if (chapter !== currentChapter || !segData?.segments) {
+        // Cross-chapter edit or segData unavailable: mark chapter dirty
+        segDirtyChapters.add(chapter);
+        segAllData._byChapter = null; segAllData._byChapterIndex = null;
+    } else {
+        segStructuralChange = true;
+        syncChapterSegsToAll();
+    }
+
+    computeSilenceAfter();
+    exitEditMode();
+    applyVerseFilterAndRender();
+    syncAllCardsForSegment(seg);
+    segPlayStatus.textContent = 'Adjusted (unsaved)';
+}
+
+let _previewStopHandler = null;
+
+function previewTrimAudio() {
+    // Remove any previous preview handler
+    if (_previewStopHandler) {
+        segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
+        _previewStopHandler = null;
+    }
+    const start = parseInt(document.getElementById('trim-start').value) / 1000;
+    const end = parseInt(document.getElementById('trim-end').value) / 1000;
+    if (isNaN(start) || isNaN(end)) return;
+
+    const doPlay = () => {
+        segAudioEl.currentTime = start;
+        segAudioEl.playbackRate = parseFloat(segSpeedSelect.value);
+        segAudioEl.play();
+        _previewStopHandler = () => {
+            if (segAudioEl.currentTime >= end) {
+                segAudioEl.pause();
+                segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
+                _previewStopHandler = null;
+            }
+        };
+        segAudioEl.addEventListener('timeupdate', _previewStopHandler);
+    };
+
+    const editChapter = segChapterSelect.value ? parseInt(segChapterSelect.value) : null;
+    const editSeg = editChapter != null ? getSegByChapterIndex(editChapter, segEditIndex) : null;
+    const targetUrl = editSeg && editSeg.audio_url;
+    if (targetUrl && !segAudioEl.src.endsWith(targetUrl)) {
+        segAudioEl.src = targetUrl;
+        segAudioEl.addEventListener('canplay', doPlay, { once: true });
+        segAudioEl.load();
+    } else {
+        doPlay();
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Split mode
+// ---------------------------------------------------------------------------
+
+function enterSplitMode(seg, row) {
+    if (segEditMode) {
+        console.warn('[split] blocked: already in edit mode:', segEditMode);
+        return;
+    }
+    segEditMode = 'split';
+    segEditIndex = seg.index;
+
+    // Dim other rows via CSS (O(1) instead of per-element mutation)
+    row.classList.add('seg-edit-target');
+    document.body.classList.add('seg-edit-active');
+
+    const panel = document.createElement('div');
+    panel.className = 'seg-edit-panel';
+    panel.id = 'seg-edit-panel';
+
+    const splitCanvas = document.createElement('canvas');
+    splitCanvas.width = 600;
+    splitCanvas.height = 80;
+    splitCanvas.id = 'seg-split-canvas';
+    panel.appendChild(splitCanvas);
+
+    const defaultSplit = Math.round((seg.time_start + seg.time_end) / 2);
+
+    const inputRow = document.createElement('div');
+    inputRow.className = 'seg-split-inputs';
+    inputRow.innerHTML = `
+        <label>Split at (ms): <input type="number" id="split-time" value="${defaultSplit}" step="10"
+            min="${seg.time_start + 50}" max="${seg.time_end - 50}"></label>
+        <span class="seg-split-info" id="split-info">
+            Left: ${((defaultSplit - seg.time_start) / 1000).toFixed(2)}s |
+            Right: ${((seg.time_end - defaultSplit) / 1000).toFixed(2)}s
+        </span>
+    `;
+    panel.appendChild(inputRow);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'seg-edit-buttons';
+    btnRow.innerHTML = `
+        <button class="btn btn-sm btn-confirm" id="split-confirm">Split</button>
+        <button class="btn btn-sm btn-cancel" id="split-cancel">Cancel</button>
+    `;
+    panel.appendChild(btnRow);
+
+    row.after(panel);
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    splitCanvas._splitData = { seg, currentSplit: defaultSplit };
+    drawSplitWaveform(splitCanvas);
+    setupSplitDragHandle(splitCanvas, seg);
+
+    document.getElementById('split-time').addEventListener('input', () => {
+        const val = parseInt(document.getElementById('split-time').value);
+        if (!isNaN(val)) {
+            splitCanvas._splitData.currentSplit = val;
+            drawSplitWaveform(splitCanvas);
+            updateSplitInfo(seg, val);
+        }
+    });
+
+    document.getElementById('split-confirm').addEventListener('click', () => confirmSplit(seg));
+    document.getElementById('split-cancel').addEventListener('click', exitEditMode);
+}
+
+function drawSplitWaveform(canvas) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, width, height);
+    if (!segAudioBuffer) {
+        ctx.fillStyle = '#888';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('No audio loaded', width / 2, height / 2);
+        return;
+    }
+    const centerY = height / 2;
+    const sd = canvas._splitData;
+    const seg = sd.seg;
+
+    const sampleRate = segAudioBuffer.sampleRate;
+    const rawData = segAudioBuffer.getChannelData(0);
+    const startSample = Math.floor((seg.time_start / 1000) * sampleRate);
+    const endSample = Math.min(Math.floor((seg.time_end / 1000) * sampleRate), rawData.length);
+    const totalSamples = endSample - startSample;
+    if (totalSamples <= 0) return;
+
+    const buckets = width;
+    const blockSize = Math.max(1, Math.floor(totalSamples / buckets));
+    const scale = height / 2 * 0.9;
+
+    // Compute max/min per bucket
+    const maxVals = new Float32Array(buckets);
+    const minVals = new Float32Array(buckets);
+    for (let i = 0; i < buckets; i++) {
+        const offset = startSample + i * blockSize;
+        let mx = -1.0, mn = 1.0;
+        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
+            const val = rawData[offset + j];
+            if (val > mx) mx = val;
+            if (val < mn) mn = val;
+        }
+        maxVals[i] = mx;
+        minVals[i] = mn;
+    }
+
+    const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * width;
+
+    // Draw left half (blue tint)
+    ctx.beginPath();
+    for (let i = 0; i < buckets; i++) {
+        const x = (i / buckets) * width;
+        const y = centerY - maxVals[i] * scale;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    for (let i = buckets - 1; i >= 0; i--) {
+        const x = (i / buckets) * width;
+        const y = centerY - minVals[i] * scale;
+        ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+    ctx.fill();
+
+    // Tint right half differently
+    ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
+    ctx.fillRect(splitX, 0, width - splitX, height);
+
+    // Waveform outline
+    ctx.strokeStyle = '#4361ee';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < buckets; i++) {
+        const x = (i / buckets) * width;
+        const y = centerY - maxVals[i] * scale;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Split line (yellow)
+    ctx.strokeStyle = '#ffeb3b';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(splitX, 0);
+    ctx.lineTo(splitX, height);
+    ctx.stroke();
+    // Handle grip
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath();
+    ctx.moveTo(splitX - 6, 0);
+    ctx.lineTo(splitX + 6, 0);
+    ctx.lineTo(splitX, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(splitX - 6, height);
+    ctx.lineTo(splitX + 6, height);
+    ctx.lineTo(splitX, height - 8);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function setupSplitDragHandle(canvas, seg) {
+    let dragging = false;
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const sd = canvas._splitData;
+        const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * canvas.width;
+        if (Math.abs(x - splitX) < 15) {
+            dragging = true;
+            canvas.style.cursor = 'col-resize';
+        }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const sd = canvas._splitData;
+        const timeAtX = seg.time_start + (x / canvas.width) * (seg.time_end - seg.time_start);
+        const snapped = Math.round(timeAtX / 10) * 10;
+        sd.currentSplit = Math.max(seg.time_start + 50, Math.min(snapped, seg.time_end - 50));
+        document.getElementById('split-time').value = sd.currentSplit;
+        updateSplitInfo(seg, sd.currentSplit);
+        drawSplitWaveform(canvas);
+    });
+
+    canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'col-resize'; });
+    canvas.addEventListener('mouseleave', () => { dragging = false; canvas.style.cursor = 'col-resize'; });
+}
+
+function updateSplitInfo(seg, splitTime) {
+    const el = document.getElementById('split-info');
+    if (el) {
+        el.textContent = `Left: ${((splitTime - seg.time_start) / 1000).toFixed(2)}s | Right: ${((seg.time_end - splitTime) / 1000).toFixed(2)}s`;
+    }
+}
+
+function confirmSplit(seg) {
+    const splitTime = parseInt(document.getElementById('split-time').value);
+    if (isNaN(splitTime) || splitTime <= seg.time_start || splitTime >= seg.time_end) {
+        segPlayStatus.textContent = 'Invalid split point';
+        return;
+    }
+
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    const currentChapter = parseInt(segChapterSelect.value);
+    const useSegData = chapter === currentChapter && segData?.segments;
+
+    const firstHalf = {
+        ...seg,
+        time_end: splitTime,
+    };
+    const secondHalf = {
+        ...seg,
+        index: seg.index + 1,
+        time_start: splitTime,
+        matched_ref: '',
+        matched_text: '',
+        display_text: '',
+        confidence: 1.0,
+    };
+
+    if (useSegData) {
+        const segIdx = segData.segments.findIndex(s => s.index === seg.index);
+        segData.segments.splice(segIdx, 1, firstHalf, secondHalf);
+        segData.segments.forEach((s, i) => { s.index = i; });
+        segStructuralChange = true;
+        syncChapterSegsToAll();
+        segData.segments = getChapterSegments(chapter);
+    } else {
+        // segData unavailable or cross-chapter: operate directly on segAllData
+        const globalIdx = segAllData.segments.indexOf(seg);
+        if (globalIdx !== -1) {
+            segAllData.segments.splice(globalIdx, 1, firstHalf, secondHalf);
+        }
+        let reIdx = 0;
+        segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
+        segDirtyChapters.add(chapter);
+        segAllData._byChapter = null; segAllData._byChapterIndex = null;
+    }
+
+    segSaveBtn.disabled = false;
+
+    computeSilenceAfter();
+    exitEditMode();
+    applyVerseFilterAndRender();
+    invalidateLoadedErrorCards();
+    segPlayStatus.textContent = 'Segment split (unsaved)';
+}
+
+
+// ---------------------------------------------------------------------------
+// Merge
+// ---------------------------------------------------------------------------
+
+/** Merge a segment with its previous or next neighbour in the same chapter. */
+function mergeAdjacent(seg, direction) {
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    const currentChapter = parseInt(segChapterSelect.value);
+
+    // Get chapter segments to find neighbor
+    let chapterSegs;
+    if (chapter === currentChapter && segData?.segments) {
+        chapterSegs = segData.segments;
+    } else if (segAllData?.segments) {
+        chapterSegs = getChapterSegments(chapter);
+    }
+    if (!chapterSegs) return;
+
+    const idx = chapterSegs.findIndex(s => s.index === seg.index);
+    if (idx === -1) return;
+    const otherIdx = direction === 'prev' ? idx - 1 : idx + 1;
+    if (otherIdx < 0 || otherIdx >= chapterSegs.length) return;
+    const other = chapterSegs[otherIdx];
+
+    const first = direction === 'prev' ? other : seg;
+    const second = direction === 'prev' ? seg : other;
+
+    // Build merged ref
+    let mergedRef = '';
+    const refs = [first.matched_ref, second.matched_ref].filter(Boolean);
+    if (refs.length > 0) {
+        const s = refs[0].includes('-') ? refs[0].split('-')[0] : refs[0];
+        const e = refs[refs.length - 1].includes('-') ? refs[refs.length - 1].split('-')[1] : refs[refs.length - 1];
+        mergedRef = `${s}-${e}`;
+    }
+
+    const merged = {
+        ...first,
+        index: first.index,
+        time_start: first.time_start,
+        time_end: second.time_end,
+        matched_ref: mergedRef,
+        matched_text: [first.matched_text, second.matched_text].filter(Boolean).join(' '),
+        display_text: [first.display_text, second.display_text].filter(Boolean).join(' '),
+        confidence: Math.max(first.confidence || 0, second.confidence || 0),
+    };
+
+    if (chapter === currentChapter && segData?.segments) {
+        const spliceIdx = Math.min(idx, otherIdx);
+        segData.segments.splice(spliceIdx, 2, merged);
+        segData.segments.forEach((s, i) => { s.index = i; });
+        segStructuralChange = true;
+        syncChapterSegsToAll();
+    } else if (segAllData?.segments) {
+        const globalFirst = segAllData.segments.indexOf(first);
+        const globalSecond = segAllData.segments.indexOf(second);
+        const spliceStart = Math.min(globalFirst, globalSecond);
+        segAllData.segments.splice(spliceStart, 2, merged);
+        let reIdx = 0;
+        segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
+        segDirtyChapters.add(chapter);
+        segAllData._byChapter = null; segAllData._byChapterIndex = null;
+    }
+
+    segSaveBtn.disabled = false;
+    if (chapter === currentChapter && segData) {
+        segData.segments = getChapterSegments(chapter);
+    }
+    computeSilenceAfter();
+    applyVerseFilterAndRender();
+    invalidateLoadedErrorCards();
+    segPlayStatus.textContent = 'Segments merged (unsaved)';
+}
+
+
+// ---------------------------------------------------------------------------
+// Delete
+// ---------------------------------------------------------------------------
+
+/** Unified delete: works for both main section and error card segments. */
+function deleteSegment(seg, row) {
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    const currentChapter = parseInt(segChapterSelect.value);
+    const label = seg.chapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
+    if (!confirm(`Delete segment ${label} (${formatRef(seg.matched_ref) || 'no match'})?`)) return;
+
+    if (chapter === currentChapter && segData?.segments) {
+        // Current chapter: operate on segData.segments
+        const segIdx = segData.segments.findIndex(s => s.index === seg.index);
+        if (segIdx === -1) return;
+        segData.segments.splice(segIdx, 1);
+        segData.segments.forEach((s, i) => { s.index = i; });
+        segStructuralChange = true;
+        syncChapterSegsToAll();
+    } else if (segAllData?.segments) {
+        // Cross-chapter: operate directly on segAllData
+        const globalIdx = segAllData.segments.findIndex(s => s.chapter === chapter && s.index === seg.index);
+        if (globalIdx === -1) return;
+        segAllData.segments.splice(globalIdx, 1);
+        let idx = 0;
+        segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
+        segDirtyChapters.add(chapter);
+        segAllData._byChapter = null; segAllData._byChapterIndex = null;
+    }
+
+    segSaveBtn.disabled = false;
+
+
+    // Remove the error card wrapper from DOM if applicable
+    if (row) {
+        const wrapper = row.closest('.val-card-wrapper');
+        if (wrapper) wrapper.remove();
+    }
+
+    // If deleted segment's chapter matches current chapter, re-render
+    if (chapter === currentChapter && segData) {
+        segData.segments = getChapterSegments(chapter);
+    }
+
+    computeSilenceAfter();
+    applyVerseFilterAndRender();
+    invalidateLoadedErrorCards();
+    segPlayStatus.textContent = 'Segment deleted (unsaved)';
+}
+
+
+// ---------------------------------------------------------------------------
+// Shared edit mode
+// ---------------------------------------------------------------------------
+
+function exitEditMode() {
+    // Restore audio buffer if it was swapped for cross-chapter editing
+    const panel = document.getElementById('seg-edit-panel');
+    if (panel) {
+        const editRow = panel.previousElementSibling;
+        if (editRow?._savedAudioBuffer !== undefined) {
+            segAudioBuffer = editRow._savedAudioBuffer;
+            segAudioBufferUrl = editRow._savedAudioBufferUrl;
+            delete editRow._savedAudioBuffer;
+            delete editRow._savedAudioBufferUrl;
+        }
+        panel.remove();
+    }
+
+    segEditMode = null;
+    segEditIndex = -1;
+    // Stop any preview playback
+    if (_previewStopHandler) {
+        segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
+        _previewStopHandler = null;
+    }
+    // Un-dim rows (O(1) — remove container class + target marker)
+    document.body.classList.remove('seg-edit-active');
+    document.querySelector('.seg-row.seg-edit-target')?.classList.remove('seg-edit-target');
+}
+
+function applyVerseFilterAndRender() {
+    applyFiltersAndRender();
+}
+
+
+// ---------------------------------------------------------------------------
+// Filter bar UI
+// ---------------------------------------------------------------------------
+
+function renderFilterBar() {
+    segFilterRowsEl.innerHTML = '';
+    segActiveFilters.forEach((f, i) => {
+        const row = document.createElement('div');
+        row.className = 'seg-filter-row';
+
+        const fieldSel = document.createElement('select');
+        fieldSel.className = 'seg-filter-field';
+        SEG_FILTER_FIELDS.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.value; o.textContent = opt.label; o.selected = opt.value === f.field;
+            fieldSel.appendChild(o);
+        });
+        fieldSel.addEventListener('change', () => {
+            segActiveFilters[i].field = fieldSel.value; applyFiltersAndRender();
+        });
+
+        const opSel = document.createElement('select');
+        opSel.className = 'seg-filter-op';
+        SEG_FILTER_OPS.forEach(op => {
+            const o = document.createElement('option');
+            o.value = op; o.textContent = op; o.selected = op === f.op;
+            opSel.appendChild(o);
+        });
+        opSel.addEventListener('change', () => {
+            segActiveFilters[i].op = opSel.value; applyFiltersAndRender();
+        });
+
+        const valInput = document.createElement('input');
+        valInput.type = 'number'; valInput.className = 'seg-filter-value';
+        valInput.value = f.value ?? ''; valInput.step = 'any'; valInput.placeholder = 'value';
+        valInput.addEventListener('input', () => {
+            const v = parseFloat(valInput.value);
+            segActiveFilters[i].value = isNaN(v) ? null : v;
+            clearTimeout(_segFilterDebounceTimer);
+            _segFilterDebounceTimer = setTimeout(applyFiltersAndRender, 300);
+        });
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn btn-sm btn-cancel seg-filter-remove';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => {
+            segActiveFilters.splice(i, 1);
+            renderFilterBar(); updateFilterBarControls(); applyFiltersAndRender();
+        });
+
+        row.append(fieldSel, opSel, valInput, removeBtn);
+        segFilterRowsEl.appendChild(row);
+    });
+}
+
+function updateFilterBarControls() {
+    const n = segActiveFilters.length;
+    if (segFilterCountEl) segFilterCountEl.textContent = n > 0 ? `(${n})` : '';
+    if (segFilterClearBtn) segFilterClearBtn.hidden = n === 0;
+}
+
+function addSegFilterCondition() {
+    segActiveFilters.push({ field: 'duration_s', op: '>', value: null });
+    renderFilterBar(); updateFilterBarControls();
+    // Focus the value input of the new row
+    segFilterRowsEl.querySelectorAll('.seg-filter-value').forEach((el, i, arr) => {
+        if (i === arr.length - 1) el.focus();
+    });
+}
+
+function clearAllSegFilters() {
+    segActiveFilters = [];
+    renderFilterBar(); updateFilterBarControls(); applyFiltersAndRender();
+}
+
+
+// ---------------------------------------------------------------------------
+// Validation panel
+// ---------------------------------------------------------------------------
+
+function captureValPanelState(targetEl) {
+    const state = {};
+    targetEl.querySelectorAll('details[data-category]').forEach(d => {
+        const cat = d.getAttribute('data-category');
+        const cardsDiv = d.querySelector('.val-cards-container');
+        state[cat] = {
+            open: d.open,
+            loaded: cardsDiv && !cardsDiv.hidden && cardsDiv.children.length > 0
+        };
+    });
+    return state;
+}
+
+function restoreValPanelState(targetEl, state) {
+    targetEl.querySelectorAll('details[data-category]').forEach(d => {
+        const cat = d.getAttribute('data-category');
+        const s = state[cat];
+        if (!s) return;
+        if (s.open) d.open = true;
+        if (s.loaded) {
+            const loadBtn = d.querySelector('.val-load-all-btn');
+            if (loadBtn) loadBtn.click();
+        }
+    });
+}
+
+function renderValidationPanel(data, chapter = null, targetEl = segValidationEl, label = null) {
+    targetEl.innerHTML = '';
+    if (!data) { targetEl.hidden = true; return; }
+
+    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, cross_verse: cv, audio_bleeding: ab } = data;
+
+    if (chapter !== null) {
+        errs           = (errs           || []).filter(i => i.chapter === chapter);
+        mv             = (mv             || []).filter(i => i.chapter === chapter);
+        mw             = (mw             || []).filter(i => i.chapter === chapter);
+        failed         = (failed         || []).filter(i => i.chapter === chapter);
+        low_confidence = (low_confidence || []).filter(i => i.chapter === chapter);
+        cv             = (cv             || []).filter(i => i.chapter === chapter);
+        ab             = (ab             || []).filter(i => i.chapter === chapter);
+    }
+    const hasAny = (errs && errs.length > 0) || (mv && mv.length > 0) || (mw && mw.length > 0)
+        || (failed && failed.length > 0) || (low_confidence && low_confidence.length > 0) || (cv && cv.length > 0)
+        || (ab && ab.length > 0);
+    if (!hasAny) {
+        targetEl.hidden = true;
+        return;
+    }
+    targetEl.hidden = false;
+
+    if (label) {
+        const labelEl = document.createElement('div');
+        labelEl.className = 'val-section-label';
+        labelEl.textContent = label;
+        targetEl.appendChild(labelEl);
+    }
+
+    const isGlobal = chapter === null;
+
+    const categories = [
+        {
+            name: 'Errors', items: errs, type: 'errors', countClass: 'has-errors',
+            getLabel: i => i.verse_key, getTitle: i => i.msg, btnClass: 'val-error',
+            onClick: i => jumpToVerse(i.chapter, i.verse_key)
+        },
+        {
+            name: 'Missing Verses', items: mv, type: 'missing_verses', countClass: 'has-errors',
+            getLabel: i => i.verse_key, getTitle: i => i.msg, btnClass: 'val-error',
+            onClick: i => jumpToVerse(i.chapter, i.verse_key)
+        },
+        {
+            name: 'Missing Words', items: mw, type: 'missing_words', countClass: 'has-errors',
+            getLabel: i => {
+                const indices = i.seg_indices || [];
+                return indices.length > 0 ? `${i.verse_key} #${indices.join('/#')}` : i.verse_key;
+            },
+            getTitle: i => i.msg, btnClass: 'val-error',
+            onClick: i => {
+                const indices = i.seg_indices || [];
+                if (indices.length > 0) jumpToSegment(i.chapter, indices[0]);
+                else jumpToVerse(i.chapter, i.verse_key);
+            }
+        },
+        {
+            name: 'Failed Alignments', items: failed, type: 'failed', countClass: 'has-errors',
+            getLabel: i => `${i.chapter}:#${i.seg_index}`, getTitle: i => `${i.time}`, btnClass: 'val-error',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        },
+        {
+            name: 'Low Confidence', items: low_confidence, type: 'low_confidence', countClass: 'has-warnings',
+            getLabel: i => i.ref,
+            getTitle: i => `${(i.confidence * 100).toFixed(1)}%`,
+            btnClass: i => i.confidence < 0.60 ? 'val-conf-low' : 'val-conf-mid',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        },
+        {
+            name: 'Cross-verse', items: cv, type: 'cross_verse', countClass: 'val-cross-count',
+            getLabel: i => i.ref, getTitle: () => '', btnClass: 'val-cross',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        },
+        {
+            name: 'Audio Bleeding', items: ab, type: 'audio_bleeding', countClass: 'has-warnings',
+            getLabel: i => `${i.entry_ref}\u2192${i.matched_verse}`,
+            getTitle: i => `audio ${i.entry_ref} contains segment matching ${i.ref} (${i.time})`,
+            btnClass: 'val-bleed',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        }
+    ];
+
+    categories.forEach(cat => {
+        if (!cat.items || cat.items.length === 0) return;
+
+        const details = document.createElement('details');
+        details.setAttribute('data-category', cat.type);
+        const summary = document.createElement('summary');
+        summary.innerHTML = `${cat.name} <span class="val-count ${cat.countClass}">${cat.items.length}</span>`;
+
+        // Load All button
+        const loadBtn = document.createElement('button');
+        loadBtn.className = 'val-load-all-btn';
+        loadBtn.textContent = 'Load All';
+        loadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const cardsDiv = details.querySelector('.val-cards-container');
+            if (!cardsDiv) return;
+            if (cardsDiv.children.length > 0) {
+                cardsDiv.innerHTML = '';
+                cardsDiv.hidden = true;
+                loadBtn.textContent = 'Load All';
+            } else {
+                renderCategoryCards(cat.type, cat.items, cardsDiv);
+                cardsDiv.hidden = false;
+                loadBtn.textContent = 'Hide All';
+                details.open = true;
+            }
+        });
+        summary.appendChild(loadBtn);
+
+        // "Confirm All" button for low confidence accordion
+        if (cat.type === 'low_confidence') {
+            const confirmAllBtn = document.createElement('button');
+            confirmAllBtn.className = 'val-load-all-btn';
+            confirmAllBtn.textContent = 'Confirm All';
+            confirmAllBtn.title = 'Set all low confidence segments to 100%';
+            confirmAllBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                let changed = 0;
+                for (const issue of cat.items) {
+                    const seg = getSegByChapterIndex(issue.chapter, issue.seg_index);
+                    if (!seg || seg.confidence >= 1.0) continue;
+                    seg.confidence = 1.0;
+                    delete seg._derived;
+                    segDirtyIndices.add(seg.index);
+                    if (seg.chapter && seg.chapter !== parseInt(segChapterSelect.value)) {
+                        segDirtyChapters.add(seg.chapter);
+                    }
+                    syncAllCardsForSegment(seg);
+                    changed++;
+                }
+                if (changed > 0) {
+                    segSaveBtn.disabled = false;
+                    confirmAllBtn.disabled = true;
+                    confirmAllBtn.textContent = 'Confirmed';
+                    // Fade out all item buttons and card-level confirm buttons
+                    const btns = details.querySelectorAll('.val-items .val-btn');
+                    btns.forEach(b => { b.style.opacity = '0.4'; });
+                    const cardConfBtns = details.querySelectorAll('.val-cards-container .val-autofix-btn');
+                    cardConfBtns.forEach(b => { b.disabled = true; b.textContent = 'Confirmed'; });
+                    const cardWrappers = details.querySelectorAll('.val-cards-container .val-card-wrapper');
+                    cardWrappers.forEach(w => { w.style.opacity = '0.5'; });
+                }
+            });
+            summary.appendChild(confirmAllBtn);
+        }
+
+        details.appendChild(summary);
+
+        // Button list
+        const itemsDiv = document.createElement('div');
+        itemsDiv.className = 'val-items';
+        cat.items.forEach(issue => {
+            const btn = document.createElement('button');
+            const cls = typeof cat.btnClass === 'function' ? cat.btnClass(issue) : cat.btnClass;
+            btn.className = `val-btn ${cls}`;
+            btn.textContent = cat.getLabel(issue);
+            btn.title = cat.getTitle(issue) || '';
+            btn.addEventListener('click', () => cat.onClick(issue));
+            itemsDiv.appendChild(btn);
+        });
+        details.appendChild(itemsDiv);
+
+        // Cards container (hidden initially)
+        const cardsDiv = document.createElement('div');
+        cardsDiv.className = 'val-cards-container';
+        cardsDiv.hidden = true;
+        details.appendChild(cardsDiv);
+
+        targetEl.appendChild(details);
+    });
+}
+
+async function jumpToSegment(chapter, segIndex) {
+    // Load the chapter if not already loaded
+    if (segChapterSelect.value !== String(chapter)) {
+        segChapterSelect.value = String(chapter);
+        if (segChapterSS) segChapterSS.refresh();
+        await onSegChapterChange();
+    }
+    // Scroll to the segment
+    const row = segListEl.querySelector(`.seg-row[data-seg-index="${segIndex}"]`);
+    if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('playing');
+        setTimeout(() => row.classList.remove('playing'), 2000);
+    }
+}
+
+
+
+async function jumpToVerse(chapter, verseKey) {
+    // Load chapter, then find the first segment matching this verse
+    if (segChapterSelect.value !== String(chapter)) {
+        segChapterSelect.value = String(chapter);
+        if (segChapterSS) segChapterSS.refresh();
+        await onSegChapterChange();
+    }
+    if (!segAllData) return;
+    // Find first segment whose matched_ref contains this verse
+    const parts = verseKey.split(':');
+    const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : verseKey;
+    const seg = segAllData.segments.find(s =>
+        s.chapter === parseInt(chapter) && s.matched_ref && s.matched_ref.startsWith(prefix)
+    );
+    if (seg) {
+        const row = segListEl.querySelector(`.seg-row[data-seg-index="${seg.index}"]`);
+        if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            row.classList.add('playing');
+            setTimeout(() => row.classList.remove('playing'), 2000);
+        }
+    }
+}
+
+async function refreshValidation() {
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+    try {
+        const globalState = captureValPanelState(segValidationGlobalEl);
+        const chState = captureValPanelState(segValidationEl);
+        const valResp = await fetch(`/api/seg/validate/${reciter}`);
+        segValidation = await valResp.json();
+        const ch = segChapterSelect.value ? parseInt(segChapterSelect.value) : null;
+        if (ch !== null) {
+            renderValidationPanel(segValidation, null, segValidationGlobalEl, 'All Chapters');
+            renderValidationPanel(segValidation, ch, segValidationEl, `Chapter ${ch}`);
+            restoreValPanelState(segValidationGlobalEl, globalState);
+            restoreValPanelState(segValidationEl, chState);
+        } else {
+            segValidationGlobalEl.hidden = true;
+            segValidationGlobalEl.innerHTML = '';
+            renderValidationPanel(segValidation, null, segValidationEl);
+            restoreValPanelState(segValidationEl, chState);
+        }
+        // Re-render segment list to update tags
+        if (segData && segData.segments) {
+            applyFiltersAndRender();
+        } else if (segDisplayedSegments) {
+            renderSegList(segDisplayedSegments);
+        }
+    } catch (e) {
+        console.error('Error refreshing validation:', e);
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatRef(ref) {
+    // Show "s:v" instead of "s:v:1-s:v:N" when segment covers an entire verse
+    if (!ref) return '(no match)';
+    const vwc = (segAllData && segAllData.verse_word_counts) || (segData && segData.verse_word_counts);
+    if (!vwc) return ref;
+    const parts = ref.split('-');
+    if (parts.length !== 2) return ref;
+    const start = parts[0].split(':');
+    const end = parts[1].split(':');
+    if (start.length !== 3 || end.length !== 3) return ref;
+    // Same sura and verse, word 1 to last word
+    if (start[0] === end[0] && start[1] === end[1] && start[2] === '1') {
+        const key = `${start[0]}:${start[1]}`;
+        const totalWords = vwc[key];
+        if (totalWords && parseInt(end[2]) === totalWords) {
+            return key;
+        }
+    }
+    return ref;
+}
+
+function formatTimeMs(ms) {
+    if (!isFinite(ms)) return '0:00';
+    const totalSec = ms / 1000;
+    const mins = Math.floor(totalSec / 60);
+    const secs = Math.floor(totalSec % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatDurationMs(ms) {
+    if (!isFinite(ms) || ms === 0) return '0s';
+    const seconds = ms / 1000;
+    if (seconds < 60) return seconds.toFixed(1) + 's';
+    const mins = Math.floor(seconds / 60);
+    const secs = (seconds % 60).toFixed(0);
+    return `${mins}m ${secs}s`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Error Card helpers (Load All in global validation panel)
+// ---------------------------------------------------------------------------
+
+/** Build lazily-indexed per-chapter segment lookup from segAllData */
+function getChapterSegments(chapter) {
+    if (!segAllData || !segAllData.segments) return [];
+    if (!segAllData._byChapter) {
+        segAllData._byChapter = {};
+        segAllData._byChapterIndex = new Map();
+        segAllData.segments.forEach(s => {
+            const ch = s.chapter;
+            if (!segAllData._byChapter[ch]) segAllData._byChapter[ch] = [];
+            segAllData._byChapter[ch].push(s);
+            segAllData._byChapterIndex.set(`${ch}:${s.index}`, s);
+        });
+        // Sort each chapter's segments by index
+        for (const ch of Object.keys(segAllData._byChapter)) {
+            segAllData._byChapter[ch].sort((a, b) => a.index - b.index);
+        }
+    }
+    return segAllData._byChapter[chapter] || [];
+}
+
+function getSegByChapterIndex(chapter, index) {
+    if (!segAllData || !segAllData.segments) return null;
+    // Ensure index is built
+    if (!segAllData._byChapterIndex) getChapterSegments(chapter);
+    return segAllData._byChapterIndex.get(`${chapter}:${index}`) || null;
+}
+
+function getAdjacentSegments(chapter, index) {
+    const segs = getChapterSegments(chapter);
+    const pos = segs.findIndex(s => s.index === index);
+    return {
+        prev: pos > 0 ? segs[pos - 1] : null,
+        next: pos >= 0 && pos < segs.length - 1 ? segs[pos + 1] : null
+    };
+}
+
+/** Shared <audio> element for error card playback */
+let valCardAudio = null;
+let valCardPlayingBtn = null;
+let valCardStopTime = null;
+let valCardAnimId = null;    // rAF handle for error card waveform animation
+let valCardAnimSeg = null;   // segment currently being animated
+
+function getValCardAudio() {
+    if (!valCardAudio) {
+        valCardAudio = document.createElement('audio');
+        valCardAudio.addEventListener('timeupdate', () => {
+            if (valCardStopTime !== null && valCardAudio.currentTime >= valCardStopTime) {
+                stopErrorCardAudio();
+            }
+        });
+        valCardAudio.addEventListener('ended', () => {
+            stopErrorCardAudio();
+        });
+        valCardAudio.addEventListener('play', () => {
+            segPlayBtn.textContent = 'Pause';
+            _activeAudioSource = 'error';
+        });
+        valCardAudio.addEventListener('pause', () => {
+            if (segAudioEl.paused) segPlayBtn.textContent = 'Play';
+            if (_activeAudioSource === 'error') _activeAudioSource = null;
+        });
+    }
+    return valCardAudio;
+}
+
+function stopErrorCardAudio() {
+    if (!valCardAudio) return;
+    valCardAudio.pause();
+    valCardStopTime = null;
+    if (valCardPlayingBtn) {
+        valCardPlayingBtn.textContent = '\u25B6';
+        valCardPlayingBtn = null;
+    }
+    if (_activeAudioSource === 'error') _activeAudioSource = null;
+}
+
+function _startValCardAnimation(btn, seg) {
+    if (valCardAnimId) cancelAnimationFrame(valCardAnimId);
+    valCardAnimSeg = seg;
+
+    const row = btn.closest('.seg-row');
+    const canvas = row ? row.querySelector('canvas') : null;
+    if (!canvas) return;
+
+    const chapter = seg.chapter;
+    const currentChapter = parseInt(segChapterSelect.value);
+
+    function getBuffer() {
+        // By-ayah: prefer URL-keyed buffer
+        if (seg.audio_url) return segAudioBuffers.get(seg.audio_url) || null;
+        if (chapter === currentChapter) return segAudioBuffer;
+        return segAudioBuffers.get(chapter) || null;
+    }
+
+    function frame() {
+        if (valCardPlayingBtn !== btn) {
+            // Stopped — redraw static waveform
+            const buf = getBuffer();
+            if (buf && canvas) {
+                const saved = segAudioBuffer;
+                segAudioBuffer = buf;
+                drawSegmentWaveform(canvas, seg.time_start, seg.time_end);
+                segAudioBuffer = saved;
+            }
+            valCardAnimId = null;
+            valCardAnimSeg = null;
+            return;
+        }
+        const buf = getBuffer();
+        if (buf) {
+            const timeMs = getValCardAudio().currentTime * 1000;
+            const saved = segAudioBuffer;
+            segAudioBuffer = buf;
+            drawSegPlayhead(canvas, seg.time_start, seg.time_end, timeMs);
+            segAudioBuffer = saved;
+        }
+        valCardAnimId = requestAnimationFrame(frame);
+    }
+    valCardAnimId = requestAnimationFrame(frame);
+}
+
+function playErrorCardAudio(seg, btn) {
+    const audio = getValCardAudio();
+
+    // If already playing this button, stop
+    if (valCardPlayingBtn === btn && !audio.paused) {
+        stopErrorCardAudio();
+        return;
+    }
+
+    // Pause main audio if playing
+    if (!segAudioEl.paused) {
+        _segContinuousPlay = false;
+        segAudioEl.pause();
+    }
+    _activeAudioSource = 'error';
+
+    // Reset previous button
+    if (valCardPlayingBtn) valCardPlayingBtn.textContent = '\u25B6';
+
+    const audioUrl = seg.audio_url || (segAllData && segAllData.audio_by_chapter && segAllData.audio_by_chapter[seg.chapter]) || '';
+    if (!audioUrl) return;
+
+    const startSec = (seg.time_start || 0) / 1000;
+    const endSec = (seg.time_end || 0) / 1000;
+
+    if (audio.src !== audioUrl && audio.getAttribute('data-url') !== audioUrl) {
+        audio.src = audioUrl;
+        audio.setAttribute('data-url', audioUrl);
+        audio.addEventListener('loadedmetadata', function onLoad() {
+            audio.removeEventListener('loadedmetadata', onLoad);
+            audio.currentTime = startSec;
+            valCardStopTime = endSec;
+            audio.playbackRate = parseFloat(segSpeedSelect.value);
+            audio.play();
+        });
+    } else {
+        audio.currentTime = startSec;
+        valCardStopTime = endSec;
+        audio.playbackRate = parseFloat(segSpeedSelect.value);
+        audio.play();
+    }
+
+    btn.textContent = '\u23F9';
+    valCardPlayingBtn = btn;
+    _startValCardAnimation(btn, seg);
+}
+
+function invalidateLoadedErrorCards() {
+    document.querySelectorAll('.val-cards-container').forEach(container => {
+        if (container.children.length > 0) {
+            container.innerHTML = '';
+            container.hidden = true;
+            const details = container.closest('details');
+            if (details) {
+                const loadBtn = details.querySelector('.val-load-all-btn');
+                if (loadBtn) loadBtn.textContent = 'Load All';
+            }
+        }
+    });
+}
+
+/**
+ * Render an error card for a segment — thin wrapper around renderSegCard.
+ * @param {object} seg — segment from segAllData.segments
+ * @param {object} options — { isContext, contextLabel }
+ */
+function renderErrorCard(seg, options = {}) {
+    const { isContext = false, contextLabel = '' } = options;
+    return renderSegCard(seg, {
+        showChapter: true,
+        showPlayBtn: !isContext,
+        showGotoBtn: true,
+        isContext,
+        contextLabel,
+    });
+}
+
+/**
+ * Render all error cards for one validation category into a container.
+ * @param {string} type — 'errors'|'missing_verses'|'missing_words'|'failed'|'low_confidence'|'cross_verse'
+ * @param {Array} items — issues array for this category
+ * @param {HTMLElement} container — target container div
+ */
+function renderCategoryCards(type, items, container) {
+    container.innerHTML = '';
+    if (!segAllData || !items || items.length === 0) return;
+
+    items.forEach(issue => {
+        if (type === 'missing_words') {
+            // Combined card: gap label + bordering segments
+            const wrapper = document.createElement('div');
+            wrapper.className = 'val-card-wrapper';
+
+            const gapLabel = document.createElement('div');
+            gapLabel.className = 'val-card-gap-label';
+            gapLabel.textContent = issue.msg || 'Missing words between segments';
+            wrapper.appendChild(gapLabel);
+
+            const indices = issue.seg_indices || [];
+            const segsInWrapper = [];
+            indices.forEach(idx => {
+                const seg = getSegByChapterIndex(issue.chapter, idx);
+                if (seg) {
+                    const card = renderErrorCard(seg);
+                    wrapper.appendChild(card);
+                    segsInWrapper.push({ seg, card });
+                }
+            });
+
+            // Auto Fix button (only present when backend computed a fix)
+            if (issue.auto_fix) {
+                const fixBtn = document.createElement('button');
+                fixBtn.className = 'val-autofix-btn';
+                fixBtn.textContent = 'Auto Fix';
+                fixBtn.title = 'Extend segment ref to cover the missing word';
+                fixBtn.addEventListener('click', async () => {
+                    const af = issue.auto_fix;
+                    const seg = getSegByChapterIndex(issue.chapter, af.target_seg_index);
+                    if (!seg) return;
+
+                    // Snapshot state before fix
+                    const oldRef = seg.matched_ref || '';
+                    const oldText = seg.matched_text || '';
+                    const oldDisplay = seg.display_text || '';
+                    const oldConf = seg.confidence;
+                    const wasDirty = segDirtyIndices.has(seg.index);
+
+                    const newRef = `${af.new_ref_start}-${af.new_ref_end}`;
+                    const entry = segsInWrapper.find(s => s.seg === seg);
+                    const card = entry?.card || wrapper;
+                    await commitRefEdit(seg, newRef, card);
+                    wrapper.style.opacity = '0.5';
+                    fixBtn.disabled = true;
+                    fixBtn.textContent = 'Fixed (save to apply)';
+
+                    // Add Undo button
+                    const undoBtn = document.createElement('button');
+                    undoBtn.className = 'val-undo-btn';
+                    undoBtn.textContent = 'Undo';
+                    undoBtn.title = 'Revert auto-fix';
+                    undoBtn.addEventListener('click', () => {
+                        seg.matched_ref = oldRef;
+                        seg.matched_text = oldText;
+                        seg.display_text = oldDisplay;
+                        seg.confidence = oldConf;
+                        if (!wasDirty) segDirtyIndices.delete(seg.index);
+                        fixBtn.disabled = false;
+                        fixBtn.textContent = 'Auto Fix';
+                        wrapper.style.opacity = '1';
+                        syncAllCardsForSegment(seg);
+                        undoBtn.remove();
+                        segSaveBtn.disabled = !(segDirtyIndices.size > 0 || segStructuralChange || segDirtyChapters.size > 0);
+                    });
+                    fixBtn.after(undoBtn);
+                });
+                wrapper.appendChild(fixBtn);
+            }
+
+            // Show Context button
+            if (segsInWrapper.length > 0) {
+                addContextToggle(wrapper, segsInWrapper);
+            }
+
+            container.appendChild(wrapper);
+        } else {
+            // Single segment card
+            const seg = resolveIssueToSegment(type, issue);
+            if (!seg) return;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'val-card-wrapper';
+
+            if (issue.msg) {
+                const msgLabel = document.createElement('div');
+                msgLabel.className = 'val-card-issue-label';
+                msgLabel.textContent = issue.msg;
+                wrapper.appendChild(msgLabel);
+            }
+
+            const card = renderErrorCard(seg);
+            wrapper.appendChild(card);
+
+            // Confirm button for low confidence segments (styled like Auto Fix)
+            if (type === 'low_confidence' && seg.confidence < 1.0) {
+                const confirmBtn = document.createElement('button');
+                confirmBtn.className = 'val-autofix-btn';
+                confirmBtn.textContent = 'Confirm';
+                confirmBtn.title = 'Set confidence to 100%';
+                confirmBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (seg.confidence >= 1.0) return;
+                    seg.confidence = 1.0;
+                    delete seg._derived;
+                    segDirtyIndices.add(seg.index);
+                    if (seg.chapter && seg.chapter !== parseInt(segChapterSelect.value)) {
+                        segDirtyChapters.add(seg.chapter);
+                    }
+                    segSaveBtn.disabled = false;
+                    syncAllCardsForSegment(seg);
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Confirmed';
+                    wrapper.style.opacity = '0.5';
+                });
+                wrapper.appendChild(confirmBtn);
+            }
+
+            addContextToggle(wrapper, [{ seg, card }]);
+            container.appendChild(wrapper);
+        }
+    });
+
+    // Observe error card canvases for lazy waveform drawing
+    const observer = _ensureWaveformObserver();
+    container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+}
+
+function resolveIssueToSegment(type, issue) {
+    if (type === 'failed' || type === 'low_confidence' || type === 'cross_verse' || type === 'audio_bleeding') {
+        return getSegByChapterIndex(issue.chapter, issue.seg_index);
+    }
+    if (type === 'errors' || type === 'missing_verses') {
+        // Try to find a segment whose matched_ref starts with the verse_key prefix
+        const parts = (issue.verse_key || '').split(':');
+        const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : issue.verse_key;
+        const chapterSegs = getChapterSegments(issue.chapter);
+        return chapterSegs.find(s => s.matched_ref && s.matched_ref.startsWith(prefix)) || chapterSegs[0] || null;
+    }
+    return null;
+}
+
+function addContextToggle(wrapper, segsInWrapper) {
+    const ctxBtn = document.createElement('button');
+    ctxBtn.className = 'val-context-btn';
+    ctxBtn.textContent = 'Show Context';
+    let contextShown = false;
+    let contextEls = [];
+
+    ctxBtn.addEventListener('click', () => {
+        if (contextShown) {
+            contextEls.forEach(el => el.remove());
+            contextEls = [];
+            ctxBtn.textContent = 'Show Context';
+            contextShown = false;
+        } else {
+            // Gather unique chapters/indices from segsInWrapper
+            const first = segsInWrapper[0];
+            const last = segsInWrapper[segsInWrapper.length - 1];
+
+            const { prev } = getAdjacentSegments(first.seg.chapter, first.seg.index);
+            const { next } = getAdjacentSegments(last.seg.chapter, last.seg.index);
+
+            if (prev) {
+                const prevCard = renderErrorCard(prev, { isContext: true, contextLabel: 'Previous' });
+                // Insert before first segment card
+                first.card.parentNode.insertBefore(prevCard, first.card);
+                contextEls.push(prevCard);
+            }
+            if (next) {
+                const nextCard = renderErrorCard(next, { isContext: true, contextLabel: 'Next' });
+                // Insert after last segment card
+                if (last.card.nextSibling) {
+                    last.card.parentNode.insertBefore(nextCard, last.card.nextSibling);
+                } else {
+                    last.card.parentNode.insertBefore(nextCard, ctxBtn);
+                }
+                contextEls.push(nextCard);
+            }
+            ctxBtn.textContent = 'Hide Context';
+            contextShown = true;
+        }
+    });
+
+    wrapper.appendChild(ctxBtn);
+}
+
+
+// ---------------------------------------------------------------------------
+// Segmentation Stats Panel
+// ---------------------------------------------------------------------------
+
+function renderStatsPanel(data) {
+    if (!data || data.error) return;
+    segStatsPanel.hidden = false;
+
+    const vad = data.vad_params;
+
+    // Charts
+    const charts = [
+        {
+            key: 'pause_duration_ms', title: 'Pause Duration (ms)',
+            refLine: vad.min_silence_ms, refLabel: 'threshold',
+            barColor: (bin, i, bins) => bin < vad.min_silence_ms ? '#666' : '#4cc9f0',
+            formatBin: v => v >= 3000 ? '3000+' : String(v),
+        },
+        {
+            key: 'seg_duration_ms', title: 'Segment Duration (ms)',
+            barColor: (bin) => bin < 1000 ? '#ff9800' : '#4cc9f0',
+            formatBin: v => (v/1000).toFixed(1) + 's',
+            showAllLabels: true,
+        },
+        {
+            key: 'words_per_seg', title: 'Words Per Segment',
+            barColor: (bin) => bin === 1 ? '#f44336' : '#4cc9f0',
+            formatBin: v => String(v),
+            showAllLabels: true,
+        },
+        {
+            key: 'segs_per_verse', title: 'Segments Per Verse',
+            barColor: () => '#4cc9f0',
+            formatBin: v => v >= 8 ? '8+' : String(v),
+        },
+        {
+            key: 'confidence', title: 'Confidence (%)',
+            barColor: (bin) => bin < 60 ? '#f44336' : bin < 80 ? '#ff9800' : '#4caf50',
+            formatBin: v => v >= 100 ? '100' : String(v),
+        },
+    ];
+
+    segStatsCharts.innerHTML = '';
+    for (const cfg of charts) {
+        const dist = data.distributions[cfg.key];
+        if (!dist) continue;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'seg-stats-chart-wrap';
+
+        const header = document.createElement('div');
+        header.className = 'seg-stats-chart-header';
+
+        const h4 = document.createElement('h4');
+        h4.textContent = cfg.title;
+        header.appendChild(h4);
+
+        const btnGroup = document.createElement('span');
+        btnGroup.className = 'seg-stats-chart-btns';
+
+        const fsBtn = document.createElement('button');
+        fsBtn.className = 'seg-stats-chart-btn';
+        fsBtn.title = 'Full screen';
+        fsBtn.textContent = '\u26F6';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'seg-stats-chart-btn';
+        saveBtn.title = 'Save PNG';
+        saveBtn.textContent = '\u2B73';
+
+        btnGroup.appendChild(fsBtn);
+        btnGroup.appendChild(saveBtn);
+        header.appendChild(btnGroup);
+        wrap.appendChild(header);
+
+        const canvasWrap = document.createElement('div');
+        canvasWrap.style.position = 'relative';
+        canvasWrap.style.width = '100%';
+        canvasWrap.style.height = '160px';
+        const canvas = document.createElement('canvas');
+        canvasWrap.appendChild(canvas);
+        wrap.appendChild(canvasWrap);
+
+        segStatsCharts.appendChild(wrap);
+        drawBarChart(canvas, dist, cfg);
+
+        // Fullscreen
+        fsBtn.addEventListener('click', () => _openChartFullscreen(dist, cfg));
+
+        // Save
+        saveBtn.addEventListener('click', () => _saveChart(canvas, cfg.key));
+    }
+}
+
+function _openChartFullscreen(dist, cfg) {
+    let overlay = document.getElementById('seg-stats-fullscreen');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'seg-stats-fullscreen';
+        overlay.innerHTML = '<div class="seg-stats-fs-inner"><div class="seg-stats-fs-bar">' +
+            '<span class="seg-stats-fs-title"></span>' +
+            '<button class="seg-stats-chart-btn seg-stats-fs-save" title="Save PNG">\u2B73</button>' +
+            '<button class="seg-stats-chart-btn seg-stats-fs-close" title="Close">\u2715</button>' +
+            '</div><div style="flex:1;min-height:0;position:relative"><canvas></canvas></div></div>';
+        document.body.appendChild(overlay);
+        overlay.querySelector('.seg-stats-fs-close').addEventListener('click', () => {
+            overlay.style.display = 'none';
+        });
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.style.display = 'none';
+        });
+    }
+
+    overlay.style.display = 'flex';
+    overlay.querySelector('.seg-stats-fs-title').textContent = cfg.title;
+
+    const canvas = overlay.querySelector('canvas');
+
+    // Destroy any previous Chart.js instance
+    if (canvas._chartInstance) {
+        canvas._chartInstance.destroy();
+        canvas._chartInstance = null;
+    }
+
+    requestAnimationFrame(() => {
+        drawBarChart(canvas, dist, cfg);
+    });
+
+    // Re-bind save button for this chart
+    const saveBtn = overlay.querySelector('.seg-stats-fs-save');
+    const newBtn = saveBtn.cloneNode(true);
+    saveBtn.parentNode.replaceChild(newBtn, saveBtn);
+    newBtn.addEventListener('click', () => _saveChart(canvas, cfg.key));
+}
+
+function _saveChart(canvas, key) {
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+
+    canvas.toBlob((blob) => {
+        if (!blob) return;
+        const fd = new FormData();
+        fd.append('name', key);
+        fd.append('image', blob, key + '.png');
+        fetch(`/api/seg/stats/${encodeURIComponent(reciter)}/save-chart`, {
+            method: 'POST', body: fd,
+        }).then(r => r.json()).then(data => {
+            if (data.ok) {
+                const tip = document.createElement('span');
+                tip.className = 'seg-stats-saved-tip';
+                tip.textContent = 'Saved';
+                document.body.appendChild(tip);
+                setTimeout(() => tip.remove(), 1200);
+            }
+        });
+    }, 'image/png');
+}
+
+function _findBinIndex(bins, value) {
+    // Find fractional index where value falls within bin range
+    if (bins.length < 2) return 0;
+    const binStep = bins[1] - bins[0];
+    const frac = (value - bins[0]) / binStep;
+    return Math.max(-0.5, Math.min(bins.length - 0.5, frac));
+}
+
+function drawBarChart(canvas, dist, cfg) {
+    const { bins, counts } = dist;
+    const n = counts.length;
+    if (n === 0) return;
+
+    // Destroy previous instance
+    if (canvas._chartInstance) {
+        canvas._chartInstance.destroy();
+        canvas._chartInstance = null;
+    }
+
+    const totalCount = counts.reduce((a, b) => a + b, 0);
+    const labels = bins.map(b => cfg.formatBin ? cfg.formatBin(b) : String(b));
+    const bgColors = bins.map((b, i) => cfg.barColor ? cfg.barColor(b, i, bins) : '#4cc9f0');
+    const hoverColors = bgColors.map(c => {
+        // Lighten each color for hover
+        const r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
+        return `rgb(${Math.min(255, r + 40)}, ${Math.min(255, g + 40)}, ${Math.min(255, b + 40)})`;
+    });
+
+    // Build annotation lines
+    const annotations = {};
+
+    if (cfg.refLine != null && bins.length >= 2) {
+        annotations.refLine = {
+            type: 'line', scaleID: 'x',
+            value: _findBinIndex(bins, cfg.refLine),
+            borderColor: '#f44336', borderWidth: 1.5, borderDash: [4, 3],
+            label: {
+                display: true, content: cfg.refLabel || '',
+                position: 'start', color: '#f44336',
+                font: { size: 9, family: 'monospace' },
+                backgroundColor: 'rgba(15,15,35,0.7)',
+            }
+        };
+    }
+
+    if (dist.percentiles && bins.length >= 2) {
+        const pCfg = {
+            p25: { color: '#888', dash: [3, 3], label: 'P25' },
+            p50: { color: '#e0e040', dash: [6, 3], label: 'Med' },
+            p75: { color: '#888', dash: [3, 3], label: 'P75' },
+        };
+        for (const [key, val] of Object.entries(dist.percentiles)) {
+            const pc = pCfg[key];
+            if (!pc) continue;
+            const fmtVal = cfg.formatBin ? cfg.formatBin(val) : String(val);
+            annotations[key] = {
+                type: 'line', scaleID: 'x',
+                value: _findBinIndex(bins, val),
+                borderColor: pc.color, borderWidth: 1, borderDash: pc.dash,
+                label: {
+                    display: true, content: `${pc.label} ${fmtVal}`,
+                    position: 'start', color: pc.color,
+                    font: { size: 8, family: 'monospace' },
+                    backgroundColor: 'rgba(15,15,35,0.7)',
+                }
+            };
+        }
+    }
+
+    const chart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: counts,
+                backgroundColor: bgColors,
+                hoverBackgroundColor: hoverColors,
+                borderWidth: 0,
+                borderSkipped: false,
+                barPercentage: 0.92,
+                categoryPercentage: 0.92,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 200 },
+            layout: { padding: { top: 4, right: 4, bottom: 0, left: 0 } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#16213e',
+                    borderColor: '#4cc9f0',
+                    borderWidth: 1,
+                    titleColor: '#4cc9f0',
+                    bodyColor: '#e0e0e0',
+                    footerColor: '#888',
+                    titleFont: { family: 'monospace', size: 11 },
+                    bodyFont: { family: 'monospace', size: 11 },
+                    footerFont: { family: 'monospace', size: 10 },
+                    padding: 6,
+                    displayColors: false,
+                    callbacks: {
+                        title: (items) => items[0]?.label || '',
+                        label: (item) => `Count: ${item.raw}`,
+                        footer: (items) => {
+                            const count = items[0]?.raw || 0;
+                            return `${(count / totalCount * 100).toFixed(1)}%`;
+                        },
+                    },
+                },
+                annotation: { annotations },
+            },
+            scales: {
+                x: {
+                    grid: { color: '#2a2a4a', lineWidth: 0.5 },
+                    ticks: {
+                        color: '#888',
+                        font: { family: 'monospace', size: 9 },
+                        autoSkip: !cfg.showAllLabels,
+                        maxRotation: 45,
+                        minRotation: 0,
+                    },
+                    border: { color: '#2a2a4a' },
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#1a1a3e', lineWidth: 0.5 },
+                    ticks: {
+                        color: '#888',
+                        font: { family: 'monospace', size: 10 },
+                    },
+                    border: { color: '#2a2a4a' },
+                },
+            },
+        },
+    });
+
+    canvas._chartInstance = chart;
+    return chart;
+}

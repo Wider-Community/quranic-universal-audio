@@ -1,0 +1,23 @@
+# Cache
+__pycache__/
+.cache/
+*.bak
+
+# IDEs / Agents
+.vscode/
+.claude/
+CLAUDE.md
+
+# envs
+.env
+.venv
+
+# Local
+jobs/
+extract_segments.py
+extract_timestamps.py
+
+# Large binaries tracked in HF Spaces but not in parent repo
+mfa_aligner/quran_aligner_model.zip
+quran_multi_aligner/data/*.pkl
+quran_multi_aligner/data/*.mp3

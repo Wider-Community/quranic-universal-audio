@@ -1,0 +1,14 @@
+__pycache__/
+.cache/
+.vscode/
+.claude/
+CLAUDE.md
+.env
+.venv
+captures/
+
+# Local-only scripts
+sync_mfa.sh
+fetch_results.sh
+mfa_train.pbs
+prepare_labs.py
