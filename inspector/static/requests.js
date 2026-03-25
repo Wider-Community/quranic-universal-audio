@@ -33,6 +33,7 @@
         reqReciterSS = new SearchableSelect(reciterSelect);
 
         submitBtn.addEventListener('click', submitRequest);
+        requestTypeSelect.addEventListener('change', onRequestTypeChange);
 
         loadReciters();
         loadProcessed();
@@ -41,24 +42,43 @@
     }
 
     // ── Reciter dropdown ────────────────────────────────────────────
+    // Caches for both lists so we don't re-fetch on every type toggle
+    let _availableReciters = null;
+    let _processedReciters = null;
+
     async function loadReciters() {
         reciterSelect.innerHTML = '<option value="">Loading reciters...</option>';
         try {
-            const resp = await fetch(SPACE_URL + '/api/reciters', {
-                signal: AbortSignal.timeout(60000),
-            });
-            const data = await resp.json();
-            populateReciters(data.reciters || []);
+            const [availResp, procResp] = await Promise.all([
+                fetch(SPACE_URL + '/api/reciters', { signal: AbortSignal.timeout(60000) }),
+                fetch(SPACE_URL + '/api/processed', { signal: AbortSignal.timeout(60000) }),
+            ]);
+            const availData = await availResp.json();
+            const procData = await procResp.json();
+            _availableReciters = availData.reciters || [];
+            _processedReciters = procData.reciters || [];
+            populateRecitersForType(requestTypeSelect.value);
         } catch (e) {
             reciterSelect.innerHTML = '<option value="">Failed to load (Space may be starting up)</option>';
             console.error('Failed to load reciters:', e);
         }
     }
 
-    function populateReciters(reciters) {
+    function onRequestTypeChange() {
+        populateRecitersForType(requestTypeSelect.value);
+    }
+
+    function populateRecitersForType(type) {
+        if (type === 'Re-align') {
+            populateProcessedReciters(_processedReciters || []);
+        } else {
+            populateAvailableReciters(_availableReciters || []);
+        }
+    }
+
+    function populateAvailableReciters(reciters) {
         reciterSelect.innerHTML = '<option value="">-- Select reciter --</option>';
 
-        // Group by source
         const groups = {};
         for (const r of reciters) {
             if (r.has_pending_request) continue;
@@ -72,15 +92,28 @@
             og.label = source;
             for (const r of recs.sort((a, b) => a.name.localeCompare(b.name))) {
                 const opt = document.createElement('option');
-                opt.value = JSON.stringify({
-                    slug: r.slug,
-                    name: r.name,
-                    source: r.source,
-                });
+                opt.value = JSON.stringify({ slug: r.slug, name: r.name, source: r.source });
                 opt.textContent = r.name;
                 og.appendChild(opt);
             }
             reciterSelect.appendChild(og);
+        }
+
+        if (reqReciterSS) reqReciterSS.refresh();
+    }
+
+    function populateProcessedReciters(reciters) {
+        reciterSelect.innerHTML = '<option value="">-- Select reciter --</option>';
+
+        for (const r of reciters.sort((a, b) => a.name.localeCompare(b.name))) {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({
+                slug: r.slug,
+                name: r.name,
+                source: r.audio_source || '',
+            });
+            opt.textContent = `${r.name} (${r.audio_source || '?'})`;
+            reciterSelect.appendChild(opt);
         }
 
         if (reqReciterSS) reqReciterSS.refresh();

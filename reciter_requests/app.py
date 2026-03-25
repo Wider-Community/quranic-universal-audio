@@ -454,20 +454,38 @@ def submit_request(
 # ---------------------------------------------------------------------------
 # Gradio UI helpers
 # ---------------------------------------------------------------------------
-def get_reciter_choices():
-    """Return (display_label, slug) tuples for the dropdown, grouped by source."""
-    reciters = fetch_available_reciters()
-    choices = []
-    for r in sorted(reciters, key=lambda x: (x["source"], x["name"])):
-        if r["has_pending_request"]:
-            continue  # Exclude pending from dropdown
-        label = f"{r['name']} ({r['source']})"
-        choices.append((label, json.dumps({
-            "slug": r["slug"],
-            "name": r["name"],
-            "source": r["source"],
-        })))
-    return choices
+def get_reciter_choices(request_type="New reciter"):
+    """Return (display_label, value_json) tuples for the dropdown."""
+    if request_type == "Re-align":
+        processed = fetch_processed_reciters()
+        choices = []
+        for r in sorted(processed, key=lambda x: x["name"]):
+            label = f"{r['name']} ({r.get('audio_source', '?')})"
+            choices.append((label, json.dumps({
+                "slug": r["slug"],
+                "name": r["name"],
+                "source": r.get("audio_source", ""),
+            })))
+        return choices
+    else:
+        reciters = fetch_available_reciters()
+        choices = []
+        for r in sorted(reciters, key=lambda x: (x["source"], x["name"])):
+            if r["has_pending_request"]:
+                continue
+            label = f"{r['name']} ({r['source']})"
+            choices.append((label, json.dumps({
+                "slug": r["slug"],
+                "name": r["name"],
+                "source": r["source"],
+            })))
+        return choices
+
+
+def update_reciter_choices(request_type):
+    """Called when request type changes — swap reciter dropdown choices."""
+    choices = get_reciter_choices(request_type)
+    return gr.update(choices=choices, value=None)
 
 
 def get_requests_markdown():
@@ -622,6 +640,12 @@ with gr.Blocks(title="Reciter Requests") as demo:
                     ref_table = gr.Markdown(
                         value=get_processed_markdown(),
                     )
+
+            request_type_dd.change(
+                fn=update_reciter_choices,
+                inputs=[request_type_dd],
+                outputs=[reciter_dd],
+            )
 
             submit_btn.click(
                 fn=handle_submit,
