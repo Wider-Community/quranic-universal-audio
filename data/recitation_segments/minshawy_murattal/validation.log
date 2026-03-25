@@ -1,4 +1,4 @@
-Generated: 2026-03-25 20:21:38
+Generated: 2026-03-26 00:19:29
 
 ========================================================================
   minshawy_murattal
@@ -33,64 +33,3 @@ Generated: 2026-03-25 20:21:38
   Min:      0.50s
   Median:   1.10s
   Mean:     1.17s
-  Max:      13.78s
-
---- Alignment Confidence ---
-  Min:        0.8000
-  Median:     1.0000
-  Mean:       0.9881
-  Max:        1.0000
-  Below 60%:  0
-  Below 80%:  0
-  Failed:     0 (no alignment)
-  Empty ASR:  3969 (matched but no phonemes)
-
---- First 10 of 3969 Segments with Empty Phonemes ---
-   1. [0.8000]  2:1:1-2:1:1  @ 0:00.0 - 0:05.9
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002001.mp3
-      text:  الٓمٓ
-
-   2. [0.9600]  2:2:1-2:2:5  @ 0:00.5 - 0:04.9
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002002.mp3
-      text:  ذَٰلِكَ ٱلْكِتَـٰبُ لَا رَيْبَ ۛ فِيهِ ۛ
-
-   3. [1.0000]  2:2:6-2:2:7  @ 0:05.8 - 0:09.0
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002002.mp3
-      text:  هُدًى لِّلْمُتَّقِينَ
-
-   4. [1.0000]  2:3:1-2:3:8  @ 0:00.8 - 0:12.5
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002003.mp3
-      text:  ٱلَّذِينَ يُؤْمِنُونَ بِٱلْغَيْبِ وَيُقِيمُونَ ٱلصَّلَوٰةَ وَمِمَّا رَزَقْنَـٰهُمْ يُنفِقُونَ
-
-   5. [1.0000]  2:4:1-2:4:12  @ 0:00.5 - 0:16.0
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002004.mp3
-      text:  وَٱلَّذِينَ يُؤْمِنُونَ بِمَآ أُنزِلَ إِلَيْكَ وَمَآ أُنزِلَ مِن قَبْلِكَ وَبِٱلْـَٔاخِرَةِ هُمْ يُوقِنُونَ
-
-   6. [1.0000]  2:5:1-2:5:8  @ 0:00.5 - 0:11.8
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002005.mp3
-      text:  أُو۟لَـٰٓئِكَ عَلَىٰ هُدًى مِّن رَّبِّهِمْ ۖ وَأُو۟لَـٰٓئِكَ هُمُ ٱلْمُفْلِحُونَ
-
-   7. [1.0000]  2:6:1-2:6:11  @ 0:00.7 - 0:14.8
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002006.mp3
-      text:  إِنَّ ٱلَّذِينَ كَفَرُوا۟ سَوَآءٌ عَلَيْهِمْ ءَأَنذَرْتَهُمْ أَمْ لَمْ تُنذِرْهُمْ لَا يُؤْمِنُونَ
-
-   8. [1.0000]  2:7:1-2:7:6  @ 0:01.1 - 0:07.0
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002007.mp3
-      text:  خَتَمَ ٱللَّهُ عَلَىٰ قُلُوبِهِمْ وَعَلَىٰ سَمْعِهِمْ ۖ
-
-   9. [1.0000]  2:7:7-2:7:12  @ 0:08.1 - 0:17.6
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002007.mp3
-      text:  وَعَلَىٰٓ أَبْصَـٰرِهِمْ غِشَـٰوَةٌ ۖ وَلَهُمْ عَذَابٌ عَظِيمٌ
-
-  10. [1.0000]  2:8:1-2:8:11  @ 0:01.0 - 0:13.8
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002008.mp3
-      text:  وَمِنَ ٱلنَّاسِ مَن يَقُولُ ءَامَنَّا بِٱللَّهِ وَبِٱلْيَوْمِ ٱلْـَٔاخِرِ وَمَا هُم بِمُؤْمِنِينَ
-
-
---- Cross-file Consistency (detailed.json ↔ segments.json) ---
-  Mismatches:     0
-
---- Validation Issues ---
-  Errors:     0
-  Warnings:   0
-

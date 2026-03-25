@@ -1,4 +1,4 @@
-Generated: 2026-03-25 21:35:34
+Generated: 2026-03-26 00:19:28
 
 ========================================================================
   minshawy_mujawwad
@@ -59,7 +59,7 @@ Generated: 2026-03-25 21:35:34
       text:  يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوٓا۟ أَوْفُوا۟ بِٱلْعُقُودِ ۚ أُحِلَّتْ لَكُم بَهِيمَةُ ٱلْأَنْعَـٰمِ إِلَّا مَا يُتْلَىٰ عَلَيْكُمْ غَيْرَ مُحِلِّى ٱلصَّيْدِ وَأَنتُمْ حُرُمٌ ۗ
 
 
---- Lowest 10 of 15 Segments Below 80% Confidence ---
+--- Lowest 15 of 15 Segments Below 80% Confidence ---
    1. [0.7500]  55:19:1-55:19:3  @ 0:00.4 - 0:07.6
       audio: https://everyayah.com/data/Minshawy_Mujawwad_192kbps/055019.mp3
       text:  مَرَجَ ٱلْبَحْرَيْنِ يَلْتَقِيَانِ
@@ -110,6 +110,31 @@ Generated: 2026-03-25 21:35:34
       text:  وَرَبُّكَ ٱلْغَنِىُّ ذُو ٱلرَّحْمَةِ ۚ
       asr:   rˤ aˤ bb u k a l ɣ aˤ n i jj u ð u rˤrˤ aˤ ħ m a h
 
+  11. [0.7900]  13:35:17-13:35:19  @ 0:41.6 - 0:50.5
+      audio: https://everyayah.com/data/Minshawy_Mujawwad_192kbps/013035.mp3
+      text:  وَّعُقْبَى ٱلْكَـٰفِرِينَ ٱلنَّارُ
+      asr:   w a q u ð a l k a: f i r i: n a ñ a: rˤ
+
+  12. [0.7900]  19:13:5-19:13:6  @ 0:17.8 - 0:20.5
+      audio: https://everyayah.com/data/Minshawy_Mujawwad_192kbps/019013.mp3
+      text:  وَكَانَ تَقِيًّا
+      asr:   w a k a: n a t a q i:
+
+  13. [0.7900]  49:11:28-49:11:33  @ 1:14.9 - 1:28.4
+      audio: https://everyayah.com/data/Minshawy_Mujawwad_192kbps/049011.mp3
+      text:  بِٱلْأَلْقَـٰبِ ۖ بِئْسَ ٱلِٱسْمُ ٱلْفُسُوقُ بَعْدَ ٱلْإِيمَـٰنِ ۚ
+      asr:   ʔ a l q aˤ: b i b i ʔ t a l i θ m u l f u s u: q u b a ʕ d a l i: m a: n
+
+  14. [0.7900]  50:34:1-50:34:2  @ 0:00.0 - 0:06.2
+      audio: https://everyayah.com/data/Minshawy_Mujawwad_192kbps/050034.mp3
+      text:  ٱدْخُلُوهَا بِسَلَـٰمٍ ۖ
+      asr:   ʔ i ð Q x u l u: h a: b i s a l a: m
+
+  15. [0.7900]  88:25:1-88:25:3  @ 0:01.2 - 0:07.4
+      audio: https://everyayah.com/data/Minshawy_Mujawwad_192kbps/088025.mp3
+      text:  إِنَّ إِلَيْنَآ إِيَابَهُمْ
+      asr:   ʔ i ñ a ʔ i l a j n a: h i j a: b a:
+
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches:     0
@@ -118,7 +143,7 @@ Generated: 2026-03-25 21:35:34
   Errors:     4
   Warnings:   52
 
-  Missing verses (first 10 of 15):
+  Missing verses (first 15 of 15):
     MISS   2:1  (1 words)
     MISS   3:1  (1 words)
     MISS   19:1  (1 words)
@@ -129,7 +154,11 @@ Generated: 2026-03-25 21:35:34
     MISS   41:1  (1 words)
     MISS   42:2  (1 words)
     MISS   55:1  (1 words)
-    ... and 5 more
+    MISS   70:16  (2 words)
+    MISS   86:3  (2 words)
+    MISS   86:8  (4 words)
+    MISS   88:9  (2 words)
+    MISS   112:2  (2 words)
 
   Warnings:
     WARN   2:184  @ 0:10.9 - 1:17.1
