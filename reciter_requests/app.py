@@ -473,6 +473,25 @@ def handle_submit(reciter_json, min_silence, name, email, notes):
     )
 
 
+def fetch_guide():
+    """Fetch the requesting-a-reciter guide from GitHub."""
+    cached = _get_cached("guide")
+    if cached is not None:
+        return cached
+    try:
+        md = _gh_get_raw("docs/requesting-a-reciter.md")
+        # Convert relative links to absolute GitHub links
+        md = md.replace(
+            "../inspector/README.md",
+            f"https://github.com/{REPO_OWNER}/{REPO_NAME}/tree/main/inspector/README.md",
+        )
+        _set_cached("guide", md)
+        return md
+    except Exception as e:
+        logger.error(f"Failed to fetch guide: {e}")
+        return "*Guide not available — check back after the next deployment.*"
+
+
 def refresh_dashboard():
     """Clear caches and refresh dashboard data."""
     _set_cached("requests", None)
@@ -566,6 +585,10 @@ with gr.Blocks(title="Reciter Requests") as demo:
                 outputs=[requests_table, processed_table],
             )
 
+        # ── Tab 3: Guide ──────────────────────────────────────────────
+        with gr.Tab("Guide"):
+            guide_md = gr.Markdown(value=fetch_guide())
+
 
 # ---------------------------------------------------------------------------
 # FastAPI app with custom API endpoints + Gradio mount
@@ -627,6 +650,12 @@ async def api_processed():
 async def api_requests():
     """List all request issues."""
     return {"requests": fetch_request_issues()}
+
+
+@api.get("/api/guide")
+async def api_guide():
+    """Fetch the requesting-a-reciter guide markdown."""
+    return {"markdown": fetch_guide()}
 
 
 # Mount Gradio app onto FastAPI
