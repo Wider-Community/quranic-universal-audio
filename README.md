@@ -1,17 +1,20 @@
-# Qur'anic Universal Audio
+<h1 align="center">Qur'anic Universal Audio</h1>
 
-[![Demo - Quran Multi-Aligner](https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow)](https://huggingface.co/spaces/hetchyy/Quran-multi-aligner)
-[![Dataset - Qur'anic Universal Ayahs](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Quranic%20Universal%20Ayahs-blue)](https://huggingface.co/datasets/hetchyy/quranic-universal-audio)
-[![Reciters](https://img.shields.io/badge/Reciters-205-green)](data/audio/by_surah/qul/)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776ab)](https://www.python.org)
-[![License](https://img.shields.io/badge/License-Apache%202.0-orange)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social)](https://github.com/Wider-Community/quranic-universal-audio)
+<p align="center">A large-scale database of Qur'an recitation audio with precise word-level and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the known Qur'anic text.</p>
 
-A large-scale database of Qur'an recitation audio with precise word-level and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the known Qur'anic text.
+<p align="center">
+  <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow" alt="Demo - Quran Multi-Aligner"></a>
+  <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-audio"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Quranic%20Universal%20Ayahs-blue" alt="Dataset - Qur'anic Universal Ayahs"></a>
+  <a href="data/audio/by_surah/qul/"><img src="https://img.shields.io/badge/Reciters-205-green" alt="Reciters"></a>
+  <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3.10+-3776ab" alt="Python"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-orange" alt="License"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
+</p>
 
-```
-Audio → Silence Detection → Phoneme Speech Recognition ↴
-Word/Letter/Phoneme Timestamps ← Forced Alignment on Pause Segments ← Qur'an Text Alignment
+```mermaid
+graph LR
+    A[Audio] --> B[Silence Detection] --> C[Phoneme Speech Recognition]
+    C --> D[Qur'an Text Alignment] --> E[Forced Alignment on Pause Segments] --> F[Word/Letter/Phoneme Timestamps]
 ```
 
 **205 reciters available, 2 fully processed so far**.
