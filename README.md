@@ -2,14 +2,14 @@
 
 <p align="center">
   <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow" alt="Demo - Qur'an Multi-Aligner"></a>
-  <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-audio"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-blue" alt="Dataset - Qur'anic Universal Ayahs"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-205-green" alt="Reciters"></a>
+  <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-blue" alt="Dataset - Qur'anic Universal Ayahs"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-216%20Available%20%7C%202%20Processed-green" alt="Reciters"></a>
   <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3.10+-3776ab" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-orange" alt="License"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
 
-<p align="center">A large-scale database of Qur'an recitation audio with precise word- and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the detected Qur'anic text. 205 reciters available, 2 fully processed so far.</p>
+<p align="center">A large-scale database of Qur'an recitation audio with precise word- and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the detected Qur'anic text.</p>
 
 <p align="center">
   <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
@@ -59,7 +59,7 @@ See the [detailed comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md)
 If you're just here for the audio, timestamps or segment data, you can access them as follows:
 
 1. **Direct download** — JSON files in [`data/`](data/), or packaged in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
-2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/Wider-hetchyy/quranic-universal-audio)
+2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
 3. **QUD API** — *(coming soon)*
 
 ## Contributing
