@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/d6bffa29-5e71-492b-b0ec-b6a34c19a693
 | [`reciter_requests`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
 | [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Quran-specific G2P; the foundation that makes phoneme-level alignment possible |
 
-## What makes this different
+## Key Highlights & features
 
 - **Phoneme-level alignment.** Most Qur'an audio tools align at the word level. This project aligns at the phoneme level first, then recovers word and letter boundaries from the phoneme timestamps. The result is significantly more precise and accurate word timings.
 
