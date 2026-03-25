@@ -119,10 +119,99 @@ def print_json(data: dict) -> None:
     print()
 
 
+def generate_available_markdown(data: dict) -> tuple[str, int]:
+    """Generate the Available Reciters markdown section.
+
+    Returns (markdown_text, total_count).
+    """
+    lines = [
+        "## Available Reciters",
+        "",
+        "All reciters with audio manifests in `data/audio/`. Not yet processed through the pipeline.",
+        "",
+        "Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly one source "
+        "— no duplicates across sources. A reciter *can* appear in both `by_surah` and `by_ayah` "
+        "(different audio granularity from different providers).",
+    ]
+    total = 0
+
+    for category, heading in [("by_surah", "By Surah"), ("by_ayah", "By Ayah")]:
+        sources = data.get(category, {})
+        if not sources:
+            continue
+        lines.append("")
+        lines.append(f"### {heading}")
+
+        for source in sorted(sources):
+            reciters = sources[source]
+            # Determine source label from directory name
+            lines.append("")
+            source_labels = {
+                "qul": "`qul` (Tarteel CDN)",
+                "surah-quran": "`surah-quran` (surah-quran.com)",
+                "asswatul-quran": "`asswatul-quran` (asswatul-quran.com)",
+                "everyayah": "`everyayah` (everyayah.com)",
+            }
+            label = source_labels.get(source, f"`{source}`")
+            lines.append(f"#### {label}")
+            lines.append("")
+            lines.append("| # | Reciter |")
+            lines.append("|---|---------|")
+            for i, r in enumerate(reciters, 1):
+                lines.append(f"| {i} | {r['name']} |")
+                total += 1
+
+    return "\n".join(lines), total
+
+
+def write_reciters_md(data: dict) -> int:
+    """Regenerate the Available section of RECITERS.md, preserving Processed section.
+
+    Returns total reciter count (available + processed).
+    """
+    reciters_path = REPO / "data" / "RECITERS.md"
+    md = reciters_path.read_text()
+
+    # Split at "## Available Reciters" — preserve everything before it
+    marker = "## Available Reciters"
+    idx = md.find(marker)
+    if idx == -1:
+        print(f"ERROR: Could not find '{marker}' in RECITERS.md", file=sys.stderr)
+        sys.exit(1)
+
+    header = md[:idx]
+    available_md, available_count = generate_available_markdown(data)
+
+    reciters_path.write_text(header + available_md + "\n")
+    print(f"Updated: {reciters_path}")
+
+    # Count processed reciters from the header section
+    processed_count = sum(
+        1 for line in header.split("\n")
+        if line.startswith("|") and "| Reciter" not in line and "|---" not in line and line.strip()
+    )
+    total = available_count + processed_count
+
+    # Update README.md
+    readme_path = REPO / "README.md"
+    readme = readme_path.read_text()
+    import re
+    # Update badge
+    readme = re.sub(r"Reciters-\d+-green", f"Reciters-{total}-green", readme)
+    # Update paragraph count
+    readme = re.sub(r"\d+ reciters available", f"{total} reciters available", readme)
+    readme_path.write_text(readme)
+    print(f"Updated: {readme_path} (total: {total}, processed: {processed_count})")
+
+    return total
+
+
 def main():
     parser = argparse.ArgumentParser(description="List available audio reciters")
     parser.add_argument("--detail", action="store_true", help="List every reciter")
     parser.add_argument("--json", action="store_true", help="JSON output")
+    parser.add_argument("--write", action="store_true",
+                        help="Regenerate RECITERS.md Available section and update README.md counts")
     args = parser.parse_args()
 
     data = discover_reciters()
@@ -131,7 +220,9 @@ def main():
         print(f"No audio data found at {AUDIO_PATH}", file=sys.stderr)
         sys.exit(1)
 
-    if args.json:
+    if args.write:
+        write_reciters_md(data)
+    elif args.json:
         print_json(data)
     elif args.detail:
         print_summary(data)
