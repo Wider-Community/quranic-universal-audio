@@ -1,4 +1,5 @@
-"""Quran Aligner — Automatic Quran recitation segmentation and alignment."""
+"""Quran Aligner — Automatic Quran recitation segmentation and alignment.
+Copyright 2026 Wider Community. Licensed under Apache 2.0."""
 import os
 import sys
 from pathlib import Path
