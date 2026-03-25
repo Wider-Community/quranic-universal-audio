@@ -1,9 +1,17 @@
 # Qur'anic Universal Audio
 
+[![Demo - Quran Multi-Aligner](https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow)](https://huggingface.co/spaces/hetchyy/Quran-multi-aligner)
+[![Dataset - Qur'anic Universal Ayahs](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Quranic%20Universal%20Ayahs-blue)](https://huggingface.co/datasets/Wider-hetchyy/quranic-universal-audio)
+[![Reciters](https://img.shields.io/badge/Reciters-205-green)](data/audio/by_surah/qul/)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776ab)](https://www.python.org)
+[![License](https://img.shields.io/badge/License-Apache%202.0-orange)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social)](https://github.com/Wider-Community/quranic-universal-audio)
+
 A large-scale database of Qur'an recitation audio with precise word-level and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the known Qur'anic text.
 
-```
-Audio → Silence Detection → Phoneme Speech Recognition → Qur'an Text Alignment → Forced Alignment on Pause Segments → Word/Letter/Phoneme Timestamps
+```mermaid
+graph LR
+    A[Audio] --> B[Silence Detection] --> C[Phoneme ASR] --> D[Text Alignment] --> E[Forced Alignment] --> F[Timestamps]
 ```
 
 **205 reciters available, 2 fully processed so far**.
@@ -20,7 +28,7 @@ Audio → Silence Detection → Phoneme Speech Recognition → Qur'an Text Align
 | Component | Description |
 |-----------|-------------|
 | [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps |
-| [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an API |
+| [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](docs/client_api.md) |
 | [`mfa_aligner/`](mfa_aligner/) | MFA forced alignment service for timestamps computation |
 | [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
 | [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |
