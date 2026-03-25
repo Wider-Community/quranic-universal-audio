@@ -1,0 +1,29 @@
+name: Update Reciter Counts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/audio/**/*.json'
+
+permissions:
+  contents: write
+
+jobs:
+  update-reciters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Regenerate RECITERS.md and update README.md
+        run: python scripts/list_reciters.py --write
+
+      - name: Commit and push if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'docs: update reciter counts'
+          file_pattern: 'data/RECITERS.md README.md'
