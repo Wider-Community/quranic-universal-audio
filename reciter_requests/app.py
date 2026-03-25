@@ -306,16 +306,36 @@ def fetch_request_issues():
 # Submit request
 # ---------------------------------------------------------------------------
 RIWAYAT = [
+    # Asim
     "Hafs an Asim",
+    "Shubah an Asim",
+    # Nafi
     "Warsh an Nafi",
     "Qalun an Nafi",
+    # Abu Amr
     "Al-Duri an Abu Amr",
-    "Shubah an Asim",
-    "Ibn Amir ad-Dimashqi",
-    "Al-Kisai",
-    "Abu Amr al-Basri",
-    "Nafi al-Madani",
-    "Ibn Kathir al-Makki",
+    "Al-Susi an Abu Amr",
+    # Ibn Amir
+    "Hisham an Ibn Amir",
+    "Ibn Dhakwan an Ibn Amir",
+    # Ibn Kathir
+    "Al-Bazzi an Ibn Kathir",
+    "Qunbul an Ibn Kathir",
+    # Hamzah
+    "Khalaf an Hamzah",
+    "Khallad an Hamzah",
+    # Al-Kisai
+    "Al-Layth an Al-Kisai",
+    "Al-Duri an Al-Kisai",
+    # Abu Jafar
+    "Isa Ibn Wardan an Abu Jafar",
+    "Ibn Jummaz an Abu Jafar",
+    # Yaqub
+    "Ruways an Yaqub",
+    "Rawh an Yaqub",
+    # Khalaf
+    "Ishaq an Khalaf",
+    "Idris an Khalaf",
 ]
 
 REQUEST_TYPES = ["New reciter", "Re-align"]
