@@ -15,7 +15,7 @@
   <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
 </p>
 
-<video src="captures/timestamps_demo.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/d6bffa29-5e71-492b-b0ec-b6a34c19a693
 
 ## Use cases
 
