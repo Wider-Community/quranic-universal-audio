@@ -12,10 +12,18 @@
 </p>
 
 ```mermaid
-graph LR
-    A[Audio] --> B[Silence Detection] --> C[Phoneme Speech Recognition]
-    C --> D[Qur'an Text Alignment]
-    D --> E[Forced Alignment on Pause Segments] --> F[Word/Letter/Phoneme Timestamps]
+flowchart TB
+    subgraph row1[" "]
+        direction LR
+        A["🔊 Audio"] --> B["Silence\nDetection"] --> C["Phoneme\nRecognition"]
+    end
+    subgraph row2[" "]
+        direction LR
+        D["Text\nAlignment"] --> E["Forced Alignment\non Segments"] --> F["Word / Letter\nTimestamps"]
+    end
+    C --> D
+    style row1 fill:none,stroke:none
+    style row2 fill:none,stroke:none
 ```
 
 ## Use cases
