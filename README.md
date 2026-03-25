@@ -9,7 +9,7 @@
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
 
-<p align="center">A large-scale database of Qur'an recitation audio with precise word- and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the detected Qur'anic text. 205 reciters available, 2 fully processed so far.</p>
+<p align="center">A large-scale database of Qur'an recitation audio with precise word- and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the detected Qur'anic text. 205 reciters available, 4 fully processed so far.</p>
 
 <p align="center">
   <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">

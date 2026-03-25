@@ -13,6 +13,8 @@ Timestamps column: `✓✓` = words + letters/phonemes, `✓` = words only.
 |---------|----------|:---------:|:------------------:|:-----------:|
 | Minshawy Murattal | 114 surahs, 6236 ayahs | ✓ | ✓ | ✓✓ |
 | Minshawy Mujawwad | 114 surahs, 6236 ayahs | ✓ | ✗ | ✗ |
+| Ali Jaber | 114 surahs, 6236 ayahs | ✓ | ✗ | ✗ |
+| Abu Bakr Al Shatri | 114 surahs, 6236 ayahs | ✓ | ✗ | ✗ |
 
 ---
 
@@ -42,54 +44,53 @@ Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly 
 | 12 | Abdur Rahman As Sudais |
 | 13 | Abdur Rashid Sufi |
 | 14 | Abdur Razaq Bin Abtan Al Dulaimi |
-| 15 | Abu Bakr Al Shatri |
-| 16 | Adel Kalbani |
-| 17 | Ahmad Alnufais |
-| 18 | Ahmad Nauina |
-| 19 | Akram Al Alaqmi |
-| 20 | Ali Abdur Rahman Al Huthaify |
-| 21 | Ali Hajjaj Alsouasi |
-| 22 | Asim Abdul Aleem |
-| 23 | Aziz Alili |
-| 24 | Bandar Baleela |
-| 25 | Fares Abbad |
-| 26 | Fatih Seferagic |
-| 27 | Hady Toure |
-| 28 | Hamad Sinan |
-| 29 | Hani Ar Rifai |
-| 30 | Hatem Farid |
-| 31 | Ibrahim Al Akhdar |
-| 32 | Imad Zuhair Hafez |
-| 33 | Khalid Al Jalil |
-| 34 | Khalid Al Qahtani |
-| 35 | Khalifa Al Tunaiji |
-| 36 | Maher Al Muaiqly |
-| 37 | Mahmood Ali Al Bana |
-| 38 | Mahmoud Khalil Al Husary Mujawwad |
-| 39 | Mahmoud Khalil Al Husary Murattal |
-| 40 | Mishari Rashid Al Afasy |
-| 41 | Mohammad Al Tablawi |
-| 42 | Mohammad Ismaeel Al Muqaddim |
-| 43 | Mostafa Ismaeel |
-| 44 | Muhammad Abdul Kareem |
-| 45 | Muhammad Ayyoob |
-| 46 | Muhammad Hassan |
-| 47 | Muhammad Jibreel |
-| 48 | Muhammad Siddiq Al Minshawi Mujawwad |
-| 49 | Muhammad Siddiq Al Minshawi Murattal |
-| 50 | Muhammad Sulaiman Patel |
-| 51 | Nabil Ar Rifai |
-| 52 | Nasser Al Qatami |
-| 53 | Noreen Siddiq |
-| 54 | Saad Al Ghamdi |
-| 55 | Sadaqat Ali |
-| 56 | Sahl Yasin |
-| 57 | Salah Al Budair |
-| 58 | Salah Bukhatir |
-| 59 | Saud Ash Shuraym |
-| 60 | Tawfeeq Ibn Said As Sawaigh |
-| 61 | Wadee Hammadi Al Yamani |
-| 62 | Yasser Ad Dussary |
+| 15 | Adel Kalbani |
+| 16 | Ahmad Alnufais |
+| 17 | Ahmad Nauina |
+| 18 | Akram Al Alaqmi |
+| 19 | Ali Abdur Rahman Al Huthaify |
+| 20 | Ali Hajjaj Alsouasi |
+| 21 | Asim Abdul Aleem |
+| 22 | Aziz Alili |
+| 23 | Bandar Baleela |
+| 24 | Fares Abbad |
+| 25 | Fatih Seferagic |
+| 26 | Hady Toure |
+| 27 | Hamad Sinan |
+| 28 | Hani Ar Rifai |
+| 29 | Hatem Farid |
+| 30 | Ibrahim Al Akhdar |
+| 31 | Imad Zuhair Hafez |
+| 32 | Khalid Al Jalil |
+| 33 | Khalid Al Qahtani |
+| 34 | Khalifa Al Tunaiji |
+| 35 | Maher Al Muaiqly |
+| 36 | Mahmood Ali Al Bana |
+| 37 | Mahmoud Khalil Al Husary Mujawwad |
+| 38 | Mahmoud Khalil Al Husary Murattal |
+| 39 | Mishari Rashid Al Afasy |
+| 40 | Mohammad Al Tablawi |
+| 41 | Mohammad Ismaeel Al Muqaddim |
+| 42 | Mostafa Ismaeel |
+| 43 | Muhammad Abdul Kareem |
+| 44 | Muhammad Ayyoob |
+| 45 | Muhammad Hassan |
+| 46 | Muhammad Jibreel |
+| 47 | Muhammad Siddiq Al Minshawi Mujawwad |
+| 48 | Muhammad Siddiq Al Minshawi Murattal |
+| 49 | Muhammad Sulaiman Patel |
+| 50 | Nabil Ar Rifai |
+| 51 | Nasser Al Qatami |
+| 52 | Noreen Siddiq |
+| 53 | Saad Al Ghamdi |
+| 54 | Sadaqat Ali |
+| 55 | Sahl Yasin |
+| 56 | Salah Al Budair |
+| 57 | Salah Bukhatir |
+| 58 | Saud Ash Shuraym |
+| 59 | Tawfeeq Ibn Said As Sawaigh |
+| 60 | Wadee Hammadi Al Yamani |
+| 61 | Yasser Ad Dussary |
 
 #### `surah-quran` (surah-quran.com)
 
@@ -225,39 +226,38 @@ Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly 
 | 10 | Akram Al Alaqimy |
 | 11 | Alafasy |
 | 12 | Ali Hajjaj Alsuesy |
-| 13 | Ali Jaber |
-| 14 | Ayman Sowaid |
-| 15 | Aziz Alili |
-| 16 | Fares Abbad |
-| 17 | Ghamadi |
-| 18 | Hani Rifai |
-| 19 | Hudhaify |
-| 20 | Husary Muallim |
-| 21 | Husary Mujawwad |
-| 22 | Husary Murattal |
-| 23 | Ibrahim Akhdar |
-| 24 | Karim Mansoori |
-| 25 | Khaalid Abdullaah Al Qahtaanee |
-| 26 | Khalefa Al Tunaiji |
-| 27 | Maher Al Muaiqly |
-| 28 | Mahmoud Ali Al Banna |
-| 29 | Minshawy Mujawwad |
-| 30 | Minshawy Murattal |
-| 31 | Mohammad Al Tablaway |
-| 32 | Muhammad Abdulkareem |
-| 33 | Muhammad Ayyoub |
-| 34 | Muhammad Jibreel |
-| 35 | Muhsin Al Qasim |
-| 36 | Mustafa Ismail |
-| 37 | Nabil Rifa3i |
-| 38 | Nasser Alqatami |
-| 39 | Parhizgar |
-| 40 | Sahl Yassin |
-| 41 | Salaah Abdulrahman Bukhatir |
-| 42 | Salah Al Budair |
-| 43 | Saood Ash Shuraym |
-| 44 | Yaser Salamah |
-| 45 | Yasser Ad Dussary |
+| 13 | Ayman Sowaid |
+| 14 | Aziz Alili |
+| 15 | Fares Abbad |
+| 16 | Ghamadi |
+| 17 | Hani Rifai |
+| 18 | Hudhaify |
+| 19 | Husary Muallim |
+| 20 | Husary Mujawwad |
+| 21 | Husary Murattal |
+| 22 | Ibrahim Akhdar |
+| 23 | Karim Mansoori |
+| 24 | Khaalid Abdullaah Al Qahtaanee |
+| 25 | Khalefa Al Tunaiji |
+| 26 | Maher Al Muaiqly |
+| 27 | Mahmoud Ali Al Banna |
+| 28 | Minshawy Mujawwad |
+| 29 | Minshawy Murattal |
+| 30 | Mohammad Al Tablaway |
+| 31 | Muhammad Abdulkareem |
+| 32 | Muhammad Ayyoub |
+| 33 | Muhammad Jibreel |
+| 34 | Muhsin Al Qasim |
+| 35 | Mustafa Ismail |
+| 36 | Nabil Rifa3i |
+| 37 | Nasser Alqatami |
+| 38 | Parhizgar |
+| 39 | Sahl Yassin |
+| 40 | Salaah Abdulrahman Bukhatir |
+| 41 | Salah Al Budair |
+| 42 | Saood Ash Shuraym |
+| 43 | Yaser Salamah |
+| 44 | Yasser Ad Dussary |
 
 #### `qul` (Tarteel CDN)
 
