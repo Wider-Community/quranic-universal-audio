@@ -11,20 +11,9 @@
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
 
-```mermaid
-flowchart TB
-    subgraph row1[" "]
-        direction LR
-        A["🔊 Audio"] --> B["Silence\nDetection"] --> C["Phoneme\nRecognition"]
-    end
-    subgraph row2[" "]
-        direction LR
-        D["Text\nAlignment"] --> E["Forced Alignment\non Segments"] --> F["Word / Letter\nTimestamps"]
-    end
-    C --> D
-    style row1 fill:none,stroke:none
-    style row2 fill:none,stroke:none
-```
+<p align="center">
+  <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
+</p>
 
 ## Use cases
 
