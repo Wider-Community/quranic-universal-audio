@@ -558,10 +558,12 @@ def fetch_guide():
         return cached
     try:
         md = _gh_get_raw("docs/requesting-a-reciter.md")
-        # Convert relative links to absolute GitHub links
-        md = md.replace(
-            "../inspector/README.md",
-            f"https://github.com/{REPO_OWNER}/{REPO_NAME}/tree/main/inspector/README.md",
+        # Convert relative links (../) to absolute GitHub links
+        base = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/tree/main"
+        md = re.sub(
+            r'\]\(\.\./([^)]+)\)',
+            lambda m: f']({base}/{m.group(1)})',
+            md,
         )
         _set_cached("guide", md)
         return md
