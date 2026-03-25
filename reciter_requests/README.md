@@ -1,0 +1,18 @@
+---
+title: Reciter Requests
+emoji: 📋
+colorFrom: purple
+colorTo: green
+sdk: docker
+pinned: false
+---
+
+# Quran Reciter Segmentation Requests
+
+Submit and track requests for new Quran reciter segmentation processing.
+
+**Two ways to submit:**
+1. Use this Space's form directly
+2. Use the Requests tab in the [Alignment Inspector](https://github.com/hetchyy/quranic-universal-audio/tree/main/inspector)
+
+Each request creates a public [GitHub Issue](https://github.com/hetchyy/quranic-universal-audio/issues?q=label%3Arequest) for status tracking. Requester email is stored privately in Notion for notifications.
