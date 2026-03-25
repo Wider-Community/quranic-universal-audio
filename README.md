@@ -38,7 +38,7 @@ flowchart TB
 | Component | Description |
 |-----------|-------------|
 | [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps |
-| [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](docs/client_api.md) |
+| [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](quran_multi_aligner/docs/client_api.md) |
 | [`mfa_aligner/`](mfa_aligner/) | MFA forced alignment service for timestamps computation |
 | [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
 | [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |

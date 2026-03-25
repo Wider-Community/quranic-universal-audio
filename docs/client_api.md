@@ -1,1 +1,0 @@
-../quran_multi_aligner/docs/client_api.md
