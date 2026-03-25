@@ -586,8 +586,13 @@ with gr.Blocks(title="Reciter Requests") as demo:
             )
 
         # ── Tab 3: Guide ──────────────────────────────────────────────
-        with gr.Tab("Guide"):
-            guide_md = gr.Markdown(value=fetch_guide())
+        with gr.Tab("Guide") as guide_tab:
+            guide_md = gr.Markdown(value="*Loading guide...*")
+
+            guide_tab.select(
+                fn=fetch_guide,
+                outputs=guide_md,
+            )
 
 
 # ---------------------------------------------------------------------------
