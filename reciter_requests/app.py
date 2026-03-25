@@ -106,6 +106,12 @@ def _notion_create_page(properties):
 # ---------------------------------------------------------------------------
 # Data fetching
 # ---------------------------------------------------------------------------
+def _is_check(val):
+    """Check if a table cell value is a positive marker (✓, ✓✓, Y)."""
+    v = val.strip()
+    return v in ("Y", "✓", "✓✓")
+
+
 def _parse_processed_reciters(md_text):
     """Parse the Processed Reciters table from RECITERS.md."""
     processed = []
@@ -122,9 +128,9 @@ def _parse_processed_reciters(md_text):
                 processed.append({
                     "name": cols[0],
                     "coverage": cols[1],
-                    "segmented": cols[2].strip() == "Y",
-                    "timestamped": cols[3].strip() == "Y",
-                    "validated": cols[4].strip() == "Y" if len(cols) > 4 else False,
+                    "segmented": _is_check(cols[2]),
+                    "validated": _is_check(cols[3]) if len(cols) > 3 else False,
+                    "timestamped": _is_check(cols[4]) if len(cols) > 4 else False,
                 })
         elif in_table and not line.strip().startswith("|"):
             break
@@ -460,6 +466,8 @@ def get_reciter_choices(request_type="New reciter"):
         processed = fetch_processed_reciters()
         choices = []
         for r in sorted(processed, key=lambda x: x["name"]):
+            if r.get("validated"):
+                continue  # Already manually validated — no need to re-align
             label = f"{r['name']} ({r.get('audio_source', '?')})"
             choices.append((label, json.dumps({
                 "slug": r["slug"],

@@ -105,7 +105,9 @@
     function populateProcessedReciters(reciters) {
         reciterSelect.innerHTML = '<option value="">-- Select reciter --</option>';
 
-        for (const r of reciters.sort((a, b) => a.name.localeCompare(b.name))) {
+        // Only show reciters not yet manually validated
+        const unvalidated = reciters.filter(r => !r.validated);
+        for (const r of unvalidated.sort((a, b) => a.name.localeCompare(b.name))) {
             const opt = document.createElement('option');
             opt.value = JSON.stringify({
                 slug: r.slug,
