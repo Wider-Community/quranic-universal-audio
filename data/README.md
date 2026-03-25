@@ -26,8 +26,6 @@ Current audio sources (see [RECITERS.md](RECITERS.md) for the full list):
 - **by_surah:** `qul`, `surah-quran`, `asswatul-quran`
 - **by_ayah:** `everyayah`, `qul`
 
-**205 reciters** with audio available, **2 processed** with pause segments and word-level timestamps.
-
 ---
 
 ## Audio Inputs (`audio/`)
