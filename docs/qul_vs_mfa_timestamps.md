@@ -46,25 +46,13 @@ QUL word count errors (overcounting):
 - Off by +1: 348 verses
 - Off by +2 to +9: 51 verses
 
-This is a word-count convention difference — QUL likely counts Basmala words or splits some words differently.
+This is a word-count convention difference or error, QUL splits words differently.
 
 ### Identical Sequences Breakdown
 
 Of the 5519 identical sequences:
 - **5483 are consecutive 1..N** (simple sequential reading)
 - **36 have repeats that both sources agree on** (e.g. `2:85`: both show `...10, 6, 7, 8, 9, 10, 11...`)
-
-### QUL-Has-More Cases (284 verses)
-
-| Pattern | Count |
-|---------|-------|
-| Only last word missing in TS | 355* |
-| TS missing 2+ words from end | 21 |
-| Other patterns | 24 |
-
-*Count exceeds 284 because some verses where QUL "has more" are due to QUL overcounting vs ground truth, not TS undercounting.
-
-Most are the word-count convention difference (QUL has word N, TS stops at N-1). A few have TS missing trailing words due to audio cut differences or reciter trailing off.
 
 ---
 
@@ -210,9 +198,9 @@ Pattern: QUL repeat indices are **off by +1** compared to TS. TS is correct (mat
 
 ## Summary
 
-These are the **same audio recordings** from different CDNs (EveryAyah vs Tarteel). The ~254ms systematic midpoint shift comes from TS trimming leading silence more aggressively. The main structural differences:
+The ~254ms systematic midpoint shift comes from TS trimming leading silence more aggressively. The main structural differences:
 
 1. **Repeat detection**: TS catches 469 reciter loopbacks vs QUL's 53 (QUL's 53 are a subset)
-2. **Word count**: TS matches ground truth 99.98% vs QUL's 93.6% (convention difference)
-3. **Duration**: TS words are longer due to gap-filling padding, not alignment error
+2. **Word count**: TS matches ground truth 99.98% vs QUL's 93.6%
+3. **Duration**: TS words are longer due to gap-filling padding, not alignment error. This is more natural and intuitive since recitation is continuous within segments, and we do not expect gaps between words.
 4. **Timing**: Word midpoints agree within 500ms for 82.8% of words, with a systematic +254ms offset
