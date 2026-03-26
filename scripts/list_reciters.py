@@ -6,20 +6,28 @@ Walks data/audio/{by_surah,by_ayah}/<source>/*.json and reports:
 - Format (surah-keyed vs ayah-keyed) and entry counts
 - Reciters shared across multiple sources
 
+Also scans data/recitation_segments/ and data/timestamps/ to build the
+Processed Reciters section.  When run with --write, regenerates the entire
+RECITERS.md (both Processed and Available sections) from disk state.
+
 Usage:
     python scripts/list_reciters.py              # summary table
     python scripts/list_reciters.py --detail      # list every reciter
     python scripts/list_reciters.py --json        # machine-readable output
+    python scripts/list_reciters.py --write       # regenerate RECITERS.md + README badges
 """
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 AUDIO_PATH = REPO / "data" / "audio"
+SEGMENTS_PATH = REPO / "data" / "recitation_segments"
+TIMESTAMPS_PATH = REPO / "data" / "timestamps"
 
 
 def discover_reciters() -> dict[str, dict[str, list[dict]]]:
@@ -62,6 +70,118 @@ def discover_reciters() -> dict[str, dict[str, list[dict]]]:
         if cat_data:
             result[category] = cat_data
     return result
+
+
+def collect_processed_reciters() -> list[dict]:
+    """Scan disk to build the Processed reciters list.
+
+    Walks data/recitation_segments/*/ for directories containing segments.json,
+    then checks data/timestamps/ for timestamp status.
+
+    Returns list of dicts sorted by name:
+        [{"slug", "name", "audio_source", "coverage_str", "ts_level"}, ...]
+    """
+    processed = []
+    if not SEGMENTS_PATH.is_dir():
+        return processed
+
+    for seg_dir in sorted(SEGMENTS_PATH.iterdir()):
+        if not seg_dir.is_dir():
+            continue
+        seg_file = seg_dir / "segments.json"
+        if not seg_file.exists():
+            continue
+
+        slug = seg_dir.name
+        name = slug.replace("_", " ").title()
+
+        # Read _meta and count coverage from segments.json
+        audio_source = ""
+        surahs = set()
+        ayah_count = 0
+        try:
+            with open(seg_file, encoding="utf-8") as f:
+                doc = json.load(f)
+            audio_source = doc.get("_meta", {}).get("audio_source", "")
+            for key in doc:
+                if key == "_meta":
+                    continue
+                ayah_count += 1
+                # Keys like "1:1" or cross-verse "37:151:3-37:152:2"
+                surahs.add(key.split(":")[0])
+        except (json.JSONDecodeError, OSError):
+            pass
+
+        surah_count = len(surahs)
+        coverage_str = f"{surah_count} surahs, {ayah_count} ayahs"
+
+        # Check timestamp status
+        ts_level = "\u2717"
+        for audio_type in ("by_ayah_audio", "by_surah_audio"):
+            ts_dir = TIMESTAMPS_PATH / audio_type / slug
+            if (ts_dir / "timestamps.json").exists():
+                if (ts_dir / "timestamps_full.json").exists():
+                    ts_level = "\u2713\u2713"
+                else:
+                    ts_level = "\u2713"
+                break
+
+        processed.append({
+            "slug": slug,
+            "name": name,
+            "audio_source": audio_source,
+            "coverage_str": coverage_str,
+            "ts_level": ts_level,
+        })
+
+    return sorted(processed, key=lambda r: r["name"])
+
+
+def generate_processed_markdown(processed: list[dict]) -> tuple[str, int]:
+    """Generate the Processed Reciters markdown section.
+
+    Returns (markdown_text, processed_count).
+    """
+    lines = [
+        "## Processed Reciters",
+        "",
+        "Reciters that have been through the alignment and timestamp pipelines.",
+        "",
+        "Timestamps column: `\u2713\u2713` = words + letters/phonemes, `\u2713` = words only.",
+        "",
+        "",
+        "| Reciter | Coverage | Segmented | Manually Validated | Timestamped |",
+        "|---------|----------|:---------:|:------------------:|:-----------:|",
+    ]
+
+    for r in processed:
+        lines.append(
+            f"| {r['name']} | {r['coverage_str']} | \u2713 | \u2713 | {r['ts_level']} |"
+        )
+
+    return "\n".join(lines), len(processed)
+
+
+def filter_available(data: dict, processed: list[dict]) -> dict:
+    """Remove processed reciters from Available data.
+
+    Matches by (slug, audio_source) so a reciter processed from by_ayah/everyayah
+    is excluded from that source but still appears in by_surah/qul under a
+    different slug.
+    """
+    processed_sources = {(r["slug"], r["audio_source"]) for r in processed}
+
+    filtered = {}
+    for category, sources in data.items():
+        filtered_sources = {}
+        for source, reciters in sources.items():
+            source_path = f"{category}/{source}"
+            kept = [r for r in reciters if (r["slug"], source_path) not in processed_sources]
+            if kept:
+                filtered_sources[source] = kept
+        if filtered_sources:
+            filtered[category] = filtered_sources
+    return filtered
 
 
 def find_cross_source(data: dict) -> dict[str, list[str]]:
@@ -130,7 +250,7 @@ def generate_available_markdown(data: dict) -> tuple[str, int]:
         "All reciters with audio manifests in `data/audio/`. Not yet processed through the pipeline.",
         "",
         "Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly one source "
-        "— no duplicates across sources. A reciter *can* appear in both `by_surah` and `by_ayah` "
+        "\u2014 no duplicates across sources. A reciter *can* appear in both `by_surah` and `by_ayah` "
         "(different audio granularity from different providers).",
     ]
     total = 0
@@ -165,43 +285,45 @@ def generate_available_markdown(data: dict) -> tuple[str, int]:
 
 
 def write_reciters_md(data: dict) -> int:
-    """Regenerate the Available section of RECITERS.md, preserving Processed section.
+    """Regenerate RECITERS.md entirely from disk state.
+
+    Both the Processed and Available sections are rebuilt. Processed reciters
+    are excluded from the Available tables.
 
     Returns total reciter count (available + processed).
     """
     reciters_path = REPO / "data" / "RECITERS.md"
-    md = reciters_path.read_text()
 
-    # Split at "## Available Reciters" — preserve everything before it
-    marker = "## Available Reciters"
-    idx = md.find(marker)
-    if idx == -1:
-        print(f"ERROR: Could not find '{marker}' in RECITERS.md", file=sys.stderr)
-        sys.exit(1)
+    # Build Processed section from disk
+    processed = collect_processed_reciters()
+    processed_md, processed_count = generate_processed_markdown(processed)
 
-    header = md[:idx]
-    available_md, available_count = generate_available_markdown(data)
+    # Build Available section, filtering out processed reciters
+    filtered = filter_available(data, processed)
+    available_md, available_count = generate_available_markdown(filtered)
 
-    reciters_path.write_text(header + available_md + "\n")
+    # Assemble full file
+    header = (
+        "# Reciters\n"
+        "\n"
+        "Full list of available reciters. Generated from `scripts/list_reciters.py`.\n"
+        "\n"
+    )
+    reciters_path.write_text(header + processed_md + "\n\n---\n\n" + available_md + "\n")
     print(f"Updated: {reciters_path}")
 
-    # Count processed reciters from the header section
-    processed_count = sum(
-        1 for line in header.split("\n")
-        if line.startswith("|") and "| Reciter" not in line and "|---" not in line and line.strip()
-    )
     total = available_count + processed_count
 
-    # Update README.md
+    # Update README.md badge
     readme_path = REPO / "README.md"
     readme = readme_path.read_text()
-    import re
-    # Update badge
-    readme = re.sub(r"Reciters-\d+-green", f"Reciters-{total}-green", readme)
-    # Update paragraph count
-    readme = re.sub(r"\d+ reciters available", f"{total} reciters available", readme)
+    readme = re.sub(
+        r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Processed)",
+        rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
+        readme,
+    )
     readme_path.write_text(readme)
-    print(f"Updated: {readme_path} (total: {total}, processed: {processed_count})")
+    print(f"Updated: {readme_path} (available: {available_count}, processed: {processed_count})")
 
     return total
 
@@ -211,7 +333,7 @@ def main():
     parser.add_argument("--detail", action="store_true", help="List every reciter")
     parser.add_argument("--json", action="store_true", help="JSON output")
     parser.add_argument("--write", action="store_true",
-                        help="Regenerate RECITERS.md Available section and update README.md counts")
+                        help="Regenerate RECITERS.md and update README.md counts")
     args = parser.parse_args()
 
     data = discover_reciters()

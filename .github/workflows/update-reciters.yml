@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'data/audio/**/*.json'
+      - 'data/recitation_segments/**/segments.json'
+      - 'data/timestamps/**/timestamps.json'
+      - 'data/timestamps/**/timestamps_full.json'
 
 permissions:
   contents: write
@@ -19,7 +22,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Regenerate RECITERS.md and update README.md
+      - name: Regenerate RECITERS.md and update README badges
         run: python scripts/list_reciters.py --write
 
       - name: Commit and push if changed

@@ -11,8 +11,8 @@ Timestamps column: `✓✓` = words + letters/phonemes, `✓` = words only.
 
 | Reciter | Coverage | Segmented | Manually Validated | Timestamped |
 |---------|----------|:---------:|:------------------:|:-----------:|
+| Minshawy Mujawwad | 114 surahs, 6227 ayahs | ✓ | ✓ | ✗ |
 | Minshawy Murattal | 114 surahs, 6236 ayahs | ✓ | ✓ | ✓✓ |
-| Minshawy Mujawwad | 114 surahs, 6236 ayahs | ✓ | ✗ | ✗ |
 
 ---
 
