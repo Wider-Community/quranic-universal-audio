@@ -11,7 +11,7 @@ Timestamps column: `✓✓` = words + letters/phonemes, `✓` = words only.
 
 | Reciter | Coverage | Segmented | Manually Validated | Timestamped |
 |---------|----------|:---------:|:------------------:|:-----------:|
-| Ali Jaber | 114 surahs, 6235 ayahs | ✓ | ✓ | ✗ |
+| Ali Jaber | 114 surahs, 6235 ayahs | ✓ | ✓ | ✓ |
 | Minshawy Mujawwad | 114 surahs, 6227 ayahs | ✓ | ✓ | ✗ |
 | Minshawy Murattal | 114 surahs, 6236 ayahs | ✓ | ✓ | ✓✓ |
 
