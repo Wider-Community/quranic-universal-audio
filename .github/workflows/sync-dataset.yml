@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sync-dataset
+  cancel-in-progress: false
+
 jobs:
   sync-dataset:
     runs-on: ubuntu-latest
