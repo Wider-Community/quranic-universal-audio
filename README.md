@@ -16,7 +16,7 @@
   <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
 </p>
 
-https://github.com/user-attachments/assets/d6bffa29-5e71-492b-b0ec-b6a34c19a693
+https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 ## Use cases
 
