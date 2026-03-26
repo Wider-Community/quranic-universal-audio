@@ -469,6 +469,27 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
         # Remove from markdown table
         body = re.sub(rf"\| `{RIWAYAH}` \| `{remove_slug}` \|[^\n]*\n?", "", body)
 
+    # Update badge counts
+    processed_count = len(find_eligible_reciters())
+    # Count available from audio manifests (all unique slugs minus processed)
+    all_slugs = set()
+    audio_dir = ROOT / "data" / "audio"
+    if audio_dir.is_dir():
+        for source_type in audio_dir.iterdir():
+            for source in source_type.iterdir():
+                if source.is_dir():
+                    for f in source.glob("*.json"):
+                        all_slugs.add(f.stem)
+    available_count = len(all_slugs) - processed_count
+    if available_count < 0:
+        available_count = 0
+
+    body = re.sub(
+        r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
+        rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
+        body,
+    )
+
     text = f"---{yaml_text}---{body}"
     readme_path.write_text(text)
 
