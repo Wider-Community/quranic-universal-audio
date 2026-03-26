@@ -1102,6 +1102,29 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     background: #455a64;
 }
 
+/* Back to filter results banner */
+.seg-back-banner {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #1b3a4b;
+    border-bottom: 2px solid #4361ee;
+    padding: 6px 12px;
+    text-align: center;
+}
+.seg-back-btn {
+    background: #4361ee;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 4px 14px;
+    border-radius: 4px;
+}
+.seg-back-btn:hover {
+    background: #5a7bff;
+}
+
 .val-card-gap-label {
     font-size: 0.75rem;
     color: #f44336;

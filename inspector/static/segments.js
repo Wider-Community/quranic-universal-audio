@@ -28,6 +28,7 @@ let _segFilterDebounceTimer = null; // debounce timer for filter value input
 let _activeAudioSource = null;      // 'main' | 'error' | null — which audio is active
 let _segIndexMap = null;         // Map<index, segment> for O(1) lookups
 let _waveformObserver = null;    // IntersectionObserver for lazy waveform drawing
+let _segSavedFilterView = null;  // { filters, chapter, verse, scrollTop } — saved when "Go To" from filter results
 
 // ---------------------------------------------------------------------------
 // Dirty-state helpers
@@ -538,6 +539,12 @@ function applyFiltersAndRender() {
 
     segDisplayedSegments = segs;
     _segIndexMap = new Map(segs.map(s => [`${s.chapter}:${s.index}`, s]));
+
+    // Clear stale "Back to filter results" state when user re-activates filters
+    if (activeValid.length > 0 && _segSavedFilterView) {
+        _segSavedFilterView = null;
+    }
+
     renderSegList(segDisplayedSegments);
 }
 
@@ -780,13 +787,23 @@ function handleSegRowClick(e) {
         if (seg) playErrorCardAudio(seg, playBtn);
         return;
     }
-    // Go To button (error cards)
+    // Go To button (error cards + filter results)
     const gotoBtn = e.target.closest('.seg-card-goto-btn');
     if (gotoBtn) {
         e.stopPropagation();
         const row = gotoBtn.closest('.seg-row');
         const seg = resolveSegFromRow(row);
-        if (seg) jumpToSegment(seg.chapter, seg.index);
+        if (!seg) return;
+        // Save filter state when clicking from main list with active filters
+        if (row.closest('#seg-list') && segActiveFilters.some(f => f.value !== null)) {
+            _segSavedFilterView = {
+                filters: JSON.parse(JSON.stringify(segActiveFilters)),
+                chapter: segChapterSelect.value,
+                verse: segVerseSelect.value,
+                scrollTop: segListEl.scrollTop,
+            };
+        }
+        jumpToSegment(seg.chapter, seg.index);
         return;
     }
     // Adjust button
@@ -1784,6 +1801,9 @@ function handleSegKeydown(e) {
             if (segEditMode) {
                 e.preventDefault();
                 exitEditMode();
+            } else if (_segSavedFilterView) {
+                e.preventDefault();
+                _restoreFilterView();
             }
             break;
 
@@ -2674,6 +2694,7 @@ function addSegFilterCondition() {
 
 function clearAllSegFilters() {
     segActiveFilters = [];
+    _segSavedFilterView = null;
     renderFilterBar(); updateFilterBarControls(); applyFiltersAndRender();
 }
 
@@ -2882,18 +2903,35 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
 }
 
 async function jumpToSegment(chapter, segIndex) {
+    // If jumping from filter view, temporarily clear filters to show full chapter
+    const fromFilterView = !!_segSavedFilterView;
+    if (fromFilterView) {
+        segActiveFilters = [];
+        renderFilterBar();
+        updateFilterBarControls();
+    }
+
     // Load the chapter if not already loaded
     if (segChapterSelect.value !== String(chapter)) {
         segChapterSelect.value = String(chapter);
         if (segChapterSS) segChapterSS.refresh();
         await onSegChapterChange();
+    } else if (fromFilterView) {
+        // Same chapter but filters changed — re-render unfiltered
+        applyFiltersAndRender();
     }
+
     // Scroll to the segment
     const row = segListEl.querySelector(`.seg-row[data-seg-index="${segIndex}"]`);
     if (row) {
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.classList.add('playing');
         setTimeout(() => row.classList.remove('playing'), 2000);
+    }
+
+    // Show "Back to results" banner if we came from filter view
+    if (fromFilterView) {
+        _showBackToResultsBanner();
     }
 }
 
@@ -2954,6 +2992,45 @@ async function refreshValidation() {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// Filter view save / restore (Go To → Back navigation)
+// ---------------------------------------------------------------------------
+
+function _showBackToResultsBanner() {
+    segListEl.querySelector('.seg-back-banner')?.remove();
+    const banner = document.createElement('div');
+    banner.className = 'seg-back-banner';
+    banner.innerHTML = '<button class="btn btn-sm seg-back-btn">\u2190 Back to filter results</button>';
+    banner.querySelector('.seg-back-btn').addEventListener('click', _restoreFilterView);
+    segListEl.insertBefore(banner, segListEl.firstChild);
+}
+
+function _restoreFilterView() {
+    if (!_segSavedFilterView) return;
+    const saved = _segSavedFilterView;
+    _segSavedFilterView = null;
+
+    // Restore filter conditions
+    segActiveFilters = saved.filters;
+    renderFilterBar();
+    updateFilterBarControls();
+
+    // Restore chapter/verse selection
+    if (saved.chapter !== segChapterSelect.value) {
+        segChapterSelect.value = saved.chapter;
+        if (segChapterSS) segChapterSS.refresh();
+    }
+    segVerseSelect.value = saved.verse;
+
+    // Re-render with restored filters
+    applyFiltersAndRender();
+
+    // Restore scroll position after render
+    requestAnimationFrame(() => {
+        segListEl.scrollTop = saved.scrollTop;
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
