@@ -1,6 +1,7 @@
 name: Sync HF Dataset
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -31,30 +32,40 @@ jobs:
       - name: Detect changed reciters
         id: detect
         run: |
-          # Extract reciter slugs from changed timestamp/segment paths
-          changed=$(git diff HEAD~1 --name-only | \
-            grep -E "data/(timestamps|recitation_segments)/" | \
-            sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|; s|data/recitation_segments/([^/]+)/.*|\1|' | \
-            sort -u | tr '\n' ' ')
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger: sync all eligible reciters
+            eligible=$(python -c "
+          import sys; sys.path.insert(0, 'dataset')
+          from build_reciter import find_eligible_reciters
+          print(' '.join(find_eligible_reciters()))
+          ")
+            deleted=""
+          else
+            # Push trigger: detect from git diff
+            changed=$(git diff HEAD~1 --name-only | \
+              grep -E "data/(timestamps|recitation_segments)/" | \
+              sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|; s|data/recitation_segments/([^/]+)/.*|\1|' | \
+              sort -u | tr '\n' ' ')
 
-          # Filter to only eligible reciters (must have timestamps)
-          eligible=""
-          for slug in $changed; do
-            if [ -f "data/timestamps/by_ayah_audio/$slug/timestamps.json" ] || \
-               [ -f "data/timestamps/by_surah_audio/$slug/timestamps.json" ]; then
-              eligible="$eligible $slug"
-            fi
-          done
-          eligible=$(echo "$eligible" | xargs)
-          echo "slugs=$eligible" >> $GITHUB_OUTPUT
+            # Filter to only eligible reciters (must have timestamps)
+            eligible=""
+            for slug in $changed; do
+              if [ -f "data/timestamps/by_ayah_audio/$slug/timestamps.json" ] || \
+                 [ -f "data/timestamps/by_surah_audio/$slug/timestamps.json" ]; then
+                eligible="$eligible $slug"
+              fi
+            done
+            eligible=$(echo "$eligible" | xargs)
 
-          # Detect deleted timestamp dirs
-          deleted=$(git diff HEAD~1 --diff-filter=D --name-only | \
-            grep "data/timestamps/" | \
-            sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|' | \
-            sort -u | tr '\n' ' ')
+            # Detect deleted timestamp dirs
+            deleted=$(git diff HEAD~1 --diff-filter=D --name-only | \
+              grep "data/timestamps/" | \
+              sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|' | \
+              sort -u | tr '\n' ' ')
+          fi
+
+          echo "slugs=$(echo $eligible | xargs)" >> $GITHUB_OUTPUT
           echo "deleted=$(echo $deleted | xargs)" >> $GITHUB_OUTPUT
-
           echo "Changed reciters: $eligible"
           echo "Deleted reciters: $deleted"
 
