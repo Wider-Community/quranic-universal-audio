@@ -318,7 +318,7 @@ def write_reciters_md(data: dict) -> int:
     readme_path = REPO / "README.md"
     readme = readme_path.read_text()
     readme = re.sub(
-        r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Processed)",
+        r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
         rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
         readme,
     )
