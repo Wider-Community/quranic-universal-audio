@@ -40,7 +40,7 @@ https://github.com/user-attachments/assets/d6bffa29-5e71-492b-b0ec-b6a34c19a693
 
 - **Phoneme-level alignment.** Most Qur'an audio tools align at the word level. This project aligns at the phoneme level first, then recovers word and letter boundaries from the phoneme timestamps. The result is significantly more precise and accurate word timings.
 
-- **Gap-free timestamps.** Within each pause segment, word timestamps are padded forward so there are no artificial gaps between words. Highlighting stays perfectly synchronized with the audio — no silent flickers between words that other tools produce.
+- **Gap-free timestamps.** Within each recitation segment, word timestamps are padded forward so there are no artificial gaps between words. Highlighting stays perfectly synchronized with the audio — no silent flickers between words that other tools produce.
 
 - **Handles cross-word tajweed  naturally.** Rules like idgham, where sounds span word boundaries are resolved at the phoneme level. There is no ambiguity about where one word ends and the next begins.
 
