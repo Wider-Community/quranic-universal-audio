@@ -1,0 +1,96 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (e.g. v0.2.0). Leave empty for auto.'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Sync HF Dataset"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for tags
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Package release
+        id: package
+        run: |
+          args=""
+          if [ -n "${{ inputs.version }}" ]; then
+            args="--version ${{ inputs.version }}"
+          fi
+          python scripts/package_release.py $args --output-dir dist
+
+          # Read computed version from manifest (if it exists)
+          if [ -f dist/manifest.json ]; then
+            version=$(python -c "import json; print(json.load(open('dist/manifest.json'))['version'])")
+            count=$(python -c "import json; print(len(json.load(open('dist/manifest.json'))['reciters']))")
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "count=$count" >> $GITHUB_OUTPUT
+            echo "skip=false" >> $GITHUB_OUTPUT
+          else
+            echo "No changes since last release"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        if: steps.package.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${{ steps.package.outputs.version }}
+
+          # Create and push tag
+          git tag "$version"
+          git push origin "$version"
+
+          # Create release with all assets
+          gh release create "$version" \
+            --title "$version" \
+            --notes-file dist/release_notes.md \
+            dist/*.zip dist/manifest.json dist/surah_info.json dist/qpc_hafs.json
+
+          echo "Created release $version with ${{ steps.package.outputs.count }} reciter(s)"
+
+      - name: Tag HF dataset
+        if: steps.package.outputs.skip != 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python -c "
+          from huggingface_hub import HfApi
+          import os
+          api = HfApi(token=os.environ['HF_TOKEN'])
+          try:
+              api.create_tag(
+                  repo_id='hetchyy/quranic-universal-ayahs',
+                  repo_type='dataset',
+                  tag='${{ steps.package.outputs.version }}',
+                  tag_message='Release ${{ steps.package.outputs.version }}'
+              )
+              print('Tagged HF dataset with ${{ steps.package.outputs.version }}')
+          except Exception as e:
+              print(f'Warning: Could not tag HF dataset: {e}')
+          "
