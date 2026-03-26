@@ -35,10 +35,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "dist"
 # Eligibility detection
 # ---------------------------------------------------------------------------
 def find_release_eligible():
-    """Find reciters with segments.json + timestamps.json tracked in git.
-
-    Broader than HF eligibility (which requires timestamps_full.json).
-    """
+    """Find reciters with segments.json + timestamps.json tracked in git."""
     eligible = []
     seg_dir = ROOT / "data" / "recitation_segments"
     if not seg_dir.is_dir():

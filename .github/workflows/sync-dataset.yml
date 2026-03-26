@@ -40,8 +40,8 @@ jobs:
           # Filter to only eligible reciters (must have timestamps)
           eligible=""
           for slug in $changed; do
-            if [ -f "data/timestamps/by_ayah_audio/$slug/timestamps_full.json" ] || \
-               [ -f "data/timestamps/by_surah_audio/$slug/timestamps_full.json" ]; then
+            if [ -f "data/timestamps/by_ayah_audio/$slug/timestamps.json" ] || \
+               [ -f "data/timestamps/by_surah_audio/$slug/timestamps.json" ]; then
               eligible="$eligible $slug"
             fi
           done

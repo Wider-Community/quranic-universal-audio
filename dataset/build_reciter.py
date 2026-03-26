@@ -80,10 +80,10 @@ def find_eligible_reciters():
         slug = d.name
         if not (d / "detailed.json").exists() or not (d / "segments.json").exists():
             continue
-        # Check timestamps exist
+        # Check timestamps exist (timestamps.json is sufficient)
         for audio_type in ("by_ayah_audio", "by_surah_audio"):
             ts_dir = ROOT / "data" / "timestamps" / audio_type / slug
-            if (ts_dir / "timestamps_full.json").exists():
+            if (ts_dir / "timestamps.json").exists():
                 eligible.append(slug)
                 break
 
@@ -94,15 +94,21 @@ def find_eligible_reciters():
 # Data loading
 # ---------------------------------------------------------------------------
 def load_data(slug, audio_type):
-    """Load all data files for a reciter."""
-    ts_full_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
+    """Load all data files for a reciter.
+
+    Loads timestamps.json (word-level) and derives verse boundaries from the
+    word array (verse_start_ms = first word start, verse_end_ms = last word
+    end). This avoids requiring timestamps_full.json which contains large
+    letter/phoneme data not used by the HF dataset.
+    """
+    ts_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps.json"
     detailed_path = ROOT / "data" / "recitation_segments" / slug / "detailed.json"
     segments_path = ROOT / "data" / "recitation_segments" / slug / "segments.json"
     surah_info_path = ROOT / "data" / "surah_info.json"
 
     log.info("Loading data for %s...", slug)
-    with open(ts_full_path) as f:
-        ts_full = json.load(f)
+    with open(ts_path) as f:
+        ts_raw = json.load(f)
     with open(detailed_path) as f:
         detailed = json.load(f)
     with open(segments_path) as f:
@@ -110,17 +116,33 @@ def load_data(slug, audio_type):
     with open(surah_info_path) as f:
         surah_info = json.load(f)
 
+    # Reshape timestamps.json ([[word_idx, start, end], ...]) into the
+    # structure build_rows expects: {ref: {"words": [...], "verse_start_ms",
+    # "verse_end_ms"}}
+    timestamps = {}
+    for ref, words in ts_raw.items():
+        if ref == "_meta":
+            continue
+        if not words:
+            timestamps[ref] = {"words": [], "verse_start_ms": 0, "verse_end_ms": 0}
+            continue
+        timestamps[ref] = {
+            "words": words,
+            "verse_start_ms": words[0][1],
+            "verse_end_ms": words[-1][2],
+        }
+
     detailed_by_ref = {}
     for entry in detailed["entries"]:
         detailed_by_ref[entry["ref"]] = entry
 
-    return ts_full, detailed_by_ref, segments, surah_info
+    return timestamps, detailed_by_ref, segments, surah_info
 
 
 # ---------------------------------------------------------------------------
 # Row building
 # ---------------------------------------------------------------------------
-def build_rows(ts_full, detailed_by_ref, segments, surah_info):
+def build_rows(timestamps, detailed_by_ref, segments, surah_info):
     """Build row metadata (without audio bytes) in canonical verse order."""
     rows = []
     for surah_num in sorted(surah_info.keys(), key=int):
@@ -135,8 +157,8 @@ def build_rows(ts_full, detailed_by_ref, segments, surah_info):
                 continue
 
             # Clip boundaries
-            if ref in ts_full and ref != "_meta":
-                verse_data = ts_full[ref]
+            if ref in timestamps and ref != "_meta":
+                verse_data = timestamps[ref]
                 clip_start = verse_data["verse_start_ms"]
                 clip_end = verse_data["verse_end_ms"]
             elif ref in segments and ref != "_meta":
@@ -159,8 +181,8 @@ def build_rows(ts_full, detailed_by_ref, segments, surah_info):
                     ])
 
             verse_words = []
-            if ref in ts_full and ref != "_meta":
-                for word in ts_full[ref]["words"]:
+            if ref in timestamps and ref != "_meta":
+                for word in timestamps[ref]["words"]:
                     verse_words.append([
                         word[0],
                         word[1] - clip_start,
@@ -294,8 +316,8 @@ def push_reciter(slug, audio_type):
     """Build and push a reciter to the HF dataset."""
     is_surah = "by_surah" in audio_type
 
-    ts_full, detailed_by_ref, segments, surah_info = load_data(slug, audio_type)
-    rows = build_rows(ts_full, detailed_by_ref, segments, surah_info)
+    timestamps, detailed_by_ref, segments, surah_info = load_data(slug, audio_type)
+    rows = build_rows(timestamps, detailed_by_ref, segments, surah_info)
     log.info("Built %d rows for %s", len(rows), slug)
 
     if SAMPLE_PCT > 0:
