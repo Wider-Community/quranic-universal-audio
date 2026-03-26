@@ -327,13 +327,25 @@ def generate_release_notes(manifest, output_dir):
             f"{r['coverage']['ayahs']:,} ayahs, {r['riwayah']}, timestamps: {ts}"
         )
 
+    lines.append("\n## Zip file structure\n")
+    lines.append("Each reciter zip contains:\n")
+    lines.append("| File | Description |")
+    lines.append("|------|-------------|")
+    lines.append("| `info.json` | Reciter metadata (name, riwayah, audio source, coverage, version) |")
+    lines.append("| `audio.json` | Audio URLs by surah or ayah |")
+    lines.append("| `segments.json` | Verse-level timestamped recitation segments |")
+    lines.append("| `timestamps.json` | Word-level timestamps |")
+    lines.append("| `timestamps_full.json` | Word + letter + phoneme timestamps (if available) |")
+
     lines.append("\n## Downloads\n")
     lines.append("| File | Size |")
     lines.append("|------|------|")
     for r in manifest["reciters"]:
         size_mb = r["zip_size_bytes"] / 1024 / 1024
         lines.append(f"| `{r['zip_file']}` | {size_mb:.1f} MB |")
-    lines.append("| `manifest.json` | Index of all reciters with checksums |")
+    lines.append("| `surah_info.json` | Reference: surahs with verse and word counts |")
+    lines.append("| `qpc_hafs.json` | Reference: Quran word text keyed by surah:ayah:word |")
+    lines.append("| `manifest.json` | Index of all reciters with checksums and download URLs |")
 
     lines.append(
         f"\nHuggingFace dataset: "
