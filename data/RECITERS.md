@@ -12,7 +12,6 @@ Timestamps column: `✓✓` = words + letters/phonemes, `✓` = words only.
 | Reciter | Coverage | Segmented | Manually Validated | Timestamped |
 |---------|----------|:---------:|:------------------:|:-----------:|
 | Ali Jaber | 114 surahs, 6235 ayahs | ✓ | ✓ | ✓ |
-| Minshawy Mujawwad | 114 surahs, 6227 ayahs | ✓ | ✓ | ✗ |
 | Minshawy Murattal | 114 surahs, 6236 ayahs | ✓ | ✓ | ✓✓ |
 
 ---
@@ -241,21 +240,22 @@ Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly 
 | 25 | Khalefa Al Tunaiji |
 | 26 | Maher Al Muaiqly |
 | 27 | Mahmoud Ali Al Banna |
-| 28 | Mohammad Al Tablaway |
-| 29 | Muhammad Abdulkareem |
-| 30 | Muhammad Ayyoub |
-| 31 | Muhammad Jibreel |
-| 32 | Muhsin Al Qasim |
-| 33 | Mustafa Ismail |
-| 34 | Nabil Rifa3I |
-| 35 | Nasser Alqatami |
-| 36 | Parhizgar |
-| 37 | Sahl Yassin |
-| 38 | Salaah Abdulrahman Bukhatir |
-| 39 | Salah Al Budair |
-| 40 | Saood Ash Shuraym |
-| 41 | Yaser Salamah |
-| 42 | Yasser Ad Dussary |
+| 28 | Minshawy Mujawwad |
+| 29 | Mohammad Al Tablaway |
+| 30 | Muhammad Abdulkareem |
+| 31 | Muhammad Ayyoub |
+| 32 | Muhammad Jibreel |
+| 33 | Muhsin Al Qasim |
+| 34 | Mustafa Ismail |
+| 35 | Nabil Rifa3I |
+| 36 | Nasser Alqatami |
+| 37 | Parhizgar |
+| 38 | Sahl Yassin |
+| 39 | Salaah Abdulrahman Bukhatir |
+| 40 | Salah Al Budair |
+| 41 | Saood Ash Shuraym |
+| 42 | Yaser Salamah |
+| 43 | Yasser Ad Dussary |
 
 #### `qul` (Tarteel CDN)
 
