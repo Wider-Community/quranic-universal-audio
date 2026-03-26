@@ -13,12 +13,10 @@ let segAudioBufferUrl = '';  // URL of the currently decoded audio buffer
 let segAnimId = null;        // animation frame ID for playback
 let segCurrentIdx = -1;      // currently playing segment index
 let segDisplayedSegments = null; // segments currently shown (may be filtered)
-let segDirtyIndices = new Set(); // indices of segments with unsaved edits
+let segDirtyMap = new Map();     // Map<chapter, {indices: Set, structural: boolean}> — all unsaved edits
 let segEditMode = null;          // null | 'trim' | 'split'
 let segEditIndex = -1;           // index of segment being edited
 // (merge is now button-driven, no merge selection state needed)
-let segStructuralChange = false; // true if split/merge/adjust changed the segment array
-let segDirtyChapters = new Set(); // chapters modified via error card edits (cross-chapter)
 let segAudioBuffers = new Map();  // chapter → AudioBuffer for multi-chapter waveform support
 let _segPrefetchCache = {};      // url → Promise<void> for prefetched audio
 let _segContinuousPlay = false;  // true while continuous playback is active across audio files
@@ -30,6 +28,38 @@ let _segFilterDebounceTimer = null; // debounce timer for filter value input
 let _activeAudioSource = null;      // 'main' | 'error' | null — which audio is active
 let _segIndexMap = null;         // Map<index, segment> for O(1) lookups
 let _waveformObserver = null;    // IntersectionObserver for lazy waveform drawing
+
+// ---------------------------------------------------------------------------
+// Dirty-state helpers
+// ---------------------------------------------------------------------------
+
+function markDirty(chapter, index, structural = false) {
+    if (!segDirtyMap.has(chapter)) {
+        segDirtyMap.set(chapter, { indices: new Set(), structural: false });
+    }
+    const entry = segDirtyMap.get(chapter);
+    if (index !== undefined) entry.indices.add(index);
+    if (structural) entry.structural = true;
+    segSaveBtn.disabled = false;
+}
+
+function unmarkDirty(chapter, index) {
+    const entry = segDirtyMap.get(chapter);
+    if (!entry) return;
+    entry.indices.delete(index);
+    if (entry.indices.size === 0 && !entry.structural) {
+        segDirtyMap.delete(chapter);
+    }
+}
+
+function isDirty() {
+    return segDirtyMap.size > 0;
+}
+
+function isIndexDirty(chapter, index) {
+    const entry = segDirtyMap.get(chapter);
+    return entry ? entry.indices.has(index) : false;
+}
 
 // Filter constants
 const SEG_FILTER_FIELDS = [
@@ -699,13 +729,11 @@ function clearSegDisplay() {
     segAudioBufferUrl = '';
     segDisplayedSegments = null;
     segCurrentIdx = -1;
-    segDirtyIndices.clear();
+    segDirtyMap.clear();
     segEditMode = null;
     segEditIndex = -1;
     segStatsData = null;
     if (segStatsPanel) { segStatsPanel.hidden = true; segStatsCharts.innerHTML = ''; }
-
-    segStructuralChange = false;
     _segPrefetchCache = {};
     _segContinuousPlay = false;
     _segPlayEndMs = 0;
@@ -843,7 +871,7 @@ function renderSegCard(seg, options = {}) {
     } = options;
 
     const row = document.createElement('div');
-    row.className = 'seg-row' + (segDirtyIndices.has(seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
+    row.className = 'seg-row' + (isIndexDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
     row.dataset.segIndex = seg.index;
     row.dataset.segChapter = seg.chapter;
 
@@ -1457,8 +1485,7 @@ async function commitRefEdit(seg, newRef, row) {
         if (seg.confidence < 1.0) {
             seg.confidence = 1.0;
             delete seg._derived;
-            segDirtyIndices.add(seg.index);
-            segSaveBtn.disabled = false;
+            markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
             syncAllCardsForSegment(seg);
         } else {
             const refSpan = row.querySelector('.seg-text-ref');
@@ -1495,13 +1522,7 @@ async function commitRefEdit(seg, newRef, row) {
     }
 
     delete seg._derived;
-    segDirtyIndices.add(seg.index);
-    segSaveBtn.disabled = false;
-
-    // Track cross-chapter edits
-    if (seg.chapter && seg.chapter !== parseInt(segChapterSelect.value)) {
-        segDirtyChapters.add(seg.chapter);
-    }
+    markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
 
     // Update all matching cards globally (both main and error sections)
     syncAllCardsForSegment(seg);
@@ -1553,8 +1574,7 @@ function syncAllCardsForSegment(seg) {
 // ---------------------------------------------------------------------------
 
 async function onSegSaveClick() {
-    const hasDirty = segDirtyIndices.size > 0 || segStructuralChange || segDirtyChapters.size > 0;
-    if (!hasDirty) return;
+    if (!isDirty()) return;
 
     const reciter = segReciterSelect.value;
     if (!reciter) return;
@@ -1562,47 +1582,18 @@ async function onSegSaveClick() {
     segSaveBtn.disabled = true;
     segSaveBtn.textContent = 'Saving...';
 
+    let savedChanges = 0;
+    let savedChapters = 0;
     let allOk = true;
 
     try {
-        // 1) Save cross-chapter edits (from error card edits)
-        if (segDirtyChapters.size > 0) {
-            for (const ch of segDirtyChapters) {
-                const chSegs = getChapterSegments(ch);
-                const payload = {
-                    full_replace: true,
-                    segments: chSegs.map(s => ({
-                        time_start: s.time_start,
-                        time_end: s.time_end,
-                        matched_ref: s.matched_ref,
-                        matched_text: s.matched_text,
-                        confidence: s.confidence,
-                        phonemes_asr: s.phonemes_asr || '',
-                    })),
-                };
-                const resp = await fetch(`/api/seg/save/${reciter}/${ch}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const result = await resp.json();
-                if (!result.ok) {
-                    segPlayStatus.textContent = `Save error (ch ${ch}): ${result.error}`;
-                    allOk = false;
-                    break;
-                }
-            }
-            segDirtyChapters.clear();
-        }
-
-        // 2) Save current chapter edits (existing logic)
-        const chapter = segChapterSelect.value;
-        if (allOk && segData && chapter && (segDirtyIndices.size > 0 || segStructuralChange)) {
+        for (const [ch, entry] of segDirtyMap) {
+            // Always read from segAllData (canonical source)
+            const chSegs = getChapterSegments(ch);
             let payload;
-            // Always read from segAllData (canonical source) — segData.segments can desync
-            // after structural changes like split/merge due to shallow copies in syncChapterSegsToAll
-            const chSegs = getChapterSegments(parseInt(chapter));
-            if (segStructuralChange) {
+
+            if (entry.structural) {
+                // Structural change (split/merge/delete/trim) — replace entire chapter
                 payload = {
                     full_replace: true,
                     segments: chSegs.map(s => ({
@@ -1614,9 +1605,11 @@ async function onSegSaveClick() {
                         phonemes_asr: s.phonemes_asr || '',
                     })),
                 };
+                savedChanges += chSegs.length;
             } else {
+                // Patch mode — only send changed segments
                 const updates = [];
-                for (const idx of segDirtyIndices) {
+                for (const idx of entry.indices) {
                     const seg = chSegs.find(s => s.index === idx);
                     if (seg) {
                         updates.push({
@@ -1627,39 +1620,47 @@ async function onSegSaveClick() {
                         });
                     }
                 }
+                if (updates.length === 0) continue;
                 payload = { segments: updates };
+                savedChanges += updates.length;
             }
 
-            const resp = await fetch(`/api/seg/save/${reciter}/${chapter}`, {
+            const resp = await fetch(`/api/seg/save/${reciter}/${ch}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
             const result = await resp.json();
             if (!result.ok) {
-                segPlayStatus.textContent = `Save error: ${result.error}`;
+                segPlayStatus.textContent = `Save error (ch ${ch}): ${result.error}`;
                 allOk = false;
+                break;
             }
+            // Remove successfully saved chapter so partial failures keep remaining entries
+            segDirtyMap.delete(ch);
+            savedChapters++;
         }
 
         if (allOk) {
-            segDirtyIndices.clear();
-            segStructuralChange = false;
-            segSaveBtn.textContent = 'Saved';
+            segDirtyMap.clear();
+            const msg = savedChapters > 1
+                ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
+                : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
+            segSaveBtn.textContent = msg;
             // Clear dirty indicators on all cards (main + error sections)
             document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
-            setTimeout(() => { segSaveBtn.textContent = 'Save'; }, 1500);
+            setTimeout(() => { segSaveBtn.textContent = 'Save'; }, 2500);
             segUndoBtn.hidden = false;
             // Delay validation refresh to let server background thread finish
             setTimeout(refreshValidation, 1500);
         } else {
-            segSaveBtn.disabled = false;
+            segSaveBtn.disabled = !isDirty();
             segSaveBtn.textContent = 'Save';
         }
     } catch (e) {
         console.error('Save failed:', e);
         segPlayStatus.textContent = 'Save failed';
-        segSaveBtn.disabled = false;
+        segSaveBtn.disabled = !isDirty();
         segSaveBtn.textContent = 'Save';
     }
 }
@@ -1766,7 +1767,7 @@ function handleSegKeydown(e) {
             break;
         }
         case 'KeyS': {
-            if (segDirtyIndices.size > 0 || segStructuralChange || segDirtyChapters.size > 0) {
+            if (isDirty()) {
                 e.preventDefault();
                 onSegSaveClick();
             }
@@ -2133,15 +2134,11 @@ function confirmTrim(seg) {
     // Update in-memory
     seg.time_start = newStart;
     seg.time_end = newEnd;
-    segSaveBtn.disabled = false;
-
+    markDirty(chapter, undefined, true);
 
     if (chapter !== currentChapter || !segData?.segments) {
-        // Cross-chapter edit or segData unavailable: mark chapter dirty
-        segDirtyChapters.add(chapter);
         segAllData._byChapter = null; segAllData._byChapterIndex = null;
     } else {
-        segStructuralChange = true;
         syncChapterSegsToAll();
     }
 
@@ -2425,7 +2422,6 @@ function confirmSplit(seg) {
         const segIdx = segData.segments.findIndex(s => s.index === seg.index);
         segData.segments.splice(segIdx, 1, firstHalf, secondHalf);
         segData.segments.forEach((s, i) => { s.index = i; });
-        segStructuralChange = true;
         syncChapterSegsToAll();
         segData.segments = getChapterSegments(chapter);
     } else {
@@ -2436,11 +2432,10 @@ function confirmSplit(seg) {
         }
         let reIdx = 0;
         segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
-        segDirtyChapters.add(chapter);
         segAllData._byChapter = null; segAllData._byChapterIndex = null;
     }
 
-    segSaveBtn.disabled = false;
+    markDirty(chapter, undefined, true);
 
     computeSilenceAfter();
     exitEditMode();
@@ -2501,7 +2496,6 @@ function mergeAdjacent(seg, direction) {
         const spliceIdx = Math.min(idx, otherIdx);
         segData.segments.splice(spliceIdx, 2, merged);
         segData.segments.forEach((s, i) => { s.index = i; });
-        segStructuralChange = true;
         syncChapterSegsToAll();
     } else if (segAllData?.segments) {
         const globalFirst = segAllData.segments.indexOf(first);
@@ -2510,11 +2504,10 @@ function mergeAdjacent(seg, direction) {
         segAllData.segments.splice(spliceStart, 2, merged);
         let reIdx = 0;
         segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
-        segDirtyChapters.add(chapter);
         segAllData._byChapter = null; segAllData._byChapterIndex = null;
     }
 
-    segSaveBtn.disabled = false;
+    markDirty(chapter, undefined, true);
     if (chapter === currentChapter && segData) {
         segData.segments = getChapterSegments(chapter);
     }
@@ -2542,7 +2535,6 @@ function deleteSegment(seg, row) {
         if (segIdx === -1) return;
         segData.segments.splice(segIdx, 1);
         segData.segments.forEach((s, i) => { s.index = i; });
-        segStructuralChange = true;
         syncChapterSegsToAll();
     } else if (segAllData?.segments) {
         // Cross-chapter: operate directly on segAllData
@@ -2551,11 +2543,10 @@ function deleteSegment(seg, row) {
         segAllData.segments.splice(globalIdx, 1);
         let idx = 0;
         segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
-        segDirtyChapters.add(chapter);
         segAllData._byChapter = null; segAllData._byChapterIndex = null;
     }
 
-    segSaveBtn.disabled = false;
+    markDirty(chapter, undefined, true);
 
 
     // Remove the error card wrapper from DOM if applicable
@@ -2845,15 +2836,11 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
                     if (!seg || seg.confidence >= 1.0) continue;
                     seg.confidence = 1.0;
                     delete seg._derived;
-                    segDirtyIndices.add(seg.index);
-                    if (seg.chapter && seg.chapter !== parseInt(segChapterSelect.value)) {
-                        segDirtyChapters.add(seg.chapter);
-                    }
+                    markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
                     syncAllCardsForSegment(seg);
                     changed++;
                 }
                 if (changed > 0) {
-                    segSaveBtn.disabled = false;
                     confirmAllBtn.disabled = true;
                     confirmAllBtn.textContent = 'Confirmed';
                     // Fade out all item buttons and card-level confirm buttons
@@ -3262,7 +3249,8 @@ function renderCategoryCards(type, items, container) {
                     const oldText = seg.matched_text || '';
                     const oldDisplay = seg.display_text || '';
                     const oldConf = seg.confidence;
-                    const wasDirty = segDirtyIndices.has(seg.index);
+                    const segChapter = seg.chapter || issue.chapter;
+                    const wasDirty = isIndexDirty(segChapter, seg.index);
 
                     const newRef = `${af.new_ref_start}-${af.new_ref_end}`;
                     const entry = segsInWrapper.find(s => s.seg === seg);
@@ -3282,13 +3270,13 @@ function renderCategoryCards(type, items, container) {
                         seg.matched_text = oldText;
                         seg.display_text = oldDisplay;
                         seg.confidence = oldConf;
-                        if (!wasDirty) segDirtyIndices.delete(seg.index);
+                        if (!wasDirty) unmarkDirty(segChapter, seg.index);
                         fixBtn.disabled = false;
                         fixBtn.textContent = 'Auto Fix';
                         wrapper.style.opacity = '1';
                         syncAllCardsForSegment(seg);
                         undoBtn.remove();
-                        segSaveBtn.disabled = !(segDirtyIndices.size > 0 || segStructuralChange || segDirtyChapters.size > 0);
+                        segSaveBtn.disabled = !isDirty();
                     });
                     fixBtn.after(undoBtn);
                 });
@@ -3330,11 +3318,7 @@ function renderCategoryCards(type, items, container) {
                     if (seg.confidence >= 1.0) return;
                     seg.confidence = 1.0;
                     delete seg._derived;
-                    segDirtyIndices.add(seg.index);
-                    if (seg.chapter && seg.chapter !== parseInt(segChapterSelect.value)) {
-                        segDirtyChapters.add(seg.chapter);
-                    }
-                    segSaveBtn.disabled = false;
+                    markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
                     syncAllCardsForSegment(seg);
                     confirmBtn.disabled = true;
                     confirmBtn.textContent = 'Confirmed';
