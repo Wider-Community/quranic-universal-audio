@@ -24,6 +24,21 @@ Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly 
 
 ### By Surah
 
+#### `asswatul-quran` (asswatul-quran.com)
+
+| # | Reciter |
+|---|---------|
+| 1 | Abdullah Al Kandari |
+| 2 | Abdullah Ghailan |
+| 3 | Ahmad Saber |
+| 4 | Ashraf Abdo Darwish |
+| 5 | Hani Eid |
+| 6 | Mahmood Al Rifai |
+| 7 | Mohammed Saleh Abu Zaid |
+| 8 | Musa Bilal Minyar |
+| 9 | Syed Ramadaan |
+| 10 | Waleed Al Naehi |
+
 #### `qul` (Tarteel CDN)
 
 | # | Reciter |
@@ -192,21 +207,6 @@ Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly 
 | 95 | Yusuf Nooh |
 | 96 | Zaki Daghestani |
 
-#### `asswatul-quran` (asswatul-quran.com)
-
-| # | Reciter |
-|---|---------|
-| 1 | Abdullah Al Kandari |
-| 2 | Abdullah Ghailan |
-| 3 | Ahmad Saber |
-| 4 | Ashraf Abdo Darwish |
-| 5 | Hani Eid |
-| 6 | Mahmood Al Rifai |
-| 7 | Mohammed Saleh Abu Zaid |
-| 8 | Musa Bilal Minyar |
-| 9 | Syed Ramadaan |
-| 10 | Waleed Al Naehi |
-
 ### By Ayah
 
 #### `everyayah` (everyayah.com)
@@ -241,23 +241,21 @@ Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly 
 | 26 | Khalefa Al Tunaiji |
 | 27 | Maher Al Muaiqly |
 | 28 | Mahmoud Ali Al Banna |
-| 29 | Minshawy Mujawwad |
-| 30 | Minshawy Murattal |
-| 31 | Mohammad Al Tablaway |
-| 32 | Muhammad Abdulkareem |
-| 33 | Muhammad Ayyoub |
-| 34 | Muhammad Jibreel |
-| 35 | Muhsin Al Qasim |
-| 36 | Mustafa Ismail |
-| 37 | Nabil Rifa3i |
-| 38 | Nasser Alqatami |
-| 39 | Parhizgar |
-| 40 | Sahl Yassin |
-| 41 | Salaah Abdulrahman Bukhatir |
-| 42 | Salah Al Budair |
-| 43 | Saood Ash Shuraym |
-| 44 | Yaser Salamah |
-| 45 | Yasser Ad Dussary |
+| 29 | Mohammad Al Tablaway |
+| 30 | Muhammad Abdulkareem |
+| 31 | Muhammad Ayyoub |
+| 32 | Muhammad Jibreel |
+| 33 | Muhsin Al Qasim |
+| 34 | Mustafa Ismail |
+| 35 | Nabil Rifa3I |
+| 36 | Nasser Alqatami |
+| 37 | Parhizgar |
+| 38 | Sahl Yassin |
+| 39 | Salaah Abdulrahman Bukhatir |
+| 40 | Salah Al Budair |
+| 41 | Saood Ash Shuraym |
+| 42 | Yaser Salamah |
+| 43 | Yasser Ad Dussary |
 
 #### `qul` (Tarteel CDN)
 
