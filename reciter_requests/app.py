@@ -261,14 +261,45 @@ def fetch_available_reciters():
         return []
 
 
+def _build_issue_pr_lookup(prs, issues):
+    """Build {issue_number: pr_html_url} from PR list.
+
+    Strategy 1: Parse 'Closes #N' / 'Fixes #N' / 'Resolves #N' from PR body.
+    Strategy 2: Match branch name feat/add-segments-{slug} to issue slug.
+    """
+    lookup = {}
+    for pr in prs:
+        body = pr.get("body", "") or ""
+        for m in re.finditer(
+            r"(?:Closes|Fixes|Resolves)\s+#(\d+)", body, re.IGNORECASE
+        ):
+            lookup[int(m.group(1))] = pr["html_url"]
+
+    # Strategy 2: branch name matching
+    slug_to_issue = {}
+    for iss in issues:
+        if iss.get("reciter_slug"):
+            slug_to_issue[iss["reciter_slug"]] = iss["issue_number"]
+    for pr in prs:
+        branch = pr.get("head", {}).get("ref", "")
+        m = re.match(r"feat/add-segments-(.+)", branch)
+        if m:
+            branch_slug = m.group(1).replace("-", "_")
+            issue_num = slug_to_issue.get(branch_slug)
+            if issue_num and issue_num not in lookup:
+                lookup[issue_num] = pr["html_url"]
+
+    return lookup
+
+
 def fetch_request_issues():
-    """Fetch all request issues from GitHub."""
+    """Fetch all request issues from GitHub, with linked PR URLs."""
     cached = _get_cached("requests")
     if cached is not None:
         return cached
 
     try:
-        # Fetch both open and closed
+        # Fetch both open and closed issues
         all_issues = []
         for state in ["open", "closed"]:
             issues = _gh_get("issues", params={
@@ -278,6 +309,7 @@ def fetch_request_issues():
             })
             all_issues.extend(issues)
 
+        # Build initial result list (without pr_url yet)
         result = []
         for iss in all_issues:
             labels = [l["name"] for l in iss.get("labels", [])]
@@ -299,7 +331,23 @@ def fetch_request_issues():
                 "created_at": iss["created_at"][:10],
                 "updated_at": iss["updated_at"][:10],
                 "url": iss["html_url"],
+                "pr_url": "",
             })
+
+        # Fetch PRs to build issue→PR lookup
+        try:
+            all_prs = []
+            for pr_state in ["open", "closed"]:
+                prs = _gh_get("pulls", params={
+                    "state": pr_state,
+                    "per_page": 100,
+                })
+                all_prs.extend(prs)
+            pr_lookup = _build_issue_pr_lookup(all_prs, result)
+            for r in result:
+                r["pr_url"] = pr_lookup.get(r["issue_number"], "")
+        except Exception as e:
+            logger.warning(f"Failed to fetch PRs for lookup: {e}")
 
         _set_cached("requests", result)
         return result
@@ -506,14 +554,15 @@ def get_requests_markdown():
     requests = fetch_request_issues()
     if not requests:
         return "*No requests yet.*"
-    lines = ["| Reciter | Status | Submitted | Updated | Link |",
-             "|---------|--------|-----------|---------|------|"]
+    lines = ["| Reciter | Status | Submitted | Updated | Issue | PR |",
+             "|---------|--------|-----------|---------|-------|------|"]
     for r in requests:
-        name = r["title"].replace("[request] ", "")
-        url = r["url"]
+        name = r["title"].replace("[request] ", "").replace("[re-align] ", "")
+        issue_link = f"[#{r['issue_number']}]({r['url']})"
+        pr_link = f"[View]({r['pr_url']})" if r.get("pr_url") else ""
         lines.append(
             f"| {name} | {r['status']} | {r['created_at']} "
-            f"| {r['updated_at']} | [View]({url}) |"
+            f"| {r['updated_at']} | {issue_link} | {pr_link} |"
         )
     return "\n".join(lines)
 

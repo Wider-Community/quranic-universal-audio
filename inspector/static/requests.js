@@ -175,17 +175,21 @@
             return;
         }
         let html = '<table class="req-table"><thead><tr>'
-            + '<th>Reciter</th><th>Status</th><th>Submitted</th><th>Updated</th><th></th>'
+            + '<th>Reciter</th><th>Status</th><th>Submitted</th><th>Updated</th><th></th><th></th>'
             + '</tr></thead><tbody>';
         for (const r of requests) {
-            const name = r.title.replace('[request] ', '');
+            const name = r.title.replace('[request] ', '').replace('[re-align] ', '');
             const badge = `<span class="req-badge req-badge-${r.status}">${r.status}</span>`;
+            const prCell = r.pr_url
+                ? `<a href="${esc(r.pr_url)}" target="_blank" class="req-link">PR</a>`
+                : '';
             html += '<tr>'
                 + `<td>${esc(name)}</td>`
                 + `<td>${badge}</td>`
                 + `<td>${esc(r.created_at)}</td>`
                 + `<td>${esc(r.updated_at)}</td>`
-                + `<td><a href="${esc(r.url)}" target="_blank" class="req-link">View</a></td>`
+                + `<td><a href="${esc(r.url)}" target="_blank" class="req-link">Issue</a></td>`
+                + `<td>${prCell}</td>`
                 + '</tr>';
         }
         html += '</tbody></table>';
