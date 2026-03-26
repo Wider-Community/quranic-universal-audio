@@ -1,0 +1,254 @@
+Generated: 2026-03-26 08:31:12
+
+========================================================================
+  ali_jaber
+  data/recitation_segments/ali_jaber
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   200 ms
+  Min speech:    200 ms
+  Padding:       80 ms
+
+--- Coverage ---
+  Verses found:       6233 / 6236
+  Missing verses:     3
+  Partial words:      16 verses with word gaps
+
+--- Segments ---
+  Total segments:     9480
+  Single-seg verses:  4166
+  Multi-seg verses:   2067 (5314 segments)
+  Cross-verse segs:   0
+  Empty verse keys:   0
+  Max segs/verse:     14
+
+--- Segment Duration ---
+  Min:      0.50s
+  Median:   8.10s
+  Mean:     8.77s
+  Max:      25.41s
+
+--- True Silence Duration (padding reversed) ---
+  Min:      0.20s
+  Median:   0.86s
+  Mean:     0.90s
+  Max:      2.90s
+
+--- Alignment Confidence ---
+  Min:        0.5000
+  Median:     1.0000
+  Mean:       0.9904
+  Max:        1.0000
+  Below 60%:  6
+  Below 80%:  11
+  Failed:     15 (no alignment)
+  Empty ASR:  0 (matched but no phonemes)
+
+--- First 15 of 15 Alignment Failures ---
+   1. 0:00.5 - 0:05.9  (5.42s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/001001.mp3
+      asr:   ʔ a ʕ u: ð u b i ll a: h i m i n a ʃʃ a j tˤ aˤ: n i rˤrˤ aˤ ʒ i: m
+
+   2. 0:00.1 - 0:01.6  (1.52s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/002001.mp3
+      asr:   a l i f l a:
+
+   3. 0:18.8 - 0:20.1  (1.29s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/002027.mp3
+      asr:   ɣ u n a: rˤ
+
+   4. 0:20.3 - 0:21.1  (0.76s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/002132.mp3
+      asr:   
+
+   5. 0:20.3 - 0:20.6  (0.36s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/003024.mp3
+      asr:   n
+
+   6. 0:20.2 - 0:20.7  (0.50s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/006044.mp3
+      asr:   n
+
+   7. 0:10.2 - 0:10.5  (0.36s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/010035.mp3
+      asr:   q Q
+
+   8. 0:15.0 - 0:15.4  (0.40s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/010035.mp3
+      asr:   q
+
+   9. 0:04.5 - 0:04.9  (0.36s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/018044.mp3
+      asr:   q
+
+  10. 0:00.9 - 0:01.4  (0.46s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/020001.mp3
+      asr:   a:
+
+  11. 0:20.6 - 0:21.0  (0.44s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/024032.mp3
+      asr:   m
+
+  12. 0:00.2 - 0:01.8  (1.64s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/029001.mp3
+      asr:   a l i f l a:
+
+  13. 0:04.3 - 0:08.7  (4.42s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/029001.mp3
+      asr:   ħ m̃ i: m
+
+  14. 0:03.2 - 0:03.7  (0.48s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/050001.mp3
+      asr:   
+
+  15. 0:05.5 - 0:09.0  (3.48s)
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/114006.mp3
+      asr:   sˤ aˤ d a q aˤ lˤlˤ aˤ: h u l ʕ a ðˤ i: m
+
+
+--- Lowest 11 of 11 Segments Below 80% Confidence ---
+   1. [0.5000]  2:3:6-2:3:6  @ 0:04.0 - 0:08.8
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/002001.mp3
+      text:  وَمِمَّا
+      asr:   ħ a: m̃ i: m
+
+   2. [0.5000]  7:134:13-7:134:13  @ 0:22.7 - 0:23.8
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/007134.mp3
+      text:  لَئِن
+      asr:   aˤ: ʔ i: n
+
+   3. [0.5200]  32:2:3-32:2:3  @ 0:00.3 - 0:02.4
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/032001.mp3
+      text:  لَا
+      asr:   l i f l a:
+
+   4. [0.5700]  5:83:21-5:83:21  @ 0:20.6 - 0:21.8
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/005083.mp3
+      text:  ٱلشَّـٰهِدِينَ
+      asr:   h i d i: n
+
+   5. [0.5700]  32:2:6-32:2:6  @ 0:03.4 - 0:08.1
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/032001.mp3
+      text:  مِن
+      asr:   m̃ i: m
+
+   6. [0.5800]  50:1:1-50:1:1  @ 0:00.6 - 0:01.6
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/050001.mp3
+      text:  قٓ ۚ
+      asr:   q a: l
+
+   7. [0.6000]  24:21:34-24:21:34  @ 0:40.2 - 0:41.0
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/024021.mp3
+      text:  عَلِيمٌ
+      asr:   a l i: m
+
+   8. [0.6200]  9:20:16-9:20:16  @ 0:20.2 - 0:22.8
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/009020.mp3
+      text:  ٱلْفَآئِزُونَ
+      asr:   a: ʔ i z u: n
+
+   9. [0.7400]  7:1:1-7:1:1  @ 0:00.4 - 0:12.4
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/007001.mp3
+      text:  الٓمٓصٓ
+      asr:   a l i f l a: m̃ i j̃ i m sˤ aˤ: d Q
+
+  10. [0.7500]  75:27:3-75:27:3  @ 0:01.6 - 0:03.1
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/075027.mp3
+      text:  رَاقٍ
+      asr:   rˤ aˤ: q i:
+
+  11. [0.7900]  5:3:29-5:3:30  @ 0:31.4 - 0:33.6
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/005003.mp3
+      text:  ذَٰلِكُمْ فِسْقٌ ۗ
+      asr:   ð a: l i k u m f i s q Q
+
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches:     0
+
+--- Validation Issues ---
+  Errors:     2
+  Warnings:   16
+
+  Missing verses (first 3 of 3):
+    MISS   2:1  (1 words)
+    MISS   29:1  (1 words)
+    MISS   32:1  (1 words)
+
+  Warnings:
+    WARN   2:68  @ 0:00.8 - 0:25.1
+           missing words: [8]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/002068.mp3
+
+    WARN   2:271  @ 0:00.3 - 0:26.7
+           missing words: [5]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/002271.mp3
+
+    WARN   3:64  @ 0:00.8 - 0:43.2
+           missing words: [17]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/003064.mp3
+
+    WARN   3:154  @ 0:00.6 - 1:29.8
+           missing words: [40]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/003154.mp3
+
+    WARN   4:11  @ 0:00.3 - 1:20.1
+           missing words: [14, 15, 16, 17]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/004011.mp3
+
+    WARN   4:36  @ 0:00.1 - 0:38.8
+           missing words: [6]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/004036.mp3
+
+    WARN   5:67  @ 0:00.3 - 0:23.8
+           missing words: [9]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/005067.mp3
+
+    WARN   6:142  @ 0:00.5 - 0:20.1
+           missing words: [16]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/006142.mp3
+
+    WARN   11:57  @ 0:00.4 - 0:21.9
+           missing words: [15]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/011057.mp3
+
+    WARN   17:99  @ 0:00.4 - 0:20.3
+           missing words: [23]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/017099.mp3
+
+    WARN   24:32  @ 0:00.7 - 0:20.1
+           missing words: [17]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/024032.mp3
+
+    WARN   31:33  @ 0:00.4 - 0:32.8
+           missing words: [18]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/031033.mp3
+
+    WARN   40:43  @ 0:00.4 - 0:20.1
+           missing words: [22]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/040043.mp3
+
+    WARN   42:21  @ 0:00.6 - 0:20.1
+           missing words: [22]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/042021.mp3
+
+    WARN   48:12  @ 0:00.6 - 0:20.1
+           missing words: [20]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/048012.mp3
+
+    WARN   74:37  @ 0:00.0 - 0:06.9
+           missing words: [1]
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/074037.mp3
+
+
+  Errors:
+    ERROR  2:3  @ 0:04.0 - 0:14.5
+           time overlap: seg[0] ends 0:08.8, seg[1] starts 0:01.4
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/002001.mp3
+
+    ERROR  32:2  @ 0:03.4 - 0:07.3
+           time overlap: seg[1] ends 0:08.1, seg[2] starts 0:00.3
+           audio: https://everyayah.com/data/Ali_Jaber_64kbps/032001.mp3
+
+
