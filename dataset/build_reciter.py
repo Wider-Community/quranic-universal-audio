@@ -285,9 +285,9 @@ def download_all_audio(rows, is_surah=False):
             row = rows[idx]
             return idx, download_and_slice(row["audio_url"], row["clip_start"], row["clip_end"])
 
-        log.info("Downloading and slicing %d audio files (32 workers)...", len(rows))
+        log.info("Downloading and slicing %d audio files (64 workers)...", len(rows))
         completed = 0
-        with ThreadPoolExecutor(max_workers=32) as pool:
+        with ThreadPoolExecutor(max_workers=64) as pool:
             futures = {pool.submit(process, i): i for i in range(len(rows))}
             for future in as_completed(futures):
                 idx = futures[future]

@@ -23,10 +23,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libsndfile1
 
       - name: Install Python dependencies
-        run: pip install datasets huggingface_hub pydub
+        run: pip install datasets huggingface_hub pydub soundfile
 
       - name: Detect changed reciters
         id: detect
