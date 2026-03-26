@@ -10,7 +10,11 @@ tags:
 - forced-alignment
 - word-timestamps
 - audio-segmentation
-version: v0.1.0
+- speech-recognition
+- asr
+- vad
+- phoneme
+version: v0.1.3
 pretty_name: Qur'anic Universal Ayahs
 size_categories:
 - 1K<n<10K
@@ -38,17 +42,17 @@ dataset_info:
       sequence: int32
   splits:
   - name: minshawy_murattal
-    num_bytes: 1571705367.0
+    num_bytes: 1571705367
     num_examples: 6236
   download_size: 1569809077
-  dataset_size: 1571705367.0
+  dataset_size: 1571705367
 ---
 
 <p align="center">
   <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow" alt="Demo - Qur'an Multi-Aligner"></a>
   <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-New%20Reciter-ff69b4" alt="Request - New Reciter"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release" alt="Latest Release"></a>
-  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-205%20Available%20%7C%202%20Aligned-green" alt="Reciters"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-205%20Available%20%7C%202%20Processed-green" alt="Reciters"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-orange" alt="License"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
