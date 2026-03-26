@@ -11,6 +11,7 @@ Timestamps column: `✓✓` = words + letters/phonemes, `✓` = words only.
 
 | Reciter | Coverage | Segmented | Manually Validated | Timestamped |
 |---------|----------|:---------:|:------------------:|:-----------:|
+| Ali Jaber | 114 surahs, 6235 ayahs | ✓ | ✓ | ✗ |
 | Minshawy Mujawwad | 114 surahs, 6227 ayahs | ✓ | ✓ | ✗ |
 | Minshawy Murattal | 114 surahs, 6236 ayahs | ✓ | ✓ | ✓✓ |
 
@@ -225,37 +226,36 @@ Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly 
 | 10 | Akram Al Alaqimy |
 | 11 | Alafasy |
 | 12 | Ali Hajjaj Alsuesy |
-| 13 | Ali Jaber |
-| 14 | Ayman Sowaid |
-| 15 | Aziz Alili |
-| 16 | Fares Abbad |
-| 17 | Ghamadi |
-| 18 | Hani Rifai |
-| 19 | Hudhaify |
-| 20 | Husary Muallim |
-| 21 | Husary Mujawwad |
-| 22 | Husary Murattal |
-| 23 | Ibrahim Akhdar |
-| 24 | Karim Mansoori |
-| 25 | Khaalid Abdullaah Al Qahtaanee |
-| 26 | Khalefa Al Tunaiji |
-| 27 | Maher Al Muaiqly |
-| 28 | Mahmoud Ali Al Banna |
-| 29 | Mohammad Al Tablaway |
-| 30 | Muhammad Abdulkareem |
-| 31 | Muhammad Ayyoub |
-| 32 | Muhammad Jibreel |
-| 33 | Muhsin Al Qasim |
-| 34 | Mustafa Ismail |
-| 35 | Nabil Rifa3I |
-| 36 | Nasser Alqatami |
-| 37 | Parhizgar |
-| 38 | Sahl Yassin |
-| 39 | Salaah Abdulrahman Bukhatir |
-| 40 | Salah Al Budair |
-| 41 | Saood Ash Shuraym |
-| 42 | Yaser Salamah |
-| 43 | Yasser Ad Dussary |
+| 13 | Ayman Sowaid |
+| 14 | Aziz Alili |
+| 15 | Fares Abbad |
+| 16 | Ghamadi |
+| 17 | Hani Rifai |
+| 18 | Hudhaify |
+| 19 | Husary Muallim |
+| 20 | Husary Mujawwad |
+| 21 | Husary Murattal |
+| 22 | Ibrahim Akhdar |
+| 23 | Karim Mansoori |
+| 24 | Khaalid Abdullaah Al Qahtaanee |
+| 25 | Khalefa Al Tunaiji |
+| 26 | Maher Al Muaiqly |
+| 27 | Mahmoud Ali Al Banna |
+| 28 | Mohammad Al Tablaway |
+| 29 | Muhammad Abdulkareem |
+| 30 | Muhammad Ayyoub |
+| 31 | Muhammad Jibreel |
+| 32 | Muhsin Al Qasim |
+| 33 | Mustafa Ismail |
+| 34 | Nabil Rifa3I |
+| 35 | Nasser Alqatami |
+| 36 | Parhizgar |
+| 37 | Sahl Yassin |
+| 38 | Salaah Abdulrahman Bukhatir |
+| 39 | Salah Al Budair |
+| 40 | Saood Ash Shuraym |
+| 41 | Yaser Salamah |
+| 42 | Yasser Ad Dussary |
 
 #### `qul` (Tarteel CDN)
 
