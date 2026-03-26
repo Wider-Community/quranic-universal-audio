@@ -1,29 +1,52 @@
 ---
 license: apache-2.0
 task_categories:
-  - automatic-speech-recognition
+- automatic-speech-recognition
 language:
-  - ar
+- ar
 tags:
-  - quran
-  - recitation
-  - forced-alignment
-  - word-timestamps
-  - audio-segmentation
-pretty_name: "Qur'anic Universal Ayahs"
+- quran
+- recitation
+- forced-alignment
+- word-timestamps
+- audio-segmentation
+pretty_name: Qur'anic Universal Ayahs
 size_categories:
-  - 1K<n<10K
+- 1K<n<10K
 configs:
-  - config_name: hafs_an_asim
-    data_files:
-      - split: minshawy_murattal
-        path: data/hafs_an_asim/minshawy_murattal-*
+- config_name: hafs_an_asim
+  data_files:
+  - split: minshawy_murattal
+    path: hafs_an_asim/minshawy_murattal-*
+dataset_info:
+  config_name: hafs_an_asim
+  features:
+  - name: audio
+    dtype: audio
+  - name: surah
+    dtype: int32
+  - name: ayah
+    dtype: int32
+  - name: text
+    dtype: string
+  - name: segments
+    sequence:
+      sequence: int32
+  - name: words
+    sequence:
+      sequence: int32
+  splits:
+  - name: minshawy_murattal
+    num_bytes: 1571705367.0
+    num_examples: 6236
+  download_size: 1569809077
+  dataset_size: 1571705367.0
 ---
 
 <p align="center">
   <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow" alt="Demo - Qur'an Multi-Aligner"></a>
   <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-New%20Reciter-ff69b4" alt="Request - New Reciter"></a>
-  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-205%20Available%20%7C%202%20Processed-green" alt="Reciters"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-216%20Available%20%7C%202%20Processed-green" alt="Reciters"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-orange" alt="License"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
@@ -58,15 +81,6 @@ print(verse["words"])                  # [[1, 0, 400], [2, 400, 800], ...]
 from IPython.display import Audio
 Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 ```
-
-## Configs
-
-Subset (config) is the riwayah, split is the reciter.
-
-| Subset | Split | Reciter | Verses | Audio Source |
-|--------|-------|---------|--------|-------------|
-| `hafs_an_asim` | `minshawy_murattal` | Mohamed Siddiq El-Minshawi (Murattal) | 6,236 | everyayah.com |
-
 ## Schema
 
 | Column | Type | Description |
@@ -83,6 +97,14 @@ Subset (config) is the riwayah, split is the reciter.
 **`segments`** — Each segment is `[word_from, word_to, start_ms, end_ms]`. Represents a continuous speech region between pauses. Word indices are 1-based.
 
 **`words`** — Each word is `[word_index, start_ms, end_ms]`. Word-level timestamps from phoneme-level forced alignment (MFA). Word indices are 1-based.
+
+## Configs
+
+Subset (config) is the riwayah, split is the reciter.
+
+| Subset | Split | Reciter | Verses | Audio Source |
+|--------|-------|---------|--------|-------------|
+| `hafs_an_asim` | `minshawy_murattal` | Mohamed Siddiq El-Minshawi (Murattal) | 6,236 | everyayah.com |
 
 ## Pipeline
 
