@@ -73,7 +73,7 @@ jobs:
 
           echo "Created release $version with ${{ steps.package.outputs.count }} reciter(s)"
 
-      - name: Tag HF dataset
+      - name: Tag HF dataset and update version
         if: steps.package.outputs.skip != 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -81,16 +81,32 @@ jobs:
           pip install huggingface_hub
           python -c "
           from huggingface_hub import HfApi
-          import os
+          import os, re
           api = HfApi(token=os.environ['HF_TOKEN'])
+          version = '${{ steps.package.outputs.version }}'
+          repo = 'hetchyy/quranic-universal-ayahs'
+
+          # Tag
           try:
-              api.create_tag(
-                  repo_id='hetchyy/quranic-universal-ayahs',
-                  repo_type='dataset',
-                  tag='${{ steps.package.outputs.version }}',
-                  tag_message='Release ${{ steps.package.outputs.version }}'
-              )
-              print('Tagged HF dataset with ${{ steps.package.outputs.version }}')
+              api.create_tag(repo, repo_type='dataset', tag=version, tag_message=f'Release {version}')
+              print(f'Tagged HF dataset with {version}')
           except Exception as e:
               print(f'Warning: Could not tag HF dataset: {e}')
+
+          # Update version in dataset README
+          try:
+              readme = api.hf_hub_download(repo, 'README.md', repo_type='dataset')
+              with open(readme) as f:
+                  content = f.read()
+              content = re.sub(r'version: v[\d.]+', f'version: {version}', content)
+              api.upload_file(
+                  path_or_fileobj=content.encode(),
+                  path_in_repo='README.md',
+                  repo_id=repo,
+                  repo_type='dataset',
+                  commit_message=f'Update version to {version}',
+              )
+              print(f'Updated dataset README version to {version}')
+          except Exception as e:
+              print(f'Warning: Could not update dataset README: {e}')
           "
