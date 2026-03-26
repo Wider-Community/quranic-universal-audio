@@ -1,0 +1,99 @@
+Generated: 2026-03-26 21:52:31
+
+========================================================================
+  ali_jaber
+  data/recitation_segments/ali_jaber
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   200 ms
+  Min speech:    200 ms
+  Padding:       80 ms
+
+--- Coverage ---
+  Verses found:       6235 / 6236
+  Missing verses:     1
+  Partial words:      0 verses with word gaps
+
+--- Segments ---
+  Total segments:     9461
+  Single-seg verses:  4172
+  Multi-seg verses:   2063 (5289 segments)
+  Cross-verse segs:   0
+  Empty verse keys:   0
+  Max segs/verse:     14
+
+--- Segment Duration ---
+  Min:      0.96s
+  Median:   8.10s
+  Mean:     8.78s
+  Max:      25.41s
+
+--- True Silence Duration (padding reversed) ---
+  Min:      0.24s
+  Median:   0.86s
+  Mean:     0.90s
+  Max:      2.46s
+
+--- Alignment Confidence ---
+  Min:        0.8000
+  Median:     1.0000
+  Mean:       0.9910
+  Max:        1.0000
+  Below 60%:  0
+  Below 80%:  0
+  Failed:     0 (no alignment)
+  Empty ASR:  28 (matched but no phonemes)
+
+--- First 10 of 28 Segments with Empty Phonemes ---
+   1. [1.0000]  2:1:1-2:1:1  @ 0:00.1 - 0:08.8
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/002001.mp3
+      text:  الٓمٓ
+
+   2. [0.8500]  2:27:18-2:27:20  @ 0:18.8 - 0:23.4
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/002027.mp3
+      text:  أُو۟لَـٰٓئِكَ هُمُ ٱلْخَـٰسِرُونَ
+
+   3. [0.9500]  2:208:12-2:208:15  @ 0:16.1 - 0:21.5
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/002208.mp3
+      text:  إِنَّهُۥ لَكُمْ عَدُوٌّ مُّبِينٌ
+
+   4. [0.9700]  3:23:15-3:23:20  @ 0:14.3 - 0:22.5
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/003023.mp3
+      text:  ثُمَّ يَتَوَلَّىٰ فَرِيقٌ مِّنْهُمْ وَهُم مُّعْرِضُونَ
+
+   5. [0.9900]  3:24:10-3:24:15  @ 0:14.1 - 0:20.6
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/003024.mp3
+      text:  وَغَرَّهُمْ فِى دِينِهِم مَّا كَانُوا۟ يَفْتَرُونَ
+
+   6. [0.9500]  3:178:15-3:178:17  @ 0:18.1 - 0:22.0
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/003178.mp3
+      text:  وَلَهُمْ عَذَابٌ مُّهِينٌ
+
+   7. [0.9800]  4:144:11-4:144:17  @ 0:13.0 - 0:21.2
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/004144.mp3
+      text:  أَتُرِيدُونَ أَن تَجْعَلُوا۟ لِلَّهِ عَلَيْكُمْ سُلْطَـٰنًا مُّبِينًا
+
+   8. [1.0000]  5:83:16-5:83:21  @ 0:14.1 - 0:21.8
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/005083.mp3
+      text:  يَقُولُونَ رَبَّنَآ ءَامَنَّا فَٱكْتُبْنَا مَعَ ٱلشَّـٰهِدِينَ
+
+   9. [1.0000]  6:44:11-6:44:20  @ 0:10.0 - 0:20.7
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/006044.mp3
+      text:  حَتَّىٰٓ إِذَا فَرِحُوا۟ بِمَآ أُوتُوٓا۟ أَخَذْنَـٰهُم بَغْتَةً فَإِذَا هُم مُّبْلِسُونَ
+
+  10. [1.0000]  6:142:13-6:142:16  @ 0:16.0 - 0:22.1
+      audio: https://everyayah.com/data/Ali_Jaber_64kbps/006142.mp3
+      text:  إِنَّهُۥ لَكُمْ عَدُوٌّ مُّبِينٌ
+
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches:     0
+
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   0
+
+  Missing verses (first 1 of 1):
+    MISS   4:11  (71 words)
+
