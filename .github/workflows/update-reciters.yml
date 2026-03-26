@@ -56,4 +56,5 @@ jobs:
             --head "$branch" \
             --base main
 
-          gh pr merge "$branch" --auto --squash --delete-branch
+          gh pr merge "$branch" --auto --squash --delete-branch || \
+            gh pr merge "$branch" --squash --delete-branch
