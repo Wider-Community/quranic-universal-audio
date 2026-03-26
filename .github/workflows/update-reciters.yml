@@ -28,7 +28,7 @@ jobs:
 
       - name: Create PR if changed
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           if git diff --quiet; then
             echo "No changes to commit"
