@@ -1,0 +1,30 @@
+Generated: 2026-03-28 04:43:51
+
+========================================================================
+  Audio Validation: data/audio/by_surah/mp3quran/mishary_alafasi.json
+  Format: sura_json (sura-level)
+========================================================================
+
+--- Metadata ---
+  reciter            mishary_alafasi
+  name_en            Mishary Alafasi
+  name_ar            مشاري العفاسي
+  riwayah            hafs_an_asim
+  style              murattal
+  audio_category     by_surah
+  source             https://mp3quran.net/
+  country            unknown
+
+--- Coverage ---
+  Surahs found:       114 / 114  (100.0%)
+  Missing surahs:     0
+
+--- Source Validation ---
+  (skipped)
+
+--- Summary ---
+  Total sources:  114
+  Source type:    url
+  Errors:         0
+  Warnings:       1
+
