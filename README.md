@@ -10,7 +10,7 @@
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
 
-<p align="center">A large-scale database of Qur'an recitation audio with precise word- and letter-level timestamps. Audio is processed from full surah or verse recordings into pause-based segments, then force-aligned against the detected Qur'anic text.</p>
+<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A one-stop, community-verified dataset providing large-scale, multi-riwayah recitations, timestamped at the word- and letter-level. Our automated pipeline transforms surah or ayah recordings into precise, waqf-aware Qur'anic transcripts and timestamps, with robust human-in-the-loop verification.</p>
 
 <p align="center">
   <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
@@ -39,19 +39,17 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 ## Key Highlights
 
-- **More precise than standard word alignment** — The pipeline aligns at the     phoneme level first, then recovers word and letter boundaries for cleaner, more  reliable timestamps. 
+- **Tajweed- and Phoneme-level precision:** We bypass standard word alignment by aligning at the phoneme level first, recovering clean, precise word boundaries. Tajweed rules like idgham, where sounds merge at word boundaries, are resolved at the phoneme level, eliminating the ambiguity of where one word ends and the next begins.
 
-- **Gap-free timestamps.** Within each recitation segment, word timestamps are padded forward so there are no artificial gaps between words. Highlighting stays perfectly synchronized with the audio — no silent flickers between words that other tools produce.
+- **Gap-free timestamps** — As segments have no pauses, word timestamps are padded to eliminate artificial gaps and reflecting natural word continuity in recitations. Highlighting stays perfectly synchronized with the audio—no silent flickers or jarring jumps
 
-- **Handles cross-word tajweed  naturally.** Rules like idgham, where sounds span word boundaries are resolved at the phoneme level. There is no ambiguity about where one word ends and the next begins.
-
-- **Handles repetitions naturally.** Because the pipeline first segments by silences and then transcribes each segment independently, repeated words or verses are detected and timestamped correctly — each occurrence gets its own timestamps.
+- **Handles repetitions naturally** — Because the pipeline first segments by silences and then transcribes each segment independently, repeated words or verses are detected and timestamped correctly — each occurrence gets its own timestamps.
 
 - **Robust validation and inspection** — Three dedicated validators check every stage of the pipeline, and the inspector UI makes it possible to review, edit, and correct AI errors, improving results instead of treating them as a black box.
 
-- **Community-reviewed.** Unlike static dataset releases, this project is open for anyone to inspect, fix, and improve the data through the inspector and pull requests. Quality improves continuously as more people review and correct errors.
+- **Community-reviewed** — Unlike static dataset releases, this project is open for anyone to inspect, fix, and improve the data through the inspector and pull requests. Quality improves continuously as more people review and correct errors.
 
-- **Full provenance and reproducibility.** Every output file records the models, parameters, and sources used to produce it via `_meta` blocks across all three pipeline stages — audio manifests (reciter, riwayah, source, audio category), segments (models, thresholds), and timestamps (alignment settings). Results are fully traceable and reproducible. Git versioning and Github Releases track all changes to the data over time.
+- **Full provenance and reproducibility** — Every output file records the models, parameters, and sources used to produce it via `_meta` blocks across all three pipeline stages — audio manifests (reciter, riwayah, source, audio category), segments (models, thresholds), and timestamps (alignment settings). Results are fully traceable and reproducible. Git versioning and Github Releases track all changes to the data over time.
 
 See the [detailed comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md) for concrete examples of accuracy and robustness to repetitions.
 
