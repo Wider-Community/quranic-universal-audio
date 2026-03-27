@@ -1,6 +1,6 @@
 # Reciters
 
-**381** reciter entries (2 aligned, 379 available). Generated from `scripts/list_reciters.py`.
+**382** reciter entries (2 aligned, 380 available). Generated from `scripts/list_reciters.py`.
 
 > **Note:** A "reciter entry" is a unique combination of reciter × riwayah × style × granularity, not a unique person. For example, Mahmoud Khalil Al-Hussary appears as 5 entries: Hafs Murattal Ayah, Hafs Murattal Surah, Hafs Mujawwad Surah, Hafs Muallim Ayah, and Warsh Murattal Surah.
 >
@@ -10,14 +10,14 @@
 
 | Riwayah | | Style | | Source | |
 |---------|:-:|-------|:-:|--------|:-:|
-| Hafs A'n Assem | 327 | Murattal | 365 | [MP3Quran](https://mp3quran.net/) | 281 |
+| Hafs A'n Assem | 327 | Murattal | 366 | [MP3Quran](https://mp3quran.net/) | 282 |
 | Sho'bah A'n Asim | 3 | Mujawwad | 10 | [EveryAyah](https://everyayah.com/) | 45 |
 | Warsh A'n Nafi' | 15 | Muallim | 6 | [Surah-Quran](https://surahquran.com/quran-mp3-english.html) | 42 |
 | Qalon A'n Nafi' | 12 |  |  | [QUL](https://qul.tarteel.ai/resources/recitation) | 13 |
 | Aldori A'n Abi Amr | 5 |  |  |  |  |
 | Assosi A'n Abi Amr | 2 |  |  |  |  |
 | Albizi A'n Ibn Katheer | 2 |  |  |  |  |
-| Qunbol A'n Ibn Katheer | 1 |  |  |  |  |
+| Qunbol A'n Ibn Katheer | 2 |  |  |  |  |
 | Khalaf A'n Hamzah | 2 |  |  |  |  |
 | AlDorai A'n Al-Kisa'ai | 6 |  |  |  |  |
 | Ibn Thakwan A'n Ibn Amer | 2 |  |  |  |  |
@@ -112,7 +112,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 55 | Abdulrahman Alshahhat | Murattal | MP3Quran | Surah | 114/114 |
 | 56 | Abdulrahman Alsudaes | Murattal | MP3Quran | Surah | 114/114 |
 | 57 | Abdulrahman Alsudaes | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 58 | Abdulrahman Alsuwayid | Murattal | MP3Quran | Surah | 107/114 |
+| 58 | Abdulrahman Alsuwayid | Murattal | MP3Quran | Surah + Ayah timings | 107/114 |
 | 59 | Abdulrasheed Soufi | Murattal | MP3Quran | Surah | 114/114 |
 | 60 | Abdulwadood Haneef | Murattal | MP3Quran | Surah | 114/114 |
 | 61 | Abdulwali Al-Arkani | Murattal | MP3Quran | Surah | 114/114 |
@@ -153,7 +153,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 96 | Ali Hajjaj Alsouasi | Murattal | EveryAyah | Ayah | 6236/6236 |
 | 97 | Alijon Qori | Murattal | MP3Quran | Surah | 114/114 |
 | 98 | Alwaleed Alshamsan | Murattal | MP3Quran | Surah | 71/114 |
-| 99 | Alzain Mohammad Ahmad | Murattal | MP3Quran | Surah | 114/114 |
+| 99 | Alzain Mohammad Ahmad | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 100 | Amer Al-Kazemi | Murattal | Surah-Quran | Surah | 114/114 |
 | 101 | Ammar Louay Al-Mulla Ali | Murattal | Surah-Quran | Surah | 114/114 |
 | 102 | Anas Al-Miman | Murattal | Surah-Quran | Surah | 114/114 |
@@ -204,7 +204,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 147 | Ibrahim Al-Shahri | Murattal | MP3Quran | Surah | 113/114 |
 | 148 | Ibrahim Aldosari | Murattal | MP3Quran | Surah | 114/114 |
 | 149 | Ibrahim Aljormy | Murattal | MP3Quran | Surah | 114/114 |
-| 150 | Idrees Abkr | Murattal | MP3Quran | Surah | 114/114 |
+| 150 | Idrees Abkr | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 151 | Imad Al-Mansri | Murattal | Surah-Quran | Surah | 114/114 |
 | 152 | Ishak Danish | Murattal | Surah-Quran | Surah | 114/114 |
 | 153 | Islam Sobhi | Murattal | MP3Quran | Surah | 106/114 |
@@ -241,20 +241,20 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 184 | Mahmoud Ali  Albanna | Murattal | MP3Quran | Surah | 114/114 |
 | 185 | Mahmoud Ali  Albanna | Mujawwad | MP3Quran | Surah | 114/114 |
 | 186 | Mahmoud Ali  Albanna | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 187 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah | 114/114 |
-| 188 | Mahmoud Khalil Al-Hussary | Mujawwad | MP3Quran | Surah | 114/114 |
+| 187 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 188 | Mahmoud Khalil Al-Hussary | Mujawwad | MP3Quran | Surah + Ayah timings | 114/114 |
 | 189 | Mahmoud Khalil Al-Hussary | Murattal | EveryAyah | Ayah | 6236/6236 |
 | 190 | Mahmoud Khalil Al-Hussary | Muallim | EveryAyah | Ayah | 6236/6236 |
 | 191 | Mahmoud Khalil Al-Hussary | Mujawwad | EveryAyah | Ayah | 6236/6236 |
 | 192 | Majed Al-Enezi | Murattal | MP3Quran | Surah | 113/114 |
-| 193 | Majed Al-Zamil | Murattal | MP3Quran | Surah | 114/114 |
+| 193 | Majed Al-Zamil | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 194 | Mal-Allah Abdulrhman Aljaber | Murattal | MP3Quran | Surah | 114/114 |
 | 195 | Mansour Al-Salemi | Murattal | MP3Quran | Surah | 114/114 |
 | 196 | Maytham Al-Tammar | Murattal | Surah-Quran | Surah | 114/114 |
-| 197 | Mishary Alafasi | Murattal | MP3Quran | Surah | 114/114 |
+| 197 | Mishary Alafasi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 198 | Mishary Alafasi | Murattal | EveryAyah | Ayah | 6236/6236 |
 | 199 | Moeedh Alharthi | Murattal | MP3Quran | Surah | 114/114 |
-| 200 | Mohammad Abdullkarem | Murattal | MP3Quran | Surah | 114/114 |
+| 200 | Mohammad Abdullkarem | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 201 | Mohammad Abdullkarem | Murattal | EveryAyah | Ayah | 6236/6236 |
 | 202 | Mohammad Al-Tablaway | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 203 | Mohammad Al-Tablaway | Mujawwad | MP3Quran | Surah + Ayah timings | 114/114 |
@@ -265,7 +265,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 208 | Mohammad Khalil Al-Qari | Murattal | MP3Quran | Surah | 114/114 |
 | 209 | Mohammad Rashad Alshareef | Murattal | MP3Quran | Surah | 114/114 |
 | 210 | Mohammad Refat | Murattal | MP3Quran | Surah | 31/114 |
-| 211 | Mohammad Saleh Alim Shah | Murattal | MP3Quran | Surah | 114/114 |
+| 211 | Mohammad Saleh Alim Shah | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 212 | Mohammed Al-Barrak | Murattal | MP3Quran | Surah | 63/114 |
 | 213 | Mohammed Al-Ghazali | Murattal | Surah-Quran | Surah | 114/114 |
 | 214 | Mohammed Al-Lohaidan | Murattal | MP3Quran | Surah | 114/114 |
@@ -278,9 +278,9 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 221 | Mohammed Jibreel | Murattal | MP3Quran | Surah | 114/114 |
 | 222 | Mohammed Jibreel | Murattal | EveryAyah | Ayah | 6236/6236 |
 | 223 | Mohammed Osman Khan | Murattal | MP3Quran | Surah | 114/114 |
-| 224 | Mohammed Siddiq Al-Minshawi | Murattal | MP3Quran | Surah | 114/114 |
-| 225 | Mohammed Siddiq Al-Minshawi | Muallim | MP3Quran | Surah | 114/114 |
-| 226 | Mohammed Siddiq Al-Minshawi | Mujawwad | MP3Quran | Surah | 114/114 |
+| 224 | Mohammed Siddiq Al-Minshawi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 225 | Mohammed Siddiq Al-Minshawi | Muallim | MP3Quran | Surah + Ayah timings | 114/114 |
+| 226 | Mohammed Siddiq Al-Minshawi | Mujawwad | MP3Quran | Surah + Ayah timings | 114/114 |
 | 227 | Mohammed Siddiq Al-Minshawi | Murattal | EveryAyah | Ayah | 6236/6236 |
 | 228 | Mohammed Siddiq Al-Minshawi | Mujawwad | EveryAyah | Ayah | 6236/6236 |
 | 229 | Mousa Bilal | Murattal | MP3Quran | Surah | 114/114 |
@@ -403,10 +403,10 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 5 | Aloyoon Al-Koshi | Murattal | MP3Quran | Surah | 114/114 |
 | 6 | Hicham Lharraz | Murattal | MP3Quran | Surah | 113/114 |
 | 7 | Ibrahim Aldosari | Murattal | MP3Quran | Surah | 114/114 |
-| 8 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah | 114/114 |
-| 9 | Mohammad Abdullkarem | Murattal | MP3Quran | Surah | 114/114 |
+| 8 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 9 | Mohammad Abdullkarem | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 10 | Mohammad Al-Airawy | Murattal | MP3Quran | Surah | 111/114 |
-| 11 | Mohammad Saayed | Murattal | MP3Quran | Surah | 114/114 |
+| 11 | Mohammad Saayed | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 12 | Omar Al-Qazabri | Murattal | MP3Quran | Surah | 114/114 |
 | 13 | Rachid Belalya | Murattal | MP3Quran | Surah | 114/114 |
 | 14 | Rasheed Ifrad | Murattal | MP3Quran | Surah | 51/114 |
@@ -421,7 +421,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 3 | Ahmed Al-trabulsi | Murattal | MP3Quran | Surah | 114/114 |
 | 4 | Ali Alhuthaifi | Murattal | MP3Quran | Surah | 114/114 |
 | 5 | Ibrahim Kshidan | Murattal | MP3Quran | Surah | 114/114 |
-| 6 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah | 114/114 |
+| 6 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 7 | Marwan Alakri | Murattal | MP3Quran | Surah | 114/114 |
 | 8 | Mohammed Al-Amin Qeniwa | Murattal | MP3Quran | Surah | 114/114 |
 | 9 | Muhammad Abu Sneina | Murattal | MP3Quran | Surah | 114/114 |
@@ -438,7 +438,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 |---|---------|-------|--------|-------------|:--------:|
 | 1 | Ahmad Deban | Murattal | MP3Quran | Surah | 114/114 |
 | 2 | Alfateh Alzubair | Murattal | MP3Quran | Surah | 114/114 |
-| 3 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah | 114/114 |
+| 3 | Mahmoud Khalil Al-Hussary | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 | 4 | Muftah Alsaltany | Murattal | MP3Quran | Surah | 114/114 |
 | 5 | Noreen Mohammad Siddiq | Murattal | MP3Quran | Surah | 114/114 |
 
@@ -464,6 +464,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | # | Reciter | Style | Source | Granularity | Coverage |
 |---|---------|-------|--------|-------------|:--------:|
 | 1 | Ahmad Deban | Murattal | MP3Quran | Surah | 114/114 |
+| 2 | Mohammad Al-Abdullah | Murattal | MP3Quran | Surah | 114/114 |
 
 
 ### Hamzah
@@ -484,7 +485,7 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 |---|---------|-------|--------|-------------|:--------:|
 | 1 | Ahmad Deban | Murattal | MP3Quran | Surah | 13/114 |
 | 2 | Mahmood AlSheimy | Murattal | MP3Quran | Surah | 114/114 |
-| 3 | Mishary Alafasi | Murattal | MP3Quran | Surah | 6/114 |
+| 3 | Mishary Alafasi | Murattal | MP3Quran | Surah + Ayah timings | 6/114 |
 | 4 | Mohammad Al-Abdullah | Murattal | MP3Quran | Surah | 114/114 |
 | 5 | Muftah Alsaltany | Murattal | MP3Quran | Surah | 114/114 |
 | 6 | Okasha Kameny | Murattal | MP3Quran | Surah | 38/114 |
