@@ -1070,22 +1070,43 @@ def save_seg_data(reciter, chapter):
             # by_surah: single entry, replace directly
             matching[0]["segments"] = [_make_seg(s) for s in updates["segments"]]
         else:
-            # by_ayah: multiple entries per chapter, distribute segments by ref
+            # by_ayah: preserve segment ownership by source audio entry.
+            # Never redistribute by matched_ref, which can silently "move"
+            # segments across verse audio files and mask audio-bleeding issues.
+            entry_by_audio: dict[str, list[dict]] = defaultdict(list)
             for e in matching:
+                audio = e.get("audio", "")
+                if audio:
+                    entry_by_audio[audio].append(e)
                 e["segments"] = []
-            last_entry = matching[0]
+
             for s in updates["segments"]:
-                seg_ref = s.get("matched_ref", "")
-                placed = False
-                for e in matching:
-                    if _seg_belongs_to_entry(seg_ref, e["ref"]):
-                        e["segments"].append(_make_seg(s))
-                        last_entry = e
-                        placed = True
-                        break
-                if not placed:
-                    # No ref (e.g. second half of a split) — keep with previous segment's entry
-                    last_entry["segments"].append(_make_seg(s))
+                seg_audio = s.get("audio_url", "")
+                if not seg_audio:
+                    return jsonify({
+                        "error": (
+                            "Rejected structural save for by_ayah: segment payload is "
+                            "missing audio_url. Reload Inspector and try again."
+                        )
+                    }), 400
+
+                candidates = entry_by_audio.get(seg_audio, [])
+                if len(candidates) != 1:
+                    if len(candidates) == 0:
+                        return jsonify({
+                            "error": (
+                                "Rejected structural save for by_ayah: segment audio_url "
+                                "does not belong to this chapter."
+                            )
+                        }), 400
+                    return jsonify({
+                        "error": (
+                            "Rejected structural save for by_ayah: ambiguous audio_url "
+                            "matched multiple chapter entries."
+                        )
+                    }), 400
+
+                candidates[0]["segments"].append(_make_seg(s))
     else:
         # Patch mode: update individual segments by running index across all entries
         flat_segments = []
@@ -1246,9 +1267,44 @@ def validate_reciter_segments(reciter):
     missing_words = []
     failed = []
     low_confidence = []
+    oversegmented = []
     cross_verse = []
     audio_bleeding = []
     chapter_seg_idx = {}  # chapter -> next index (running counter)
+
+    # Huruf muqattaat locations (surah, ayah) — excluded from oversegmented
+    _MUQATTAAT_VERSES = {
+        (2,1),(3,1),(7,1),(10,1),(11,1),(12,1),(13,1),(14,1),(15,1),
+        (19,1),(20,1),(26,1),(27,1),(28,1),(29,1),(30,1),(31,1),(32,1),
+        (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
+        (46,1),(50,1),(68,1),
+    }
+    # Single-word verses — excluded from oversegmented
+    _single_word_verses = {k for k, v in word_counts.items() if v == 1}
+    # Known standalone word refs and texts — excluded from oversegmented
+    _STANDALONE_REFS = {
+        (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
+        (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
+    }
+    _STANDALONE_WORDS = {"كلا", "ذلك", "سبحنهۥ"}
+    # Strip Quranic decoration and diacritics so matched_text variants like
+    # "كَلَّآ" or "۞ ذَٰلِكَ" match the bare skeleton.
+    # Only chars actually present in matched_text data:
+    #   U+0640 ARABIC TATWEEL, U+06DE RUB EL HIZB, U+06E6 SMALL YEH,
+    #   U+06E9 PLACE OF SAJDAH, U+200F RTL MARK
+    # (U+06E5 SMALL WAW is kept — it's part of سبحنهۥ)
+    import unicodedata as _ud
+    _STRIP_CHARS = set("\u0640\u06de\u06e6\u06e9\u200f")
+    def _strip_quran_deco(text):
+        text = _ud.normalize("NFD", text)  # decompose آ → ا + combining madda, etc.
+        out = []
+        for ch in text:
+            if ch in _STRIP_CHARS:
+                continue
+            if _ud.category(ch) == "Mn":  # combining marks (diacritics)
+                continue
+            out.append(ch)
+        return "".join(out).strip()
 
     # Detect audio_source to know if by_ayah (bleeding only applies there)
     meta = _SEG_META_CACHE.get(reciter, {})
@@ -1354,6 +1410,20 @@ def validate_reciter_segments(reciter):
                         verse_segments[(surah, ayah)].append((1, wc, i))
             else:
                 verse_segments[(surah, s_ayah)].append((s_word, e_word, i))
+
+                # Potentially oversegmented: 1-word segment, not muqattaat, not single-word verse,
+                # not a known standalone word (by ref or matched_text)
+                if (s_word == e_word
+                    and (surah, s_ayah) not in _MUQATTAAT_VERSES
+                    and (surah, s_ayah) not in _single_word_verses
+                    and (surah, s_ayah, s_word) not in _STANDALONE_REFS
+                    and _strip_quran_deco(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
+                    oversegmented.append({
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "ref": matched_ref,
+                        "verse_key": f"{surah}:{s_ayah}",
+                    })
 
     # Detect missing word pairs from detailed.json segments (global across all entries)
     for (surah, ayah), seg_list in verse_segments.items():
@@ -1558,6 +1628,7 @@ def validate_reciter_segments(reciter):
         "missing_words": missing_words,
         "failed": failed,
         "low_confidence": low_confidence,
+        "oversegmented": oversegmented,
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
         "stats": stats,
@@ -1802,6 +1873,8 @@ def get_audio_surahs(category, source, slug):
     with open(path, encoding="utf-8") as f:
         surahs = json.load(f)
     surahs.pop("_meta", None)
+    # Normalize: entries may be plain URL strings or {"url": ..., "timing": ...} dicts
+    surahs = {k: (v["url"] if isinstance(v, dict) else v) for k, v in surahs.items()}
     _AUDIO_URL_CACHE[key] = surahs
     return jsonify({"surahs": surahs})
 

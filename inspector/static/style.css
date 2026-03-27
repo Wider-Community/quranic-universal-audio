@@ -1493,12 +1493,23 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     border-radius: 0 0 4px 4px;
     z-index: 100;
 }
+.ss-group-label {
+    padding: 6px 8px 3px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #8fb8d8;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
 .ss-option {
     padding: 4px 8px;
     cursor: pointer;
     font-size: 0.85rem;
     color: #ccc;
     white-space: nowrap;
+}
+.ss-option-grouped {
+    padding-left: 20px;
 }
 .ss-option:hover,
 .ss-highlight {

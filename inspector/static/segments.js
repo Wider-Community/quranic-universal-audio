@@ -1620,6 +1620,7 @@ async function onSegSaveClick() {
                         matched_text: s.matched_text,
                         confidence: s.confidence,
                         phonemes_asr: s.phonemes_asr || '',
+                        audio_url: s.audio_url || '',
                     })),
                 };
                 savedChanges += chSegs.length;
@@ -2435,7 +2436,7 @@ function confirmSplit(seg) {
         matched_ref: '',
         matched_text: '',
         display_text: '',
-        confidence: 1.0,
+        confidence: 0,
     };
 
     if (useSegData) {
@@ -2491,6 +2492,14 @@ function mergeAdjacent(seg, direction) {
 
     const first = direction === 'prev' ? other : seg;
     const second = direction === 'prev' ? seg : other;
+    const firstAudio = first.audio_url || '';
+    const secondAudio = second.audio_url || '';
+    if (firstAudio !== secondAudio) {
+        const msg = 'Cannot merge segments from different audio clips. Reassign references instead.';
+        segPlayStatus.textContent = msg;
+        alert(msg);
+        return;
+    }
 
     // Build merged ref
     let mergedRef = '';
@@ -2509,7 +2518,7 @@ function mergeAdjacent(seg, direction) {
         matched_ref: mergedRef,
         matched_text: [first.matched_text, second.matched_text].filter(Boolean).join(' '),
         display_text: [first.display_text, second.display_text].filter(Boolean).join(' '),
-        confidence: Math.max(first.confidence || 0, second.confidence || 0),
+        confidence: 1.0,
     };
 
     if (chapter === currentChapter && segData?.segments) {
@@ -2733,7 +2742,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
     targetEl.innerHTML = '';
     if (!data) { targetEl.hidden = true; return; }
 
-    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, cross_verse: cv, audio_bleeding: ab } = data;
+    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, oversegmented: os, cross_verse: cv, audio_bleeding: ab } = data;
 
     if (chapter !== null) {
         errs           = (errs           || []).filter(i => i.chapter === chapter);
@@ -2741,12 +2750,13 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         mw             = (mw             || []).filter(i => i.chapter === chapter);
         failed         = (failed         || []).filter(i => i.chapter === chapter);
         low_confidence = (low_confidence || []).filter(i => i.chapter === chapter);
+        os             = (os             || []).filter(i => i.chapter === chapter);
         cv             = (cv             || []).filter(i => i.chapter === chapter);
         ab             = (ab             || []).filter(i => i.chapter === chapter);
     }
     const hasAny = (errs && errs.length > 0) || (mv && mv.length > 0) || (mw && mw.length > 0)
-        || (failed && failed.length > 0) || (low_confidence && low_confidence.length > 0) || (cv && cv.length > 0)
-        || (ab && ab.length > 0);
+        || (failed && failed.length > 0) || (low_confidence && low_confidence.length > 0) || (os && os.length > 0)
+        || (cv && cv.length > 0) || (ab && ab.length > 0);
     if (!hasAny) {
         targetEl.hidden = true;
         return;
@@ -2764,14 +2774,14 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
 
     const categories = [
         {
-            name: 'Errors', items: errs, type: 'errors', countClass: 'has-errors',
-            getLabel: i => i.verse_key, getTitle: i => i.msg, btnClass: 'val-error',
-            onClick: i => jumpToVerse(i.chapter, i.verse_key)
+            name: 'Failed Alignments', items: failed, type: 'failed', countClass: 'has-errors',
+            getLabel: i => `${i.chapter}:#${i.seg_index}`, getTitle: i => `${i.time}`, btnClass: 'val-error',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
         },
         {
             name: 'Missing Verses', items: mv, type: 'missing_verses', countClass: 'has-errors',
             getLabel: i => i.verse_key, getTitle: i => i.msg, btnClass: 'val-error',
-            onClick: i => jumpToVerse(i.chapter, i.verse_key)
+            onClick: i => jumpToMissingVerseContext(i.chapter, i.verse_key)
         },
         {
             name: 'Missing Words', items: mw, type: 'missing_words', countClass: 'has-errors',
@@ -2787,15 +2797,20 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             }
         },
         {
-            name: 'Failed Alignments', items: failed, type: 'failed', countClass: 'has-errors',
-            getLabel: i => `${i.chapter}:#${i.seg_index}`, getTitle: i => `${i.time}`, btnClass: 'val-error',
-            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+            name: 'Structural Errors', items: errs, type: 'errors', countClass: 'has-errors',
+            getLabel: i => i.verse_key, getTitle: i => i.msg, btnClass: 'val-error',
+            onClick: i => jumpToVerse(i.chapter, i.verse_key)
         },
         {
             name: 'Low Confidence', items: low_confidence, type: 'low_confidence', countClass: 'has-warnings',
             getLabel: i => i.ref,
             getTitle: i => `${(i.confidence * 100).toFixed(1)}%`,
             btnClass: i => i.confidence < 0.60 ? 'val-conf-low' : 'val-conf-mid',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        },
+        {
+            name: 'Potentially Oversegmented', items: os, type: 'oversegmented', countClass: 'has-warnings',
+            getLabel: i => i.ref, getTitle: i => i.verse_key, btnClass: 'val-conf-mid',
             onClick: i => jumpToSegment(i.chapter, i.seg_index)
         },
         {
@@ -2841,40 +2856,6 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             }
         });
         summary.appendChild(loadBtn);
-
-        // "Confirm All" button for low confidence accordion
-        if (cat.type === 'low_confidence') {
-            const confirmAllBtn = document.createElement('button');
-            confirmAllBtn.className = 'val-load-all-btn';
-            confirmAllBtn.textContent = 'Confirm All';
-            confirmAllBtn.title = 'Set all low confidence segments to 100%';
-            confirmAllBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                let changed = 0;
-                for (const issue of cat.items) {
-                    const seg = getSegByChapterIndex(issue.chapter, issue.seg_index);
-                    if (!seg || seg.confidence >= 1.0) continue;
-                    seg.confidence = 1.0;
-                    delete seg._derived;
-                    markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
-                    syncAllCardsForSegment(seg);
-                    changed++;
-                }
-                if (changed > 0) {
-                    confirmAllBtn.disabled = true;
-                    confirmAllBtn.textContent = 'Confirmed';
-                    // Fade out all item buttons and card-level confirm buttons
-                    const btns = details.querySelectorAll('.val-items .val-btn');
-                    btns.forEach(b => { b.style.opacity = '0.4'; });
-                    const cardConfBtns = details.querySelectorAll('.val-cards-container .val-autofix-btn');
-                    cardConfBtns.forEach(b => { b.disabled = true; b.textContent = 'Confirmed'; });
-                    const cardWrappers = details.querySelectorAll('.val-cards-container .val-card-wrapper');
-                    cardWrappers.forEach(w => { w.style.opacity = '0.5'; });
-                }
-            });
-            summary.appendChild(confirmAllBtn);
-        }
 
         details.appendChild(summary);
 
@@ -2935,6 +2916,124 @@ async function jumpToSegment(chapter, segIndex) {
     }
 }
 
+function _parseVerseFromKey(verseKey) {
+    const parts = (verseKey || '').split(':');
+    if (parts.length < 2) return null;
+    const verse = parseInt(parts[1], 10);
+    return Number.isFinite(verse) ? verse : null;
+}
+
+function findMissingVerseBoundarySegments(chapter, verseKey) {
+    const targetVerse = _parseVerseFromKey(verseKey);
+    if (!targetVerse) return { prev: null, next: null, targetVerse: null, covered: false };
+
+    const segs = getChapterSegments(chapter);
+    let prev = null;
+    let prevVerse = -Infinity;
+    let next = null;
+    let nextVerse = Infinity;
+
+    for (const seg of segs) {
+        const parsed = parseSegRef(seg.matched_ref);
+        if (!parsed) continue;
+
+        if (parsed.ayah_from <= targetVerse && targetVerse <= parsed.ayah_to) {
+            return { prev: seg, next: seg, targetVerse, covered: true };
+        }
+
+        if (parsed.ayah_to < targetVerse && parsed.ayah_to > prevVerse) {
+            prev = seg;
+            prevVerse = parsed.ayah_to;
+        }
+        if (parsed.ayah_from > targetVerse && parsed.ayah_from < nextVerse) {
+            next = seg;
+            nextVerse = parsed.ayah_from;
+        }
+    }
+
+    return { prev, next, targetVerse, covered: false };
+}
+
+async function jumpToMissingVerseContext(chapter, verseKey) {
+    const targetVerse = _parseVerseFromKey(verseKey);
+    if (!targetVerse) {
+        await jumpToVerse(chapter, verseKey);
+        return;
+    }
+
+    // Preserve current filter view so users can jump back after boundary navigation.
+    const hasFilterView = segActiveFilters.some(f => f.value !== null) || !!segVerseSelect.value;
+    if (hasFilterView) {
+        _segSavedFilterView = {
+            filters: JSON.parse(JSON.stringify(segActiveFilters)),
+            chapter: segChapterSelect.value,
+            verse: segVerseSelect.value,
+            scrollTop: segListEl.scrollTop,
+        };
+    }
+
+    if (segChapterSelect.value !== String(chapter)) {
+        segChapterSelect.value = String(chapter);
+        if (segChapterSS) segChapterSS.refresh();
+        await onSegChapterChange();
+    }
+
+    if (hasFilterView) {
+        segActiveFilters = [];
+        renderFilterBar();
+        updateFilterBarControls();
+    }
+    if (segVerseSelect.value) {
+        segVerseSelect.value = '';
+    }
+    applyFiltersAndRender();
+
+    const { prev, next, covered } = findMissingVerseBoundarySegments(chapter, verseKey);
+    if (covered && prev) {
+        await jumpToSegment(chapter, prev.index);
+        return;
+    }
+
+    const rows = [];
+    if (prev) {
+        const row = segListEl.querySelector(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${prev.index}"]`);
+        if (row) rows.push(row);
+    }
+    if (next && (!prev || next.index !== prev.index)) {
+        const row = segListEl.querySelector(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${next.index}"]`);
+        if (row) rows.push(row);
+    }
+
+    if (rows.length === 0) {
+        segPlayStatus.textContent = `Could not locate boundary segments for missing verse ${verseKey}.`;
+        return;
+    }
+
+    if (rows.length === 1) {
+        rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+        const top = Math.min(...rows.map(r => r.offsetTop));
+        const bottom = Math.max(...rows.map(r => r.offsetTop + r.offsetHeight));
+        const targetTop = Math.max(0, ((top + bottom) / 2) - (segListEl.clientHeight / 2));
+        segListEl.scrollTo({ top: targetTop, behavior: 'smooth' });
+    }
+
+    rows.forEach(r => r.classList.add('playing'));
+    setTimeout(() => rows.forEach(r => r.classList.remove('playing')), 2000);
+
+    if (prev && next) {
+        segPlayStatus.textContent = `Missing verse ${verseKey} is between #${prev.index} and #${next.index}.`;
+    } else if (prev) {
+        segPlayStatus.textContent = `Missing verse ${verseKey} is after #${prev.index}.`;
+    } else {
+        segPlayStatus.textContent = `Missing verse ${verseKey} is before #${next.index}.`;
+    }
+
+    if (hasFilterView) {
+        _showBackToResultsBanner();
+    }
+}
+
 
 
 async function jumpToVerse(chapter, verseKey) {
@@ -2958,7 +3057,9 @@ async function jumpToVerse(chapter, verseKey) {
             row.classList.add('playing');
             setTimeout(() => row.classList.remove('playing'), 2000);
         }
+        return;
     }
+    segPlayStatus.textContent = `No segment found for verse ${verseKey}.`;
 }
 
 async function refreshValidation() {
@@ -3366,6 +3467,40 @@ function renderCategoryCards(type, items, container) {
             }
 
             container.appendChild(wrapper);
+        } else if (type === 'missing_verses') {
+            // Missing verse context: show boundary cards around where the verse should appear.
+            const wrapper = document.createElement('div');
+            wrapper.className = 'val-card-wrapper';
+
+            const msgLabel = document.createElement('div');
+            msgLabel.className = 'val-card-issue-label';
+            msgLabel.textContent = issue.msg ? `${issue.verse_key} — ${issue.msg}` : issue.verse_key;
+            wrapper.appendChild(msgLabel);
+
+            const { prev, next } = findMissingVerseBoundarySegments(issue.chapter, issue.verse_key);
+            const segsInWrapper = [];
+
+            if (prev) {
+                const prevCard = renderErrorCard(prev, { contextLabel: 'Previous verse boundary' });
+                wrapper.appendChild(prevCard);
+                segsInWrapper.push({ seg: prev, card: prevCard });
+            }
+            if (next && (!prev || next.index !== prev.index)) {
+                const nextCard = renderErrorCard(next, { contextLabel: 'Next verse boundary' });
+                wrapper.appendChild(nextCard);
+                segsInWrapper.push({ seg: next, card: nextCard });
+            }
+
+            if (segsInWrapper.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'seg-loading';
+                empty.textContent = 'No boundary segments found for this missing verse.';
+                wrapper.appendChild(empty);
+            } else {
+                addContextToggle(wrapper, segsInWrapper);
+            }
+
+            container.appendChild(wrapper);
         } else {
             // Single segment card
             const seg = resolveIssueToSegment(type, issue);
@@ -3384,27 +3519,28 @@ function renderCategoryCards(type, items, container) {
             const card = renderErrorCard(seg);
             wrapper.appendChild(card);
 
-            // Confirm button for low confidence segments (styled like Auto Fix)
-            if (type === 'low_confidence' && seg.confidence < 1.0) {
-                const confirmBtn = document.createElement('button');
-                confirmBtn.className = 'val-autofix-btn';
-                confirmBtn.textContent = 'Confirm';
-                confirmBtn.title = 'Set confidence to 100%';
-                confirmBtn.addEventListener('click', (e) => {
+            // Ignore button for low confidence, oversegmented, and cross-verse segments
+            if ((type === 'low_confidence' || type === 'oversegmented' || type === 'cross_verse') && seg.confidence < 1.0) {
+                const ignoreBtn = document.createElement('button');
+                ignoreBtn.className = 'val-autofix-btn';
+                ignoreBtn.textContent = 'Ignore';
+                ignoreBtn.title = 'Set confidence to 100% (dismiss this issue)';
+                ignoreBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (seg.confidence >= 1.0) return;
                     seg.confidence = 1.0;
                     delete seg._derived;
                     markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
                     syncAllCardsForSegment(seg);
-                    confirmBtn.disabled = true;
-                    confirmBtn.textContent = 'Confirmed';
+                    ignoreBtn.disabled = true;
+                    ignoreBtn.textContent = 'Ignored';
                     wrapper.style.opacity = '0.5';
                 });
-                wrapper.appendChild(confirmBtn);
+                wrapper.appendChild(ignoreBtn);
             }
 
-            addContextToggle(wrapper, [{ seg, card }]);
+            const contextDefault = type === 'failed' || type === 'oversegmented' || type === 'audio_bleeding';
+            addContextToggle(wrapper, [{ seg, card }], { defaultOpen: contextDefault });
             container.appendChild(wrapper);
         }
     });
@@ -3415,10 +3551,10 @@ function renderCategoryCards(type, items, container) {
 }
 
 function resolveIssueToSegment(type, issue) {
-    if (type === 'failed' || type === 'low_confidence' || type === 'cross_verse' || type === 'audio_bleeding') {
+    if (type === 'failed' || type === 'low_confidence' || type === 'oversegmented' || type === 'cross_verse' || type === 'audio_bleeding') {
         return getSegByChapterIndex(issue.chapter, issue.seg_index);
     }
-    if (type === 'errors' || type === 'missing_verses') {
+    if (type === 'errors') {
         // Try to find a segment whose matched_ref starts with the verse_key prefix
         const parts = (issue.verse_key || '').split(':');
         const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : issue.verse_key;
@@ -3428,49 +3564,53 @@ function resolveIssueToSegment(type, issue) {
     return null;
 }
 
-function addContextToggle(wrapper, segsInWrapper) {
+function addContextToggle(wrapper, segsInWrapper, { defaultOpen = false } = {}) {
     const ctxBtn = document.createElement('button');
     ctxBtn.className = 'val-context-btn';
     ctxBtn.textContent = 'Show Context';
     let contextShown = false;
     let contextEls = [];
 
-    ctxBtn.addEventListener('click', () => {
-        if (contextShown) {
-            contextEls.forEach(el => el.remove());
-            contextEls = [];
-            ctxBtn.textContent = 'Show Context';
-            contextShown = false;
-        } else {
-            // Gather unique chapters/indices from segsInWrapper
-            const first = segsInWrapper[0];
-            const last = segsInWrapper[segsInWrapper.length - 1];
+    function showContext() {
+        const first = segsInWrapper[0];
+        const last = segsInWrapper[segsInWrapper.length - 1];
 
-            const { prev } = getAdjacentSegments(first.seg.chapter, first.seg.index);
-            const { next } = getAdjacentSegments(last.seg.chapter, last.seg.index);
+        const { prev } = getAdjacentSegments(first.seg.chapter, first.seg.index);
+        const { next } = getAdjacentSegments(last.seg.chapter, last.seg.index);
 
-            if (prev) {
-                const prevCard = renderErrorCard(prev, { isContext: true, contextLabel: 'Previous' });
-                // Insert before first segment card
-                first.card.parentNode.insertBefore(prevCard, first.card);
-                contextEls.push(prevCard);
-            }
-            if (next) {
-                const nextCard = renderErrorCard(next, { isContext: true, contextLabel: 'Next' });
-                // Insert after last segment card
-                if (last.card.nextSibling) {
-                    last.card.parentNode.insertBefore(nextCard, last.card.nextSibling);
-                } else {
-                    last.card.parentNode.insertBefore(nextCard, ctxBtn);
-                }
-                contextEls.push(nextCard);
-            }
-            ctxBtn.textContent = 'Hide Context';
-            contextShown = true;
+        if (prev) {
+            const prevCard = renderErrorCard(prev, { isContext: true, contextLabel: 'Previous' });
+            first.card.parentNode.insertBefore(prevCard, first.card);
+            contextEls.push(prevCard);
         }
+        if (next) {
+            const nextCard = renderErrorCard(next, { isContext: true, contextLabel: 'Next' });
+            if (last.card.nextSibling) {
+                last.card.parentNode.insertBefore(nextCard, last.card.nextSibling);
+            } else {
+                last.card.parentNode.insertBefore(nextCard, ctxBtn);
+            }
+            contextEls.push(nextCard);
+        }
+        ctxBtn.textContent = 'Hide Context';
+        contextShown = true;
+    }
+
+    function hideContext() {
+        contextEls.forEach(el => el.remove());
+        contextEls = [];
+        ctxBtn.textContent = 'Show Context';
+        contextShown = false;
+    }
+
+    ctxBtn.addEventListener('click', () => {
+        if (contextShown) hideContext();
+        else showContext();
     });
 
     wrapper.appendChild(ctxBtn);
+
+    if (defaultOpen) showContext();
 }
 
 

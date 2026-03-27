@@ -24,7 +24,7 @@ function surahOptionText(num) {
 class SearchableSelect {
     constructor(selectEl) {
         this.select = selectEl;
-        this.options = [];  // [{value, text}, ...]
+        this.options = [];  // [{value, text, group}, ...]
 
         // Wrapper
         this.wrapper = document.createElement('div');
@@ -63,7 +63,9 @@ class SearchableSelect {
         this.options = [];
         for (const opt of this.select.options) {
             if (!opt.value) continue;  // skip placeholder
-            this.options.push({ value: opt.value, text: opt.textContent });
+            const parent = opt.parentElement;
+            const group = parent && parent.tagName === 'OPTGROUP' ? parent.label : '';
+            this.options.push({ value: opt.value, text: opt.textContent, group });
         }
         // Sync displayed text to current select value
         const cur = this.select.value;
@@ -89,16 +91,32 @@ class SearchableSelect {
 
     _filter() {
         const q = this.input.value.toLowerCase();
-        this.filtered = q ? this.options.filter(o => o.text.toLowerCase().includes(q)) : [...this.options];
+        this.filtered = q
+            ? this.options.filter(o =>
+                o.text.toLowerCase().includes(q) ||
+                o.group.toLowerCase().includes(q)
+            )
+            : [...this.options];
         this.highlightIdx = -1;
         this._render();
     }
 
     _render() {
         this.dropdown.innerHTML = '';
+        let currentGroup = null;
         this.filtered.forEach((opt, i) => {
+            if (opt.group && opt.group !== currentGroup) {
+                currentGroup = opt.group;
+                const header = document.createElement('div');
+                header.className = 'ss-group-label';
+                header.textContent = currentGroup;
+                this.dropdown.appendChild(header);
+            }
+
             const div = document.createElement('div');
-            div.className = 'ss-option' + (i === this.highlightIdx ? ' ss-highlight' : '');
+            div.className = 'ss-option'
+                + (opt.group ? ' ss-option-grouped' : '')
+                + (i === this.highlightIdx ? ' ss-highlight' : '');
             div.textContent = opt.text;
             div.addEventListener('mousedown', e => { e.preventDefault(); this._pick(opt); });
             this.dropdown.appendChild(div);
@@ -138,7 +156,7 @@ class SearchableSelect {
     }
 
     _scrollToHighlight() {
-        const el = this.dropdown.children[this.highlightIdx];
+        const el = this.dropdown.querySelector('.ss-highlight');
         if (el) el.scrollIntoView({ block: 'nearest' });
     }
 }
@@ -1998,4 +2016,3 @@ function formatTime(seconds) {
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
-

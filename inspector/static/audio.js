@@ -23,6 +23,7 @@
     let ayahBySurah = {};   // { 1: [1,2,...,7], 2: [1,...,286], ... }
     let allSurahNums = [];  // sorted surah numbers available
 
+    let audReciterSS = null;  // SearchableSelect for reciter dropdown
     let audSurahSS = null;  // SearchableSelect for surah dropdown
 
     document.addEventListener('DOMContentLoaded', loadSources);
@@ -30,12 +31,14 @@
     async function loadSources() {
         try {
             await surahInfoReady;
+            audReciterSS = new SearchableSelect(reciterSelect);
             audSurahSS = new SearchableSelect(surahSelect);
             const res = await fetch('/api/audio/sources');
             audioSources = await res.json();
             populateReciters();
         } catch (e) {
             reciterSelect.innerHTML = '<option value="">Error loading sources</option>';
+            if (audReciterSS) audReciterSS.refresh();
         }
     }
 
@@ -65,6 +68,7 @@
             }
         }
 
+        if (audReciterSS) audReciterSS.refresh();
         ayahLabel.hidden = true;
         updateNavButtons();
     }
