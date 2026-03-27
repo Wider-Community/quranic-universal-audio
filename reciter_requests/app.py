@@ -361,35 +361,35 @@ def fetch_request_issues():
 # ---------------------------------------------------------------------------
 RIWAYAT = [
     # Asim
-    "Hafs an Asim",
-    "Shubah an Asim",
+    "Hafs A'n Assem",
+    "Sho'bah A'n Asim",
     # Nafi
-    "Warsh an Nafi",
-    "Qalun an Nafi",
+    "Warsh A'n Nafi'",
+    "Qalon A'n Nafi'",
     # Abu Amr
-    "Al-Duri an Abu Amr",
-    "Al-Susi an Abu Amr",
+    "Aldori A'n Abi Amr",
+    "Assosi A'n Abi Amr",
     # Ibn Amir
-    "Hisham an Ibn Amir",
-    "Ibn Dhakwan an Ibn Amir",
+    "Hesham A'n Ibn Amer",
+    "Ibn Thakwan A'n Ibn Amer",
     # Ibn Kathir
-    "Al-Bazzi an Ibn Kathir",
-    "Qunbul an Ibn Kathir",
+    "Albizi A'n Ibn Katheer",
+    "Qunbol A'n Ibn Katheer",
     # Hamzah
-    "Khalaf an Hamzah",
-    "Khallad an Hamzah",
+    "Khalaf A'n Hamzah",
+    "Khallad A'n Hamzah",
     # Al-Kisai
-    "Al-Layth an Al-Kisai",
-    "Al-Duri an Al-Kisai",
+    "Al-Layth A'n Al-Kisa'ai",
+    "AlDorai A'n Al-Kisa'ai",
     # Abu Jafar
-    "Isa Ibn Wardan an Abu Jafar",
-    "Ibn Jummaz an Abu Jafar",
+    "Isa Ibn Wardan A'n Abi Ja'far",
+    "Ibn Jammaz A'n Abi Ja'far",
     # Yaqub
-    "Ruways an Yaqub",
-    "Rawh an Yaqub",
+    "Rowis A'n Yakoob",
+    "Rawh A'n Yakoob",
     # Khalaf
-    "Ishaq an Khalaf",
-    "Idris an Khalaf",
+    "Ishaq A'n Khalaf",
+    "Idris A'n Khalaf",
 ]
 
 REQUEST_TYPES = ["New reciter", "Re-align"]
@@ -416,7 +416,7 @@ def submit_request(
 
     min_silence_ms = int(min_silence_ms or 500)
     request_type = request_type or "New reciter"
-    riwayah = riwayah or "Hafs an Asim"
+    riwayah = riwayah or "Hafs A'n Assem"
 
     # Check for duplicate (only for "New reciter" — re-align is allowed)
     if request_type == "New reciter":
@@ -665,10 +665,10 @@ with gr.Blocks(title="Reciter Requests") as demo:
                     )
                     riwayah_dd = gr.Dropdown(
                         choices=RIWAYAT,
-                        value="Hafs an Asim",
+                        value="Hafs A'n Assem",
                         label="Riwayah",
                         info="Quranic reading tradition. Most existing reciters "
-                             "use Hafs an Asim — verify by listening.",
+                             "use Hafs A'n Assem — verify by listening.",
                     )
                     min_silence = gr.Number(
                         value=500, label="Min Silence (ms)",
@@ -775,7 +775,7 @@ async def api_request(request: Request):
         reciter_name=req.get("reciter_name", ""),
         audio_source=req.get("audio_source", ""),
         request_type=req.get("request_type", "New reciter"),
-        riwayah=req.get("riwayah", "Hafs an Asim"),
+        riwayah=req.get("riwayah", "Hafs A'n Assem"),
         min_silence_ms=req.get("min_silence_ms", 500),
         requester_name=req.get("requester_name", ""),
         requester_email=req.get("requester_email", ""),

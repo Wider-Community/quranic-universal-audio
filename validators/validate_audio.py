@@ -153,15 +153,24 @@ def _expected_verses(surah_info: dict) -> Dict[int, List[int]]:
 
 # ── Metadata validation ──────────────────────────────────────────────────
 
-REQUIRED_META_KEYS = ("reciter", "riwayah", "audio_category", "source", "country")
+# Keys that MUST have a real value (not empty, not "unknown")
+STRICT_META_KEYS = ("reciter", "name_en")
+# Keys that must be present but may be "unknown" if not known
+ALL_META_KEYS = (
+    "reciter", "name_en", "name_ar", "riwayah", "style",
+    "audio_category", "source", "country",
+)
+VALID_STYLES = ("murattal", "mujawwad", "muallim", "unknown")
+VALID_AUDIO_CATEGORIES = ("by_surah", "by_ayah")
 
 
 def validate_meta(path: Path) -> Tuple[List[dict], List[dict]]:
     """Check _meta presence and required keys in an audio JSON file.
 
     Returns (errors, warnings) where each item is a dict with 'msg'.
-    Errors: required key missing entirely from _meta (or no _meta at all).
-    Warnings: required key present but value is empty/blank.
+    Errors: strict key missing/empty, any key missing, or empty value
+            (use "unknown" if not known).
+    Warnings: non-strict key has value "unknown".
     """
     errors: List[dict] = []
     warnings: List[dict] = []
@@ -180,11 +189,27 @@ def validate_meta(path: Path) -> Tuple[List[dict], List[dict]]:
         errors.append({"msg": f"_meta is not an object (got {type(meta).__name__})"})
         return errors, warnings
 
-    for key in REQUIRED_META_KEYS:
-        if key not in meta:
+    for key in ALL_META_KEYS:
+        val = str(meta.get(key, "")).strip() if key in meta else None
+        is_strict = key in STRICT_META_KEYS
+
+        if val is None:
             errors.append({"msg": f"_meta missing required key: {key}"})
-        elif not str(meta[key]).strip():
-            warnings.append({"msg": f"_meta.{key} is empty"})
+        elif not val:
+            errors.append({"msg": f"_meta.{key} is empty (use \"unknown\" if not known)"})
+        elif val == "unknown" and is_strict:
+            errors.append({"msg": f"_meta.{key} must have a real value, not \"unknown\""})
+        elif val == "unknown":
+            warnings.append({"msg": f"_meta.{key} is \"unknown\""})
+
+    # Validate constrained values
+    style = str(meta.get("style", "")).strip()
+    if style and style not in VALID_STYLES:
+        errors.append({"msg": f"_meta.style must be one of {VALID_STYLES}, got \"{style}\""})
+
+    audio_cat = str(meta.get("audio_category", "")).strip()
+    if audio_cat and audio_cat not in VALID_AUDIO_CATEGORIES:
+        errors.append({"msg": f"_meta.audio_category must be one of {VALID_AUDIO_CATEGORIES}, got \"{audio_cat}\""})
 
     return errors, warnings
 
@@ -523,7 +548,7 @@ def _print_verbose(results: dict, surah_info: dict, top_n: int) -> None:
     meta = results.get("meta")
     if meta:
         print(f"\n--- Metadata ---")
-        for key in REQUIRED_META_KEYS:
+        for key in ALL_META_KEYS:
             val = meta.get(key, "")
             status = "" if val else "  (empty)"
             print(f"  {key:<18} {val}{status}")
