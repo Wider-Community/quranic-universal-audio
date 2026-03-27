@@ -12,10 +12,6 @@
 
 <p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A one-stop, community-verified dataset providing large-scale, multi-riwayah recitations, timestamped at the word- and letter-level. Our automated pipeline transforms surah or ayah recordings into precise, waqf-aware Qur'anic transcripts and timestamps, with robust human-in-the-loop verification.</p>
 
-<p align="center">
-  <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
-</p>
-
 https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 ## Use Cases
@@ -25,21 +21,9 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 - **Tajweed timing analysis** — Subword-level timestamps let you measure durations of tajweed rules (e.g. madd and ghunnah lengths) across expert reciters.
 - **Unified multi-reciter audio access** — Browse and access audio from hundreds of reciters across multiple sources through a single unified format with consistent JSON schemas.
 
-## Components
-
-| Component | Description |
-|-----------|-------------|
-| [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
-| [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](quran_multi_aligner/docs/client_api.md) |
-| [`mfa_aligner/`](mfa_aligner/) | MFA forced alignment service for timestamps computation |
-| [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
-| [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |
-| [`reciter_requests`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
-| [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Quran-specific G2P; the foundation that makes phoneme-level alignment possible |
-
 ## Key Highlights
 
-- **Tajweed- and Phoneme-level precision:** We bypass standard word alignment by aligning at the phoneme level first, recovering clean, precise word boundaries. Tajweed rules like idgham, where sounds merge at word boundaries, are resolved at the phoneme level, eliminating the ambiguity of where one word ends and the next begins.
+- **Tajweed- and Phoneme-level precision** — We bypass standard word alignment by aligning at the phoneme level first, recovering clean, precise word boundaries. Tajweed rules like idgham, where sounds merge at word boundaries, are resolved at the phoneme level, eliminating the ambiguity of where one word ends and the next begins.
 
 - **Gap-free timestamps** — As segments have no pauses, word timestamps are padded to eliminate artificial gaps and reflecting natural word continuity in recitations. Highlighting stays perfectly synchronized with the audio—no silent flickers or jarring jumps
 
@@ -61,11 +45,30 @@ If you're just here for the audio, timestamps or segment data, you can access th
 2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
 3. **QUD API** — *(coming soon)*
 
+## Technical Overview
+
+<p align="center">
+  <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
+</p>
+
+The repository uses the following components:
+
+| Component | Description |
+|-----------|-------------|
+| [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
+| [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](quran_multi_aligner/docs/client_api.md) |
+| [`mfa_aligner/`](mfa_aligner/) | MFA forced alignment service for timestamps computation |
+| [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
+| [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |
+| [`reciter_requests`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
+| [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Quran-specific G2P; the foundation that makes phoneme-level alignment possible |
+
+
 ## Contributing
 
-This is a community project. The pipeline is automated, but manual review is essential to guarantee quality. No expertise in tajweed or recitation rules is needed — fixing errors means things like missing words, over/under-segmentation, and low-confidence segments, all done through the inspector UI.
+This is a community-based project. While the pipeline is ~95% automated, manual review is essential to guarantee quality. No expertise in tajweed or recitation rules is needed — fixing errors means things like missing words, over/under-segmentation, and low-confidence segments, all done through the inspector UI.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started, or [open an issue](https://github.com/Wider-Community/quranic-universal-audio/issues) for bugs and feature requests.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started, or [open an issue](https://github.com/Wider-Community/quranic-universal-audio/issues) for bugs and suggestions.
 
 ## License
 
