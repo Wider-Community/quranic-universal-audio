@@ -39,7 +39,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 ## Key Highlights
 
-- **Phoneme-level alignment.** Most Qur'an audio tools align at the word level. This project aligns at the phoneme level first, then recovers word and letter boundaries from the phoneme timestamps. The result is significantly more precise and accurate word timings.
+- **More precise than standard word alignment** — The pipeline aligns at the     phoneme level first, then recovers word and letter boundaries for cleaner, more  reliable timestamps. 
 
 - **Gap-free timestamps.** Within each recitation segment, word timestamps are padded forward so there are no artificial gaps between words. Highlighting stays perfectly synchronized with the audio — no silent flickers between words that other tools produce.
 
@@ -47,7 +47,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 - **Handles repetitions naturally.** Because the pipeline first segments by silences and then transcribes each segment independently, repeated words or verses are detected and timestamped correctly — each occurrence gets its own timestamps.
 
-- **Robust validation and inspection.** Three dedicated validators check every stage of the pipeline, and the inspector provides a full editing UI with waveform visualization, confidence scoring, and playback for verifying segments and timestamps quality and editing them.
+- **Robust validation and inspection** — Three dedicated validators check every stage of the pipeline, and the inspector UI makes it possible to review, edit, and correct AI errors, improving results instead of treating them as a black box.
 
 - **Community-reviewed.** Unlike static dataset releases, this project is open for anyone to inspect, fix, and improve the data through the inspector and pull requests. Quality improves continuously as more people review and correct errors.
 
