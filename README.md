@@ -4,8 +4,8 @@
   <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow" alt="Demo - Qur'an Multi-Aligner"></a>
   <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-blue" alt="Dataset - Qur'anic Universal Ayahs"></a>
   <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Add%20a%20Reciter-ff9d00" alt="Request - Add a Reciter"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-308%20Available%20%7C%202%20Aligned-green" alt="Reciters"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-12%20%2F%2020-green" alt="Riwayat"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-379%20Available%20%7C%202%20Aligned-green" alt="Reciters"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-14%20%2F%2020-green" alt="Riwayat"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release" alt="Latest Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-orange" alt="License"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 - **Community-driven validation** — No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an inspector UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and the corrections feed back into the dataset.
 
-- **Automated request-to-release pipeline** — [Request or add a reciter](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours.
+- **Automated request-to-release pipeline** — [Request or add a reciter](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours with email updates.
 
 - **Fully reproducible** — Every output records the models, parameters, and settings that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
 

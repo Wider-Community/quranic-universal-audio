@@ -27,7 +27,7 @@ When segments are extracted for a reciter, a **draft PR** is opened automaticall
    ```
 5. **Commit and push** your corrections directly to the PR branch:
    ```bash
-   git add data/recitation_segments/<reciter>/segments.json data/recitation_segments/<reciter>/detailed.json data/recitation_segments/<reciter>/validation.log
+   git add data/recitation_segments/<reciter>/*
    git commit -m "fix: correct segmentation errors for <reciter>"
    git push
    ```

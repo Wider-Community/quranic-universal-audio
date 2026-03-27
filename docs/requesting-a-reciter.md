@@ -105,7 +105,7 @@ Open http://localhost:5000, go to the **Segments** tab, select the reciter, and 
 All your corrections go directly on the PR branch — no need to open a separate PR:
 
 ```bash
-git add data/recitation_segments/<reciter>/segments.json data/recitation_segments/<reciter>/detailed.json
+git add data/recitation_segments/<reciter>/*
 git commit -m "fix: correct segmentation errors for <reciter>"
 git push
 ```
