@@ -447,10 +447,28 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
 
     if add_slug:
         riwayah = get_riwayah(add_slug)
-        # Add to YAML data_files
-        new_entry = f"      - split: {add_slug}\n        path: data/{riwayah}/{add_slug}-*"
+        # Add to YAML data_files (insert after last data_files entry)
+        new_df_entry = f"  - split: {add_slug}\n    path: {riwayah}/{add_slug}-*"
         if add_slug not in yaml_text:
-            yaml_text = yaml_text.rstrip() + f"\n{new_entry}\n"
+            # Insert after last "path: ..." line under data_files
+            yaml_text = re.sub(
+                r"(    path: [^\n]+)(\n(?!  - split:))",
+                rf"\1\n{new_df_entry}\2",
+                yaml_text,
+                count=1,
+            )
+        # Add split entry under dataset_info.splits
+        new_split = (
+            f"  - name: {add_slug}\n"
+            f"    num_bytes: 0\n"
+            f"    num_examples: 6236"
+        )
+        if f"name: {add_slug}" not in yaml_text:
+            yaml_text = re.sub(
+                r"(  splits:\n(?:  - name: [^\n]+\n    num_bytes: \d+\n    num_examples: \d+\n)+)",
+                rf"\g<0>{new_split}\n",
+                yaml_text,
+            )
 
         # Add to markdown table
         source_label = get_audio_source_label(add_slug)
@@ -467,9 +485,15 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
 
     if remove_slug:
         riwayah = get_riwayah(remove_slug)
-        # Remove from YAML — match any riwayah config
+        # Remove from YAML data_files — match any riwayah config
         yaml_text = re.sub(
-            rf"\s*- split: {remove_slug}\n\s*path: data/[a-z_]+/{remove_slug}-\*",
+            rf"\n  - split: {remove_slug}\n    path: [a-z_]+/{remove_slug}-\*",
+            "",
+            yaml_text,
+        )
+        # Remove from YAML dataset_info.splits
+        yaml_text = re.sub(
+            rf"\n  - name: {remove_slug}\n    num_bytes: \d+\n    num_examples: \d+",
             "",
             yaml_text,
         )
