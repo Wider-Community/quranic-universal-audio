@@ -1,29 +1,62 @@
-Generated: 2026-03-28 04:43:51
+Generated: 2026-03-28 10:16:09
 
 ========================================================================
-  Audio Validation: data/audio/by_surah/mp3quran/mishary_alafasi.json
+  Audio Validation: data/audio/by_surah/mp3quran/salah_alhashim_qalon.json
   Format: sura_json (sura-level)
 ========================================================================
 
 --- Metadata ---
-  reciter            mishary_alafasi
-  name_en            Mishary Alafasi
-  name_ar            مشاري العفاسي
-  riwayah            hafs_an_asim
+  reciter            salah_alhashim_qalon
+  name_en            Salah Alhashim
+  name_ar            صلاح الهاشم
+  riwayah            qalon_an_nafi
   style              murattal
   audio_category     by_surah
   source             https://mp3quran.net/
   country            unknown
 
 --- Coverage ---
-  Surahs found:       114 / 114  (100.0%)
-  Missing surahs:     0
+  Surahs found:       7 / 114  (6.1%)
+  Missing surahs:     107
+
+--- Missing Surahs (first 30 of 107) ---
+  Sura 2     Al-Baqara                 (286 verses)
+  Sura 3     Aal-i-Imraan              (200 verses)
+  Sura 4     An-Nisaa                  (176 verses)
+  Sura 5     Al-Maaida                 (120 verses)
+  Sura 6     Al-An'aam                 (165 verses)
+  Sura 7     Al-A'raaf                 (206 verses)
+  Sura 8     Al-Anfaal                 (75 verses)
+  Sura 9     At-Tawba                  (129 verses)
+  Sura 10    Yunus                     (109 verses)
+  Sura 11    Hud                       (123 verses)
+  Sura 13    Ar-Ra'd                   (43 verses)
+  Sura 14    Ibrahim                   (52 verses)
+  Sura 15    Al-Hijr                   (99 verses)
+  Sura 16    An-Nahl                   (128 verses)
+  Sura 17    Al-Israa                  (111 verses)
+  Sura 18    Al-Kahf                   (110 verses)
+  Sura 19    Maryam                    (98 verses)
+  Sura 20    Taa-Haa                   (135 verses)
+  Sura 21    Al-Anbiyaa                (112 verses)
+  Sura 22    Al-Hajj                   (78 verses)
+  Sura 23    Al-Muminoon               (118 verses)
+  Sura 24    An-Noor                   (64 verses)
+  Sura 25    Al-Furqaan                (77 verses)
+  Sura 26    Ash-Shu'araa              (227 verses)
+  Sura 27    An-Naml                   (93 verses)
+  Sura 28    Al-Qasas                  (88 verses)
+  Sura 29    Al-Ankaboot               (69 verses)
+  Sura 30    Ar-Room                   (60 verses)
+  Sura 31    Luqman                    (34 verses)
+  Sura 32    As-Sajda                  (30 verses)
+  ... and 77 more
 
 --- Source Validation ---
   (skipped)
 
 --- Summary ---
-  Total sources:  114
+  Total sources:  7
   Source type:    url
   Errors:         0
   Warnings:       1
