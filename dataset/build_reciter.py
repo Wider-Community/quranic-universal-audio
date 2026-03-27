@@ -32,7 +32,6 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO_ID = "hetchyy/quranic-universal-ayahs"
-RIWAYAH = "hafs_an_asim"
 SAMPLE_PCT = int(os.environ.get("SAMPLE_PCT", "0"))
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
@@ -65,6 +64,26 @@ def detect_audio_source(slug):
     except Exception:
         pass
     return None
+
+
+def get_riwayah(slug):
+    """Get riwayah slug for a reciter from its audio manifest _meta."""
+    audio_dir = ROOT / "data" / "audio"
+    for category in ("by_surah", "by_ayah"):
+        cat_dir = audio_dir / category
+        if not cat_dir.is_dir():
+            continue
+        for source_dir in cat_dir.iterdir():
+            if not source_dir.is_dir():
+                continue
+            manifest = source_dir / f"{slug}.json"
+            if manifest.exists():
+                try:
+                    meta = json.loads(manifest.read_text()).get("_meta", {})
+                    return meta.get("riwayah", "hafs_an_asim")
+                except (json.JSONDecodeError, OSError):
+                    pass
+    return "hafs_an_asim"
 
 
 def find_eligible_reciters():
@@ -369,14 +388,15 @@ def push_reciter(slug, audio_type):
     api = HfApi(token=HF_TOKEN)
     api.create_repo(repo_id=REPO_ID, repo_type="dataset", exist_ok=True)
 
-    log.info("Pushing to hub as %s/%s...", RIWAYAH, slug)
+    riwayah = get_riwayah(slug)
+    log.info("Pushing to hub as %s/%s...", riwayah, slug)
     ds.push_to_hub(
         REPO_ID,
-        config_name=RIWAYAH,
+        config_name=riwayah,
         split=slug,
         token=HF_TOKEN,
         max_shard_size="10GB",
-        commit_message=f"Add {RIWAYAH}/{slug}",
+        commit_message=f"Add {riwayah}/{slug}",
     )
     log.info("Done: %s uploaded to %s", slug, REPO_ID)
 
@@ -426,48 +446,35 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
     body = parts[2]
 
     if add_slug:
+        riwayah = get_riwayah(add_slug)
         # Add to YAML data_files
-        new_entry = f"      - split: {add_slug}\n        path: data/{RIWAYAH}/{add_slug}-*"
+        new_entry = f"      - split: {add_slug}\n        path: data/{riwayah}/{add_slug}-*"
         if add_slug not in yaml_text:
-            # Insert before the closing of data_files
             yaml_text = yaml_text.rstrip() + f"\n{new_entry}\n"
 
         # Add to markdown table
         source_label = get_audio_source_label(add_slug)
         display_name = get_display_name(add_slug)
-        new_row = f"| `{RIWAYAH}` | `{add_slug}` | {display_name} | 6,236 | {source_label} |"
+        new_row = f"| `{riwayah}` | `{add_slug}` | {display_name} | 6,236 | {source_label} |"
         if add_slug not in body:
-            # Find the table and append
+            # Find last table row and append after it
             body = re.sub(
-                r"(\| `" + RIWAYAH + r"` \| .+\|[^\n]*)",
+                r"(\| `[a-z_]+` \| .+\|[^\n]*)",
                 lambda m: m.group(0) + "\n" + new_row,
                 body,
                 count=1,
             )
-            # If no existing row, append after table header
-            if add_slug not in body:
-                body = body.replace(
-                    "| `hafs_an_asim` |",
-                    f"| `hafs_an_asim` |",
-                    1,
-                )
-                # Append to end of table
-                table_end = body.rfind("|")
-                if table_end != -1:
-                    # Find end of current last row
-                    next_newline = body.find("\n", table_end)
-                    if next_newline != -1:
-                        body = body[:next_newline + 1] + new_row + "\n" + body[next_newline + 1:]
 
     if remove_slug:
-        # Remove from YAML
+        riwayah = get_riwayah(remove_slug)
+        # Remove from YAML — match any riwayah config
         yaml_text = re.sub(
-            rf"\s*- split: {remove_slug}\n\s*path: data/{RIWAYAH}/{remove_slug}-\*",
+            rf"\s*- split: {remove_slug}\n\s*path: data/[a-z_]+/{remove_slug}-\*",
             "",
             yaml_text,
         )
-        # Remove from markdown table
-        body = re.sub(rf"\| `{RIWAYAH}` \| `{remove_slug}` \|[^\n]*\n?", "", body)
+        # Remove from markdown table — match any riwayah
+        body = re.sub(rf"\| `[a-z_]+` \| `{remove_slug}` \|[^\n]*\n?", "", body)
 
     # Update badge counts
     processed_count = len(find_eligible_reciters())
@@ -532,13 +539,14 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
 def delete_reciter(slug):
     """Delete a reciter's parquet data from HF dataset."""
     api = HfApi(token=HF_TOKEN)
-    path = f"data/{RIWAYAH}/{slug}"
+    riwayah = get_riwayah(slug)
+    path = f"data/{riwayah}/{slug}"
     try:
         api.delete_folder(
             repo_id=REPO_ID,
             path_in_repo=path,
             repo_type="dataset",
-            commit_message=f"Remove {RIWAYAH}/{slug}",
+            commit_message=f"Remove {riwayah}/{slug}",
         )
         log.info("Deleted %s from %s", path, REPO_ID)
     except Exception as e:
