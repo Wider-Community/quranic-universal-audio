@@ -397,9 +397,9 @@ def get_audio_source_label(slug):
             source = meta.get("audio_source", "")
             source_map = {
                 "by_ayah/everyayah": "everyayah.com",
+                "by_surah/mp3quran": "mp3quran.net",
                 "by_surah/qul": "qul.tarteel.ai",
                 "by_surah/surah-quran": "surah-quran.com",
-                "by_surah/asswatul-quran": "asswatul-quran.com",
             }
             return source_map.get(source, source)
         except Exception:
@@ -487,6 +487,27 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
     body = re.sub(
         r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
         rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
+        body,
+    )
+
+    # Update riwayat badge
+    riwayat_with_data = set()
+    if audio_dir.is_dir():
+        for source_type in audio_dir.iterdir():
+            for source in source_type.iterdir():
+                if source.is_dir():
+                    for f in source.glob("*.json"):
+                        try:
+                            meta = json.loads(f.read_text()).get("_meta", {})
+                            rw = meta.get("riwayah", "hafs_an_asim")
+                            riwayat_with_data.add(rw)
+                        except (json.JSONDecodeError, OSError):
+                            pass
+    riwayat_total_path = ROOT / "data" / "riwayat.json"
+    riwayat_total = len(json.loads(riwayat_total_path.read_text())) if riwayat_total_path.exists() else 20
+    body = re.sub(
+        r"Riwayat-\d+(%20%2F%20)\d+",
+        rf"Riwayat-{len(riwayat_with_data)}\g<1>{riwayat_total}",
         body,
     )
 

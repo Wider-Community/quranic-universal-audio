@@ -3,36 +3,39 @@
 <p align="center">
   <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'an%20Multi--Aligner-yellow" alt="Demo - Qur'an Multi-Aligner"></a>
   <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-blue" alt="Dataset - Qur'anic Universal Ayahs"></a>
+  <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Add%20a%20Reciter-ff9d00" alt="Request - Add a Reciter"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-308%20Available%20%7C%202%20Aligned-green" alt="Reciters"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-12%20%2F%2020-green" alt="Riwayat"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release" alt="Latest Release"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Reciters-212%20Available%20%7C%202%20Aligned-green" alt="Reciters"></a>
-  <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3.10+-3776ab" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-orange" alt="License"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
 
-<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A one-stop, community-verified dataset providing large-scale, multi-riwayah recitations, timestamped at the word- and letter-level. Our automated pipeline transforms surah or ayah recordings into precise, waqf-aware Qur'anic transcripts and timestamps, with robust human-in-the-loop verification.</p>
+<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A community-verified dataset featuring 300+ reciters with word- and letter-level timestamps across multiple riwayat.</p>
 
 https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 ## Key Highlights
 
-- **Tajweed- and Phoneme-level precision** — We bypass standard word alignment by aligning at the phoneme level first, recovering clean, precise word boundaries. Tajweed rules like idgham, where sounds merge at word boundaries, are resolved at the phoneme level, eliminating the ambiguity of where one word ends and the next begins.
+- **Unified Qur'anic audio hub** — A single consistent schema with comprehensive metadata for all recitations. No more chasing scattered websites, CDN APIs, YouTube playlists, and raw files with different formats, surah/ayah splits, and inconsistent reciter names.
 
-- **Gap-free timestamps** — As segments have no pauses, word timestamps are padded to eliminate artificial gaps and reflecting natural word continuity in recitations. Highlighting stays perfectly synchronized with the audio—no silent flickers or jarring jumps
+- **Large-scale, multi-riwayah, multi-style** — Full Qur'an coverage for [300+ reciters and 15+ riwayat](data/RECITERS.md) spanning mujawwad, murattal, muallim, taraweeh and children repeat styles, with dedicated handling of wording and verse numbering differences across riwayat.
 
-- **Handles repetitions naturally** — Because the pipeline first segments by silences and then transcribes each segment independently, repeated words or verses are detected and timestamped correctly — each occurrence gets its own timestamps.
+- **Phoneme-first alignment** — 20ms phoneme-level precision eliminates ambiguity at word boundaries and resolves tajweed effects like idgham where sounds merge across words. Powered by a state-of-the-art Qur'an-specific ASR model trained on hundreds of hours of diverse recitations, robust across styles, voices, and recording conditions.
 
-- **Robust validation and inspection** — Three dedicated validators check every stage of the pipeline, and the inspector UI makes it possible to review, edit, and correct AI errors, improving results instead of treating them as a black box.
+- **Repetition-safe, gap-free timestamps** — The pipeline transcribes each silence-based segment independently, so repeated words/verses are detected and timestamped correctly. Word timestamps are padded to fill alignment artefacts, reflecting natural recitation and keeping highlighting perfectly synchronized with no visual gaps. See the [comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md).
 
-- **Community-reviewed** — Unlike static dataset releases, this project is open for anyone to inspect, fix, and improve the data through the inspector and pull requests. Quality improves continuously as more people review and correct errors.
+- **Community-driven validation** — No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an inspector UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and the corrections feed back into the dataset.
 
-- **Full provenance and reproducibility** — Every output file records the models, parameters, and sources used to produce it via `_meta` blocks across all three pipeline stages — audio manifests (reciter, riwayah, source, audio category), segments (models, thresholds), and timestamps (alignment settings). Results are fully traceable and reproducible. Git versioning and Github Releases track all changes to the data over time.
+- **Automated request-to-release pipeline** — [Request or add a reciter](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours.
 
-See the [detailed comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md) for concrete examples of accuracy and robustness to repetitions.
+- **Fully reproducible** — Every output records the models, parameters, and settings that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
 
-## Accessing Data
+- **Flexible access** — Consume the data through structured JSON files, Hugging Face dataset, or API-style access, all versioned and auto-updated with each release.
 
-If you're just here for the audio, timestamps or segment data, you can access them as follows:
+## Data Access
+
+To access the audio or timestamps:
 
 1. **Direct download** — JSON files in [`data/`](data/), or packaged in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
 2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
