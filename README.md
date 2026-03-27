@@ -14,13 +14,6 @@
 
 https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
-## Use Cases
-
-- **Word-highlighted recitation** — Accurate word and letter timestamps for highlighting in Qur'an apps, learning tools, and educational platforms.
-- **Generate EveryAyah style audio from surah recordings** — Extract per-ayah audio clips from full-surah recordings, producing verse-by-verse files for any reciter even when only surah-level audio exists.
-- **Tajweed timing analysis** — Subword-level timestamps let you measure durations of tajweed rules (e.g. madd and ghunnah lengths) across expert reciters.
-- **Unified multi-reciter audio access** — Browse and access audio from hundreds of reciters across multiple sources through a single unified format with consistent JSON schemas.
-
 ## Key Highlights
 
 - **Tajweed- and Phoneme-level precision** — We bypass standard word alignment by aligning at the phoneme level first, recovering clean, precise word boundaries. Tajweed rules like idgham, where sounds merge at word boundaries, are resolved at the phoneme level, eliminating the ambiguity of where one word ends and the next begins.
