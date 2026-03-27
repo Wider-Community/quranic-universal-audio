@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""List all available audio reciters, classified by category and source.
+"""List all available audio reciters, grouped by qira'ah and riwayah.
 
-Walks data/audio/{by_surah,by_ayah}/<source>/*.json and reports:
-- Reciter count per source
-- Format (surah-keyed vs ayah-keyed) and entry counts
-- Reciters shared across multiple sources
+Walks data/audio/{by_surah,by_ayah}/<source>/*.json, reads manifest _meta,
+and generates RECITERS.md with:
+- Summary tables (riwayah counts, style counts, source counts)
+- Processed section grouped by qira'ah > riwayah
+- Available section grouped by qira'ah > riwayah
 
 Also scans data/recitation_segments/ and data/timestamps/ to build the
-Processed Reciters section.  When run with --write, regenerates the entire
-RECITERS.md (both Processed and Available sections) from disk state.
+Processed Reciters section.
 
 Usage:
     python scripts/list_reciters.py              # summary table
@@ -20,6 +20,7 @@ Usage:
 import argparse
 import json
 import re
+import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -29,57 +30,130 @@ AUDIO_PATH = REPO / "data" / "audio"
 SEGMENTS_PATH = REPO / "data" / "recitation_segments"
 TIMESTAMPS_PATH = REPO / "data" / "timestamps"
 
+# Cache for git-tracked file checks
+_git_tracked_cache: set[str] | None = None
 
-def discover_reciters() -> dict[str, dict[str, list[dict]]]:
-    """Walk data/audio/{by_surah,by_ayah}/<source>/ and build a hierarchical index.
 
-    Reuses the same directory-walking approach as inspector/server.py _load_audio_sources().
+def _is_git_tracked(path: Path) -> bool:
+    """Check if a file is tracked by git (not just on disk)."""
+    global _git_tracked_cache
+    if _git_tracked_cache is None:
+        try:
+            result = subprocess.run(
+                ["git", "ls-files", "data/timestamps/"],
+                capture_output=True, text=True, cwd=REPO,
+            )
+            _git_tracked_cache = set(result.stdout.strip().splitlines())
+        except OSError:
+            _git_tracked_cache = set()
+    try:
+        rel = str(path.relative_to(REPO))
+    except ValueError:
+        return False
+    return rel in _git_tracked_cache
 
-    Returns::
-        {"by_surah": {"qul": [{"slug": "...", "name": "...", "entries": 114}, ...], ...},
-         "by_ayah":  {"everyayah": [...]}}
+# Qira'ah hierarchy: canonical reader -> list of riwayah slugs (display order)
+QIRAAT_HIERARCHY = [
+    ("Asim", ["hafs_an_asim", "shubah_an_asim"]),
+    ("Nafi", ["warsh_an_nafi", "qalon_an_nafi"]),
+    ("Abu Amr", ["duri_abu_amr", "susi_abu_amr"]),
+    ("Ibn Kathir", ["bazzi_ibn_kathir", "qunbul_ibn_kathir"]),
+    ("Hamzah", ["khalaf_an_hamzah", "khallad_an_hamzah"]),
+    ("Al-Kisa'i", ["duri_al_kisai", "layth_al_kisai"]),
+    ("Ibn Amir", ["ibn_dhakwan_ibn_amir", "hisham_ibn_amir"]),
+    ("Abu Ja'far", ["isa_abu_jafar", "ibn_jummaz_abu_jafar"]),
+    ("Ya'qub", ["ruways_an_yaqub", "rawh_an_yaqub"]),
+    ("Khalaf", ["ishaq_an_khalaf", "idris_an_khalaf"]),
+]
+
+SOURCE_LABELS = {
+    "mp3quran": "MP3Quran",
+    "everyayah": "EveryAyah",
+    "qul": "QUL",
+    "surah-quran": "Surah-Quran",
+}
+
+
+def load_source_urls() -> dict[str, str]:
+    """Load source slug -> URL from sources.json."""
+    sources_path = REPO / "data" / "sources.json"
+    if not sources_path.exists():
+        return {}
+    data = json.loads(sources_path.read_text())
+    return {s["slug"]: s["url"] for s in data}
+
+
+def source_link(slug: str, source_urls: dict[str, str]) -> str:
+    """Format source as a markdown hyperlink."""
+    label = SOURCE_LABELS.get(slug, slug)
+    url = source_urls.get(slug)
+    if url:
+        return f"[{label}]({url})"
+    return label
+
+
+def load_riwayat_names() -> dict[str, str]:
+    """Load riwayah slug -> display name from riwayat.json."""
+    riwayat_path = REPO / "data" / "riwayat.json"
+    if not riwayat_path.exists():
+        return {}
+    data = json.loads(riwayat_path.read_text())
+    return {r["slug"]: r["name"] for r in data}
+
+
+def discover_reciters() -> list[dict]:
+    """Walk all audio manifests and return a flat list of reciter records.
+
+    Each record: {slug, name_en, source, style, riwayah, audio_cat, coverage, has_timing}
     """
-    result: dict[str, dict[str, list[dict]]] = {}
+    records = []
     if not AUDIO_PATH.exists():
-        return result
+        return records
 
     for category in ("by_surah", "by_ayah"):
         cat_dir = AUDIO_PATH / category
         if not cat_dir.is_dir():
             continue
-        cat_data: dict[str, list[dict]] = {}
         for source_dir in sorted(cat_dir.iterdir()):
             if not source_dir.is_dir():
                 continue
             source = source_dir.name
-            reciters = []
             for p in sorted(source_dir.glob("*.json")):
-                slug = p.stem
-                name = slug.replace("_", " ").title()
-                # Count entries to show coverage
-                entries = 0
                 try:
                     with open(p, encoding="utf-8") as f:
                         data = json.load(f)
-                    entries = len(data)
                 except (json.JSONDecodeError, OSError):
-                    pass
-                reciters.append({"slug": slug, "name": name, "entries": entries})
-            if reciters:
-                cat_data[source] = reciters
-        if cat_data:
-            result[category] = cat_data
-    return result
+                    continue
+
+                meta = data.get("_meta", {})
+                slug = p.stem
+                name_en = meta.get("name_en", slug.replace("_", " ").title())
+                riwayah = meta.get("riwayah", "hafs_an_asim")
+                style = meta.get("style", "murattal")
+                has_timing = "_timing" in meta
+
+                entries = {k: v for k, v in data.items() if k != "_meta"}
+                coverage = len(entries)
+
+                records.append({
+                    "slug": slug,
+                    "name_en": name_en,
+                    "source": source,
+                    "style": style,
+                    "riwayah": riwayah,
+                    "audio_cat": category,
+                    "coverage": coverage,
+                    "has_timing": has_timing,
+                })
+    return records
 
 
 def collect_processed_reciters() -> list[dict]:
     """Scan disk to build the Processed reciters list.
 
-    Walks data/recitation_segments/*/ for directories containing segments.json,
-    then checks data/timestamps/ for timestamp status.
-
     Returns list of dicts sorted by name:
-        [{"slug", "name", "audio_source", "coverage_str", "ts_level"}, ...]
+        [{"slug", "name_en", "audio_source", "coverage_str", "segmented",
+          "manually_validated", "ts_level"}, ...]
     """
     processed = []
     if not SEGMENTS_PATH.is_dir():
@@ -93,9 +167,7 @@ def collect_processed_reciters() -> list[dict]:
             continue
 
         slug = seg_dir.name
-        name = slug.replace("_", " ").title()
 
-        # Read _meta and count coverage from segments.json
         audio_source = ""
         surahs = set()
         ayah_count = 0
@@ -107,20 +179,21 @@ def collect_processed_reciters() -> list[dict]:
                 if key == "_meta":
                     continue
                 ayah_count += 1
-                # Keys like "1:1" or cross-verse "37:151:3-37:152:2"
                 surahs.add(key.split(":")[0])
         except (json.JSONDecodeError, OSError):
             pass
 
         surah_count = len(surahs)
-        coverage_str = f"{surah_count} surahs, {ayah_count} ayahs"
+        coverage_str = f"{surah_count}/{ayah_count}"
 
-        # Check timestamp status
+        # Check timestamp status (use git-tracked files, not disk)
         ts_level = "\u2717"
         for audio_type in ("by_ayah_audio", "by_surah_audio"):
             ts_dir = TIMESTAMPS_PATH / audio_type / slug
-            if (ts_dir / "timestamps.json").exists():
-                if (ts_dir / "timestamps_full.json").exists():
+            ts_file = ts_dir / "timestamps.json"
+            ts_full = ts_dir / "timestamps_full.json"
+            if _is_git_tracked(ts_file):
+                if _is_git_tracked(ts_full):
                     ts_level = "\u2713\u2713"
                 else:
                     ts_level = "\u2713"
@@ -128,204 +201,388 @@ def collect_processed_reciters() -> list[dict]:
 
         processed.append({
             "slug": slug,
-            "name": name,
             "audio_source": audio_source,
             "coverage_str": coverage_str,
             "ts_level": ts_level,
         })
 
-    return sorted(processed, key=lambda r: r["name"])
+    return processed
 
 
-def generate_processed_markdown(processed: list[dict]) -> tuple[str, int]:
-    """Generate the Processed Reciters markdown section.
+def enrich_processed(processed: list[dict], all_records: list[dict]) -> list[dict]:
+    """Enrich processed reciters with manifest metadata (riwayah, style, etc.)."""
+    # Build lookup from slug -> manifest record
+    by_slug = {}
+    for r in all_records:
+        # Prefer the source that matches the processed audio_source
+        key = r["slug"]
+        audio_source_path = f"{r['audio_cat']}/{r['source']}"
+        by_slug.setdefault(key, {})
+        by_slug[key][audio_source_path] = r
 
-    Returns (markdown_text, processed_count).
-    """
+    enriched = []
+    for p in processed:
+        slug = p["slug"]
+        manifest = None
+        if slug in by_slug:
+            if p["audio_source"] in by_slug[slug]:
+                manifest = by_slug[slug][p["audio_source"]]
+            else:
+                manifest = next(iter(by_slug[slug].values()))
+
+        enriched.append({
+            **p,
+            "name_en": manifest["name_en"] if manifest else slug.replace("_", " ").title(),
+            "riwayah": manifest["riwayah"] if manifest else "hafs_an_asim",
+            "style": manifest["style"] if manifest else "murattal",
+            "source": manifest["source"] if manifest else "unknown",
+            "audio_cat": manifest["audio_cat"] if manifest else "unknown",
+            "has_timing": manifest["has_timing"] if manifest else False,
+        })
+
+    return sorted(enriched, key=lambda r: r["name_en"])
+
+
+def granularity_str(audio_cat: str, has_timing: bool) -> str:
+    """Format the granularity column value."""
+    if audio_cat == "by_ayah":
+        return "Ayah"
+    if has_timing:
+        return "Surah + Ayah timings"
+    return "Surah"
+
+
+def riwayah_display(slug: str, names: dict[str, str]) -> str:
+    """Format riwayah for display: 'Hafs A'n Assem' from riwayat.json."""
+    return names.get(slug, slug.replace("_", " ").title())
+
+
+def generate_summary_tables(all_records: list[dict], riwayah_names: dict[str, str]) -> str:
+    """Generate a single 6-column side-by-side summary table: riwayah | style | source."""
+    riwayah_counts = defaultdict(int)
+    style_counts = defaultdict(int)
+    source_counts = defaultdict(int)
+
+    for r in all_records:
+        riwayah_counts[r["riwayah"]] += 1
+        style_counts[r["style"]] += 1
+        source_counts[r["source"]] += 1
+
+    # Build ordered lists for each dimension
+    riwayah_rows = []
+    seen = set()
+    for _qari, riwayat in QIRAAT_HIERARCHY:
+        for rw in riwayat:
+            if rw in riwayah_counts:
+                riwayah_rows.append((riwayah_display(rw, riwayah_names), riwayah_counts[rw]))
+                seen.add(rw)
+    for rw, count in sorted(riwayah_counts.items(), key=lambda x: -x[1]):
+        if rw not in seen:
+            riwayah_rows.append((riwayah_display(rw, riwayah_names), count))
+
+    style_order = ["murattal", "mujawwad", "muallim", "children_repeat", "taraweeh"]
+    style_rows = []
+    seen_styles = set()
+    for s in style_order:
+        if s in style_counts:
+            label = s.replace("_", " ").title()
+            style_rows.append((label, style_counts[s]))
+            seen_styles.add(s)
+    for s, count in sorted(style_counts.items(), key=lambda x: -x[1]):
+        if s not in seen_styles:
+            label = s.replace("_", " ").title()
+            style_rows.append((label, count))
+
+    source_urls = load_source_urls()
+    source_rows = []
+    for src, count in sorted(source_counts.items(), key=lambda x: -x[1]):
+        source_rows.append((source_link(src, source_urls), count))
+
+    # Pad to same length
+    max_rows = max(len(riwayah_rows), len(style_rows), len(source_rows))
+    while len(riwayah_rows) < max_rows:
+        riwayah_rows.append(("", ""))
+    while len(style_rows) < max_rows:
+        style_rows.append(("", ""))
+    while len(source_rows) < max_rows:
+        source_rows.append(("", ""))
+
     lines = [
-        "## Processed Reciters",
+        "## Summary",
+        "",
+        "| Riwayah | | Style | | Source | |",
+        "|---------|:-:|-------|:-:|--------|:-:|",
+    ]
+    for (rw_name, rw_n), (st_name, st_n), (src_name, src_n) in zip(
+        riwayah_rows, style_rows, source_rows
+    ):
+        lines.append(f"| {rw_name} | {rw_n} | {st_name} | {st_n} | {src_name} | {src_n} |")
+
+    return "\n".join(lines)
+
+
+def group_by_riwayah(records: list[dict]) -> dict[str, list[dict]]:
+    """Group records by riwayah slug."""
+    groups = defaultdict(list)
+    for r in records:
+        groups[r["riwayah"]].append(r)
+    # Sort each group by name
+    for rw in groups:
+        groups[rw].sort(key=lambda r: r["name_en"])
+    return groups
+
+
+def generate_processed_markdown(processed: list[dict], riwayah_names: dict[str, str]) -> tuple[str, int]:
+    """Generate the Processed Reciters markdown section grouped by qira'ah > riwayah."""
+    lines = [
+        "## Aligned Reciters",
         "",
         "Reciters that have been through the alignment and timestamp pipelines.",
         "",
-        "Timestamps column: `\u2713\u2713` = words + letters/phonemes, `\u2713` = words only.",
+        "Timestamps: `\u2713\u2713` = words + letters/phonemes, `\u2713` = words only.",
         "",
-        "",
-        "| Reciter | Coverage | Segmented | Manually Validated | Timestamped |",
-        "|---------|----------|:---------:|:------------------:|:-----------:|",
     ]
 
-    for r in processed:
-        lines.append(
-            f"| {r['name']} | {r['coverage_str']} | \u2713 | \u2713 | {r['ts_level']} |"
-        )
+    if not processed:
+        lines.append("*No aligned reciters yet.*")
+        return "\n".join(lines), 0
 
-    return "\n".join(lines), len(processed)
+    by_rw = group_by_riwayah(processed)
+    count = 0
 
+    for qari, riwayat in QIRAAT_HIERARCHY:
+        section_records = []
+        for rw in riwayat:
+            if rw in by_rw:
+                section_records.extend([(rw, r) for r in by_rw[rw]])
 
-def filter_available(data: dict, processed: list[dict]) -> dict:
-    """Remove processed reciters from Available data.
+        if not section_records:
+            continue
 
-    Matches by (slug, audio_source) so a reciter processed from by_ayah/everyayah
-    is excluded from that source but still appears in by_surah/qul under a
-    different slug.
-    """
-    processed_sources = {(r["slug"], r["audio_source"]) for r in processed}
+        lines.append(f"### {qari}")
+        lines.append("")
 
-    filtered = {}
-    for category, sources in data.items():
-        filtered_sources = {}
-        for source, reciters in sources.items():
-            source_path = f"{category}/{source}"
-            kept = [r for r in reciters if (r["slug"], source_path) not in processed_sources]
-            if kept:
-                filtered_sources[source] = kept
-        if filtered_sources:
-            filtered[category] = filtered_sources
-    return filtered
+        current_rw = None
+        for rw, r in section_records:
+            if rw != current_rw:
+                if current_rw is not None:
+                    lines.append("")
+                lines.append(f"#### {riwayah_display(rw, riwayah_names)}")
+                lines.append("")
+                lines.append(
+                    "| Reciter | Style | Source | Granularity | Coverage "
+                    "| Segmented | Manually Validated | Timestamped |"
+                )
+                lines.append(
+                    "|---------|-------|--------|-------------|:--------:"
+                    "|:---------:|:------------------:|:-----------:|"
+                )
+                current_rw = rw
 
+            gran = granularity_str(r["audio_cat"], r["has_timing"])
+            src = SOURCE_LABELS.get(r["source"], r["source"])
+            lines.append(
+                f"| {r['name_en']} | {r['style'].title()} | {src} | {gran} | {r['coverage_str']} "
+                f"| \u2713 | \u2713 | {r['ts_level']} |"
+            )
+            count += 1
 
-def find_cross_source(data: dict) -> dict[str, list[str]]:
-    """Find reciters that appear in multiple sources (by slug)."""
-    slug_sources: dict[str, list[str]] = defaultdict(list)
-    for category, sources in data.items():
-        for source, reciters in sources.items():
-            for r in reciters:
-                slug_sources[r["slug"]].append(f"{category}/{source}")
-    return {slug: locs for slug, locs in slug_sources.items() if len(locs) > 1}
+        lines.append("")
 
-
-def print_summary(data: dict) -> None:
-    total = 0
-    print("Category        Source             Reciters  Format")
-    print("-" * 62)
-    for category in ("by_surah", "by_ayah"):
-        sources = data.get(category, {})
-        for source in sorted(sources):
-            reciters = sources[source]
-            count = len(reciters)
-            total += count
-            # Infer format from entry count of first reciter
-            sample = reciters[0]["entries"] if reciters else 0
-            if sample == 114:
-                fmt = "surah-keyed (114)"
-            elif sample == 6236:
-                fmt = "ayah-keyed (6236)"
-            else:
-                fmt = f"{sample} entries"
-            print(f"{category:<15} {source:<18} {count:>5}     {fmt}")
-    print("-" * 62)
-    print(f"{'Total':<34} {total:>5}")
-
-    cross = find_cross_source(data)
-    if cross:
-        print(f"\nReciters in multiple sources ({len(cross)}):")
-        for slug, locs in sorted(cross.items()):
-            name = slug.replace("_", " ").title()
-            print(f"  {name:<40} {', '.join(locs)}")
+    return "\n".join(lines), count
 
 
-def print_detail(data: dict) -> None:
-    for category in ("by_surah", "by_ayah"):
-        sources = data.get(category, {})
-        for source in sorted(sources):
-            reciters = sources[source]
-            print(f"\n=== {category}/{source} ({len(reciters)} reciters) ===")
-            for r in reciters:
-                print(f"  {r['name']:<45} ({r['entries']} entries)")
+def generate_available_markdown(
+    records: list[dict],
+    processed_slugs: set[str],
+    riwayah_names: dict[str, str],
+) -> tuple[str, int]:
+    """Generate the Available Reciters section grouped by qira'ah > riwayah."""
+    # Filter out processed reciters
+    available = [r for r in records if r["slug"] not in processed_slugs]
 
-
-def print_json(data: dict) -> None:
-    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
-    print()
-
-
-def generate_available_markdown(data: dict) -> tuple[str, int]:
-    """Generate the Available Reciters markdown section.
-
-    Returns (markdown_text, total_count).
-    """
     lines = [
         "## Available Reciters",
         "",
-        "All reciters with audio manifests in `data/audio/`. Not yet processed through the pipeline.",
-        "",
-        "Within a category (`by_surah` or `by_ayah`), each reciter appears under exactly one source "
-        "\u2014 no duplicates across sources. A reciter *can* appear in both `by_surah` and `by_ayah` "
-        "(different audio granularity from different providers).",
+        "All reciters with audio manifests in `data/audio/`. Not yet aligned — "
+        "[submit a request](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) to align.",
     ]
-    total = 0
 
-    for category, heading in [("by_surah", "By Surah"), ("by_ayah", "By Ayah")]:
-        sources = data.get(category, {})
-        if not sources:
+    if not available:
+        lines.append("")
+        lines.append("*No available reciters.*")
+        return "\n".join(lines), 0
+
+    by_rw = group_by_riwayah(available)
+    count = 0
+
+    for qari, riwayat in QIRAAT_HIERARCHY:
+        section_records = []
+        for rw in riwayat:
+            if rw in by_rw:
+                section_records.extend([(rw, r) for r in by_rw[rw]])
+
+        if not section_records:
+            continue
+
+        lines.append("")
+        lines.append(f"### {qari}")
+        lines.append("")
+
+        current_rw = None
+        for rw, r in section_records:
+            if rw != current_rw:
+                if current_rw is not None:
+                    lines.append("")
+                lines.append(f"#### {riwayah_display(rw, riwayah_names)}")
+                lines.append("")
+                lines.append("| # | Reciter | Style | Source | Granularity | Coverage |")
+                lines.append("|---|---------|-------|--------|-------------|:--------:|")
+                current_rw = rw
+                row_num = 0
+
+            row_num += 1
+            gran = granularity_str(r["audio_cat"], r["has_timing"])
+            src = SOURCE_LABELS.get(r["source"], r["source"])
+            cov = f"{r['coverage']}/114" if r["audio_cat"] == "by_surah" else f"{r['coverage']}/6236"
+            lines.append(
+                f"| {row_num} | {r['name_en']} | {r['style'].title()} | {src} | {gran} | {cov} |"
+            )
+            count += 1
+
+        lines.append("")
+
+    # Catch any riwayat not in hierarchy
+    for rw, recs in sorted(by_rw.items()):
+        already = any(rw in riwayat for _, riwayat in QIRAAT_HIERARCHY)
+        if already:
             continue
         lines.append("")
-        lines.append(f"### {heading}")
+        lines.append(f"### Other")
+        lines.append("")
+        lines.append(f"#### {riwayah_display(rw, riwayah_names)}")
+        lines.append("")
+        lines.append("| # | Reciter | Style | Source | Granularity | Coverage |")
+        lines.append("|---|---------|-------|--------|-------------|:--------:|")
+        for i, r in enumerate(recs, 1):
+            gran = granularity_str(r["audio_cat"], r["has_timing"])
+            src = SOURCE_LABELS.get(r["source"], r["source"])
+            cov = f"{r['coverage']}/114" if r["audio_cat"] == "by_surah" else f"{r['coverage']}/6236"
+            lines.append(
+                f"| {i} | {r['name_en']} | {r['style'].title()} | {src} | {gran} | {cov} |"
+            )
+            count += 1
 
-        for source in sorted(sources):
-            reciters = sources[source]
-            # Determine source label from directory name
-            lines.append("")
-            source_labels = {
-                "qul": "`qul` (Tarteel CDN)",
-                "surah-quran": "`surah-quran` (surah-quran.com)",
-                "asswatul-quran": "`asswatul-quran` (asswatul-quran.com)",
-                "everyayah": "`everyayah` (everyayah.com)",
-            }
-            label = source_labels.get(source, f"`{source}`")
-            lines.append(f"#### {label}")
-            lines.append("")
-            lines.append("| # | Reciter |")
-            lines.append("|---|---------|")
-            for i, r in enumerate(reciters, 1):
-                lines.append(f"| {i} | {r['name']} |")
-                total += 1
-
-    return "\n".join(lines), total
+    return "\n".join(lines), count
 
 
-def write_reciters_md(data: dict) -> int:
-    """Regenerate RECITERS.md entirely from disk state.
-
-    Both the Processed and Available sections are rebuilt. Processed reciters
-    are excluded from the Available tables.
-
-    Returns total reciter count (available + processed).
-    """
+def write_reciters_md(all_records: list[dict]) -> int:
+    """Regenerate RECITERS.md entirely from disk state."""
     reciters_path = REPO / "data" / "RECITERS.md"
+    riwayah_names = load_riwayat_names()
+    source_urls = load_source_urls()
 
-    # Build Processed section from disk
+    # Summary tables
+    summary_md = generate_summary_tables(all_records, riwayah_names)
+
+    # Processed section
     processed = collect_processed_reciters()
-    processed_md, processed_count = generate_processed_markdown(processed)
+    enriched = enrich_processed(processed, all_records)
+    processed_md, processed_count = generate_processed_markdown(enriched, riwayah_names)
+    processed_slugs = {p["slug"] for p in processed}
 
-    # Build Available section, filtering out processed reciters
-    filtered = filter_available(data, processed)
-    available_md, available_count = generate_available_markdown(filtered)
+    # Available section
+    available_md, available_count = generate_available_markdown(
+        all_records, processed_slugs, riwayah_names
+    )
 
     # Assemble full file
     header = (
         "# Reciters\n"
         "\n"
-        "Full list of available reciters. Generated from `scripts/list_reciters.py`.\n"
+        f"**{available_count + processed_count}** reciter entries "
+        f"({processed_count} aligned, {available_count} available). "
+        "Generated from `scripts/list_reciters.py`.\n"
+        "\n"
+        "> **Note:** A \"reciter entry\" is a unique combination of reciter \u00d7 riwayah \u00d7 style \u00d7 granularity, "
+        "not a unique person. For example, Mahmoud Khalil Al-Hussary appears as 5 entries: "
+        "Hafs Murattal Ayah, Hafs Murattal Surah, Hafs Mujawwad Surah, Hafs Muallim Ayah, "
+        "and Warsh Murattal Surah.\n"
+        ">\n"
+        "> Within a given source, each reciter appears only once per riwayah/style combination. "
+        "Across sources, there are no duplicates \u2014 a reciter's riwayah/style pair is served by exactly one source. "
+        "The same reciter *can* appear multiple times under different Surah/Ayah granularities.\n"
         "\n"
     )
-    reciters_path.write_text(header + processed_md + "\n\n---\n\n" + available_md + "\n")
+    reciters_path.write_text(
+        header + summary_md + "\n\n---\n\n" + processed_md + "\n\n---\n\n" + available_md + "\n"
+    )
     print(f"Updated: {reciters_path}")
 
     total = available_count + processed_count
 
-    # Update README.md badge
+    # Update README.md badges
     readme_path = REPO / "README.md"
-    readme = readme_path.read_text()
-    readme = re.sub(
-        r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
-        rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
-        readme,
-    )
-    readme_path.write_text(readme)
-    print(f"Updated: {readme_path} (available: {available_count}, processed: {processed_count})")
+    if readme_path.exists():
+        readme = readme_path.read_text()
+        readme = re.sub(
+            r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
+            rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
+            readme,
+        )
+        # Count riwayat with data vs total defined
+        riwayat_with_data = len({r["riwayah"] for r in all_records})
+        riwayat_total = len(json.loads((REPO / "data" / "riwayat.json").read_text()))
+        readme = re.sub(
+            r"Riwayat-\d+(%20%2F%20)\d+",
+            rf"Riwayat-{riwayat_with_data}\g<1>{riwayat_total}",
+            readme,
+        )
+        readme_path.write_text(readme)
+        print(f"Updated: {readme_path} (available: {available_count}, aligned: {processed_count}, riwayat: {riwayat_with_data}/{riwayat_total})")
 
     return total
+
+
+def print_summary(data: list[dict]) -> None:
+    riwayah_counts = defaultdict(int)
+    style_counts = defaultdict(int)
+    source_counts = defaultdict(int)
+
+    for r in data:
+        riwayah_counts[r["riwayah"]] += 1
+        style_counts[r["style"]] += 1
+        source_counts[r["source"]] += 1
+
+    print(f"\nTotal: {len(data)} reciter entries\n")
+    print("Riwayah                        Count")
+    print("-" * 42)
+    for rw, count in sorted(riwayah_counts.items(), key=lambda x: -x[1]):
+        print(f"  {rw:<28} {count:>5}")
+    print()
+    print("Style                          Count")
+    print("-" * 42)
+    for s, count in sorted(style_counts.items(), key=lambda x: -x[1]):
+        print(f"  {s:<28} {count:>5}")
+    print()
+    print("Source                         Count")
+    print("-" * 42)
+    for src, count in sorted(source_counts.items(), key=lambda x: -x[1]):
+        print(f"  {src:<28} {count:>5}")
+
+
+def print_detail(data: list[dict]) -> None:
+    by_rw = group_by_riwayah(data)
+    for rw in sorted(by_rw, key=lambda x: -len(by_rw[x])):
+        recs = by_rw[rw]
+        print(f"\n=== {rw} ({len(recs)} reciters) ===")
+        for r in recs:
+            print(f"  {r['name_en']:<40} {r['style']:<12} {r['source']:<14} {r['audio_cat']}")
+
+
+def print_json(data: list[dict]) -> None:
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    print()
 
 
 def main():

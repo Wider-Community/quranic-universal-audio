@@ -1,6 +1,6 @@
 # Data Directory
 
-Reference data and all pipeline I/O for the Quran forced alignment toolkit.
+Reference data and all pipeline I/O for the Quran forced alignment toolkit. See [RECITERS.md](RECITERS.md) for the full list of available sources, reciters and their metadata.
 
 ```
 data/
@@ -22,10 +22,6 @@ data/
     └── by_surah/
 ```
 
-Current audio sources (see [RECITERS.md](RECITERS.md) for the full list):
-- **by_surah:** `qul`, `surah-quran`, `asswatul-quran`
-- **by_ayah:** `everyayah`, `qul`
-
 ---
 
 ## Audio Inputs (`audio/`)
@@ -39,16 +35,19 @@ A single JSON file where keys are surah numbers (`"1"` to `"114"`) mapping to au
 ```json
 {
   "_meta": {
-    "reciter": "ahmad_alnufais",
+    "reciter": "mishary_alafasi",
+    "name_en": "Mishary Alafasi",
+    "name_ar": "مشاري العفاسي",
     "riwayah": "hafs_an_asim",
+    "style": "murattal",
     "audio_category": "by_surah",
-    "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": ""
+    "source": "https://mp3quran.net/",
+    "country": "unknown"
   },
-  "1": "https://audio-cdn.tarteel.ai/quran/surah/alnufais/murattal/mp3/001.mp3",
-  "2": "https://audio-cdn.tarteel.ai/quran/surah/alnufais/murattal/mp3/002.mp3",
+  "1": "https://server8.mp3quran.net/afs/001.mp3",
+  "2": "https://server8.mp3quran.net/afs/002.mp3",
   ...
-  "114": "https://audio-cdn.tarteel.ai/quran/surah/alnufais/murattal/mp3/114.mp3"
+  "114": "https://server8.mp3quran.net/afs/114.mp3"
 }
 ```
 
@@ -62,11 +61,14 @@ A single JSON file where keys are `"surah:ayah"` pairs mapping to audio URLs.
 ```json
 {
   "_meta": {
-    "reciter": "minshawy_murattal",
+    "reciter": "mohammed_siddiq_al_minshawi",
+    "name_en": "Mohammed Siddiq Al-Minshawi",
+    "name_ar": "محمد صديق المنشاوي",
     "riwayah": "hafs_an_asim",
+    "style": "murattal",
     "audio_category": "by_ayah",
     "source": "https://everyayah.com/",
-    "country": ""
+    "country": "unknown"
   },
   "1:1": "https://everyayah.com/data/Minshawy_Murattal_128kbps/001001.mp3",
   "1:2": "https://everyayah.com/data/Minshawy_Murattal_128kbps/001002.mp3",
