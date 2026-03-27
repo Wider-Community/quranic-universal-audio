@@ -18,7 +18,7 @@
 
 https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
-## Use cases
+## Use Cases
 
 - **Word-highlighted recitation** — Accurate word and letter timestamps for highlighting in Qur'an apps, learning tools, and educational platforms.
 - **Generate EveryAyah style audio from surah recordings** — Extract per-ayah audio clips from full-surah recordings, producing verse-by-verse files for any reciter even when only surah-level audio exists.
@@ -37,7 +37,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 | [`reciter_requests`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
 | [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Quran-specific G2P; the foundation that makes phoneme-level alignment possible |
 
-## Key Highlights & features
+## Key Highlights
 
 - **Phoneme-level alignment.** Most Qur'an audio tools align at the word level. This project aligns at the phoneme level first, then recovers word and letter boundaries from the phoneme timestamps. The result is significantly more precise and accurate word timings.
 
@@ -55,7 +55,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 See the [detailed comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md) for concrete examples of accuracy and robustness to repetitions.
 
-## Accessing the data
+## Accessing Data
 
 If you're just here for the audio, timestamps or segment data, you can access them as follows:
 
