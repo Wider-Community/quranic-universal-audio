@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Murattal",
+    "slug": "murattal",
+    "description": "Standard recitation at a moderate, measured pace following tajweed rules"
+  },
+  {
+    "name": "Mujawwad",
+    "slug": "mujawwad",
+    "description": "Melodic recitation with elaborate vocal ornamentation and extended maqam patterns"
+  },
+  {
+    "name": "Muallim",
+    "slug": "muallim",
+    "description": "Teaching recitation with pauses for student repetition"
+  },
+  {
+    "name": "Children Repeat",
+    "slug": "children_repeat",
+    "description": "Each verse repeated multiple times at a pace suited for children's memorisation (hifz)"
+  },
+  {
+    "name": "Taraweeh",
+    "slug": "taraweeh",
+    "description": "Live recordings from Taraweeh night prayers during Ramadan"
+  }
+]
