@@ -41,12 +41,12 @@
   },
   {
     "name": "Albizi A'n Ibn Katheer",
-    "mp3quran_type": [41, 111],
+    "mp3quran_type": [41],
     "slug": "bazzi_ibn_kathir"
   },
   {
     "name": "Qunbol A'n Ibn Katheer",
-    "mp3quran_type": [61, 111],
+    "mp3quran_type": [61],
     "slug": "qunbul_ibn_kathir"
   },
   {
