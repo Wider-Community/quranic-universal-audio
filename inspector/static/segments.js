@@ -31,6 +31,46 @@ let _waveformObserver = null;    // IntersectionObserver for lazy waveform drawi
 let _segSavedFilterView = null;  // { filters, chapter, verse, scrollTop } — saved when "Go To" from filter results
 
 // ---------------------------------------------------------------------------
+// Edit history — operation log (sent with save payload)
+// ---------------------------------------------------------------------------
+let segOpLog = new Map();   // Map<chapter, Array<operation>>
+let _pendingOp = null;      // stashed op for multi-step edits (trim, split, ref edit)
+
+function createOp(opType, { contextCategory = null, fixKind = 'manual' } = {}) {
+    return {
+        op_id: crypto.randomUUID(),
+        op_type: opType,
+        op_context_category: contextCategory,
+        fix_kind: fixKind,
+        started_at_utc: new Date().toISOString(),
+        applied_at_utc: null,
+        ready_at_utc: null,
+        targets_before: [],
+        targets_after: [],
+    };
+}
+
+function snapshotSeg(seg) {
+    return {
+        segment_uid: seg.segment_uid || null,
+        index_at_save: seg.index,
+        audio_url: seg.audio_url || null,
+        time_start: seg.time_start,
+        time_end: seg.time_end,
+        matched_ref: seg.matched_ref || '',
+        matched_text: seg.matched_text || '',
+        confidence: seg.confidence ?? 0,
+    };
+}
+
+function finalizeOp(chapter, op) {
+    op.ready_at_utc = new Date().toISOString();
+    if (!segOpLog.has(chapter)) segOpLog.set(chapter, []);
+    segOpLog.get(chapter).push(op);
+    _pendingOp = null;
+}
+
+// ---------------------------------------------------------------------------
 // Dirty-state helpers
 // ---------------------------------------------------------------------------
 
@@ -737,6 +777,8 @@ function clearSegDisplay() {
     segDisplayedSegments = null;
     segCurrentIdx = -1;
     segDirtyMap.clear();
+    segOpLog.clear();
+    _pendingOp = null;
     segEditMode = null;
     segEditIndex = -1;
     segStatsData = null;
@@ -1459,6 +1501,10 @@ function startRefEdit(refSpan, seg, row) {
     // Already editing
     if (refSpan.querySelector('input')) return;
 
+    // Edit history: snapshot before ref edit
+    _pendingOp = createOp('edit_reference');
+    _pendingOp.targets_before = [snapshotSeg(seg)];
+
     const originalRef = seg.matched_ref || '';
     const input = document.createElement('input');
     input.type = 'text';
@@ -1487,6 +1533,7 @@ function startRefEdit(refSpan, seg, row) {
         } else if (e.key === 'Escape') {
             e.preventDefault();
             committed = true;
+            _pendingOp = null;  // discard edit history op on cancel
             refSpan.textContent = formatRef(originalRef);
         }
     });
@@ -1497,14 +1544,27 @@ function startRefEdit(refSpan, seg, row) {
 
 async function commitRefEdit(seg, newRef, row) {
     const oldRef = seg.matched_ref || '';
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
     if (newRef === oldRef) {
         // Same ref confirmed — mark as validated (100% confidence)
         if (seg.confidence < 1.0) {
+            // Edit history: confirm_reference (audit)
+            if (_pendingOp) {
+                _pendingOp.op_type = 'confirm_reference';
+                _pendingOp.fix_kind = 'audit';
+            }
             seg.confidence = 1.0;
             delete seg._derived;
-            markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
+            markDirty(chapter, seg.index);
             syncAllCardsForSegment(seg);
+            // Edit history: finalize confirm
+            if (_pendingOp) {
+                _pendingOp.applied_at_utc = new Date().toISOString();
+                _pendingOp.targets_after = [snapshotSeg(seg)];
+                finalizeOp(chapter, _pendingOp);
+            }
         } else {
+            _pendingOp = null;  // no-op: ref unchanged, already 1.0
             const refSpan = row.querySelector('.seg-text-ref');
             if (refSpan) refSpan.textContent = formatRef(oldRef);
         }
@@ -1539,10 +1599,17 @@ async function commitRefEdit(seg, newRef, row) {
     }
 
     delete seg._derived;
-    markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
+    markDirty(chapter, seg.index);
 
     // Update all matching cards globally (both main and error sections)
     syncAllCardsForSegment(seg);
+
+    // Edit history: finalize edit_reference after resolve + sync
+    if (_pendingOp) {
+        _pendingOp.applied_at_utc = new Date().toISOString();
+        _pendingOp.targets_after = [snapshotSeg(seg)];
+        finalizeOp(chapter, _pendingOp);
+    }
 }
 
 /** Update a single .seg-row card in-place (works for both main and error section cards). */
@@ -1609,11 +1676,15 @@ async function onSegSaveClick() {
             const chSegs = getChapterSegments(ch);
             let payload;
 
+            // Attach edit history operations for this chapter
+            const chOps = segOpLog.get(ch) || [];
+
             if (entry.structural) {
                 // Structural change (split/merge/delete/trim) — replace entire chapter
                 payload = {
                     full_replace: true,
                     segments: chSegs.map(s => ({
+                        segment_uid: s.segment_uid || '',
                         time_start: s.time_start,
                         time_end: s.time_end,
                         matched_ref: s.matched_ref,
@@ -1622,6 +1693,7 @@ async function onSegSaveClick() {
                         phonemes_asr: s.phonemes_asr || '',
                         audio_url: s.audio_url || '',
                     })),
+                    operations: chOps,
                 };
                 savedChanges += chSegs.length;
             } else {
@@ -1632,6 +1704,7 @@ async function onSegSaveClick() {
                     if (seg) {
                         updates.push({
                             index: seg.index,
+                            segment_uid: seg.segment_uid || '',
                             matched_ref: seg.matched_ref,
                             matched_text: seg.matched_text,
                             confidence: seg.confidence,
@@ -1639,7 +1712,7 @@ async function onSegSaveClick() {
                     }
                 }
                 if (updates.length === 0) continue;
-                payload = { segments: updates };
+                payload = { segments: updates, operations: chOps };
                 savedChanges += updates.length;
             }
 
@@ -1656,11 +1729,13 @@ async function onSegSaveClick() {
             }
             // Remove successfully saved chapter so partial failures keep remaining entries
             segDirtyMap.delete(ch);
+            segOpLog.delete(ch);
             savedChapters++;
         }
 
         if (allOk) {
             segDirtyMap.clear();
+            segOpLog.clear();
             const msg = savedChapters > 1
                 ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
                 : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
@@ -1702,6 +1777,8 @@ async function onSegUndoClick() {
             segUndoBtn.hidden = true;
             segUndoBtn.disabled = false;
             segUndoBtn.textContent = 'Undo Save';
+            segOpLog.clear();
+            _pendingOp = null;
             // Reload data for the current reciter
             onSegReciterChange();
         } else {
@@ -1893,11 +1970,16 @@ async function enterEditWithBuffer(seg, row, mode) {
         }
     }
 
+    // Edit history: snapshot before entering edit mode
+    _pendingOp = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment');
+    _pendingOp.targets_before = [snapshotSeg(seg)];
+
     try {
         if (mode === 'trim') enterTrimMode(seg, row);
         else if (mode === 'split') enterSplitMode(seg, row);
     } catch (e) {
         console.error(`[${mode}] error entering edit mode:`, e);
+        _pendingOp = null;
         segEditMode = null;
         segEditIndex = -1;
         document.body.classList.remove('seg-edit-active');
@@ -2157,6 +2239,14 @@ function confirmTrim(seg) {
     seg.time_end = newEnd;
     markDirty(chapter, undefined, true);
 
+    // Edit history: record applied state
+    const trimOp = _pendingOp;
+    _pendingOp = null;  // detach so exitEditMode doesn't null it
+    if (trimOp) {
+        trimOp.applied_at_utc = new Date().toISOString();
+        trimOp.targets_after = [snapshotSeg(seg)];
+    }
+
     if (chapter !== currentChapter || !segData?.segments) {
         segAllData._byChapter = null; segAllData._byChapterIndex = null;
     } else {
@@ -2167,6 +2257,10 @@ function confirmTrim(seg) {
     exitEditMode();
     applyVerseFilterAndRender();
     syncAllCardsForSegment(seg);
+
+    // Edit history: finalize after re-render
+    if (trimOp) finalizeOp(chapter, trimOp);
+
     segPlayStatus.textContent = 'Adjusted (unsaved)';
 }
 
@@ -2427,10 +2521,12 @@ function confirmSplit(seg) {
 
     const firstHalf = {
         ...seg,
+        segment_uid: crypto.randomUUID(),
         time_end: splitTime,
     };
     const secondHalf = {
         ...seg,
+        segment_uid: crypto.randomUUID(),
         index: seg.index + 1,
         time_start: splitTime,
         matched_ref: '',
@@ -2438,6 +2534,14 @@ function confirmSplit(seg) {
         display_text: '',
         confidence: 0,
     };
+
+    // Edit history: record applied state with new UIDs
+    const splitOp = _pendingOp;
+    _pendingOp = null;  // detach so exitEditMode doesn't null it
+    if (splitOp) {
+        splitOp.applied_at_utc = new Date().toISOString();
+        splitOp.targets_after = [snapshotSeg(firstHalf), snapshotSeg(secondHalf)];
+    }
 
     if (useSegData) {
         const segIdx = segData.segments.findIndex(s => s.index === seg.index);
@@ -2462,6 +2566,10 @@ function confirmSplit(seg) {
     exitEditMode();
     applyVerseFilterAndRender();
     invalidateLoadedErrorCards();
+
+    // Edit history: finalize after re-render
+    if (splitOp) finalizeOp(chapter, splitOp);
+
     segPlayStatus.textContent = 'Segment split (unsaved)';
 }
 
@@ -2492,6 +2600,11 @@ function mergeAdjacent(seg, direction) {
 
     const first = direction === 'prev' ? other : seg;
     const second = direction === 'prev' ? seg : other;
+
+    // Edit history: snapshot before merge
+    const mergeOp = createOp('merge_segments');
+    mergeOp.targets_before = [snapshotSeg(first), snapshotSeg(second)];
+
     const firstAudio = first.audio_url || '';
     const secondAudio = second.audio_url || '';
     if (firstAudio !== secondAudio) {
@@ -2512,6 +2625,7 @@ function mergeAdjacent(seg, direction) {
 
     const merged = {
         ...first,
+        segment_uid: crypto.randomUUID(),
         index: first.index,
         time_start: first.time_start,
         time_end: second.time_end,
@@ -2520,6 +2634,10 @@ function mergeAdjacent(seg, direction) {
         display_text: [first.display_text, second.display_text].filter(Boolean).join(' '),
         confidence: 1.0,
     };
+
+    // Edit history: record applied state
+    mergeOp.applied_at_utc = new Date().toISOString();
+    mergeOp.targets_after = [snapshotSeg(merged)];
 
     if (chapter === currentChapter && segData?.segments) {
         const spliceIdx = Math.min(idx, otherIdx);
@@ -2543,6 +2661,10 @@ function mergeAdjacent(seg, direction) {
     computeSilenceAfter();
     applyVerseFilterAndRender();
     invalidateLoadedErrorCards();
+
+    // Edit history: finalize after re-render
+    finalizeOp(chapter, mergeOp);
+
     segPlayStatus.textContent = 'Segments merged (unsaved)';
 }
 
@@ -2556,7 +2678,16 @@ function deleteSegment(seg, row) {
     const chapter = seg.chapter || parseInt(segChapterSelect.value);
     const currentChapter = parseInt(segChapterSelect.value);
     const label = seg.chapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
+
+    // Edit history: snapshot before confirm dialog
+    const deleteOp = createOp('delete_segment');
+    deleteOp.targets_before = [snapshotSeg(seg)];
+
     if (!confirm(`Delete segment ${label} (${formatRef(seg.matched_ref) || 'no match'})?`)) return;
+
+    // Edit history: user confirmed deletion
+    deleteOp.applied_at_utc = new Date().toISOString();
+    deleteOp.targets_after = [];
 
     if (chapter === currentChapter && segData?.segments) {
         // Current chapter: operate on segData.segments
@@ -2592,6 +2723,10 @@ function deleteSegment(seg, row) {
     computeSilenceAfter();
     applyVerseFilterAndRender();
     invalidateLoadedErrorCards();
+
+    // Edit history: finalize after re-render
+    finalizeOp(chapter, deleteOp);
+
     segPlayStatus.textContent = 'Segment deleted (unsaved)';
 }
 
@@ -2601,6 +2736,9 @@ function deleteSegment(seg, row) {
 // ---------------------------------------------------------------------------
 
 function exitEditMode() {
+    // Discard any pending edit history op (user cancelled)
+    _pendingOp = null;
+
     // Restore audio buffer if it was swapped for cross-chapter editing
     const panel = document.getElementById('seg-edit-panel');
     if (panel) {
@@ -3430,6 +3568,13 @@ function renderCategoryCards(type, items, container) {
                     const segChapter = seg.chapter || issue.chapter;
                     const wasDirty = isIndexDirty(segChapter, seg.index);
 
+                    // Edit history: set up auto_fix op before commitRefEdit
+                    _pendingOp = createOp('auto_fix_missing_word', {
+                        contextCategory: 'missing_words', fixKind: 'auto_fix'
+                    });
+                    _pendingOp.targets_before = [snapshotSeg(seg)];
+                    const _autoFixOpId = _pendingOp.op_id;
+
                     const newRef = `${af.new_ref_start}-${af.new_ref_end}`;
                     const entry = segsInWrapper.find(s => s.seg === seg);
                     const card = entry?.card || wrapper;
@@ -3455,6 +3600,12 @@ function renderCategoryCards(type, items, container) {
                         syncAllCardsForSegment(seg);
                         undoBtn.remove();
                         segSaveBtn.disabled = !isDirty();
+                        // Edit history: remove the auto-fix op from log
+                        const ops = segOpLog.get(segChapter);
+                        if (ops) {
+                            const idx = ops.findIndex(o => o.op_id === _autoFixOpId);
+                            if (idx !== -1) ops.splice(idx, 1);
+                        }
                     });
                     fixBtn.after(undoBtn);
                 });
@@ -3528,10 +3679,24 @@ function renderCategoryCards(type, items, container) {
                 ignoreBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (seg.confidence >= 1.0) return;
+                    const segChapter = seg.chapter || parseInt(segChapterSelect.value);
+
+                    // Edit history: ignore op
+                    const ignoreOp = createOp('ignore_issue', {
+                        contextCategory: type, fixKind: 'ignore'
+                    });
+                    ignoreOp.targets_before = [snapshotSeg(seg)];
+                    ignoreOp.applied_at_utc = ignoreOp.started_at_utc;
+
                     seg.confidence = 1.0;
                     delete seg._derived;
-                    markDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index);
+                    markDirty(segChapter, seg.index);
                     syncAllCardsForSegment(seg);
+
+                    // Edit history: finalize
+                    ignoreOp.targets_after = [snapshotSeg(seg)];
+                    finalizeOp(segChapter, ignoreOp);
+
                     ignoreBtn.disabled = true;
                     ignoreBtn.textContent = 'Ignored';
                     wrapper.style.opacity = '0.5';

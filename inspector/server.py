@@ -4,6 +4,7 @@ Alignment Inspector Server
 Flask server for browsing alignment timestamps, recitation segments, and audio.
 """
 import argparse
+import hashlib
 import json
 import random
 import re
@@ -13,11 +14,25 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time as _time
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
+
+
+def _uuid7() -> str:
+    """Generate a UUIDv7 (time-ordered, RFC 9562) as a hyphenated string."""
+    ts_ms = int(_time.time() * 1000)
+    rand_bytes = uuid.uuid4().bytes
+    uuid_int = (ts_ms & 0xFFFFFFFFFFFF) << 80
+    uuid_int |= 0x7000 << 64  # version 7
+    uuid_int |= (int.from_bytes(rand_bytes[:2], "big") & 0x0FFF) << 64
+    uuid_int |= 0x8000000000000000  # variant 10
+    uuid_int |= int.from_bytes(rand_bytes[2:10], "big") & 0x3FFFFFFFFFFFFFFF
+    return str(uuid.UUID(int=uuid_int))
 
 
 from config import (
@@ -925,10 +940,16 @@ def get_seg_all(reciter):
             idx = chapter_seg_idx.get(chapter, 0)
             chapter_seg_idx[chapter] = idx + 1
             mref = seg.get("matched_ref", "")
+            # Assign stable segment_uid if missing (persists on next save)
+            seg_uid = seg.get("segment_uid") or ""
+            if not seg_uid:
+                seg_uid = _uuid7()
+                seg["segment_uid"] = seg_uid
             segments.append({
                 "chapter":      chapter,
                 "entry_idx":    entry_idx,
                 "index":        idx,
+                "segment_uid":  seg_uid,
                 "time_start":   seg.get("time_start", 0),
                 "time_end":     seg.get("time_end", 0),
                 "matched_ref":  mref,
@@ -1056,7 +1077,9 @@ def save_seg_data(reciter, chapter):
     def _make_seg(s):
         existing = existing_by_time.get((s.get("time_start", 0), s.get("time_end", 0)), {})
         phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
+        seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
         return {
+            "segment_uid": seg_uid,
             "time_start": s.get("time_start", 0),
             "time_end": s.get("time_end", 0),
             "matched_ref": _normalize_ref(s.get("matched_ref", "")),
@@ -1064,6 +1087,10 @@ def save_seg_data(reciter, chapter):
             "confidence": s.get("confidence", 0.0),
             "phonemes_asr": phonemes,
         }
+
+    # Edit history: snapshot validation counts before mutation
+    meta = _SEG_META_CACHE.get(reciter, {})
+    val_before = _chapter_validation_counts(entries, chapter, meta)
 
     if updates.get("full_replace"):
         if len(matching) == 1:
@@ -1131,12 +1158,33 @@ def save_seg_data(reciter, chapter):
         shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
 
     # Write detailed.json
-    meta = _SEG_META_CACHE.get(reciter, {})
     with open(detailed_path, "w", encoding="utf-8") as f:
         json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
 
+    # Compute file hash for tamper detection
+    file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
+
     # Rebuild segments.json
     _rebuild_segments_json(reciter, entries)
+
+    # Edit history: snapshot validation counts after mutation and write batch record
+    val_after = _chapter_validation_counts(entries, chapter, meta)
+    operations = updates.get("operations", [])
+    batch = {
+        "schema_version": 1,
+        "batch_id": _uuid7(),
+        "reciter": reciter,
+        "chapter": chapter,
+        "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "save_mode": "full_replace" if updates.get("full_replace") else "patch",
+        "file_hash_after": file_hash,
+        "validation_summary_before": val_before,
+        "validation_summary_after": val_after,
+        "operations": operations,
+    }
+    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    with open(history_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(batch, ensure_ascii=False) + "\n")
 
     # Invalidate cache
     global _SEG_RECITERS_CACHE
@@ -1166,10 +1214,41 @@ def undo_seg_save(reciter):
     detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
     segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
 
+    # Read last edit_history record to link the revert
+    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    last_batch_id = None
+    last_chapter = None
+    if history_path.exists():
+        try:
+            lines = history_path.read_text(encoding="utf-8").strip().splitlines()
+            if lines:
+                last_record = json.loads(lines[-1])
+                last_batch_id = last_record.get("batch_id")
+                last_chapter = last_record.get("chapter")
+        except (json.JSONDecodeError, OSError):
+            pass
+
     # Restore from backup
     shutil.copy2(detailed_bak, detailed_path)
     if segments_bak.exists():
         shutil.copy2(segments_bak, segments_path)
+
+    # Compute file hash of restored file
+    file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
+
+    # Append revert record to edit history (append-only, never mutates old records)
+    revert = {
+        "schema_version": 1,
+        "batch_id": _uuid7(),
+        "reverts_batch_id": last_batch_id,
+        "reciter": reciter,
+        "chapter": last_chapter,
+        "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "file_hash_after": file_hash,
+        "operations": [],
+    }
+    with open(history_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(revert, ensure_ascii=False) + "\n")
 
     # Remove backup files (single-level undo only)
     detailed_bak.unlink()
@@ -1253,6 +1332,117 @@ def _rebuild_segments_json(reciter: str, entries: list[dict]):
         json.dump(seg_doc, f, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------------------
+# Validation constants and helpers (shared by validate endpoint and edit history)
+# ---------------------------------------------------------------------------
+import unicodedata as _ud
+
+_MUQATTAAT_VERSES = {
+    (2,1),(3,1),(7,1),(10,1),(11,1),(12,1),(13,1),(14,1),(15,1),
+    (19,1),(20,1),(26,1),(27,1),(28,1),(29,1),(30,1),(31,1),(32,1),
+    (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
+    (46,1),(50,1),(68,1),
+}
+_STANDALONE_REFS = {
+    (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
+    (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
+}
+_STANDALONE_WORDS = {"كلا", "ذلك", "سبحنهۥ"}
+_STRIP_CHARS = set("\u0640\u06de\u06e6\u06e9\u200f")
+
+
+def _strip_quran_deco(text):
+    """Strip Quranic decoration and diacritics for bare-skeleton comparison."""
+    text = _ud.normalize("NFD", text)
+    out = []
+    for ch in text:
+        if ch in _STRIP_CHARS:
+            continue
+        if _ud.category(ch) == "Mn":
+            continue
+        out.append(ch)
+    return "".join(out).strip()
+
+
+def _chapter_validation_counts(entries: list, chapter: int, meta: dict) -> dict:
+    """Count validation issues for a single chapter. Returns {category: count}."""
+    word_counts = _get_word_counts()
+    single_word_verses = {k for k, v in word_counts.items() if v == 1}
+    is_by_ayah = "by_ayah" in meta.get("audio_source", "")
+
+    counts = {
+        "failed": 0, "low_confidence": 0, "oversegmented": 0,
+        "cross_verse": 0, "missing_words": 0, "audio_bleeding": 0,
+    }
+    verse_segments: dict[tuple, list] = defaultdict(list)
+
+    for entry in entries:
+        ch = _chapter_from_ref(entry["ref"])
+        if ch != chapter:
+            continue
+        entry_ref = entry.get("ref", "")
+        for seg in entry.get("segments", []):
+            matched_ref = seg.get("matched_ref", "")
+            confidence = seg.get("confidence", 0.0)
+
+            if not matched_ref:
+                counts["failed"] += 1
+                continue
+
+            if is_by_ayah and ":" in entry_ref and not _seg_belongs_to_entry(matched_ref, entry_ref):
+                counts["audio_bleeding"] += 1
+
+            if confidence < 0.80:
+                counts["low_confidence"] += 1
+
+            parts = matched_ref.split("-")
+            if len(parts) != 2:
+                continue
+            sp = parts[0].split(":")
+            ep = parts[1].split(":")
+            if len(sp) != 3 or len(ep) != 3:
+                continue
+            try:
+                surah, s_ayah, s_word = int(sp[0]), int(sp[1]), int(sp[2])
+                e_ayah, e_word = int(ep[1]), int(ep[2])
+            except (ValueError, IndexError):
+                continue
+
+            if s_ayah != e_ayah:
+                counts["cross_verse"] += 1
+                for ayah in range(s_ayah, e_ayah + 1):
+                    if ayah == s_ayah:
+                        wc = word_counts.get((surah, ayah), s_word)
+                        verse_segments[(surah, ayah)].append((s_word, wc))
+                    elif ayah == e_ayah:
+                        verse_segments[(surah, ayah)].append((1, e_word))
+                    else:
+                        wc = word_counts.get((surah, ayah), 1)
+                        verse_segments[(surah, ayah)].append((1, wc))
+            else:
+                verse_segments[(surah, s_ayah)].append((s_word, e_word))
+                if (s_word == e_word
+                    and (surah, s_ayah) not in _MUQATTAAT_VERSES
+                    and (surah, s_ayah) not in single_word_verses
+                    and (surah, s_ayah, s_word) not in _STANDALONE_REFS
+                    and _strip_quran_deco(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
+                    counts["oversegmented"] += 1
+
+    # Missing words
+    for (surah, ayah), seg_list in verse_segments.items():
+        expected = word_counts.get((surah, ayah))
+        if not expected:
+            continue
+        covered = set()
+        for wf, wt in seg_list:
+            covered.update(range(wf, wt + 1))
+        missing = set(range(1, expected + 1)) - covered
+        if missing:
+            counts["missing_words"] += len(missing)
+
+    return counts
+
+
 @app.route("/api/seg/validate/<reciter>")
 def validate_reciter_segments(reciter):
     """Validate all chapters for a reciter, returning issues grouped by category."""
@@ -1272,39 +1462,7 @@ def validate_reciter_segments(reciter):
     audio_bleeding = []
     chapter_seg_idx = {}  # chapter -> next index (running counter)
 
-    # Huruf muqattaat locations (surah, ayah) — excluded from oversegmented
-    _MUQATTAAT_VERSES = {
-        (2,1),(3,1),(7,1),(10,1),(11,1),(12,1),(13,1),(14,1),(15,1),
-        (19,1),(20,1),(26,1),(27,1),(28,1),(29,1),(30,1),(31,1),(32,1),
-        (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
-        (46,1),(50,1),(68,1),
-    }
-    # Single-word verses — excluded from oversegmented
     _single_word_verses = {k for k, v in word_counts.items() if v == 1}
-    # Known standalone word refs and texts — excluded from oversegmented
-    _STANDALONE_REFS = {
-        (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
-        (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
-    }
-    _STANDALONE_WORDS = {"كلا", "ذلك", "سبحنهۥ"}
-    # Strip Quranic decoration and diacritics so matched_text variants like
-    # "كَلَّآ" or "۞ ذَٰلِكَ" match the bare skeleton.
-    # Only chars actually present in matched_text data:
-    #   U+0640 ARABIC TATWEEL, U+06DE RUB EL HIZB, U+06E6 SMALL YEH,
-    #   U+06E9 PLACE OF SAJDAH, U+200F RTL MARK
-    # (U+06E5 SMALL WAW is kept — it's part of سبحنهۥ)
-    import unicodedata as _ud
-    _STRIP_CHARS = set("\u0640\u06de\u06e6\u06e9\u200f")
-    def _strip_quran_deco(text):
-        text = _ud.normalize("NFD", text)  # decompose آ → ا + combining madda, etc.
-        out = []
-        for ch in text:
-            if ch in _STRIP_CHARS:
-                continue
-            if _ud.category(ch) == "Mn":  # combining marks (diacritics)
-                continue
-            out.append(ch)
-        return "".join(out).strip()
 
     # Detect audio_source to know if by_ayah (bleeding only applies there)
     meta = _SEG_META_CACHE.get(reciter, {})
