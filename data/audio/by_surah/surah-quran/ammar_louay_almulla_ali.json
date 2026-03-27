@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Syria"
+    "country": "Syria",
+    "name_en": "Ammar Louay Al-Mulla Ali",
+    "name_ar": "عمار لؤي الملا علي"
   },
   "1": "https://archive.org/compress/002_20250410/001.mp3",
   "2": "https://archive.org/compress/002_20250410/002.mp3",

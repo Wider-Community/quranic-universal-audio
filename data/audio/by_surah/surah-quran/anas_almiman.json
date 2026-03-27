@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Saudi Arabia"
+    "country": "Saudi Arabia",
+    "name_en": "Anas Al-Miman",
+    "name_ar": "أنس الميمان"
   },
   "1": "https://ia800707.us.archive.org/1/items/alfirdwsiy1433_22_201812/001.mp3",
   "2": "https://ia800707.us.archive.org/1/items/alfirdwsiy1433_22_201812/002.mp3",

@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Fatih Seferagic",
+    "name_ar": "فاتح سفراجيك"
   },
   "1": "https://download.quranicaudio.com/quran/fatih_seferagic//001.mp3",
   "2": "https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3",

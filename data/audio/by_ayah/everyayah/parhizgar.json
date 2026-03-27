@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_ayah",
     "source": "https://everyayah.com/",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Shahriar Parhizgar",
+    "name_ar": "شهريار پرهيزكار"
   },
   "1:1": "https://everyayah.com/data/Parhizgar_48kbps/001001.mp3",
   "1:2": "https://everyayah.com/data/Parhizgar_48kbps/001002.mp3",

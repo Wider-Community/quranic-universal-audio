@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Sadaqat Ali",
+    "name_ar": "صدقات علي"
   },
   "1": "https://download.quranicaudio.com/quran/sadaqat_ali/001.mp3",
   "2": "https://download.quranicaudio.com/quran/sadaqat_ali/002.mp3",

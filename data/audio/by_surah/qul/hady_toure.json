@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Hady Toure",
+    "name_ar": "هادي توري"
   },
   "1": "https://download.quranicaudio.com/qdc/hadi_toure/mp3/1.mp3",
   "2": "https://download.quranicaudio.com/qdc/hadi_toure/mp3/2.mp3",

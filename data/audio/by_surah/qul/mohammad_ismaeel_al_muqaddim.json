@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Mohammad Ismaeel Al-Muqaddim",
+    "name_ar": "محمد إسماعيل المقدم"
   },
   "1": "https://download.quranicaudio.com/quran/mohammad_ismaeel_almuqaddim//001.mp3",
   "2": "https://download.quranicaudio.com/quran/mohammad_ismaeel_almuqaddim//002.mp3",

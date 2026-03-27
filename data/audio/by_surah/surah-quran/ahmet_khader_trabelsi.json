@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Lebanon"
+    "country": "Lebanon",
+    "name_en": "Ahmet Khader Trabelsi",
+    "name_ar": "أحمد خضر الطرابلسي"
   },
   "1": "https://server10.mp3quran.net/trabulsi/001.mp3",
   "2": "https://server10.mp3quran.net/trabulsi/002.mp3",

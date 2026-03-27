@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Asim Abdul-Aleem",
+    "name_ar": "عاصم عبدالعليم"
   },
   "1": "https://download.quranicaudio.com/quran/asim_abdulaleem//001.mp3",
   "2": "https://download.quranicaudio.com/quran/asim_abdulaleem//002.mp3",

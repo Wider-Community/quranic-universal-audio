@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Aziz Alili",
+    "name_ar": "عزيز عليلي"
   },
   "1": "https://download.quranicaudio.com/quran/aziz_alili//001.mp3",
   "2": "https://download.quranicaudio.com/quran/aziz_alili//002.mp3",

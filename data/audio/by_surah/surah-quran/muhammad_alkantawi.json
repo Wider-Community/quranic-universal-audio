@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Morocco"
+    "country": "Morocco",
+    "name_en": "Muhammad Al-Kantawi",
+    "name_ar": "محمد الكنتاوي"
   },
   "1": "https://ia601004.us.archive.org/10/items/Elkantaoui002/Elkantaoui001.mp3",
   "2": "https://ia601004.us.archive.org/10/items/Elkantaoui002/Elkantaoui002.mp3",

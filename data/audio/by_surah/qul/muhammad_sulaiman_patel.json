@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Muhammad Sulaiman Patel",
+    "name_ar": "محمد سليمان باتل"
   },
   "1": "https://download.quranicaudio.com/quran/muhammad_patel//001.mp3",
   "2": "https://download.quranicaudio.com/quran/muhammad_patel//002.mp3",

@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://qul.tarteel.ai/resources/recitation",
-    "country": "unknown"
+    "country": "unknown",
+    "name_en": "Abdur-Razaq bin Abtan al-Dulaimi",
+    "name_ar": "عبد الرزاق بن عبطان الدليمي"
   },
   "1": "https://download.quranicaudio.com/quran/abdulrazaq_bin_abtan_al_dulaimi//001.mp3",
   "2": "https://download.quranicaudio.com/quran/abdulrazaq_bin_abtan_al_dulaimi//002.mp3",

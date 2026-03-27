@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Turkey"
+    "country": "Turkey",
+    "name_en": "Ishak Danish",
+    "name_ar": "إسحاق دانش"
   },
   "1": "https://ia801309.us.archive.org/15/items/ishak_danish/001.mp3",
   "2": "https://ia801309.us.archive.org/15/items/ishak_danish/002.mp3",

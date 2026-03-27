@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Saudi Arabia"
+    "country": "Saudi Arabia",
+    "name_en": "Saeed Al-Khatib",
+    "name_ar": "سعيد الخطيب"
   },
   "1": "https://ia800401.us.archive.org/35/items/Said-Akhateeb/001.mp3",
   "2": "https://ia800401.us.archive.org/35/items/Said-Akhateeb/002.mp3",

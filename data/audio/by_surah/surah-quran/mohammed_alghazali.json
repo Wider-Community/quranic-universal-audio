@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Saudi Arabia"
+    "country": "Saudi Arabia",
+    "name_en": "Mohammed Al-Ghazali",
+    "name_ar": "محمد الغزالي"
   },
   "1": "https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/001.mp3",
   "2": "https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3",

@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Yemen"
+    "country": "Yemen",
+    "name_en": "Khalil Al-Saghir",
+    "name_ar": "خليل الصغير"
   },
   "1": "https://ia802905.us.archive.org/1/items/0ryy02_20200331_2020qeryeryeryeqry03/001.mp3",
   "2": "https://ia802905.us.archive.org/1/items/0ryy02_20200331_2020qeryeryeryeqry03/002.mp3",

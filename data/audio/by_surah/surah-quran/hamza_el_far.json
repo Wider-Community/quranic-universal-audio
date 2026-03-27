@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Jordan"
+    "country": "Jordan",
+    "name_en": "Hamza El Far",
+    "name_ar": "حمزة الفار"
   },
   "1": "https://ia801408.us.archive.org/6/items/002_20221105_202211/001.mp3",
   "2": "https://ia801408.us.archive.org/6/items/002_20221105_202211/002.mp3",

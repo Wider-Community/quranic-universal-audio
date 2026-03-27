@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Kuwait"
+    "country": "Kuwait",
+    "name_en": "Fahad Al-Mutairi",
+    "name_ar": "فهد المطيري"
   },
   "1": "https://archive.org/compress/fahad-almutairi/001.mp3",
   "2": "https://archive.org/compress/fahad-almutairi/002.mp3",

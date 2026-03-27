@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Saudi Arabia"
+    "country": "Saudi Arabia",
+    "name_en": "Yusuf Nooh",
+    "name_ar": "يوسف نوح"
   },
   "1": "https://server8.mp3quran.net/noah/001.mp3",
   "2": "https://server8.mp3quran.net/noah/002.mp3",

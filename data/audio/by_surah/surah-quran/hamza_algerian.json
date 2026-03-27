@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Algeria"
+    "country": "Algeria",
+    "name_en": "Hamza Al-Jazairi",
+    "name_ar": "حمزة الجزائري"
   },
   "1": "https://ia801208.us.archive.org/8/items/34734734732473247457/001.mp3",
   "2": "https://ia801208.us.archive.org/8/items/34734734732473247457/002.mp3",

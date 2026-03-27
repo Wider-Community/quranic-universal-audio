@@ -5,7 +5,9 @@
     "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://surahquran.com/quran-mp3-english.html",
-    "country": "Saudi Arabia"
+    "country": "Saudi Arabia",
+    "name_en": "Rayan Al-Muhaisni",
+    "name_ar": "ريان المحيسني"
   },
   "1": "https://ia800608.us.archive.org/6/items/002_20250107/001.mp3",
   "2": "https://ia800608.us.archive.org/6/items/002_20250107/002.mp3",
