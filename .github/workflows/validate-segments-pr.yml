@@ -1,0 +1,38 @@
+name: Validate Segment Edits
+
+on:
+  pull_request:
+    paths:
+      - 'data/recitation_segments/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git diff against base
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Detect changed reciters
+        id: detect
+        run: |
+          reciters=$(git diff ${{ github.event.pull_request.base.sha }}...HEAD \
+            --name-only -- data/recitation_segments/ | \
+            sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
+            sort -u | tr '\n' ' ')
+          echo "reciters=$(echo $reciters | xargs)" >> $GITHUB_OUTPUT
+          echo "Changed reciters: $reciters"
+
+      - name: Validate edit history
+        if: steps.detect.outputs.reciters != ''
+        run: |
+          python scripts/validate_edit_history.py \
+            --base-sha ${{ github.event.pull_request.base.sha }} \
+            --reciters ${{ steps.detect.outputs.reciters }}
