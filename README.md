@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 To access the audio or timestamps:
 
 1. **Direct download** — JSON files in [`data/`](data/), or packaged in [GitHub Releases](https://github.com/Wider-Community/ic-universal-audio/releases)
-2. **Hugging Face Dataset** — [ic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
+2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
 3. **QUD API** — *(coming soon)*
 
 ## Technical Overview
