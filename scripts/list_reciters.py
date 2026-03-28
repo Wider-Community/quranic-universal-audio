@@ -71,6 +71,7 @@ SOURCE_LABELS = {
     "everyayah": "EveryAyah",
     "qul": "QUL",
     "surah-quran": "Surah-Quran",
+    "youtube": "YouTube",
 }
 
 
@@ -518,6 +519,11 @@ def write_reciters_md(all_records: list[dict]) -> int:
         header + summary_md + "\n\n---\n\n" + processed_md + "\n\n---\n\n" + available_md + "\n"
     )
     print(f"Updated: {reciters_path}")
+
+    # Write machine-readable index for the HF request form
+    index_path = REPO / "data" / "reciters_index.json"
+    index_path.write_text(json.dumps(all_records, indent=2, ensure_ascii=False) + "\n")
+    print(f"Updated: {index_path}")
 
     total = available_count + processed_count
 

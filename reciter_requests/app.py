@@ -69,6 +69,12 @@ def _gh_headers():
 def _gh_get(path, params=None):
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/{path}"
     r = httpx.get(url, headers=_gh_headers(), params=params, timeout=30)
+    if r.status_code == 403 and r.headers.get("X-RateLimit-Remaining") == "0":
+        reset = int(r.headers.get("X-RateLimit-Reset", 0)) - int(time.time())
+        wait = min(max(reset, 1), 5)
+        logger.warning(f"GitHub rate limited, waiting {wait}s")
+        time.sleep(wait)
+        r = httpx.get(url, headers=_gh_headers(), params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -77,8 +83,23 @@ def _gh_get_raw(path):
     """Fetch raw file content from the default branch."""
     url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{path}"
     r = httpx.get(url, headers=_gh_headers(), timeout=30)
+    if r.status_code == 403:
+        time.sleep(2)
+        r = httpx.get(url, headers=_gh_headers(), timeout=30)
     r.raise_for_status()
     return r.text
+
+
+def _verify_github_user(username):
+    """Check if a GitHub username exists. Returns True/False/None (API error)."""
+    try:
+        r = httpx.get(
+            f"https://api.github.com/users/{username}",
+            headers=_gh_headers(), timeout=10,
+        )
+        return r.status_code == 200
+    except Exception:
+        return None  # Don't block on API errors
 
 
 # ---------------------------------------------------------------------------
@@ -184,13 +205,29 @@ def fetch_processed_reciters():
         return []
 
 
+def _fetch_reciters_index():
+    """Fetch the pre-computed reciters index from GitHub (single API call)."""
+    cached = _get_cached("reciters_index")
+    if cached is not None:
+        return cached
+    try:
+        raw = _gh_get_raw("data/reciters_index.json")
+        data = json.loads(raw)
+        _set_cached("reciters_index", data)
+        return data
+    except Exception as e:
+        logger.error(f"Failed to fetch reciters index: {e}")
+        return []
+
+
 def fetch_available_reciters():
-    """Fetch available (unprocessed) reciters from GitHub."""
+    """Fetch available (unprocessed) reciters from the pre-computed index."""
     cached = _get_cached("available")
     if cached is not None:
         return cached
 
     try:
+        index = _fetch_reciters_index()
         processed = fetch_processed_reciters()
         processed_slugs = {r["slug"] for r in processed}
 
@@ -203,7 +240,6 @@ def fetch_available_reciters():
                 "per_page": 100,
             })
             for iss in issues:
-                # Extract slug from issue body
                 body = iss.get("body", "")
                 slug_match = re.search(r"\*\*Slug:\*\*\s*(\S+)", body)
                 if slug_match:
@@ -212,50 +248,25 @@ def fetch_available_reciters():
             pass
 
         reciters = []
-        for category in ["by_surah", "by_ayah"]:
-            try:
-                sources = _gh_get(f"contents/data/audio/{category}")
-            except Exception:
-                continue
-            for source_entry in sources:
-                if source_entry["type"] != "dir":
-                    continue
-                source_name = source_entry["name"]
-                try:
-                    files = _gh_get(
-                        f"contents/data/audio/{category}/{source_name}"
-                    )
-                except Exception:
-                    continue
-                for f in files:
-                    if not f["name"].endswith(".json"):
-                        continue
-                    slug = f["name"].replace(".json", "")
-                    if slug in processed_slugs:
-                        continue
-
-                    # Try to get display name from _meta
-                    display_name = slug.replace("_", " ").title()
-                    source_path = f"{category}/{source_name}"
-
-                    reciters.append({
-                        "slug": slug,
-                        "name": display_name,
-                        "source": source_path,
-                        "has_pending_request": slug in pending,
-                        "pending_issue_url": pending.get(slug, ""),
-                    })
-
-        # Deduplicate by slug (keep first occurrence)
         seen = set()
-        unique = []
-        for r in reciters:
-            if r["slug"] not in seen:
-                seen.add(r["slug"])
-                unique.append(r)
+        for r in index:
+            slug = r["slug"]
+            if slug in processed_slugs or slug in seen:
+                continue
+            seen.add(slug)
+            source_path = f"{r['audio_cat']}/{r['source']}"
+            reciters.append({
+                "slug": slug,
+                "name": r["name_en"],
+                "source": source_path,
+                "riwayah": r["riwayah"],
+                "style": r["style"],
+                "has_pending_request": slug in pending,
+                "pending_issue_url": pending.get(slug, ""),
+            })
 
-        _set_cached("available", unique)
-        return unique
+        _set_cached("available", reciters)
+        return reciters
     except Exception as e:
         logger.error(f"Failed to fetch available reciters: {e}")
         return []
@@ -359,38 +370,35 @@ def fetch_request_issues():
 # ---------------------------------------------------------------------------
 # Submit request
 # ---------------------------------------------------------------------------
-RIWAYAT = [
-    # Asim
-    "Hafs A'n Assem",
-    "Sho'bah A'n Asim",
-    # Nafi
-    "Warsh A'n Nafi'",
-    "Qalon A'n Nafi'",
-    # Abu Amr
-    "Aldori A'n Abi Amr",
-    "Assosi A'n Abi Amr",
-    # Ibn Amir
-    "Hesham A'n Ibn Amer",
-    "Ibn Thakwan A'n Ibn Amer",
-    # Ibn Kathir
-    "Albizi A'n Ibn Katheer",
-    "Qunbol A'n Ibn Katheer",
-    # Hamzah
-    "Khalaf A'n Hamzah",
-    "Khallad A'n Hamzah",
-    # Al-Kisai
-    "Al-Layth A'n Al-Kisa'ai",
-    "AlDorai A'n Al-Kisa'ai",
-    # Abu Jafar
-    "Isa Ibn Wardan A'n Abi Ja'far",
-    "Ibn Jammaz A'n Abi Ja'far",
-    # Yaqub
-    "Rowis A'n Yakoob",
-    "Rawh A'n Yakoob",
-    # Khalaf
-    "Ishaq A'n Khalaf",
-    "Idris A'n Khalaf",
-]
+# Load riwayah data from riwayat.json (ground truth)
+_RIWAYAH_SLUG_TO_NAME: dict[str, str] = {}
+_RIWAYAH_NAME_TO_SLUG: dict[str, str] = {}
+RIWAYAT: list[str] = []
+
+
+def _load_riwayat():
+    """Fetch riwayat.json from GitHub and build slug↔name mappings."""
+    global _RIWAYAH_SLUG_TO_NAME, _RIWAYAH_NAME_TO_SLUG, RIWAYAT
+    if RIWAYAT:
+        return
+    try:
+        raw = _gh_get_raw("data/riwayat.json")
+        data = json.loads(raw)
+        _RIWAYAH_SLUG_TO_NAME = {r["slug"]: r["name"] for r in data}
+        _RIWAYAH_NAME_TO_SLUG = {r["name"]: r["slug"] for r in data}
+        RIWAYAT = [r["name"] for r in data]
+    except Exception as e:
+        logger.error(f"Failed to load riwayat.json: {e}")
+        # Fallback so the form still renders
+        RIWAYAT = ["Hafs A'n Assem"]
+        _RIWAYAH_SLUG_TO_NAME = {"hafs_an_asim": "Hafs A'n Assem"}
+        _RIWAYAH_NAME_TO_SLUG = {"Hafs A'n Assem": "hafs_an_asim"}
+
+
+def _riwayah_slug_to_name(slug: str) -> str:
+    """Convert riwayah slug to display name."""
+    _load_riwayat()
+    return _RIWAYAH_SLUG_TO_NAME.get(slug, slug.replace("_", " ").title())
 
 REQUEST_TYPES = ["New reciter", "Re-align"]
 
@@ -407,33 +415,57 @@ def submit_request(
         return "Error: Please select a reciter."
     if not requester_name or not requester_name.strip():
         return "Error: Please enter your name."
-    if not requester_email or "@" not in requester_email:
+    if not requester_email or not re.match(r"[^@\s]+@[^@\s]+\.[^@\s]+", requester_email.strip()):
         return "Error: Please enter a valid email address."
     if not request_type:
         return "Error: Please select a request type."
     if not riwayah:
         return "Error: Please select a riwayah."
-
-    min_silence_ms = int(min_silence_ms or 500)
+    _load_riwayat()
+    if RIWAYAT and riwayah not in _RIWAYAH_NAME_TO_SLUG and riwayah not in _RIWAYAH_SLUG_TO_NAME:
+        return f"Error: Unknown riwayah '{riwayah}'. Please select from the dropdown."
+    if min_silence_ms is None or min_silence_ms == "":
+        return "Error: Please enter a min silence value (100–2000ms). Check the parameter reference for guidance."
+    try:
+        min_silence_ms = int(min_silence_ms)
+    except (ValueError, TypeError):
+        return "Error: Min silence must be a number."
+    if not (100 <= min_silence_ms <= 2000):
+        return "Error: Min silence must be between 100 and 2000ms."
     request_type = request_type or "New reciter"
-    riwayah = riwayah or "Hafs A'n Assem"
 
-    # Check for duplicate (only for "New reciter" — re-align is allowed)
+    # Verify GitHub username if provided
+    github_username = (github_username or "").strip().lstrip("@")
+    if github_username:
+        user_exists = _verify_github_user(github_username)
+        if user_exists is False:
+            return f"Error: GitHub username '@{github_username}' not found. Please check the spelling."
+
+    # Check for duplicate (open AND closed issues)
     if request_type == "New reciter":
         try:
             issues = _gh_get("issues", params={
                 "labels": "request",
-                "state": "open",
+                "state": "all",
                 "per_page": 100,
             })
             for iss in issues:
                 body = iss.get("body", "")
                 if f"**Slug:** {reciter_slug}" in body:
                     url = iss["html_url"]
-                    return (
-                        f"This reciter already has a pending request.\n\n"
-                        f"Track status: {url}"
-                    )
+                    state = iss.get("state", "open")
+                    if state == "open":
+                        return (
+                            f"This reciter already has a pending request.\n\n"
+                            f"Track status: {url}"
+                        )
+                    else:
+                        return (
+                            f"This reciter was previously requested (now closed).\n\n"
+                            f"See: {url}\n\n"
+                            f"If you believe it needs re-processing, use the "
+                            f"'Re-align' request type instead."
+                        )
         except Exception as e:
             logger.warning(f"Duplicate check failed: {e}")
 
@@ -455,8 +487,8 @@ def submit_request(
         f"**Suggested Min Silence:** {min_silence_ms}ms\n"
         f"**Requester:** {requester_id}\n"
     )
-    if github_username and github_username.strip():
-        issue_body += f"**GitHub:** @{github_username.strip().lstrip('@')}\n"
+    if github_username:
+        issue_body += f"**GitHub:** @{github_username}\n"
     if notes and notes.strip():
         issue_body += f"**Notes:** {notes.strip()}\n"
 
@@ -466,8 +498,8 @@ def submit_request(
             "body": issue_body,
             "labels": ["request", "status:pending"],
         }
-        if github_username and github_username.strip():
-            issue_json["assignees"] = [github_username.strip().lstrip("@")]
+        if github_username:
+            issue_json["assignees"] = [github_username]
         issue_resp = httpx.post(
             f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues",
             headers=_gh_headers(),
@@ -493,7 +525,7 @@ def submit_request(
             "Request Type": {"select": {"name": request_type}},
             "Riwayah": {"rich_text": [{"text": {"content": riwayah}}]},
             "Min Silence": {"number": min_silence_ms},
-            "GitHub Username": {"rich_text": [{"text": {"content": (github_username or "").strip().lstrip("@")[:100]}}]},
+            "GitHub Username": {"rich_text": [{"text": {"content": github_username[:100]}}]},
             "Status": {"select": {"name": "Pending"}},
             "GitHub Issue": {"url": issue_url},
             "Issue Number": {"number": issue_number},
@@ -529,7 +561,11 @@ def get_reciter_choices(request_type="New reciter"):
                 "slug": r["slug"],
                 "name": r["name"],
                 "source": r.get("audio_source", ""),
+                "riwayah": "",
+                "style": "",
             })))
+        if not choices:
+            choices = [("All processed reciters are validated — no re-alignment needed", "")]
         return choices
     else:
         reciters = fetch_available_reciters()
@@ -542,6 +578,8 @@ def get_reciter_choices(request_type="New reciter"):
                 "slug": r["slug"],
                 "name": r["name"],
                 "source": r["source"],
+                "riwayah": r.get("riwayah", ""),
+                "style": r.get("style", ""),
             })))
         return choices
 
@@ -550,6 +588,21 @@ def update_reciter_choices(request_type):
     """Called when request type changes — swap reciter dropdown choices."""
     choices = get_reciter_choices(request_type)
     return gr.update(choices=choices, value=None)
+
+
+def on_reciter_selected(reciter_json):
+    """Auto-fill riwayah dropdown when a reciter is selected."""
+    if not reciter_json:
+        return gr.update()
+    try:
+        info = json.loads(reciter_json)
+        riwayah_slug = info.get("riwayah", "")
+        if riwayah_slug:
+            display_name = _riwayah_slug_to_name(riwayah_slug)
+            return gr.update(value=display_name)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return gr.update()
 
 
 def get_requests_markdown():
@@ -640,6 +693,10 @@ def refresh_dashboard():
 # ---------------------------------------------------------------------------
 # Gradio App
 # ---------------------------------------------------------------------------
+
+# Pre-load riwayat data before building UI
+_load_riwayat()
+
 with gr.Blocks(title="Reciter Requests") as demo:
     gr.Markdown("# Quran Reciter Segmentation Requests")
     gr.Markdown(
@@ -670,14 +727,14 @@ with gr.Blocks(title="Reciter Requests") as demo:
                     )
                     riwayah_dd = gr.Dropdown(
                         choices=RIWAYAT,
-                        value="Hafs A'n Assem",
                         label="Riwayah",
-                        info="Quranic reading tradition. Most existing reciters "
-                             "use Hafs A'n Assem — verify by listening.",
+                        info="Auto-filled from the reciter's manifest. "
+                             "Change only if you know the reciter uses a different reading.",
                     )
                     min_silence = gr.Number(
-                        value=500, label="Min Silence (ms)",
-                        info="Minimum silence duration to split segments",
+                        value=None, label="Min Silence (ms)",
+                        info="Required. Check the parameter reference table for guidance. "
+                             "Murattal: 300–600ms, Mujawwad: 600–1200ms.",
                         minimum=100, maximum=2000, step=50,
                     )
                     req_name = gr.Textbox(
@@ -719,6 +776,12 @@ with gr.Blocks(title="Reciter Requests") as demo:
                 fn=update_reciter_choices,
                 inputs=[request_type_dd],
                 outputs=[reciter_dd],
+            )
+
+            reciter_dd.change(
+                fn=on_reciter_selected,
+                inputs=[reciter_dd],
+                outputs=[riwayah_dd],
             )
 
             submit_btn.click(
@@ -780,8 +843,8 @@ async def api_request(request: Request):
         reciter_name=req.get("reciter_name", ""),
         audio_source=req.get("audio_source", ""),
         request_type=req.get("request_type", "New reciter"),
-        riwayah=req.get("riwayah", "Hafs A'n Assem"),
-        min_silence_ms=req.get("min_silence_ms", 500),
+        riwayah=req.get("riwayah", ""),
+        min_silence_ms=req.get("min_silence_ms"),
         requester_name=req.get("requester_name", ""),
         requester_email=req.get("requester_email", ""),
         notes=req.get("notes", ""),

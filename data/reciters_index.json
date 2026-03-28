@@ -1,0 +1,3812 @@
+[
+  {
+    "slug": "abdelaziz_sheim_warsh",
+    "name_en": "Abdelaziz sheim",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 15,
+    "has_timing": false
+  },
+  {
+    "slug": "abdelbari_al_toubayti",
+    "name_en": "Abdelbari Al-Toubayti",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdul_aziz_al_ahmad",
+    "name_en": "Abdul Aziz Al-Ahmad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdul_rahman_bin_abdul_razzaq_al_badr",
+    "name_en": "Abdul Rahman bin Abdul Razzaq Al Badr",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulaziz_alasiri",
+    "name_en": "Abdulaziz Alasiri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 72,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulaziz_alturki",
+    "name_en": "Abdulaziz Alturki",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulaziz_az_zahrani",
+    "name_en": "Abdulaziz Az-Zahrani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulbadi_ghailan",
+    "name_en": "Abdulbadi Ghailan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulbari_mohammad",
+    "name_en": "Abdulbari Mohammad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulbari_mohammad_muallim",
+    "name_en": "Abdulbari Mohammad",
+    "source": "mp3quran",
+    "style": "muallim",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 91,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulbasit_abdulsamad",
+    "name_en": "Abdulbasit Abdulsamad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulbasit_abdulsamad_mujawwad",
+    "name_en": "Abdulbasit Abdulsamad",
+    "source": "mp3quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulbasit_abdulsamad_warsh",
+    "name_en": "Abdulbasit Abdulsamad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulelah_bin_aoun",
+    "name_en": "Abdulelah bin Aoun",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulghani_abdullah",
+    "name_en": "Abdulghani Abdullah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 13,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulhadi_kanakeri",
+    "name_en": "Abdulhadi Kanakeri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulkareem_alhazmi",
+    "name_en": "Abdulkareem Alhazmi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_abdal",
+    "name_en": "Abdullah Abdal",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_burimi",
+    "name_en": "Abdullah Al-Burimi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 69,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_johany",
+    "name_en": "Abdullah Al-Johany",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_al_kandari",
+    "name_en": "Abdullah Al-Kandari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_khalaf",
+    "name_en": "Abdullah Al-Khalaf",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_al_mattrod",
+    "name_en": "Abdullah Al-Mattrod",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_al_mishal",
+    "name_en": "Abdullah Al-Mishal",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 11,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_mousa",
+    "name_en": "Abdullah Al-Mousa",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_al_mousa_muallim",
+    "name_en": "Abdullah Al-Mousa",
+    "source": "mp3quran",
+    "style": "muallim",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 38,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_al_qarafi",
+    "name_en": "Abdullah Al-Qarafi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_albuajan",
+    "name_en": "Abdullah Albuajan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_basfer",
+    "name_en": "Abdullah Basfer",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_bukhari",
+    "name_en": "Abdullah Bukhari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 80,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_fahmi",
+    "name_en": "Abdullah Fahmi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 4,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_kamel",
+    "name_en": "Abdullah Kamel",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_khayyat",
+    "name_en": "Abdullah Khayyat",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdullah_qaulan",
+    "name_en": "Abdullah Qaulan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulmajeed_al_arkani",
+    "name_en": "Abdulmajeed Al-Arkani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 49,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulmalik_alaskar",
+    "name_en": "Abdulmalik Alaskar",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 7,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulmohsen_al_qasim",
+    "name_en": "Abdulmohsen Al-Qasim",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulmohsin_al_askar",
+    "name_en": "Abdulmohsin Al-Askar",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 4,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulmohsin_al_harthy",
+    "name_en": "Abdulmohsin Al-Harthy",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulmohsin_al_obaikan",
+    "name_en": "Abdulmohsin Al-Obaikan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulrahman_al_majed",
+    "name_en": "Abdulrahman Al-Majed",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulrahman_aloosi",
+    "name_en": "Abdulrahman Aloosi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulrahman_alshahhat",
+    "name_en": "Abdulrahman Alshahhat",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulrahman_alsudaes",
+    "name_en": "Abdulrahman Alsudaes",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulrahman_alsuwayid",
+    "name_en": "Abdulrahman Alsuwayid",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 107,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulrasheed_soufi",
+    "name_en": "Abdulrasheed Soufi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulrasheed_soufi_khalaf",
+    "name_en": "Abdulrasheed Soufi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "khalaf_an_hamzah",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulrasheed_soufi_susi",
+    "name_en": "Abdulrasheed Soufi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "susi_abu_amr",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulwadood_haneef",
+    "name_en": "Abdulwadood Haneef",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdulwali_al_arkani",
+    "name_en": "Abdulwali Al-Arkani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "addokali_mohammad_alalim_qalon",
+    "name_en": "Addokali Mohammad Alalim",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "adel_al_khalbany",
+    "name_en": "Adel Al-Khalbany",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "adel_ryyan",
+    "name_en": "Adel Ryyan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_al_ajmy",
+    "name_en": "Ahmad Al-Ajmy",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_al_hawashi",
+    "name_en": "Ahmad Al-Hawashi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_al_nufais",
+    "name_en": "Ahmad Al Nufais",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_alhuthaifi",
+    "name_en": "Ahmad Alhuthaifi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 110,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmad_deban",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_bazzi",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "bazzi_ibn_kathir",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_duri",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_al_kisai",
+    "audio_cat": "by_surah",
+    "coverage": 13,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_duri_abu_amr",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_hisham",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hisham_ibn_amir",
+    "audio_cat": "by_surah",
+    "coverage": 27,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_ibn",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "ibn_jummaz_abu_jafar",
+    "audio_cat": "by_surah",
+    "coverage": 11,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_ibn_dhakwan",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "ibn_dhakwan_ibn_amir",
+    "audio_cat": "by_surah",
+    "coverage": 33,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_khalaf",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "khalaf_an_hamzah",
+    "audio_cat": "by_surah",
+    "coverage": 6,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_qalon",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_qunbul",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qunbul_ibn_kathir",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_shubah",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "shubah_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_susi",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "susi_abu_amr",
+    "audio_cat": "by_surah",
+    "coverage": 19,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_deban_warsh",
+    "name_en": "Ahmad Deban",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_issa_al_maasaraawi",
+    "name_en": "Ahmad Issa Al Maasaraawi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmad_issa_al_maasaraawi_rawh",
+    "name_en": "Ahmad Issa Al Maasaraawi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "rawh_an_yaqub",
+    "audio_cat": "by_surah",
+    "coverage": 64,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmad_nauina",
+    "name_en": "Ahmad Nauina",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_saber",
+    "name_en": "Ahmad Saber",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_saud",
+    "name_en": "Ahmad Saud",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 30,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmad_shaheen",
+    "name_en": "Ahmad Shaheen",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmad_talib_bin_humaid",
+    "name_en": "Ahmad Talib bin Humaid",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 107,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_al_swailem",
+    "name_en": "Ahmed Al-Swailem",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_al_trabulsi",
+    "name_en": "Ahmed Al-trabulsi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmed_al_trabulsi_qalon",
+    "name_en": "Ahmed Al-trabulsi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ahmed_amer",
+    "name_en": "Ahmed Amer",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "akhil_abdulhayy_rawa",
+    "name_en": "Akhil Abdulhayy Rawa",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 4,
+    "has_timing": false
+  },
+  {
+    "slug": "akram_alalaqmi",
+    "name_en": "Akram Alalaqmi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "al_qaria_yassen_warsh",
+    "name_en": "Al-Qaria Yassen",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "alashri_omran",
+    "name_en": "Alashri Omran",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 113,
+    "has_timing": false
+  },
+  {
+    "slug": "alfateh_alzubair_duri",
+    "name_en": "Alfateh Alzubair",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "alhusayni_al_azazi_muallim",
+    "name_en": "Alhusayni Al-Azazi",
+    "source": "mp3quran",
+    "style": "muallim",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 57,
+    "has_timing": false
+  },
+  {
+    "slug": "ali_abo_hashim",
+    "name_en": "Ali Abo-Hashim",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 14,
+    "has_timing": false
+  },
+  {
+    "slug": "ali_alhuthaifi",
+    "name_en": "Ali Alhuthaifi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ali_alhuthaifi_qalon",
+    "name_en": "Ali Alhuthaifi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ali_alhuthaifi_shubah",
+    "name_en": "Ali Alhuthaifi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "shubah_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ali_hajjaj_alsouasi",
+    "name_en": "Ali Hajjaj Alsouasi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ali_jaber",
+    "name_en": "Ali Jaber",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "alijon_qori",
+    "name_en": "Alijon Qori",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "aloyoon_al_koshi_warsh",
+    "name_en": "Aloyoon Al-Koshi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "alwaleed_alshamsan",
+    "name_en": "Alwaleed Alshamsan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 71,
+    "has_timing": false
+  },
+  {
+    "slug": "alzain_mohammad_ahmad",
+    "name_en": "Alzain Mohammad Ahmad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "anas_alemadi",
+    "name_en": "Anas Alemadi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "bader_alturki",
+    "name_en": "Bader Alturki",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "bandar_balilah",
+    "name_en": "Bandar Balilah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "dawood_hamza",
+    "name_en": "Dawood Hamza",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "emad_hafez",
+    "name_en": "Emad Hafez",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "fahad_al_kandari",
+    "name_en": "Fahad Al-Kandari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 77,
+    "has_timing": false
+  },
+  {
+    "slug": "fahad_al_otaibi",
+    "name_en": "Fahad Al-Otaibi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 8,
+    "has_timing": false
+  },
+  {
+    "slug": "faisal_al_hajry",
+    "name_en": "Faisal Al-Hajry",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "fares_abbad",
+    "name_en": "Fares Abbad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "fawaz_alkabi",
+    "name_en": "Fawaz Alkabi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 49,
+    "has_timing": false
+  },
+  {
+    "slug": "fouad_alkhamery",
+    "name_en": "Fouad Alkhamery",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "haitham_aldukhain",
+    "name_en": "Haitham Aldukhain",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "hamad_al_daghriri",
+    "name_en": "Hamad Al Daghriri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 87,
+    "has_timing": false
+  },
+  {
+    "slug": "hani_arrifai",
+    "name_en": "Hani Arrifai",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "haroon_baqai",
+    "name_en": "Haroon Baqai",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 51,
+    "has_timing": true
+  },
+  {
+    "slug": "hasan_saleh",
+    "name_en": "Hasan Saleh",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hashim_abu_dalal",
+    "name_en": "Hashim Abu Dalal",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hassan_aldaghriri",
+    "name_en": "Hassan Aldaghriri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hatem_fareed_alwaer",
+    "name_en": "Hatem Fareed Alwaer",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hazza_al_balushi",
+    "name_en": "Hazza Al-Balushi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 83,
+    "has_timing": false
+  },
+  {
+    "slug": "hicham_lharraz_warsh",
+    "name_en": "Hicham Lharraz",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 113,
+    "has_timing": true
+  },
+  {
+    "slug": "hitham_aljadani",
+    "name_en": "Hitham Aljadani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 101,
+    "has_timing": false
+  },
+  {
+    "slug": "hussain_alshaik",
+    "name_en": "Hussain Alshaik",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 59,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahem_assadan",
+    "name_en": "Ibrahem Assadan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 50,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahim_al_akdar",
+    "name_en": "Ibrahim Al-Akdar",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ibrahim_al_asiri",
+    "name_en": "Ibrahim Al-Asiri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ibrahim_al_jebreen",
+    "name_en": "Ibrahim Al-Jebreen",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 107,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahim_al_shahri",
+    "name_en": "Ibrahim Al-Shahri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 113,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahim_aldosari",
+    "name_en": "Ibrahim Aldosari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahim_aldosari_warsh",
+    "name_en": "Ibrahim Aldosari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahim_aljormy",
+    "name_en": "Ibrahim Aljormy",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahim_kshidan_qalon",
+    "name_en": "Ibrahim Kshidan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "idrees_abkr",
+    "name_en": "Idrees Abkr",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "islam_sobhi",
+    "name_en": "Islam Sobhi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 106,
+    "has_timing": false
+  },
+  {
+    "slug": "issa_omar_sanankoua",
+    "name_en": "Issa Omar Sanankoua",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "jamaan_alosaimi",
+    "name_en": "Jamaan Alosaimi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "jamal_addeen_alzailaie",
+    "name_en": "Jamal Addeen Alzailaie",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 8,
+    "has_timing": false
+  },
+  {
+    "slug": "jamal_shaker_abdullah",
+    "name_en": "Jamal Shaker Abdullah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "junaid_adam_abdullah",
+    "name_en": "Junaid Adam Abdullah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "khaled_al_qahtani",
+    "name_en": "Khaled Al-Qahtani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "khalid_abdulkafi",
+    "name_en": "Khalid Abdulkafi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "khalid_al_jileel",
+    "name_en": "Khalid Al-Jileel",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "khalid_al_shoraimy",
+    "name_en": "Khalid Al-Shoraimy",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 73,
+    "has_timing": false
+  },
+  {
+    "slug": "khalid_al_wehabi",
+    "name_en": "Khalid Al-Wehabi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 25,
+    "has_timing": false
+  },
+  {
+    "slug": "khalid_algamdi",
+    "name_en": "Khalid Algamdi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 102,
+    "has_timing": false
+  },
+  {
+    "slug": "khalid_almohana",
+    "name_en": "Khalid Almohana",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "khalid_alsharekh",
+    "name_en": "Khalid Alsharekh",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 64,
+    "has_timing": false
+  },
+  {
+    "slug": "khalid_mohammadi",
+    "name_en": "Khalid Mohammadi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "khalifa_altunaiji",
+    "name_en": "Khalifa Altunaiji",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "lafi_al_oni",
+    "name_en": "Lafi Al-Oni",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 84,
+    "has_timing": false
+  },
+  {
+    "slug": "maher_al_meaqli",
+    "name_en": "Maher Al Meaqli",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "maher_al_meaqli_muallim",
+    "name_en": "Maher Al Meaqli",
+    "source": "mp3quran",
+    "style": "muallim",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 38,
+    "has_timing": false
+  },
+  {
+    "slug": "maher_al_meaqli_mujawwad",
+    "name_en": "Maher Al Meaqli",
+    "source": "mp3quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "maher_shakhashero",
+    "name_en": "Maher Shakhashero",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmood_al_rifai",
+    "name_en": "Mahmood Al rifai",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmood_alsheimy_duri",
+    "name_en": "Mahmood AlSheimy",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_al_kisai",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_abdul_hakam",
+    "name_en": "Mahmoud Abdul Hakam",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_ali_albanna",
+    "name_en": "Mahmoud Ali  Albanna",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_ali_albanna_mujawwad",
+    "name_en": "Mahmoud Ali  Albanna",
+    "source": "mp3quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary_duri",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary_mujawwad",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "mp3quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary_qalon",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary_warsh",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "majed_al_enezi",
+    "name_en": "Majed Al-Enezi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 113,
+    "has_timing": false
+  },
+  {
+    "slug": "majed_al_zamil",
+    "name_en": "Majed Al-Zamil",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mal_allah_abdulrhman_aljaber",
+    "name_en": "Mal-Allah Abdulrhman Aljaber",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mansour_al_salemi",
+    "name_en": "Mansour Al-Salemi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "marwan_alakri_qalon",
+    "name_en": "Marwan Alakri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mishary_alafasi",
+    "name_en": "Mishary Alafasi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mishary_alafasi_duri",
+    "name_en": "Mishary Alafasi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_al_kisai",
+    "audio_cat": "by_surah",
+    "coverage": 6,
+    "has_timing": true
+  },
+  {
+    "slug": "moeedh_alharthi",
+    "name_en": "Moeedh Alharthi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_abdullkarem",
+    "name_en": "Mohammad Abdullkarem",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_abdullkarem_warsh",
+    "name_en": "Mohammad Abdullkarem",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_al_abdullah_duri",
+    "name_en": "Mohammad Al-Abdullah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_al_kisai",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_al_abdullah_qunbul",
+    "name_en": "Mohammad Al-Abdullah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qunbul_ibn_kathir",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_al_airawy_warsh",
+    "name_en": "Mohammad Al-Airawy",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 111,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_al_tablaway",
+    "name_en": "Mohammad Al-Tablaway",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_al_tablaway_mujawwad",
+    "name_en": "Mohammad Al-Tablaway",
+    "source": "mp3quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_albukheet",
+    "name_en": "Mohammad Albukheet",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_almonshed",
+    "name_en": "Mohammad AlMonshed",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 110,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_khalil_al_qari",
+    "name_en": "Mohammad Khalil Al-Qari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_rashad_alshareef",
+    "name_en": "Mohammad Rashad Alshareef",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_refat",
+    "name_en": "Mohammad Refat",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 31,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_saayed_warsh",
+    "name_en": "Mohammad Saayed",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammad_saleh_alim_shah",
+    "name_en": "Mohammad Saleh Alim Shah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammed_al_amin_qeniwa_qalon",
+    "name_en": "Mohammed Al-Amin Qeniwa",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_al_barrak",
+    "name_en": "Mohammed Al-Barrak",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 63,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_al_lohaidan",
+    "name_en": "Mohammed Al-Lohaidan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_al_muhasny",
+    "name_en": "Mohammed Al-Muhasny",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_al_zubaidi",
+    "name_en": "Mohammed Al-Zubaidi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_ayyub",
+    "name_en": "Mohammed Ayyub",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammed_hafas_ali",
+    "name_en": "Mohammed Hafas Ali",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 5,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_jibreel",
+    "name_en": "Mohammed Jibreel",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_osman_khan",
+    "name_en": "Mohammed Osman Khan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_siddiq_al_minshawi",
+    "name_en": "Mohammed Siddiq Al-Minshawi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammed_siddiq_al_minshawi_muallim",
+    "name_en": "Mohammed Siddiq Al-Minshawi",
+    "source": "mp3quran",
+    "style": "muallim",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mohammed_siddiq_al_minshawi_mujawwad",
+    "name_en": "Mohammed Siddiq Al-Minshawi",
+    "source": "mp3quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "mousa_bilal",
+    "name_en": "Mousa Bilal",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muamar_from_indonesia",
+    "name_en": "Muamar (From Indonesia)",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 8,
+    "has_timing": false
+  },
+  {
+    "slug": "muftah_alsaltany",
+    "name_en": "Muftah Alsaltany",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muftah_alsaltany_duri",
+    "name_en": "Muftah Alsaltany",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_al_kisai",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muftah_alsaltany_duri_abu_amr",
+    "name_en": "Muftah Alsaltany",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muftah_alsaltany_ibn",
+    "name_en": "Muftah Alsaltany",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "ibn_dhakwan_ibn_amir",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muftah_alsaltany_shubah",
+    "name_en": "Muftah Alsaltany",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "shubah_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 77,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_abu_sneina_qalon",
+    "name_en": "Muhammad Abu Sneina",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_al_faqih",
+    "name_en": "Muhammad Al Faqih",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_al_hafiz",
+    "name_en": "Muhammad Al-Hafiz",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 3,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_burhaji",
+    "name_en": "Muhammad Burhaji",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammed_khairul_anuar",
+    "name_en": "Muhammed Khairul Anuar",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 4,
+    "has_timing": false
+  },
+  {
+    "slug": "mukhtar_al_haj",
+    "name_en": "Mukhtar Al-Haj",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mustafa_al_lahoni",
+    "name_en": "Mustafa Al-Lahoni",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mustafa_ismail",
+    "name_en": "Mustafa Ismail",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mustafa_ismail_mujawwad",
+    "name_en": "Mustafa Ismail",
+    "source": "mp3quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mustafa_raad_alazawy",
+    "name_en": "Mustafa raad Alazawy",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "nabil_al_rifay",
+    "name_en": "Nabil Al Rifay",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "nasser_al_obaid",
+    "name_en": "Nasser Al obaid",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 67,
+    "has_timing": false
+  },
+  {
+    "slug": "nasser_almajed",
+    "name_en": "Nasser Almajed",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "nasser_alosfor",
+    "name_en": "Nasser Alosfor",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "nasser_alqatami",
+    "name_en": "Nasser Alqatami",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "nathier_almalki",
+    "name_en": "Nathier Almalki",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "neamah_al_hassan",
+    "name_en": "Neamah Al-Hassan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "noreen_mohammad_siddiq_duri",
+    "name_en": "Noreen Mohammad Siddiq",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "okasha_kameny_bazzi",
+    "name_en": "Okasha Kameny",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "bazzi_ibn_kathir",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "okasha_kameny_duri",
+    "name_en": "Okasha Kameny",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "duri_al_kisai",
+    "audio_cat": "by_surah",
+    "coverage": 38,
+    "has_timing": false
+  },
+  {
+    "slug": "omar_al_darweez",
+    "name_en": "Omar Al Darweez",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 97,
+    "has_timing": false
+  },
+  {
+    "slug": "omar_al_qazabri_warsh",
+    "name_en": "Omar Al-Qazabri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "othman_al_ansary",
+    "name_en": "Othman Al-Ansary",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 76,
+    "has_timing": false
+  },
+  {
+    "slug": "peshawa_qadr_al_kurdi",
+    "name_en": "Peshawa Qadr Al-Kurdi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "raad_al_kurdi",
+    "name_en": "Raad Al Kurdi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "rachid_belalya",
+    "name_en": "Rachid Belalya",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 5,
+    "has_timing": false
+  },
+  {
+    "slug": "rachid_belalya_warsh",
+    "name_en": "Rachid Belalya",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ramadan_shakoor",
+    "name_en": "Ramadan Shakoor",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 65,
+    "has_timing": false
+  },
+  {
+    "slug": "rami_aldeais",
+    "name_en": "Rami Aldeais",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "rasheed_ifrad_warsh",
+    "name_en": "Rasheed Ifrad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 51,
+    "has_timing": false
+  },
+  {
+    "slug": "rodziah_abdulrahman",
+    "name_en": "Rodziah Abdulrahman",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 4,
+    "has_timing": false
+  },
+  {
+    "slug": "rogayah_sulong",
+    "name_en": "Rogayah Sulong",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 1,
+    "has_timing": false
+  },
+  {
+    "slug": "saad_al_ghamdi",
+    "name_en": "Saad Al-Ghamdi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "saad_almqren",
+    "name_en": "Saad Almqren",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "saber_abdulhakm",
+    "name_en": "Saber Abdulhakm",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "sahl_yassin",
+    "name_en": "Sahl Yassin",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "saidin_abdulrahman",
+    "name_en": "Saidin Abdulrahman",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 4,
+    "has_timing": false
+  },
+  {
+    "slug": "salah_albudair",
+    "name_en": "Salah Albudair",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "salah_alhashim",
+    "name_en": "Salah Alhashim",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "salah_alhashim_qalon",
+    "name_en": "Salah Alhashim",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 7,
+    "has_timing": true
+  },
+  {
+    "slug": "salah_musali",
+    "name_en": "Salah Musali",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 49,
+    "has_timing": false
+  },
+  {
+    "slug": "saleh_al_habdan",
+    "name_en": "Saleh Al-Habdan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "saleh_al_talib",
+    "name_en": "Saleh Al-Talib",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 33,
+    "has_timing": false
+  },
+  {
+    "slug": "saleh_alquraishi",
+    "name_en": "Saleh Alquraishi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "saleh_alsahood",
+    "name_en": "Saleh Alsahood",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "saleh_alshamrani",
+    "name_en": "Saleh Alshamrani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "salman_alotaibi",
+    "name_en": "Salman Alotaibi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 76,
+    "has_timing": false
+  },
+  {
+    "slug": "salman_alsadeiq",
+    "name_en": "Salman Alsadeiq",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "sami_al_dosari",
+    "name_en": "Sami Al-Dosari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 53,
+    "has_timing": false
+  },
+  {
+    "slug": "sami_al_hasn",
+    "name_en": "Sami Al-Hasn",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 28,
+    "has_timing": false
+  },
+  {
+    "slug": "sapinah_mamat",
+    "name_en": "Sapinah Mamat",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 4,
+    "has_timing": false
+  },
+  {
+    "slug": "saud_al_shuraim",
+    "name_en": "Saud Al-Shuraim",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "sayed_ahmad_hashemi",
+    "name_en": "Sayed Ahmad Hashemi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "sayeed_ramadan",
+    "name_en": "Sayeed Ramadan",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "shaban_al_sayiaad",
+    "name_en": "Shaban Al-Sayiaad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 65,
+    "has_timing": false
+  },
+  {
+    "slug": "shaik_abu_bakr_al_shatri",
+    "name_en": "Shaik Abu Bakr Al Shatri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "shirazad_taher",
+    "name_en": "Shirazad Taher",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "slaah_bukhatir",
+    "name_en": "Slaah Bukhatir",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "tareq_abdulgani_daawob_qalon",
+    "name_en": "Tareq Abdulgani daawob",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "tawfeeq_as_sayegh",
+    "name_en": "Tawfeeq As-Sayegh",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "ustaz_zamri",
+    "name_en": "Ustaz Zamri",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 7,
+    "has_timing": false
+  },
+  {
+    "slug": "wadeea_al_yamani",
+    "name_en": "Wadeea Al-Yamani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "waleed_alnaehi_qalon",
+    "name_en": "Waleed Alnaehi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "walid_al_dulaimi",
+    "name_en": "Walid Al-Dulaimi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 58,
+    "has_timing": false
+  },
+  {
+    "slug": "wasel_almethen",
+    "name_en": "Wasel Almethen",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 9,
+    "has_timing": false
+  },
+  {
+    "slug": "wishear_hayder_arbili",
+    "name_en": "Wishear Hayder Arbili",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 2,
+    "has_timing": false
+  },
+  {
+    "slug": "yahya_hawwa",
+    "name_en": "Yahya Hawwa",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "yasser_al_dosari",
+    "name_en": "Yasser Al-Dosari",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "yasser_al_faylakawi",
+    "name_en": "Yasser Al-Faylakawi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 88,
+    "has_timing": false
+  },
+  {
+    "slug": "yasser_al_mazroyee_rawh",
+    "name_en": "Yasser Al-Mazroyee",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "rawh_an_yaqub",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "yasser_al_qurashi",
+    "name_en": "Yasser Al-Qurashi",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "yasser_salamah",
+    "name_en": "Yasser Salamah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "younes_souilass_warsh",
+    "name_en": "Younes Souilass",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "audio_cat": "by_surah",
+    "coverage": 65,
+    "has_timing": false
+  },
+  {
+    "slug": "yousef_alshoaey",
+    "name_en": "Yousef Alshoaey",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "yousef_bin_noah_ahmad",
+    "name_en": "Yousef Bin Noah Ahmad",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "youssef_edghouch",
+    "name_en": "Youssef Edghouch",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 26,
+    "has_timing": false
+  },
+  {
+    "slug": "yusuf_alaidroos",
+    "name_en": "Yusuf ALaidroos",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 111,
+    "has_timing": false
+  },
+  {
+    "slug": "zakaria_hamamah",
+    "name_en": "Zakaria Hamamah",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 7,
+    "has_timing": false
+  },
+  {
+    "slug": "zaki_daghistani",
+    "name_en": "Zaki Daghistani",
+    "source": "mp3quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": true
+  },
+  {
+    "slug": "abdul_munim_abdul_mubdi",
+    "name_en": "Abdul-Munim Abdul-Mubdi",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_ali_jabir",
+    "name_en": "Abdullah Ali Jabir",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdur_razaq_bin_abtan_al_dulaimi",
+    "name_en": "Abdur-Razaq bin Abtan al-Dulaimi",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "asim_abdul_aleem",
+    "name_en": "Asim Abdul-Aleem",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "aziz_alili",
+    "name_en": "Aziz Alili",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "fatih_seferagic",
+    "name_en": "Fatih Seferagic",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hady_toure",
+    "name_en": "Hady Toure",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hamad_sinan",
+    "name_en": "Hamad Sinan",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_ismaeel_al_muqaddim",
+    "name_en": "Mohammad Ismaeel Al-Muqaddim",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_hassan",
+    "name_en": "Muhammad Hassan",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_sulaiman_patel",
+    "name_en": "Muhammad Sulaiman Patel",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "sadaqat_ali",
+    "name_en": "Sadaqat Ali",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdel_rahman_benmoussa",
+    "name_en": "Abdel Rahman Benmoussa",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdelhamid_ehsain",
+    "name_en": "Abdelhamid Ehsain",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdelmoujib_benkirane",
+    "name_en": "Abdelmoujib Benkirane",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdualhaleem_hussain",
+    "name_en": "Abdulhaleem Hussain",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdul_rahman_aljuraidhi",
+    "name_en": "Abdul Rahman Al-Juraidhi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulkabeer_alhadidi",
+    "name_en": "Abdulkabeer Al-Hadidi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_allahdan",
+    "name_en": "Ahmed Allahdan",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_mohammed_taher",
+    "name_en": "Ahmed Mohammed Taher",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_nasr",
+    "name_en": "Ahmed Nasr",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmet_khader_trabelsi",
+    "name_en": "Ahmet Khader Trabelsi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "alshahat_anwar",
+    "name_en": "Al-Shahat Anwar",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "amer_alkazemi",
+    "name_en": "Amer Al-Kazemi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ammar_louay_almulla_ali",
+    "name_en": "Ammar Louay Al-Mulla Ali",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "anas_almiman",
+    "name_en": "Anas Al-Miman",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "anas_jalhoum",
+    "name_en": "Anas Jalhoum",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "fahad_almutairi",
+    "name_en": "Fahad Al-Mutairi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "fatih_cholak",
+    "name_en": "Fatih Cholak",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ghassan_alshorbagy",
+    "name_en": "Ghassan Al-Shorbagy",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hajjaj_al_hindawi",
+    "name_en": "Hajjaj Al-Hindawi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hamza_algerian",
+    "name_en": "Hamza Al-Jazairi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hamza_el_far",
+    "name_en": "Hamza El Far",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hassan_alwajdi",
+    "name_en": "Hassan Al-Wajdi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "imad_almansri",
+    "name_en": "Imad Al-Mansri",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ishak_danish",
+    "name_en": "Ishak Danish",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "jazza_alswaileh",
+    "name_en": "Jazza Al-Swaileh",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "karim_mansouri",
+    "name_en": "Karim Mansouri",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "khalil_alsaghir",
+    "name_en": "Khalil Al-Saghir",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "maher_alwan",
+    "name_en": "Maher Alwan",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "maytham_altammar",
+    "name_en": "Maytham Al-Tammar",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_alghazali",
+    "name_en": "Mohammed Al-Ghazali",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_alkantawi",
+    "name_en": "Muhammad Al-Kantawi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_alsabil",
+    "name_en": "Muhammad Al-Sabil",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammed_husayn_amer",
+    "name_en": "Muhammed Husayn Amer",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mustafa_gharbi",
+    "name_en": "Mustafa Gharbi",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "obaida_muafaq",
+    "name_en": "Obaida Muafaq",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "rachid_belachia",
+    "name_en": "Rachid Belachia",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "rayan_almuhaisni",
+    "name_en": "Rayan Al-Muhaisni",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "saeed_alkhatib",
+    "name_en": "Saeed Al-Khatib",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "salah_aljamal",
+    "name_en": "Salah Al-Jamal",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "salah_baothman",
+    "name_en": "Salah Ba Othman",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "salih_ahmed_salih",
+    "name_en": "Salih Ahmed Salih",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "yusuf_nooh",
+    "name_en": "Yusuf Nooh",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulbasit_abdulsamad",
+    "name_en": "Abdulbasit Abdulsamad",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulbasit_abdulsamad_mujawwad",
+    "name_en": "Abdulbasit Abdulsamad",
+    "source": "everyayah",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_johany",
+    "name_en": "Abdullah Al-Johany",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_mattrod",
+    "name_en": "Abdullah Al-Mattrod",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_basfer",
+    "name_en": "Abdullah Basfer",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulmohsen_al_qasim",
+    "name_en": "Abdulmohsen Al-Qasim",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulrahman_alsudaes",
+    "name_en": "Abdulrahman Alsudaes",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmad_al_ajmy",
+    "name_en": "Ahmad Al-Ajmy",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmad_nauina",
+    "name_en": "Ahmad Nauina",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "akram_alalaqmi",
+    "name_en": "Akram Alalaqmi",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ali_alhuthaifi",
+    "name_en": "Ali Alhuthaifi",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ali_hajjaj_alsouasi",
+    "name_en": "Ali Hajjaj Alsouasi",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ali_jaber",
+    "name_en": "Ali Jaber",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ayman_sowaid",
+    "name_en": "Ayman Sowaid",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "aziz_alili",
+    "name_en": "Aziz Alili",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "fares_abbad",
+    "name_en": "Fares Abbad",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "hani_arrifai",
+    "name_en": "Hani Arrifai",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ibrahim_al_akdar",
+    "name_en": "Ibrahim Al-Akdar",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "karim_mansouri",
+    "name_en": "Karim Mansouri",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "khaled_al_qahtani",
+    "name_en": "Khaled Al-Qahtani",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "khalifa_altunaiji",
+    "name_en": "Khalifa Altunaiji",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "maher_al_meaqli",
+    "name_en": "Maher Al Meaqli",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_ali_albanna",
+    "name_en": "Mahmoud Ali  Albanna",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary_muallim",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "everyayah",
+    "style": "muallim",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_khalil_al_hussary_mujawwad",
+    "name_en": "Mahmoud Khalil Al-Hussary",
+    "source": "everyayah",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mishary_alafasi",
+    "name_en": "Mishary Alafasi",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_abdullkarem",
+    "name_en": "Mohammad Abdullkarem",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammad_al_tablaway",
+    "name_en": "Mohammad Al-Tablaway",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_ayyub",
+    "name_en": "Mohammed Ayyub",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_jibreel",
+    "name_en": "Mohammed Jibreel",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_siddiq_al_minshawi",
+    "name_en": "Mohammed Siddiq Al-Minshawi",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_siddiq_al_minshawi_mujawwad",
+    "name_en": "Mohammed Siddiq Al-Minshawi",
+    "source": "everyayah",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "mustafa_ismail",
+    "name_en": "Mustafa Ismail",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "nabil_al_rifay",
+    "name_en": "Nabil Al Rifay",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "nasser_alqatami",
+    "name_en": "Nasser Alqatami",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "parhizgar",
+    "name_en": "Shahriar Parhizgar",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "saad_al_ghamdi",
+    "name_en": "Saad Al-Ghamdi",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "sahl_yassin",
+    "name_en": "Sahl Yassin",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "salah_albudair",
+    "name_en": "Salah Albudair",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "saud_al_shuraim",
+    "name_en": "Saud Al-Shuraim",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "shaik_abu_bakr_al_shatri",
+    "name_en": "Shaik Abu Bakr Al Shatri",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "slaah_bukhatir",
+    "name_en": "Slaah Bukhatir",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "yasser_al_dosari",
+    "name_en": "Yasser Al-Dosari",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "yasser_salamah",
+    "name_en": "Yasser Salamah",
+    "source": "everyayah",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmad_al_nufais",
+    "name_en": "Ahmad Al Nufais",
+    "source": "qul",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "audio_cat": "by_ayah",
+    "coverage": 6236,
+    "has_timing": false
+  }
+]
