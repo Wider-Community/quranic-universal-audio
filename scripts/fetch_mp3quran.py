@@ -70,7 +70,12 @@ def slugify(name):
 
 
 def make_unique_slug(name_en, name_ar, style, riwayah_slug, seen_slugs):
-    """Generate a unique slug, appending style/riwayah suffixes as needed."""
+    """Generate a unique slug, appending style/riwayah suffixes as needed.
+
+    When the short riwayah name (first word, e.g. "duri") would collide with
+    an existing slug, falls back to the full riwayah slug before resorting to
+    numeric suffixes.  E.g.: base_duri → base_duri_abu_amr.
+    """
     base = slugify(name_en)
     if not base:
         en = AR_TO_EN.get(name_ar)
@@ -82,10 +87,14 @@ def make_unique_slug(name_en, name_ar, style, riwayah_slug, seen_slugs):
 
     # Append riwayah suffix for non-hafs
     if riwayah_slug != "hafs_an_asim":
-        short_riwayah = riwayah_slug.split("_")[0]  # e.g., "warsh", "qalon"
-        base = f"{base}_{short_riwayah}"
+        short_riwayah = riwayah_slug.split("_")[0]  # e.g., "warsh", "duri", "ibn"
+        candidate = f"{base}_{short_riwayah}"
+        if candidate in seen_slugs:
+            # Short name collides (e.g. duri_abu_amr vs duri_al_kisai) — use full
+            candidate = f"{base}_{riwayah_slug}"
+        base = candidate
 
-    # Deduplicate
+    # Deduplicate (last resort numeric suffix)
     slug = base
     counter = 2
     while slug in seen_slugs:
