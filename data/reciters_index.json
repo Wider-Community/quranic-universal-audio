@@ -5,6 +5,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 15,
     "has_timing": false
@@ -15,6 +16,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -25,6 +27,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -35,6 +38,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -45,6 +49,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 72,
     "has_timing": false
@@ -55,6 +60,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -65,6 +71,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -75,6 +82,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -85,6 +93,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -95,6 +104,7 @@
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 91,
     "has_timing": true
@@ -105,6 +115,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -115,6 +126,7 @@
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -125,6 +137,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -135,6 +148,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -145,6 +159,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 13,
     "has_timing": false
@@ -155,6 +170,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -165,6 +181,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -175,6 +192,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -185,6 +203,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 69,
     "has_timing": false
@@ -195,6 +214,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -205,6 +225,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -215,6 +236,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -225,6 +247,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -235,6 +258,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 11,
     "has_timing": false
@@ -245,6 +269,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -255,6 +280,7 @@
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 38,
     "has_timing": true
@@ -265,6 +291,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -275,6 +302,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -285,6 +313,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -295,6 +324,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 80,
     "has_timing": false
@@ -305,6 +335,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 4,
     "has_timing": false
@@ -315,6 +346,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -325,6 +357,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -335,6 +368,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -345,6 +379,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 49,
     "has_timing": false
@@ -355,6 +390,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 7,
     "has_timing": true
@@ -365,6 +401,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -375,6 +412,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 4,
     "has_timing": false
@@ -385,6 +423,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -395,6 +434,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -405,6 +445,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -415,6 +456,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -425,6 +467,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -435,6 +478,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -445,6 +489,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 107,
     "has_timing": true
@@ -455,6 +500,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -465,6 +511,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "khalaf_an_hamzah",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -475,6 +522,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "susi_abu_amr",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -485,6 +533,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -495,6 +544,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -505,6 +555,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -515,6 +566,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -525,6 +577,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -535,6 +588,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -545,6 +599,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -555,6 +610,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -565,6 +621,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 110,
     "has_timing": false
@@ -575,6 +632,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -585,6 +643,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "bazzi_ibn_kathir",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -595,6 +654,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 13,
     "has_timing": true
@@ -605,6 +665,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -615,6 +676,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hisham_ibn_amir",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 27,
     "has_timing": true
@@ -625,6 +687,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "ibn_jummaz_abu_jafar",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 11,
     "has_timing": true
@@ -635,6 +698,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "ibn_dhakwan_ibn_amir",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 33,
     "has_timing": true
@@ -645,6 +709,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "khalaf_an_hamzah",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 6,
     "has_timing": true
@@ -655,6 +720,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -665,6 +731,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qunbul_ibn_kathir",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -675,6 +742,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "shubah_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -685,6 +753,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "susi_abu_amr",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 19,
     "has_timing": true
@@ -695,6 +764,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -705,6 +775,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -715,6 +786,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "rawh_an_yaqub",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 64,
     "has_timing": false
@@ -725,6 +797,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -735,6 +808,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -745,6 +819,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 30,
     "has_timing": false
@@ -755,6 +830,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -765,6 +841,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 107,
     "has_timing": false
@@ -775,6 +852,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -785,6 +863,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -795,6 +874,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -805,6 +885,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -815,6 +896,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 4,
     "has_timing": false
@@ -825,6 +907,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -835,6 +918,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -845,6 +929,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 113,
     "has_timing": false
@@ -855,6 +940,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -865,6 +951,7 @@
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 57,
     "has_timing": false
@@ -875,6 +962,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 14,
     "has_timing": false
@@ -885,6 +973,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -895,6 +984,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -905,6 +995,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "shubah_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -915,6 +1006,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -925,6 +1017,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -935,6 +1028,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -945,6 +1039,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -955,6 +1050,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 71,
     "has_timing": false
@@ -965,6 +1061,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -975,6 +1072,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -985,6 +1083,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -995,6 +1094,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1005,6 +1105,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1015,6 +1116,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1025,6 +1127,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 77,
     "has_timing": false
@@ -1035,6 +1138,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 8,
     "has_timing": false
@@ -1045,6 +1149,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1055,6 +1160,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1065,6 +1171,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 49,
     "has_timing": false
@@ -1075,6 +1182,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1085,6 +1193,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1095,6 +1204,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 87,
     "has_timing": false
@@ -1105,6 +1215,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1115,6 +1226,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 51,
     "has_timing": true
@@ -1125,6 +1237,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1135,6 +1248,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1145,6 +1259,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1155,6 +1270,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1165,6 +1281,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 83,
     "has_timing": false
@@ -1175,6 +1292,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 113,
     "has_timing": true
@@ -1185,6 +1303,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 101,
     "has_timing": false
@@ -1195,6 +1314,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 59,
     "has_timing": false
@@ -1205,6 +1325,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 50,
     "has_timing": false
@@ -1215,6 +1336,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1225,6 +1347,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1235,6 +1358,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 107,
     "has_timing": false
@@ -1245,6 +1369,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 113,
     "has_timing": false
@@ -1255,6 +1380,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1265,6 +1391,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1275,6 +1402,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1285,6 +1413,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1295,6 +1424,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1305,6 +1435,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 106,
     "has_timing": false
@@ -1315,6 +1446,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1325,6 +1457,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1335,6 +1468,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 8,
     "has_timing": false
@@ -1345,6 +1479,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1355,6 +1490,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1365,6 +1501,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1375,6 +1512,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1385,6 +1523,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1395,6 +1534,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 73,
     "has_timing": false
@@ -1405,6 +1545,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 25,
     "has_timing": false
@@ -1415,6 +1556,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 102,
     "has_timing": false
@@ -1425,6 +1567,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1435,6 +1578,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 64,
     "has_timing": false
@@ -1445,6 +1589,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1455,6 +1600,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1465,6 +1611,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 84,
     "has_timing": false
@@ -1475,6 +1622,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1485,6 +1633,7 @@
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 38,
     "has_timing": false
@@ -1495,6 +1644,7 @@
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1505,6 +1655,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1515,6 +1666,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1525,6 +1677,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1535,6 +1688,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1545,6 +1699,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1555,6 +1710,7 @@
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1565,6 +1721,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1575,6 +1732,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1585,6 +1743,7 @@
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1595,6 +1754,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1605,6 +1765,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1615,6 +1776,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 113,
     "has_timing": false
@@ -1625,6 +1787,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1635,6 +1798,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1645,6 +1809,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1655,6 +1820,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1665,6 +1831,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1675,6 +1842,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 6,
     "has_timing": true
@@ -1685,6 +1853,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1695,6 +1864,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1705,6 +1875,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1715,6 +1886,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1725,6 +1897,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qunbul_ibn_kathir",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1735,6 +1908,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 111,
     "has_timing": false
@@ -1745,6 +1919,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1755,6 +1930,7 @@
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1765,6 +1941,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1775,6 +1952,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 110,
     "has_timing": false
@@ -1785,6 +1963,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1795,6 +1974,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1805,6 +1985,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 31,
     "has_timing": false
@@ -1815,6 +1996,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1825,6 +2007,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1835,6 +2018,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1845,6 +2029,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 63,
     "has_timing": false
@@ -1855,6 +2040,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1865,6 +2051,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1875,6 +2062,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1885,6 +2073,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1895,6 +2084,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 5,
     "has_timing": false
@@ -1905,6 +2095,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1915,6 +2106,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1925,6 +2117,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1935,6 +2128,7 @@
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1945,6 +2139,7 @@
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -1955,6 +2150,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1965,6 +2161,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 8,
     "has_timing": false
@@ -1975,6 +2172,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1985,6 +2183,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -1995,6 +2194,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2005,6 +2205,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "ibn_dhakwan_ibn_amir",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2015,6 +2216,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "shubah_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 77,
     "has_timing": false
@@ -2025,6 +2227,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2035,6 +2238,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2045,6 +2249,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 3,
     "has_timing": false
@@ -2055,6 +2260,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2065,6 +2271,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 4,
     "has_timing": false
@@ -2075,6 +2282,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2085,6 +2293,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2095,6 +2304,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2105,6 +2315,7 @@
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2115,6 +2326,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2125,6 +2337,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2135,6 +2348,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 67,
     "has_timing": false
@@ -2145,6 +2359,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2155,6 +2370,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2165,6 +2381,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2175,6 +2392,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2185,6 +2403,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2195,6 +2414,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2205,6 +2425,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "bazzi_ibn_kathir",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2215,6 +2436,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 38,
     "has_timing": false
@@ -2225,6 +2447,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 97,
     "has_timing": false
@@ -2235,6 +2458,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2245,6 +2469,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 76,
     "has_timing": false
@@ -2255,6 +2480,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2265,6 +2491,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2275,6 +2502,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 5,
     "has_timing": false
@@ -2285,6 +2513,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2295,6 +2524,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 65,
     "has_timing": false
@@ -2305,6 +2535,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2315,6 +2546,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 51,
     "has_timing": false
@@ -2325,6 +2557,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 4,
     "has_timing": false
@@ -2335,6 +2568,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 1,
     "has_timing": false
@@ -2345,6 +2579,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2355,6 +2590,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2365,6 +2601,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2375,6 +2612,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2385,6 +2623,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 4,
     "has_timing": false
@@ -2395,6 +2634,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2405,6 +2645,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2415,6 +2656,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 7,
     "has_timing": true
@@ -2425,6 +2667,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 49,
     "has_timing": false
@@ -2435,6 +2678,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2445,6 +2689,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 33,
     "has_timing": false
@@ -2455,6 +2700,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2465,6 +2711,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2475,6 +2722,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2485,6 +2733,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 76,
     "has_timing": false
@@ -2495,6 +2744,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2505,6 +2755,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 53,
     "has_timing": false
@@ -2515,6 +2766,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 28,
     "has_timing": false
@@ -2525,6 +2777,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 4,
     "has_timing": false
@@ -2535,6 +2788,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2545,6 +2799,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2555,6 +2810,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2565,6 +2821,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 65,
     "has_timing": false
@@ -2575,6 +2832,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2585,6 +2843,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2595,6 +2854,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2605,6 +2865,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2615,6 +2876,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2625,6 +2887,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 7,
     "has_timing": false
@@ -2635,6 +2898,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2645,6 +2909,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2655,6 +2920,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 58,
     "has_timing": false
@@ -2665,6 +2931,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 9,
     "has_timing": false
@@ -2675,6 +2942,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 2,
     "has_timing": false
@@ -2685,6 +2953,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2695,6 +2964,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2705,6 +2975,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 88,
     "has_timing": false
@@ -2715,6 +2986,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "rawh_an_yaqub",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2725,6 +2997,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2735,6 +3008,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2745,6 +3019,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 65,
     "has_timing": false
@@ -2755,6 +3030,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2765,6 +3041,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2775,6 +3052,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 26,
     "has_timing": false
@@ -2785,6 +3063,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 111,
     "has_timing": false
@@ -2795,6 +3074,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 7,
     "has_timing": false
@@ -2805,6 +3085,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -2815,6 +3096,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2825,6 +3107,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2835,6 +3118,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2845,6 +3129,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2855,6 +3140,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2865,6 +3151,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2875,6 +3162,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2885,6 +3173,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2895,6 +3184,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2905,6 +3195,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2915,6 +3206,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2925,6 +3217,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2935,6 +3228,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2945,6 +3239,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2955,6 +3250,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2965,6 +3261,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Sudan",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2975,6 +3272,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2985,6 +3283,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -2995,6 +3294,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Bahrain",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3005,6 +3305,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Sudan",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3015,6 +3316,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Egypt",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3025,6 +3327,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Lebanon",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3035,6 +3338,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Egypt",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3045,6 +3349,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Iraq",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3055,6 +3360,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Syria",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3065,6 +3371,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3075,6 +3382,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Egypt",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3085,6 +3393,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Kuwait",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3095,6 +3404,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Turkey",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3105,6 +3415,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Palestine",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3115,6 +3426,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Egypt",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3125,6 +3437,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Algeria",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3135,6 +3448,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Jordan",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3145,6 +3459,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Somalia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3155,6 +3470,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3165,6 +3481,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Turkey",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3175,6 +3492,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Kuwait",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3185,6 +3503,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Iran",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3195,6 +3514,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Yemen",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3205,6 +3525,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Qatar",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3215,6 +3536,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Iraq",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3225,6 +3547,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3235,6 +3558,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3245,6 +3569,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3255,6 +3580,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Yemen",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3265,6 +3591,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3275,6 +3602,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Iraq",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3285,6 +3613,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3295,6 +3624,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3305,6 +3635,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3315,6 +3646,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Egypt",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3325,6 +3657,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3335,6 +3668,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Sudan",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3345,6 +3679,7 @@
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -3355,6 +3690,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3365,6 +3701,7 @@
     "source": "everyayah",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3375,6 +3712,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3385,6 +3723,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3395,6 +3734,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3405,6 +3745,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3415,6 +3756,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3425,6 +3767,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3435,6 +3778,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3445,6 +3789,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3455,6 +3800,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3465,6 +3811,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3475,6 +3822,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3485,6 +3833,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3495,6 +3844,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3505,6 +3855,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3515,6 +3866,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3525,6 +3877,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3535,6 +3888,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "Iran",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3545,6 +3899,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3555,6 +3910,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3565,6 +3921,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3575,6 +3932,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3585,6 +3943,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3595,6 +3954,7 @@
     "source": "everyayah",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3605,6 +3965,7 @@
     "source": "everyayah",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3615,6 +3976,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3625,6 +3987,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3635,6 +3998,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3645,6 +4009,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3655,6 +4020,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3665,6 +4031,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3675,6 +4042,7 @@
     "source": "everyayah",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3685,6 +4053,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3695,6 +4064,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3705,6 +4075,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3715,6 +4086,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3725,6 +4097,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3735,6 +4108,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3745,6 +4119,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3755,6 +4130,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3765,6 +4141,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3775,6 +4152,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3785,6 +4163,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3795,6 +4174,7 @@
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
@@ -3805,6 +4185,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
+    "country": "unknown",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
