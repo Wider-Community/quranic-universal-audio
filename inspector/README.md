@@ -54,5 +54,5 @@ Remaining categories that can co-occur on the same segment:
 | **Merge**         | Combine two adjacent segments audio and text |
 | **Edit Reference**| Inline edit of Qur'anic text |
 | **Delete**        | Remove segment entirely |
-| **Auto-fix** [Missing Word errors]     |  Intelligently extend segment to cover a missing word |
-| **Ignore** [Low Confidence, Oversegmented, Cross-Verse errors]       |  Dismiss issue, set confidence to 1 |
+| **Auto-fix** [Missing Word errors] |  Intelligently extend segment to cover a missing word |
+| **Ignore** [Low Confidence, Oversegmented, Cross-Verse errors] |  Dismiss issue, set confidence to 1 |

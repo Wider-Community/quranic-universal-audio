@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 - **Community-driven validation** — No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an inspector UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and the corrections feed back into the dataset.
 
-- **Automated request-to-release pipeline** — [Request alignment](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) or [add a new reciter](docs/adding-a-reciter.md) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours with email updates.
+- **Automated request-to-release pipeline** — [Request alignment](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) or [add a new reciter](docs/adding-a-reciter.md) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours.
 
 - **Fully reproducible** — Every JSON file includes creation timestamp, models, parameters, config that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
 
