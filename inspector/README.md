@@ -1,6 +1,6 @@
 # Inspector
 
-Flask web app for reviewing and editing Quran recitation alignment results. Four tabs: **Timestamps** (waveform + karaoke phoneme display), **Segments** (browse/edit alignment output with validation), **Audio** (hierarchical recording browser), **Requests** (submit and track reciter requests).
+Flask web app for reviewing and editing Quran recitation alignment results. 3 tabs: **Timestamps** (waveform + karaoke phoneme display), **Segments** (browse/edit alignment output with validation) and **Audio** (hierarchical recording browser).
 
 ## Setup
 
