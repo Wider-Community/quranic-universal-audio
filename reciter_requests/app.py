@@ -627,22 +627,22 @@ def get_reciter_choices(request_type="New reciter"):
 def update_reciter_choices(request_type):
     """Called when request type changes — swap reciter dropdown choices."""
     choices = get_reciter_choices(request_type)
-    return gr.update(choices=choices, value=None)
+    return gr.Dropdown(choices=choices, value=None)
 
 
 def on_reciter_selected(reciter_json):
     """Auto-fill riwayah dropdown when a reciter is selected."""
     if not reciter_json:
-        return gr.update()
+        return gr.Dropdown()
     try:
         info = json.loads(reciter_json)
         riwayah_slug = info.get("riwayah", "")
         if riwayah_slug:
             display_name = _riwayah_slug_to_name(riwayah_slug)
-            return gr.update(value=display_name)
+            return gr.Dropdown(value=display_name)
     except (json.JSONDecodeError, TypeError):
         pass
-    return gr.update()
+    return gr.Dropdown()
 
 
 def get_requests_markdown():
@@ -866,8 +866,8 @@ with gr.Blocks(title="Reciter Requests") as demo:
         proc_md = get_processed_markdown()
         req_md = get_requests_markdown()
         return (
-            gr.update(choices=reciter_choices),
-            gr.update(choices=RIWAYAT),
+            gr.Dropdown(choices=reciter_choices),
+            gr.Dropdown(choices=RIWAYAT),
             proc_md,
             req_md,
             proc_md,
