@@ -89,10 +89,22 @@ def find_audio_manifest(slug):
 # Metadata extraction
 # ---------------------------------------------------------------------------
 def load_meta(path):
-    """Load _meta from a JSON file's first line."""
+    """Load _meta from a JSON file (single-line or pretty-printed)."""
     try:
-        first_line = path.read_text(encoding="utf-8").split("\n", 1)[0]
-        return json.loads(first_line).get("_meta", {})
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return {}
+    # Try single-line format first (JSONL-style segments/detailed files)
+    first_line = text.split("\n", 1)[0]
+    try:
+        meta = json.loads(first_line).get("_meta")
+        if meta is not None:
+            return meta
+    except (json.JSONDecodeError, AttributeError):
+        pass
+    # Fall back to full JSON parse (pretty-printed audio manifests)
+    try:
+        return json.loads(text).get("_meta", {})
     except Exception:
         return {}
 
@@ -117,12 +129,16 @@ def build_info_json(slug, version):
     audio_meta = load_meta(manifest_path) if manifest_path else {}
 
     riwayah = audio_meta.get("riwayah", "hafs_an_asim")
-    display_name = slug.replace("_", " ").title()
+    display_name = audio_meta.get("name_en") or slug.replace("_", " ").title()
 
     return {
         "reciter": slug,
         "reciter_display": display_name,
+        "name_en": audio_meta.get("name_en", ""),
+        "name_ar": audio_meta.get("name_ar", ""),
         "riwayah": riwayah,
+        "style": audio_meta.get("style", "unknown"),
+        "country": audio_meta.get("country", "unknown"),
         "audio_source": audio_source,
         "coverage": compute_coverage(slug),
         "version": version,

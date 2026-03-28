@@ -1,10 +1,10 @@
 {
   "_meta": {
-    "reciter": "ahmad_al_ajmy",
-    "name_en": "Ahmad Al-Ajmy",
+    "reciter": "test_reciter_ci",
+    "name_en": "Test Reciter CI",
     "name_ar": "أحمد بن علي العجمي",
     "riwayah": "hafs_an_asim",
-    "style": "mujawwad",
+    "style": "murattal",
     "audio_category": "by_surah",
     "source": "https://mp3quran.net/",
     "country": "unknown",
