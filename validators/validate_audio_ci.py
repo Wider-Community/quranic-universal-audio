@@ -36,10 +36,16 @@ _DIFF_KEYS = list(ALL_META_KEYS) + ["fetched"]
 # ---------------------------------------------------------------------------
 
 def _load_meta_from_text(text: str) -> dict:
-    """Extract _meta from the first line of a manifest's text content."""
+    """Extract _meta from manifest text (single-line or pretty-printed)."""
     first_line = text.split("\n", 1)[0]
     try:
-        return json.loads(first_line).get("_meta", {})
+        meta = json.loads(first_line).get("_meta")
+        if meta is not None:
+            return meta
+    except (json.JSONDecodeError, AttributeError):
+        pass
+    try:
+        return json.loads(text).get("_meta", {})
     except (json.JSONDecodeError, AttributeError):
         return {}
 
