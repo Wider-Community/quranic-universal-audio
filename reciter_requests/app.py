@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import gradio as gr
 import httpx
+import pycountry
 
 # ---------------------------------------------------------------------------
 # Config
@@ -445,13 +446,17 @@ _STYLE_DISPLAY_TO_SLUG = {
 }
 _STYLE_SLUG_TO_DISPLAY = {v: k for k, v in _STYLE_DISPLAY_TO_SLUG.items()}
 
-COUNTRIES = [
-    "unknown", "Algeria", "Bahrain", "Bangladesh", "Egypt", "India", "Indonesia",
-    "Iran", "Iraq", "Jordan", "Kuwait", "Lebanon", "Libya", "Malaysia", "Mauritania",
-    "Morocco", "Nigeria", "Oman", "Pakistan", "Palestine", "Qatar", "Saudi Arabia",
-    "Senegal", "Somalia", "South Africa", "Sudan", "Syria", "Tunisia", "Turkey",
-    "UAE", "Yemen", "Other",
-]
+AUDIO_CATEGORIES = ["By Surah", "By Ayah"]
+_AUDIO_CAT_TO_SLUG = {"By Surah": "by_surah", "By Ayah": "by_ayah"}
+
+# Build country list from pycountry (ISO 3166), preferring common names.
+# Add aliases for values used in existing manifests that differ from ISO.
+_COUNTRY_ALIASES = {"Türkiye": "Turkey", "Palestine, State of": "Palestine",
+                    "United Arab Emirates": "UAE"}
+COUNTRIES = ["unknown"] + sorted(
+    _COUNTRY_ALIASES.get(getattr(c, "common_name", c.name), getattr(c, "common_name", c.name))
+    for c in pycountry.countries
+) + ["Other"]
 
 
 def submit_request(
@@ -620,7 +625,19 @@ def submit_request(
 # ---------------------------------------------------------------------------
 # Gradio UI helpers
 # ---------------------------------------------------------------------------
-def get_reciter_choices(request_type="New reciter"):
+def _reciter_label(name, riwayah="hafs_an_asim", style="murattal"):
+    """Build a display label with qualifiers for non-default riwayah/style."""
+    qualifiers = []
+    if riwayah and riwayah != "hafs_an_asim":
+        qualifiers.append(_riwayah_slug_to_name(riwayah))
+    if style and style not in ("murattal", "unknown"):
+        qualifiers.append(_STYLE_SLUG_TO_DISPLAY.get(style, style.title()))
+    if qualifiers:
+        return f"{name} — {', '.join(qualifiers)}"
+    return name
+
+
+def get_reciter_choices(request_type="New reciter", audio_cat="By Surah"):
     """Return (display_label, value_json) tuples for the dropdown."""
     if request_type == "Re-align":
         processed = fetch_processed_reciters()
@@ -628,7 +645,7 @@ def get_reciter_choices(request_type="New reciter"):
         for r in sorted(processed, key=lambda x: x["name"]):
             if r.get("validated"):
                 continue  # Already manually validated — no need to re-align
-            label = f"{r['name']} ({r.get('audio_source', '?')})"
+            label = r["name"]
             choices.append((label, json.dumps({
                 "slug": r["slug"],
                 "name": r["name"],
@@ -641,12 +658,16 @@ def get_reciter_choices(request_type="New reciter"):
             choices = [("All processed reciters are validated — no re-alignment needed", "")]
         return choices
     else:
+        cat_slug = _AUDIO_CAT_TO_SLUG.get(audio_cat, "by_surah")
         reciters = fetch_available_reciters()
         choices = []
-        for r in sorted(reciters, key=lambda x: (x["source"], x["name"])):
+        for r in sorted(reciters, key=lambda x: x["name"]):
             if r["has_pending_request"]:
                 continue
-            label = f"{r['name']} ({r['source']})"
+            # Filter by audio category (source path starts with by_surah/ or by_ayah/)
+            if not r["source"].startswith(cat_slug):
+                continue
+            label = _reciter_label(r["name"], r.get("riwayah", ""), r.get("style", ""))
             choices.append((label, json.dumps({
                 "slug": r["slug"],
                 "name": r["name"],
@@ -658,9 +679,22 @@ def get_reciter_choices(request_type="New reciter"):
         return choices
 
 
-def update_reciter_choices(request_type):
-    """Called when request type changes — swap reciter dropdown choices."""
-    choices = get_reciter_choices(request_type)
+def update_on_request_type(request_type):
+    """Called when request type changes — swap reciter choices, toggle audio cat."""
+    if request_type == "Re-align":
+        choices = get_reciter_choices("Re-align")
+        return gr.Dropdown(choices=choices, value=None), gr.Dropdown(visible=False)
+    else:
+        choices = get_reciter_choices("New reciter", "By Surah")
+        return (
+            gr.Dropdown(choices=choices, value=None),
+            gr.Dropdown(value="By Surah", visible=True),
+        )
+
+
+def update_on_audio_cat(audio_cat, request_type):
+    """Called when audio category changes — filter reciter choices."""
+    choices = get_reciter_choices(request_type, audio_cat)
     return gr.Dropdown(choices=choices, value=None)
 
 
@@ -805,6 +839,13 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         info="New reciter = first-time processing. "
                              "Re-align = re-run with different parameters.",
                     )
+                    audio_cat_dd = gr.Dropdown(
+                        choices=AUDIO_CATEGORIES,
+                        value="By Surah",
+                        label="Audio Source Type",
+                        info="By Surah = full-chapter audio files. "
+                             "By Ayah = per-verse audio files.",
+                    )
                     reciter_dd = gr.Dropdown(
                         choices=[],
                         label="Reciter",
@@ -871,8 +912,14 @@ with gr.Blocks(title="Reciter Requests") as demo:
                     )
 
             request_type_dd.change(
-                fn=update_reciter_choices,
+                fn=update_on_request_type,
                 inputs=[request_type_dd],
+                outputs=[reciter_dd, audio_cat_dd],
+            )
+
+            audio_cat_dd.change(
+                fn=update_on_audio_cat,
+                inputs=[audio_cat_dd, request_type_dd],
                 outputs=[reciter_dd],
             )
 
@@ -932,6 +979,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
             gr.Dropdown(choices=RIWAYAT),
             gr.Dropdown(choices=STYLE_CHOICES),
             gr.Dropdown(choices=COUNTRIES),
+            gr.Dropdown(choices=AUDIO_CATEGORIES, value="By Surah"),
             proc_md,
             req_md,
             proc_md,
@@ -939,7 +987,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
 
     demo.load(
         fn=_load_initial_data,
-        outputs=[reciter_dd, riwayah_dd, style_dd, country_dd,
+        outputs=[reciter_dd, riwayah_dd, style_dd, country_dd, audio_cat_dd,
                  ref_table, requests_table, processed_table],
     )
 
@@ -1024,6 +1072,7 @@ demo.launch(
     server_name="0.0.0.0",
     server_port=7860,
     prevent_thread_lock=True,
+    ssr_mode=False,
 )
 demo.app.mount("/api", _api_routes)
 
