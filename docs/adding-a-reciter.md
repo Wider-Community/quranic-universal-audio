@@ -1,15 +1,15 @@
 # Adding a New Reciter
 
-This guide walks you through adding a new reciter's audio manifest to the repository so it becomes available for alignment requests and appears in all tooling (inspector, request form, RECITERS.md).
+This guide walks you through adding a new reciter's audio manifest to the repository so it becomes available for alignment requests and appears in all tooling.
 
 ## Before You Start: Check for Duplicates
 
 Before creating a new manifest, verify the reciter doesn't already exist under a different name or spelling. Reciters are often transliterated inconsistently across sources — the same person may appear as:
 
 - **Spelling variations:** "Al-Hussary" vs "Alhussary" vs "El Hosary"
-- **Missing or extra middle names:** "Abdulbasit" vs "Abdulbasit Abdulsamad" vs "Abdul Basit Abdul Samad"
+- **Missing or extra names:** "Abdulbasit" vs "Abdulbasit Abdulsamad" vs "Abdul Basit Abdul Samad"
 - **Title/honorific differences:** "Sheikh Mishary" vs "Mishary Alafasi"
-- **Transliteration style:** "Mohammad" vs "Muhammad" vs "Mohammed", "Abdul" vs "Abdel" vs "Abdoul"
+- **Transliteration style:** "Mohammad" vs "Muhammad" vs "Mohammed", "Abdul" vs "Abdel"
 
 **How to check:**
 
@@ -103,10 +103,29 @@ Use the reciter's name in `snake_case`. For non-Hafs riwayat, append the riwayah
 | `audio_category` | | `"by_surah"` or `"by_ayah"` — must match the manifest's directory |
 | `source` | | Source URL (e.g., `"https://mp3quran.net/"`) — use `"unknown"` if unsure |
 | `country` | | Country of origin (e.g., `"Saudi Arabia"`) — use `"unknown"` if unsure |
+| `fetched` | | ISO date string (e.g., `"2026-03-28"`) — when the manifest was created or last refreshed |
+| `_timing` | | Verse timing data from the source API (see below) |
 
 **Important:** `reciter` and `name_en` must have real values — never `"unknown"` or empty strings. All other optional fields accept `"unknown"` but should never be empty strings.
 
 Audio entries must always be plain URL strings, never objects or dicts.
+
+### Optional: Verse Timing Data
+
+Some sources (e.g., MP3Quran) provide verse-level timing information. If available, include it in `_meta._timing`:
+
+```json
+"_timing": {
+  "source": "mp3quran_api",
+  "type": "verse",
+  "data": {
+    "1": [[6420, 11120], [11120, 17640], ...],
+    "2": [[0, 5230], [5230, 12100], ...]
+  }
+}
+```
+
+Each entry in `data` is keyed by surah number and contains an array of `[start_ms, end_ms]` pairs — one per verse. This timing data is not required but improves alignment accuracy when present.
 
 ## Step 3: Validate
 
@@ -133,9 +152,15 @@ Fix any errors before submitting. Warnings (e.g., `"unknown"` metadata values) a
 
 ## Step 4: Submit a PR
 
-1. Add the manifest file to git
-2. Run `scripts/list_reciters.py --write` to regenerate RECITERS.md with the new entry
-3. Submit a pull request against `main`
+Create a branch, commit the manifest, and open a pull request:
+
+```bash
+git checkout -b feat/add-audio-<reciter_slug>
+git add data/audio/by_surah/<source>/<reciter>.json
+git commit -m "chore: add audio manifest for <Reciter Name>"
+git push -u origin feat/add-audio-<reciter_slug>
+gh pr create --title "Add audio manifest for <Reciter Name>" --body "Adds <source> manifest for <Reciter Name>."
+```
 
 Once merged, the reciter will automatically appear in:
 - The [RECITERS.md](../data/RECITERS.md) catalog
