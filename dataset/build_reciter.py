@@ -608,12 +608,13 @@ def update_dataset_readme():
                         except (json.JSONDecodeError, OSError):
                             pass
 
-    eligible_set = set(eligible)
-    available_slugs = all_slugs - eligible_set
-    available_count = len(available_slugs)
-    available_full = sum(1 for s in available_slugs if slug_full_coverage.get(s, False))
+    # Compute badge counts (inclusive: all reciters for Audio Only, subset for Timestamped)
+    all_total = len(all_slugs)
+    all_full = sum(1 for s in all_slugs if slug_full_coverage.get(s, False))
+    all_partial = all_total - all_full
 
     # Aligned full coverage: check segments
+    eligible_set = set(eligible)
     aligned_full = 0
     seg_dir = ROOT / "data" / "recitation_segments"
     for slug in eligible:
@@ -632,17 +633,29 @@ def update_dataset_readme():
                     aligned_full += 1
             except (json.JSONDecodeError, OSError):
                 pass
+    ts_partial = processed_count - aligned_full
 
-    body = re.sub(
-        r"Available%20Reciters-\d+%20%28\d+%20Full%20Mushafs%29",
-        f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Mushafs%29",
-        body,
-    )
-    body = re.sub(
-        r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Mushafs%29",
-        f"Aligned%20Reciters-{processed_count}%20%28{aligned_full}%20Full%20Mushafs%29",
-        body,
-    )
+    # Load hours from cache
+    cache_path = ROOT / "data" / ".audio_durations.json"
+    total_hours = 0
+    ts_hours = 0
+    if cache_path.exists():
+        try:
+            cache = json.loads(cache_path.read_text())
+            total_hours = round(sum(e["duration_s"] for e in cache.values()) / 3600)
+            ts_hours = round(sum(cache[s]["duration_s"] for s in eligible_set if s in cache) / 3600)
+        except Exception as e:
+            log.warning("Could not read audio durations cache: %s", e)
+
+    # Audio Only badge
+    audio_val = f"{all_full}%20Full%20%C2%B7%20{all_partial}%20Partial%20%C2%B7%20{total_hours:,}h"
+    body = re.sub(r"Audio%20Only-[^-]+-d4842a", f"Audio%20Only-{audio_val}-d4842a", body)
+
+    # Timestamped badge
+    ts_val = f"{aligned_full}%20Full%20%C2%B7%20{ts_partial}%20Partial%20%C2%B7%20{ts_hours:,}h"
+    body = re.sub(r"Timestamped-[^-]+-d4842a", f"Timestamped-{ts_val}-d4842a", body)
+
+    # Riwayat badge
     riwayat_total_path = ROOT / "data" / "riwayat.json"
     riwayat_total = len(json.loads(riwayat_total_path.read_text())) if riwayat_total_path.exists() else 20
     body = re.sub(
