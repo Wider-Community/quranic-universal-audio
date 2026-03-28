@@ -26,8 +26,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefm
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
-REPO_OWNER = "Wider-Community"
-REPO_NAME = "quranic-universal-audio"
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+from config_loader import repo_config  # noqa: E402
+
+_cfg = repo_config()
+REPO_OWNER = _cfg["repo_owner"]
+REPO_NAME = _cfg["repo_name"]
 DEFAULT_OUTPUT_DIR = ROOT / "dist"
 
 
@@ -317,7 +321,7 @@ def build_manifest(packaged, version, output_dir):
         "version": version,
         "created": str(date.today()),
         "repo": f"{REPO_OWNER}/{REPO_NAME}",
-        "hf_dataset": "hetchyy/quranic-universal-ayahs",
+        "hf_dataset": _cfg["hf_dataset"],
         "reciters": packaged,
     }
 

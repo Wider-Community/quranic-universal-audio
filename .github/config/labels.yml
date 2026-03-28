@@ -1,0 +1,38 @@
+op_labels:
+  trim_segment: "Boundary adjustments"
+  split_segment: "Splits"
+  merge_segments: "Merges"
+  delete_segment: "Deletions"
+  edit_reference: "Reference edits"
+  confirm_reference: "Reference confirmations"
+  auto_fix_missing_word: "Auto-fix missing words"
+  ignore_issue: "Ignored issues"
+
+source_labels:
+  mp3quran: "MP3Quran"
+  everyayah: "EveryAyah"
+  qul: "QUL"
+  surah-quran: "Surah-Quran"
+  youtube: "YouTube"
+
+qiraat_hierarchy:
+  - reader: "Asim"
+    riwayat: [hafs_an_asim, shubah_an_asim]
+  - reader: "Nafi"
+    riwayat: [warsh_an_nafi, qalon_an_nafi]
+  - reader: "Abu Amr"
+    riwayat: [duri_abu_amr, susi_abu_amr]
+  - reader: "Ibn Kathir"
+    riwayat: [bazzi_ibn_kathir, qunbul_ibn_kathir]
+  - reader: "Hamzah"
+    riwayat: [khalaf_an_hamzah, khallad_an_hamzah]
+  - reader: "Al-Kisa'i"
+    riwayat: [duri_al_kisai, layth_al_kisai]
+  - reader: "Ibn Amir"
+    riwayat: [ibn_dhakwan_ibn_amir, hisham_ibn_amir]
+  - reader: "Abu Ja'far"
+    riwayat: [isa_abu_jafar, ibn_jummaz_abu_jafar]
+  - reader: "Ya'qub"
+    riwayat: [ruways_an_yaqub, rawh_an_yaqub]
+  - reader: "Khalaf"
+    riwayat: [ishaq_an_khalaf, idris_an_khalaf]

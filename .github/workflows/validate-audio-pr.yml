@@ -85,10 +85,14 @@ jobs:
           print('\n'.join(lines))
           ")
 
+            SUMMARY="$summary" PR_NUMBER="$pr_number" python3 -c "
+import os, sys
+tpl = open('.github/templates/workflows/meta-update-comment.md').read()
+sys.stdout.write(tpl.format(pr_number=os.environ['PR_NUMBER'], summary=os.environ['SUMMARY']))
+" > /tmp/meta_comment.md
             gh issue comment "$issue" \
               --repo "${{ github.repository }}" \
-              --body "Meta updated via PR #${pr_number}:
-          ${summary}"
+              --body-file /tmp/meta_comment.md
 
             echo "Commented on issue #$issue for $slug"
           done

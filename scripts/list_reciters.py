@@ -35,6 +35,9 @@ SEGMENTS_PATH = REPO / "data" / "recitation_segments"
 TIMESTAMPS_PATH = REPO / "data" / "timestamps"
 CACHE_PATH = REPO / "data" / ".audio_durations.json"
 
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+from config_loader import load_config  # noqa: E402
+
 MAX_WORKERS = 64
 FFPROBE_TIMEOUT = 15
 AYAH_SAMPLE_SIZE = 20
@@ -61,27 +64,10 @@ def _is_git_tracked(path: Path) -> bool:
         return False
     return rel in _git_tracked_cache
 
+_labels = load_config("labels")
 # Qira'ah hierarchy: canonical reader -> list of riwayah slugs (display order)
-QIRAAT_HIERARCHY = [
-    ("Asim", ["hafs_an_asim", "shubah_an_asim"]),
-    ("Nafi", ["warsh_an_nafi", "qalon_an_nafi"]),
-    ("Abu Amr", ["duri_abu_amr", "susi_abu_amr"]),
-    ("Ibn Kathir", ["bazzi_ibn_kathir", "qunbul_ibn_kathir"]),
-    ("Hamzah", ["khalaf_an_hamzah", "khallad_an_hamzah"]),
-    ("Al-Kisa'i", ["duri_al_kisai", "layth_al_kisai"]),
-    ("Ibn Amir", ["ibn_dhakwan_ibn_amir", "hisham_ibn_amir"]),
-    ("Abu Ja'far", ["isa_abu_jafar", "ibn_jummaz_abu_jafar"]),
-    ("Ya'qub", ["ruways_an_yaqub", "rawh_an_yaqub"]),
-    ("Khalaf", ["ishaq_an_khalaf", "idris_an_khalaf"]),
-]
-
-SOURCE_LABELS = {
-    "mp3quran": "MP3Quran",
-    "everyayah": "EveryAyah",
-    "qul": "QUL",
-    "surah-quran": "Surah-Quran",
-    "youtube": "YouTube",
-}
+QIRAAT_HIERARCHY = [(item["reader"], item["riwayat"]) for item in _labels["qiraat_hierarchy"]]
+SOURCE_LABELS = _labels["source_labels"]
 
 
 def load_source_urls() -> dict[str, str]:

@@ -13,6 +13,9 @@ import re
 import threading
 import time
 from base64 import b64decode
+from pathlib import Path
+
+import yaml
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +27,18 @@ import pycountry
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+_APP_DIR = Path(__file__).resolve().parent
+
+
+def _load_app_config(name: str) -> dict:
+    with open(_APP_DIR / "config" / f"{name}.yml", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def _load_app_template(name: str) -> str:
+    return (_APP_DIR / "templates" / f"{name}.md").read_text(encoding="utf-8")
+
+
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
@@ -437,13 +452,12 @@ def _riwayah_slug_to_name(slug: str) -> str:
     _load_riwayat()
     return _RIWAYAH_SLUG_TO_NAME.get(slug, slug.replace("_", " ").title())
 
-REQUEST_TYPES = ["New reciter", "Re-align"]
+_form_data = _load_app_config("form_data")
+_msgs = _load_app_config("messages")
 
-STYLE_CHOICES = ["Murattal", "Mujawwad", "Muallim", "Children Repeat", "Taraweeh", "Unknown"]
-_STYLE_DISPLAY_TO_SLUG = {
-    "Murattal": "murattal", "Mujawwad": "mujawwad", "Muallim": "muallim",
-    "Children Repeat": "children_repeat", "Taraweeh": "taraweeh", "Unknown": "unknown",
-}
+REQUEST_TYPES = _form_data["request_types"]
+STYLE_CHOICES = _form_data["style_choices"]
+_STYLE_DISPLAY_TO_SLUG = _form_data["style_slug_map"]
 _STYLE_SLUG_TO_DISPLAY = {v: k for k, v in _STYLE_DISPLAY_TO_SLUG.items()}
 
 AUDIO_CATEGORIES = ["By Surah", "By Ayah"]
@@ -451,8 +465,7 @@ _AUDIO_CAT_TO_SLUG = {"By Surah": "by_surah", "By Ayah": "by_ayah"}
 
 # Build country list from pycountry (ISO 3166), preferring common names.
 # Add aliases for values used in existing manifests that differ from ISO.
-_COUNTRY_ALIASES = {"Türkiye": "Turkey", "Palestine, State of": "Palestine",
-                    "United Arab Emirates": "UAE"}
+_COUNTRY_ALIASES = _form_data["country_aliases"]
 COUNTRIES = ["unknown"] + sorted(
     _COUNTRY_ALIASES.get(getattr(c, "common_name", c.name), getattr(c, "common_name", c.name))
     for c in pycountry.countries
@@ -469,26 +482,26 @@ def submit_request(
     """Create GitHub Issue + Notion row for a new reciter request."""
     # Validate
     if not reciter_slug or not reciter_name:
-        return "Error: Please select a reciter."
+        return _msgs["errors"]["no_reciter"]
     if not requester_name or not requester_name.strip():
-        return "Error: Please enter your name."
+        return _msgs["errors"]["no_name"]
     if not requester_email or not re.match(r"[^@\s]+@[^@\s]+\.[^@\s]+", requester_email.strip()):
-        return "Error: Please enter a valid email address."
+        return _msgs["errors"]["invalid_email"]
     if not request_type:
-        return "Error: Please select a request type."
+        return _msgs["errors"]["no_request_type"]
     if not riwayah:
-        return "Error: Please select a riwayah."
+        return _msgs["errors"]["no_riwayah"]
     _load_riwayat()
     if RIWAYAT and riwayah not in _RIWAYAH_NAME_TO_SLUG and riwayah not in _RIWAYAH_SLUG_TO_NAME:
-        return f"Error: Unknown riwayah '{riwayah}'. Please select from the dropdown."
+        return _msgs["errors"]["unknown_riwayah"].format(riwayah=riwayah)
     if min_silence_ms is None or min_silence_ms == "":
-        return "Error: Please enter a min silence value (100–2000ms). Check the parameter reference for guidance."
+        return _msgs["errors"]["no_min_silence"]
     try:
         min_silence_ms = int(min_silence_ms)
     except (ValueError, TypeError):
-        return "Error: Min silence must be a number."
+        return _msgs["errors"]["invalid_min_silence_type"]
     if not (100 <= min_silence_ms <= 2000):
-        return "Error: Min silence must be between 100 and 2000ms."
+        return _msgs["errors"]["min_silence_range"]
     request_type = request_type or "New reciter"
     style = style or "Unknown"
     if style not in STYLE_CHOICES:
@@ -502,7 +515,7 @@ def submit_request(
     if github_username:
         user_exists = _verify_github_user(github_username)
         if user_exists is False:
-            return f"Error: GitHub username '@{github_username}' not found. Please check the spelling."
+            return _msgs["errors"]["github_user_not_found"].format(github_username=github_username)
 
     # Check for duplicate requests
     if request_type == "New reciter":
@@ -518,20 +531,12 @@ def submit_request(
                     url = iss["html_url"]
                     state = iss.get("state", "open")
                     if state == "open":
-                        return (
-                            f"This reciter already has a pending request.\n\n"
-                            f"Track status: {url}"
-                        )
+                        return _load_app_template("duplicate-open").format(url=url)
                     # Closed issue — check if data was cleaned up
                     has_segments = _repo_segments_exist(reciter_slug)
                     has_notion = _notion_slug_exists(reciter_slug)
                     if has_segments or has_notion:
-                        return (
-                            f"This reciter was previously requested (now closed).\n\n"
-                            f"See: {url}\n\n"
-                            f"If you believe it needs re-processing, use the "
-                            f"'Re-align' request type instead."
-                        )
+                        return _load_app_template("duplicate-closed").format(url=url)
                     # Data cleaned up — allow fresh request
                     logger.info(
                         f"Closed issue found for {reciter_slug} but data removed "
@@ -548,30 +553,34 @@ def submit_request(
     ).hexdigest()[:8]
 
     # Build title prefix
-    title_prefix = "[request]" if request_type == "New reciter" else "[re-align]"
+    title_prefix = (
+        _msgs["title_prefixes"]["new_reciter"]
+        if request_type == "New reciter"
+        else _msgs["title_prefixes"]["re_align"]
+    )
 
     # Create GitHub Issue
-    issue_body = (
-        f"**Request Type:** {request_type}\n"
-        f"**Reciter:** {reciter_name}\n"
-        f"**Slug:** {reciter_slug}\n"
-        f"**Audio Source:** {audio_source}\n"
-        f"**Riwayah:** {riwayah}\n"
-        f"**Style:** {style}\n"
-        f"**Country:** {country}\n"
-        f"**Suggested Min Silence:** {min_silence_ms}ms\n"
-        f"**Requester:** {requester_id}\n"
+    github_line = f"**GitHub:** @{github_username}\n" if github_username else ""
+    notes_line = f"**Notes:** {notes.strip()}\n" if notes and notes.strip() else ""
+    issue_body = _load_app_template("issue-body").format(
+        request_type=request_type,
+        reciter_name=reciter_name,
+        slug=reciter_slug,
+        audio_source=audio_source,
+        riwayah=riwayah,
+        style=style,
+        country=country,
+        min_silence_ms=min_silence_ms,
+        requester_id=requester_id,
+        github_line=github_line,
+        notes_line=notes_line,
     )
-    if github_username:
-        issue_body += f"**GitHub:** @{github_username}\n"
-    if notes and notes.strip():
-        issue_body += f"**Notes:** {notes.strip()}\n"
 
     try:
         issue_json = {
             "title": f"{title_prefix} {reciter_name}",
             "body": issue_body,
-            "labels": ["request", "status:pending"],
+            "labels": _msgs["issue_labels"]["new_reciter"],
         }
         if github_username:
             issue_json["assignees"] = [github_username]
@@ -615,11 +624,7 @@ def submit_request(
     _set_cached("requests", None)
     _set_cached("available", None)
 
-    return (
-        f"Request submitted successfully!\n\n"
-        f"Track status: {issue_url}\n\n"
-        f"You'll receive email updates when the status changes."
-    )
+    return _load_app_template("success").format(issue_url=issue_url)
 
 
 # ---------------------------------------------------------------------------
@@ -655,7 +660,7 @@ def get_reciter_choices(request_type="New reciter", audio_cat="By Surah"):
                 "country": "",
             })))
         if not choices:
-            choices = [("All processed reciters are validated — no re-alignment needed", "")]
+            choices = [(_msgs["ui"]["no_realign_reciters"], "")]
         return choices
     else:
         cat_slug = _AUDIO_CAT_TO_SLUG.get(audio_cat, "by_surah")
@@ -730,7 +735,7 @@ def get_requests_markdown():
     """Return markdown table of request issues."""
     requests = fetch_request_issues()
     if not requests:
-        return "*No requests yet.*"
+        return _msgs["ui"]["no_requests"]
     lines = ["| Reciter | Status | Submitted | Updated | Issue | PR |",
              "|---------|--------|-----------|---------|-------|------|"]
     for r in requests:
@@ -748,7 +753,7 @@ def get_processed_markdown():
     """Return markdown table of processed reciters."""
     processed = fetch_processed_reciters()
     if not processed:
-        return "*No data available.*"
+        return _msgs["ui"]["no_data"]
     lines = ["| Reciter | Source | Min Silence |",
              "|---------|--------|-------------|"]
     for r in processed:
@@ -763,12 +768,12 @@ def handle_submit(reciter_json, request_type, riwayah, style, country,
                    min_silence, name, email, github_username, notes):
     """Handle form submission from Gradio UI."""
     if not reciter_json:
-        return "Error: Please select a reciter."
+        return _msgs["errors"]["no_reciter"]
 
     try:
         info = json.loads(reciter_json)
     except (json.JSONDecodeError, TypeError):
-        return "Error: Invalid reciter selection."
+        return _msgs["errors"]["invalid_reciter_selection"]
 
     return submit_request(
         reciter_slug=info["slug"],
@@ -804,7 +809,7 @@ def fetch_guide():
         return md
     except Exception as e:
         logger.error(f"Failed to fetch guide: {e}")
-        return "*Guide not available — check back after the next deployment.*"
+        return _msgs["ui"]["guide_fallback"]
 
 
 def refresh_dashboard():

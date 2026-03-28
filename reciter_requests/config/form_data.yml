@@ -1,0 +1,24 @@
+request_types:
+  - "New reciter"
+  - "Re-align"
+
+style_choices:
+  - "Murattal"
+  - "Mujawwad"
+  - "Muallim"
+  - "Children Repeat"
+  - "Taraweeh"
+  - "Unknown"
+
+style_slug_map:
+  Murattal: murattal
+  Mujawwad: mujawwad
+  Muallim: muallim
+  "Children Repeat": children_repeat
+  Taraweeh: taraweeh
+  Unknown: unknown
+
+country_aliases:
+  "Türkiye": "Turkey"
+  "Palestine, State of": "Palestine"
+  "United Arab Emirates": "UAE"

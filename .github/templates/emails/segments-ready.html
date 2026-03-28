@@ -1,0 +1,21 @@
+<h2>Segments Ready</h2>
+<p>Hi {requester_name},</p>
+<p>Alignment segments for <strong>{reciter_name}</strong> have been extracted
+successfully and a pull request has been opened for review.</p>
+{pr_link}
+
+<h3>Next Steps</h3>
+<ol>
+  <li>Checkout the PR branch locally:
+    <pre style="background:#f5f5f5;padding:8px;border-radius:4px;font-size:13px">gh pr checkout {pr_number}</pre>
+  </li>
+  <li>Run the Inspector (<code>python inspector/server.py</code>) to review and fix segments</li>
+  <li>Commit and push your corrections directly to the PR branch</li>
+  <li>Once you're satisfied, click <strong>"Ready for review"</strong> on the PR page
+    (or run <code>gh pr ready</code>)</li>
+</ol>
+<p>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/docs/requesting-a-reciter.md#step-3-review-segments-in-the-inspector">
+    View the full review guide &rarr;
+  </a>
+</p>

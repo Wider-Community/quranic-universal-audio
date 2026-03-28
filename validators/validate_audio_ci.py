@@ -20,12 +20,16 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(_PROJECT_ROOT / "scripts" / "lib"))
 
 from validate_audio import (  # noqa: E402
     ALL_META_KEYS,
     validate_audio,
     load_surah_info,
 )
+from config_loader import load_template  # noqa: E402
+
+_VALIDATION_HEADER = load_template("reports/audio-validation-header").strip()
 
 # Fields to compare when diffing _meta between base and HEAD versions.
 _DIFF_KEYS = list(ALL_META_KEYS) + ["fetched"]
@@ -170,7 +174,7 @@ def _format_single(result: dict, meta_diff: dict | None) -> str:
             header += f" ({name_ar})"
 
     lines = [
-        "## Audio Manifest Validation",
+        _VALIDATION_HEADER,
         "",
         header,
         f"- Coverage: {_coverage_str(result)}",
@@ -206,7 +210,7 @@ def _format_single(result: dict, meta_diff: dict | None) -> str:
 def _format_multi(results: list[dict], meta_diffs: dict) -> str:
     """Table + details report for multiple manifests."""
     lines = [
-        "## Audio Manifest Validation",
+        _VALIDATION_HEADER,
         "",
         "| File | Reciter | Coverage | Sources | Meta |",
         "|------|---------|----------|---------|------|",

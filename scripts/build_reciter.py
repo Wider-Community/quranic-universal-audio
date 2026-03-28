@@ -31,7 +31,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefm
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
-REPO_ID = "hetchyy/quranic-universal-ayahs"
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+from config_loader import repo_config  # noqa: E402
+
+REPO_ID = repo_config()["hf_dataset"]
 SAMPLE_PCT = int(os.environ.get("SAMPLE_PCT", "0"))
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 

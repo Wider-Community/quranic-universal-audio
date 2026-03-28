@@ -16,23 +16,16 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "validators"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "lib"))
 
 from validate_segments import load_word_counts, validate_reciter  # noqa: E402
+from config_loader import load_config, load_template  # noqa: E402
 
 SURAH_INFO = PROJECT_ROOT / "data" / "surah_info.json"
 SEGMENTS_ROOT = PROJECT_ROOT / "data" / "recitation_segments"
 
-# Human-readable labels for op_types
-OP_LABELS = {
-    "trim_segment": "Boundary adjustments",
-    "split_segment": "Splits",
-    "merge_segments": "Merges",
-    "delete_segment": "Deletions",
-    "edit_reference": "Reference edits",
-    "confirm_reference": "Reference confirmations",
-    "auto_fix_missing_word": "Auto-fix missing words",
-    "ignore_issue": "Ignored issues",
-}
+OP_LABELS = load_config("labels")["op_labels"]
+_EDIT_SUMMARY_TPL = load_template("reports/edit-summary").strip()
 
 
 def _summarize_edit_history(reciter_dir: Path) -> dict:
@@ -124,11 +117,11 @@ def _format_edits(edit_summary: dict) -> str:
         return "No manual edits recorded."
 
     lines = []
-    lines.append(
-        f"**{edit_summary['total_operations']}** operations "
-        f"across **{edit_summary['chapters_edited']}** chapters "
-        f"in **{edit_summary['total_batches']}** save(s)."
-    )
+    lines.append(_EDIT_SUMMARY_TPL.format(
+        total_operations=edit_summary['total_operations'],
+        chapters_edited=edit_summary['chapters_edited'],
+        total_batches=edit_summary['total_batches'],
+    ))
 
     op_counts = edit_summary["op_counts"]
     if op_counts:

@@ -12,9 +12,6 @@ sync_mfa.sh
 fetch_results.sh
 mfa_train.pbs
 prepare_labs.py
-email_templates.py
 audit_reciters.py
-process_requests.py
-request_helpers.py
 .process_state.json
 .timestamps_state.json
