@@ -12,11 +12,9 @@ data/
 ├── recitation_segments/<reciter>/                        # Alignment pipeline output
 │   ├── segments.json                                     # Word-level time segments per verse
 │   ├── detailed.json                                     # Full entries with ASR metadata
-│   └── validation.log
 ├── timestamps/<by_ayah_audio|by_surah_audio>/<reciter>/  # Timestamps output
 │   ├── timestamps.json                                   # Word-level timing
 │   ├── timestamps_full.json                              # Word + letter + phoneme timing
-│   └── validation.log
 └── qul_downloads/                                        # Raw segment files from Tarteel QUL
     ├── by_ayah/
     └── by_surah/
