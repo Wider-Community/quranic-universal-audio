@@ -3,10 +3,10 @@
 Build and upload a reciter config to the HuggingFace dataset.
 
 Usage:
-    python dataset/build_reciter.py <slug>              # Upload one reciter
-    python dataset/build_reciter.py --all               # Upload all eligible
-    python dataset/build_reciter.py --delete <slug>     # Delete a reciter's data
-    python dataset/build_reciter.py --update-readme     # Update dataset card only
+    python quranic_universal_ayahs/build_reciter.py <slug>              # Upload one reciter
+    python quranic_universal_ayahs/build_reciter.py --all               # Upload all eligible
+    python quranic_universal_ayahs/build_reciter.py --delete <slug>     # Delete a reciter's data
+    python quranic_universal_ayahs/build_reciter.py --update-readme     # Update dataset card only
 
 Environment:
     HF_TOKEN       — HuggingFace API token
@@ -493,8 +493,8 @@ def _build_reciter_info(eligible):
 
 
 def update_dataset_readme():
-    """Rebuild dataset/README.md YAML configs and markdown tables from eligible reciters."""
-    readme_path = ROOT / "dataset" / "README.md"
+    """Rebuild quranic_universal_ayahs/README.md YAML configs and markdown tables from eligible reciters."""
+    readme_path = ROOT / "quranic_universal_ayahs" / "README.md"
     text = readme_path.read_text()
 
     # Split YAML frontmatter from body

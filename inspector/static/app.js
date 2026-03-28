@@ -1644,7 +1644,7 @@ function charsMatch(mfaChar, displayChar) {
 
 /**
  * Split text into character groups (base char + combining marks).
- * Port of quran_multi_aligner/src/ui/segments.py:split_into_char_groups()
+ * Port of quranic_universal_aligner/src/ui/segments.py:split_into_char_groups()
  */
 function splitIntoCharGroups(text) {
     const groups = [];

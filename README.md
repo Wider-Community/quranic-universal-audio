@@ -45,7 +45,7 @@ To access the audio or timestamps:
 ## Technical Overview
 
 <p align="center">
-  <img src="captures/quran_multi_aligner_pipeline.svg" alt="Pipeline diagram">
+  <img src="captures/quranic_universal_aligner_pipeline.svg" alt="Pipeline diagram">
 </p>
 
 The repository uses the following components:
@@ -53,7 +53,7 @@ The repository uses the following components:
 | Component | Description |
 |-----------|-------------|
 | [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
-| [`quran_multi_aligner/`](quran_multi_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](quran_multi_aligner/docs/client_api.md) |
+| [`quranic_universal_aligner/`](quranic_universal_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](quranic_universal_aligner/docs/client_api.md) |
 | [`mfa_aligner/`](mfa_aligner/) | MFA forced alignment service for timestamps computation |
 | [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
 | [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |

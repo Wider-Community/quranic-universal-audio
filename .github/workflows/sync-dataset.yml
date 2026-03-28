@@ -40,7 +40,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # Manual trigger: sync all eligible reciters
             eligible=$(python -c "
-          import sys; sys.path.insert(0, 'dataset')
+          import sys; sys.path.insert(0, 'quranic_universal_ayahs')
           from build_reciter import find_eligible_reciters
           print(' '.join(find_eligible_reciters()))
           ")
@@ -81,7 +81,7 @@ jobs:
         run: |
           for slug in ${{ steps.detect.outputs.slugs }}; do
             echo "Building $slug..."
-            python dataset/build_reciter.py "$slug"
+            python quranic_universal_ayahs/build_reciter.py "$slug"
           done
 
       - name: Delete removed reciters
@@ -91,5 +91,5 @@ jobs:
         run: |
           for slug in ${{ steps.detect.outputs.deleted }}; do
             echo "Deleting $slug..."
-            python dataset/build_reciter.py --delete "$slug"
+            python quranic_universal_ayahs/build_reciter.py --delete "$slug"
           done

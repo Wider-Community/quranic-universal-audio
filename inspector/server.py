@@ -48,11 +48,11 @@ from config import (
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
-_QPC_PATH = Path(__file__).resolve().parent.parent / "quran_multi_aligner" / "data" / "qpc_hafs.json"
+_QPC_PATH = Path(__file__).resolve().parent.parent / "quranic_universal_aligner" / "data" / "qpc_hafs.json"
 _QPC: dict[str, dict] | None = None
 
 # Digital Khatt display text lookup (digital_khatt_v2_script.json)
-_DK_PATH = Path(__file__).resolve().parent.parent / "quran_multi_aligner" / "data" / "digital_khatt_v2_script.json"
+_DK_PATH = Path(__file__).resolve().parent.parent / "quranic_universal_aligner" / "data" / "digital_khatt_v2_script.json"
 _DK: dict[str, dict] | None = None
 
 

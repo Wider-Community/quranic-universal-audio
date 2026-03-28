@@ -39,5 +39,5 @@ dist/
 
 # Large binaries tracked in HF Spaces but not in parent repo
 mfa_aligner/quran_aligner_model.zip
-quran_multi_aligner/data/*.pkl
-quran_multi_aligner/data/*.mp3
+quranic_universal_aligner/data/*.pkl
+quranic_universal_aligner/data/*.mp3

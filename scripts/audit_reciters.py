@@ -8,7 +8,7 @@ Cross-references:
 - data/recitation_segments/ (segment files on disk)
 - data/timestamps/ (timestamp files on disk, git-tracked only)
 - README.md (badge counts: reciters + riwayat)
-- dataset/README.md (badge counts: reciters + riwayat)
+- quranic_universal_ayahs/README.md (badge counts: reciters + riwayat)
 - GitHub issues (request labels)
 - Notion database (request statuses)
 
@@ -123,9 +123,9 @@ def collect_disk_state():
 
 
 def collect_readme_badges():
-    """Parse badge counts from README.md and dataset/README.md."""
+    """Parse badge counts from README.md and quranic_universal_ayahs/README.md."""
     result = {}
-    for key, path in [("readme", REPO_ROOT / "README.md"), ("dataset", REPO_ROOT / "dataset" / "README.md")]:
+    for key, path in [("readme", REPO_ROOT / "README.md"), ("dataset", REPO_ROOT / "quranic_universal_ayahs" / "README.md")]:
         text = path.read_text() if path.exists() else ""
         avail_match = re.search(r"Available%20Reciters-(\d+)%20%28(\d+)%20Full%20Coverage%29", text)
         aligned_match = re.search(r"Aligned%20Reciters-(\d+)%20%28(\d+)%20Full%20Coverage%29", text)
@@ -216,7 +216,7 @@ def audit(disk, badges):
                     pass
 
     # ── 5. README badge counts ─────────────────────────────────────────
-    for key, label in [("readme", "README.md"), ("dataset", "dataset/README.md")]:
+    for key, label in [("readme", "README.md"), ("dataset", "quranic_universal_ayahs/README.md")]:
         b = badges[key]
         if b["available"] is not None and b["available"] != expected_available:
             issues.append(("FIX", f"{label} available badge: {b['available']} but expected {expected_available}"))
@@ -303,8 +303,8 @@ def apply_fixes(disk):
         print(f"  ERROR: list_reciters.py failed: {result.stderr}")
         return False
 
-    # Update dataset/README.md badges too
-    dataset_readme_path = REPO_ROOT / "dataset" / "README.md"
+    # Update quranic_universal_ayahs/README.md badges too
+    dataset_readme_path = REPO_ROOT / "quranic_universal_ayahs" / "README.md"
     if dataset_readme_path.exists():
         ds_text = dataset_readme_path.read_text()
         original = ds_text
@@ -347,7 +347,7 @@ def apply_fixes(disk):
 
         if ds_text != original:
             dataset_readme_path.write_text(ds_text)
-            print(f"  Updated dataset/README.md badges")
+            print(f"  Updated quranic_universal_ayahs/README.md badges")
 
     return True
 
@@ -375,7 +375,7 @@ def main():
 
     print("\nParsing badges...")
     badges = collect_readme_badges()
-    for key, label in [("readme", "README.md"), ("dataset", "dataset/README.md")]:
+    for key, label in [("readme", "README.md"), ("dataset", "quranic_universal_ayahs/README.md")]:
         b = badges[key]
         if b["available"] is not None:
             parts = [f"{b['available']} Available ({b['available_full']} Full) | {b['aligned']} Aligned ({b['aligned_full']} Full)"]
