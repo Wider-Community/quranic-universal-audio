@@ -694,9 +694,6 @@ def refresh_dashboard():
 # Gradio App
 # ---------------------------------------------------------------------------
 
-# Pre-load riwayat data before building UI
-_load_riwayat()
-
 with gr.Blocks(title="Reciter Requests") as demo:
     gr.Markdown("# Quran Reciter Segmentation Requests")
     gr.Markdown(
@@ -719,14 +716,14 @@ with gr.Blocks(title="Reciter Requests") as demo:
                              "Re-align = re-run with different parameters.",
                     )
                     reciter_dd = gr.Dropdown(
-                        choices=get_reciter_choices(),
+                        choices=[],
                         label="Reciter",
                         info="Select a reciter to request segmentation for. "
                              "Already-processed and pending reciters are excluded.",
                         filterable=True,
                     )
                     riwayah_dd = gr.Dropdown(
-                        choices=RIWAYAT,
+                        choices=[],
                         label="Riwayah",
                         info="Auto-filled from the reciter's manifest. "
                              "Change only if you know the reciter uses a different reading.",
@@ -769,7 +766,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         "reciters. Use them as a guide for your suggestion."
                     )
                     ref_table = gr.Markdown(
-                        value=get_processed_markdown(),
+                        value="*Loading...*",
                     )
 
             request_type_dd.change(
@@ -799,13 +796,13 @@ with gr.Blocks(title="Reciter Requests") as demo:
             gr.Markdown(
                 "All reciter segmentation requests and their current pipeline status."
             )
-            requests_table = gr.Markdown(value=get_requests_markdown())
+            requests_table = gr.Markdown(value="*Loading...*")
 
             gr.Markdown("### Completed Reciters")
             gr.Markdown(
                 "Reciters that have been fully processed with their VAD parameters."
             )
-            processed_table = gr.Markdown(value=get_processed_markdown())
+            processed_table = gr.Markdown(value="*Loading...*")
 
             refresh_btn.click(
                 fn=refresh_dashboard,
@@ -820,6 +817,27 @@ with gr.Blocks(title="Reciter Requests") as demo:
                 fn=fetch_guide,
                 outputs=guide_md,
             )
+
+    # ── Deferred initial data load (runs after server starts) ────────
+    def _load_initial_data():
+        """Fetch all startup data in one callback so the server starts fast."""
+        _load_riwayat()
+        reciter_choices = get_reciter_choices()
+        proc_md = get_processed_markdown()
+        req_md = get_requests_markdown()
+        return (
+            gr.update(choices=reciter_choices),
+            gr.update(choices=RIWAYAT),
+            proc_md,
+            req_md,
+            proc_md,
+        )
+
+    demo.load(
+        fn=_load_initial_data,
+        outputs=[reciter_dd, riwayah_dd, ref_table, requests_table,
+                 processed_table],
+    )
 
 
 # ---------------------------------------------------------------------------
