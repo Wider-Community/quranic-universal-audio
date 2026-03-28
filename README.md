@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 - **Community-driven validation** — No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an inspector UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and the corrections feed back into the dataset.
 
-- **Automated request-to-release pipeline** — [Request alignment](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) or [add a new reciter](docs/adding-a-reciter.md) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours.
+- **Automated request-to-release pipeline** — [Request alignment](https://huggingface.co/spaces/hetchyy/-reciter-requests) or [add a new reciter](docs/adding-a-reciter.md) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours.
 
 - **Fully reproducible** — Every JSON file includes creation timestamp, models, parameters, config that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
 
@@ -35,8 +35,8 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 To access the audio or timestamps:
 
-1. **Direct download** — JSON files in [`data/`](data/), or packaged in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
-2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
+1. **Direct download** — JSON files in [`data/`](data/), or packaged in [GitHub Releases](https://github.com/Wider-Community/ic-universal-audio/releases)
+2. **Hugging Face Dataset** — [ic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
 3. **QUD API** — *(coming soon)*
 
 ## Technical Overview
@@ -55,7 +55,7 @@ The repository uses the following components:
 | [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
 | [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |
 | [`reciter_requests`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
-| [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Quran-specific G2P; the foundation that makes phoneme-level alignment possible |
+| [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Qur'an-specific G2P; the foundation that makes phoneme-level alignment possible |
 
 
 ## Contributing
