@@ -110,41 +110,23 @@ my_reciter/
 
 ### `_meta` Fields (JSON formats)
 
-All JSON audio manifests must include a `_meta` object. Missing keys are flagged as errors; empty values as warnings.
+All JSON audio manifests must include a `_meta` object. Fields marked **required** must have a real value; other fields must be present but may be `"unknown"` if not known. Empty strings are never allowed — use `"unknown"` instead.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `reciter` | string | Reciter name in snake_case (e.g., `"ahmad_alnufais"`) |
-| `riwayah` | string | Quranic reading tradition (e.g., `"hafs_an_asim"`) |
-| `audio_category` | string | `"by_surah"` or `"by_ayah"` |
-| `source` | string | Source URL or description |
-| `country` | string | Country of origin (may be empty) |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `reciter` | string | **yes** | Reciter name in snake_case (e.g., `"ahmad_alnufais"`) |
+| `name_en` | string | **yes** | English display name (e.g., `"Ahmad Al-Nufais"`) |
+| `name_ar` | string | | Arabic display name (e.g., `"أحمد النفيس"`) |
+| `riwayah` | string | | Quranic reading tradition (e.g., `"hafs_an_asim"`) |
+| `style` | string | | Recitation style: `murattal`, `mujawwad`, `muallim`, `hadr`, or `unknown` |
+| `audio_category` | string | | `"by_surah"` or `"by_ayah"` |
+| `source` | string | | Source URL or description |
+| `country` | string | | Country of origin |
+| `fetched` | string | | ISO date when manifest was created/refreshed (e.g., `"2026-03-28"`) |
 
 ### Adding a New Reciter
 
-1. **Create the manifest** at the appropriate path:
-   - Surah-level: `data/audio/by_surah/<source>/<reciter>.json`
-   - Verse-level: `data/audio/by_ayah/<source>/<reciter>.json`
-   - Or use a local directory of audio files (`sura_dir` / `verse_dir`)
-
-2. **If using a new source**, create the source directory and add a `SOURCE` file containing the origin URL:
-   ```bash
-   mkdir data/audio/by_surah/my-source
-   echo "https://example.com/quran-audio" > data/audio/by_surah/my-source/SOURCE
-   ```
-   No other configuration is needed — the pipeline, inspector, and `scripts/list_reciters.py` auto-discover source directories.
-
-3. **Include the `_meta` block** with all 5 required fields (see table above).
-
-4. **Populate the audio entries** — surah numbers (`"1"` to `"114"`) or verse keys (`"1:1"` to `"114:6"`), each mapping to a URL or local file path.
-
-5. **Validate:**
-   ```bash
-   python validators/validate_audio.py data/audio/by_surah/<source>/<reciter>.json
-   python validators/validate_audio.py <path> --ffprobe    # (optional) also probe audio files with ffprobe
-   ```
-
-   Validation checks: metadata completeness, coverage against `surah_info.json` (missing surahs/verses), duplicate keys, URL reachability, and local file integrity.
+See the [Adding a New Reciter](../docs/adding-a-reciter.md) guide for the full walkthrough — including duplicate checking, manifest creation, validation, and PR submission.
 
 ---
 

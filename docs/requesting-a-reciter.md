@@ -63,7 +63,7 @@ You will be notified by email when the request is approved and the segments have
 
 If the reciter you want is not in the dropdown, their audio manifest hasn't been added to the repository yet. To add one:
 
-1. Create the audio manifest JSON following the [Adding a New Reciter](../data/README.md#adding-a-new-reciter) guide
+1. Create the audio manifest JSON following the [Adding a New Reciter](adding-a-reciter.md) guide
 2. Submit a PR with the manifest file
 3. Wait for the PR to be merged — the reciter will then appear automatically in the request form dropdowns
 

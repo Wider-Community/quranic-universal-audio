@@ -41,7 +41,7 @@ When segments are extracted for a reciter, a **draft PR** is opened automaticall
 
 ### Add a new reciter or request alignment
 
-- **Add audio yourself** — Create an audio manifest and submit a PR. See [Adding a New Reciter](data/README.md#adding-a-new-reciter) for the expected format and steps.
+- **Add audio yourself** — Create an audio manifest and submit a PR. See [Adding a New Reciter](docs/adding-a-reciter.md) for the full guide.
 - **Request processing** — Use the [reciter request form](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) to request segmentation and timestamping for a specific reciter.
 
 ### Review and fix segments

@@ -11,7 +11,7 @@
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
 </p>
 
-<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A community-verified dataset featuring 300+ reciters with word- and letter-level timestamps across multiple riwayat.</p>
+<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A community-verified dataset of 350+ reciters with word- and letter-level timestamps across multiple riwayat.</p>
 
 https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 - **Unified Qur'anic audio hub** — A single consistent schema with comprehensive metadata for all recitations. No more chasing scattered websites, CDN APIs, YouTube playlists, and raw files with different formats, surah/ayah splits, and inconsistent reciter names.
 
-- **Large-scale, multi-riwayah, multi-style** — Full Qur'an coverage for [300+ reciters and 15+ riwayat](data/RECITERS.md) spanning mujawwad, murattal, muallim, taraweeh and children repeat styles, with dedicated handling of wording and verse numbering differences across riwayat.
+- **Large-scale, multi-riwayah, multi-style** — Full Qur'an coverage for [350+ reciters and 14 riwayat](data/RECITERS.md) spanning mujawwad, murattal, muallim, taraweeh and children repeat styles, with dedicated handling of wording and verse numbering differences across riwayat.
 
 - **Phoneme-first alignment** — 20ms phoneme-level precision eliminates ambiguity at word boundaries and resolves tajweed effects like idgham where sounds merge across words. Powered by a state-of-the-art Qur'an-specific ASR model trained on hundreds of hours of diverse recitations, robust across styles, voices, and recording conditions.
 
@@ -27,11 +27,9 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 - **Community-driven validation** — No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an inspector UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and the corrections feed back into the dataset.
 
-- **Automated request-to-release pipeline** — [Request or add a reciter](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours with email updates.
+- **Automated request-to-release pipeline** — [Request alignment](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) or [add a new reciter](docs/adding-a-reciter.md) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours with email updates.
 
-- **Fully reproducible** — Every output records the models, parameters, and settings that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
-
-- **Flexible access** — Consume the data through structured JSON files, Hugging Face dataset, or API-style access, all versioned and auto-updated with each release.
+- **Fully reproducible** — Every JSON file includes creation timestamp, models, parameters, config that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
 
 ## Data Access
 
