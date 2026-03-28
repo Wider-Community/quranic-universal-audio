@@ -124,6 +124,36 @@ def _notion_create_page(properties):
     return r.json()
 
 
+def _repo_segments_exist(slug):
+    """Check if segment data exists in the repo for this reciter."""
+    try:
+        _gh_get(f"contents/data/recitation_segments/{slug}/segments.json")
+        return True
+    except Exception:
+        return False
+
+
+def _notion_slug_exists(slug):
+    """Check if a Notion page with this slug exists in the database."""
+    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
+        return None  # Can't check — treat as unknown
+    try:
+        url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
+        body = {
+            "filter": {
+                "property": "Slug",
+                "rich_text": {"equals": slug},
+            },
+            "page_size": 1,
+        }
+        r = httpx.post(url, headers=_notion_headers(), json=body, timeout=15)
+        r.raise_for_status()
+        return len(r.json().get("results", [])) > 0
+    except Exception as e:
+        logger.warning(f"Notion slug check failed: {e}")
+        return None  # Unknown — don't block on Notion failure
+
+
 # ---------------------------------------------------------------------------
 # Data fetching
 # ---------------------------------------------------------------------------
@@ -441,7 +471,7 @@ def submit_request(
         if user_exists is False:
             return f"Error: GitHub username '@{github_username}' not found. Please check the spelling."
 
-    # Check for duplicate (open AND closed issues)
+    # Check for duplicate requests
     if request_type == "New reciter":
         try:
             issues = _gh_get("issues", params={
@@ -459,13 +489,23 @@ def submit_request(
                             f"This reciter already has a pending request.\n\n"
                             f"Track status: {url}"
                         )
-                    else:
+                    # Closed issue — check if data was cleaned up
+                    has_segments = _repo_segments_exist(reciter_slug)
+                    has_notion = _notion_slug_exists(reciter_slug)
+                    if has_segments or has_notion:
                         return (
                             f"This reciter was previously requested (now closed).\n\n"
                             f"See: {url}\n\n"
                             f"If you believe it needs re-processing, use the "
                             f"'Re-align' request type instead."
                         )
+                    # Data cleaned up — allow fresh request
+                    logger.info(
+                        f"Closed issue found for {reciter_slug} but data removed "
+                        f"(segments={has_segments}, notion={has_notion}) — "
+                        f"allowing new request"
+                    )
+                    break
         except Exception as e:
             logger.warning(f"Duplicate check failed: {e}")
 
@@ -844,7 +884,17 @@ with gr.Blocks(title="Reciter Requests") as demo:
 # FastAPI app with custom API endpoints + Gradio mount
 # ---------------------------------------------------------------------------
 api = FastAPI()
-api.add_middleware(
+
+
+@api.get("/health")
+async def health():
+    """Immediate health check — lets HF know the container is alive."""
+    return {"status": "ok"}
+
+
+# Sub-app for /api/* routes with its own CORS (doesn't interfere with Gradio)
+api_routes = FastAPI()
+api_routes.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
@@ -852,7 +902,7 @@ api.add_middleware(
 )
 
 
-@api.post("/api/request")
+@api_routes.post("/request")
 async def api_request(request: Request):
     """API endpoint for Inspector form submissions."""
     req = await request.json()
@@ -887,28 +937,31 @@ async def api_request(request: Request):
         }, status_code=201)
 
 
-@api.get("/api/reciters")
+@api_routes.get("/reciters")
 async def api_reciters():
     """List available (unprocessed) reciters."""
     return {"reciters": fetch_available_reciters()}
 
 
-@api.get("/api/processed")
+@api_routes.get("/processed")
 async def api_processed():
     """List processed reciters with VAD parameters."""
     return {"reciters": fetch_processed_reciters()}
 
 
-@api.get("/api/requests")
+@api_routes.get("/requests")
 async def api_requests():
     """List all request issues."""
     return {"requests": fetch_request_issues()}
 
 
-@api.get("/api/guide")
+@api_routes.get("/guide")
 async def api_guide():
     """Fetch the requesting-a-reciter guide markdown."""
     return {"markdown": fetch_guide()}
+
+
+api.mount("/api", api_routes)
 
 
 # Mount Gradio app onto FastAPI
