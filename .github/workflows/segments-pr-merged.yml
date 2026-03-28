@@ -1,0 +1,138 @@
+name: Segments PR Merged
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths:
+      - 'data/recitation_segments/**'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  update-issue:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Extract issue number from PR body
+        id: issue
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          issue=$(echo "$PR_BODY" | grep -oP '(?:Ref|Closes|Fixes)\s+#\K\d+' | head -1)
+          echo "number=$issue" >> $GITHUB_OUTPUT
+
+      - name: Detect changed reciters
+        id: detect
+        run: |
+          reciters=$(git diff HEAD~1 --name-only -- data/recitation_segments/ | \
+            sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
+            sort -u | tr '\n' ' ')
+          echo "reciters=$(echo $reciters | xargs)" >> $GITHUB_OUTPUT
+          echo "Changed reciters: $reciters"
+
+      - name: Get PR commit authors
+        id: authors
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_number=${{ github.event.pull_request.number }}
+          repo=${{ github.repository }}
+          merger="${{ github.event.pull_request.merged_by.login }}"
+
+          # Fetch all commits on the PR, extract unique authors (exclude bots and merger)
+          authors=$(gh api "repos/$repo/pulls/$pr_number/commits" --paginate \
+            --jq '.[].author.login // empty' | \
+            grep -v '\[bot\]$' | \
+            grep -v '^github-actions$' | \
+            sort -u)
+
+          if [ -n "$merger" ]; then
+            authors=$(echo "$authors" | grep -v "^${merger}$")
+          fi
+
+          authors=$(echo "$authors" | xargs)
+          echo "authors=$authors" >> $GITHUB_OUTPUT
+          echo "Segment editors: ${authors:-none}"
+
+      - name: Generate edit summary
+        id: summary
+        if: steps.detect.outputs.reciters != ''
+        run: |
+          summary=$(python scripts/summarize_pr_edits.py ${{ steps.detect.outputs.reciters }})
+
+          # Write to file for multi-line output
+          echo "$summary" > /tmp/edit_summary.md
+          echo "generated=true" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        if: steps.summary.outputs.generated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          pr_number=${{ github.event.pull_request.number }}
+          authors="${{ steps.authors.outputs.authors }}"
+
+          if [ -n "$authors" ]; then
+            mentions=""
+            for author in $authors; do
+              mentions="$mentions @$author"
+            done
+            edited_by="Segments edited by: $(echo $mentions | xargs)"
+          else
+            edited_by="No external edits — pipeline output accepted as-is."
+          fi
+
+          {
+            echo "## Merge Summary"
+            echo ""
+            echo "$edited_by"
+            echo ""
+            cat /tmp/edit_summary.md
+          } > /tmp/pr_comment.md
+
+          gh pr comment "$pr_number" \
+            --repo "${{ github.repository }}" \
+            --body-file /tmp/pr_comment.md
+
+      - name: Comment on issue
+        if: steps.issue.outputs.number != '' && steps.summary.outputs.generated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          issue=${{ steps.issue.outputs.number }}
+          pr_number=${{ github.event.pull_request.number }}
+          authors="${{ steps.authors.outputs.authors }}"
+
+          if [ -n "$authors" ]; then
+            mentions=""
+            for author in $authors; do
+              mentions="$mentions @$author"
+            done
+            edited_by="Segments edited by: $(echo $mentions | xargs)"
+          else
+            edited_by="No external edits — pipeline output accepted as-is."
+          fi
+
+          {
+            echo "Segments merged via #${pr_number}."
+            echo ""
+            echo "$edited_by"
+            echo ""
+            cat /tmp/edit_summary.md
+            echo ""
+            echo "Thank you for your contribution!"
+          } > /tmp/issue_comment.md
+
+          gh issue comment "$issue" \
+            --repo "${{ github.repository }}" \
+            --body-file /tmp/issue_comment.md
