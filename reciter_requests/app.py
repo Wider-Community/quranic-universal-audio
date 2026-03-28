@@ -461,14 +461,17 @@ def submit_request(
         issue_body += f"**Notes:** {notes.strip()}\n"
 
     try:
+        issue_json = {
+            "title": f"{title_prefix} {reciter_name}",
+            "body": issue_body,
+            "labels": ["request", "status:pending"],
+        }
+        if github_username and github_username.strip():
+            issue_json["assignees"] = [github_username.strip().lstrip("@")]
         issue_resp = httpx.post(
             f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues",
             headers=_gh_headers(),
-            json={
-                "title": f"{title_prefix} {reciter_name}",
-                "body": issue_body,
-                "labels": ["request", "status:pending"],
-            },
+            json=issue_json,
             timeout=30,
         )
         issue_resp.raise_for_status()
@@ -641,7 +644,9 @@ with gr.Blocks(title="Reciter Requests") as demo:
     gr.Markdown("# Quran Reciter Segmentation Requests")
     gr.Markdown(
         "Submit a request to have a new reciter processed through the "
-        "alignment pipeline. Track the status of all requests below."
+        "alignment pipeline. Track the status of all requests below.\n\n"
+        "Don't see your reciter in the dropdown? "
+        "[Add one](https://github.com/Wider-Community/quranic-universal-audio/blob/main/docs/adding-a-reciter.md)."
     )
 
     with gr.Tabs():
