@@ -52,7 +52,9 @@ A single JSON file where keys are surah numbers (`"1"` to `"114"`) mapping to au
 ```
 
 - **Location:** `audio/by_surah/<source>/<reciter>.json`
+- **Sources:** `mp3quran`, `qul`, `surah-quran`, `youtube`
 - **Expected coverage:** 114 surahs
+- **Note:** YouTube URLs are supported — the pipeline downloads audio via `yt-dlp` at extraction time
 
 ### Format 2: `verse_json` — Verse-level JSON
 

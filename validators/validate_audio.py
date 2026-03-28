@@ -160,7 +160,7 @@ ALL_META_KEYS = (
     "reciter", "name_en", "name_ar", "riwayah", "style",
     "audio_category", "source", "country",
 )
-VALID_STYLES = ("murattal", "mujawwad", "muallim", "unknown")
+VALID_STYLES = ("murattal", "mujawwad", "muallim", "children_repeat", "taraweeh", "unknown")
 VALID_AUDIO_CATEGORIES = ("by_surah", "by_ayah")
 
 
@@ -295,8 +295,40 @@ def analyze_verse_coverage(
 # ── URL validation ───────────────────────────────────────────────────────
 
 
+def _is_youtube_url(url: str) -> bool:
+    return "youtube.com/" in url or "youtu.be/" in url
+
+
+def _check_youtube_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
+    """Check a YouTube URL is accessible via yt-dlp --simulate."""
+    import shutil
+    import subprocess
+    if not shutil.which("yt-dlp"):
+        return {"url": url, "ok": False, "status": None,
+                "error": "yt-dlp not installed (pip install yt-dlp)",
+                "content_type": None}
+    try:
+        subprocess.run(
+            ["yt-dlp", "--simulate", "--no-warnings", url],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        return {"url": url, "ok": True, "status": 200,
+                "error": None, "content_type": "video/youtube"}
+    except subprocess.TimeoutExpired:
+        return {"url": url, "ok": False, "status": None,
+                "error": "yt-dlp timeout", "content_type": None}
+    except Exception as e:
+        return {"url": url, "ok": False, "status": None,
+                "error": str(e), "content_type": None}
+
+
 def check_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
-    """Check a single URL with HTTP HEAD (fallback to ranged GET)."""
+    """Check a single URL with HTTP HEAD (fallback to ranged GET).
+
+    YouTube URLs are validated via yt-dlp --simulate instead.
+    """
+    if _is_youtube_url(url):
+        return _check_youtube_url(url, timeout=30)
     headers = {"User-Agent": "Mozilla/5.0"}
     for method in ("HEAD", "GET"):
         try:
@@ -500,6 +532,17 @@ def validate_audio(
     errors.extend(meta_errors)
     warnings.extend(meta_warnings)
 
+    # Missing coverage as warnings
+    if level == "sura":
+        for sura in coverage.get("missing", []):
+            info = surah_info.get(sura, {})
+            name = info.get("name_en", sura)
+            warnings.append({"msg": f"Missing surah {sura} ({name})"})
+    else:
+        missing_count = coverage.get("missing_count", 0)
+        if missing_count:
+            warnings.append({"msg": f"Missing {missing_count} verse(s)"})
+
     # Duplicates as warnings
     for dup in coverage.get("duplicates", []):
         warnings.append({
@@ -672,11 +715,18 @@ def _print_verbose(results: dict, surah_info: dict, top_n: int) -> None:
         print(f"  (skipped)")
 
     # ── Summary ──
+    warnings = results["warnings"]
     print(f"\n--- Summary ---")
     print(f"  Total sources:  {results['total_sources']}")
     print(f"  Source type:    {results['source_type']}")
     print(f"  Errors:         {len(errors)}")
-    print(f"  Warnings:       {len(results['warnings'])}")
+    if errors:
+        for e in errors:
+            print(f"    - {e['msg']}")
+    print(f"  Warnings:       {len(warnings)}")
+    if warnings:
+        for w in warnings:
+            print(f"    - {w['msg']}")
     print()
 
 

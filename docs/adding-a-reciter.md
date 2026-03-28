@@ -37,7 +37,7 @@ data/audio/
 └── by_ayah/<source>/<reciter>.json     # Per-verse recordings
 ```
 
-Existing sources: `mp3quran`, `everyayah`, `qul`, `surah-quran`. If your audio comes from a new source, create the directory and add a `SOURCE` file:
+Existing sources: `mp3quran`, `everyayah`, `qul`, `surah-quran`, `youtube`. If your audio comes from a new source, create the directory and add a `SOURCE` file:
 
 ```bash
 mkdir data/audio/by_surah/my-source
@@ -146,9 +146,41 @@ The validator checks:
 - **Metadata completeness** — all `_meta` fields present and valid
 - **Coverage** — all 114 surahs (or 6,236 verses for by-ayah) accounted for against `surah_info.json`
 - **Duplicate keys** — no repeated surah/verse entries
-- **URL reachability** — parallel HEAD requests to verify audio URLs are live
+- **URL reachability** — parallel HEAD requests to verify audio URLs are live (YouTube URLs use `yt-dlp --simulate` instead)
 
-Fix any errors before submitting. Warnings (e.g., `"unknown"` metadata values) are acceptable but should be resolved where possible.
+Fix any errors before submitting. Warnings (e.g., `"unknown"` metadata values, missing surahs) are acceptable but should be resolved where possible.
+
+## YouTube Audio
+
+For YouTube-hosted recitations, use the helper script instead of creating the manifest manually. It supports two modes:
+
+### From a playlist
+
+```bash
+python3 scripts/youtube_manifest.py <playlist_url>
+```
+
+The script will fetch playlist metadata (title, channel, video count), match each video title to a surah by name (fuzzy English/Arabic matching with surah number fallback), then prompt you for reciter metadata.
+
+### From individual videos
+
+If the recitation is spread across separate uploads rather than a single playlist, create a text file with one `<surah_number> <youtube_url>` per line:
+
+```
+1 https://www.youtube.com/watch?v=abc123
+2 https://www.youtube.com/watch?v=def456
+3 https://www.youtube.com/watch?v=ghi789
+```
+
+Then run:
+
+```bash
+python3 scripts/youtube_manifest.py --from-file urls.txt
+```
+
+**Requirements:** `yt-dlp` and `thefuzz` — the script will prompt to install them if missing.
+
+After generating, validate and submit as usual (Steps 3–4).
 
 ## Step 4: Submit a PR
 

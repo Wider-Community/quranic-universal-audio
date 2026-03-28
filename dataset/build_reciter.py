@@ -420,6 +420,7 @@ def get_audio_source_label(slug):
                 "by_surah/mp3quran": "mp3quran.net",
                 "by_surah/qul": "qul.tarteel.ai",
                 "by_surah/surah-quran": "surah-quran.com",
+                "by_surah/youtube": "youtube.com",
             }
             return source_map.get(source, source)
         except Exception:
