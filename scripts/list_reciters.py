@@ -102,6 +102,12 @@ def load_riwayat_names() -> dict[str, str]:
     return {r["slug"]: r["name"] for r in data}
 
 
+def _is_full_coverage(audio_cat: str, coverage: int) -> bool:
+    """Check if coverage count represents full Qur'an coverage."""
+    return (audio_cat == "by_surah" and coverage == 114) or \
+           (audio_cat == "by_ayah" and coverage == 6236)
+
+
 def discover_reciters() -> list[dict]:
     """Walk all audio manifests and return a flat list of reciter records.
 
@@ -204,6 +210,8 @@ def collect_processed_reciters() -> list[dict]:
             "slug": slug,
             "audio_source": audio_source,
             "coverage_str": coverage_str,
+            "surah_count": surah_count,
+            "ayah_count": ayah_count,
             "ts_level": ts_level,
         })
 
@@ -527,13 +535,29 @@ def write_reciters_md(all_records: list[dict]) -> int:
 
     total = available_count + processed_count
 
+    # Compute full coverage counts
+    available_records = [r for r in all_records if r["slug"] not in processed_slugs]
+    available_full = sum(
+        1 for r in available_records
+        if _is_full_coverage(r["audio_cat"], r["coverage"])
+    )
+    aligned_full = sum(
+        1 for p in processed
+        if p["surah_count"] == 114 or p["ayah_count"] == 6236
+    )
+
     # Update README.md badges
     readme_path = REPO / "README.md"
     if readme_path.exists():
         readme = readme_path.read_text()
         readme = re.sub(
-            r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
-            rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
+            r"Available%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
+            f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Coverage%29",
+            readme,
+        )
+        readme = re.sub(
+            r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
+            f"Aligned%20Reciters-{processed_count}%20%28{aligned_full}%20Full%20Coverage%29",
             readme,
         )
         # Count riwayat with data vs total defined
@@ -557,7 +581,7 @@ def write_reciters_md(all_records: list[dict]) -> int:
             readme,
         )
         readme_path.write_text(readme)
-        print(f"Updated: {readme_path} (available: {available_count}, aligned: {processed_count}, riwayat: {riwayat_with_data}/{riwayat_total})")
+        print(f"Updated: {readme_path} (available: {available_count} ({available_full} full), aligned: {processed_count} ({aligned_full} full), riwayat: {riwayat_with_data}/{riwayat_total})")
 
     return total
 

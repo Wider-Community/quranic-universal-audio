@@ -40,6 +40,7 @@ from list_reciters import (
     discover_reciters,
     collect_processed_reciters,
     load_riwayat_names,
+    _is_full_coverage,
     _is_git_tracked,
     TIMESTAMPS_PATH,
 )
@@ -126,11 +127,14 @@ def collect_readme_badges():
     result = {}
     for key, path in [("readme", REPO_ROOT / "README.md"), ("dataset", REPO_ROOT / "dataset" / "README.md")]:
         text = path.read_text() if path.exists() else ""
-        rec_match = re.search(r"Reciters-(\d+)%20Available%20%7C%20(\d+)%20Aligned", text)
+        avail_match = re.search(r"Available%20Reciters-(\d+)%20%28(\d+)%20Full%20Coverage%29", text)
+        aligned_match = re.search(r"Aligned%20Reciters-(\d+)%20%28(\d+)%20Full%20Coverage%29", text)
         riw_match = re.search(r"Riwayat-(\d+)(%20%2F%20)(\d+)", text)
         result[key] = {
-            "available": int(rec_match.group(1)) if rec_match else None,
-            "aligned": int(rec_match.group(2)) if rec_match else None,
+            "available": int(avail_match.group(1)) if avail_match else None,
+            "available_full": int(avail_match.group(2)) if avail_match else None,
+            "aligned": int(aligned_match.group(1)) if aligned_match else None,
+            "aligned_full": int(aligned_match.group(2)) if aligned_match else None,
             "riwayat_active": int(riw_match.group(1)) if riw_match else None,
             "riwayat_total": int(riw_match.group(3)) if riw_match else None,
             "has_riwayat_badge": riw_match is not None,
@@ -150,11 +154,17 @@ def audit(disk, badges):
     all_records = discover_reciters()
     processed = collect_processed_reciters()
     processed_slugs = {p["slug"] for p in processed}
-    expected_available = len(all_records) - len([r for r in all_records if r["slug"] in processed_slugs])
-    # Actually: available = total entries - processed entries that match
-    # But list_reciters counts all records minus processed slugs
-    # Let's just use the script's logic
+    available_records = [r for r in all_records if r["slug"] not in processed_slugs]
+    expected_available = len(available_records)
     expected_aligned = len(processed)
+    expected_available_full = sum(
+        1 for r in available_records
+        if _is_full_coverage(r["audio_cat"], r["coverage"])
+    )
+    expected_aligned_full = sum(
+        1 for p in processed
+        if p["surah_count"] == 114 or p["ayah_count"] == 6236
+    )
 
     riwayat_total = len(json.loads((REPO_ROOT / "data" / "riwayat.json").read_text()))
     riwayat_active = len(disk["riwayat_with_data"])
@@ -209,9 +219,13 @@ def audit(disk, badges):
     for key, label in [("readme", "README.md"), ("dataset", "dataset/README.md")]:
         b = badges[key]
         if b["available"] is not None and b["available"] != expected_available:
-            issues.append(("FIX", f"{label} reciters badge: {b['available']} Available but expected {expected_available}"))
+            issues.append(("FIX", f"{label} available badge: {b['available']} but expected {expected_available}"))
+        if b["available_full"] is not None and b["available_full"] != expected_available_full:
+            issues.append(("FIX", f"{label} available full coverage: {b['available_full']} but expected {expected_available_full}"))
         if b["aligned"] is not None and b["aligned"] != expected_aligned:
-            issues.append(("FIX", f"{label} reciters badge: {b['aligned']} Aligned but expected {expected_aligned}"))
+            issues.append(("FIX", f"{label} aligned badge: {b['aligned']} but expected {expected_aligned}"))
+        if b["aligned_full"] is not None and b["aligned_full"] != expected_aligned_full:
+            issues.append(("FIX", f"{label} aligned full coverage: {b['aligned_full']} but expected {expected_aligned_full}"))
         if b["has_riwayat_badge"]:
             if b["riwayat_active"] != riwayat_active:
                 issues.append(("FIX", f"{label} riwayat badge: {b['riwayat_active']} but expected {riwayat_active}"))
@@ -299,12 +313,26 @@ def apply_fixes(disk):
         all_records = discover_reciters()
         processed = collect_processed_reciters()
         processed_slugs = {p["slug"] for p in processed}
-        available_count = len(all_records) - len([r for r in all_records if r["slug"] in processed_slugs])
+        available_records = [r for r in all_records if r["slug"] not in processed_slugs]
+        available_count = len(available_records)
         aligned_count = len(processed)
+        available_full = sum(
+            1 for r in available_records
+            if _is_full_coverage(r["audio_cat"], r["coverage"])
+        )
+        aligned_full = sum(
+            1 for p in processed
+            if p["surah_count"] == 114 or p["ayah_count"] == 6236
+        )
 
         ds_text = re.sub(
-            r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
-            rf"Reciters-{available_count}\g<1>{aligned_count}\g<2>",
+            r"Available%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
+            f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Coverage%29",
+            ds_text,
+        )
+        ds_text = re.sub(
+            r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
+            f"Aligned%20Reciters-{aligned_count}%20%28{aligned_full}%20Full%20Coverage%29",
             ds_text,
         )
 
@@ -350,7 +378,7 @@ def main():
     for key, label in [("readme", "README.md"), ("dataset", "dataset/README.md")]:
         b = badges[key]
         if b["available"] is not None:
-            parts = [f"{b['available']} Available | {b['aligned']} Aligned"]
+            parts = [f"{b['available']} Available ({b['available_full']} Full) | {b['aligned']} Aligned ({b['aligned_full']} Full)"]
             if b["has_riwayat_badge"]:
                 parts.append(f"Riwayat {b['riwayat_active']}/{b['riwayat_total']}")
             print(f"  {label}: {', '.join(parts)}")
