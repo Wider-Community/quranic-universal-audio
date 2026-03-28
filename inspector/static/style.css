@@ -504,6 +504,14 @@ footer {
     background: #b71c1c;
 }
 
+.btn-history {
+    background: #1a237e;
+    margin-left: 0;
+}
+.btn-history:hover:not(:disabled) {
+    background: #283593;
+}
+
 /* Summary panel */
 /* Segment list */
 .seg-list {
@@ -828,6 +836,14 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 }
 
 /* ============ Validation Panel ============ */
+
+/* Whitespace gap between non-error panels (stats) and error panels (validation) */
+#seg-validation-global:not([hidden]) {
+    margin-top: 16px;
+}
+#seg-validation-global[hidden] + #seg-validation:not([hidden]) {
+    margin-top: 16px;
+}
 
 .seg-validation {
     margin-bottom: 8px;
@@ -1312,34 +1328,21 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     padding: 8px;
 }
 
-/* ============ Edit History Panel ============ */
+/* ============ Edit History View ============ */
 
-.seg-history-panel {
-    background: #16213e;
-    border: 1px solid #2a2a4a;
-    border-radius: 6px;
+.seg-history-view {
     margin-bottom: 8px;
 }
-.seg-history-panel[open] { border-color: #3a3a5a; }
-
-.seg-history-summary {
-    padding: 8px 12px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    color: #aaa;
-    user-select: none;
-    list-style: none;
+.seg-history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0 12px;
+}
+.seg-history-title {
+    font-size: 0.95rem;
     font-weight: 600;
-}
-.seg-history-summary::before {
-    content: '\25B6';
-    display: inline-block;
-    margin-right: 8px;
-    font-size: 0.65rem;
-    transition: transform 0.15s;
-}
-.seg-history-panel[open] .seg-history-summary::before {
-    transform: rotate(90deg);
+    color: #ccc;
 }
 
 /* Summary stats */
@@ -1406,36 +1409,23 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     padding: 0 12px 12px;
 }
 
-/* Individual batch (nested <details>) */
+/* Individual batch */
 .seg-history-batch {
     background: #0f0f23;
     border-radius: 6px;
-    border: 1px solid #2a2a4a;
+    border: 1px solid #3a3a5a;
     overflow: hidden;
 }
-.seg-history-batch[open] { border-color: #3a3a5a; }
 
 .seg-history-batch-header {
     padding: 8px 12px;
-    cursor: pointer;
     font-size: 0.8rem;
     color: #aaa;
-    user-select: none;
-    list-style: none;
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-}
-.seg-history-batch-header::before {
-    content: '\25B6';
-    display: inline-block;
-    font-size: 0.55rem;
-    transition: transform 0.15s;
-    flex-shrink: 0;
-}
-.seg-history-batch[open] > .seg-history-batch-header::before {
-    transform: rotate(90deg);
+    border-bottom: 1px solid #2a2a4a;
 }
 
 .seg-history-batch.is-revert {

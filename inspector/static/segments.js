@@ -137,7 +137,9 @@ const segFilterStatusEl = document.getElementById('seg-filter-status');
 
 // Edit history viewer state
 let segHistoryData = null;
-const segHistoryPanel   = document.getElementById('seg-history-panel');
+const segHistoryView    = document.getElementById('seg-history-view');
+const segHistoryBtn     = document.getElementById('seg-history-btn');
+const segHistoryBackBtn = document.getElementById('seg-history-back-btn');
 const segHistoryStats   = document.getElementById('seg-history-stats');
 const segHistoryBatches = document.getElementById('seg-history-batches');
 
@@ -176,8 +178,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     segFilterAddBtn.addEventListener('click', addSegFilterCondition);
     segFilterClearBtn.addEventListener('click', clearAllSegFilters);
 
-    // Delegated event listeners for segment card actions — shared across main & error sections
-    [segListEl, segValidationEl, segValidationGlobalEl].forEach(el => {
+    segHistoryBtn.addEventListener('click', showHistoryView);
+    segHistoryBackBtn.addEventListener('click', hideHistoryView);
+
+    // Delegated event listeners for segment card actions — shared across main, error & history sections
+    [segListEl, segValidationEl, segValidationGlobalEl, segHistoryView].forEach(el => {
         el.addEventListener('click', handleSegRowClick);
     });
 
@@ -271,8 +276,8 @@ async function onSegReciterChange() {
     segStatsPanel.hidden = true;
     segStatsPanel.removeAttribute('open');
     segStatsData = null;
-    segHistoryPanel.hidden = true;
-    segHistoryPanel.removeAttribute('open');
+    segHistoryView.hidden = true;
+    segHistoryBtn.hidden = true;
     segHistoryStats.innerHTML = '';
     segHistoryBatches.innerHTML = '';
     segHistoryData = null;
@@ -819,6 +824,11 @@ function clearSegDisplay() {
     segEditIndex = -1;
     segStatsData = null;
     if (segStatsPanel) { segStatsPanel.hidden = true; segStatsCharts.innerHTML = ''; }
+    segHistoryData = null;
+    segHistoryBtn.hidden = true;
+    segHistoryView.hidden = true;
+    segHistoryStats.innerHTML = '';
+    segHistoryBatches.innerHTML = '';
     _segPrefetchCache = {};
     _segContinuousPlay = false;
     _segPlayEndMs = 0;
@@ -833,7 +843,7 @@ function clearSegDisplay() {
 // Unified event delegation
 // ---------------------------------------------------------------------------
 
-/** Resolve a segment object from a .seg-row element. Tries _segIndexMap first, falls back to global lookup. */
+/** Resolve a segment object from a .seg-row element. Tries _segIndexMap first, falls back to global lookup, then history card data attributes. */
 function resolveSegFromRow(row) {
     if (!row) return null;
     const idx = parseInt(row.dataset.segIndex);
@@ -842,16 +852,30 @@ function resolveSegFromRow(row) {
     const fromMap = _segIndexMap?.get(`${chapter}:${idx}`);
     if (fromMap) return fromMap;
     // Fall back to global chapter/index lookup (error section cards)
-    if (chapter) return getSegByChapterIndex(chapter, idx);
+    if (chapter) {
+        const found = getSegByChapterIndex(chapter, idx);
+        if (found) return found;
+    }
+    // History cards: construct pseudo-seg from stored snapshot data attributes
+    if (row.dataset.histTimeStart !== undefined) {
+        return {
+            chapter, index: idx,
+            time_start: parseFloat(row.dataset.histTimeStart),
+            time_end: parseFloat(row.dataset.histTimeEnd),
+            audio_url: row.dataset.histAudioUrl || '',
+            matched_ref: '', matched_text: '', confidence: 0,
+        };
+    }
     return null;
 }
 
 function handleSegRowClick(e) {
-    // Ref edit
+    // Ref edit (skip for read-only history cards)
     const refSpan = e.target.closest('.seg-text-ref');
     if (refSpan) {
         e.stopPropagation();
         const row = refSpan.closest('.seg-row');
+        if (row && row.dataset.histTimeStart !== undefined) return; // read-only history card
         const seg = resolveSegFromRow(row);
         if (seg && row) startRefEdit(refSpan, seg, row);
         return;
@@ -1036,18 +1060,22 @@ function renderSegCard(seg, options = {}) {
     }
     textBox.appendChild(timeInfo);
 
-    // Action buttons (skip for read-only history cards)
-    if (!isContext && !readOnly) {
-        const actions = document.createElement('div');
+    // Play button (allowed even on read-only history cards)
+    if (!isContext && showPlayBtn) {
+        const actions = row.querySelector('.seg-actions') || document.createElement('div');
         actions.className = 'seg-actions';
+        const playBtn = document.createElement('button');
+        playBtn.className = 'btn btn-sm seg-card-play-btn';
+        playBtn.textContent = '\u25B6';
+        playBtn.title = 'Play segment audio';
+        actions.appendChild(playBtn);
+        if (!actions.parentNode) textBox.appendChild(actions);
+    }
 
-        if (showPlayBtn) {
-            const playBtn = document.createElement('button');
-            playBtn.className = 'btn btn-sm seg-card-play-btn';
-            playBtn.textContent = '\u25B6';
-            playBtn.title = 'Play segment audio';
-            actions.appendChild(playBtn);
-        }
+    // Editing action buttons (skip for read-only history cards)
+    if (!isContext && !readOnly) {
+        const actions = textBox.querySelector('.seg-actions') || document.createElement('div');
+        actions.className = 'seg-actions';
 
         const trimBtn = document.createElement('button');
         trimBtn.className = 'btn btn-sm btn-adjust';
@@ -1078,7 +1106,7 @@ function renderSegCard(seg, options = {}) {
             actions.appendChild(gotoBtn);
         }
 
-        textBox.appendChild(actions);
+        if (!actions.parentNode) textBox.appendChild(actions);
     }
 
     row.appendChild(textBox);
@@ -3998,12 +4026,53 @@ function _findBinIndex(bins, value) {
 // Edit History Panel
 // ---------------------------------------------------------------------------
 
+// IDs of elements to hide/show when toggling history view
+const _SEG_NORMAL_IDS = ['seg-stats-panel', 'seg-validation-global', 'seg-validation',
+    'seg-filter-bar', 'seg-list'];
+
+function showHistoryView() {
+    // Hide normal view elements, saving their previous hidden state
+    for (const id of _SEG_NORMAL_IDS) {
+        const el = document.getElementById(id);
+        if (el) { el.dataset.hiddenByHistory = el.hidden ? '1' : ''; el.hidden = true; }
+    }
+    // Hide controls + shortcuts (no id, query by class)
+    const panel = document.getElementById('segments-panel');
+    const controls = panel.querySelector('.seg-controls');
+    if (controls) { controls.dataset.hiddenByHistory = controls.hidden ? '1' : ''; controls.hidden = true; }
+    const shortcuts = panel.querySelector('.shortcuts-guide');
+    if (shortcuts) { shortcuts.dataset.hiddenByHistory = shortcuts.hidden ? '1' : ''; shortcuts.hidden = true; }
+
+    segHistoryView.hidden = false;
+    // Observe all waveform canvases + draw arrows
+    const observer = _ensureWaveformObserver();
+    segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+    requestAnimationFrame(() => {
+        segHistoryView.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
+    });
+}
+
+function hideHistoryView() {
+    stopErrorCardAudio();
+    segHistoryView.hidden = true;
+    // Restore normal view elements
+    for (const id of _SEG_NORMAL_IDS) {
+        const el = document.getElementById(id);
+        if (el) { if (el.dataset.hiddenByHistory !== '1') el.hidden = false; delete el.dataset.hiddenByHistory; }
+    }
+    const panel = document.getElementById('segments-panel');
+    const controls = panel.querySelector('.seg-controls');
+    if (controls) { if (controls.dataset.hiddenByHistory !== '1') controls.hidden = false; delete controls.dataset.hiddenByHistory; }
+    const shortcuts = panel.querySelector('.shortcuts-guide');
+    if (shortcuts) { if (shortcuts.dataset.hiddenByHistory !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByHistory; }
+}
+
 function renderEditHistoryPanel(data) {
     if (!data || !data.batches || data.batches.length === 0) {
-        segHistoryPanel.hidden = true;
+        segHistoryBtn.hidden = true;
         return;
     }
-    segHistoryPanel.hidden = false;
+    segHistoryBtn.hidden = false;
 
     if (data.summary) renderHistorySummaryStats(data.summary);
     renderHistoryBatches(data.batches);
@@ -4061,23 +4130,22 @@ function renderHistorySummaryStats(summary) {
 
 function renderHistoryBatches(batches) {
     segHistoryBatches.innerHTML = '';
-    const observer = _ensureWaveformObserver();
 
     // Reverse: most recent first
     const reversed = [...batches].reverse();
 
     for (const batch of reversed) {
-        const details = document.createElement('details');
-        details.className = 'seg-history-batch' + (batch.is_revert ? ' is-revert' : '');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'seg-history-batch' + (batch.is_revert ? ' is-revert' : '');
 
         // Header
-        const summary = document.createElement('summary');
-        summary.className = 'seg-history-batch-header';
+        const header = document.createElement('div');
+        header.className = 'seg-history-batch-header';
 
         const time = document.createElement('span');
         time.className = 'seg-history-batch-time';
         time.textContent = _formatHistDate(batch.saved_at_utc);
-        summary.appendChild(time);
+        header.appendChild(time);
 
         // Multi-chapter auto-fix batch (e.g. remove_sadaqa across many surahs)
         const isMultiChapter = batch.chapter == null && Array.isArray(batch.chapters);
@@ -4086,7 +4154,7 @@ function renderHistoryBatches(batches) {
             const ch = document.createElement('span');
             ch.className = 'seg-history-batch-chapter';
             ch.textContent = surahOptionText(batch.chapter);
-            summary.appendChild(ch);
+            header.appendChild(ch);
         }
 
         const opsCount = document.createElement('span');
@@ -4100,28 +4168,28 @@ function renderHistoryBatches(batches) {
         } else {
             opsCount.textContent = n === 0 ? 'revert' : `${n} op${n !== 1 ? 's' : ''}`;
         }
-        summary.appendChild(opsCount);
+        header.appendChild(opsCount);
 
         if (isMultiChapter) {
             const fk = document.createElement('span');
             fk.className = 'seg-history-op-fix-kind';
             fk.textContent = 'auto_fix';
-            summary.appendChild(fk);
+            header.appendChild(fk);
         }
 
         if (batch.is_revert) {
             const badge = document.createElement('span');
             badge.className = 'seg-history-batch-revert-badge';
             badge.textContent = 'Reverted';
-            summary.appendChild(badge);
+            header.appendChild(badge);
         }
 
         // Validation delta badges
-        _appendValDeltas(summary, batch.validation_summary_before, batch.validation_summary_after);
+        _appendValDeltas(header, batch.validation_summary_before, batch.validation_summary_after);
 
-        details.appendChild(summary);
+        wrapper.appendChild(header);
 
-        // Body with operations
+        // Body with operations (always visible)
         if (batch.operations && batch.operations.length > 0) {
             const body = document.createElement('div');
             body.className = 'seg-history-batch-body';
@@ -4137,22 +4205,10 @@ function renderHistoryBatches(batches) {
                     body.appendChild(renderHistoryOp(op, batch.chapter));
                 }
             }
-            details.appendChild(body);
-
-            if (!isMultiChapter) {
-                // Defer waveform observation and arrow drawing until batch is opened
-                details.addEventListener('toggle', () => {
-                    if (!details.open) return;
-                    details.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-                    // Draw arrows after layout is complete
-                    requestAnimationFrame(() => {
-                        details.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
-                    });
-                });
-            }
+            wrapper.appendChild(body);
         }
 
-        segHistoryBatches.appendChild(details);
+        segHistoryBatches.appendChild(wrapper);
     }
 }
 
@@ -4199,7 +4255,7 @@ function renderHistoryOp(op, chapter) {
     const beforeCards = [];
     for (const snap of before) {
         const pseudoSeg = _snapToSeg(snap, chapter);
-        const card = renderSegCard(pseudoSeg, { readOnly: true, showChapter: true });
+        const card = renderSegCard(pseudoSeg, { readOnly: true, showChapter: true, showPlayBtn: true });
         beforeCol.appendChild(card);
         beforeCards.push(card);
     }
@@ -4214,7 +4270,7 @@ function renderHistoryOp(op, chapter) {
     } else {
         for (const snap of after) {
             const pseudoSeg = _snapToSeg(snap, chapter);
-            const card = renderSegCard(pseudoSeg, { readOnly: true, showChapter: true });
+            const card = renderSegCard(pseudoSeg, { readOnly: true, showChapter: true, showPlayBtn: true });
             afterCol.appendChild(card);
             afterCards.push(card);
         }

@@ -154,6 +154,7 @@
                     </label>
                     <button id="seg-save-btn" class="btn btn-save" disabled>Save</button>
                     <button id="seg-undo-btn" class="btn btn-undo" hidden>Undo Save</button>
+                    <button id="seg-history-btn" class="btn btn-history" hidden>History</button>
                 </div>
             </div>
 
@@ -206,11 +207,14 @@
                 <div id="seg-stats-charts" class="seg-stats-charts"></div>
             </details>
 
-            <details id="seg-history-panel" class="seg-history-panel" hidden>
-                <summary class="seg-history-summary">Edit History</summary>
+            <div id="seg-history-view" class="seg-history-view" hidden>
+                <div class="seg-history-toolbar">
+                    <button id="seg-history-back-btn" class="btn">&larr; Back</button>
+                    <span class="seg-history-title">Edit History</span>
+                </div>
                 <div id="seg-history-stats" class="seg-history-stats"></div>
                 <div id="seg-history-batches" class="seg-history-batches"></div>
-            </details>
+            </div>
 
             <div id="seg-validation-global" class="seg-validation" hidden></div>
             <div id="seg-validation" class="seg-validation" hidden></div>
