@@ -1,1 +1,197 @@
-{"_meta": {"reciter": "ahmad_deban_khalaf", "name_en": "Ahmad Deban", "name_ar": "أحمد ديبان", "riwayah": "khalaf_an_hamzah", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "94": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/094.mp3", "97": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/097.mp3", "101": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/101.mp3", "107": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/107.mp3", "108": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/108.mp3", "109": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/109.mp3"}
+{
+  "_meta": {
+    "reciter": "ahmad_deban_khalaf",
+    "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
+    "riwayah": "khalaf_an_hamzah",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "_timing": {
+      "source": "mp3quran_api",
+      "type": "verse",
+      "data": {
+        "94": [
+          [
+            3900,
+            6840
+          ],
+          [
+            6840,
+            11040
+          ],
+          [
+            11040,
+            15260
+          ],
+          [
+            15260,
+            18600
+          ],
+          [
+            18600,
+            22780
+          ],
+          [
+            22780,
+            26720
+          ],
+          [
+            26720,
+            30680
+          ],
+          [
+            30680,
+            34000
+          ]
+        ],
+        "97": [
+          [
+            3740,
+            8700
+          ],
+          [
+            8700,
+            13000
+          ],
+          [
+            13000,
+            18140
+          ],
+          [
+            18140,
+            29320
+          ],
+          [
+            29320,
+            34700
+          ]
+        ],
+        "101": [
+          [
+            3660,
+            4880
+          ],
+          [
+            4880,
+            6420
+          ],
+          [
+            6420,
+            10040
+          ],
+          [
+            10040,
+            16219
+          ],
+          [
+            16219,
+            22820
+          ],
+          [
+            22820,
+            28560
+          ],
+          [
+            28560,
+            32439
+          ],
+          [
+            32439,
+            37460
+          ],
+          [
+            37460,
+            41200
+          ],
+          [
+            41200,
+            44660
+          ],
+          [
+            44660,
+            47220
+          ]
+        ],
+        "107": [
+          [
+            3680,
+            8160
+          ],
+          [
+            8160,
+            12860
+          ],
+          [
+            12860,
+            17980
+          ],
+          [
+            17980,
+            20920
+          ],
+          [
+            20920,
+            26960
+          ],
+          [
+            26960,
+            31720
+          ],
+          [
+            31720,
+            35840
+          ]
+        ],
+        "108": [
+          [
+            3990,
+            8189
+          ],
+          [
+            8189,
+            11823
+          ],
+          [
+            11823,
+            17031
+          ]
+        ],
+        "109": [
+          [
+            3580,
+            6760
+          ],
+          [
+            6760,
+            9980
+          ],
+          [
+            9980,
+            15160
+          ],
+          [
+            15160,
+            19540
+          ],
+          [
+            19540,
+            24600
+          ],
+          [
+            24600,
+            29160
+          ]
+        ]
+      }
+    },
+    "fetched": "2026-03-28"
+  },
+  "94": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/094.mp3",
+  "97": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/097.mp3",
+  "101": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/101.mp3",
+  "107": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/107.mp3",
+  "108": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/108.mp3",
+  "109": "https://server16.mp3quran.net/deban/Rewayat-Khalaf-A-n-Hamzah/109.mp3"
+}

@@ -1,1 +1,18 @@
-{"_meta": {"reciter": "mohammed_hafas_ali", "name_en": "Mohammed Hafas Ali", "name_ar": "محمد حفص علي", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "1": "https://server12.mp3quran.net/malaysia/hfs/001.mp3", "9": "https://server12.mp3quran.net/malaysia/hfs/009.mp3", "11": "https://server12.mp3quran.net/malaysia/hfs/011.mp3", "13": "https://server12.mp3quran.net/malaysia/hfs/013.mp3", "67": "https://server12.mp3quran.net/malaysia/hfs/067.mp3"}
+{
+  "_meta": {
+    "reciter": "mohammed_hafas_ali",
+    "name_en": "Mohammed Hafas Ali",
+    "name_ar": "محمد حفص علي",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "1": "https://server12.mp3quran.net/malaysia/hfs/001.mp3",
+  "9": "https://server12.mp3quran.net/malaysia/hfs/009.mp3",
+  "11": "https://server12.mp3quran.net/malaysia/hfs/011.mp3",
+  "13": "https://server12.mp3quran.net/malaysia/hfs/013.mp3",
+  "67": "https://server12.mp3quran.net/malaysia/hfs/067.mp3"
+}

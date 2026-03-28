@@ -1,1 +1,21 @@
-{"_meta": {"reciter": "muamar_from_indonesia", "name_en": "Muamar (From Indonesia)", "name_ar": "معمر الأندونيسي", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "36": "https://server6.mp3quran.net/muamr/036.mp3", "93": "https://server6.mp3quran.net/muamr/093.mp3", "94": "https://server6.mp3quran.net/muamr/094.mp3", "97": "https://server6.mp3quran.net/muamr/097.mp3", "101": "https://server6.mp3quran.net/muamr/101.mp3", "109": "https://server6.mp3quran.net/muamr/109.mp3", "110": "https://server6.mp3quran.net/muamr/110.mp3", "111": "https://server6.mp3quran.net/muamr/111.mp3"}
+{
+  "_meta": {
+    "reciter": "muamar_from_indonesia",
+    "name_en": "Muamar (From Indonesia)",
+    "name_ar": "معمر الأندونيسي",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "36": "https://server6.mp3quran.net/muamr/036.mp3",
+  "93": "https://server6.mp3quran.net/muamr/093.mp3",
+  "94": "https://server6.mp3quran.net/muamr/094.mp3",
+  "97": "https://server6.mp3quran.net/muamr/097.mp3",
+  "101": "https://server6.mp3quran.net/muamr/101.mp3",
+  "109": "https://server6.mp3quran.net/muamr/109.mp3",
+  "110": "https://server6.mp3quran.net/muamr/110.mp3",
+  "111": "https://server6.mp3quran.net/muamr/111.mp3"
+}

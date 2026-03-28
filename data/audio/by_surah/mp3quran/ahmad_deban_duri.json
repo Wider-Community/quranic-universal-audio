@@ -1,1 +1,350 @@
-{"_meta": {"reciter": "ahmad_deban_duri", "name_en": "Ahmad Deban", "name_ar": "أحمد ديبان", "riwayah": "duri_al_kisai", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "1": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/001.mp3", "94": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/094.mp3", "95": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/095.mp3", "100": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/100.mp3", "103": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/103.mp3", "105": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/105.mp3", "106": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/106.mp3", "108": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/108.mp3", "109": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/109.mp3", "110": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/110.mp3", "112": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/112.mp3", "113": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/113.mp3", "114": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/114.mp3"}
+{
+  "_meta": {
+    "reciter": "ahmad_deban_duri",
+    "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
+    "riwayah": "duri_al_kisai",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "_timing": {
+      "source": "mp3quran_api",
+      "type": "verse",
+      "data": {
+        "1": [
+          [
+            180,
+            4200
+          ],
+          [
+            4200,
+            8980
+          ],
+          [
+            8980,
+            12360
+          ],
+          [
+            12360,
+            16860
+          ],
+          [
+            16860,
+            22480
+          ],
+          [
+            22480,
+            26800
+          ],
+          [
+            26800,
+            42660
+          ]
+        ],
+        "94": [
+          [
+            3900,
+            6840
+          ],
+          [
+            6840,
+            11040
+          ],
+          [
+            11040,
+            15260
+          ],
+          [
+            15260,
+            18600
+          ],
+          [
+            18600,
+            22780
+          ],
+          [
+            22780,
+            26720
+          ],
+          [
+            26720,
+            30680
+          ],
+          [
+            30680,
+            34000
+          ]
+        ],
+        "95": [
+          [
+            3640,
+            5960
+          ],
+          [
+            5960,
+            8039
+          ],
+          [
+            8039,
+            12380
+          ],
+          [
+            12380,
+            19120
+          ],
+          [
+            19120,
+            24700
+          ],
+          [
+            24700,
+            34300
+          ],
+          [
+            34300,
+            38900
+          ],
+          [
+            38900,
+            45500
+          ]
+        ],
+        "100": [
+          [
+            3540,
+            6220
+          ],
+          [
+            6220,
+            9340
+          ],
+          [
+            9340,
+            12400
+          ],
+          [
+            12400,
+            15440
+          ],
+          [
+            15440,
+            18760
+          ],
+          [
+            18760,
+            25960
+          ],
+          [
+            25960,
+            31300
+          ],
+          [
+            31300,
+            37000
+          ],
+          [
+            37000,
+            42740
+          ],
+          [
+            42740,
+            46440
+          ],
+          [
+            46440,
+            53900
+          ]
+        ],
+        "103": [
+          [
+            3969,
+            5103
+          ],
+          [
+            5103,
+            10689
+          ],
+          [
+            10689,
+            22197
+          ]
+        ],
+        "105": [
+          [
+            3680,
+            9720
+          ],
+          [
+            9720,
+            14480
+          ],
+          [
+            14480,
+            19480
+          ],
+          [
+            19480,
+            26380
+          ],
+          [
+            26380,
+            32360
+          ]
+        ],
+        "106": [
+          [
+            3740,
+            6440
+          ],
+          [
+            6440,
+            13240
+          ],
+          [
+            13240,
+            18140
+          ],
+          [
+            18140,
+            29180
+          ]
+        ],
+        "108": [
+          [
+            3990,
+            8189
+          ],
+          [
+            8189,
+            11823
+          ],
+          [
+            11823,
+            17031
+          ]
+        ],
+        "109": [
+          [
+            3580,
+            6760
+          ],
+          [
+            6760,
+            9980
+          ],
+          [
+            9980,
+            15160
+          ],
+          [
+            15160,
+            19540
+          ],
+          [
+            19540,
+            24600
+          ],
+          [
+            24600,
+            29160
+          ]
+        ],
+        "110": [
+          [
+            3885,
+            8778
+          ],
+          [
+            8778,
+            16968
+          ],
+          [
+            16968,
+            27090
+          ]
+        ],
+        "112": [
+          [
+            3822,
+            6531
+          ],
+          [
+            6531,
+            8967
+          ],
+          [
+            8967,
+            12138
+          ],
+          [
+            12138,
+            16884
+          ]
+        ],
+        "113": [
+          [
+            3740,
+            6880
+          ],
+          [
+            6880,
+            10000
+          ],
+          [
+            10000,
+            15080
+          ],
+          [
+            15080,
+            21100
+          ],
+          [
+            21100,
+            27100
+          ]
+        ],
+        "114": [
+          [
+            3980,
+            8780
+          ],
+          [
+            8780,
+            11820
+          ],
+          [
+            11820,
+            15140
+          ],
+          [
+            15140,
+            21200
+          ],
+          [
+            21200,
+            27120
+          ],
+          [
+            27120,
+            32960
+          ]
+        ]
+      }
+    },
+    "fetched": "2026-03-28"
+  },
+  "1": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/001.mp3",
+  "94": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/094.mp3",
+  "95": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/095.mp3",
+  "100": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/100.mp3",
+  "103": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/103.mp3",
+  "105": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/105.mp3",
+  "106": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/106.mp3",
+  "108": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/108.mp3",
+  "109": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/109.mp3",
+  "110": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/110.mp3",
+  "112": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/112.mp3",
+  "113": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/113.mp3",
+  "114": "https://server16.mp3quran.net/deban/Rewayat-AlDorai-A-n-Al-Kisa-ai/114.mp3"
+}

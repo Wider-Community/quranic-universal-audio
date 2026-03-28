@@ -1,1 +1,17 @@
-{"_meta": {"reciter": "sapinah_mamat", "name_en": "Sapinah Mamat", "name_ar": "سابينة مامات", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "3": "https://server12.mp3quran.net/malaysia/mamat/003.mp3", "14": "https://server12.mp3quran.net/malaysia/mamat/014.mp3", "21": "https://server12.mp3quran.net/malaysia/mamat/021.mp3", "22": "https://server12.mp3quran.net/malaysia/mamat/022.mp3"}
+{
+  "_meta": {
+    "reciter": "sapinah_mamat",
+    "name_en": "Sapinah Mamat",
+    "name_ar": "سابينة مامات",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "3": "https://server12.mp3quran.net/malaysia/mamat/003.mp3",
+  "14": "https://server12.mp3quran.net/malaysia/mamat/014.mp3",
+  "21": "https://server12.mp3quran.net/malaysia/mamat/021.mp3",
+  "22": "https://server12.mp3quran.net/malaysia/mamat/022.mp3"
+}

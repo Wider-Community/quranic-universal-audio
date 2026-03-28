@@ -1,1 +1,28 @@
-{"_meta": {"reciter": "abdelaziz_sheim_warsh", "name_en": "Abdelaziz sheim", "name_ar": "عبدالعزيز سحيم", "riwayah": "warsh_an_nafi", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "1": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/001.mp3", "18": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/018.mp3", "19": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/019.mp3", "31": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/031.mp3", "49": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/049.mp3", "50": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/050.mp3", "51": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/051.mp3", "55": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/055.mp3", "56": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/056.mp3", "66": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/066.mp3", "67": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/067.mp3", "72": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/072.mp3", "75": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/075.mp3", "87": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/087.mp3", "112": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/112.mp3"}
+{
+  "_meta": {
+    "reciter": "abdelaziz_sheim_warsh",
+    "name_en": "Abdelaziz sheim",
+    "name_ar": "عبدالعزيز سحيم",
+    "riwayah": "warsh_an_nafi",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "1": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/001.mp3",
+  "18": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/018.mp3",
+  "19": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/019.mp3",
+  "31": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/031.mp3",
+  "49": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/049.mp3",
+  "50": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/050.mp3",
+  "51": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/051.mp3",
+  "55": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/055.mp3",
+  "56": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/056.mp3",
+  "66": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/066.mp3",
+  "67": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/067.mp3",
+  "72": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/072.mp3",
+  "75": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/075.mp3",
+  "87": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/087.mp3",
+  "112": "https://server16.mp3quran.net/a_sheim/Rewayat-Warsh-A-n-Nafi/112.mp3"
+}

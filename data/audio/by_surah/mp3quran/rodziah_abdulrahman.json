@@ -1,1 +1,17 @@
-{"_meta": {"reciter": "rodziah_abdulrahman", "name_en": "Rodziah Abdulrahman", "name_ar": "رضية عبدالرحمن", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "3": "https://server12.mp3quran.net/malaysia/rziah/003.mp3", "8": "https://server12.mp3quran.net/malaysia/rziah/008.mp3", "33": "https://server12.mp3quran.net/malaysia/rziah/033.mp3", "35": "https://server12.mp3quran.net/malaysia/rziah/035.mp3"}
+{
+  "_meta": {
+    "reciter": "rodziah_abdulrahman",
+    "name_en": "Rodziah Abdulrahman",
+    "name_ar": "رضية عبدالرحمن",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "3": "https://server12.mp3quran.net/malaysia/rziah/003.mp3",
+  "8": "https://server12.mp3quran.net/malaysia/rziah/008.mp3",
+  "33": "https://server12.mp3quran.net/malaysia/rziah/033.mp3",
+  "35": "https://server12.mp3quran.net/malaysia/rziah/035.mp3"
+}

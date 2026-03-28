@@ -1,6 +1,11 @@
 # Research
 docs/reciters-research/
 
+# Temp data files
+data/qul_reciters.txt
+data/all_reciter_combos.txt
+data/qul_explore_prompt.md
+
 # Cache
 __pycache__/
 .cache/

@@ -1,1 +1,17 @@
-{"_meta": {"reciter": "muhammed_khairul_anuar", "name_en": "Muhammed Khairul Anuar", "name_ar": "محمد خير النور", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "1": "https://server12.mp3quran.net/malaysia/nor/001.mp3", "12": "https://server12.mp3quran.net/malaysia/nor/012.mp3", "19": "https://server12.mp3quran.net/malaysia/nor/019.mp3", "31": "https://server12.mp3quran.net/malaysia/nor/031.mp3"}
+{
+  "_meta": {
+    "reciter": "muhammed_khairul_anuar",
+    "name_en": "Muhammed Khairul Anuar",
+    "name_ar": "محمد خير النور",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "1": "https://server12.mp3quran.net/malaysia/nor/001.mp3",
+  "12": "https://server12.mp3quran.net/malaysia/nor/012.mp3",
+  "19": "https://server12.mp3quran.net/malaysia/nor/019.mp3",
+  "31": "https://server12.mp3quran.net/malaysia/nor/031.mp3"
+}

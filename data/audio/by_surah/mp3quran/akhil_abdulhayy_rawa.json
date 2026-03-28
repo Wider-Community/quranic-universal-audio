@@ -1,1 +1,17 @@
-{"_meta": {"reciter": "akhil_abdulhayy_rawa", "name_en": "Akhil Abdulhayy Rawa", "name_ar": "أخيل عبدالحي روا", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "50": "https://server12.mp3quran.net/malaysia/akil/050.mp3", "51": "https://server12.mp3quran.net/malaysia/akil/051.mp3", "52": "https://server12.mp3quran.net/malaysia/akil/052.mp3", "56": "https://server12.mp3quran.net/malaysia/akil/056.mp3"}
+{
+  "_meta": {
+    "reciter": "akhil_abdulhayy_rawa",
+    "name_en": "Akhil Abdulhayy Rawa",
+    "name_ar": "أخيل عبدالحي روا",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "50": "https://server12.mp3quran.net/malaysia/akil/050.mp3",
+  "51": "https://server12.mp3quran.net/malaysia/akil/051.mp3",
+  "52": "https://server12.mp3quran.net/malaysia/akil/052.mp3",
+  "56": "https://server12.mp3quran.net/malaysia/akil/056.mp3"
+}

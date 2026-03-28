@@ -1,1 +1,22 @@
-{"_meta": {"reciter": "wasel_almethen", "name_en": "Wasel Almethen", "name_ar": "واصل المذن", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "8": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/008.mp3", "9": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/009.mp3", "36": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/036.mp3", "38": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/038.mp3", "42": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/042.mp3", "45": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/045.mp3", "50": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/050.mp3", "59": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/059.mp3", "60": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/060.mp3"}
+{
+  "_meta": {
+    "reciter": "wasel_almethen",
+    "name_en": "Wasel Almethen",
+    "name_ar": "واصل المذن",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "8": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/008.mp3",
+  "9": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/009.mp3",
+  "36": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/036.mp3",
+  "38": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/038.mp3",
+  "42": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/042.mp3",
+  "45": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/045.mp3",
+  "50": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/050.mp3",
+  "59": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/059.mp3",
+  "60": "https://server11.mp3quran.net/wasel/Rewayat-Hafs-A-n-Assem/060.mp3"
+}

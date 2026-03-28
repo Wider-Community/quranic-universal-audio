@@ -1,1 +1,27 @@
-{"_meta": {"reciter": "ali_abo_hashim", "name_en": "Ali Abo-Hashim", "name_ar": "علي أبو هاشم", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "11": "https://server9.mp3quran.net/abo_hashim/011.mp3", "12": "https://server9.mp3quran.net/abo_hashim/012.mp3", "18": "https://server9.mp3quran.net/abo_hashim/018.mp3", "19": "https://server9.mp3quran.net/abo_hashim/019.mp3", "21": "https://server9.mp3quran.net/abo_hashim/021.mp3", "25": "https://server9.mp3quran.net/abo_hashim/025.mp3", "50": "https://server9.mp3quran.net/abo_hashim/050.mp3", "51": "https://server9.mp3quran.net/abo_hashim/051.mp3", "52": "https://server9.mp3quran.net/abo_hashim/052.mp3", "53": "https://server9.mp3quran.net/abo_hashim/053.mp3", "54": "https://server9.mp3quran.net/abo_hashim/054.mp3", "55": "https://server9.mp3quran.net/abo_hashim/055.mp3", "56": "https://server9.mp3quran.net/abo_hashim/056.mp3", "57": "https://server9.mp3quran.net/abo_hashim/057.mp3"}
+{
+  "_meta": {
+    "reciter": "ali_abo_hashim",
+    "name_en": "Ali Abo-Hashim",
+    "name_ar": "علي أبو هاشم",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "11": "https://server9.mp3quran.net/abo_hashim/011.mp3",
+  "12": "https://server9.mp3quran.net/abo_hashim/012.mp3",
+  "18": "https://server9.mp3quran.net/abo_hashim/018.mp3",
+  "19": "https://server9.mp3quran.net/abo_hashim/019.mp3",
+  "21": "https://server9.mp3quran.net/abo_hashim/021.mp3",
+  "25": "https://server9.mp3quran.net/abo_hashim/025.mp3",
+  "50": "https://server9.mp3quran.net/abo_hashim/050.mp3",
+  "51": "https://server9.mp3quran.net/abo_hashim/051.mp3",
+  "52": "https://server9.mp3quran.net/abo_hashim/052.mp3",
+  "53": "https://server9.mp3quran.net/abo_hashim/053.mp3",
+  "54": "https://server9.mp3quran.net/abo_hashim/054.mp3",
+  "55": "https://server9.mp3quran.net/abo_hashim/055.mp3",
+  "56": "https://server9.mp3quran.net/abo_hashim/056.mp3",
+  "57": "https://server9.mp3quran.net/abo_hashim/057.mp3"
+}

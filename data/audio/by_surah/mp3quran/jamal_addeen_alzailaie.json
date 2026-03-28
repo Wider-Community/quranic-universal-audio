@@ -1,1 +1,21 @@
-{"_meta": {"reciter": "jamal_addeen_alzailaie", "name_en": "Jamal Addeen Alzailaie", "name_ar": "جمال الدين الزيلعي", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "1": "https://server11.mp3quran.net/zilaie/001.mp3", "19": "https://server11.mp3quran.net/zilaie/019.mp3", "32": "https://server11.mp3quran.net/zilaie/032.mp3", "54": "https://server11.mp3quran.net/zilaie/054.mp3", "67": "https://server11.mp3quran.net/zilaie/067.mp3", "70": "https://server11.mp3quran.net/zilaie/070.mp3", "73": "https://server11.mp3quran.net/zilaie/073.mp3", "91": "https://server11.mp3quran.net/zilaie/091.mp3"}
+{
+  "_meta": {
+    "reciter": "jamal_addeen_alzailaie",
+    "name_en": "Jamal Addeen Alzailaie",
+    "name_ar": "جمال الدين الزيلعي",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "1": "https://server11.mp3quran.net/zilaie/001.mp3",
+  "19": "https://server11.mp3quran.net/zilaie/019.mp3",
+  "32": "https://server11.mp3quran.net/zilaie/032.mp3",
+  "54": "https://server11.mp3quran.net/zilaie/054.mp3",
+  "67": "https://server11.mp3quran.net/zilaie/067.mp3",
+  "70": "https://server11.mp3quran.net/zilaie/070.mp3",
+  "73": "https://server11.mp3quran.net/zilaie/073.mp3",
+  "91": "https://server11.mp3quran.net/zilaie/091.mp3"
+}

@@ -1,1 +1,15 @@
-{"_meta": {"reciter": "wishear_hayder_arbili", "name_en": "Wishear Hayder Arbili", "name_ar": "وشيار حيدر اربيلي", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "55": "https://server11.mp3quran.net/wishear/055.mp3", "56": "https://server11.mp3quran.net/wishear/056.mp3"}
+{
+  "_meta": {
+    "reciter": "wishear_hayder_arbili",
+    "name_en": "Wishear Hayder Arbili",
+    "name_ar": "وشيار حيدر اربيلي",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "55": "https://server11.mp3quran.net/wishear/055.mp3",
+  "56": "https://server11.mp3quran.net/wishear/056.mp3"
+}

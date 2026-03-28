@@ -1,1 +1,17 @@
-{"_meta": {"reciter": "abdulmohsin_al_askar", "name_en": "Abdulmohsin Al-Askar", "name_ar": "عبدالمحسن العسكر", "riwayah": "hafs_an_asim", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "1": "https://server6.mp3quran.net/askr/001.mp3", "2": "https://server6.mp3quran.net/askr/002.mp3", "7": "https://server6.mp3quran.net/askr/007.mp3", "55": "https://server6.mp3quran.net/askr/055.mp3"}
+{
+  "_meta": {
+    "reciter": "abdulmohsin_al_askar",
+    "name_en": "Abdulmohsin Al-Askar",
+    "name_ar": "عبدالمحسن العسكر",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "fetched": "2026-03-28"
+  },
+  "1": "https://server6.mp3quran.net/askr/001.mp3",
+  "2": "https://server6.mp3quran.net/askr/002.mp3",
+  "7": "https://server6.mp3quran.net/askr/007.mp3",
+  "55": "https://server6.mp3quran.net/askr/055.mp3"
+}

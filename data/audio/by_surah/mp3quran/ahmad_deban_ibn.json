@@ -1,1 +1,328 @@
-{"_meta": {"reciter": "ahmad_deban_ibn", "name_en": "Ahmad Deban", "name_ar": "أحمد ديبان", "riwayah": "ibn_jummaz_abu_jafar", "style": "murattal", "audio_category": "by_surah", "source": "https://mp3quran.net/", "country": "unknown"}, "1": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/001.mp3", "93": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/093.mp3", "100": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/100.mp3", "102": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/102.mp3", "103": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/103.mp3", "109": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/109.mp3", "110": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/110.mp3", "111": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/111.mp3", "112": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/112.mp3", "113": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/113.mp3", "114": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/114.mp3"}
+{
+  "_meta": {
+    "reciter": "ahmad_deban_ibn",
+    "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
+    "riwayah": "ibn_jummaz_abu_jafar",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://mp3quran.net/",
+    "country": "unknown",
+    "_timing": {
+      "source": "mp3quran_api",
+      "type": "verse",
+      "data": {
+        "1": [
+          [
+            180,
+            4200
+          ],
+          [
+            4200,
+            8980
+          ],
+          [
+            8980,
+            12360
+          ],
+          [
+            12360,
+            16860
+          ],
+          [
+            16860,
+            22480
+          ],
+          [
+            22480,
+            26800
+          ],
+          [
+            26800,
+            42660
+          ]
+        ],
+        "93": [
+          [
+            3640,
+            4560
+          ],
+          [
+            4560,
+            7080
+          ],
+          [
+            7080,
+            11440
+          ],
+          [
+            11440,
+            17000
+          ],
+          [
+            17000,
+            22100
+          ],
+          [
+            22100,
+            27280
+          ],
+          [
+            27280,
+            33720
+          ],
+          [
+            33720,
+            39400
+          ],
+          [
+            39400,
+            44540
+          ],
+          [
+            44540,
+            50180
+          ],
+          [
+            50180,
+            56360
+          ]
+        ],
+        "100": [
+          [
+            3540,
+            6220
+          ],
+          [
+            6220,
+            9340
+          ],
+          [
+            9340,
+            12400
+          ],
+          [
+            12400,
+            15440
+          ],
+          [
+            15440,
+            18760
+          ],
+          [
+            18760,
+            25960
+          ],
+          [
+            25960,
+            31300
+          ],
+          [
+            31300,
+            37000
+          ],
+          [
+            37000,
+            42740
+          ],
+          [
+            42740,
+            46440
+          ],
+          [
+            46440,
+            53900
+          ]
+        ],
+        "102": [
+          [
+            3460,
+            5740
+          ],
+          [
+            5740,
+            9160
+          ],
+          [
+            9160,
+            13000
+          ],
+          [
+            13000,
+            18440
+          ],
+          [
+            18440,
+            24100
+          ],
+          [
+            24100,
+            27520
+          ],
+          [
+            27520,
+            33860
+          ],
+          [
+            33860,
+            43780
+          ]
+        ],
+        "103": [
+          [
+            3969,
+            5103
+          ],
+          [
+            5103,
+            10689
+          ],
+          [
+            10689,
+            22197
+          ]
+        ],
+        "109": [
+          [
+            3580,
+            6760
+          ],
+          [
+            6760,
+            9980
+          ],
+          [
+            9980,
+            15160
+          ],
+          [
+            15160,
+            19540
+          ],
+          [
+            19540,
+            24600
+          ],
+          [
+            24600,
+            29160
+          ]
+        ],
+        "110": [
+          [
+            3885,
+            8778
+          ],
+          [
+            8778,
+            16968
+          ],
+          [
+            16968,
+            27090
+          ]
+        ],
+        "111": [
+          [
+            3640,
+            8740
+          ],
+          [
+            8740,
+            13880
+          ],
+          [
+            13880,
+            18100
+          ],
+          [
+            18100,
+            23180
+          ],
+          [
+            23180,
+            28660
+          ]
+        ],
+        "112": [
+          [
+            3822,
+            6531
+          ],
+          [
+            6531,
+            8967
+          ],
+          [
+            8967,
+            12138
+          ],
+          [
+            12138,
+            16884
+          ]
+        ],
+        "113": [
+          [
+            3740,
+            6880
+          ],
+          [
+            6880,
+            10000
+          ],
+          [
+            10000,
+            15080
+          ],
+          [
+            15080,
+            21100
+          ],
+          [
+            21100,
+            27100
+          ]
+        ],
+        "114": [
+          [
+            3980,
+            8780
+          ],
+          [
+            8780,
+            11820
+          ],
+          [
+            11820,
+            15140
+          ],
+          [
+            15140,
+            21200
+          ],
+          [
+            21200,
+            27120
+          ],
+          [
+            27120,
+            32960
+          ]
+        ]
+      }
+    },
+    "fetched": "2026-03-28"
+  },
+  "1": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/001.mp3",
+  "93": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/093.mp3",
+  "100": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/100.mp3",
+  "102": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/102.mp3",
+  "103": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/103.mp3",
+  "109": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/109.mp3",
+  "110": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/110.mp3",
+  "111": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/111.mp3",
+  "112": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/112.mp3",
+  "113": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/113.mp3",
+  "114": "https://server16.mp3quran.net/deban/Rewayat-Ibn-Jammaz-A-n-Abi-Ja-far/114.mp3"
+}
