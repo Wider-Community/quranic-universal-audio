@@ -572,23 +572,56 @@ The HF dataset is the right default for most programmatic use. The primary gaps 
 
 Investigated [spa5k/quran-timings-api](https://github.com/spa5k/quran-timings-api) as a reference for API/CDN design. Key observations:
 
-**Architecture:** Not a running API — a CLI pipeline (Python/Typer) that generates static JSON files committed to the repo, intended to be served via GitHub raw URLs or JSDelivr. No dynamic server.
+**Architecture:** A CLI pipeline (Python/Typer) that generates static JSON files committed to the repo. The README presents this as a "free static JSON API" served via 5 CDN providers (JSDelivr, GitHack, Statically, GitHub Raw, GitLoaf). In practice, only GitHub Raw actually serves data — JSDelivr and GitHack return 403 (likely repo size limits). No dynamic server, no audio hosting.
 
-**Alignment pipeline (interesting):** Multi-engine forced alignment with candidate fusion:
+**Four static "endpoints":**
+```
+/reciters.json                                    — reciter catalog
+/api/reciters/{slug}/metadata.json               — reciter info + available surahs
+/api/reciters/{slug}/surahs/{n}/metadata.json    — surah-level QC metadata
+/api/reciters/{slug}/surahs/{n}/timings.json     — ayah + word-level timings
+```
+
+**Timings data format (v2 schema):**
+```json
+{
+  "ayahs": [
+    {"surah": 114, "ayah": 1, "start_s": 0.0, "end_s": 2.2,
+     "audio_url": "https://everyayah.com/data/Muhsin_Al_Qasim_192kbps/114001.mp3"}
+  ],
+  "words": [
+    {"surah": 114, "ayah": 1, "word_index_in_ayah": 1,
+     "text_uthmani": "قُلۡ", "text_norm": "قل",
+     "start_s": 0.0, "end_s": 0.02}
+  ]
+}
+```
+
+Includes Uthmani + normalized text per word (we use word indices only), ayah-level audio URLs from source CDNs, and word-level timestamps in seconds.
+
+**Quality concerns confirmed in live data.** Multiple words have physically impossible durations:
+- "قُلۡ" (Qul): 20ms — impossible for a spoken word
+- "ٱلنَّاسِ": 75ms — far too short for a 4-letter word
+- "مِن": 20ms, "شَرِّ": 20ms — same pattern across many words
+
+This suggests alignment failures where the model couldn't place word boundaries and defaulted to minimal spans. Our MFA pipeline produces more realistic durations (typically 200-1500ms per word with forward padding).
+
+**Alignment pipeline (interesting for future reference):** Multi-engine forced alignment with candidate fusion:
 - NeMo (NVIDIA FastConformer) → WhisperX → MFA, tries all engines and picks best per-ayah result via composite scoring
 - Iterative refinement for weak ayahs with expanded audio windows (up to 3 passes)
 - Detailed QC provenance: boundary error medians, engine selection scores, quantization step detection
 
-**Current state: very early.** 3 reciters enabled (out of 201 cataloged), covering only surahs 65-114. Cloudflare Worker and JSDelivr CDN both non-functional (403). Quality concerns in output (20ms word durations, 300ms+ boundary error medians).
+**Current state: very early.** 3 reciters enabled (out of 201 cataloged), covering only surahs 65-114. CDN delivery mostly broken.
 
 **Data sources they have that we don't:**
 - QuranicAudio.com (110 reciters) — potential future source for our manifests
 - Quran.com verse segment API (12 reciters)
 
-**What they lack that we have:** 381 reciters (vs 3), 14 riwayat, letter/phoneme-level timestamps, gapless playback design, HF dataset with embedded audio, working infrastructure.
+**What they lack that we have:** 381 reciters (vs 3), 14 riwayat, letter/phoneme-level timestamps, gapless playback design, HF dataset with embedded audio, working infrastructure, reliable word-level timing quality.
 
 **Takeaways for our project:**
 1. **Multi-engine fusion** — worth studying if we need to improve alignment robustness for difficult reciters. Their approach of running multiple engines and scoring candidates could complement our current single-engine (MFA via Kalpy) pipeline.
 2. **QuranicAudio.com** as a future audio source — 110 additional reciters with surah-level audio.
-3. **Static JSON on CDN** is a viable MVP for API delivery but doesn't scale well in git (repo size limits on JSDelivr, no dynamic filtering). Validates our decision to use HF parquet + datasets-server instead.
-4. **Their project does not solve our needs** — too limited in coverage, no gapless support, no audio hosting. But the alignment pipeline design is a useful reference.
+3. **Static JSON on CDN** is fragile at scale — their JSDelivr/GitHack 403s validate our decision to use HF parquet + datasets-server instead of committing generated data to git.
+4. **Per-word embedded text** (Uthmani + normalized) is a nice UX touch — worth considering for our `sources` config or as an optional dataset column, since our current schema uses word indices that require a lookup against `qpc_hafs.json`.
+5. **Their project does not solve our needs** — too limited in coverage, broken CDN, unreliable word timings. But the alignment pipeline design and QuranicAudio.com source are useful references.
