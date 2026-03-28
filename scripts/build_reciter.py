@@ -3,10 +3,10 @@
 Build and upload a reciter config to the HuggingFace dataset.
 
 Usage:
-    python quranic_universal_ayahs/build_reciter.py <slug>              # Upload one reciter
-    python quranic_universal_ayahs/build_reciter.py --all               # Upload all eligible
-    python quranic_universal_ayahs/build_reciter.py --delete <slug>     # Delete a reciter's data
-    python quranic_universal_ayahs/build_reciter.py --update-readme     # Update dataset card only
+    python scripts/build_reciter.py <slug>              # Upload one reciter
+    python scripts/build_reciter.py --all               # Upload all eligible
+    python scripts/build_reciter.py --delete <slug>     # Delete a reciter's data
+    python scripts/build_reciter.py --update-readme     # Update dataset card only
 
 Environment:
     HF_TOKEN       — HuggingFace API token

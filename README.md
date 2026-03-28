@@ -45,7 +45,7 @@ To access the audio or timestamps:
 ## Technical Overview
 
 <p align="center">
-  <img src="captures/quranic_universal_aligner_pipeline.svg" alt="Pipeline diagram">
+  <img src="docs/quranic_universal_aligner_pipeline.svg" alt="Pipeline diagram">
 </p>
 
 The repository uses the following components:
