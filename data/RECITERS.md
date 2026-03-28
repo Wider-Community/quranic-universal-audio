@@ -1,6 +1,6 @@
 # Reciters
 
-**382** reciter entries (2 aligned, 380 available). Generated from `scripts/list_reciters.py`.
+**381** reciter entries (2 aligned, 379 available). Generated from `scripts/list_reciters.py`.
 
 > **Note:** A "reciter entry" is a unique combination of reciter × riwayah × style × granularity, not a unique person. For example, Mahmoud Khalil Al-Hussary appears as 5 entries: Hafs Murattal Ayah, Hafs Murattal Surah, Hafs Mujawwad Surah, Hafs Muallim Ayah, and Warsh Murattal Surah.
 >
@@ -10,7 +10,7 @@
 
 | Riwayah | | Style | | Source | |
 |---------|:-:|-------|:-:|--------|:-:|
-| Hafs A'n Assem | 327 | Murattal | 366 | [MP3Quran](https://mp3quran.net/) | 282 |
+| Hafs A'n Assem | 326 | Murattal | 365 | [MP3Quran](https://mp3quran.net/) | 281 |
 | Sho'bah A'n Asim | 3 | Mujawwad | 10 | [EveryAyah](https://everyayah.com/) | 45 |
 | Warsh A'n Nafi' | 15 | Muallim | 6 | [Surah-Quran](https://surahquran.com/quran-mp3-english.html) | 42 |
 | Qalon A'n Nafi' | 12 |  |  | [QUL](https://qul.tarteel.ai/resources/recitation) | 13 |
@@ -272,114 +272,113 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 215 | Mohammed Al-Muhasny | Murattal | MP3Quran | Surah | 114/114 |
 | 216 | Mohammed Al-Zubaidi | Murattal | MP3Quran | Surah | 114/114 |
 | 217 | Mohammed Ayyub | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 218 | Mohammed Ayyub | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 219 | Mohammed Ayyub | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 220 | Mohammed Hafas Ali | Murattal | MP3Quran | Surah | 5/114 |
-| 221 | Mohammed Jibreel | Murattal | MP3Quran | Surah | 114/114 |
-| 222 | Mohammed Jibreel | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 223 | Mohammed Osman Khan | Murattal | MP3Quran | Surah | 114/114 |
-| 224 | Mohammed Siddiq Al-Minshawi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 225 | Mohammed Siddiq Al-Minshawi | Muallim | MP3Quran | Surah + Ayah timings | 114/114 |
-| 226 | Mohammed Siddiq Al-Minshawi | Mujawwad | MP3Quran | Surah + Ayah timings | 114/114 |
-| 227 | Mohammed Siddiq Al-Minshawi | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 228 | Mohammed Siddiq Al-Minshawi | Mujawwad | EveryAyah | Ayah | 6236/6236 |
-| 229 | Mousa Bilal | Murattal | MP3Quran | Surah | 114/114 |
-| 230 | Muamar (From Indonesia) | Murattal | MP3Quran | Surah | 8/114 |
-| 231 | Muftah Alsaltany | Murattal | MP3Quran | Surah | 114/114 |
-| 232 | Muhammad Al Faqih | Murattal | MP3Quran | Surah | 114/114 |
-| 233 | Muhammad Al-Hafiz | Murattal | MP3Quran | Surah | 3/114 |
-| 234 | Muhammad Al-Kantawi | Murattal | Surah-Quran | Surah | 114/114 |
-| 235 | Muhammad Al-Sabil | Murattal | Surah-Quran | Surah | 114/114 |
-| 236 | Muhammad Burhaji | Murattal | MP3Quran | Surah | 114/114 |
-| 237 | Muhammad Hassan | Murattal | QUL | Surah | 114/114 |
-| 238 | Muhammad Sulaiman Patel | Murattal | QUL | Surah | 114/114 |
-| 239 | Muhammed Husayn Amer | Murattal | Surah-Quran | Surah | 114/114 |
-| 240 | Muhammed Khairul Anuar | Murattal | MP3Quran | Surah | 4/114 |
-| 241 | Mukhtar Al-Haj | Murattal | MP3Quran | Surah | 114/114 |
-| 242 | Mustafa Al-Lahoni | Murattal | MP3Quran | Surah | 114/114 |
-| 243 | Mustafa Gharbi | Murattal | Surah-Quran | Surah | 114/114 |
-| 244 | Mustafa Ismail | Murattal | MP3Quran | Surah | 114/114 |
-| 245 | Mustafa Ismail | Mujawwad | MP3Quran | Surah | 114/114 |
-| 246 | Mustafa Ismail | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 247 | Mustafa raad Alazawy | Murattal | MP3Quran | Surah | 114/114 |
-| 248 | Nabil Al Rifay | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 249 | Nabil Al Rifay | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 250 | Nasser Al obaid | Murattal | MP3Quran | Surah | 67/114 |
-| 251 | Nasser Almajed | Murattal | MP3Quran | Surah | 114/114 |
-| 252 | Nasser Alosfor | Murattal | MP3Quran | Surah | 114/114 |
-| 253 | Nasser Alqatami | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 254 | Nasser Alqatami | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 255 | Nathier Almalki | Murattal | MP3Quran | Surah | 114/114 |
-| 256 | Neamah Al-Hassan | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 257 | Obaida Muafaq | Murattal | Surah-Quran | Surah | 114/114 |
-| 258 | Omar Al Darweez | Murattal | MP3Quran | Surah | 97/114 |
-| 259 | Othman Al-Ansary | Murattal | MP3Quran | Surah | 76/114 |
-| 260 | Peshawa Qadr Al-Kurdi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 261 | Raad Al Kurdi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 262 | Rachid Belachia | Murattal | Surah-Quran | Surah | 114/114 |
-| 263 | Rachid Belalya | Murattal | MP3Quran | Surah | 5/114 |
-| 264 | Ramadan Shakoor | Murattal | MP3Quran | Surah | 65/114 |
-| 265 | Rami Aldeais | Murattal | MP3Quran | Surah | 114/114 |
-| 266 | Rayan Al-Muhaisni | Murattal | Surah-Quran | Surah | 114/114 |
-| 267 | Rodziah Abdulrahman | Murattal | MP3Quran | Surah | 4/114 |
-| 268 | Rogayah Sulong | Murattal | MP3Quran | Surah | 1/114 |
-| 269 | Saad Al-Ghamdi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 270 | Saad Al-Ghamdi | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 271 | Saad Almqren | Murattal | MP3Quran | Surah | 114/114 |
-| 272 | Saber Abdulhakm | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 273 | Sadaqat Ali | Murattal | QUL | Surah | 114/114 |
-| 274 | Saeed Al-Khatib | Murattal | Surah-Quran | Surah | 114/114 |
-| 275 | Sahl Yassin | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 276 | Sahl Yassin | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 277 | Saidin Abdulrahman | Murattal | MP3Quran | Surah | 4/114 |
-| 278 | Salah Al-Jamal | Murattal | Surah-Quran | Surah | 114/114 |
-| 279 | Salah Albudair | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 280 | Salah Albudair | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 281 | Salah Alhashim | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 282 | Salah Ba Othman | Murattal | Surah-Quran | Surah | 114/114 |
-| 283 | Salah Musali | Murattal | MP3Quran | Surah | 49/114 |
-| 284 | Saleh Al-Habdan | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 285 | Saleh Al-Talib | Murattal | MP3Quran | Surah | 33/114 |
-| 286 | Saleh Alquraishi | Murattal | MP3Quran | Surah | 114/114 |
-| 287 | Saleh Alsahood | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 288 | Saleh Alshamrani | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 289 | Salih Ahmed Salih | Murattal | Surah-Quran | Surah | 114/114 |
-| 290 | Salman Alotaibi | Murattal | MP3Quran | Surah | 76/114 |
-| 291 | Salman Alsadeiq | Murattal | MP3Quran | Surah | 114/114 |
-| 292 | Sami Al-Dosari | Murattal | MP3Quran | Surah | 53/114 |
-| 293 | Sami Al-Hasn | Murattal | MP3Quran | Surah | 28/114 |
-| 294 | Sapinah Mamat | Murattal | MP3Quran | Surah | 4/114 |
-| 295 | Saud Al-Shuraim | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 296 | Saud Al-Shuraim | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 297 | Sayed Ahmad Hashemi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 298 | Sayeed Ramadan | Murattal | MP3Quran | Surah | 114/114 |
-| 299 | Shaban Al-Sayiaad | Murattal | MP3Quran | Surah | 65/114 |
-| 300 | Shahriar Parhizgar | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 301 | Shaik Abu Bakr Al Shatri | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 302 | Shaik Abu Bakr Al Shatri | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 303 | Shirazad Taher | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 304 | Slaah Bukhatir | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 305 | Slaah Bukhatir | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 306 | Tawfeeq As-Sayegh | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 307 | Ustaz Zamri | Murattal | MP3Quran | Surah | 7/114 |
-| 308 | Wadeea Al-Yamani | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 309 | Walid Al-Dulaimi | Murattal | MP3Quran | Surah | 58/114 |
-| 310 | Wasel Almethen | Murattal | MP3Quran | Surah | 9/114 |
-| 311 | Wishear Hayder Arbili | Murattal | MP3Quran | Surah | 2/114 |
-| 312 | Yahya Hawwa | Murattal | MP3Quran | Surah | 114/114 |
-| 313 | Yasser Al-Dosari | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 314 | Yasser Al-Dosari | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 315 | Yasser Al-Faylakawi | Murattal | MP3Quran | Surah | 88/114 |
-| 316 | Yasser Al-Qurashi | Murattal | MP3Quran | Surah | 114/114 |
-| 317 | Yasser Salamah | Murattal | MP3Quran | Surah | 114/114 |
-| 318 | Yasser Salamah | Murattal | EveryAyah | Ayah | 6236/6236 |
-| 319 | Yousef Alshoaey | Murattal | MP3Quran | Surah | 114/114 |
-| 320 | Yousef Bin Noah Ahmad | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
-| 321 | Youssef Edghouch | Murattal | MP3Quran | Surah | 26/114 |
-| 322 | Yusuf ALaidroos | Murattal | MP3Quran | Surah | 111/114 |
-| 323 | Yusuf Nooh | Murattal | Surah-Quran | Surah | 114/114 |
-| 324 | Zakaria Hamamah | Murattal | MP3Quran | Surah | 7/114 |
-| 325 | Zaki Daghistani | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 218 | Mohammed Ayyub | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 219 | Mohammed Hafas Ali | Murattal | MP3Quran | Surah | 5/114 |
+| 220 | Mohammed Jibreel | Murattal | MP3Quran | Surah | 114/114 |
+| 221 | Mohammed Jibreel | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 222 | Mohammed Osman Khan | Murattal | MP3Quran | Surah | 114/114 |
+| 223 | Mohammed Siddiq Al-Minshawi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 224 | Mohammed Siddiq Al-Minshawi | Muallim | MP3Quran | Surah + Ayah timings | 114/114 |
+| 225 | Mohammed Siddiq Al-Minshawi | Mujawwad | MP3Quran | Surah + Ayah timings | 114/114 |
+| 226 | Mohammed Siddiq Al-Minshawi | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 227 | Mohammed Siddiq Al-Minshawi | Mujawwad | EveryAyah | Ayah | 6236/6236 |
+| 228 | Mousa Bilal | Murattal | MP3Quran | Surah | 114/114 |
+| 229 | Muamar (From Indonesia) | Murattal | MP3Quran | Surah | 8/114 |
+| 230 | Muftah Alsaltany | Murattal | MP3Quran | Surah | 114/114 |
+| 231 | Muhammad Al Faqih | Murattal | MP3Quran | Surah | 114/114 |
+| 232 | Muhammad Al-Hafiz | Murattal | MP3Quran | Surah | 3/114 |
+| 233 | Muhammad Al-Kantawi | Murattal | Surah-Quran | Surah | 114/114 |
+| 234 | Muhammad Al-Sabil | Murattal | Surah-Quran | Surah | 114/114 |
+| 235 | Muhammad Burhaji | Murattal | MP3Quran | Surah | 114/114 |
+| 236 | Muhammad Hassan | Murattal | QUL | Surah | 114/114 |
+| 237 | Muhammad Sulaiman Patel | Murattal | QUL | Surah | 114/114 |
+| 238 | Muhammed Husayn Amer | Murattal | Surah-Quran | Surah | 114/114 |
+| 239 | Muhammed Khairul Anuar | Murattal | MP3Quran | Surah | 4/114 |
+| 240 | Mukhtar Al-Haj | Murattal | MP3Quran | Surah | 114/114 |
+| 241 | Mustafa Al-Lahoni | Murattal | MP3Quran | Surah | 114/114 |
+| 242 | Mustafa Gharbi | Murattal | Surah-Quran | Surah | 114/114 |
+| 243 | Mustafa Ismail | Murattal | MP3Quran | Surah | 114/114 |
+| 244 | Mustafa Ismail | Mujawwad | MP3Quran | Surah | 114/114 |
+| 245 | Mustafa Ismail | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 246 | Mustafa raad Alazawy | Murattal | MP3Quran | Surah | 114/114 |
+| 247 | Nabil Al Rifay | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 248 | Nabil Al Rifay | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 249 | Nasser Al obaid | Murattal | MP3Quran | Surah | 67/114 |
+| 250 | Nasser Almajed | Murattal | MP3Quran | Surah | 114/114 |
+| 251 | Nasser Alosfor | Murattal | MP3Quran | Surah | 114/114 |
+| 252 | Nasser Alqatami | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 253 | Nasser Alqatami | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 254 | Nathier Almalki | Murattal | MP3Quran | Surah | 114/114 |
+| 255 | Neamah Al-Hassan | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 256 | Obaida Muafaq | Murattal | Surah-Quran | Surah | 114/114 |
+| 257 | Omar Al Darweez | Murattal | MP3Quran | Surah | 97/114 |
+| 258 | Othman Al-Ansary | Murattal | MP3Quran | Surah | 76/114 |
+| 259 | Peshawa Qadr Al-Kurdi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 260 | Raad Al Kurdi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 261 | Rachid Belachia | Murattal | Surah-Quran | Surah | 114/114 |
+| 262 | Rachid Belalya | Murattal | MP3Quran | Surah | 5/114 |
+| 263 | Ramadan Shakoor | Murattal | MP3Quran | Surah | 65/114 |
+| 264 | Rami Aldeais | Murattal | MP3Quran | Surah | 114/114 |
+| 265 | Rayan Al-Muhaisni | Murattal | Surah-Quran | Surah | 114/114 |
+| 266 | Rodziah Abdulrahman | Murattal | MP3Quran | Surah | 4/114 |
+| 267 | Rogayah Sulong | Murattal | MP3Quran | Surah | 1/114 |
+| 268 | Saad Al-Ghamdi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 269 | Saad Al-Ghamdi | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 270 | Saad Almqren | Murattal | MP3Quran | Surah | 114/114 |
+| 271 | Saber Abdulhakm | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 272 | Sadaqat Ali | Murattal | QUL | Surah | 114/114 |
+| 273 | Saeed Al-Khatib | Murattal | Surah-Quran | Surah | 114/114 |
+| 274 | Sahl Yassin | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 275 | Sahl Yassin | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 276 | Saidin Abdulrahman | Murattal | MP3Quran | Surah | 4/114 |
+| 277 | Salah Al-Jamal | Murattal | Surah-Quran | Surah | 114/114 |
+| 278 | Salah Albudair | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 279 | Salah Albudair | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 280 | Salah Alhashim | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 281 | Salah Ba Othman | Murattal | Surah-Quran | Surah | 114/114 |
+| 282 | Salah Musali | Murattal | MP3Quran | Surah | 49/114 |
+| 283 | Saleh Al-Habdan | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 284 | Saleh Al-Talib | Murattal | MP3Quran | Surah | 33/114 |
+| 285 | Saleh Alquraishi | Murattal | MP3Quran | Surah | 114/114 |
+| 286 | Saleh Alsahood | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 287 | Saleh Alshamrani | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 288 | Salih Ahmed Salih | Murattal | Surah-Quran | Surah | 114/114 |
+| 289 | Salman Alotaibi | Murattal | MP3Quran | Surah | 76/114 |
+| 290 | Salman Alsadeiq | Murattal | MP3Quran | Surah | 114/114 |
+| 291 | Sami Al-Dosari | Murattal | MP3Quran | Surah | 53/114 |
+| 292 | Sami Al-Hasn | Murattal | MP3Quran | Surah | 28/114 |
+| 293 | Sapinah Mamat | Murattal | MP3Quran | Surah | 4/114 |
+| 294 | Saud Al-Shuraim | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 295 | Saud Al-Shuraim | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 296 | Sayed Ahmad Hashemi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 297 | Sayeed Ramadan | Murattal | MP3Quran | Surah | 114/114 |
+| 298 | Shaban Al-Sayiaad | Murattal | MP3Quran | Surah | 65/114 |
+| 299 | Shahriar Parhizgar | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 300 | Shaik Abu Bakr Al Shatri | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 301 | Shaik Abu Bakr Al Shatri | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 302 | Shirazad Taher | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 303 | Slaah Bukhatir | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 304 | Slaah Bukhatir | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 305 | Tawfeeq As-Sayegh | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 306 | Ustaz Zamri | Murattal | MP3Quran | Surah | 7/114 |
+| 307 | Wadeea Al-Yamani | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 308 | Walid Al-Dulaimi | Murattal | MP3Quran | Surah | 58/114 |
+| 309 | Wasel Almethen | Murattal | MP3Quran | Surah | 9/114 |
+| 310 | Wishear Hayder Arbili | Murattal | MP3Quran | Surah | 2/114 |
+| 311 | Yahya Hawwa | Murattal | MP3Quran | Surah | 114/114 |
+| 312 | Yasser Al-Dosari | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 313 | Yasser Al-Dosari | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 314 | Yasser Al-Faylakawi | Murattal | MP3Quran | Surah | 88/114 |
+| 315 | Yasser Al-Qurashi | Murattal | MP3Quran | Surah | 114/114 |
+| 316 | Yasser Salamah | Murattal | MP3Quran | Surah | 114/114 |
+| 317 | Yasser Salamah | Murattal | EveryAyah | Ayah | 6236/6236 |
+| 318 | Yousef Alshoaey | Murattal | MP3Quran | Surah | 114/114 |
+| 319 | Yousef Bin Noah Ahmad | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
+| 320 | Youssef Edghouch | Murattal | MP3Quran | Surah | 26/114 |
+| 321 | Yusuf ALaidroos | Murattal | MP3Quran | Surah | 111/114 |
+| 322 | Yusuf Nooh | Murattal | Surah-Quran | Surah | 114/114 |
+| 323 | Zakaria Hamamah | Murattal | MP3Quran | Surah | 7/114 |
+| 324 | Zaki Daghistani | Murattal | MP3Quran | Surah + Ayah timings | 114/114 |
 
 #### Sho'bah A'n Asim
 
