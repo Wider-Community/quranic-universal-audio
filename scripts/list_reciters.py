@@ -810,6 +810,11 @@ def write_reciters_md(all_records: list[dict]) -> int:
             f"{reciters_rounded}+ reciters and {riwayat_with_data} riwayat",
             readme,
         )
+        readme = re.sub(
+            r"across \d+ riwayat",
+            f"across {riwayat_with_data} riwayat",
+            readme,
+        )
         readme_path.write_text(readme)
         print(f"Updated: {readme_path} "
               f"(audio: {all_full} full / {all_partial} partial / {total_hours:,}h, "

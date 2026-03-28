@@ -64,7 +64,7 @@ dataset_info:
 
 # Qur'anic Universal Ayahs
 
-Word-level aligned Qur'an recitation audio with precise timestamps derived from phoneme-level forced alignment.
+Word-level aligned Qur'an recitation audio with precise timestamps derived from phoneme-level forced alignment. A community-verified dataset of 350+ reciters across 14 riwayat.
 
 ## Dataset Description
 

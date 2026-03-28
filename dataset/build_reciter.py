@@ -664,6 +664,11 @@ def update_dataset_readme():
         body,
     )
 
+    # Update prose counts
+    reciters_rounded = (all_total // 50) * 50
+    body = re.sub(r"\d+\+ reciters", f"{reciters_rounded}+ reciters", body)
+    body = re.sub(r"across \d+ riwayat", f"across {len(riwayat_with_data)} riwayat", body)
+
     text = f"---{yaml_text}---{body}"
     readme_path.write_text(text)
 
