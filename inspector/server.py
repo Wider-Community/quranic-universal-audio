@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time as _time
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -45,7 +45,6 @@ from config import (
     ANIM_WORD_SPACING, ANIM_LINE_HEIGHT, ANIM_FONT_SIZE,
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
     SEG_FONT_SIZE, SEG_WORD_SPACING,
-    REQUEST_SPACE_URL,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -1409,7 +1408,8 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict) -> dict:
                 continue
 
             if s_ayah != e_ayah:
-                counts["cross_verse"] += 1
+                if confidence < 1.0:
+                    counts["cross_verse"] += 1
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
                         wc = word_counts.get((surah, ayah), s_word)
@@ -1422,6 +1422,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict) -> dict:
             else:
                 verse_segments[(surah, s_ayah)].append((s_word, e_word))
                 if (s_word == e_word
+                    and confidence < 1.0
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -1549,8 +1550,8 @@ def validate_reciter_segments(reciter):
             except (ValueError, IndexError):
                 continue
 
-            # Cross-verse detection
-            if s_ayah != e_ayah:
+            # Cross-verse detection (skip if already ignored / confidence=1.0)
+            if s_ayah != e_ayah and confidence < 1.0:
                 cross_verse.append({
                     "chapter": chapter,
                     "seg_index": i,
@@ -1570,8 +1571,10 @@ def validate_reciter_segments(reciter):
                 verse_segments[(surah, s_ayah)].append((s_word, e_word, i))
 
                 # Potentially oversegmented: 1-word segment, not muqattaat, not single-word verse,
-                # not a known standalone word (by ref or matched_text)
+                # not a known standalone word (by ref or matched_text).
+                # Skip if already ignored (confidence=1.0).
                 if (s_word == e_word
+                    and confidence < 1.0
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in _single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -1966,6 +1969,75 @@ def save_stat_chart(reciter):
 
 
 # ---------------------------------------------------------------------------
+# Edit history endpoint
+# ---------------------------------------------------------------------------
+
+@app.route("/api/seg/edit-history/<reciter>")
+def get_seg_edit_history(reciter):
+    """Return edit history batches and summary stats for the reciter."""
+    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    if not history_path.exists():
+        return jsonify({"batches": [], "summary": None})
+
+    batches = []
+    op_counts: Counter = Counter()
+    fix_kind_counts: Counter = Counter()
+    chapters_edited: set[int] = set()
+    total_batches = 0
+
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        if record.get("record_type") == "genesis":
+            continue
+
+        is_revert = bool(record.get("reverts_batch_id"))
+        ops = record.get("operations", [])
+
+        batch = {
+            "batch_id": record.get("batch_id"),
+            "saved_at_utc": record.get("saved_at_utc"),
+            "chapter": record.get("chapter"),
+            "chapters": record.get("chapters"),
+            "save_mode": record.get("save_mode"),
+            "is_revert": is_revert,
+            "reverts_batch_id": record.get("reverts_batch_id"),
+            "validation_summary_before": record.get("validation_summary_before"),
+            "validation_summary_after": record.get("validation_summary_after"),
+            "operations": ops,
+        }
+        batches.append(batch)
+
+        if ops:
+            total_batches += 1
+            ch = record.get("chapter")
+            if ch is not None:
+                chapters_edited.add(ch)
+            for mch in record.get("chapters") or []:
+                chapters_edited.add(mch)
+            for op in ops:
+                op_counts[op.get("op_type", "unknown")] += 1
+                fix_kind_counts[op.get("fix_kind", "unknown")] += 1
+
+    total_operations = sum(op_counts.values())
+    summary = {
+        "total_operations": total_operations,
+        "total_batches": total_batches,
+        "chapters_edited": len(chapters_edited),
+        "op_counts": dict(op_counts),
+        "fix_kind_counts": dict(fix_kind_counts),
+    } if total_operations > 0 else None
+
+    return jsonify({"batches": batches, "summary": summary})
+
+
+# ---------------------------------------------------------------------------
 # Audio tab endpoints
 # ---------------------------------------------------------------------------
 
@@ -2035,16 +2107,6 @@ def get_audio_surahs(category, source, slug):
     surahs = {k: (v["url"] if isinstance(v, dict) else v) for k, v in surahs.items()}
     _AUDIO_URL_CACHE[key] = surahs
     return jsonify({"surahs": surahs})
-
-
-# ---------------------------------------------------------------------------
-# Requests tab
-# ---------------------------------------------------------------------------
-
-@app.route("/api/req/config")
-def req_config():
-    """Return request space configuration for the Requests tab."""
-    return jsonify({"space_url": REQUEST_SPACE_URL})
 
 
 # ---------------------------------------------------------------------------

@@ -10,11 +10,11 @@
     <div class="container">
         <header>
             <h1>Alignment Inspector</h1>
+            <p class="header-links">Want to add a reciter? <a href="https://hetchyy-quran-reciter-requests.hf.space" target="_blank" rel="noopener">Submit a request</a> or read the <a href="https://github.com/hetchyy/quranic-universal-audio/blob/main/docs/adding-a-reciter.md" target="_blank" rel="noopener">contribution guide</a>.</p>
             <div class="tab-bar">
                 <button class="tab-btn active" data-tab="timestamps">Timestamps</button>
                 <button class="tab-btn" data-tab="segments">Segments</button>
                 <button class="tab-btn" data-tab="audio">Audio</button>
-                <button class="tab-btn" data-tab="requests">Requests</button>
             </div>
         </header>
 
@@ -206,6 +206,12 @@
                 <div id="seg-stats-charts" class="seg-stats-charts"></div>
             </details>
 
+            <details id="seg-history-panel" class="seg-history-panel" hidden>
+                <summary class="seg-history-summary">Edit History</summary>
+                <div id="seg-history-stats" class="seg-history-stats"></div>
+                <div id="seg-history-batches" class="seg-history-batches"></div>
+            </details>
+
             <div id="seg-validation-global" class="seg-validation" hidden></div>
             <div id="seg-validation" class="seg-validation" hidden></div>
 
@@ -248,112 +254,6 @@
             </div>
         </div>
 
-        <!-- ============ Requests Tab ============ -->
-        <div id="requests-panel" hidden>
-            <div class="info-bar">
-                <h3 style="color:#4cc9f0; margin:0;">Reciter Segmentation Requests</h3>
-            </div>
-
-            <!-- Guide -->
-            <details class="req-guide-section">
-                <summary>How to choose the right parameters &amp; what happens next</summary>
-                <div id="req-guide-content">Loading guide...</div>
-            </details>
-
-            <div class="req-layout">
-                <!-- Request Form -->
-                <div class="req-form-section">
-                    <h4>Submit New Request</h4>
-                    <div class="req-form">
-                        <label>Request Type:
-                            <select id="req-type-select">
-                                <option value="New reciter">New reciter</option>
-                                <option value="Re-align">Re-align (different parameters)</option>
-                            </select>
-                        </label>
-                        <label>Reciter:
-                            <select id="req-reciter-select"><option value="">Loading...</option></select>
-                        </label>
-                        <label>Riwayah:
-                            <select id="req-riwayah-select">
-                                <optgroup label="Asim">
-                                    <option value="Hafs an Asim" selected>Hafs an Asim</option>
-                                    <option value="Shubah an Asim">Shubah an Asim</option>
-                                </optgroup>
-                                <optgroup label="Nafi">
-                                    <option value="Warsh an Nafi">Warsh an Nafi</option>
-                                    <option value="Qalun an Nafi">Qalun an Nafi</option>
-                                </optgroup>
-                                <optgroup label="Abu Amr">
-                                    <option value="Al-Duri an Abu Amr">Al-Duri an Abu Amr</option>
-                                    <option value="Al-Susi an Abu Amr">Al-Susi an Abu Amr</option>
-                                </optgroup>
-                                <optgroup label="Ibn Amir">
-                                    <option value="Hisham an Ibn Amir">Hisham an Ibn Amir</option>
-                                    <option value="Ibn Dhakwan an Ibn Amir">Ibn Dhakwan an Ibn Amir</option>
-                                </optgroup>
-                                <optgroup label="Ibn Kathir">
-                                    <option value="Al-Bazzi an Ibn Kathir">Al-Bazzi an Ibn Kathir</option>
-                                    <option value="Qunbul an Ibn Kathir">Qunbul an Ibn Kathir</option>
-                                </optgroup>
-                                <optgroup label="Hamzah">
-                                    <option value="Khalaf an Hamzah">Khalaf an Hamzah</option>
-                                    <option value="Khallad an Hamzah">Khallad an Hamzah</option>
-                                </optgroup>
-                                <optgroup label="Al-Kisai">
-                                    <option value="Al-Layth an Al-Kisai">Al-Layth an Al-Kisai</option>
-                                    <option value="Al-Duri an Al-Kisai">Al-Duri an Al-Kisai</option>
-                                </optgroup>
-                                <optgroup label="Abu Jafar">
-                                    <option value="Isa Ibn Wardan an Abu Jafar">Isa Ibn Wardan an Abu Jafar</option>
-                                    <option value="Ibn Jummaz an Abu Jafar">Ibn Jummaz an Abu Jafar</option>
-                                </optgroup>
-                                <optgroup label="Yaqub">
-                                    <option value="Ruways an Yaqub">Ruways an Yaqub</option>
-                                    <option value="Rawh an Yaqub">Rawh an Yaqub</option>
-                                </optgroup>
-                                <optgroup label="Khalaf">
-                                    <option value="Ishaq an Khalaf">Ishaq an Khalaf</option>
-                                    <option value="Idris an Khalaf">Idris an Khalaf</option>
-                                </optgroup>
-                            </select>
-                        </label>
-                        <label>Min Silence (ms):
-                            <input type="number" id="req-min-silence" value="500" min="100" max="2000" step="50">
-                        </label>
-                        <label>Your Name:
-                            <input type="text" id="req-name" placeholder="Enter your name">
-                        </label>
-                        <label>Your Email:
-                            <input type="email" id="req-email" placeholder="For notification when complete">
-                        </label>
-                        <label>GitHub Username (optional):
-                            <input type="text" id="req-github" placeholder="For write access to the review PR">
-                        </label>
-                        <label>Notes (optional):
-                            <textarea id="req-notes" rows="2" placeholder="Any notes about this reciter"></textarea>
-                        </label>
-                        <button id="req-submit-btn" class="btn btn-save">Submit Request</button>
-                        <div id="req-submit-status" hidden></div>
-                    </div>
-                </div>
-
-                <!-- Reference: Completed Reciters -->
-                <div class="req-reference-section">
-                    <h4>Parameter Reference</h4>
-                    <p class="req-hint">VAD parameters used for already-processed reciters. Use as a guide.</p>
-                    <div id="req-processed-table"></div>
-                </div>
-            </div>
-
-            <!-- Status Dashboard -->
-            <div class="req-status-section">
-                <h4>Request Pipeline Status</h4>
-                <div id="req-status-table">Loading...</div>
-            </div>
-
-        </div>
-
         <footer></footer>
     </div>
 
@@ -362,6 +262,5 @@
     <script src="/static/app.js"></script>
     <script src="/static/segments.js"></script>
     <script src="/static/audio.js"></script>
-    <script src="/static/requests.js"></script>
 </body>
 </html>

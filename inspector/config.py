@@ -49,6 +49,3 @@ ANALYSIS_LETTER_FONT_SIZE = "1.75rem"      # letter sub-row text size in analysi
 # Segments tab settings
 SEG_FONT_SIZE = "1.8rem"                  # Arabic text size in segment cards
 SEG_WORD_SPACING = "0.2em"                # gap between words in segment cards
-
-# Requests tab
-REQUEST_SPACE_URL = "https://hetchyy-quran-reciter-requests.hf.space"

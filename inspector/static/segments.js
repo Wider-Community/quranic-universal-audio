@@ -135,6 +135,20 @@ const segFilterClearBtn = document.getElementById('seg-filter-clear-btn');
 const segFilterCountEl  = document.getElementById('seg-filter-count');
 const segFilterStatusEl = document.getElementById('seg-filter-status');
 
+// Edit history viewer state
+let segHistoryData = null;
+const segHistoryPanel   = document.getElementById('seg-history-panel');
+const segHistoryStats   = document.getElementById('seg-history-stats');
+const segHistoryBatches = document.getElementById('seg-history-batches');
+
+const EDIT_OP_LABELS = {
+    trim_segment: 'Boundary adjustment', split_segment: 'Split',
+    merge_segments: 'Merge', delete_segment: 'Deletion',
+    edit_reference: 'Reference edit', confirm_reference: 'Reference confirmation',
+    auto_fix_missing_word: 'Auto-fix missing word', ignore_issue: 'Ignored issue',
+    waqf_sakt: 'Waqf sakt merge', remove_sadaqa: 'Remove Sadaqa',
+};
+
 // SearchableSelect instance for segments chapter dropdown
 let segChapterSS = null;
 
@@ -248,7 +262,7 @@ async function onSegReciterChange() {
     segVerseSelect.innerHTML = '<option value="">All</option>';
     clearSegDisplay();
     segUndoBtn.hidden = true;
-    // Hide validation and stats when reciter changes
+    // Hide validation, stats, and history when reciter changes
     segValidationGlobalEl.hidden = true;
     segValidationGlobalEl.innerHTML = '';
     segValidationEl.hidden = true;
@@ -257,6 +271,11 @@ async function onSegReciterChange() {
     segStatsPanel.hidden = true;
     segStatsPanel.removeAttribute('open');
     segStatsData = null;
+    segHistoryPanel.hidden = true;
+    segHistoryPanel.removeAttribute('open');
+    segHistoryStats.innerHTML = '';
+    segHistoryBatches.innerHTML = '';
+    segHistoryData = null;
     if (!reciter) return;
 
     try {
@@ -273,11 +292,12 @@ async function onSegReciterChange() {
         console.error('Error loading chapters:', e);
     }
 
-    // Fetch validation, stats, and all segments in parallel
-    const [valResult, statsResult, allResult] = await Promise.allSettled([
+    // Fetch validation, stats, all segments, and edit history in parallel
+    const [valResult, statsResult, allResult, histResult] = await Promise.allSettled([
         fetch(`/api/seg/validate/${reciter}`).then(r => r.json()),
         fetch(`/api/seg/stats/${reciter}`).then(r => r.json()),
         fetch(`/api/seg/all/${reciter}`).then(r => r.json()),
+        fetch(`/api/seg/edit-history/${reciter}`).then(r => r.ok ? r.json() : null),
     ]);
 
     if (valResult.status === 'fulfilled') {
@@ -301,6 +321,11 @@ async function onSegReciterChange() {
         applyFiltersAndRender();
     } else {
         console.error('Error loading all segments:', allResult.reason);
+    }
+
+    if (histResult.status === 'fulfilled' && histResult.value) {
+        segHistoryData = histResult.value;
+        renderEditHistoryPanel(segHistoryData);
     }
 }
 
@@ -678,8 +703,19 @@ function _ensureWaveformObserver() {
             const idx = parseInt(row.dataset.segIndex);
             const chapter = parseInt(row.dataset.segChapter);
 
-            // Resolve segment: try index map first, fall back to global lookup
-            const seg = (_segIndexMap ? _segIndexMap.get(`${chapter}:${idx}`) : null) || (chapter ? getSegByChapterIndex(chapter, idx) : null);
+            // Resolve segment. For history cards, prefer the stored snapshot data
+            // (the segment at this index may have different times now).
+            let seg;
+            if (row.dataset.histTimeStart) {
+                seg = {
+                    time_start: parseInt(row.dataset.histTimeStart),
+                    time_end: parseInt(row.dataset.histTimeEnd),
+                    audio_url: row.dataset.histAudioUrl || '',
+                    chapter,
+                };
+            } else {
+                seg = (_segIndexMap ? _segIndexMap.get(`${chapter}:${idx}`) : null) || (chapter ? getSegByChapterIndex(chapter, idx) : null);
+            }
             if (!seg) return;
 
             // Determine which audio buffer to use
@@ -927,12 +963,21 @@ function renderSegCard(seg, options = {}) {
         isContext = false,
         contextLabel = '',
         missingWordSegIndices = null,
+        readOnly = false,
     } = options;
 
     const row = document.createElement('div');
-    row.className = 'seg-row' + (isIndexDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
+    row.className = 'seg-row' + (!readOnly && isIndexDirty(seg.chapter || parseInt(segChapterSelect.value), seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
     row.dataset.segIndex = seg.index;
     row.dataset.segChapter = seg.chapter;
+
+    // For history cards: store time/audio data directly so the waveform observer
+    // can draw even when the segment no longer exists at this index.
+    if (readOnly) {
+        row.dataset.histTimeStart = seg.time_start;
+        row.dataset.histTimeEnd = seg.time_end;
+        if (seg.audio_url) row.dataset.histAudioUrl = seg.audio_url;
+    }
 
     // Canvas for waveform
     const canvas = document.createElement('canvas');
@@ -991,8 +1036,8 @@ function renderSegCard(seg, options = {}) {
     }
     textBox.appendChild(timeInfo);
 
-    // Action buttons
-    if (!isContext) {
+    // Action buttons (skip for read-only history cards)
+    if (!isContext && !readOnly) {
         const actions = document.createElement('div');
         actions.className = 'seg-actions';
 
@@ -3671,7 +3716,10 @@ function renderCategoryCards(type, items, container) {
             wrapper.appendChild(card);
 
             // Ignore button for low confidence, oversegmented, and cross-verse segments
-            if ((type === 'low_confidence' || type === 'oversegmented' || type === 'cross_verse') && seg.confidence < 1.0) {
+            // For oversegmented/cross_verse, always show (confidence=1.0 items are filtered server-side)
+            // For low_confidence, only show when confidence is still below 1.0
+            if ((type === 'oversegmented' || type === 'cross_verse') ||
+                (type === 'low_confidence' && seg.confidence < 1.0)) {
                 const ignoreBtn = document.createElement('button');
                 ignoreBtn.className = 'val-autofix-btn';
                 ignoreBtn.textContent = 'Ignore';
@@ -3944,6 +3992,431 @@ function _findBinIndex(bins, value) {
     const frac = (value - bins[0]) / binStep;
     return Math.max(-0.5, Math.min(bins.length - 0.5, frac));
 }
+
+
+// ---------------------------------------------------------------------------
+// Edit History Panel
+// ---------------------------------------------------------------------------
+
+function renderEditHistoryPanel(data) {
+    if (!data || !data.batches || data.batches.length === 0) {
+        segHistoryPanel.hidden = true;
+        return;
+    }
+    segHistoryPanel.hidden = false;
+
+    if (data.summary) renderHistorySummaryStats(data.summary);
+    renderHistoryBatches(data.batches);
+}
+
+function renderHistorySummaryStats(summary) {
+    segHistoryStats.innerHTML = '';
+    if (!summary) return;
+
+    // Stat cards row
+    const cardsRow = document.createElement('div');
+    cardsRow.className = 'seg-history-stat-cards';
+    const stats = [
+        { value: summary.total_operations, label: 'Operations' },
+        { value: summary.total_batches, label: 'Saves' },
+        { value: summary.chapters_edited, label: 'Chapters' },
+    ];
+    for (const s of stats) {
+        const card = document.createElement('div');
+        card.className = 'seg-history-stat-card';
+        card.innerHTML = `<div class="seg-history-stat-value">${s.value}</div>`
+            + `<div class="seg-history-stat-label">${s.label}</div>`;
+        cardsRow.appendChild(card);
+    }
+    segHistoryStats.appendChild(cardsRow);
+
+    // Op type pills
+    if (summary.op_counts && Object.keys(summary.op_counts).length > 0) {
+        const pills = document.createElement('div');
+        pills.className = 'seg-history-op-pills';
+        const sorted = Object.entries(summary.op_counts).sort((a, b) => b[1] - a[1]);
+        for (const [opType, count] of sorted) {
+            const pill = document.createElement('span');
+            pill.className = 'seg-history-op-pill';
+            pill.innerHTML = `${EDIT_OP_LABELS[opType] || opType} <span class="pill-count">${count}</span>`;
+            pills.appendChild(pill);
+        }
+        segHistoryStats.appendChild(pills);
+    }
+
+    // Fix kind breakdown
+    const fk = summary.fix_kind_counts || {};
+    const parts = [];
+    if (fk.manual) parts.push(`${fk.manual} manual`);
+    if (fk.auto_fix) parts.push(`${fk.auto_fix} auto-fix`);
+    if (fk.ignore) parts.push(`${fk.ignore} ignored`);
+    if (fk.audit) parts.push(`${fk.audit} audit`);
+    if (parts.length > 0) {
+        const fkDiv = document.createElement('div');
+        fkDiv.className = 'seg-history-fix-kinds';
+        fkDiv.textContent = `Fix breakdown: ${parts.join(', ')}`;
+        segHistoryStats.appendChild(fkDiv);
+    }
+}
+
+function renderHistoryBatches(batches) {
+    segHistoryBatches.innerHTML = '';
+    const observer = _ensureWaveformObserver();
+
+    // Reverse: most recent first
+    const reversed = [...batches].reverse();
+
+    for (const batch of reversed) {
+        const details = document.createElement('details');
+        details.className = 'seg-history-batch' + (batch.is_revert ? ' is-revert' : '');
+
+        // Header
+        const summary = document.createElement('summary');
+        summary.className = 'seg-history-batch-header';
+
+        const time = document.createElement('span');
+        time.className = 'seg-history-batch-time';
+        time.textContent = _formatHistDate(batch.saved_at_utc);
+        summary.appendChild(time);
+
+        // Multi-chapter auto-fix batch (e.g. remove_sadaqa across many surahs)
+        const isMultiChapter = batch.chapter == null && Array.isArray(batch.chapters);
+
+        if (batch.chapter != null) {
+            const ch = document.createElement('span');
+            ch.className = 'seg-history-batch-chapter';
+            ch.textContent = surahOptionText(batch.chapter);
+            summary.appendChild(ch);
+        }
+
+        const opsCount = document.createElement('span');
+        opsCount.className = 'seg-history-batch-ops-count';
+        const n = (batch.operations || []).length;
+        if (isMultiChapter) {
+            // Compact: "Remove Sadaqa x42" instead of "42 ops"
+            const opType = batch.operations[0]?.op_type;
+            const label = EDIT_OP_LABELS[opType] || opType;
+            opsCount.textContent = `${label} x${n}`;
+        } else {
+            opsCount.textContent = n === 0 ? 'revert' : `${n} op${n !== 1 ? 's' : ''}`;
+        }
+        summary.appendChild(opsCount);
+
+        if (isMultiChapter) {
+            const fk = document.createElement('span');
+            fk.className = 'seg-history-op-fix-kind';
+            fk.textContent = 'auto_fix';
+            summary.appendChild(fk);
+        }
+
+        if (batch.is_revert) {
+            const badge = document.createElement('span');
+            badge.className = 'seg-history-batch-revert-badge';
+            badge.textContent = 'Reverted';
+            summary.appendChild(badge);
+        }
+
+        // Validation delta badges
+        _appendValDeltas(summary, batch.validation_summary_before, batch.validation_summary_after);
+
+        details.appendChild(summary);
+
+        // Body with operations
+        if (batch.operations && batch.operations.length > 0) {
+            const body = document.createElement('div');
+            body.className = 'seg-history-batch-body';
+            if (isMultiChapter) {
+                // Compact chapter list instead of individual op cards
+                const chList = document.createElement('div');
+                chList.className = 'seg-history-chapter-list';
+                chList.textContent = 'Chapters: ' + batch.chapters
+                    .map(c => surahOptionText(c)).join(', ');
+                body.appendChild(chList);
+            } else {
+                for (const op of batch.operations) {
+                    body.appendChild(renderHistoryOp(op, batch.chapter));
+                }
+            }
+            details.appendChild(body);
+
+            if (!isMultiChapter) {
+                // Defer waveform observation and arrow drawing until batch is opened
+                details.addEventListener('toggle', () => {
+                    if (!details.open) return;
+                    details.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+                    // Draw arrows after layout is complete
+                    requestAnimationFrame(() => {
+                        details.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
+                    });
+                });
+            }
+        }
+
+        segHistoryBatches.appendChild(details);
+    }
+}
+
+function renderHistoryOp(op, chapter) {
+    const wrap = document.createElement('div');
+    wrap.className = 'seg-history-op';
+
+    // Label row
+    const label = document.createElement('div');
+    label.className = 'seg-history-op-label';
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'seg-history-op-type-badge';
+    typeBadge.textContent = EDIT_OP_LABELS[op.op_type] || op.op_type;
+    label.appendChild(typeBadge);
+    if (op.fix_kind && op.fix_kind !== 'manual') {
+        const fk = document.createElement('span');
+        fk.className = 'seg-history-op-fix-kind';
+        fk.textContent = op.fix_kind;
+        label.appendChild(fk);
+    }
+    wrap.appendChild(label);
+
+    // 3-column diff grid
+    const diff = document.createElement('div');
+    diff.className = 'seg-history-diff';
+
+    const beforeCol = document.createElement('div');
+    beforeCol.className = 'seg-history-before';
+
+    const arrowCol = document.createElement('div');
+    arrowCol.className = 'seg-history-arrows';
+    // SVG placeholder — drawn after DOM insertion
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('height', '1');  // resized by drawHistoryArrows
+    arrowCol.appendChild(svg);
+
+    const afterCol = document.createElement('div');
+    afterCol.className = 'seg-history-after';
+
+    const before = op.targets_before || [];
+    const after = op.targets_after || [];
+
+    // Render before cards
+    const beforeCards = [];
+    for (const snap of before) {
+        const pseudoSeg = _snapToSeg(snap, chapter);
+        const card = renderSegCard(pseudoSeg, { readOnly: true, showChapter: true });
+        beforeCol.appendChild(card);
+        beforeCards.push(card);
+    }
+
+    // Render after cards (or empty placeholder for delete)
+    const afterCards = [];
+    if (after.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'seg-history-empty';
+        empty.textContent = '(deleted)';
+        afterCol.appendChild(empty);
+    } else {
+        for (const snap of after) {
+            const pseudoSeg = _snapToSeg(snap, chapter);
+            const card = renderSegCard(pseudoSeg, { readOnly: true, showChapter: true });
+            afterCol.appendChild(card);
+            afterCards.push(card);
+        }
+    }
+
+    // Change highlighting for 1→1 ops
+    if (before.length === 1 && after.length === 1) {
+        _highlightChanges(before[0], after[0], beforeCards[0], afterCards[0]);
+    }
+
+    diff.append(beforeCol, arrowCol, afterCol);
+    wrap.appendChild(diff);
+    return wrap;
+}
+
+function _snapToSeg(snap, chapter) {
+    return {
+        index: snap.index_at_save,
+        chapter: chapter,
+        audio_url: snap.audio_url || '',
+        time_start: snap.time_start,
+        time_end: snap.time_end,
+        matched_ref: snap.matched_ref || '',
+        matched_text: snap.matched_text || '',
+        confidence: snap.confidence ?? 0,
+    };
+}
+
+function _highlightChanges(beforeSnap, afterSnap, beforeCard, afterCard) {
+    // Compare fields and add .seg-history-changed to after card elements
+    if (beforeSnap.matched_ref !== afterSnap.matched_ref) {
+        const el = afterCard.querySelector('.seg-text-ref');
+        if (el) el.classList.add('seg-history-changed');
+    }
+    if (beforeSnap.time_start !== afterSnap.time_start || beforeSnap.time_end !== afterSnap.time_end) {
+        const el = afterCard.querySelector('.seg-text-time');
+        if (el) el.classList.add('seg-history-changed');
+    }
+    if (beforeSnap.confidence !== afterSnap.confidence) {
+        const el = afterCard.querySelector('.seg-text-conf');
+        if (el) el.classList.add('seg-history-changed');
+    }
+    if (beforeSnap.matched_text !== afterSnap.matched_text) {
+        const el = afterCard.querySelector('.seg-text-body');
+        if (el) el.classList.add('seg-history-changed');
+    }
+}
+
+function _appendValDeltas(container, before, after) {
+    if (!before || !after) return;
+    const cats = ['failed', 'low_confidence', 'oversegmented', 'cross_verse', 'missing_words', 'audio_bleeding'];
+    const shortLabels = {
+        failed: 'fail', low_confidence: 'low conf', oversegmented: 'overseg',
+        cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
+    };
+    for (const cat of cats) {
+        const delta = (after[cat] || 0) - (before[cat] || 0);
+        if (delta === 0) continue;
+        const badge = document.createElement('span');
+        badge.className = 'seg-history-val-delta ' + (delta < 0 ? 'improved' : 'regression');
+        badge.textContent = `${shortLabels[cat]} ${delta > 0 ? '+' : ''}${delta}`;
+        container.appendChild(badge);
+    }
+}
+
+function _formatHistDate(isoStr) {
+    if (!isoStr) return '';
+    try {
+        const d = new Date(isoStr);
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+            + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    } catch { return isoStr; }
+}
+
+
+// ---------------------------------------------------------------------------
+// Edit History — SVG Arrows
+// ---------------------------------------------------------------------------
+
+function _ensureHistArrowDefs() {
+    if (document.getElementById('hist-arrow-defs')) return;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('id', 'hist-arrow-defs');
+    svg.setAttribute('width', '0');
+    svg.setAttribute('height', '0');
+    svg.style.position = 'absolute';
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'hist-arrow');
+    marker.setAttribute('viewBox', '0 0 10 7');
+    marker.setAttribute('refX', '10');
+    marker.setAttribute('refY', '3.5');
+    marker.setAttribute('markerWidth', '8');
+    marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('orient', 'auto-start-reverse');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute('points', '0 0, 10 3.5, 0 7');
+    poly.setAttribute('fill', '#4cc9f0');
+    marker.appendChild(poly);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+    document.body.appendChild(svg);
+}
+
+function drawHistoryArrows(diffEl) {
+    _ensureHistArrowDefs();
+    const svg = diffEl.querySelector('.seg-history-arrows svg');
+    if (!svg) return;
+
+    const beforeCards = diffEl.querySelectorAll('.seg-history-before .seg-row');
+    const afterCards = diffEl.querySelectorAll('.seg-history-after .seg-row');
+    const afterEmpty = diffEl.querySelector('.seg-history-after .seg-history-empty');
+
+    // Clear previous arrows
+    svg.innerHTML = '';
+
+    const arrowCol = diffEl.querySelector('.seg-history-arrows');
+    const colRect = arrowCol.getBoundingClientRect();
+    if (colRect.height < 1) return;  // not visible
+
+    svg.setAttribute('height', colRect.height);
+    svg.setAttribute('viewBox', `0 0 60 ${colRect.height}`);
+
+    const midYs = (cards) => Array.from(cards).map(c => {
+        const r = c.getBoundingClientRect();
+        return r.top + r.height / 2 - colRect.top;
+    });
+
+    const bY = midYs(beforeCards);
+    const aY = afterCards.length > 0 ? midYs(afterCards) : [];
+
+    // Delete: arrow to X
+    if (afterCards.length === 0 && afterEmpty) {
+        const eRect = afterEmpty.getBoundingClientRect();
+        const targetY = eRect.top + eRect.height / 2 - colRect.top;
+        for (const sy of bY) {
+            _drawArrowPath(svg, 4, sy, 56, targetY, true);
+        }
+        // X mark at target
+        const xSize = 5;
+        const xG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        xG.setAttribute('stroke', '#f44336');
+        xG.setAttribute('stroke-width', '2');
+        const cx = 52, cy = targetY;
+        const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        l1.setAttribute('x1', cx - xSize); l1.setAttribute('y1', cy - xSize);
+        l1.setAttribute('x2', cx + xSize); l1.setAttribute('y2', cy + xSize);
+        const l2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        l2.setAttribute('x1', cx - xSize); l2.setAttribute('y1', cy + xSize);
+        l2.setAttribute('x2', cx + xSize); l2.setAttribute('y2', cy - xSize);
+        xG.append(l1, l2);
+        svg.appendChild(xG);
+        return;
+    }
+
+    // 1→1: straight arrow
+    if (bY.length === 1 && aY.length === 1) {
+        _drawArrowPath(svg, 4, bY[0], 56, aY[0], false);
+        return;
+    }
+
+    // 1→N (split): fan out
+    if (bY.length === 1 && aY.length > 1) {
+        for (const ty of aY) {
+            _drawArrowPath(svg, 4, bY[0], 56, ty, false);
+        }
+        return;
+    }
+
+    // N→1 (merge): converge
+    if (bY.length > 1 && aY.length === 1) {
+        for (const sy of bY) {
+            _drawArrowPath(svg, 4, sy, 56, aY[0], false);
+        }
+        return;
+    }
+
+    // N→M fallback: connect each pair by index
+    const maxLen = Math.max(bY.length, aY.length);
+    for (let i = 0; i < maxLen; i++) {
+        const sy = bY[Math.min(i, bY.length - 1)];
+        const ty = aY[Math.min(i, aY.length - 1)];
+        _drawArrowPath(svg, 4, sy, 56, ty, false);
+    }
+}
+
+function _drawArrowPath(svg, x1, y1, x2, y2, dashed) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    // Use quadratic bezier for smooth curves when source/target differ in Y
+    const midX = (x1 + x2) / 2;
+    const d = Math.abs(y2 - y1) < 2
+        ? `M ${x1} ${y1} L ${x2} ${y2}`
+        : `M ${x1} ${y1} Q ${midX} ${y1}, ${midX} ${(y1 + y2) / 2} Q ${midX} ${y2}, ${x2} ${y2}`;
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#4cc9f0');
+    path.setAttribute('stroke-width', '1.5');
+    if (dashed) path.setAttribute('stroke-dasharray', '4,3');
+    path.setAttribute('marker-end', 'url(#hist-arrow)');
+    svg.appendChild(path);
+}
+
 
 function drawBarChart(canvas, dist, cfg) {
     const { bins, counts } = dist;
