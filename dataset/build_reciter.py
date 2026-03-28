@@ -634,13 +634,13 @@ def update_dataset_readme():
                 pass
 
     body = re.sub(
-        r"Available%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
-        f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Coverage%29",
+        r"Available%20Reciters-\d+%20%28\d+%20Full%20Mushafs%29",
+        f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Mushafs%29",
         body,
     )
     body = re.sub(
-        r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
-        f"Aligned%20Reciters-{processed_count}%20%28{aligned_full}%20Full%20Coverage%29",
+        r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Mushafs%29",
+        f"Aligned%20Reciters-{processed_count}%20%28{aligned_full}%20Full%20Mushafs%29",
         body,
     )
     riwayat_total_path = ROOT / "data" / "riwayat.json"

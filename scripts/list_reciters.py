@@ -551,13 +551,13 @@ def write_reciters_md(all_records: list[dict]) -> int:
     if readme_path.exists():
         readme = readme_path.read_text()
         readme = re.sub(
-            r"Available%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
-            f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Coverage%29",
+            r"Available%20Reciters-\d+%20%28\d+%20Full%20Mushafs%29",
+            f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Mushafs%29",
             readme,
         )
         readme = re.sub(
-            r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
-            f"Aligned%20Reciters-{processed_count}%20%28{aligned_full}%20Full%20Coverage%29",
+            r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Mushafs%29",
+            f"Aligned%20Reciters-{processed_count}%20%28{aligned_full}%20Full%20Mushafs%29",
             readme,
         )
         # Count riwayat with data vs total defined
