@@ -24,6 +24,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install ffprobe
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+
       - name: Regenerate RECITERS.md and update README badges
         run: python scripts/list_reciters.py --write
 
@@ -40,7 +43,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add data/RECITERS.md README.md
+          git add data/RECITERS.md README.md data/.audio_durations.json
           git commit -m "docs: update reciter counts"
           git push -f origin "$branch"
 
