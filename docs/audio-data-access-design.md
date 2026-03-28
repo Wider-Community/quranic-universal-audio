@@ -565,3 +565,30 @@ Both paths arrive at the same result: chapter audio + absolute timestamps for ve
 ### Key Insight
 
 The HF dataset is the right default for most programmatic use. The primary gaps are not latency — they are **the gapless playback story** (solved by `source_offset_ms` + `source_url` columns) and **reciter discovery** (solved by the `sources` config). Phase 1 addresses both with zero infrastructure cost. A custom API (Phase 3) should only be built when CDN reliability or rate limits become real bottlenecks for production apps.
+
+---
+
+## Appendix: External Reference — spa5k/quran-timings-api
+
+Investigated [spa5k/quran-timings-api](https://github.com/spa5k/quran-timings-api) as a reference for API/CDN design. Key observations:
+
+**Architecture:** Not a running API — a CLI pipeline (Python/Typer) that generates static JSON files committed to the repo, intended to be served via GitHub raw URLs or JSDelivr. No dynamic server.
+
+**Alignment pipeline (interesting):** Multi-engine forced alignment with candidate fusion:
+- NeMo (NVIDIA FastConformer) → WhisperX → MFA, tries all engines and picks best per-ayah result via composite scoring
+- Iterative refinement for weak ayahs with expanded audio windows (up to 3 passes)
+- Detailed QC provenance: boundary error medians, engine selection scores, quantization step detection
+
+**Current state: very early.** 3 reciters enabled (out of 201 cataloged), covering only surahs 65-114. Cloudflare Worker and JSDelivr CDN both non-functional (403). Quality concerns in output (20ms word durations, 300ms+ boundary error medians).
+
+**Data sources they have that we don't:**
+- QuranicAudio.com (110 reciters) — potential future source for our manifests
+- Quran.com verse segment API (12 reciters)
+
+**What they lack that we have:** 381 reciters (vs 3), 14 riwayat, letter/phoneme-level timestamps, gapless playback design, HF dataset with embedded audio, working infrastructure.
+
+**Takeaways for our project:**
+1. **Multi-engine fusion** — worth studying if we need to improve alignment robustness for difficult reciters. Their approach of running multiple engines and scoring candidates could complement our current single-engine (MFA via Kalpy) pipeline.
+2. **QuranicAudio.com** as a future audio source — 110 additional reciters with surah-level audio.
+3. **Static JSON on CDN** is a viable MVP for API delivery but doesn't scale well in git (repo size limits on JSDelivr, no dynamic filtering). Validates our decision to use HF parquet + datasets-server instead.
+4. **Their project does not solve our needs** — too limited in coverage, no gapless support, no audio hosting. But the alignment pipeline design is a useful reference.
