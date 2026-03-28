@@ -428,12 +428,71 @@ def get_audio_source_label(slug):
 
 
 def get_display_name(slug):
-    """Convert slug to display name."""
+    """Get display name from audio manifest _meta.name_en, fallback to slug."""
+    meta = _find_audio_manifest_meta(slug)
+    if meta and meta.get("name_en") and meta["name_en"] != "unknown":
+        return meta["name_en"]
     return slug.replace("_", " ").title()
 
 
-def update_dataset_readme(add_slug=None, remove_slug=None):
-    """Update dataset/README.md YAML configs and markdown table."""
+def get_style(slug):
+    """Get recitation style from audio manifest _meta.style."""
+    meta = _find_audio_manifest_meta(slug)
+    if meta and meta.get("style") and meta["style"] != "unknown":
+        return meta["style"]
+    return "unknown"
+
+
+def get_coverage(slug):
+    """Get verse count from segments.json (keys minus _meta)."""
+    seg_file = ROOT / "data" / "recitation_segments" / slug / "segments.json"
+    if seg_file.exists():
+        try:
+            data = json.loads(seg_file.read_text())
+            return len([k for k in data if k != "_meta"])
+        except (json.JSONDecodeError, OSError):
+            pass
+    return 0
+
+
+def _find_audio_manifest_meta(slug):
+    """Find first audio manifest for slug and return its _meta dict."""
+    audio_dir = ROOT / "data" / "audio"
+    for category in ("by_surah", "by_ayah"):
+        cat_dir = audio_dir / category
+        if not cat_dir.is_dir():
+            continue
+        for source_dir in cat_dir.iterdir():
+            if not source_dir.is_dir():
+                continue
+            manifest = source_dir / f"{slug}.json"
+            if manifest.exists():
+                try:
+                    return json.loads(manifest.read_text()).get("_meta", {})
+                except (json.JSONDecodeError, OSError):
+                    pass
+    return None
+
+
+def _build_reciter_info(eligible):
+    """Build a list of info dicts for eligible reciters, grouped by riwayah."""
+    from collections import defaultdict
+    by_riwayah = defaultdict(list)
+    for slug in sorted(eligible):
+        riwayah = get_riwayah(slug)
+        verses = get_coverage(slug)
+        by_riwayah[riwayah].append({
+            "slug": slug,
+            "name": get_display_name(slug),
+            "style": get_style(slug),
+            "source": get_audio_source_label(slug),
+            "verses": f"{verses:,}",
+        })
+    return by_riwayah
+
+
+def update_dataset_readme():
+    """Rebuild dataset/README.md YAML configs and markdown tables from eligible reciters."""
     readme_path = ROOT / "dataset" / "README.md"
     text = readme_path.read_text()
 
@@ -445,64 +504,81 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
     yaml_text = parts[1]
     body = parts[2]
 
-    if add_slug:
-        riwayah = get_riwayah(add_slug)
-        # Add to YAML data_files (insert after last data_files entry)
-        new_df_entry = f"  - split: {add_slug}\n    path: {riwayah}/{add_slug}-*"
-        if add_slug not in yaml_text:
-            # Insert after last "path: ..." line under data_files
-            yaml_text = re.sub(
-                r"(    path: [^\n]+)(\n(?!  - split:))",
-                rf"\1\n{new_df_entry}\2",
-                yaml_text,
-                count=1,
+    eligible = find_eligible_reciters()
+    by_riwayah = _build_reciter_info(eligible)
+
+    # --- Rebuild YAML configs and data_files ---
+    data_files_lines = []
+    split_lines = []
+    for riwayah in sorted(by_riwayah):
+        for info in by_riwayah[riwayah]:
+            data_files_lines.append(
+                f"  - split: {info['slug']}\n"
+                f"    path: {riwayah}/{info['slug']}-*"
             )
-        # Add split entry under dataset_info.splits
-        new_split = (
-            f"  - name: {add_slug}\n"
-            f"    num_bytes: 0\n"
-            f"    num_examples: 6236"
-        )
-        if f"name: {add_slug}" not in yaml_text:
-            yaml_text = re.sub(
-                r"(  splits:\n(?:  - name: [^\n]+\n    num_bytes: \d+\n    num_examples: \d+\n)+)",
-                rf"\g<0>{new_split}\n",
-                yaml_text,
+            split_lines.append(
+                f"  - name: {info['slug']}\n"
+                f"    num_bytes: 0\n"
+                f"    num_examples: 6236"
             )
 
-        # Add to markdown table
-        source_label = get_audio_source_label(add_slug)
-        display_name = get_display_name(add_slug)
-        new_row = f"| `{riwayah}` | `{add_slug}` | {display_name} | 6,236 | {source_label} |"
-        if add_slug not in body:
-            # Find last table row and append after it
-            body = re.sub(
-                r"(\| `[a-z_]+` \| .+\|[^\n]*)",
-                lambda m: m.group(0) + "\n" + new_row,
-                body,
-                count=1,
+    # Replace configs block
+    yaml_text = re.sub(
+        r"configs:\n(?:- config_name:.*\n(?:  .*\n)*)*",
+        "configs:\n" + "".join(
+            f"- config_name: {riwayah}\n  data_files:\n"
+            + "\n".join(df for df in data_files_lines
+                        if f"path: {riwayah}/" in df)
+            + "\n"
+            for riwayah in sorted(by_riwayah)
+        ),
+        yaml_text,
+    )
+
+    # Replace splits block (keep existing num_bytes for known splits)
+    existing_bytes = {}
+    for m in re.finditer(r"- name: ([^\n]+)\n\s+num_bytes: (\d+)", yaml_text):
+        existing_bytes[m.group(1)] = m.group(2)
+
+    new_splits = "  splits:\n"
+    for riwayah in sorted(by_riwayah):
+        for info in by_riwayah[riwayah]:
+            nb = existing_bytes.get(info["slug"], "0")
+            new_splits += (
+                f"  - name: {info['slug']}\n"
+                f"    num_bytes: {nb}\n"
+                f"    num_examples: 6236\n"
+            )
+    yaml_text = re.sub(
+        r"  splits:\n(?:  - name: [^\n]+\n    num_bytes: \d+\n    num_examples: \d+\n)+",
+        new_splits,
+        yaml_text,
+    )
+
+    # --- Rebuild markdown tables (one per subset) ---
+    tables_md = "Subset (config) is the riwayah, split is the reciter.\n"
+    for riwayah in sorted(by_riwayah):
+        tables_md += f"\n### `{riwayah}`\n\n"
+        tables_md += "| Reciter | Style | Verses | Audio Source |\n"
+        tables_md += "|---------|-------|--------|-------------|\n"
+        for info in by_riwayah[riwayah]:
+            tables_md += (
+                f"| [{info['name']}](#{info['slug']}) "
+                f"| {info['style']} "
+                f"| {info['verses']} "
+                f"| {info['source']} |\n"
             )
 
-    if remove_slug:
-        riwayah = get_riwayah(remove_slug)
-        # Remove from YAML data_files — match any riwayah config
-        yaml_text = re.sub(
-            rf"\n  - split: {remove_slug}\n    path: [a-z_]+/{remove_slug}-\*",
-            "",
-            yaml_text,
-        )
-        # Remove from YAML dataset_info.splits
-        yaml_text = re.sub(
-            rf"\n  - name: {remove_slug}\n    num_bytes: \d+\n    num_examples: \d+",
-            "",
-            yaml_text,
-        )
-        # Remove from markdown table — match any riwayah
-        body = re.sub(rf"\| `[a-z_]+` \| `{remove_slug}` \|[^\n]*\n?", "", body)
+    # Replace existing configs section in body
+    body = re.sub(
+        r"Subset \(config\) is the riwayah.*?(?=\n## |\Z)",
+        tables_md,
+        body,
+        flags=re.DOTALL,
+    )
 
     # Update badge counts
-    processed_count = len(find_eligible_reciters())
-    # Count available from audio manifests (all unique slugs minus processed)
+    processed_count = len(eligible)
     all_slugs = set()
     audio_dir = ROOT / "data" / "audio"
     if audio_dir.is_dir():
@@ -511,9 +587,7 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
                 if source.is_dir():
                     for f in source.glob("*.json"):
                         all_slugs.add(f.stem)
-    available_count = len(all_slugs) - processed_count
-    if available_count < 0:
-        available_count = 0
+    available_count = max(len(all_slugs) - processed_count, 0)
 
     body = re.sub(
         r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
@@ -552,7 +626,7 @@ def update_dataset_readme(add_slug=None, remove_slug=None):
         path_in_repo="README.md",
         repo_id=REPO_ID,
         repo_type="dataset",
-        commit_message=f"Update dataset card",
+        commit_message="Update dataset card",
     )
     log.info("Dataset README updated")
 
@@ -576,7 +650,7 @@ def delete_reciter(slug):
     except Exception as e:
         log.error("Failed to delete %s: %s", path, e)
 
-    update_dataset_readme(remove_slug=slug)
+    update_dataset_readme()
 
 
 # ---------------------------------------------------------------------------
@@ -594,10 +668,7 @@ def main():
         sys.exit("HF_TOKEN not set")
 
     if args.update_readme:
-        # Re-sync README with all eligible reciters
-        eligible = find_eligible_reciters()
-        for slug in eligible:
-            update_dataset_readme(add_slug=slug)
+        update_dataset_readme()
         return
 
     if args.delete:
@@ -616,7 +687,7 @@ def main():
                 log.warning("Could not detect audio source for %s, skipping", slug)
                 continue
             push_reciter(slug, audio_type)
-            update_dataset_readme(add_slug=slug)
+        update_dataset_readme()
         return
 
     if not args.slug:
@@ -628,7 +699,7 @@ def main():
         sys.exit(f"Could not detect audio source for {args.slug}")
 
     push_reciter(args.slug, audio_type)
-    update_dataset_readme(add_slug=args.slug)
+    update_dataset_readme()
 
 
 if __name__ == "__main__":
