@@ -1,0 +1,94 @@
+name: Validate Audio Manifests
+
+on:
+  pull_request:
+    paths:
+      - 'data/audio/**/*.json'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git diff and git show
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Detect changed manifests
+        id: detect
+        run: |
+          manifests=$(git diff ${{ github.event.pull_request.base.sha }}...HEAD \
+            --name-only --diff-filter=ACMR -- 'data/audio/**/*.json' | tr '\n' ' ')
+          count=$(echo "$manifests" | wc -w)
+          echo "manifests=$(echo $manifests | xargs)" >> $GITHUB_OUTPUT
+          echo "count=$count" >> $GITHUB_OUTPUT
+          echo "Changed manifests ($count): $manifests"
+
+      - name: Validate manifests
+        id: validate
+        if: steps.detect.outputs.count != '0'
+        run: |
+          python validators/validate_audio_ci.py \
+            --base-sha ${{ github.event.pull_request.base.sha }} \
+            --comment-file /tmp/pr_comment.md \
+            --changes-json /tmp/changes.json \
+            ${{ steps.detect.outputs.manifests }}
+
+      - name: Post PR comment
+        if: always() && steps.detect.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f /tmp/pr_comment.md ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body-file /tmp/pr_comment.md
+          fi
+
+      - name: Update linked issues
+        if: always() && steps.detect.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          [ -f /tmp/changes.json ] || exit 0
+          changes=$(cat /tmp/changes.json)
+          [ "$changes" = "{}" ] && exit 0
+
+          pr_number=${{ github.event.pull_request.number }}
+
+          for slug in $(echo "$changes" | python -c "import sys,json; print(' '.join(json.load(sys.stdin).keys()))"); do
+            # Find linked request issue
+            issue=$(gh issue list \
+              --repo "${{ github.repository }}" \
+              --label request \
+              --search "Slug: $slug" \
+              --json number --jq '.[0].number // empty' 2>/dev/null || true)
+
+            [ -z "$issue" ] && continue
+
+            # Build change summary
+            summary=$(echo "$changes" | python -c "
+          import sys, json
+          d = json.load(sys.stdin)['$slug']
+          lines = []
+          for f, v in d.items():
+              old = v['old'] if v['old'] is not None else '(missing)'
+              new = v['new'] if v['new'] is not None else '(removed)'
+              lines.append(f'- **{f}:** ~~{old}~~ {new}')
+          print('\n'.join(lines))
+          ")
+
+            gh issue comment "$issue" \
+              --repo "${{ github.repository }}" \
+              --body "Meta updated via PR #${pr_number}:
+          ${summary}"
+
+            echo "Commented on issue #$issue for $slug"
+          done

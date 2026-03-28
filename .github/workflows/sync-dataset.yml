@@ -7,6 +7,7 @@ on:
     paths:
       - 'data/timestamps/**'
       - 'data/recitation_segments/**'
+      - 'data/audio/**/*.json'
 
 permissions:
   contents: read
@@ -47,8 +48,8 @@ jobs:
           else
             # Push trigger: detect from git diff
             changed=$(git diff HEAD~1 --name-only | \
-              grep -E "data/(timestamps|recitation_segments)/" | \
-              sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|; s|data/recitation_segments/([^/]+)/.*|\1|' | \
+              grep -E "data/(timestamps|recitation_segments|audio)/" | \
+              sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|; s|data/recitation_segments/([^/]+)/.*|\1|; s|data/audio/[^/]+/[^/]+/([^/]+)\.json|\1|' | \
               sort -u | tr '\n' ' ')
 
             # Filter to only eligible reciters (must have timestamps)
