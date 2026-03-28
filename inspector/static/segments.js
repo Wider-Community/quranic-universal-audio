@@ -843,20 +843,12 @@ function clearSegDisplay() {
 // Unified event delegation
 // ---------------------------------------------------------------------------
 
-/** Resolve a segment object from a .seg-row element. Tries _segIndexMap first, falls back to global lookup, then history card data attributes. */
+/** Resolve a segment object from a .seg-row element. History cards use stored snapshot data; others try index map then global lookup. */
 function resolveSegFromRow(row) {
     if (!row) return null;
     const idx = parseInt(row.dataset.segIndex);
     const chapter = parseInt(row.dataset.segChapter);
-    // Try the fast index map (populated for main section displayed segments)
-    const fromMap = _segIndexMap?.get(`${chapter}:${idx}`);
-    if (fromMap) return fromMap;
-    // Fall back to global chapter/index lookup (error section cards)
-    if (chapter) {
-        const found = getSegByChapterIndex(chapter, idx);
-        if (found) return found;
-    }
-    // History cards: construct pseudo-seg from stored snapshot data attributes
+    // History cards: always use stored snapshot data (indices may have changed since save)
     if (row.dataset.histTimeStart !== undefined) {
         return {
             chapter, index: idx,
@@ -866,6 +858,11 @@ function resolveSegFromRow(row) {
             matched_ref: '', matched_text: '', confidence: 0,
         };
     }
+    // Try the fast index map (populated for main section displayed segments)
+    const fromMap = _segIndexMap?.get(`${chapter}:${idx}`);
+    if (fromMap) return fromMap;
+    // Fall back to global chapter/index lookup (error section cards)
+    if (chapter) return getSegByChapterIndex(chapter, idx);
     return null;
 }
 
@@ -1252,15 +1249,25 @@ function drawSegmentWaveform(canvas, startMs, endMs) {
         else ctx.lineTo(x, y);
     }
     ctx.stroke();
+
+    // Invalidate playhead cache so next drawSegPlayhead re-caches the fresh waveform
+    canvas._wfCache = null;
 }
 
 function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs) {
-    // Redraw waveform first
-    drawSegmentWaveform(canvas, startMs, endMs);
+    // Restore cached waveform image if available (avoids recomputing from raw samples every frame)
+    const ctx = canvas.getContext('2d');
+    const cacheKey = `${startMs}:${endMs}`;
+    if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
+        ctx.putImageData(canvas._wfCache, 0, 0);
+    } else {
+        drawSegmentWaveform(canvas, startMs, endMs);
+        canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        canvas._wfCacheKey = cacheKey;
+    }
 
     if (currentTimeMs < startMs || currentTimeMs > endMs) return;
 
-    const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
     const progress = (currentTimeMs - startMs) / (endMs - startMs);
@@ -1768,7 +1775,7 @@ async function onSegSaveClick() {
                     })),
                     operations: chOps,
                 };
-                savedChanges += chSegs.length;
+                savedChanges += chOps.length;
             } else {
                 // Patch mode — only send changed segments
                 const updates = [];
@@ -1786,7 +1793,7 @@ async function onSegSaveClick() {
                 }
                 if (updates.length === 0) continue;
                 payload = { segments: updates, operations: chOps };
-                savedChanges += updates.length;
+                savedChanges += chOps.length;
             }
 
             const resp = await fetch(`/api/seg/save/${reciter}/${ch}`, {
@@ -1819,6 +1826,14 @@ async function onSegSaveClick() {
             segUndoBtn.hidden = false;
             // Delay validation refresh to let server background thread finish
             setTimeout(refreshValidation, 1500);
+            // Re-fetch edit history so the History view includes the just-saved batch
+            try {
+                const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
+                if (histResp.ok) {
+                    segHistoryData = await histResp.json();
+                    renderEditHistoryPanel(segHistoryData);
+                }
+            } catch (_) { /* non-critical */ }
         } else {
             segSaveBtn.disabled = !isDirty();
             segSaveBtn.textContent = 'Save';

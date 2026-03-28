@@ -1,3 +1,6 @@
+/* Ensure [hidden] always hides even when CSS sets explicit display values */
+[hidden] { display: none !important; }
+
 @font-face {
     font-family: 'DigitalKhatt';
     src: url('/static/fonts/DigitalKhattV2.otf') format('opentype');
