@@ -1,2 +1,2 @@
-gradio>=4.0,<5.0
+gradio>=4.44,<5.0
 httpx
