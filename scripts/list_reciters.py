@@ -538,6 +538,18 @@ def write_reciters_md(all_records: list[dict]) -> int:
             rf"Riwayat-{riwayat_with_data}\g<1>{riwayat_total}",
             readme,
         )
+        # Update prose counts: reciters rounded down to nearest 50 with "+", riwayat actual
+        reciters_rounded = (total // 50) * 50
+        readme = re.sub(
+            r"featuring \d+\+ reciters",
+            f"featuring {reciters_rounded}+ reciters",
+            readme,
+        )
+        readme = re.sub(
+            r"\d+\+ reciters and \d+\+ riwayat",
+            f"{reciters_rounded}+ reciters and {riwayat_with_data} riwayat",
+            readme,
+        )
         readme_path.write_text(readme)
         print(f"Updated: {readme_path} (available: {available_count}, aligned: {processed_count}, riwayat: {riwayat_with_data}/{riwayat_total})")
 
