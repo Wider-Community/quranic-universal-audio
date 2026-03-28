@@ -213,7 +213,7 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info):
                 "ayah": ayah,
                 "text": text,
                 "segments": verse_segments,
-                "words": verse_words,
+                "word_timestamps": verse_words,
                 "audio_url": entry["audio"],
                 "clip_start": clip_start,
                 "clip_end": clip_end,
@@ -352,7 +352,7 @@ def push_reciter(slug, audio_type):
         "ayah": [],
         "text": [],
         "segments": [],
-        "words": [],
+        "word_timestamps": [],
     }
 
     skipped = 0
@@ -368,7 +368,7 @@ def push_reciter(slug, audio_type):
         data["ayah"].append(row["ayah"])
         data["text"].append(row["text"])
         data["segments"].append(row["segments"])
-        data["words"].append(row["words"])
+        data["word_timestamps"].append(row["word_timestamps"])
 
     if skipped:
         log.warning("Skipped %d verses due to download failures", skipped)
@@ -380,7 +380,7 @@ def push_reciter(slug, audio_type):
         "ayah": Value("int32"),
         "text": Value("string"),
         "segments": Sequence(Sequence(Value("int32"))),
-        "words": Sequence(Sequence(Value("int32"))),
+        "word_timestamps": Sequence(Sequence(Value("int32"))),
     })
 
     ds = Dataset.from_dict(data, features=features)
@@ -581,34 +581,68 @@ def update_dataset_readme():
     # Update badge counts
     processed_count = len(eligible)
     all_slugs = set()
+    slug_full_coverage = {}
+    riwayat_with_data = set()
     audio_dir = ROOT / "data" / "audio"
     if audio_dir.is_dir():
         for source_type in audio_dir.iterdir():
+            if not source_type.is_dir():
+                continue
+            audio_cat = source_type.name  # "by_surah" or "by_ayah"
             for source in source_type.iterdir():
                 if source.is_dir():
                     for f in source.glob("*.json"):
-                        all_slugs.add(f.stem)
-    available_count = max(len(all_slugs) - processed_count, 0)
-
-    body = re.sub(
-        r"Reciters-\d+(%20Available%20%7C%20)\d+(%20Aligned)",
-        rf"Reciters-{available_count}\g<1>{processed_count}\g<2>",
-        body,
-    )
-
-    # Update riwayat badge
-    riwayat_with_data = set()
-    if audio_dir.is_dir():
-        for source_type in audio_dir.iterdir():
-            for source in source_type.iterdir():
-                if source.is_dir():
-                    for f in source.glob("*.json"):
+                        slug = f.stem
+                        all_slugs.add(slug)
                         try:
-                            meta = json.loads(f.read_text()).get("_meta", {})
+                            data = json.loads(f.read_text())
+                            meta = data.get("_meta", {})
                             rw = meta.get("riwayah", "hafs_an_asim")
                             riwayat_with_data.add(rw)
+                            entries = {k: v for k, v in data.items() if k != "_meta"}
+                            cov = len(entries)
+                            is_full = (audio_cat == "by_surah" and cov == 114) or \
+                                      (audio_cat == "by_ayah" and cov == 6236)
+                            if is_full:
+                                slug_full_coverage[slug] = True
                         except (json.JSONDecodeError, OSError):
                             pass
+
+    eligible_set = set(eligible)
+    available_slugs = all_slugs - eligible_set
+    available_count = len(available_slugs)
+    available_full = sum(1 for s in available_slugs if slug_full_coverage.get(s, False))
+
+    # Aligned full coverage: check segments
+    aligned_full = 0
+    seg_dir = ROOT / "data" / "recitation_segments"
+    for slug in eligible:
+        seg_file = seg_dir / slug / "segments.json"
+        if seg_file.exists():
+            try:
+                doc = json.loads(seg_file.read_text())
+                surahs = set()
+                ayah_count = 0
+                for key in doc:
+                    if key == "_meta":
+                        continue
+                    ayah_count += 1
+                    surahs.add(key.split(":")[0])
+                if len(surahs) == 114 or ayah_count == 6236:
+                    aligned_full += 1
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    body = re.sub(
+        r"Available%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
+        f"Available%20Reciters-{available_count}%20%28{available_full}%20Full%20Coverage%29",
+        body,
+    )
+    body = re.sub(
+        r"Aligned%20Reciters-\d+%20%28\d+%20Full%20Coverage%29",
+        f"Aligned%20Reciters-{processed_count}%20%28{aligned_full}%20Full%20Coverage%29",
+        body,
+    )
     riwayat_total_path = ROOT / "data" / "riwayat.json"
     riwayat_total = len(json.loads(riwayat_total_path.read_text())) if riwayat_total_path.exists() else 20
     body = re.sub(
