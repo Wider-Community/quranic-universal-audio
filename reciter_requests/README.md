@@ -3,7 +3,9 @@ title: Reciter Requests
 emoji: 📋
 colorFrom: purple
 colorTo: green
-sdk: docker
+sdk: gradio
+sdk_version: "5.50.0"
+app_file: app.py
 pinned: false
 ---
 

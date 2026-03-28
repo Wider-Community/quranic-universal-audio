@@ -164,7 +164,11 @@ def _is_check(val):
 
 
 def _parse_processed_reciters(md_text):
-    """Parse the Processed Reciters table from RECITERS.md."""
+    """Parse the Aligned Reciters table from RECITERS.md.
+
+    Table columns: Reciter | Style | Source | Granularity | Coverage |
+                   Segmented | Manually Validated | Timestamped
+    """
     processed = []
     in_table = False
     for line in md_text.split("\n"):
@@ -175,13 +179,14 @@ def _parse_processed_reciters(md_text):
             continue
         if in_table and line.startswith("|"):
             cols = [c.strip() for c in line.split("|")[1:-1]]
-            if len(cols) >= 4:
+            if len(cols) >= 8:
                 processed.append({
                     "name": cols[0],
-                    "coverage": cols[1],
-                    "segmented": _is_check(cols[2]),
-                    "validated": _is_check(cols[3]) if len(cols) > 3 else False,
-                    "timestamped": _is_check(cols[4]) if len(cols) > 4 else False,
+                    "style": cols[1].lower().replace(" ", "_") if cols[1] else "unknown",
+                    "coverage": cols[4],
+                    "segmented": _is_check(cols[5]),
+                    "validated": _is_check(cols[6]),
+                    "timestamped": _is_check(cols[7]),
                 })
         elif in_table and not line.strip().startswith("|"):
             break
@@ -291,6 +296,7 @@ def fetch_available_reciters():
                 "source": source_path,
                 "riwayah": r["riwayah"],
                 "style": r["style"],
+                "country": r.get("country", "unknown"),
                 "has_pending_request": slug in pending,
                 "pending_issue_url": pending.get(slug, ""),
             })
@@ -432,10 +438,26 @@ def _riwayah_slug_to_name(slug: str) -> str:
 
 REQUEST_TYPES = ["New reciter", "Re-align"]
 
+STYLE_CHOICES = ["Murattal", "Mujawwad", "Muallim", "Children Repeat", "Taraweeh", "Unknown"]
+_STYLE_DISPLAY_TO_SLUG = {
+    "Murattal": "murattal", "Mujawwad": "mujawwad", "Muallim": "muallim",
+    "Children Repeat": "children_repeat", "Taraweeh": "taraweeh", "Unknown": "unknown",
+}
+_STYLE_SLUG_TO_DISPLAY = {v: k for k, v in _STYLE_DISPLAY_TO_SLUG.items()}
+
+COUNTRIES = [
+    "unknown", "Algeria", "Bahrain", "Bangladesh", "Egypt", "India", "Indonesia",
+    "Iran", "Iraq", "Jordan", "Kuwait", "Lebanon", "Libya", "Malaysia", "Mauritania",
+    "Morocco", "Nigeria", "Oman", "Pakistan", "Palestine", "Qatar", "Saudi Arabia",
+    "Senegal", "Somalia", "South Africa", "Sudan", "Syria", "Tunisia", "Turkey",
+    "UAE", "Yemen", "Other",
+]
+
 
 def submit_request(
     reciter_slug, reciter_name, audio_source,
-    request_type, riwayah, min_silence_ms,
+    request_type, riwayah, style, country,
+    min_silence_ms,
     requester_name, requester_email, notes,
     github_username="",
 ):
@@ -463,6 +485,12 @@ def submit_request(
     if not (100 <= min_silence_ms <= 2000):
         return "Error: Min silence must be between 100 and 2000ms."
     request_type = request_type or "New reciter"
+    style = style or "Unknown"
+    if style not in STYLE_CHOICES:
+        style = "Unknown"
+    country = country or "unknown"
+    if country not in COUNTRIES:
+        country = "unknown"
 
     # Verify GitHub username if provided
     github_username = (github_username or "").strip().lstrip("@")
@@ -524,6 +552,8 @@ def submit_request(
         f"**Slug:** {reciter_slug}\n"
         f"**Audio Source:** {audio_source}\n"
         f"**Riwayah:** {riwayah}\n"
+        f"**Style:** {style}\n"
+        f"**Country:** {country}\n"
         f"**Suggested Min Silence:** {min_silence_ms}ms\n"
         f"**Requester:** {requester_id}\n"
     )
@@ -564,6 +594,8 @@ def submit_request(
             "Audio Source": {"rich_text": [{"text": {"content": audio_source}}]},
             "Request Type": {"select": {"name": request_type}},
             "Riwayah": {"rich_text": [{"text": {"content": riwayah}}]},
+            "Style": {"rich_text": [{"text": {"content": style}}]},
+            "Country": {"rich_text": [{"text": {"content": country}}]},
             "Min Silence": {"number": min_silence_ms},
             "GitHub Username": {"rich_text": [{"text": {"content": github_username[:100]}}]},
             "Status": {"select": {"name": "Pending"}},
@@ -602,7 +634,8 @@ def get_reciter_choices(request_type="New reciter"):
                 "name": r["name"],
                 "source": r.get("audio_source", ""),
                 "riwayah": "",
-                "style": "",
+                "style": r.get("style", ""),
+                "country": "",
             })))
         if not choices:
             choices = [("All processed reciters are validated — no re-alignment needed", "")]
@@ -620,6 +653,7 @@ def get_reciter_choices(request_type="New reciter"):
                 "source": r["source"],
                 "riwayah": r.get("riwayah", ""),
                 "style": r.get("style", ""),
+                "country": r.get("country", ""),
             })))
         return choices
 
@@ -631,18 +665,31 @@ def update_reciter_choices(request_type):
 
 
 def on_reciter_selected(reciter_json):
-    """Auto-fill riwayah dropdown when a reciter is selected."""
+    """Auto-fill riwayah, style, and country when a reciter is selected."""
+    empty = gr.Dropdown(), gr.Dropdown(), gr.Dropdown()
     if not reciter_json:
-        return gr.Dropdown()
+        return empty
     try:
         info = json.loads(reciter_json)
         riwayah_slug = info.get("riwayah", "")
-        if riwayah_slug:
-            display_name = _riwayah_slug_to_name(riwayah_slug)
-            return gr.Dropdown(value=display_name)
+        style_slug = info.get("style", "")
+        country = info.get("country", "")
+
+        riwayah_update = (
+            gr.Dropdown(value=_riwayah_slug_to_name(riwayah_slug))
+            if riwayah_slug else gr.Dropdown()
+        )
+        style_update = (
+            gr.Dropdown(value=_STYLE_SLUG_TO_DISPLAY.get(style_slug, ""))
+            if style_slug else gr.Dropdown()
+        )
+        country_update = (
+            gr.Dropdown(value=country)
+            if country and country != "unknown" else gr.Dropdown()
+        )
+        return riwayah_update, style_update, country_update
     except (json.JSONDecodeError, TypeError):
-        pass
-    return gr.Dropdown()
+        return empty
 
 
 def get_requests_markdown():
@@ -678,7 +725,8 @@ def get_processed_markdown():
     return "\n".join(lines)
 
 
-def handle_submit(reciter_json, request_type, riwayah, min_silence, name, email, github_username, notes):
+def handle_submit(reciter_json, request_type, riwayah, style, country,
+                   min_silence, name, email, github_username, notes):
     """Handle form submission from Gradio UI."""
     if not reciter_json:
         return "Error: Please select a reciter."
@@ -694,6 +742,8 @@ def handle_submit(reciter_json, request_type, riwayah, min_silence, name, email,
         audio_source=info["source"],
         request_type=request_type,
         riwayah=riwayah,
+        style=style,
+        country=country,
         min_silence_ms=min_silence,
         requester_name=name,
         requester_email=email,
@@ -768,6 +818,17 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         info="Auto-filled from the reciter's manifest. "
                              "Change only if you know the reciter uses a different reading.",
                     )
+                    style_dd = gr.Dropdown(
+                        choices=STYLE_CHOICES,
+                        label="Style",
+                        info="Recitation style. Auto-filled from manifest.",
+                    )
+                    country_dd = gr.Dropdown(
+                        choices=COUNTRIES,
+                        label="Country",
+                        filterable=True,
+                        info="Reciter's country of origin. Auto-filled from manifest.",
+                    )
                     min_silence = gr.Number(
                         value=None, label="Min Silence (ms)",
                         info="Required. Check the parameter reference table for guidance. "
@@ -818,13 +879,14 @@ with gr.Blocks(title="Reciter Requests") as demo:
             reciter_dd.change(
                 fn=on_reciter_selected,
                 inputs=[reciter_dd],
-                outputs=[riwayah_dd],
+                outputs=[riwayah_dd, style_dd, country_dd],
             )
 
             submit_btn.click(
                 fn=handle_submit,
-                inputs=[reciter_dd, request_type_dd, riwayah_dd,
-                        min_silence, req_name, req_email, req_github, req_notes],
+                inputs=[reciter_dd, request_type_dd, riwayah_dd, style_dd,
+                        country_dd, min_silence, req_name, req_email,
+                        req_github, req_notes],
                 outputs=result_box,
             )
 
@@ -868,6 +930,8 @@ with gr.Blocks(title="Reciter Requests") as demo:
         return (
             gr.Dropdown(choices=reciter_choices),
             gr.Dropdown(choices=RIWAYAT),
+            gr.Dropdown(choices=STYLE_CHOICES),
+            gr.Dropdown(choices=COUNTRIES),
             proc_md,
             req_md,
             proc_md,
@@ -875,26 +939,16 @@ with gr.Blocks(title="Reciter Requests") as demo:
 
     demo.load(
         fn=_load_initial_data,
-        outputs=[reciter_dd, riwayah_dd, ref_table, requests_table,
-                 processed_table],
+        outputs=[reciter_dd, riwayah_dd, style_dd, country_dd,
+                 ref_table, requests_table, processed_table],
     )
 
 
 # ---------------------------------------------------------------------------
-# FastAPI app with custom API endpoints + Gradio mount
+# Custom API routes (mounted onto Gradio's app after launch)
 # ---------------------------------------------------------------------------
-api = FastAPI()
-
-
-@api.get("/health")
-async def health():
-    """Immediate health check — lets HF know the container is alive."""
-    return {"status": "ok"}
-
-
-# Sub-app for /api/* routes with its own CORS (doesn't interfere with Gradio)
-api_routes = FastAPI()
-api_routes.add_middleware(
+_api_routes = FastAPI()
+_api_routes.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
@@ -902,7 +956,7 @@ api_routes.add_middleware(
 )
 
 
-@api_routes.post("/request")
+@_api_routes.post("/request")
 async def api_request(request: Request):
     """API endpoint for Inspector form submissions."""
     req = await request.json()
@@ -912,6 +966,8 @@ async def api_request(request: Request):
         audio_source=req.get("audio_source", ""),
         request_type=req.get("request_type", "New reciter"),
         riwayah=req.get("riwayah", ""),
+        style=req.get("style", "Unknown"),
+        country=req.get("country", "unknown"),
         min_silence_ms=req.get("min_silence_ms"),
         requester_name=req.get("requester_name", ""),
         requester_email=req.get("requester_email", ""),
@@ -937,40 +993,39 @@ async def api_request(request: Request):
         }, status_code=201)
 
 
-@api_routes.get("/reciters")
+@_api_routes.get("/reciters")
 async def api_reciters():
     """List available (unprocessed) reciters."""
     return {"reciters": fetch_available_reciters()}
 
 
-@api_routes.get("/processed")
+@_api_routes.get("/processed")
 async def api_processed():
     """List processed reciters with VAD parameters."""
     return {"reciters": fetch_processed_reciters()}
 
 
-@api_routes.get("/requests")
+@_api_routes.get("/requests")
 async def api_requests():
     """List all request issues."""
     return {"requests": fetch_request_issues()}
 
 
-@api_routes.get("/guide")
+@_api_routes.get("/guide")
 async def api_guide():
     """Fetch the requesting-a-reciter guide markdown."""
     return {"markdown": fetch_guide()}
 
 
-api.mount("/api", api_routes)
-
-
-# Mount Gradio app onto FastAPI
-app = gr.mount_gradio_app(api, demo, path="/")
-
-
 # ---------------------------------------------------------------------------
-# Launch
+# Launch — let Gradio own the server, mount custom routes after
 # ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+demo.launch(
+    server_name="0.0.0.0",
+    server_port=7860,
+    prevent_thread_lock=True,
+)
+demo.app.mount("/api", _api_routes)
+
+# Keep process alive (Gradio server runs in a background thread)
+threading.Event().wait()
