@@ -37,6 +37,7 @@ This document evaluates what we have, identifies gaps, and proposes a layered ac
 - Timestamps are **relative to clip start** (not to the original chapter audio). This is correct for playback of individual clips but means they cannot be used to seek into the original chapter recording.
 - Audio is embedded as binary blobs inside parquet shards (up to 10GB each). There are no external URL references.
 - Organized as config=riwayah, split=reciter (e.g. `hafs_an_asim` / `minshawy_murattal`).
+- Currently only covers timestamped reciters (2 full, 1 partial) out of 350+ total audio-only reciters.
 
 **Access methods:**
 ```python
@@ -61,7 +62,30 @@ ds = ds.filter(lambda x: x["surah"] == 2)  # all of Al-Baqarah
 | `ds[n]` (random access) | <10ms | Memory-mapped parquet, very fast |
 | `streaming=True` (first row) | 2–5s | HTTP range request for first parquet chunk |
 | `streaming=True` (subsequent) | <50ms | Sequential reads within shard |
-| Row-level HTTP API | 200–500ms | Via HF datasets server `/rows` endpoint |
+| Row-level HTTP API (`/rows`) | 200–500ms | Via HF datasets-server, audio returned as signed CDN URLs |
+| Filter API (`/filter`) | 200–500ms | SQL-like column filtering, same CDN URL pattern |
+
+**HF Datasets-Server API (no download required):**
+
+The HF datasets-server exposes REST endpoints that query parquet directly — no Python or dataset download needed:
+
+```bash
+# Get a specific verse by surah + ayah (no need to know row offset)
+GET /filter?dataset=hetchyy/quranic-universal-ayahs\
+  &config=hafs_an_asim&split=minshawy_murattal\
+  &where="surah"=2 AND "ayah"=255&offset=0&length=1
+
+# Get rows by offset
+GET /rows?dataset=hetchyy/quranic-universal-ayahs\
+  &config=hafs_an_asim&split=minshawy_murattal&offset=0&length=7
+```
+
+Key characteristics:
+- **Audio is served as signed CloudFront CDN URLs** (not embedded bytes). The response JSON contains `"audio": {"src": "https://datasets-server.huggingface.co/cached-assets/...?Expires=...&Signature=..."}`. Fetching the actual audio is a second HTTP request.
+- **`/filter` supports SQL-like `where` clauses**: column names in double quotes, numeric values unquoted, `AND`/`OR`/parentheses for compound conditions, plus `orderby` and pagination (`offset`/`length`, max 100 rows).
+- **Signed URLs expire** — they cannot be cached long-term or shared across users.
+- **Rate limits**: 5-minute fixed windows, exact numbers undisclosed. Unauthenticated requests are heavily throttled — always pass `HF_TOKEN`. Implement exponential backoff for 429s.
+- **Two-hop latency**: metadata request → get signed URL → fetch audio file. Not ideal for latency-sensitive apps but workable for moderate-traffic use cases.
 
 ### 2. GitHub Releases (metadata only)
 
@@ -100,6 +124,8 @@ Plus shared reference files: `manifest.json`, `surah_info.json`, `qpc_hafs.json`
 
 **What exists but isn't surfaced:** The `by_surah` audio manifests point to original, gapless chapter recordings. The `timestamps.json` in GitHub releases has timestamps relative to those original recordings. Together, these *could* enable gapless playback with verse-level seeking — but there's no unified interface or documentation telling developers to combine them this way.
 
+**Proposed fix:** `source_url` + `source_offset_ms` + `audio_category` columns on verse rows, plus `sources` config with URL templates (see Layer 2 enhancements below).
+
 ### Gap 2: Timestamp Frame of Reference Is Fragmented
 
 **The problem:** Timestamps exist in two frames of reference:
@@ -107,6 +133,8 @@ Plus shared reference files: `manifest.json`, `surah_info.json`, `qpc_hafs.json`
 2. **Source-relative** (GitHub releases `timestamps.json`): `start_ms` is relative to the original audio file (chapter or verse recording from the CDN)
 
 For gapless chapter playback, developers need source-relative timestamps. For individual verse clip playback, they need clip-relative. Currently you have to know which is which and pair the right timestamps with the right audio. This is not documented.
+
+**Proposed fix:** `source_offset_ms` bridges the two frames. Source-relative = clip-relative + `source_offset_ms`. One column, one addition. Both frames accessible from the same row.
 
 ### Gap 3: Dependence on Third-Party CDNs
 
@@ -126,11 +154,13 @@ For research and batch processing, this is fine (download once, cache locally). 
 |--------|-------------------|----------|
 | HF dataset (cached locally) | <10ms | Requires 1.5GB+ download per reciter upfront |
 | HF dataset (streaming) | 2–5s first, then fast | Sequential only; can't jump to verse 6000 fast |
-| HF datasets server API | 200–500ms | Not designed for audio serving; returns base64 |
+| HF `/filter` API | 200–500ms (metadata) + audio fetch | Two-hop (get signed URL, then fetch audio); signed URLs expire; rate-limited |
 | Third-party CDN (by_ayah) | 100–500ms | Depends on CDN availability and user location |
 | Third-party CDN (by_surah) | 100–300ms + seek | Need byte-range or time-offset seeking |
 
-None of these is ideal for a production app wanting instant verse-by-verse playback without pre-downloading gigabytes.
+**Mitigating factor:** The HF `/filter` API is better than initially assumed — it supports direct `"surah"=2 AND "ayah"=255` queries without knowing row offsets, and **latency does not scale with dataset size** because each config+split is an independent parquet file. Adding hundreds of reciters as new splits doesn't slow down querying any individual reciter. However, the two-hop latency (metadata → signed URL → audio fetch) and rate limits still make it unsuitable as a primary audio delivery mechanism for high-traffic consumer apps.
+
+**Practical mitigation via URL templates:** If the HF dataset exposes the source URL template (see `sources` config proposal below), apps can bypass HF audio serving entirely and go direct to CDN — eliminating the two-hop problem for audio while still using HF for timestamp/metadata access.
 
 ### Gap 5: No Unified Developer Experience
 
@@ -140,6 +170,17 @@ None of these is ideal for a production app wanting instant verse-by-verse playb
 3. Decide between gapped and gapless themselves
 4. Handle CDN failover themselves
 5. Build their own caching layer
+
+**Proposed fix:** The enhanced HF dataset becomes the single entry point. The `sources` config provides discovery and URL templates. The verse rows provide timestamps with `source_offset_ms` bridging both frames. The data access guide documents the recommended patterns per use case. Developers no longer need to navigate the GitHub repo structure or understand three separate systems.
+
+### Gap 6: No Reciter Discovery or Source Metadata in the Dataset
+
+**The problem:** The HF dataset only contains timestamped reciters (currently 2–3). But the project has 350+ reciters with audio manifests across 14 riwayat. There is no programmatic way for an app to:
+- Discover available reciters, their names, styles, riwayah, and sources
+- Get audio URLs for non-timestamped reciters
+- Know whether a reciter has timestamps or just audio
+
+The `reciters_index.json` file exists in the repo but isn't exposed through the HF dataset or API. Developers have to navigate the GitHub repo structure manually.
 
 ---
 
@@ -206,33 +247,121 @@ Rather than one approach for everyone, provide three well-defined layers, each s
 
 ### Layer 2: Hugging Face Dataset (Exists Today — Enhance)
 
-**Audience:** Researchers, ML engineers, anyone using Python for batch processing.
+**Audience:** Researchers, ML engineers, app developers, anyone needing structured access.
 
 **What stays the same:**
 - Embedded MP3 audio per verse
 - Word-level timestamps and segments (clip-relative)
 - Config=riwayah, split=reciter
 
-**What to add:**
+#### Enhancement A: Three New Columns on Verse Rows
 
-1. **`source_offset_ms` column** — the offset from source audio start to clip start. This single number lets anyone reconstruct source-relative timestamps:
-   ```python
-   verse = ds[0]
-   # Clip-relative (for playing the embedded audio):
-   print(verse["word_timestamps"])  # [[1, 0, 400], [2, 400, 800]]
+Add columns that bridge the gap between verse clips and original chapter audio. All three values are already computed during `build_reciter.py` but currently discarded:
 
-   # Source-relative (for seeking in chapter audio):
-   offset = verse["source_offset_ms"]  # 560
-   for w, start, end in verse["word_timestamps"]:
-       print(w, start + offset, end + offset)  # [1, 560, 960], [2, 960, 1360]
-   ```
+| New Column | Type | Description |
+|------------|------|-------------|
+| `source_url` | `string` | Original CDN audio URL (chapter or verse) |
+| `source_offset_ms` | `int32` | Clip start position in the source audio |
+| `audio_category` | `string` | `"by_surah"` or `"by_ayah"` — how to interpret the source URL |
 
-2. **`audio_url` column** (optional, string) — the source URL from the audio manifest. Enables:
-   - Fetching original (non-trimmed) audio for gapless playback
-   - Verifying/refreshing audio if needed
-   - Using the HF dataset as a unified index even for gapless use cases
+**No `source_end_ms` or `source_duration_ms` needed** — the embedded audio's own duration gives you the clip length.
 
-3. **Parquet-only access documentation** — for non-Python users, document how to read parquet files directly (Arrow, DuckDB, Spark) and extract audio bytes.
+**Parquet overhead of these columns is negligible.** Measured via pyarrow: the `source_url` column (6,236 rows with only 114 unique URLs for a by_surah reciter) compresses to **972 bytes** (~1 KB) thanks to parquet dictionary encoding. All three columns combined add ~32 KB to a 1.5 GB dataset — 0.002% overhead. The URL "duplication" across verses of the same surah is a non-issue.
+
+**Usage — gapped playback (verse clips):**
+```python
+verse = ds[0]
+# Play embedded audio directly — timestamps are already clip-relative
+Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
+print(verse["word_timestamps"])  # [[1, 0, 400], [2, 400, 800]]
+```
+
+**Usage — gapless playback (full chapter):**
+```python
+# All verses of surah 1 share the same source_url (for by_surah reciters)
+fatiha = ds.filter(lambda x: x["surah"] == 1)
+chapter_url = fatiha[0]["source_url"]  # https://server8.mp3quran.net/afs/001.mp3
+
+# Convert clip-relative timestamps to chapter-relative
+for verse in fatiha:
+    offset = verse["source_offset_ms"]
+    for word_idx, start, end in verse["word_timestamps"]:
+        abs_start = start + offset
+        abs_end = end + offset
+        # Use abs_start/abs_end to seek within the chapter audio stream
+```
+
+**Usage — via HF `/filter` API (no download):**
+```bash
+# Get verse 2:255 with source info — one HTTP call
+GET /filter?dataset=hetchyy/quranic-universal-ayahs\
+  &config=hafs_an_asim&split=minshawy_murattal\
+  &where="surah"=2 AND "ayah"=255&offset=0&length=1
+# Response includes source_url, source_offset_ms, audio_category
+# alongside timestamps and a signed URL for the verse clip
+```
+
+#### Enhancement B: `sources` Config — Reciter Discovery and URL Templates
+
+A new lightweight config (no audio column) covering **all 350+ reciters**, not just the timestamped ones. One row per reciter.
+
+**Purpose:** Let apps discover reciters, show a picker, and construct audio URLs directly — without downloading any audio data or navigating the GitHub repo.
+
+**Schema:**
+| Column | Type | Example |
+|--------|------|---------|
+| `reciter` | `string` | `mishary_alafasi` |
+| `name_en` | `string` | `Mishary Alafasi` |
+| `name_ar` | `string` | `مشاري العفاسي` |
+| `riwayah` | `string` | `hafs_an_asim` |
+| `style` | `string` | `murattal` |
+| `audio_category` | `string` | `by_surah` |
+| `source` | `string` | `mp3quran` |
+| `url_template` | `string` | `https://server8.mp3quran.net/afs/{surah:03d}.mp3` |
+| `coverage_surahs` | `int32` | `114` |
+| `coverage_ayahs` | `int32` | `6236` |
+| `has_timestamps` | `bool` | `true` |
+
+**Feasibility validated:** 380 out of 381 audio manifests follow a templatable URL pattern — the template approach works for virtually all reciters.
+
+**URL template format:**
+- By-surah: `https://server8.mp3quran.net/afs/{surah:03d}.mp3` — replace `{surah:03d}` with zero-padded surah number
+- By-ayah: `https://everyayah.com/data/Minshawy_Murattal_128kbps/{surah:03d}{ayah:03d}.mp3` — replace both `{surah:03d}` and `{ayah:03d}`
+
+**Usage — app reciter picker:**
+```python
+# Tiny download, instant — no audio data
+sources = load_dataset("hetchyy/quranic-universal-ayahs", "sources", split="train")
+
+# Show all Hafs reciters with murattal style
+murattal = sources.filter(lambda r: r["style"] == "murattal" and r["riwayah"] == "hafs_an_asim")
+for r in murattal:
+    print(f"{r['name_en']} ({r['coverage_surahs']} surahs, timestamps: {r['has_timestamps']})")
+```
+
+**Usage — direct CDN audio (bypasses HF rate limits):**
+```python
+reciter = sources.filter(lambda r: r["reciter"] == "mishary_alafasi")[0]
+url = reciter["url_template"].format(surah=2)
+# → https://server8.mp3quran.net/afs/002.mp3
+# Fetch directly from CDN — no HF rate limits, no signed URLs, no expiry
+```
+
+**Why this is a separate config, not extra columns on verse rows:**
+- Covers all 350+ reciters, not just the 2–3 with timestamps
+- One row per reciter (not one per verse) — completely different granularity
+- Tiny parquet file — instant to load as a lookup table
+- No duplication of template URL across 6,236 verse rows
+
+#### Enhancement C: Parquet-Only Access Documentation
+
+For non-Python users, document how to read parquet files directly (Arrow, DuckDB, Spark) and extract audio bytes. The HF datasets-server also exposes a `/parquet` endpoint listing all parquet file URLs for direct download.
+
+#### Scaling Characteristics
+
+**Adding more reciters does not degrade query performance.** Each config+split maps to independent parquet file(s). The HF datasets-server `/rows` and `/filter` endpoints query per-split parquet files — they never touch other splits. At 6,236 rows per reciter (~1.5 GB), each split fits in 1–2 parquet row groups with O(1) offset access.
+
+**5 GB indexing threshold:** The datasets-server fully indexes the first 5 GB of a dataset. Beyond that, filter responses may include `partial: true`. At ~1.5 GB per timestamped reciter, this threshold is reached around 3 reciters — but since each split is queried independently, this should not affect per-split row access in practice. The `sources` config (metadata-only, kilobytes) is unaffected.
 
 ### Layer 3: REST API + CDN (New — Build When Needed)
 
@@ -328,49 +457,64 @@ Client → CDN Edge (Cloudflare/BunnyCDN) → Origin (Object Storage)
 
 ## Gapless vs Gapped: Decision Framework
 
-| Use Case | Recommended | Why |
-|----------|-------------|-----|
-| Listen to full surah | **Gapless** (chapter audio + source-relative timestamps) | Natural flow, no artifacts |
-| Tap a verse to hear it | **Gapped** (verse clips from HF dataset or API) | Fast, self-contained |
-| Memorization app (repeat verse) | **Gapped** | Loop a single clip |
-| Research / ASR training | **Gapped** (HF dataset) | Clean, labeled segments |
-| Verse-by-verse with transitions | **Gapless** with verse seeking | Smooth transitions between verses |
-| Offline mobile app | **Both** — download chapter audio + verse timestamps | Gapless playback, verse-level seeking |
+| Use Case | Recommended | How (with proposed enhancements) |
+|----------|-------------|----------------------------------|
+| Listen to full surah | **Gapless** | `source_url` (chapter) + `source_offset_ms` for verse seeking |
+| Tap a verse to hear it | **Gapped** | Embedded `audio` column or `source_url` (by_ayah) |
+| Memorization (repeat verse) | **Gapped** | Loop embedded verse clip |
+| Research / ASR training | **Gapped** | `load_dataset()` — clean, labeled segments |
+| Verse-by-verse with transitions | **Gapless** | Stream chapter audio, use offsets for verse boundaries |
+| Offline mobile app | **Both** | Download chapter audio + all verse timestamps with offsets |
 
 **The key insight:** gapless and gapped aren't alternatives — they serve different purposes and apps often need both. The architecture should make both easy.
+
+**Important limitation:** Gapless playback is only possible for **by_surah** reciters, where the original recording is a continuous chapter. For **by_ayah** reciters (e.g. everyayah.com), each verse was recorded or cut separately — there is no gapless source. The `audio_category` column lets developers detect this and adjust their UI accordingly (e.g. hide "continuous play" mode for by_ayah reciters, or fall back to concatenated playback with crossfade).
 
 ---
 
 ## Recommendation: Phased Implementation
 
-### Phase 1: Documentation + Metadata Enhancements (Immediate)
+### Phase 1: HF Dataset Enhancements (Immediate)
 
 Low effort, high impact. No new infrastructure needed.
 
-1. **Add `source_offset_ms` to the HF dataset schema** — a single integer column bridging the two timestamp frames. Requires updating `build_reciter.py` to compute and include it.
+**1a. Add 3 columns to verse rows** (`build_reciter.py` change — ~15 lines):
+   - `source_url` (string) — original CDN audio URL
+   - `source_offset_ms` (int32) — clip start position in source audio
+   - `audio_category` (string) — `"by_surah"` or `"by_ayah"`
+   - All values already computed during the build; just need to stop discarding them.
 
-2. **Add `audio_url` to the HF dataset schema** — the source URL for each verse's audio. Already available in the build pipeline (`entry["audio"]`).
+**1b. Add `sources` config** (new build script — ~100 lines):
+   - One row per reciter across all 350+ reciters
+   - Includes URL templates, metadata, coverage, timestamp availability
+   - Derived from existing `data/audio/` manifests + `reciters_index.json`
 
-3. **Write a "Data Access Guide"** documenting:
+**1c. Add `clip_offset_ms` to GitHub release timestamp files** — same bridge value, for non-HF users.
+
+**1d. Write a "Data Access Guide"** documenting:
    - The three layers and when to use each
    - How to achieve gapless playback (chapter audio + source timestamps)
    - How to achieve verse-by-verse playback (HF dataset)
+   - How to use the `/filter` API for quick verse lookup without downloading
+   - How to use `sources` config + URL templates for direct CDN access
    - Code examples for common use cases (Python, JavaScript, mobile)
    - Timestamp frame of reference explanation
 
-4. **Add `clip_offset_ms` to GitHub release timestamp files** — same bridge value, for non-HF users.
+### Phase 2: Validate and Prototype (Short-term)
 
-### Phase 2: Evaluate HF Dataset Adequacy (Short-term)
+The HF `/filter` API and `sources` config together cover most access patterns. Before building a custom API, validate this in practice:
 
-Before building a custom API, measure whether the HF dataset is sufficient for most use cases:
+1. **Benchmark HF `/filter` latency** — measure actual end-to-end time (metadata + audio fetch) for random verse access from multiple regions. Key metrics: TTFB for metadata, TTFB for audio CDN URL, total time to first audio byte.
 
-1. **Benchmark HF datasets server API** — measure actual latency for random verse access via the HTTP API from multiple regions.
+2. **Prototype gapless web player** — build a minimal player using:
+   - `sources` config to get chapter URL template
+   - Verse rows (via `/filter`) for `source_offset_ms` + word timestamps
+   - HTML5 `<audio>` with `currentTime` seeking for verse navigation
+   - Does it work well enough without a custom API?
 
-2. **Test HF parquet direct access** — can a JavaScript app read individual verses from parquet over HTTP using Apache Arrow JS? What's the latency?
+3. **Test direct CDN reliability** — for the top 5 sources (mp3quran, everyayah, qul, surah-quran, archive.org), measure availability, latency, and CORS headers from common user regions.
 
-3. **Survey users** — what are the top 5 apps being built? What are their actual latency requirements?
-
-4. **Prototype gapless playback** — build a minimal web player using chapter audio from manifests + source-relative timestamps. Does it work well enough without a custom API?
+4. **Survey users** — what are the top apps being built? What are their actual latency requirements? Do they need gapless, gapped, or both?
 
 ### Phase 3: API + CDN (When Justified)
 
@@ -390,13 +534,34 @@ When building:
 
 ## Summary: Recommended Access Pattern by Audience
 
-| Audience | Layer | Access Method | Gapless? |
-|----------|-------|--------------|----------|
-| **ML researcher** | Layer 2 | `load_dataset()` in Python | No (not needed) |
-| **Data scientist** | Layer 2 | Parquet via DuckDB/Arrow | No |
-| **Offline mobile app** | Layer 1 | Download release zips + chapter audio from manifests | Yes |
-| **Web Quran player** | Layer 3 (or Layer 1 + manifest CDNs) | REST API or direct CDN | Yes |
-| **Memorization app** | Layer 2 or 3 | Verse clips | No |
-| **Custom pipeline** | Layer 1 | Raw files, full control | Developer's choice |
+| Audience | Layer | Access Method | Audio Source | Gapless? |
+|----------|-------|--------------|-------------|----------|
+| **ML researcher** | Layer 2 | `load_dataset()` in Python | Embedded verse clips | No (not needed) |
+| **Data scientist** | Layer 2 | Parquet via DuckDB/Arrow | Embedded verse clips | No |
+| **App: verse playback** | Layer 2 | HF `/filter` API for timestamps, `sources` config → direct CDN for audio | CDN via URL template | No |
+| **App: chapter playback** | Layer 2 | `sources` config → chapter CDN URL + `/filter` for `source_offset_ms` | CDN chapter audio | Yes |
+| **Offline mobile app** | Layer 1+2 | Download release zips + chapter audio from manifests | Local files | Yes |
+| **Web Quran player** | Layer 2 (→ 3 if needed) | `sources` config for discovery + CDN for audio + HF for timestamps | CDN direct | Yes |
+| **Memorization app** | Layer 2 | HF `/filter` for verse clip + timestamps | Embedded or CDN | No |
+| **Custom pipeline** | Layer 1 | Raw files, full control | Developer's choice | Developer's choice |
+| **Reciter browser/picker** | Layer 2 | `sources` config (tiny, instant) | N/A | N/A |
 
-The HF dataset is the right default for most programmatic use. The gap isn't latency for most cases — it's **documentation and the gapless playback story**. Phase 1 (documentation + `source_offset_ms`) addresses the biggest pain point with zero infrastructure cost.
+### Two Paths to Gapless Playback
+
+With the proposed enhancements, developers have two clear paths to gapless chapter playback:
+
+**Path A: GitHub Releases (offline-first)**
+1. Download reciter zip from GitHub release → get `timestamps.json` + `audio.json`
+2. `audio.json` has chapter URLs → fetch/cache chapter audio
+3. `timestamps.json` has source-relative timestamps → seek within chapter audio
+
+**Path B: HF Dataset (API-first)**
+1. Load `sources` config → get reciter's `url_template` + `audio_category`
+2. Construct chapter URL from template → stream chapter audio from CDN
+3. Query verse rows (via `/filter` or `load_dataset`) → use `source_offset_ms` + `word_timestamps` to compute chapter-relative word positions
+
+Both paths arrive at the same result: chapter audio + absolute timestamps for verse-level seeking. Path A is self-contained (no API calls at runtime). Path B requires no upfront downloads.
+
+### Key Insight
+
+The HF dataset is the right default for most programmatic use. The primary gaps are not latency — they are **the gapless playback story** (solved by `source_offset_ms` + `source_url` columns) and **reciter discovery** (solved by the `sources` config). Phase 1 addresses both with zero infrastructure cost. A custom API (Phase 3) should only be built when CDN reliability or rate limits become real bottlenecks for production apps.
