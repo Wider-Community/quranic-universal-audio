@@ -62,7 +62,7 @@ def find_release_eligible():
 
 
 # ---------------------------------------------------------------------------
-# Audio source detection (pattern from quranic_universal_ayahs/build_reciter.py)
+# Audio source detection (pattern from scripts/build_reciter.py)
 # ---------------------------------------------------------------------------
 def detect_audio_source(slug):
     """Read _meta.audio_source from segments.json."""

@@ -499,8 +499,8 @@ def _build_reciter_info(eligible):
 
 
 def update_dataset_readme():
-    """Rebuild quranic_universal_ayahs/README.md YAML configs and markdown tables from eligible reciters."""
-    readme_path = ROOT / "quranic_universal_ayahs" / "README.md"
+    """Rebuild docs/hf_dataset_card.md YAML configs and markdown tables from eligible reciters."""
+    readme_path = ROOT / "docs" / "hf_dataset_card.md"
     text = readme_path.read_text()
 
     # Split YAML frontmatter from body
