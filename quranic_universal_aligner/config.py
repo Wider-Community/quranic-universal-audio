@@ -69,6 +69,8 @@ NGRAM_INDEX_PATH = DATA_PATH / f"phoneme_ngram_index_{NGRAM_SIZE}.pkl"
 # Inference settings
 # =============================================================================
 
+ZEROGPU_MAX_DURATION = 120  # Hard cap enforced by HF ZeroGPU
+
 def get_vad_duration(minutes):
     """GPU seconds needed for VAD based on audio minutes."""
     VAD_LEASE_BUFFER = 3.16 + 15
@@ -77,8 +79,8 @@ def get_vad_duration(minutes):
 def get_asr_duration(minutes, model_name="Base"):
     """GPU seconds needed for ASR (constant, independent of audio duration)."""
     if model_name == "Large":
-        return 10 
-    return 5 
+        return 10
+    return 5
 
 ESTIMATE_GPU_BASE_SLOPE = 0.43
 ESTIMATE_GPU_BASE_INTERCEPT = 5.5

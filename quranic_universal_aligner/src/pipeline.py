@@ -11,7 +11,7 @@ import librosa
 import gradio as gr
 
 from config import (
-    get_vad_duration, get_asr_duration,
+    get_vad_duration, get_asr_duration, ZEROGPU_MAX_DURATION,
     ANCHOR_SEGMENTS, PHONEME_ALIGNMENT_PROFILING,
     UNDERSEG_MIN_WORDS, UNDERSEG_MIN_AYAH_SPAN,
     SEGMENT_AUDIO_DIR, RESAMPLE_TYPE,
@@ -49,16 +49,16 @@ def _log_gpu_info():
 
 
 def _combined_duration(audio, sample_rate, *_args, **_kwargs):
-    """Lease duration for VAD+ASR: sum of independent estimates."""
+    """Lease duration for VAD+ASR: sum of independent estimates, capped at ZeroGPU max."""
     minutes = len(audio) / sample_rate / 60
     model_name = _args[3] if len(_args) > 3 else _kwargs.get("model_name", "Base")
-    return get_vad_duration(minutes) + get_asr_duration(minutes, model_name)
+    return min(get_vad_duration(minutes) + get_asr_duration(minutes, model_name), ZEROGPU_MAX_DURATION)
 
 def _asr_only_duration(segment_audios, sample_rate, *_args, **_kwargs):
-    """Lease duration for standalone ASR."""
+    """Lease duration for standalone ASR, capped at ZeroGPU max."""
     minutes = sum(len(s) for s in segment_audios) / sample_rate / 60
     model_name = _args[0] if _args else _kwargs.get("model_name", "Base")
-    return get_asr_duration(minutes, model_name)
+    return min(get_asr_duration(minutes, model_name), ZEROGPU_MAX_DURATION)
 
 
 def _run_asr_core(segment_audios, sample_rate, model_name="Base"):
@@ -883,6 +883,10 @@ def process_audio(
             profiling.resample_time = time.time() - resample_start
             print(f"[PROFILE] Resampling {sample_rate}Hz -> 16000Hz took {profiling.resample_time:.3f}s (audio length: {len(audio)/16000:.1f}s, res_type={RESAMPLE_TYPE})")
             sample_rate = 16000
+
+    audio_duration_min = len(audio) / sample_rate / 60
+    if audio_duration_min > 300:
+        gr.Warning("Audio is over 5 hours — GPU processing will likely time out. Consider splitting into separate surahs.")
 
     print("[STAGE] Running VAD + ASR...")
 
