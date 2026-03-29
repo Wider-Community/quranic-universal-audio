@@ -1363,58 +1363,126 @@ def save_seg_data(reciter, chapter):
     return jsonify({"ok": True})
 
 
-@app.route("/api/seg/undo/<reciter>", methods=["POST"])
-def undo_seg_save(reciter):
-    """Restore detailed.json and segments.json from .bak files (single-level undo)."""
-    detailed_bak = RECITATION_SEGMENTS_PATH / reciter / "detailed.json.bak"
-    segments_bak = RECITATION_SEGMENTS_PATH / reciter / "segments.json.bak"
+@app.route("/api/seg/undo-batch/<reciter>", methods=["POST"])
+def undo_seg_batch(reciter):
+    """Undo a specific saved batch by reversing its operations."""
+    body = request.get_json()
+    if not body or not body.get("batch_id"):
+        return jsonify({"error": "Missing batch_id"}), 400
 
-    if not detailed_bak.exists():
-        return jsonify({"error": "No undo backup available"}), 404
+    target_batch_id = body["batch_id"]
+    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    if not history_path.exists():
+        return jsonify({"error": "No edit history found"}), 404
 
+    # Parse all history records
+    all_records = []
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            all_records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    # Find the target batch
+    target_batch = None
+    for rec in all_records:
+        if rec.get("batch_id") == target_batch_id:
+            target_batch = rec
+            break
+    if not target_batch:
+        return jsonify({"error": "Batch not found"}), 404
+
+    # Reject if it's a revert record
+    if target_batch.get("reverts_batch_id"):
+        return jsonify({"error": "Cannot undo a revert record"}), 400
+
+    # Reject if already undone
+    already_reverted = {r.get("reverts_batch_id") for r in all_records if r.get("reverts_batch_id")}
+    if target_batch_id in already_reverted:
+        return jsonify({"error": "This batch has already been undone"}), 400
+
+    operations = target_batch.get("operations", [])
+    if not operations:
+        return jsonify({"error": "Batch has no operations to undo"}), 400
+
+    # Load entries
+    entries = _load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter data not found"}), 404
+
+    meta = _SEG_META_CACHE.get(reciter, {})
+    chapter = target_batch.get("chapter")
+    chapters = target_batch.get("chapters")  # multi-chapter batches
+
+    affected_chapters = set()
+    if chapter is not None:
+        affected_chapters.add(chapter)
+    if chapters:
+        affected_chapters.update(chapters)
+
+    # Snapshot validation before undo
+    val_before_all = {}
+    for ch in affected_chapters:
+        val_before_all[ch] = _chapter_validation_counts(entries, ch, meta)
+
+    # Apply reverse operations (in reverse order)
+    try:
+        for op in reversed(operations):
+            _apply_reverse_op(entries, op, affected_chapters)
+    except ValueError as e:
+        # Conflict detected — roll back in-memory changes by reloading
+        _SEG_CACHE.pop(reciter, None)
+        _SEG_META_CACHE.pop(reciter, None)
+        return jsonify({"error": str(e)}), 409
+
+    # Write modified detailed.json
     detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
     segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
 
-    # Read last edit_history record to link the revert
-    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
-    last_batch_id = None
-    last_chapter = None
-    if history_path.exists():
-        try:
-            lines = history_path.read_text(encoding="utf-8").strip().splitlines()
-            if lines:
-                last_record = json.loads(lines[-1])
-                last_batch_id = last_record.get("batch_id")
-                last_chapter = last_record.get("chapter")
-        except (json.JSONDecodeError, OSError):
-            pass
+    # Backup before writing (safety net)
+    if detailed_path.exists():
+        shutil.copy2(detailed_path, detailed_path.with_suffix(".json.bak"))
+    if segments_path.exists():
+        shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
 
-    # Restore from backup
-    shutil.copy2(detailed_bak, detailed_path)
-    if segments_bak.exists():
-        shutil.copy2(segments_bak, segments_path)
+    with open(detailed_path, "w", encoding="utf-8") as f:
+        json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
 
-    # Compute file hash of restored file
     file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
+    _rebuild_segments_json(reciter, entries)
 
-    # Append revert record to edit history (append-only, never mutates old records)
+    # Snapshot validation after undo
+    val_after_all = {}
+    for ch in affected_chapters:
+        val_after_all[ch] = _chapter_validation_counts(entries, ch, meta)
+
+    # Merge validation summaries across affected chapters
+    val_before = {}
+    val_after = {}
+    for cat in ("failed", "low_confidence", "oversegmented", "cross_verse", "missing_words", "audio_bleeding"):
+        val_before[cat] = sum(v.get(cat, 0) for v in val_before_all.values())
+        val_after[cat] = sum(v.get(cat, 0) for v in val_after_all.values())
+
+    # Append revert record
     revert = {
         "schema_version": 1,
         "batch_id": _uuid7(),
-        "reverts_batch_id": last_batch_id,
+        "reverts_batch_id": target_batch_id,
         "reciter": reciter,
-        "chapter": last_chapter,
+        "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "file_hash_after": file_hash,
+        "validation_summary_before": val_before,
+        "validation_summary_after": val_after,
         "operations": [],
     }
+    if chapters:
+        revert["chapters"] = chapters
     with open(history_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(revert, ensure_ascii=False) + "\n")
-
-    # Remove backup files (single-level undo only)
-    detailed_bak.unlink()
-    if segments_bak.exists():
-        segments_bak.unlink()
 
     # Invalidate caches
     global _SEG_RECITERS_CACHE
@@ -1429,7 +1497,185 @@ def undo_seg_save(reciter):
         daemon=True,
     ).start()
 
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "operations_reversed": len(operations)})
+
+
+def _find_segment_by_uid(entries: list[dict], uid: str, chapter_set: set[int]) -> tuple | None:
+    """Find a segment by segment_uid within entries matching chapter_set.
+
+    Returns (entry, seg_index, segment) or None.
+    """
+    for entry in entries:
+        ch = _chapter_from_ref(entry["ref"])
+        if ch not in chapter_set:
+            continue
+        for i, seg in enumerate(entry.get("segments", [])):
+            if seg.get("segment_uid") == uid:
+                return (entry, i, seg)
+    return None
+
+
+def _find_entry_for_insert(entries: list[dict], snap: dict, chapter_set: set[int]) -> dict | None:
+    """Find the correct entry to insert a restored segment into.
+
+    For by_surah: single entry per chapter.
+    For by_ayah: match by audio_url from the snapshot.
+    """
+    audio_url = snap.get("audio_url", "")
+    for entry in entries:
+        ch = _chapter_from_ref(entry["ref"])
+        if ch not in chapter_set:
+            continue
+        if audio_url and entry.get("audio", "") == audio_url:
+            return entry
+        if not audio_url:
+            return entry  # by_surah fallback: first matching entry
+    # Fallback: first entry in chapter
+    for entry in entries:
+        ch = _chapter_from_ref(entry["ref"])
+        if ch in chapter_set:
+            return entry
+    return None
+
+
+def _snap_to_segment(snap: dict) -> dict:
+    """Convert a snapshot to a segment dict for insertion."""
+    return {
+        "segment_uid": snap.get("segment_uid", _uuid7()),
+        "time_start": snap["time_start"],
+        "time_end": snap["time_end"],
+        "matched_ref": snap.get("matched_ref", ""),
+        "matched_text": snap.get("matched_text", ""),
+        "confidence": snap.get("confidence", 0),
+    }
+
+
+def _verify_segment_matches_snapshot(seg: dict, snap: dict) -> str | None:
+    """Check if a current segment matches its expected snapshot state.
+
+    Returns an error message if there's a conflict, None if OK.
+    """
+    uid = snap.get("segment_uid", "")
+    if seg.get("time_start") != snap.get("time_start") or seg.get("time_end") != snap.get("time_end"):
+        return f"Segment {uid} times changed since this save (expected {snap.get('time_start')}-{snap.get('time_end')}, found {seg.get('time_start')}-{seg.get('time_end')})"
+    if seg.get("matched_ref", "") != snap.get("matched_ref", ""):
+        return f"Segment {uid} reference changed since this save"
+    return None
+
+
+def _apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]):
+    """Apply the reverse of a single operation. Raises ValueError on conflict."""
+    op_type = op.get("op_type", "")
+    before = op.get("targets_before", [])
+    after = op.get("targets_after", [])
+
+    if op_type in ("trim_segment", "auto_fix_missing_word"):
+        # Restore original time boundaries
+        if not after or not before:
+            return
+        snap_after = after[0]
+        uid = snap_after.get("segment_uid", "")
+        found = _find_segment_by_uid(entries, uid, chapter_set)
+        if not found:
+            raise ValueError(f"Segment {uid} not found — it may have been deleted by a later edit")
+        entry, idx, seg = found
+        conflict = _verify_segment_matches_snapshot(seg, snap_after)
+        if conflict:
+            raise ValueError(conflict)
+        snap_before = before[0]
+        seg["time_start"] = snap_before["time_start"]
+        seg["time_end"] = snap_before["time_end"]
+        entry["segments"].sort(key=lambda s: s["time_start"])
+
+    elif op_type == "split_segment":
+        # Remove the two split results, insert the original
+        if len(after) < 2 or not before:
+            return
+        # Verify both after-segments exist and match
+        found_list = []
+        for snap_after in after:
+            uid = snap_after.get("segment_uid", "")
+            found = _find_segment_by_uid(entries, uid, chapter_set)
+            if not found:
+                raise ValueError(f"Segment {uid} not found — it may have been modified by a later edit")
+            conflict = _verify_segment_matches_snapshot(found[2], snap_after)
+            if conflict:
+                raise ValueError(conflict)
+            found_list.append(found)
+        # Remove both (remove by higher index first to preserve indices)
+        entry = found_list[0][0]
+        indices = sorted([f[1] for f in found_list], reverse=True)
+        for idx in indices:
+            entry["segments"].pop(idx)
+        # Insert the original segment
+        restored = _snap_to_segment(before[0])
+        entry["segments"].append(restored)
+        entry["segments"].sort(key=lambda s: s["time_start"])
+
+    elif op_type in ("merge_segments", "waqf_sakt"):
+        # Remove the merged result, insert the original segments
+        if not after or not before:
+            return
+        snap_after = after[0]
+        uid = snap_after.get("segment_uid", "")
+        found = _find_segment_by_uid(entries, uid, chapter_set)
+        if not found:
+            raise ValueError(f"Segment {uid} not found — it may have been modified by a later edit")
+        conflict = _verify_segment_matches_snapshot(found[2], snap_after)
+        if conflict:
+            raise ValueError(conflict)
+        entry, idx, _ = found
+        entry["segments"].pop(idx)
+        # Insert the original segments
+        for snap_before in before:
+            restored = _snap_to_segment(snap_before)
+            entry["segments"].append(restored)
+        entry["segments"].sort(key=lambda s: s["time_start"])
+
+    elif op_type == "delete_segment":
+        # Re-insert the deleted segment
+        if not before:
+            return
+        snap_before = before[0]
+        entry = _find_entry_for_insert(entries, snap_before, chapter_set)
+        if not entry:
+            raise ValueError("Could not find entry to restore deleted segment into")
+        restored = _snap_to_segment(snap_before)
+        entry["segments"].append(restored)
+        entry["segments"].sort(key=lambda s: s["time_start"])
+
+    elif op_type in ("edit_reference", "confirm_reference", "remove_sadaqa"):
+        # Restore original ref/text/confidence
+        if not after or not before:
+            return
+        snap_after = after[0]
+        uid = snap_after.get("segment_uid", "")
+        found = _find_segment_by_uid(entries, uid, chapter_set)
+        if not found:
+            raise ValueError(f"Segment {uid} not found — it may have been modified by a later edit")
+        conflict = _verify_segment_matches_snapshot(found[2], snap_after)
+        if conflict:
+            raise ValueError(conflict)
+        _, _, seg = found
+        snap_before = before[0]
+        seg["matched_ref"] = snap_before.get("matched_ref", "")
+        seg["matched_text"] = snap_before.get("matched_text", "")
+        seg["confidence"] = snap_before.get("confidence", 0)
+
+    elif op_type == "ignore_issue":
+        # Restore original confidence
+        if not after or not before:
+            return
+        snap_after = after[0]
+        uid = snap_after.get("segment_uid", "")
+        found = _find_segment_by_uid(entries, uid, chapter_set)
+        if not found:
+            raise ValueError(f"Segment {uid} not found — it may have been modified by a later edit")
+        conflict = _verify_segment_matches_snapshot(found[2], snap_after)
+        if conflict:
+            raise ValueError(conflict)
+        _, _, seg = found
+        seg["confidence"] = before[0].get("confidence", 0)
 
 
 def _seg_sort_key(k):
@@ -2139,17 +2385,18 @@ def save_stat_chart(reciter):
 
 @app.route("/api/seg/edit-history/<reciter>")
 def get_seg_edit_history(reciter):
-    """Return edit history batches and summary stats for the reciter."""
+    """Return edit history batches and summary stats for the reciter.
+
+    Filters out undone batches and their revert records so the response
+    reflects only active (effective) history.
+    """
     history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
     if not history_path.exists():
         return jsonify({"batches": [], "summary": None})
 
-    batches = []
-    op_counts: Counter = Counter()
-    fix_kind_counts: Counter = Counter()
-    chapters_edited: set[int] = set()
-    total_batches = 0
-
+    # First pass: parse all records and collect reverted batch IDs
+    all_records = []
+    reverted_ids: set[str] = set()
     for line in history_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -2158,21 +2405,36 @@ def get_seg_edit_history(reciter):
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-
         if record.get("record_type") == "genesis":
             continue
+        all_records.append(record)
+        rbid = record.get("reverts_batch_id")
+        if rbid:
+            reverted_ids.add(rbid)
 
-        is_revert = bool(record.get("reverts_batch_id"))
+    # Second pass: build active batches (skip reverts and undone batches)
+    batches = []
+    op_counts: Counter = Counter()
+    fix_kind_counts: Counter = Counter()
+    chapters_edited: set[int] = set()
+    total_batches = 0
+
+    for record in all_records:
+        # Skip revert records
+        if record.get("reverts_batch_id"):
+            continue
+        # Skip batches that have been undone
+        if record.get("batch_id") in reverted_ids:
+            continue
+
         ops = record.get("operations", [])
-
         batch = {
             "batch_id": record.get("batch_id"),
             "saved_at_utc": record.get("saved_at_utc"),
             "chapter": record.get("chapter"),
             "chapters": record.get("chapters"),
             "save_mode": record.get("save_mode"),
-            "is_revert": is_revert,
-            "reverts_batch_id": record.get("reverts_batch_id"),
+            "is_revert": False,
             "validation_summary_before": record.get("validation_summary_before"),
             "validation_summary_after": record.get("validation_summary_after"),
             "operations": ops,

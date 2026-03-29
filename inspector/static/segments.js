@@ -127,7 +127,6 @@ const segAudioEl = document.getElementById('seg-audio-player');
 const segPlayBtn = document.getElementById('seg-play-btn');
 const segSpeedSelect = document.getElementById('seg-speed-select');
 const segSaveBtn = document.getElementById('seg-save-btn');
-const segUndoBtn = document.getElementById('seg-undo-btn');
 const segPlayStatus = document.getElementById('seg-play-status');
 const segValidationGlobalEl = document.getElementById('seg-validation-global');
 const segValidationEl = document.getElementById('seg-validation');
@@ -142,6 +141,7 @@ const segFilterStatusEl = document.getElementById('seg-filter-status');
 
 // Edit history viewer state
 let segHistoryData = null;
+let _segDataStale = false;  // set true after undo-batch; triggers reload on hideHistoryView
 const segHistoryView    = document.getElementById('seg-history-view');
 const segHistoryBtn     = document.getElementById('seg-history-btn');
 const segHistoryBackBtn = document.getElementById('seg-history-back-btn');
@@ -173,7 +173,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     segVerseSelect.addEventListener('change', applyFiltersAndRender);
     segPlayBtn.addEventListener('click', onSegPlayClick);
     segSaveBtn.addEventListener('click', onSegSaveClick);
-    segUndoBtn.addEventListener('click', onSegUndoClick);
     segSpeedSelect.addEventListener('change', () => {
         const rate = parseFloat(segSpeedSelect.value);
         segAudioEl.playbackRate = rate;
@@ -280,7 +279,7 @@ async function onSegReciterChange() {
     if (segChapterSS) segChapterSS.refresh();
     segVerseSelect.innerHTML = '<option value="">All</option>';
     clearSegDisplay();
-    segUndoBtn.hidden = true;
+    _segDataStale = false;
     // Hide validation, stats, and history when reciter changes
     segValidationGlobalEl.hidden = true;
     segValidationGlobalEl.innerHTML = '';
@@ -720,7 +719,16 @@ async function decodeSegAudio(url) {
 async function ensureChapterAudioBuffer(chapter) {
     const cached = segAudioBuffers.get(chapter);
     if (cached) return cached;  // actual buffer (not null sentinel)
-    if (segAudioBuffers.has(chapter)) return null;  // null sentinel = loading in progress, don't duplicate
+    if (segAudioBuffers.has(chapter)) {
+        // null sentinel = decode in progress — wait for it to finish
+        for (let i = 0; i < 150; i++) {  // up to 30s (150 × 200ms)
+            await new Promise(r => setTimeout(r, 200));
+            const buf = segAudioBuffers.get(chapter);
+            if (buf) return buf;  // decode completed
+            if (!segAudioBuffers.has(chapter)) break;  // sentinel removed = decode failed
+        }
+        return null;
+    }
     const url = segAllData?.audio_by_chapter?.[chapter];
     if (!url) return null;
     try {
@@ -2136,6 +2144,12 @@ function hideSavePreview() {
     if (controls) { if (controls.dataset.hiddenByPreview !== '1') controls.hidden = false; delete controls.dataset.hiddenByPreview; }
     const shortcuts = panel.querySelector('.shortcuts-guide');
     if (shortcuts) { if (shortcuts.dataset.hiddenByPreview !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByPreview; }
+
+    // If pending edits were discarded, reload data to restore clean state
+    if (_segDataStale) {
+        _segDataStale = false;
+        onSegReciterChange();
+    }
 }
 
 async function confirmSaveFromPreview() {
@@ -2227,7 +2241,6 @@ async function executeSave() {
             // Clear dirty indicators on all cards (main + error sections)
             document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
             setTimeout(() => { segSaveBtn.textContent = 'Save'; }, 2500);
-            segUndoBtn.hidden = false;
             // Delay validation refresh to let server background thread finish
             setTimeout(refreshValidation, 1500);
             // Re-fetch edit history so the History view includes the just-saved batch
@@ -2251,39 +2264,95 @@ async function executeSave() {
 }
 
 
-async function onSegUndoClick() {
+async function onBatchUndoClick(batchId, chapter, btn) {
     const reciter = segReciterSelect.value;
     if (!reciter) return;
-    if (!confirm('Undo last save? This will restore the previous version.')) return;
+    const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
+    if (!confirm(`Undo this save${chLabel}? The operations will be reversed.`)) return;
 
-    segUndoBtn.disabled = true;
-    segUndoBtn.textContent = 'Undoing...';
+    btn.disabled = true;
+    btn.textContent = 'Undoing...';
 
     try {
-        const resp = await fetch(`/api/seg/undo/${reciter}`, {
+        const resp = await fetch(`/api/seg/undo-batch/${reciter}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batch_id: batchId }),
         });
         const result = await resp.json();
         if (result.ok) {
-            segUndoBtn.hidden = true;
-            segUndoBtn.disabled = false;
-            segUndoBtn.textContent = 'Undo Save';
-            segOpLog.clear();
-            _pendingOp = null;
-            // Reload data for the current reciter
-            onSegReciterChange();
+            // Re-fetch history and re-render (undone batch disappears)
+            try {
+                const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
+                if (histResp.ok) {
+                    segHistoryData = await histResp.json();
+                    renderEditHistoryPanel(segHistoryData);
+                    // Re-trigger waveform observer + arrows for updated history
+                    const observer = _ensureWaveformObserver();
+                    segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+                    requestAnimationFrame(() => {
+                        segHistoryView.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
+                    });
+                }
+            } catch (_) { /* non-critical */ }
+            // Flag segment data as stale (refresh when leaving History)
+            _segDataStale = true;
+            segPlayStatus.textContent = `Undo successful — ${result.operations_reversed} op${result.operations_reversed !== 1 ? 's' : ''} reversed`;
         } else {
-            segPlayStatus.textContent = `Undo error: ${result.error}`;
-            segUndoBtn.disabled = false;
-            segUndoBtn.textContent = 'Undo Save';
+            alert(`Undo failed: ${result.error}`);
+            btn.disabled = false;
+            btn.textContent = 'Undo';
         }
     } catch (e) {
-        console.error('Undo failed:', e);
-        segPlayStatus.textContent = 'Undo failed';
-        segUndoBtn.disabled = false;
-        segUndoBtn.textContent = 'Undo Save';
+        console.error('Undo batch failed:', e);
+        alert('Undo failed — see console for details');
+        btn.disabled = false;
+        btn.textContent = 'Undo';
     }
+}
+
+function onPendingBatchDiscard(chapter, btn) {
+    const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
+    if (!confirm(`Discard pending edits${chLabel}?`)) return;
+
+    // Remove this chapter's dirty state and operation log
+    segDirtyMap.delete(chapter);
+    segDirtyMap.delete(String(chapter));
+    segOpLog.delete(chapter);
+    segOpLog.delete(String(chapter));
+
+    // Flag data as stale so the in-memory segment data refreshes on close
+    _segDataStale = true;
+
+    // Update save button state
+    segSaveBtn.disabled = !isDirty();
+
+    // Re-render preview or close if nothing left
+    if (!isDirty()) {
+        hideSavePreview();
+        return;
+    }
+    // Rebuild and re-render the preview in-place
+    const data = buildSavePreviewData();
+    renderHistorySummaryStats(data.summary, segSavePreviewStats);
+    if (data.warningChapters.length > 0) {
+        const warn = document.createElement('div');
+        warn.className = 'seg-save-preview-warning';
+        warn.textContent = `${data.warningChapters.length} chapter(s) marked as changed `
+            + `but have no detailed operations recorded: `
+            + data.warningChapters.map(c => surahOptionText(c)).join(', ');
+        segSavePreviewStats.prepend(warn);
+    }
+    renderHistoryBatches(data.batches, segSavePreviewBatches);
+    segSavePreviewBatches.querySelectorAll('.seg-history-batch-time').forEach(el => {
+        if (el.textContent === 'Pending') el.style.color = '#f0a500';
+    });
+    // Re-trigger arrows
+    const observer = _ensureWaveformObserver();
+    segSavePreview.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+    requestAnimationFrame(() => {
+        segSavePreview.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
+    });
 }
 
 
@@ -2357,13 +2426,6 @@ function handleSegKeydown(e) {
             if (isDirty()) {
                 e.preventDefault();
                 onSegSaveClick();
-            }
-            break;
-        }
-        case 'KeyZ': {
-            if (e.ctrlKey && !segUndoBtn.hidden) {
-                e.preventDefault();
-                onSegUndoClick();
             }
             break;
         }
@@ -4586,6 +4648,12 @@ function hideHistoryView() {
     if (controls) { if (controls.dataset.hiddenByHistory !== '1') controls.hidden = false; delete controls.dataset.hiddenByHistory; }
     const shortcuts = panel.querySelector('.shortcuts-guide');
     if (shortcuts) { if (shortcuts.dataset.hiddenByHistory !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByHistory; }
+
+    // If a batch was undone while in History view, reload all data
+    if (_segDataStale) {
+        _segDataStale = false;
+        onSegReciterChange();
+    }
 }
 
 function renderEditHistoryPanel(data) {
@@ -4707,6 +4775,27 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
 
         // Validation delta badges
         _appendValDeltas(header, batch.validation_summary_before, batch.validation_summary_after);
+
+        // Per-batch undo button
+        if (!batch.is_revert) {
+            const undoBtn = document.createElement('button');
+            undoBtn.className = 'btn btn-sm seg-history-undo-btn';
+            undoBtn.textContent = 'Undo';
+            if (batch.batch_id) {
+                // Saved batch — server-side undo
+                undoBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    onBatchUndoClick(batch.batch_id, batch.chapter, undoBtn);
+                });
+            } else {
+                // Pending batch in save preview — discard this chapter's edits
+                undoBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    onPendingBatchDiscard(batch.chapter, undoBtn);
+                });
+            }
+            header.appendChild(undoBtn);
+        }
 
         wrapper.appendChild(header);
 
