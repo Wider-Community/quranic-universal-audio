@@ -32,6 +32,7 @@ if _dotenv.exists():
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
+NOTION_WATCHERS_DB_ID = os.environ.get("NOTION_WATCHERS_DB_ID", "")
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 REPO_OWNER = "Wider-Community"
@@ -277,6 +278,51 @@ def notion_update_pr_url(page_id, pr_url):
     }
     r = httpx.patch(url, headers=_notion_headers(), json=body, timeout=30)
     r.raise_for_status()
+
+
+# ---------------------------------------------------------------------------
+# Notion Watchers helpers
+# ---------------------------------------------------------------------------
+def notion_get_watchers_for_targets(targets, target_type="reciter"):
+    """Return {target: [{email, name}]} for watchers matching the given targets.
+
+    Queries the NOTION_WATCHERS_DB_ID database for all entries of the given
+    target_type and filters to the requested target set.
+    """
+    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
+        return {}
+    url = f"https://api.notion.com/v1/databases/{NOTION_WATCHERS_DB_ID}/query"
+    body = {
+        "filter": {
+            "property": "Watch Target Type",
+            "select": {"equals": target_type},
+        },
+        "page_size": 100,
+    }
+    result = {}
+    try:
+        r = httpx.post(url, headers=_notion_headers(), json=body, timeout=30)
+        r.raise_for_status()
+        pages = r.json().get("results", [])
+        target_set = set(targets)
+        for p in pages:
+            props = p["properties"]
+            target_rt = props.get("Watch Target", {}).get("rich_text", [])
+            target_val = target_rt[0]["plain_text"] if target_rt else ""
+            if target_val not in target_set:
+                continue
+            email_val = props.get("Email", {}).get("email", "")
+            if not email_val:
+                continue
+            name_rt = props.get("Watcher Name", {}).get("rich_text", [])
+            name_val = name_rt[0]["plain_text"] if name_rt else ""
+            result.setdefault(target_val, []).append({
+                "email": email_val,
+                "name": name_val,
+            })
+    except Exception as e:
+        print(f"  Warning: Failed to query watchers: {e}")
+    return result
 
 
 # ---------------------------------------------------------------------------
