@@ -234,6 +234,35 @@ def _build_mfa_ref(seg):
     return mfa_ref
 
 
+def _ensure_segment_wavs(segments, segment_dir):
+    """Write individual segment WAVs from full.wav on demand (for MFA).
+
+    Segments are sliced from the full recording using soundfile's
+    frame-level random access — no need to load the entire file.
+    """
+    if not segment_dir:
+        return
+    full_path = os.path.join(segment_dir, "full.wav")
+    if not os.path.exists(full_path):
+        return
+    import soundfile as sf
+    info = sf.info(full_path)
+    sr = info.samplerate
+    written = 0
+    for seg in segments:
+        idx = seg.get("segment", 0) - 1
+        wav_path = os.path.join(segment_dir, f"seg_{idx}.wav")
+        if os.path.exists(wav_path):
+            continue
+        start_frame = int(seg.get("time_from", 0) * sr)
+        stop_frame = int(seg.get("time_to", 0) * sr)
+        audio_slice, _ = sf.read(full_path, start=start_frame, stop=stop_frame, dtype='int16')
+        sf.write(wav_path, audio_slice, sr, format='WAV', subtype='PCM_16')
+        written += 1
+    if written:
+        print(f"[MFA] Wrote {written} segment WAVs on demand from full.wav")
+
+
 def _build_mfa_refs(segments, segment_dir):
     """Build MFA refs and audio paths from segments.
 
@@ -552,6 +581,9 @@ def compute_mfa_timestamps_api(segments, segment_dir, granularity="words",
     if not granularity or granularity not in ("words", "words+chars"):
         granularity = "words"
 
+    # Write individual segment WAVs on demand (sliced from full.wav)
+    _ensure_segment_wavs(segments, segment_dir)
+
     refs, audio_paths, seg_to_result_idx = _build_mfa_refs(segments, segment_dir)
     if not refs:
         return {"segments": segments}
@@ -648,6 +680,9 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
 
     # Build refs and audio paths using shared helper
     segments = json_output.get("segments", []) if json_output else []
+
+    # Write individual segment WAVs on demand (sliced from full.wav)
+    _ensure_segment_wavs(segments, segment_dir)
 
     refs, audio_paths, seg_to_result_idx = _build_mfa_refs(segments, segment_dir)
 

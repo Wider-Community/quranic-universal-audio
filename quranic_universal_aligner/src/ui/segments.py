@@ -1,7 +1,6 @@
 """Segment rendering and text formatting helpers."""
 import json
 import time
-import wave
 import unicodedata
 from pathlib import Path
 
@@ -226,7 +225,7 @@ def simplify_ref(ref: str) -> str:
     return ref
 
 
-def render_segment_card(seg: SegmentInfo, idx: int, audio_int16: np.ndarray = None, sample_rate: int = 0, render_key: str = "", segment_dir: Path = None) -> str:
+def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "") -> str:
     """Render a single segment as an HTML card with optional audio player.
 
     Args:
@@ -271,10 +270,10 @@ def render_segment_card(seg: SegmentInfo, idx: int, audio_int16: np.ndarray = No
     if seg.error:
         error_html = f'<div class="segment-error">{seg.error}</div>'
 
-    # Audio player HTML — each segment gets its own WAV file served by Gradio.
+    # Audio player HTML — uses media fragment of the full recording
     audio_html = ""
-    if audio_int16 is not None and sample_rate > 0 and segment_dir is not None:
-        audio_src = encode_segment_audio(audio_int16, sample_rate, seg.start_time, seg.end_time, segment_dir, idx)
+    if full_audio_url:
+        audio_src = f"{full_audio_url}#t={seg.start_time:.3f},{seg.end_time:.3f}"
         # Add animate button only if segment has a Quran verse ref (word spans for animation).
         # Basmala/Isti'adha get animate because they have indexed word spans for MFA.
         # Transition segments (Amin, Takbir, Tahmeed) don't.
@@ -387,14 +386,14 @@ def render_segments(segments: list, audio_int16: np.ndarray = None, sample_rate:
     # Generate unique key for this render to prevent audio caching
     render_key = str(int(time.time() * 1000))
 
-    # Write full audio file for unified megacard playback (OGG for smaller size)
+    # Write full audio file (WAV via soundfile — avoids tobytes() copy)
     full_audio_url = ""
     if audio_int16 is not None and sample_rate > 0 and segment_dir and not skip_full_audio:
         t_full = time.time()
-        full_path = segment_dir / "full.ogg"
-        sf.write(str(full_path), audio_int16, sample_rate, format='OGG', subtype='VORBIS')
+        full_path = segment_dir / "full.wav"
+        sf.write(str(full_path), audio_int16, sample_rate, format='WAV', subtype='PCM_16')
         full_audio_url = f"/gradio_api/file={full_path}"
-        print(f"[PROFILE] Full audio write: {time.time() - t_full:.3f}s (OGG)")
+        print(f"[PROFILE] Full audio write: {time.time() - t_full:.3f}s (WAV via soundfile)")
 
     # Categorize segments by confidence level (1-indexed for display), excluding specials
     med_segments = [i + 1 for i, s in enumerate(segments)
@@ -476,40 +475,13 @@ def render_segments(segments: list, audio_int16: np.ndarray = None, sample_rate:
 
     t_cards = time.time()
     for idx, seg in enumerate(segments):
-        html_parts.append(render_segment_card(seg, idx, audio_int16, sample_rate, render_key, segment_dir))
+        html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key))
 
     html_parts.append('</div>')
-    print(f"[PROFILE] Segment cards: {time.time() - t_cards:.3f}s ({len(segments)} cards, WAV+HTML)")
+    print(f"[PROFILE] Segment cards: {time.time() - t_cards:.3f}s ({len(segments)} cards, HTML only)")
 
     return "\n".join(html_parts)
 
-
-def encode_segment_audio(
-    audio_int16: np.ndarray, sample_rate: int,
-    start_time: float, end_time: float,
-    segment_dir: Path, segment_idx: int,
-) -> str:
-    """Write a segment's audio as WAV (for MFA) and OGG (for playback).
-
-    Returns a ``/gradio_api/file=`` URL pointing to the OGG file.
-    """
-    start_sample = int(start_time * sample_rate)
-    end_sample = int(end_time * sample_rate)
-    segment_audio = audio_int16[start_sample:end_sample]
-
-    # WAV for MFA timestamp computation
-    wav_path = segment_dir / f"seg_{segment_idx}.wav"
-    with wave.open(str(wav_path), 'wb') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(segment_audio.tobytes())
-
-    # OGG for browser playback (~10x smaller than WAV)
-    ogg_path = segment_dir / f"seg_{segment_idx}.ogg"
-    sf.write(str(ogg_path), segment_audio, sample_rate, format='OGG', subtype='VORBIS')
-
-    return f"/gradio_api/file={ogg_path}"
 
 
 def is_end_of_verse(matched_ref: str) -> bool:

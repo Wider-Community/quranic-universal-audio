@@ -702,7 +702,7 @@ def _build_segments_from_log(row, audio_id):
         return ('<div style="color: #999; padding: 20px;">No valid segments to display.</div>', [], None)
 
     html = render_segments(segments, audio_int16=audio_int16, sample_rate=sample_rate,
-                           segment_dir=segment_dir, skip_full_audio=True)
+                           segment_dir=segment_dir)
     return html, json_segments, segment_dir
 
 
