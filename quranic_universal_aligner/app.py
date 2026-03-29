@@ -29,6 +29,22 @@ subprocess.run(
     capture_output=True,
 )
 
+# Start YouTube PO token server (needed for yt-dlp on datacenter IPs)
+_pot_server_dir = _app_path / ".pot-server"
+_pot_main = _pot_server_dir / "server" / "build" / "main.js"
+if not _pot_main.exists():
+    print("Setting up PO token server...")
+    subprocess.run(["git", "clone", "--depth=1", "--single-branch",
+                    "https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git",
+                    str(_pot_server_dir)], capture_output=True)
+    subprocess.run(["npm", "ci"], cwd=str(_pot_server_dir / "server"), capture_output=True)
+    subprocess.run(["npx", "tsc"], cwd=str(_pot_server_dir / "server"), capture_output=True)
+if _pot_main.exists():
+    subprocess.Popen(["node", str(_pot_main)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print("PO token server started on port 4416")
+else:
+    print("PO token server setup failed (YouTube downloads may not work)")
+
 from src.ui.interface import build_interface
 
 # =============================================================================

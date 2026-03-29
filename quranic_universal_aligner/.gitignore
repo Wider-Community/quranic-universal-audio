@@ -47,6 +47,9 @@ flagged/
 # Exported models
 models/
 
+# PO token server (cloned at runtime for YouTube yt-dlp support)
+.pot-server/
+
 captures/
 
 docs/api.md

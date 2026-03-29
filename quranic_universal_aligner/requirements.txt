@@ -13,3 +13,4 @@ cython>=3.0.0
 recitations_segmenter==1.0.0
 quranic-phonemizer
 yt-dlp
+bgutil-ytdlp-pot-provider
