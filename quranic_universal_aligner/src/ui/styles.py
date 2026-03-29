@@ -432,4 +432,21 @@ def build_css() -> str:
     .dark .segment-underseg {{ background: rgba(255, 140, 0, 0.2); border-color: #ff8c00; }}
     .dark .segment-special {{ background: rgba(92, 107, 192, 0.2); border-color: #5c6bc0; border-style: dashed; }}
 
+    /* Input mode toggle */
+    #input-mode-row {{ gap: 0 !important; }}
+    #input-mode-row button {{
+        border-radius: 0 !important;
+        border: 1px solid var(--border-color-primary) !important;
+    }}
+    #input-mode-row button:first-child {{ border-radius: 8px 0 0 8px !important; }}
+    #input-mode-row button:last-child {{ border-radius: 0 8px 8px 0 !important; }}
+    #input-mode-row button:not(:first-child) {{ border-left: none !important; }}
+    .mode-active {{
+        background: var(--button-primary-background-fill) !important;
+        color: var(--button-primary-text-color) !important;
+        border-color: var(--button-primary-background-fill) !important;
+    }}
+    #url-help {{ font-size: 12px; opacity: 0.7; margin-top: -8px; }}
+    #url-help a {{ color: var(--link-text-color); }}
+
     """

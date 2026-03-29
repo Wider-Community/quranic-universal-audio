@@ -21,6 +21,7 @@ PORT = 6902
 RESAMPLE_TYPE = "soxr_lq"
 SEGMENT_AUDIO_DIR = Path("/tmp/segments")   # WAV files written here per request
 URL_DOWNLOAD_DIR = Path("/tmp/url_downloads")  # Audio downloaded from URLs via yt-dlp
+DEFAULT_INPUT_MODE = "Upload"                  # "Link", "Upload", or "Record"
 DELETE_CACHE_FREQUENCY = 3600*5             # Gradio cache cleanup interval (seconds)
 DELETE_CACHE_AGE = 3600*5                   # Delete cached files older than this (seconds)
 

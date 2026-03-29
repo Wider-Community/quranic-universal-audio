@@ -18,7 +18,7 @@ from src.ui.progress_bar import pipeline_progress_bar_html
 from src.ui.handlers import (
     wire_presets, toggle_resegment_panel,
     on_mode_change, on_verse_toggle, restore_anim_settings,
-    download_url_audio,
+    fetch_url_info, download_url_audio,
 )
 
 _EMPTY_PLACEHOLDER = (
@@ -30,6 +30,7 @@ _EMPTY_PLACEHOLDER = (
 def wire_events(app, c):
     """Wire all event handlers to Gradio components."""
     _wire_preset_buttons(c)
+    _wire_input_mode_toggle(c)
     _wire_url_input(c)
     _wire_audio_input(c)
     _wire_extract_chain(c)
@@ -51,50 +52,115 @@ def _wire_preset_buttons(c):
                  c.rs_silence, c.rs_speech, c.rs_pad)
 
 
+def _wire_input_mode_toggle(c):
+    """Wire Link/Upload/Record toggle buttons."""
+
+    def _switch_to(mode):
+        is_link = mode == "Link"
+        is_upload = mode == "Upload"
+        is_record = mode == "Record"
+        return (
+            gr.update(elem_classes=["mode-active"] if is_link else []),
+            gr.update(elem_classes=["mode-active"] if is_upload else []),
+            gr.update(elem_classes=["mode-active"] if is_record else []),
+            gr.update(visible=is_link),      # link_panel
+            gr.update(visible=is_upload),    # upload_panel
+            gr.update(visible=is_record),    # record_panel
+            gr.update(visible=not is_link),  # example_row
+        )
+
+    _toggle_outputs = [
+        c.mode_link, c.mode_upload, c.mode_record,
+        c.link_panel, c.upload_panel, c.record_panel,
+        c.example_row,
+    ]
+    c.mode_link.click(fn=lambda: _switch_to("Link"), inputs=[], outputs=_toggle_outputs, api_name=False)
+    c.mode_upload.click(fn=lambda: _switch_to("Upload"), inputs=[], outputs=_toggle_outputs, api_name=False)
+    c.mode_record.click(fn=lambda: _switch_to("Record"), inputs=[], outputs=_toggle_outputs, api_name=False)
+
+
 def _wire_url_input(c):
-    """Wire URL textbox → yt-dlp download → populate audio component."""
+    """Wire URL paste → auto-fetch metadata → download button."""
+
+    def _on_url_change(url):
+        """Auto-fetch metadata when a URL is pasted."""
+        if not url or not url.strip():
+            return (
+                gr.update(visible=False),    # url_info_html
+                gr.update(visible=False),    # url_status
+                gr.update(visible=False),    # url_download_btn
+            )
+
+        # Show fetching status
+        yield (
+            gr.update(visible=False),
+            gr.update(value='<div style="text-align:center;padding:8px;opacity:0.7;">Fetching info...</div>', visible=True),
+            gr.update(visible=False),
+        )
+
+        try:
+            info_html = fetch_url_info(url)
+            if info_html is None:
+                yield (gr.update(visible=False), gr.update(visible=False), gr.update(visible=False))
+                return
+            yield (
+                gr.update(value=info_html, visible=True),
+                gr.update(visible=False),
+                gr.update(visible=True),     # show Download button
+            )
+        except gr.Error:
+            raise
+        except Exception as e:
+            yield (
+                gr.update(visible=False),
+                gr.update(
+                    value=f'<div style="color:var(--error-text-color);padding:8px;">Error: {str(e)[:200]}</div>',
+                    visible=True,
+                ),
+                gr.update(visible=False),
+            )
+
+    _fetch_outputs = [c.url_info_html, c.url_status, c.url_download_btn]
+    c.url_input.change(
+        fn=_on_url_change, inputs=[c.url_input], outputs=_fetch_outputs,
+        api_name=False, show_progress="hidden",
+    )
 
     def _on_download(url):
-        # Yield 1: show loading state
+        """Download audio after metadata was fetched."""
+        # Yield 1: loading state
         yield (
-            gr.update(),                                     # audio_input unchanged
-            gr.update(visible=False),                        # hide old info
+            gr.update(),                     # audio_input
             gr.update(
                 value='<div style="text-align:center;padding:8px;">Downloading audio...</div>',
                 visible=True,
-            ),                                               # url_status
-            gr.update(interactive=False),                    # disable button
+            ),                               # url_status
+            gr.update(interactive=False),    # disable download btn
         )
 
-        # Yield 2: download result
+        # Yield 2: result
         try:
             wav_path, info_html = download_url_audio(url)
             yield (
-                wav_path,                                    # set audio_input
-                gr.update(value=info_html, visible=True),    # url_info_html
-                gr.update(visible=False),                    # hide status
-                gr.update(interactive=True),                 # re-enable button
+                wav_path,
+                gr.update(visible=False),
+                gr.update(interactive=True),
             )
         except gr.Error:
             raise
         except Exception as e:
             yield (
                 gr.update(),
-                gr.update(visible=False),
                 gr.update(
-                    value=f'<div style="color:var(--error-text-color);padding:8px;">Error: {str(e)[:200]}</div>',
+                    value=f'<div style="color:var(--error-text-color);padding:8px;">Download failed: {str(e)[:200]}</div>',
                     visible=True,
                 ),
                 gr.update(interactive=True),
             )
 
-    _url_outputs = [c.audio_input, c.url_info_html, c.url_status, c.url_download_btn]
+    _dl_outputs = [c.audio_input, c.url_status, c.url_download_btn]
     c.url_download_btn.click(
-        fn=_on_download, inputs=[c.url_input], outputs=_url_outputs,
-        api_name=False, show_progress="hidden",
-    )
-    c.url_input.submit(
-        fn=_on_download, inputs=[c.url_input], outputs=_url_outputs,
+        fn=_on_download, inputs=[c.url_input], outputs=_dl_outputs,
         api_name=False, show_progress="hidden",
     )
 
@@ -141,13 +207,18 @@ def _wire_audio_input(c):
         api_name=False, show_progress="hidden"
     )
 
+    # Bridge upload/record to hidden unified audio_input
+    c.audio_upload.change(fn=lambda x: x, inputs=[c.audio_upload], outputs=[c.audio_input], api_name=False, show_progress="hidden")
+    c.audio_record.change(fn=lambda x: x, inputs=[c.audio_record], outputs=[c.audio_input], api_name=False, show_progress="hidden")
+
     c.btn_ex_112.click(fn=lambda: ("data/112.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
     c.btn_ex_84.click(fn=lambda: ("data/84.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
     c.btn_ex_7.click(fn=lambda: ("data/7.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
     c.btn_ex_juz30.click(fn=lambda: ("data/Juz' 30.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
 
-    # Reset is_preset when user uploads/records their own audio (.input fires only on user interaction, not programmatic changes)
-    c.audio_input.input(fn=lambda: False, inputs=[], outputs=[c.is_preset], api_name=False, show_progress="hidden")
+    # Reset is_preset when user uploads/records their own audio
+    c.audio_upload.input(fn=lambda: False, inputs=[], outputs=[c.is_preset], api_name=False, show_progress="hidden")
+    c.audio_record.input(fn=lambda: False, inputs=[], outputs=[c.is_preset], api_name=False, show_progress="hidden")
 
 
 def _wire_extract_chain(c):

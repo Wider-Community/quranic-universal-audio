@@ -20,6 +20,7 @@ from config import (
     MEGA_TEXT_SIZE_MIN, MEGA_TEXT_SIZE_MAX, MEGA_TEXT_SIZE_STEP, MEGA_TEXT_SIZE_DEFAULT,
     MEGA_LINE_SPACING_MIN, MEGA_LINE_SPACING_MAX, MEGA_LINE_SPACING_STEP, MEGA_LINE_SPACING_DEFAULT,
     LEFT_COLUMN_SCALE, RIGHT_COLUMN_SCALE,
+    DEFAULT_INPUT_MODE,
 )
 from src.ui.styles import build_css
 from src.ui.js_config import build_js_head
@@ -101,24 +102,48 @@ def build_interface():
 def _build_left_column(c):
     """Build the left input column."""
     with gr.Column(scale=LEFT_COLUMN_SCALE, elem_id="left-col"):
-        with gr.Group():
+        _is_link = DEFAULT_INPUT_MODE == "Link"
+        _is_upload = DEFAULT_INPUT_MODE == "Upload"
+        _is_record = DEFAULT_INPUT_MODE == "Record"
+
+        # Input mode toggle
+        with gr.Row(elem_id="input-mode-row"):
+            c.mode_link = gr.Button("Link", size="sm", min_width=0,
+                                     elem_classes=["mode-active"] if _is_link else [])
+            c.mode_upload = gr.Button("Upload", size="sm", min_width=0,
+                                       elem_classes=["mode-active"] if _is_upload else [])
+            c.mode_record = gr.Button("Record", size="sm", min_width=0,
+                                       elem_classes=["mode-active"] if _is_record else [])
+
+        # Link panel
+        with gr.Group(visible=_is_link, elem_id="link-panel") as c.link_panel:
             c.url_input = gr.Textbox(
-                label="Or paste a URL (YouTube, SoundCloud, etc.)",
-                placeholder="https://youtube.com/watch?v=...",
+                label="Paste a link",
+                placeholder="TikTok, SoundCloud, Archive.org, or direct audio link",
                 lines=1,
             )
-            c.url_download_btn = gr.Button("Download Audio", size="sm", variant="secondary")
             c.url_status = gr.HTML(value="", visible=False)
             c.url_info_html = gr.HTML(value="", visible=False)
+            c.url_download_btn = gr.Button("Download", size="sm", variant="primary", visible=False)
+            gr.Markdown(
+                "Supports [1800+ sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)"
+                " — TikTok, SoundCloud, Archive.org, direct links, and more",
+                elem_id="url-help",
+            )
 
-        c.audio_input = gr.Audio(
-            label="Upload Recitation",
-            sources=["upload", "microphone"],
-            type="filepath"
-        )
+        # Upload panel
+        with gr.Group(visible=_is_upload, elem_id="upload-panel") as c.upload_panel:
+            c.audio_upload = gr.Audio(label="Upload Recitation", sources=["upload"], type="filepath")
 
-        # Example audio files
-        with gr.Row():
+        # Record panel
+        with gr.Group(visible=_is_record, elem_id="record-panel") as c.record_panel:
+            c.audio_record = gr.Audio(label="Record Recitation", sources=["microphone"], type="filepath")
+
+        # Hidden unified audio (fed by upload, record, or URL download)
+        c.audio_input = gr.Audio(visible=False, type="filepath")
+
+        # Example audio files (hidden in Link mode)
+        with gr.Row(visible=not _is_link, elem_id="example-row") as c.example_row:
             c.btn_ex_112 = gr.Button("112", size="sm", min_width=0)
             c.btn_ex_84 = gr.Button("84", size="sm", min_width=0)
             c.btn_ex_7 = gr.Button("7", size="sm", min_width=0)

@@ -20,8 +20,53 @@ from config import (
 )
 
 
+def _build_info_html(title, duration, thumbnail):
+    """Build HTML info card for a URL-sourced audio."""
+    dur_str = f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration else "unknown"
+    thumb_html = (
+        f'<img src="{thumbnail}" style="max-width:100%;max-height:120px;border-radius:8px;margin-bottom:4px;">'
+        if thumbnail else ""
+    )
+    return (
+        f'<div style="padding:8px;border-radius:8px;background:var(--block-background-fill);'
+        f'border:1px solid var(--border-color-primary);">'
+        f'{thumb_html}'
+        f'<div style="font-weight:bold;font-size:14px;">{title}</div>'
+        f'<div style="font-size:12px;opacity:0.7;">Duration: {dur_str}</div>'
+        f'</div>'
+    )
+
+
+def fetch_url_info(url: str):
+    """Fetch metadata only (no download). Returns info_html or raises gr.Error."""
+    import yt_dlp
+
+    if not url or not url.strip():
+        return None
+
+    url = url.strip()
+
+    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+        except yt_dlp.utils.DownloadError as e:
+            raise gr.Error(f"Could not fetch URL: {str(e)[:200]}")
+
+    if info.get("_type") == "playlist":
+        raise gr.Error("Playlists are not supported. Please paste a single video/audio URL.")
+
+    duration = info.get("duration")
+    if duration is None:
+        raise gr.Error("Live streams are not supported. Please use a completed video/audio.")
+
+    title = info.get("title", "Unknown")
+    thumbnail = info.get("thumbnail", "")
+
+    return _build_info_html(title, duration, thumbnail)
+
+
 def download_url_audio(url: str):
-    """Download audio from a URL using yt-dlp. Returns (wav_path, info_html)."""
+    """Full download of audio from URL. Returns (wav_path, info_html)."""
     import yt_dlp
 
     if not url or not url.strip():
@@ -29,7 +74,6 @@ def download_url_audio(url: str):
 
     url = url.strip()
 
-    # Download audio as WAV (single extract_info call so PO token plugin can intercept)
     URL_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     out_path = URL_DOWNLOAD_DIR / str(uuid.uuid4())
 
@@ -49,33 +93,15 @@ def download_url_audio(url: str):
         except Exception as e:
             raise gr.Error(f"Download failed: {str(e)[:200]}")
 
-    if info.get("_type") == "playlist":
-        raise gr.Error("Playlists are not supported. Please paste a single video/audio URL.")
-
-    duration = info.get("duration")
-    title = info.get("title", "Unknown")
-    thumbnail = info.get("thumbnail", "")
-
     wav_path = str(out_path) + ".wav"
     if not Path(wav_path).exists():
         raise gr.Error("Download completed but audio file was not created.")
 
-    # Build info card HTML
-    dur_str = f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration else "unknown"
-    thumb_html = (
-        f'<img src="{thumbnail}" style="max-width:100%;max-height:120px;border-radius:8px;margin-bottom:4px;">'
-        if thumbnail else ""
-    )
-    info_html = (
-        f'<div style="padding:8px;border-radius:8px;background:var(--block-background-fill);'
-        f'border:1px solid var(--border-color-primary);">'
-        f'{thumb_html}'
-        f'<div style="font-weight:bold;font-size:14px;">{title}</div>'
-        f'<div style="font-size:12px;opacity:0.7;">Duration: {dur_str}</div>'
-        f'</div>'
-    )
+    title = info.get("title", "Unknown")
+    duration = info.get("duration")
+    thumbnail = info.get("thumbnail", "")
 
-    return wav_path, info_html
+    return wav_path, _build_info_html(title, duration, thumbnail)
 
 
 def create_segmentation_settings(id_suffix=""):
