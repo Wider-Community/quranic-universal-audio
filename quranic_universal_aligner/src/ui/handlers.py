@@ -29,24 +29,7 @@ def download_url_audio(url: str):
 
     url = url.strip()
 
-    # Extract metadata without downloading
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
-        try:
-            info = ydl.extract_info(url, download=False)
-        except yt_dlp.utils.DownloadError as e:
-            raise gr.Error(f"Could not fetch URL: {str(e)[:200]}")
-
-    if info.get("_type") == "playlist":
-        raise gr.Error("Playlists are not supported. Please paste a single video/audio URL.")
-
-    duration = info.get("duration")
-    if duration is None:
-        raise gr.Error("Live streams are not supported. Please use a completed video/audio.")
-
-    title = info.get("title", "Unknown")
-    thumbnail = info.get("thumbnail", "")
-
-    # Download audio as WAV
+    # Download audio as WAV (single extract_info call so PO token plugin can intercept)
     URL_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     out_path = URL_DOWNLOAD_DIR / str(uuid.uuid4())
 
@@ -60,16 +43,25 @@ def download_url_audio(url: str):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            ydl.download([url])
+            info = ydl.extract_info(url, download=True)
+        except yt_dlp.utils.DownloadError as e:
+            raise gr.Error(f"Could not fetch URL: {str(e)[:200]}")
         except Exception as e:
             raise gr.Error(f"Download failed: {str(e)[:200]}")
+
+    if info.get("_type") == "playlist":
+        raise gr.Error("Playlists are not supported. Please paste a single video/audio URL.")
+
+    duration = info.get("duration")
+    title = info.get("title", "Unknown")
+    thumbnail = info.get("thumbnail", "")
 
     wav_path = str(out_path) + ".wav"
     if not Path(wav_path).exists():
         raise gr.Error("Download completed but audio file was not created.")
 
     # Build info card HTML
-    dur_str = f"{duration // 60}:{duration % 60:02d}"
+    dur_str = f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration else "unknown"
     thumb_html = (
         f'<img src="{thumbnail}" style="max-width:100%;max-height:120px;border-radius:8px;margin-bottom:4px;">'
         if thumbnail else ""
