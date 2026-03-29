@@ -95,17 +95,30 @@ def _wire_input_mode_toggle(c):
             gr.update(visible=is_link),      # link_panel
             gr.update(visible=is_upload),    # upload_panel
             gr.update(visible=is_record),    # record_panel
-            # Clear link panel state so returning starts fresh
+            # Clear all input panels so switching starts fresh
             gr.update(value=""),                                      # url_input
             gr.update(value="Download", variant="secondary",
                       interactive=False),                             # url_download_btn
             gr.update(visible=False),                                 # url_audio_player
+            None,                                                     # audio_upload
+            None,                                                     # audio_record
+            None,                                                     # audio_input (State)
+            # Clear pipeline UI
+            *_on_audio_change(None),
         )
 
     _toggle_outputs = [
         c.mode_link, c.mode_upload, c.mode_record,
         c.link_panel, c.upload_panel, c.record_panel,
         c.url_input, c.url_download_btn, c.url_audio_player,
+        c.audio_upload, c.audio_record, c.audio_input,
+        # _on_audio_change returns 21 values:
+        c.output_html, c.output_json, c.export_file,
+        c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
+        c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
+        c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
+        c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
+        c.model_accordion, c.seg_accordion,
     ]
     c.mode_link.click(fn=lambda: _switch_to("Link"), inputs=[], outputs=_toggle_outputs, api_name=False)
     c.mode_upload.click(fn=lambda: _switch_to("Upload"), inputs=[], outputs=_toggle_outputs, api_name=False)
@@ -179,6 +192,7 @@ def _wire_audio_input(c):
         return (audio_path, *_on_audio_change(audio_path))
 
     # Upload/record → set audio_input State + reset UI (single round-trip)
+    # Uses .input() (not .change()) so programmatic clears from mode-switch don't cascade.
     _reset_outputs = [
         c.output_html, c.output_json, c.export_file,
         c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
@@ -188,20 +202,26 @@ def _wire_audio_input(c):
         c.model_accordion, c.seg_accordion,
     ]
     _ready_outputs = [c.audio_input] + _reset_outputs
-    c.audio_upload.change(fn=_on_audio_ready, inputs=[c.audio_upload], outputs=_ready_outputs, api_name=False, show_progress="hidden")
-    c.audio_record.change(fn=_on_audio_ready, inputs=[c.audio_record], outputs=_ready_outputs, api_name=False, show_progress="hidden")
 
-    # Example buttons: set audio_upload (for waveform) + device + preset flag.
-    # audio_upload.change → _on_audio_ready handles setting audio_input State.
+    def _on_audio_ready_reset_preset(audio_path):
+        """Bridge audio to State + reset UI + clear is_preset in one round-trip."""
+        return (*_on_audio_ready(audio_path), False)
+
+    _ready_preset_outputs = _ready_outputs + [c.is_preset]
+    c.audio_upload.input(fn=_on_audio_ready_reset_preset, inputs=[c.audio_upload], outputs=_ready_preset_outputs, api_name=False, show_progress="hidden")
+    c.audio_record.input(fn=_on_audio_ready_reset_preset, inputs=[c.audio_record], outputs=_ready_preset_outputs, api_name=False, show_progress="hidden")
+
+    # Example buttons: set audio_upload (for waveform) + device + preset flag,
+    # then chain _on_audio_ready since .input() won't fire for programmatic sets.
     _ex_outputs = [c.audio_upload, c.device_radio, c.is_preset]
-    c.btn_ex_112.click(fn=lambda: ("data/112.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
-    c.btn_ex_84.click(fn=lambda: ("data/84.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
-    c.btn_ex_7.click(fn=lambda: ("data/7.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
-    c.btn_ex_juz30.click(fn=lambda: ("data/Juz' 30.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
-
-    # Reset is_preset when user uploads/records their own audio
-    c.audio_upload.input(fn=lambda: False, inputs=[], outputs=[c.is_preset], api_name=False, show_progress="hidden")
-    c.audio_record.input(fn=lambda: False, inputs=[], outputs=[c.is_preset], api_name=False, show_progress="hidden")
+    c.btn_ex_112.click(fn=lambda: ("data/112.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False).then(
+        fn=_on_audio_ready, inputs=[c.audio_upload], outputs=_ready_outputs, api_name=False, show_progress="hidden")
+    c.btn_ex_84.click(fn=lambda: ("data/84.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False).then(
+        fn=_on_audio_ready, inputs=[c.audio_upload], outputs=_ready_outputs, api_name=False, show_progress="hidden")
+    c.btn_ex_7.click(fn=lambda: ("data/7.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False).then(
+        fn=_on_audio_ready, inputs=[c.audio_upload], outputs=_ready_outputs, api_name=False, show_progress="hidden")
+    c.btn_ex_juz30.click(fn=lambda: ("data/Juz' 30.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False).then(
+        fn=_on_audio_ready, inputs=[c.audio_upload], outputs=_ready_outputs, api_name=False, show_progress="hidden")
 
 
 def _wire_extract_chain(c):
