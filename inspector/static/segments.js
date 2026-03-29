@@ -148,6 +148,13 @@ const segHistoryBackBtn = document.getElementById('seg-history-back-btn');
 const segHistoryStats   = document.getElementById('seg-history-stats');
 const segHistoryBatches = document.getElementById('seg-history-batches');
 
+// Save confirmation preview
+const segSavePreview        = document.getElementById('seg-save-preview');
+const segSavePreviewCancel  = document.getElementById('seg-save-preview-cancel');
+const segSavePreviewConfirm = document.getElementById('seg-save-preview-confirm');
+const segSavePreviewStats   = document.getElementById('seg-save-preview-stats');
+const segSavePreviewBatches = document.getElementById('seg-save-preview-batches');
+
 const EDIT_OP_LABELS = {
     trim_segment: 'Boundary adjustment', split_segment: 'Split',
     merge_segments: 'Merge', delete_segment: 'Deletion',
@@ -185,9 +192,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     segHistoryBtn.addEventListener('click', showHistoryView);
     segHistoryBackBtn.addEventListener('click', hideHistoryView);
+    segSavePreviewCancel.addEventListener('click', hideSavePreview);
+    segSavePreviewConfirm.addEventListener('click', confirmSaveFromPreview);
 
-    // Delegated event listeners for segment card actions — shared across main, error & history sections
-    [segListEl, segValidationEl, segValidationGlobalEl, segHistoryView].forEach(el => {
+    // Delegated event listeners for segment card actions — shared across main, error, history & preview sections
+    [segListEl, segValidationEl, segValidationGlobalEl, segHistoryView, segSavePreview].forEach(el => {
         el.addEventListener('click', handleSegRowClick);
     });
 
@@ -290,6 +299,7 @@ async function onSegReciterChange() {
 
     try {
         const resp = await fetch(`/api/seg/chapters/${reciter}`);
+        if (segReciterSelect.value !== reciter) return; // reciter changed while loading
         const chapters = await resp.json();
         chapters.forEach(ch => {
             const opt = document.createElement('option');
@@ -302,6 +312,8 @@ async function onSegReciterChange() {
         console.error('Error loading chapters:', e);
     }
 
+    if (segReciterSelect.value !== reciter) return; // reciter changed while loading chapters
+
     // Fetch validation, stats, all segments, and edit history in parallel
     const [valResult, statsResult, allResult, histResult] = await Promise.allSettled([
         fetch(`/api/seg/validate/${reciter}`).then(r => r.json()),
@@ -309,6 +321,8 @@ async function onSegReciterChange() {
         fetch(`/api/seg/all/${reciter}`).then(r => r.json()),
         fetch(`/api/seg/edit-history/${reciter}`).then(r => r.ok ? r.json() : null),
     ]);
+
+    if (segReciterSelect.value !== reciter) return; // reciter changed during parallel fetches
 
     if (valResult.status === 'fulfilled') {
         segValidation = valResult.value;
@@ -379,6 +393,9 @@ async function onSegChapterChange() {
 
     // Re-compute avg speech rate and re-render (chapter filter changes the set)
     applyFiltersAndRender();
+    // Schedule fresh viewport preload for the newly rendered segments
+    clearTimeout(_scrollDebounceTimer);
+    _scrollDebounceTimer = setTimeout(_onScrollSettled, 500);
 
     if (!reciter || !chapter) return;
     segPlayBtn.disabled = false;  // Enable early — playFromSegment loads audio on demand
@@ -386,6 +403,8 @@ async function onSegChapterChange() {
     // Fetch chapter-specific audio URL + summary (reuse existing endpoint)
     try {
         const resp = await fetch(`/api/seg/data/${reciter}/${chapter}`);
+        // Stale response guard: reciter or chapter changed while fetching
+        if (segReciterSelect.value !== reciter || segChapterSelect.value !== chapter) return;
         segData = await resp.json();
         if (segData.error) return;
 
@@ -677,14 +696,21 @@ async function decodeSegAudio(url) {
         }
         const resp = await fetch(url);
         const buf = await resp.arrayBuffer();
-        segAudioBuffer = await segAudioCtx.decodeAudioData(buf);
-        segAudioBufferUrl = url;
-        // Also cache in per-chapter map
-        if (ch) segAudioBuffers.set(ch, segAudioBuffer);
+        const decoded = await segAudioCtx.decodeAudioData(buf);
+        // Always cache in per-chapter map (useful even if chapter changed)
+        if (ch) segAudioBuffers.set(ch, decoded);
+        // Only set as active buffer if chapter hasn't changed
+        if (parseInt(segChapterSelect.value) === ch) {
+            segAudioBuffer = decoded;
+            segAudioBufferUrl = url;
+        }
     } catch (e) {
         console.error('Seg audio decode failed:', e);
-        segAudioBuffer = null;
-        segAudioBufferUrl = '';
+        // Only clear active buffer if chapter hasn't changed (avoid clobbering new chapter's buffer)
+        if (parseInt(segChapterSelect.value) === ch) {
+            segAudioBuffer = null;
+            segAudioBufferUrl = '';
+        }
         // Remove sentinel so scroll preload can retry
         if (ch && segAudioBuffers.get(ch) === null) segAudioBuffers.delete(ch);
     }
@@ -806,7 +832,7 @@ function _fetchPeaks(reciter, chapters) {
     let url = `/api/seg/peaks/${reciter}`;
     if (chapters && chapters.length > 0) url += `?chapters=${chapters.join(',')}`;
     fetch(url).then(r => r.json()).then(data => {
-        if (!segAllData) return;  // reciter changed
+        if (!segAllData || segReciterSelect.value !== reciter) return;  // reciter changed
         if (!segPeaksByAudio) segPeaksByAudio = {};
         Object.assign(segPeaksByAudio, data.peaks || {});
         _redrawPeaksWaveforms();
@@ -1006,6 +1032,9 @@ function clearSegDisplay() {
     segHistoryView.hidden = true;
     segHistoryStats.innerHTML = '';
     segHistoryBatches.innerHTML = '';
+    segSavePreview.hidden = true;
+    segSavePreviewStats.innerHTML = '';
+    segSavePreviewBatches.innerHTML = '';
     _segPrefetchCache = {};
     _segContinuousPlay = false;
     _segPlayEndMs = 0;
@@ -1047,6 +1076,7 @@ function resolveSegFromRow(row) {
 }
 
 function handleSegRowClick(e) {
+
     // Ref edit (skip for read-only history cards)
     const refSpan = e.target.closest('.seg-text-ref');
     if (refSpan) {
@@ -1564,7 +1594,8 @@ function playFromSegment(segIndex, chapterOverride) {
 
     // Switch audio source if needed (by_ayah has different audio per verse)
     const segAudioUrl = seg.audio_url || '';
-    const needsSwitch = segAudioUrl && segAudioUrl !== segAudioBufferUrl;
+    const needsSwitch = segAudioUrl && segAudioUrl !== segAudioBufferUrl
+        && !segAudioEl.src.endsWith(segAudioUrl);
 
     if (needsSwitch) {
         segAudioEl.src = segAudioUrl;
@@ -1999,7 +2030,120 @@ function syncAllCardsForSegment(seg) {
 
 async function onSegSaveClick() {
     if (!isDirty()) return;
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+    showSavePreview();
+}
 
+// ---------------------------------------------------------------------------
+// Save Confirmation Preview
+// ---------------------------------------------------------------------------
+
+function buildSavePreviewData() {
+    const batches = [];
+    const warningChapters = [];
+    const opCounts = {};
+    const fixKindCounts = {};
+    let totalOps = 0;
+
+    for (const [ch, dirtyEntry] of segDirtyMap) {
+        const chOps = segOpLog.get(ch) || [];
+        if (chOps.length === 0) { warningChapters.push(ch); continue; }
+        for (const op of chOps) {
+            opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
+            fixKindCounts[op.fix_kind || 'manual'] = (fixKindCounts[op.fix_kind || 'manual'] || 0) + 1;
+            totalOps++;
+        }
+        batches.push({
+            batch_id: null,
+            saved_at_utc: null,
+            chapter: parseInt(ch),
+            save_mode: dirtyEntry.structural ? 'full_replace' : 'patch',
+            operations: chOps,
+        });
+    }
+
+    const summary = {
+        total_operations: totalOps,
+        total_batches: batches.length + warningChapters.length,
+        chapters_edited: batches.length + warningChapters.length,
+        op_counts: opCounts,
+        fix_kind_counts: fixKindCounts,
+    };
+    return { batches, summary, warningChapters };
+}
+
+function showSavePreview() {
+    if (!segSavePreview.hidden) return;
+    const data = buildSavePreviewData();
+
+    // Render stats
+    renderHistorySummaryStats(data.summary, segSavePreviewStats);
+
+    // Show warning for dirty chapters with no recorded operations
+    if (data.warningChapters.length > 0) {
+        const warn = document.createElement('div');
+        warn.className = 'seg-save-preview-warning';
+        warn.textContent = `${data.warningChapters.length} chapter(s) marked as changed `
+            + `but have no detailed operations recorded: `
+            + data.warningChapters.map(c => surahOptionText(c)).join(', ');
+        segSavePreviewStats.prepend(warn);
+    }
+
+    // Render batches
+    renderHistoryBatches(data.batches, segSavePreviewBatches);
+
+    // Style pending timestamps in gold
+    segSavePreviewBatches.querySelectorAll('.seg-history-batch-time').forEach(el => {
+        if (el.textContent === 'Pending') el.style.color = '#f0a500';
+    });
+
+    // Hide normal UI (same pattern as showHistoryView)
+    for (const id of _SEG_NORMAL_IDS) {
+        const el = document.getElementById(id);
+        if (el) { el.dataset.hiddenByPreview = el.hidden ? '1' : ''; el.hidden = true; }
+    }
+    const panel = document.getElementById('segments-panel');
+    const controls = panel.querySelector('.seg-controls');
+    if (controls) { controls.dataset.hiddenByPreview = controls.hidden ? '1' : ''; controls.hidden = true; }
+    const shortcuts = panel.querySelector('.shortcuts-guide');
+    if (shortcuts) { shortcuts.dataset.hiddenByPreview = shortcuts.hidden ? '1' : ''; shortcuts.hidden = true; }
+    segHistoryView.hidden = true;
+
+    segSavePreview.hidden = false;
+
+    // Trigger waveform observer + arrows
+    const observer = _ensureWaveformObserver();
+    segSavePreview.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+    requestAnimationFrame(() => {
+        segSavePreview.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
+    });
+}
+
+function hideSavePreview() {
+    stopErrorCardAudio();
+    segSavePreview.hidden = true;
+    segSavePreviewStats.innerHTML = '';
+    segSavePreviewBatches.innerHTML = '';
+
+    // Restore normal UI
+    for (const id of _SEG_NORMAL_IDS) {
+        const el = document.getElementById(id);
+        if (el) { if (el.dataset.hiddenByPreview !== '1') el.hidden = false; delete el.dataset.hiddenByPreview; }
+    }
+    const panel = document.getElementById('segments-panel');
+    const controls = panel.querySelector('.seg-controls');
+    if (controls) { if (controls.dataset.hiddenByPreview !== '1') controls.hidden = false; delete controls.dataset.hiddenByPreview; }
+    const shortcuts = panel.querySelector('.shortcuts-guide');
+    if (shortcuts) { if (shortcuts.dataset.hiddenByPreview !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByPreview; }
+}
+
+async function confirmSaveFromPreview() {
+    hideSavePreview();
+    await executeSave();
+}
+
+async function executeSave() {
     const reciter = segReciterSelect.value;
     if (!reciter) return;
 
@@ -2224,7 +2368,10 @@ function handleSegKeydown(e) {
             break;
         }
         case 'Escape':
-            if (segEditMode) {
+            if (!segSavePreview.hidden) {
+                e.preventDefault();
+                hideSavePreview();
+            } else if (segEditMode) {
                 e.preventDefault();
                 exitEditMode();
             } else if (_segSavedFilterView) {
@@ -2234,7 +2381,10 @@ function handleSegKeydown(e) {
             break;
 
         case 'Enter':
-            if (segEditMode && segCurrentIdx >= 0) {
+            if (!segSavePreview.hidden) {
+                e.preventDefault();
+                confirmSaveFromPreview();
+            } else if (segEditMode && segCurrentIdx >= 0) {
                 e.preventDefault();
                 const seg = segDisplayedSegments
                     ? segDisplayedSegments.find(s => s.index === segCurrentIdx)
@@ -4449,8 +4599,8 @@ function renderEditHistoryPanel(data) {
     renderHistoryBatches(data.batches);
 }
 
-function renderHistorySummaryStats(summary) {
-    segHistoryStats.innerHTML = '';
+function renderHistorySummaryStats(summary, container = segHistoryStats) {
+    container.innerHTML = '';
     if (!summary) return;
 
     // Stat cards row
@@ -4468,7 +4618,7 @@ function renderHistorySummaryStats(summary) {
             + `<div class="seg-history-stat-label">${s.label}</div>`;
         cardsRow.appendChild(card);
     }
-    segHistoryStats.appendChild(cardsRow);
+    container.appendChild(cardsRow);
 
     // Op type pills
     if (summary.op_counts && Object.keys(summary.op_counts).length > 0) {
@@ -4481,7 +4631,7 @@ function renderHistorySummaryStats(summary) {
             pill.innerHTML = `${EDIT_OP_LABELS[opType] || opType} <span class="pill-count">${count}</span>`;
             pills.appendChild(pill);
         }
-        segHistoryStats.appendChild(pills);
+        container.appendChild(pills);
     }
 
     // Fix kind breakdown
@@ -4495,12 +4645,12 @@ function renderHistorySummaryStats(summary) {
         const fkDiv = document.createElement('div');
         fkDiv.className = 'seg-history-fix-kinds';
         fkDiv.textContent = `Fix breakdown: ${parts.join(', ')}`;
-        segHistoryStats.appendChild(fkDiv);
+        container.appendChild(fkDiv);
     }
 }
 
-function renderHistoryBatches(batches) {
-    segHistoryBatches.innerHTML = '';
+function renderHistoryBatches(batches, container = segHistoryBatches) {
+    container.innerHTML = '';
 
     // Reverse: most recent first
     const reversed = [...batches].reverse();
@@ -4579,7 +4729,7 @@ function renderHistoryBatches(batches) {
             wrapper.appendChild(body);
         }
 
-        segHistoryBatches.appendChild(wrapper);
+        container.appendChild(wrapper);
     }
 }
 
@@ -4708,7 +4858,7 @@ function _appendValDeltas(container, before, after) {
 }
 
 function _formatHistDate(isoStr) {
-    if (!isoStr) return '';
+    if (!isoStr) return 'Pending';
     try {
         const d = new Date(isoStr);
         return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })

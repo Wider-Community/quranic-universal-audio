@@ -1566,6 +1566,19 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     border-radius: 6px;
 }
 
+/* Save preview toolbar */
+.seg-save-preview-toolbar { justify-content: space-between; }
+.seg-save-preview-toolbar .seg-history-title { flex: 1; text-align: center; }
+.seg-save-preview-warning {
+    background: #3e2723;
+    border: 1px solid #f0a500;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 12px;
+    color: #f0a500;
+    font-size: 0.82rem;
+}
+
 .seg-stats-chart-wrap h4 {
     font-size: 0.75rem;
     color: #4cc9f0;
