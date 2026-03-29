@@ -144,8 +144,9 @@ def _build_left_column(c):
         with gr.Column(visible=_is_record, elem_id="record-panel") as c.record_panel:
             c.audio_record = gr.Audio(label="Record Recitation", sources=["microphone"], type="filepath")
 
-        # Hidden unified audio (fed by upload, record, or URL download)
-        c.audio_input = gr.Audio(visible=False, type="filepath")
+        # Hidden unified audio state (fed by upload, record, or URL download)
+        # gr.State avoids cascading .change events that gr.Audio would fire
+        c.audio_input = gr.State(value=None)
 
         _build_animation_settings(c)
 

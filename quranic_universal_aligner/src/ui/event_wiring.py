@@ -24,6 +24,38 @@ from src.ui.handlers import (
 _EMPTY_PLACEHOLDER = ""
 
 
+def _on_audio_change(audio_path):
+    """Reset UI state for new audio. Returns 21-tuple of reset values."""
+    # Warn early if audio is very long (before user wastes GPU clicking Extract)
+    if audio_path and isinstance(audio_path, str):
+        try:
+            import soundfile as _sf
+            from config import AUDIO_DURATION_WARNING_MINUTES
+            _info = _sf.info(audio_path)
+            dur_min = _info.duration / 60
+            if dur_min > AUDIO_DURATION_WARNING_MINUTES:
+                hr = dur_min / 60
+                gr.Warning(f"Audio is {hr:.1f} hours — processing will likely time out or crash. Consider splitting into separate surahs.")
+        except Exception:
+            pass
+    has_audio = bool(audio_path)
+    return (
+        _EMPTY_PLACEHOLDER, None, None,
+        None, None, None, None, None, None, None, None,
+        gr.update(visible=True, interactive=has_audio,                    # extract_btn
+                  variant="primary" if has_audio else "secondary"),
+        gr.update(visible=False),                                         # pipeline_progress
+        gr.update(visible=False, interactive=False, variant="secondary"), # compute_ts_btn
+        gr.update(visible=False),                                         # compute_ts_progress
+        gr.update(visible=False),                                         # animate_all_html
+        gr.update(visible=False),                                         # resegment_toggle_btn
+        gr.update(visible=False),                                         # retranscribe_btn
+        gr.update(visible=False),                                         # resegment_panel
+        gr.Accordion(open=True),                                          # re-expand model_accordion
+        gr.Accordion(open=True),                                          # re-expand seg_accordion
+    )
+
+
 def wire_events(app, c):
     """Wire all event handlers to Gradio components."""
     _wire_preset_buttons(c)
@@ -122,8 +154,19 @@ def _wire_url_input(c):
             )
 
     _dl_outputs = [c.audio_input, c.url_download_btn, c.url_audio_player]
+    _dl_reset_outputs = [
+        c.output_html, c.output_json, c.export_file,
+        c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
+        c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
+        c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
+        c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
+        c.model_accordion, c.seg_accordion,
+    ]
     c.url_download_btn.click(
         fn=_on_download, inputs=[c.url_input], outputs=_dl_outputs,
+        api_name=False, show_progress="hidden",
+    ).then(
+        fn=_on_audio_change, inputs=[c.audio_input], outputs=_dl_reset_outputs,
         api_name=False, show_progress="hidden",
     )
 
@@ -131,59 +174,30 @@ def _wire_url_input(c):
 def _wire_audio_input(c):
     """Clear outputs when new audio is uploaded/recorded + wire example buttons."""
 
-    def _on_audio_change(audio_path):
-        # Warn early if audio is very long (before user wastes GPU clicking Extract)
-        if audio_path and isinstance(audio_path, str):
-            try:
-                import soundfile as _sf
-                from config import AUDIO_DURATION_WARNING_MINUTES
-                _info = _sf.info(audio_path)
-                dur_min = _info.duration / 60
-                if dur_min > AUDIO_DURATION_WARNING_MINUTES:
-                    hr = dur_min / 60
-                    gr.Warning(f"Audio is {hr:.1f} hours — processing will likely time out or crash. Consider splitting into separate surahs.")
-            except Exception:
-                pass
-        has_audio = bool(audio_path)
-        return (
-            _EMPTY_PLACEHOLDER, None, None,
-            None, None, None, None, None, None, None, None,
-            gr.update(visible=True, interactive=has_audio,                    # extract_btn
-                      variant="primary" if has_audio else "secondary"),
-            gr.update(visible=False),                                         # pipeline_progress
-            gr.update(visible=False, interactive=False, variant="secondary"), # compute_ts_btn
-            gr.update(visible=False),                                         # compute_ts_progress
-            gr.update(visible=False),                                         # animate_all_html
-            gr.update(visible=False),                                         # resegment_toggle_btn
-            gr.update(visible=False),                                         # retranscribe_btn
-            gr.update(visible=False),                                         # resegment_panel
-            gr.Accordion(open=True),                                          # re-expand model_accordion
-            gr.Accordion(open=True),                                          # re-expand seg_accordion
-        )
+    def _on_audio_ready(audio_path):
+        """Bridge audio to State + reset UI in a single round-trip."""
+        return (audio_path, *_on_audio_change(audio_path))
 
-    c.audio_input.change(
-        fn=_on_audio_change,
-        inputs=[c.audio_input],
-        outputs=[
-            c.output_html, c.output_json, c.export_file,
-            c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
-            c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
-            c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
-            c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
-            c.model_accordion, c.seg_accordion,
-        ],
-        api_name=False, show_progress="hidden"
-    )
+    # Upload/record → set audio_input State + reset UI (single round-trip)
+    _reset_outputs = [
+        c.output_html, c.output_json, c.export_file,
+        c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
+        c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
+        c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
+        c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
+        c.model_accordion, c.seg_accordion,
+    ]
+    _ready_outputs = [c.audio_input] + _reset_outputs
+    c.audio_upload.change(fn=_on_audio_ready, inputs=[c.audio_upload], outputs=_ready_outputs, api_name=False, show_progress="hidden")
+    c.audio_record.change(fn=_on_audio_ready, inputs=[c.audio_record], outputs=_ready_outputs, api_name=False, show_progress="hidden")
 
-    # Bridge upload/record to hidden unified audio_input
-    c.audio_upload.change(fn=lambda x: x, inputs=[c.audio_upload], outputs=[c.audio_input], api_name=False, show_progress="hidden")
-    c.audio_record.change(fn=lambda x: x, inputs=[c.audio_record], outputs=[c.audio_input], api_name=False, show_progress="hidden")
-
-    _ex_outputs = [c.audio_upload, c.audio_input, c.device_radio, c.is_preset]
-    c.btn_ex_112.click(fn=lambda: ("data/112.mp3", "data/112.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
-    c.btn_ex_84.click(fn=lambda: ("data/84.mp3", "data/84.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
-    c.btn_ex_7.click(fn=lambda: ("data/7.mp3", "data/7.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
-    c.btn_ex_juz30.click(fn=lambda: ("data/Juz' 30.mp3", "data/Juz' 30.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
+    # Example buttons: set audio_upload (for waveform) + device + preset flag.
+    # audio_upload.change → _on_audio_ready handles setting audio_input State.
+    _ex_outputs = [c.audio_upload, c.device_radio, c.is_preset]
+    c.btn_ex_112.click(fn=lambda: ("data/112.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
+    c.btn_ex_84.click(fn=lambda: ("data/84.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
+    c.btn_ex_7.click(fn=lambda: ("data/7.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
+    c.btn_ex_juz30.click(fn=lambda: ("data/Juz' 30.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
 
     # Reset is_preset when user uploads/records their own audio
     c.audio_upload.input(fn=lambda: False, inputs=[], outputs=[c.is_preset], api_name=False, show_progress="hidden")
