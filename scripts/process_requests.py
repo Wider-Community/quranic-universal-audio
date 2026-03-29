@@ -399,8 +399,11 @@ def cmd_generate_pbs(args):
 
     pbs_text = pbs_path.read_text()
 
-    # Update array range
-    pbs_text = re.sub(r"#PBS -J \d+-\d+", f"#PBS -J 1-{len(accepted)}", pbs_text)
+    # Update array range (insert if missing)
+    if re.search(r"#PBS -J \d+-\d+", pbs_text):
+        pbs_text = re.sub(r"#PBS -J \d+-\d+", f"#PBS -J 1-{len(accepted)}", pbs_text)
+    else:
+        pbs_text = pbs_text.replace("#PBS -N extract_segments\n", f"#PBS -N extract_segments\n#PBS -J 1-{len(accepted)}\n")
 
     # Update RECITERS array
     array_content = "\n".join(pbs_entries)
