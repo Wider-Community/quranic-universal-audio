@@ -1,4 +1,4 @@
-Generated: 2026-03-30 00:49:16
+Generated: 2026-03-30 04:38:16
 
 ========================================================================
   minshawy_murattal
@@ -43,9 +43,9 @@ Generated: 2026-03-30 00:49:16
   Below 60%:  0
   Below 80%:  0
   Failed:     0 (no alignment)
-  Empty ASR:  3969 (matched but no phonemes)
+  Empty ASR:  3970 (matched but no phonemes)
 
---- First 30 of 3969 Segments with Empty Phonemes ---
+--- First 10 of 3970 Segments with Empty Phonemes ---
    1. [0.8000]  2:1:1-2:1:1  @ 0:00.0 - 0:05.9
       audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002001.mp3
       text:  الٓمٓ
@@ -86,17 +86,11 @@ Generated: 2026-03-30 00:49:16
       audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002008.mp3
       text:  وَمِنَ ٱلنَّاسِ مَن يَقُولُ ءَامَنَّا بِٱللَّهِ وَبِٱلْيَوْمِ ٱلْـَٔاخِرِ وَمَا هُم بِمُؤْمِنِينَ
 
-  11. [1.0000]  2:9:1-2:9:10  @ 0:00.7 - 0:14.1
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002009.mp3
-      text:  يُخَـٰدِعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟ وَمَا يَخْدَعُونَ إِلَّآ أَنفُسَهُمْ وَمَا يَشْعُرُونَ
 
-  12. [0.9900]  2:10:1-2:10:6  @ 0:00.7 - 0:08.2
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002010.mp3
-      text:  فِى قُلُوبِهِم مَّرَضٌ فَزَادَهُمُ ٱللَّهُ مَرَضًا ۖ
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches:     0
 
-  13. [0.9900]  2:10:7-2:10:12  @ 0:09.0 - 0:16.2
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002010.mp3
-      text:  وَلَهُمْ عَذَابٌ أَلِيمٌ بِمَا كَانُوا۟ يَكْذِبُونَ
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   0
 
-  14. [1.0000]  2:11:1-2:11:11  @ 0:00.3 - 0:11.4
-      audio: https://everyayah.com/data/Minshawy_Murattal_128kbps/002011.mp3
