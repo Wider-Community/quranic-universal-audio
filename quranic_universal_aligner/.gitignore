@@ -52,6 +52,7 @@ models/
 
 captures/
 
+docs/changelog/
 docs/api.md
 docs/lease_duration_history.md
 docs/paid-api-plan.md

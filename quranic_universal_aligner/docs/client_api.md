@@ -6,13 +6,21 @@
 - [Word Timestamps](#word-timestamps) — `/timestamps`, `/timestamps_direct`
 - [Utilities](#utilities) — `/estimate_duration`
 - [Response Reference](#response-reference) — segment fields, special types, word arrays, GPU warning, errors
+- [API Changelog](#api-changelog)
+
+## API Changelog
+
+**29/03/2026**
+- API calls now skip HTML rendering and audio file I/O, returning JSON faster
+
 
 ---
-> **GPU Usage & Access**
->
-> - **Free Tier:** Every user receives **free daily GPU quota**. Once your daily GPU quota is exhausted, you can continue using unlimited CPU processing for all endpoints.
-> - **Unlimited GPU Access:** If you need unlimited API access on GPU (e.g., for high-volume or production use), please get in touch to arrange a payment plan and higher limits.
-> - **Note:** CPU processing is always unlimited and available, but is much slower. When GPU quota is exceeded, requests will be automatically routed to CPU and a warning will appear in the response.
+
+## GPU Usage & Access
+
+- **Free Tier:** Every user receives **free daily GPU quota**. Once your daily GPU quota is exhausted, you can continue using unlimited CPU processing for all endpoints.
+- **Unlimited GPU Access:** If you need unlimited API access on GPU (e.g., for high-volume or production use), please get in touch to arrange a payment plan and higher limits.
+- **Note:** CPU processing is always unlimited and available, but is much slower. When GPU quota is exceeded, requests will be automatically routed to CPU and a warning will appear in the response.
 
 ## Quick Start
 

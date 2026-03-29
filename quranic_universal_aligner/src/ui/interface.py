@@ -54,6 +54,11 @@ def build_interface():
         with gr.Accordion("\U0001f4e1 API Usage", open=False):
             gr.Markdown(_api_doc)
 
+        # Changelog accordion
+        _changelog = (Path(__file__).parent.parent.parent / "docs" / "CHANGELOG.md").read_text()
+        with gr.Accordion("Changelog", open=False):
+            gr.Markdown(_changelog)
+
         if DEV_TAB_VISIBLE:
             with gr.Tabs():
                 with gr.Tab("Results"):
@@ -119,20 +124,28 @@ def _build_left_column(c):
         with gr.Group(visible=_is_link, elem_id="link-panel") as c.link_panel:
             c.url_input = gr.Textbox(
                 label="Paste a link",
-                placeholder="TikTok, SoundCloud, Archive.org, or direct audio link",
+                placeholder="e.g. TikTok, SoundCloud, Archive.org",
                 lines=1,
             )
             c.url_status = gr.HTML(value="", visible=False)
             c.url_info_html = gr.HTML(value="", visible=False)
             c.url_download_btn = gr.Button("Download", size="sm", variant="primary", visible=False)
-            gr.Markdown(
-                "Supports [1800+ sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)"
-                " — TikTok, SoundCloud, Archive.org, direct links, and more",
-                elem_id="url-help",
+            c.url_audio_player = gr.Audio(label="Downloaded Audio", visible=False, interactive=False)
+            gr.HTML(
+                '<div id="url-help">'
+                '<a href="https://mp3quran.net" target="_blank">mp3quran.net</a> · '
+                'TikTok · SoundCloud · Archive.org · '
+                '<a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md" target="_blank">all supported sites</a>'
+                '</div>',
             )
 
         # Upload panel
         with gr.Group(visible=_is_upload, elem_id="upload-panel") as c.upload_panel:
+            with gr.Row(elem_id="example-row"):
+                c.btn_ex_112 = gr.Button("112", size="sm", min_width=0)
+                c.btn_ex_84 = gr.Button("84", size="sm", min_width=0)
+                c.btn_ex_7 = gr.Button("7", size="sm", min_width=0)
+                c.btn_ex_juz30 = gr.Button("Juz' 30", size="sm", min_width=0)
             c.audio_upload = gr.Audio(label="Upload Recitation", sources=["upload"], type="filepath")
 
         # Record panel
@@ -141,13 +154,6 @@ def _build_left_column(c):
 
         # Hidden unified audio (fed by upload, record, or URL download)
         c.audio_input = gr.Audio(visible=False, type="filepath")
-
-        # Example audio files (hidden in Link mode)
-        with gr.Row(visible=not _is_link, elem_id="example-row") as c.example_row:
-            c.btn_ex_112 = gr.Button("112", size="sm", min_width=0)
-            c.btn_ex_84 = gr.Button("84", size="sm", min_width=0)
-            c.btn_ex_7 = gr.Button("7", size="sm", min_width=0)
-            c.btn_ex_juz30 = gr.Button("Juz' 30", size="sm", min_width=0)
 
         _build_animation_settings(c)
 
@@ -258,7 +264,7 @@ def _build_right_column(c):
 
 def _build_results_content(c):
     """Build the main results content (extract/resegment/output)."""
-    c.extract_btn = gr.Button("Extract Segments", variant="primary", size="lg")
+    c.extract_btn = gr.Button("Extract Segments", variant="secondary", size="lg", interactive=False)
     c.pipeline_progress = gr.HTML(value="", visible=False)
     with gr.Row(elem_id="action-btns-row"):
         c.resegment_toggle_btn = gr.Button(
