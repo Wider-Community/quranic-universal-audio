@@ -12,3 +12,4 @@ soundfile>=0.12.0
 cython>=3.0.0
 recitations_segmenter==1.0.0
 quranic-phonemizer
+yt-dlp

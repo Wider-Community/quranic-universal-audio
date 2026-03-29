@@ -101,6 +101,16 @@ def build_interface():
 def _build_left_column(c):
     """Build the left input column."""
     with gr.Column(scale=LEFT_COLUMN_SCALE, elem_id="left-col"):
+        with gr.Group():
+            c.url_input = gr.Textbox(
+                label="Or paste a URL (YouTube, SoundCloud, etc.)",
+                placeholder="https://youtube.com/watch?v=...",
+                lines=1,
+            )
+            c.url_download_btn = gr.Button("Download Audio", size="sm", variant="secondary")
+            c.url_status = gr.HTML(value="", visible=False)
+            c.url_info_html = gr.HTML(value="", visible=False)
+
         c.audio_input = gr.Audio(
             label="Upload Recitation",
             sources=["upload", "microphone"],

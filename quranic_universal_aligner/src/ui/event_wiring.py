@@ -18,6 +18,7 @@ from src.ui.progress_bar import pipeline_progress_bar_html
 from src.ui.handlers import (
     wire_presets, toggle_resegment_panel,
     on_mode_change, on_verse_toggle, restore_anim_settings,
+    download_url_audio,
 )
 
 _EMPTY_PLACEHOLDER = (
@@ -29,6 +30,7 @@ _EMPTY_PLACEHOLDER = (
 def wire_events(app, c):
     """Wire all event handlers to Gradio components."""
     _wire_preset_buttons(c)
+    _wire_url_input(c)
     _wire_audio_input(c)
     _wire_extract_chain(c)
     _wire_mfa_chain(c)
@@ -47,6 +49,54 @@ def _wire_preset_buttons(c):
                  c.min_silence_slider, c.min_speech_slider, c.pad_slider)
     wire_presets(c.rs_btn_muj, c.rs_btn_mur, c.rs_btn_fast,
                  c.rs_silence, c.rs_speech, c.rs_pad)
+
+
+def _wire_url_input(c):
+    """Wire URL textbox → yt-dlp download → populate audio component."""
+
+    def _on_download(url):
+        # Yield 1: show loading state
+        yield (
+            gr.update(),                                     # audio_input unchanged
+            gr.update(visible=False),                        # hide old info
+            gr.update(
+                value='<div style="text-align:center;padding:8px;">Downloading audio...</div>',
+                visible=True,
+            ),                                               # url_status
+            gr.update(interactive=False),                    # disable button
+        )
+
+        # Yield 2: download result
+        try:
+            wav_path, info_html = download_url_audio(url)
+            yield (
+                wav_path,                                    # set audio_input
+                gr.update(value=info_html, visible=True),    # url_info_html
+                gr.update(visible=False),                    # hide status
+                gr.update(interactive=True),                 # re-enable button
+            )
+        except gr.Error:
+            raise
+        except Exception as e:
+            yield (
+                gr.update(),
+                gr.update(visible=False),
+                gr.update(
+                    value=f'<div style="color:var(--error-text-color);padding:8px;">Error: {str(e)[:200]}</div>',
+                    visible=True,
+                ),
+                gr.update(interactive=True),
+            )
+
+    _url_outputs = [c.audio_input, c.url_info_html, c.url_status, c.url_download_btn]
+    c.url_download_btn.click(
+        fn=_on_download, inputs=[c.url_input], outputs=_url_outputs,
+        api_name=False, show_progress="hidden",
+    )
+    c.url_input.submit(
+        fn=_on_download, inputs=[c.url_input], outputs=_url_outputs,
+        api_name=False, show_progress="hidden",
+    )
 
 
 def _wire_audio_input(c):

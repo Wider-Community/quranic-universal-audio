@@ -1,7 +1,11 @@
 """Python event handler callbacks for the Gradio UI."""
+import uuid
+from pathlib import Path
+
 import gradio as gr
 
 from config import (
+    URL_DOWNLOAD_DIR,
     MIN_SILENCE_MIN, MIN_SILENCE_MAX, MIN_SILENCE_STEP,
     MIN_SPEECH_MIN, MIN_SPEECH_MAX, MIN_SPEECH_STEP,
     PAD_MIN, PAD_MAX, PAD_STEP,
@@ -14,6 +18,72 @@ from config import (
     ANIM_GRANULARITY_DEFAULT,
     MEGA_WORD_SPACING_DEFAULT, MEGA_TEXT_SIZE_DEFAULT, MEGA_LINE_SPACING_DEFAULT,
 )
+
+
+def download_url_audio(url: str):
+    """Download audio from a URL using yt-dlp. Returns (wav_path, info_html)."""
+    import yt_dlp
+
+    if not url or not url.strip():
+        raise gr.Error("Please enter a URL")
+
+    url = url.strip()
+
+    # Extract metadata without downloading
+    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+        except yt_dlp.utils.DownloadError as e:
+            raise gr.Error(f"Could not fetch URL: {str(e)[:200]}")
+
+    if info.get("_type") == "playlist":
+        raise gr.Error("Playlists are not supported. Please paste a single video/audio URL.")
+
+    duration = info.get("duration")
+    if duration is None:
+        raise gr.Error("Live streams are not supported. Please use a completed video/audio.")
+
+    title = info.get("title", "Unknown")
+    thumbnail = info.get("thumbnail", "")
+
+    # Download audio as WAV
+    URL_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = URL_DOWNLOAD_DIR / str(uuid.uuid4())
+
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": str(out_path),
+        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
+        "quiet": True,
+        "no_warnings": True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            ydl.download([url])
+        except Exception as e:
+            raise gr.Error(f"Download failed: {str(e)[:200]}")
+
+    wav_path = str(out_path) + ".wav"
+    if not Path(wav_path).exists():
+        raise gr.Error("Download completed but audio file was not created.")
+
+    # Build info card HTML
+    dur_str = f"{duration // 60}:{duration % 60:02d}"
+    thumb_html = (
+        f'<img src="{thumbnail}" style="max-width:100%;max-height:120px;border-radius:8px;margin-bottom:4px;">'
+        if thumbnail else ""
+    )
+    info_html = (
+        f'<div style="padding:8px;border-radius:8px;background:var(--block-background-fill);'
+        f'border:1px solid var(--border-color-primary);">'
+        f'{thumb_html}'
+        f'<div style="font-weight:bold;font-size:14px;">{title}</div>'
+        f'<div style="font-size:12px;opacity:0.7;">Duration: {dur_str}</div>'
+        f'</div>'
+    )
+
+    return wav_path, info_html
 
 
 def create_segmentation_settings(id_suffix=""):
