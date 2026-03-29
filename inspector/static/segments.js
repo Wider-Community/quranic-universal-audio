@@ -751,59 +751,24 @@ function _ensureWaveformObserver() {
                 }
             }
 
-            // Determine which audio buffer to use
+            // Draw from already-cached audio buffers only — never start fetches here.
+            // Audio downloading is handled by the debounced scroll preloader to avoid
+            // firing requests for segments that merely scroll through the viewport.
             const currentChapter = parseInt(segChapterSelect.value);
             let buffer = null;
 
             if (seg.audio_url) {
-                // By-ayah: each segment has its own audio URL — look up or load it
+                // By-ayah: use buffer only if already cached
                 buffer = segAudioBuffers.get(seg.audio_url) || null;
-                if (!buffer) {
-                    const segUrl = seg.audio_url;
-                    if (!segAudioBuffers.has(segUrl)) {
-                        // Start loading — use null sentinel to prevent duplicate fetches
-                        segAudioBuffers.set(segUrl, null);
-                        (async () => {
-                            try {
-                                if (!segAudioCtx) segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                                const resp = await fetch(segUrl);
-                                const buf = await resp.arrayBuffer();
-                                const decoded = await segAudioCtx.decodeAudioData(buf);
-                                segAudioBuffers.set(segUrl, decoded);
-                            } catch (e) { segAudioBuffers.delete(segUrl); }
-                            if (canvas.hasAttribute('data-needs-waveform') && _waveformObserver) {
-                                _waveformObserver.unobserve(canvas);
-                                _waveformObserver.observe(canvas);
-                            }
-                        })();
-                    }
-                    // else: null sentinel = already loading, re-observe will fire when done
-                    return;
-                }
+                if (!buffer) return;  // scroll preloader will handle downloading
             } else if (chapter && chapter !== currentChapter) {
-                // Error card from different chapter — use cached chapter buffer
+                // Error card from different chapter
                 buffer = segAudioBuffers.get(chapter) || null;
-                if (!buffer) {
-                    ensureChapterAudioBuffer(chapter).then(buf => {
-                        if (buf && canvas.hasAttribute('data-needs-waveform') && _waveformObserver) {
-                            _waveformObserver.unobserve(canvas);
-                            _waveformObserver.observe(canvas);
-                        }
-                    });
-                    return;
-                }
+                if (!buffer) return;
             } else {
                 // Same-chapter by-surah
                 buffer = segAudioBuffer;
-                if (!buffer) {
-                    ensureChapterAudioBuffer(chapter).then(buf => {
-                        if (buf && canvas.hasAttribute('data-needs-waveform') && _waveformObserver) {
-                            _waveformObserver.unobserve(canvas);
-                            _waveformObserver.observe(canvas);
-                        }
-                    });
-                    return;
-                }
+                if (!buffer) return;
             }
 
             // Temporarily swap buffer for drawing if needed
@@ -894,6 +859,14 @@ function _teardownScrollPreloading() {
     _scrollListeners = [];
 }
 
+function _detachScrollPreload(container) {
+    const idx = _scrollListeners.findIndex(sl => sl.el === container);
+    if (idx !== -1) {
+        container.removeEventListener('scroll', _scrollListeners[idx].handler);
+        _scrollListeners.splice(idx, 1);
+    }
+}
+
 function _onScrollSettled() {
     const segs = _getViewportSegments();
     if (segs.length === 0) return;
@@ -974,6 +947,7 @@ async function _preloadAudioForSeg({ seg, audioUrl, chapter, isByAyah }, signal)
         const buf = await resp.arrayBuffer();
         if (signal.aborted) return;
         const decoded = await segAudioCtx.decodeAudioData(buf);
+        if (signal.aborted) return;
         if (isByAyah) {
             segAudioBuffers.set(audioUrl, decoded);
         } else {
@@ -984,9 +958,10 @@ async function _preloadAudioForSeg({ seg, audioUrl, chapter, isByAyah }, signal)
             if (chapter === currentChapter && !segAudioBuffer) {
                 segAudioBuffer = decoded;
                 segAudioBufferUrl = audioUrl;
-                drawAllSegWaveforms();
             }
         }
+        // Trigger waveform drawing for canvases that now have a buffer available
+        _redrawPeaksWaveforms();
     } catch (e) {
         if (e.name !== 'AbortError') {
             console.warn('Audio preload failed:', audioUrl, e);
@@ -3235,6 +3210,17 @@ function restoreValPanelState(targetEl, state) {
     });
 }
 
+/** Close all accordion cards except the given one across both validation panels. */
+function _collapseAccordionExcept(exceptDetails) {
+    [segValidationEl, segValidationGlobalEl].forEach(panel => {
+        if (!panel) return;
+        panel.querySelectorAll('details[data-category]').forEach(d => {
+            if (d === exceptDetails) return;
+            if (d.open) d.open = false;  // toggle handler cleans up cards
+        });
+    });
+}
+
 function renderValidationPanel(data, chapter = null, targetEl = segValidationEl, label = null) {
     targetEl.innerHTML = '';
     if (!data) { targetEl.hidden = true; return; }
@@ -3342,10 +3328,14 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             const cardsDiv = details.querySelector('.val-cards-container');
             if (!cardsDiv) return;
             if (cardsDiv.children.length > 0) {
+                // Hide: clear cards and detach scroll preload
+                _detachScrollPreload(cardsDiv);
                 cardsDiv.innerHTML = '';
                 cardsDiv.hidden = true;
                 loadBtn.textContent = 'Load All';
             } else {
+                // Collapse all other accordions first
+                _collapseAccordionExcept(details);
                 renderCategoryCards(cat.type, cat.items, cardsDiv);
                 cardsDiv.hidden = false;
                 loadBtn.textContent = 'Hide All';
@@ -3375,6 +3365,26 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         cardsDiv.className = 'val-cards-container';
         cardsDiv.hidden = true;
         details.appendChild(cardsDiv);
+
+        // Mutual exclusivity: opening this accordion closes all others;
+        // closing clears loaded cards and aborts in-flight audio fetches
+        details.addEventListener('toggle', () => {
+            if (details.open) {
+                _collapseAccordionExcept(details);
+            } else {
+                const cd = details.querySelector('.val-cards-container');
+                if (cd) {
+                    _detachScrollPreload(cd);
+                    if (cd.children.length > 0) {
+                        cd.innerHTML = '';
+                        cd.hidden = true;
+                        const btn = details.querySelector('.val-load-all-btn');
+                        if (btn) btn.textContent = 'Load All';
+                    }
+                }
+                if (_scrollAbortController) _scrollAbortController.abort();
+            }
+        });
 
         targetEl.appendChild(details);
     });
@@ -3847,8 +3857,10 @@ function playErrorCardAudio(seg, btn) {
 }
 
 function invalidateLoadedErrorCards() {
+    if (_scrollAbortController) _scrollAbortController.abort();
     document.querySelectorAll('.val-cards-container').forEach(container => {
         if (container.children.length > 0) {
+            _detachScrollPreload(container);
             container.innerHTML = '';
             container.hidden = true;
             const details = container.closest('details');
