@@ -63,11 +63,18 @@ def _wire_input_mode_toggle(c):
             gr.update(visible=is_link),      # link_panel
             gr.update(visible=is_upload),    # upload_panel
             gr.update(visible=is_record),    # record_panel
+            # Clear link panel state so returning starts fresh
+            gr.update(value=""),             # url_input
+            gr.update(visible=False),        # url_info_html
+            gr.update(visible=False),        # url_status
+            gr.update(visible=False),        # url_download_btn
+            gr.update(visible=False),        # url_audio_player
         )
 
     _toggle_outputs = [
         c.mode_link, c.mode_upload, c.mode_record,
         c.link_panel, c.upload_panel, c.record_panel,
+        c.url_input, c.url_info_html, c.url_status, c.url_download_btn, c.url_audio_player,
     ]
     c.mode_link.click(fn=lambda: _switch_to("Link"), inputs=[], outputs=_toggle_outputs, api_name=False)
     c.mode_upload.click(fn=lambda: _switch_to("Upload"), inputs=[], outputs=_toggle_outputs, api_name=False)

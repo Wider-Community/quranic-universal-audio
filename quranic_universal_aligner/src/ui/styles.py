@@ -442,10 +442,22 @@ def build_css() -> str:
     #input-mode-row button:last-child {{ border-radius: 0 8px 8px 0 !important; }}
     #input-mode-row button:not(:first-child) {{ border-left: none !important; }}
     #upload-panel, #record-panel, #link-panel {{ overflow: visible !important; }}
+    #upload-panel .audio-container, #link-panel .audio-container,
+    #upload-panel audio, #link-panel audio {{ overflow: visible !important; }}
     .mode-active {{
         background: var(--button-primary-background-fill) !important;
         color: var(--button-primary-text-color) !important;
         border-color: var(--button-primary-background-fill) !important;
     }}
+
+    /* Example preset buttons — joined group */
+    #example-row {{ gap: 0 !important; }}
+    #example-row button {{
+        border-radius: 0 !important;
+        border: 1px solid var(--border-color-primary) !important;
+    }}
+    #example-row button:first-child {{ border-radius: 8px 0 0 8px !important; }}
+    #example-row button:last-child {{ border-radius: 0 8px 8px 0 !important; }}
+    #example-row button:not(:first-child) {{ border-left: none !important; }}
 
     """

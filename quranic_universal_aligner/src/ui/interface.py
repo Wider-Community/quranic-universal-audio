@@ -124,7 +124,7 @@ def _build_left_column(c):
         with gr.Column(visible=_is_link, elem_id="link-panel") as c.link_panel:
             c.url_input = gr.Textbox(
                 label="Paste a link",
-                info='mp3quran.net · TikTok · SoundCloud · Archive.org · [all supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)',
+                info='e.g. TikTok · SoundCloud · [MP3Quran](https://www.mp3quran.net/) · [all supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)',
                 lines=1,
             )
             c.url_status = gr.HTML(value="", visible=False)
