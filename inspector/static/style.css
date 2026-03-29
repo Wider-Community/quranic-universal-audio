@@ -1531,6 +1531,11 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     color: #ccc;
     font-weight: 600;
 }
+.seg-history-op-type-badge.secondary {
+    font-weight: 400;
+    font-size: 0.85em;
+    opacity: 0.7;
+}
 .seg-history-op-fix-kind {
     color: #666;
     font-style: italic;

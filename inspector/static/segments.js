@@ -4773,16 +4773,19 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
             header.appendChild(ch);
         }
 
+        const ops = batch.operations || [];
+        const groups = isMultiChapter ? null : _groupRelatedOps(ops);
+        const visualCount = groups ? groups.length : ops.length;
+
         const opsCount = document.createElement('span');
         opsCount.className = 'seg-history-batch-ops-count';
-        const n = (batch.operations || []).length;
         if (isMultiChapter) {
             // Compact: "Remove Sadaqa x42" instead of "42 ops"
-            const opType = batch.operations[0]?.op_type;
+            const opType = ops[0]?.op_type;
             const label = EDIT_OP_LABELS[opType] || opType;
-            opsCount.textContent = `${label} x${n}`;
+            opsCount.textContent = `${label} x${ops.length}`;
         } else {
-            opsCount.textContent = n === 0 ? 'revert' : `${n} op${n !== 1 ? 's' : ''}`;
+            opsCount.textContent = visualCount === 0 ? 'revert' : `${visualCount} op${visualCount !== 1 ? 's' : ''}`;
         }
         header.appendChild(opsCount);
 
@@ -4827,7 +4830,7 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
         wrapper.appendChild(header);
 
         // Body with operations (always visible)
-        if (batch.operations && batch.operations.length > 0) {
+        if (ops.length > 0) {
             const body = document.createElement('div');
             body.className = 'seg-history-batch-body';
             if (isMultiChapter) {
@@ -4838,8 +4841,12 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
                     .map(c => surahOptionText(c)).join(', ');
                 body.appendChild(chList);
             } else {
-                for (const op of batch.operations) {
-                    body.appendChild(renderHistoryOp(op, batch.chapter));
+                for (const group of groups) {
+                    if (group.length === 1) {
+                        body.appendChild(renderHistoryOp(group[0], batch.chapter));
+                    } else {
+                        body.appendChild(renderHistoryGroupedOp(group, batch.chapter));
+                    }
                 }
             }
             wrapper.appendChild(body);
@@ -4847,6 +4854,152 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
 
         container.appendChild(wrapper);
     }
+}
+
+/**
+ * Group related operations within a batch so they render as one card.
+ * E.g. split → edit first half ref → edit second half ref  ⇒  single group.
+ * Returns array of groups, each group is an array of ops.
+ */
+function _groupRelatedOps(operations) {
+    if (!operations || operations.length === 0) return [];
+    if (operations.length === 1) return [[operations[0]]];
+
+    const groups = [];
+    const opGroupIdx = new Map(); // op array index → group index
+    const uidToGroup = new Map(); // segment_uid → group index (which group produced it)
+
+    for (let i = 0; i < operations.length; i++) {
+        const op = operations[i];
+        const beforeUids = (op.targets_before || []).map(t => t.segment_uid).filter(Boolean);
+
+        // Check if any before-UID was produced by a previous op in this batch
+        let parentGroup = null;
+        for (const uid of beforeUids) {
+            if (uidToGroup.has(uid)) {
+                parentGroup = uidToGroup.get(uid);
+                break;
+            }
+        }
+
+        if (parentGroup !== null) {
+            groups[parentGroup].push(op);
+            opGroupIdx.set(i, parentGroup);
+        } else {
+            const gIdx = groups.length;
+            groups.push([op]);
+            opGroupIdx.set(i, gIdx);
+        }
+
+        // Register this op's output UIDs
+        const gIdx = opGroupIdx.get(i);
+        for (const snap of (op.targets_after || [])) {
+            if (snap.segment_uid) uidToGroup.set(snap.segment_uid, gIdx);
+        }
+    }
+
+    return groups;
+}
+
+/**
+ * Render a group of related ops as a single combined card.
+ * Shows the original before (from first op) → final after (latest snapshot per UID).
+ */
+function renderHistoryGroupedOp(group, chapter) {
+    const primary = group[0];
+
+    // Collect final snapshot for each output UID (last write wins)
+    const finalSnaps = new Map();
+    for (const op of group) {
+        for (const snap of (op.targets_after || [])) {
+            if (snap.segment_uid) finalSnaps.set(snap.segment_uid, snap);
+        }
+    }
+
+    // Before = primary op's targets_before
+    const before = primary.targets_before || [];
+
+    // After = final states, ordered by primary's targets_after UIDs
+    const primaryAfterUids = (primary.targets_after || []).map(t => t.segment_uid);
+    const after = primaryAfterUids.map(uid => finalSnaps.get(uid)).filter(Boolean);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'seg-history-op seg-history-grouped-op';
+
+    // --- Label row: primary badge + follow-up badges ---
+    const label = document.createElement('div');
+    label.className = 'seg-history-op-label';
+
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'seg-history-op-type-badge';
+    typeBadge.textContent = EDIT_OP_LABELS[primary.op_type] || primary.op_type;
+    label.appendChild(typeBadge);
+
+    // Follow-up op type badges (smaller)
+    const followUp = {};
+    for (let i = 1; i < group.length; i++) {
+        const t = group[i].op_type;
+        followUp[t] = (followUp[t] || 0) + 1;
+    }
+    for (const [t, count] of Object.entries(followUp)) {
+        const fb = document.createElement('span');
+        fb.className = 'seg-history-op-type-badge secondary';
+        fb.textContent = '+ ' + (EDIT_OP_LABELS[t] || t) + (count > 1 ? ` x${count}` : '');
+        label.appendChild(fb);
+    }
+
+    const fixKinds = new Set(group.map(op => op.fix_kind).filter(fk => fk && fk !== 'manual'));
+    for (const fk of fixKinds) {
+        const fkBadge = document.createElement('span');
+        fkBadge.className = 'seg-history-op-fix-kind';
+        fkBadge.textContent = fk;
+        label.appendChild(fkBadge);
+    }
+    wrap.appendChild(label);
+
+    // --- 3-column diff grid ---
+    const diff = document.createElement('div');
+    diff.className = 'seg-history-diff';
+
+    const beforeCol = document.createElement('div');
+    beforeCol.className = 'seg-history-before';
+    const arrowCol = document.createElement('div');
+    arrowCol.className = 'seg-history-arrows';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('height', '1');
+    arrowCol.appendChild(svg);
+    const afterCol = document.createElement('div');
+    afterCol.className = 'seg-history-after';
+
+    const beforeCards = [];
+    for (const snap of before) {
+        const card = renderSegCard(_snapToSeg(snap, chapter), { readOnly: true, showChapter: true, showPlayBtn: true });
+        beforeCol.appendChild(card);
+        beforeCards.push(card);
+    }
+
+    const afterCards = [];
+    if (after.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'seg-history-empty';
+        empty.textContent = '(deleted)';
+        afterCol.appendChild(empty);
+    } else {
+        for (const snap of after) {
+            const card = renderSegCard(_snapToSeg(snap, chapter), { readOnly: true, showChapter: true, showPlayBtn: true });
+            afterCol.appendChild(card);
+            afterCards.push(card);
+        }
+    }
+
+    // Change highlighting for 1→1 groups (e.g. trim then ref edit)
+    if (before.length === 1 && after.length === 1) {
+        _highlightChanges(before[0], after[0], beforeCards[0], afterCards[0]);
+    }
+
+    diff.append(beforeCol, arrowCol, afterCol);
+    wrap.appendChild(diff);
+    return wrap;
 }
 
 function renderHistoryOp(op, chapter) {
