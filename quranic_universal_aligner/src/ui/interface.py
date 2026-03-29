@@ -56,7 +56,7 @@ def build_interface():
 
         # Changelog accordion
         _changelog = (Path(__file__).parent.parent.parent / "docs" / "CHANGELOG.md").read_text()
-        with gr.Accordion("Changelog", open=False):
+        with gr.Accordion("📋 Changelog", open=False):
             gr.Markdown(_changelog)
 
         if DEV_TAB_VISIBLE:
@@ -121,7 +121,7 @@ def _build_left_column(c):
                                        elem_classes=["mode-active"] if _is_record else [])
 
         # Link panel
-        with gr.Column(visible=_is_link, elem_id="link-panel") as c.link_panel:
+        with gr.Group(visible=_is_link, elem_id="link-panel") as c.link_panel:
             c.url_input = gr.Textbox(
                 label="Paste a link",
                 info='e.g. TikTok · SoundCloud · [MP3Quran](https://www.mp3quran.net/) · [all supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)',
@@ -133,7 +133,7 @@ def _build_left_column(c):
             c.url_audio_player = gr.Audio(label="Downloaded Audio", visible=False, interactive=False)
 
         # Upload panel
-        with gr.Column(visible=_is_upload, elem_id="upload-panel") as c.upload_panel:
+        with gr.Group(visible=_is_upload, elem_id="upload-panel") as c.upload_panel:
             with gr.Row(elem_id="example-row"):
                 c.btn_ex_112 = gr.Button("112", size="sm", min_width=0)
                 c.btn_ex_84 = gr.Button("84", size="sm", min_width=0)
@@ -142,7 +142,7 @@ def _build_left_column(c):
             c.audio_upload = gr.Audio(label="Upload Recitation", sources=["upload"], type="filepath")
 
         # Record panel
-        with gr.Column(visible=_is_record, elem_id="record-panel") as c.record_panel:
+        with gr.Group(visible=_is_record, elem_id="record-panel") as c.record_panel:
             c.audio_record = gr.Audio(label="Record Recitation", sources=["microphone"], type="filepath")
 
         # Hidden unified audio (fed by upload, record, or URL download)
