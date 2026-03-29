@@ -5,8 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'data/timestamps/**'
-      - 'data/recitation_segments/**'
+      - 'data/timestamps/**/*.json'
       - 'data/audio/**/*.json'
 
 permissions:
