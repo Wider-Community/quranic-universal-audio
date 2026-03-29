@@ -130,6 +130,7 @@ def discover_reciters() -> list[dict]:
                 meta = data.get("_meta", {})
                 slug = p.stem
                 name_en = meta.get("name_en", slug.replace("_", " ").title())
+                name_ar = meta.get("name_ar") or None
                 riwayah = meta.get("riwayah", "hafs_an_asim")
                 style = meta.get("style", "murattal")
                 country = meta.get("country", "unknown")
@@ -141,6 +142,7 @@ def discover_reciters() -> list[dict]:
                 records.append({
                     "slug": slug,
                     "name_en": name_en,
+                    "name_ar": name_ar,
                     "source": source,
                     "style": style,
                     "riwayah": riwayah,
