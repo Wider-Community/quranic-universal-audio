@@ -1920,7 +1920,10 @@ def validate_reciter_segments(reciter):
                 if len(parts) == 2:
                     all_verse_keys_in_file.add((int(parts[0]), int(parts[1])))
 
+        covered_surahs = {_chapter_from_ref(entry["ref"]) for entry in entries}
         for (surah, ayah) in sorted(word_counts):
+            if surah not in covered_surahs:
+                continue
             if (surah, ayah) not in all_verse_keys_in_file:
                 missing_verses.append({
                     "verse_key": f"{surah}:{ayah}", "chapter": surah,
