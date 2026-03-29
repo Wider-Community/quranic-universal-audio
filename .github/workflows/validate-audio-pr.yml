@@ -75,22 +75,25 @@ jobs:
             [ -z "$issue" ] && continue
 
             # Build change summary
-            summary=$(echo "$changes" | python -c "
+            summary=$(echo "$changes" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)['$slug']
           lines = []
           for f, v in d.items():
-              old = v['old'] if v['old'] is not None else '(missing)'
-              new = v['new'] if v['new'] is not None else '(removed)'
-              lines.append(f'- **{f}:** ~~{old}~~ {new}')
+            old = v['old'] if v['old'] is not None else '(missing)'
+            new = v['new'] if v['new'] is not None else '(removed)'
+            lines.append(f'- **{f}:** ~~{old}~~ {new}')
           print('\n'.join(lines))
           ")
 
             SUMMARY="$summary" PR_NUMBER="$pr_number" python3 -c "
-import os, sys
-tpl = open('.github/templates/workflows/meta-update-comment.md').read()
-sys.stdout.write(tpl.format(pr_number=os.environ['PR_NUMBER'], summary=os.environ['SUMMARY']))
-" > /tmp/meta_comment.md
+          import os, sys
+          tpl = open('.github/templates/workflows/meta-update-comment.md').read()
+          sys.stdout.write(tpl.format(
+            pr_number=os.environ['PR_NUMBER'],
+            summary=os.environ['SUMMARY']))
+          " > /tmp/meta_comment.md
+
             gh issue comment "$issue" \
               --repo "${{ github.repository }}" \
               --body-file /tmp/meta_comment.md
