@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Generate an audio manifest from a YouTube playlist or a list of URLs.
+"""Generate an audio manifest from a playlist, collection, or list of URLs.
 
-Extracts video URLs and matches titles to surahs via fuzzy name matching
-with fallback to surah numbers found in titles.
+Supports any yt-dlp-compatible source: YouTube playlists, archive.org items,
+SoundCloud sets, Spreaker shows, and more. Matches entry titles to surahs via
+fuzzy name matching with fallback to surah numbers found in titles.
 
 Usage:
-    python3 scripts/youtube_manifest.py <playlist_url>
-    python3 scripts/youtube_manifest.py <playlist_url> --non-interactive
-    python3 scripts/youtube_manifest.py --from-file urls.txt
+    python3 scripts/playlist_manifest.py <playlist_url>
+    python3 scripts/playlist_manifest.py "https://archive.org/details/<item>"
+    python3 scripts/playlist_manifest.py --from-file urls.txt
+    python3 scripts/playlist_manifest.py <url> --non-interactive --reciter <slug> --name-en "<Name>"
 """
 
 import argparse
@@ -18,6 +20,7 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 def _check_dependencies():
@@ -51,7 +54,26 @@ _check_dependencies()
 from thefuzz import fuzz  # noqa: E402
 
 SURAH_INFO_PATH = Path(__file__).resolve().parent.parent / "data" / "surah_info.json"
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "audio" / "by_surah" / "youtube"
+BASE_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "audio" / "by_surah"
+
+# Map hostnames to short source directory names.
+_SOURCE_NAMES = {
+    "youtube.com": "youtube", "www.youtube.com": "youtube", "youtu.be": "youtube",
+    "m.youtube.com": "youtube",
+    "archive.org": "archive", "www.archive.org": "archive",
+    "soundcloud.com": "soundcloud", "www.soundcloud.com": "soundcloud",
+    "spreaker.com": "spreaker", "www.spreaker.com": "spreaker",
+    "api.spreaker.com": "spreaker",
+}
+
+
+def _detect_source_name(url: str) -> str:
+    """Extract a source directory name from a URL's hostname."""
+    host = urlparse(url).hostname or ""
+    if host in _SOURCE_NAMES:
+        return _SOURCE_NAMES[host]
+    # Fallback: strip www. and use first domain segment
+    return host.replace("www.", "").split(".")[0] or "unknown"
 
 # Common English transliteration aliases not covered by fuzzy matching alone.
 # Maps alias → canonical name_en from surah_info.json.
@@ -351,7 +373,7 @@ def match_title(title: str, en_map: dict, ar_map: dict, alias_map: dict) -> tupl
 
 
 def parse_url_file(path: str) -> dict:
-    """Parse a text file of `<surah_number> <youtube_url>` lines.
+    """Parse a text file of `<surah_number> <url>` lines.
 
     Returns dict of surah_num (int) → url (str).
     """
@@ -385,8 +407,8 @@ def parse_url_file(path: str) -> dict:
             errors.append(f"  Line {lineno}: surah number {num} out of range (1-114)")
             continue
 
-        if "youtube.com/" not in url and "youtu.be/" not in url:
-            errors.append(f"  Line {lineno}: not a YouTube URL: {url}")
+        if not (url.startswith("http://") or url.startswith("https://")):
+            errors.append(f"  Line {lineno}: not a valid URL: {url}")
             continue
 
         if num in matched:
@@ -409,7 +431,7 @@ def parse_url_file(path: str) -> dict:
 
 
 def fetch_playlist(url: str) -> tuple:
-    """Fetch playlist metadata and entries via yt-dlp.
+    """Fetch playlist/collection metadata and entries via yt-dlp.
 
     Returns (playlist_info, entries) where playlist_info is a dict with
     title/channel/description and entries is a list of {title, url, id, duration}.
@@ -429,31 +451,48 @@ def fetch_playlist(url: str) -> tuple:
         "title": data.get("title"),
         "channel": data.get("channel") or data.get("uploader"),
         "description": data.get("description"),
-        "video_count": data.get("playlist_count", 0),
+        "entry_count": data.get("playlist_count", 0),
         "views": data.get("view_count"),
         "last_updated": data.get("modified_date"),
     }
 
     entries = []
     for item in data.get("entries", []):
+        # Use the direct URL when it starts with http (archive.org, Spreaker,
+        # etc. return the actual file/page URL).  Fall back to webpage_url for
+        # sites like YouTube where 'url' is just the video ID.
+        raw_url = item.get("url", "")
+        entry_url = raw_url if raw_url.startswith("http") else (
+            item.get("webpage_url") or ""
+        )
+        if not entry_url.startswith("http"):
+            entry_url = f"https://www.youtube.com/watch?v={item.get('id', raw_url)}"
+
+        title = item.get("title", "")
+        # SoundCloud flat-playlist returns "NA" — fall back to URL slug.
+        if not title or title == "NA":
+            slug = urlparse(entry_url).path.rstrip("/").rsplit("/", 1)[-1]
+            title = slug.replace("-", " ").replace("_", " ").title() if slug else ""
+
         entries.append({
-            "title": item.get("title", ""),
-            "url": f"https://www.youtube.com/watch?v={item['id']}",
-            "id": item["id"],
+            "title": title,
+            "url": entry_url,
+            "id": item.get("id", ""),
             "duration": item.get("duration"),
         })
 
     # Display playlist info
-    print(f"\n  Playlist:  {playlist_info['title']}")
-    print(f"  Channel:   {playlist_info['channel']}")
+    print(f"\n  Collection: {playlist_info['title']}")
+    if playlist_info["channel"]:
+        print(f"  Channel:    {playlist_info['channel']}")
     if playlist_info["description"]:
-        print(f"  About:     {playlist_info['description'][:100]}")
+        print(f"  About:      {playlist_info['description'][:100]}")
     if playlist_info["last_updated"]:
         d = playlist_info["last_updated"]
-        print(f"  Updated:   {d[:4]}-{d[4:6]}-{d[6:]}")
+        print(f"  Updated:    {d[:4]}-{d[4:6]}-{d[6:]}")
     if playlist_info["views"]:
-        print(f"  Views:     {playlist_info['views']:,}")
-    print(f"  Videos:    {len(entries)}")
+        print(f"  Views:      {playlist_info['views']:,}")
+    print(f"  Entries:    {len(entries)}")
 
     return playlist_info, entries
 
@@ -495,10 +534,15 @@ def prompt_metadata(playlist_url: str) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate audio manifest from YouTube playlist or URL list")
-    parser.add_argument("playlist_url", nargs="?", help="YouTube playlist URL")
+    parser = argparse.ArgumentParser(
+        description="Generate audio manifest from a playlist, collection, or URL list"
+    )
+    parser.add_argument("playlist_url", nargs="?",
+                        help="Playlist or collection URL (YouTube, archive.org, SoundCloud, Spreaker, etc.)")
     parser.add_argument("--from-file", metavar="PATH",
-                        help="Text file with '<surah_number> <youtube_url>' per line")
+                        help="Text file with '<surah_number> <url>' per line")
+    parser.add_argument("--source",
+                        help="Source subdirectory name (auto-detected from URL if omitted)")
     parser.add_argument("--non-interactive", action="store_true",
                         help="Skip metadata prompts (requires --reciter and --name-en)")
     parser.add_argument("--reciter", help="Reciter slug (non-interactive mode)")
@@ -522,14 +566,17 @@ def main():
         url_map = parse_url_file(args.from_file)
 
         matched = {num: {"url": url} for num, url in url_map.items()}
-        source_for_meta = "youtube"
+        # Auto-detect source from first URL
+        first_url = next(iter(url_map.values()), "")
+        source_for_meta = first_url
+        source_name = args.source or _detect_source_name(first_url)
     else:
         # ── Playlist mode: fuzzy title matching ──
         en_map, ar_map, alias_map, name_to_num = build_matchers(surah_info)
 
         playlist_info, entries = fetch_playlist(args.playlist_url)
         if not entries:
-            print("No videos found in playlist.", file=sys.stderr)
+            print("No entries found in playlist/collection.", file=sys.stderr)
             sys.exit(1)
 
         matched = {}
@@ -546,10 +593,10 @@ def main():
                 continue
             matched[num] = {**entry, "method": method}
 
-        print(f"\nMatched {len(matched)} of 114 surahs ({len(entries)} videos in playlist)")
+        print(f"\nMatched {len(matched)} of 114 surahs ({len(entries)} entries in collection)")
 
         if failed:
-            print(f"\nCould not match {len(failed)} video(s):")
+            print(f"\nCould not match {len(failed)} entry/entries:")
             for entry in failed:
                 print(f"  - {entry['title']}")
 
@@ -562,6 +609,7 @@ def main():
             print(f"\n{len(failed)} title(s) could not be matched. Fix the playlist or add aliases.")
 
         source_for_meta = args.playlist_url
+        source_name = args.source or _detect_source_name(args.playlist_url)
 
     # Report coverage
     missing = [n for n in range(1, 115) if n not in matched]
@@ -598,8 +646,9 @@ def main():
         manifest[str(num)] = matched[num]["url"]
 
     # Write output
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUTPUT_DIR / f"{meta['reciter']}.json"
+    output_dir = BASE_OUTPUT_DIR / source_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"{meta['reciter']}.json"
     with open(out_path, "w") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
         f.write("\n")

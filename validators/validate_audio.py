@@ -295,12 +295,20 @@ def analyze_verse_coverage(
 # ── URL validation ───────────────────────────────────────────────────────
 
 
-def _is_youtube_url(url: str) -> bool:
-    return "youtube.com/" in url or "youtu.be/" in url
+_DIRECT_AUDIO_EXTENSIONS = frozenset(
+    {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".wma", ".aac"}
+)
 
 
-def _check_youtube_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
-    """Check a YouTube URL is accessible via yt-dlp --simulate."""
+def _needs_ytdlp(url: str) -> bool:
+    """True if the URL requires yt-dlp (not a direct audio file)."""
+    from urllib.parse import urlparse
+    path = urlparse(url).path.split("?")[0].lower()
+    return not any(path.endswith(ext) for ext in _DIRECT_AUDIO_EXTENSIONS)
+
+
+def _check_via_ytdlp(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
+    """Check a URL is accessible via yt-dlp --simulate."""
     import shutil
     import subprocess
     if not shutil.which("yt-dlp"):
@@ -313,7 +321,7 @@ def _check_youtube_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
             capture_output=True, text=True, timeout=timeout,
         )
         return {"url": url, "ok": True, "status": 200,
-                "error": None, "content_type": "video/youtube"}
+                "error": None, "content_type": "audio/ytdlp"}
     except subprocess.TimeoutExpired:
         return {"url": url, "ok": False, "status": None,
                 "error": "yt-dlp timeout", "content_type": None}
@@ -325,10 +333,10 @@ def _check_youtube_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
 def check_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
     """Check a single URL with HTTP HEAD (fallback to ranged GET).
 
-    YouTube URLs are validated via yt-dlp --simulate instead.
+    Non-direct-audio URLs are validated via yt-dlp --simulate instead.
     """
-    if _is_youtube_url(url):
-        return _check_youtube_url(url, timeout=30)
+    if _needs_ytdlp(url):
+        return _check_via_ytdlp(url, timeout=30)
     headers = {"User-Agent": "Mozilla/5.0"}
     for method in ("HEAD", "GET"):
         try:

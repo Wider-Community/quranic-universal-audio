@@ -37,7 +37,7 @@ data/audio/
 └── by_ayah/<source>/<reciter>.json     # Per-verse recordings
 ```
 
-Existing sources: `mp3quran`, `everyayah`, `qul`, `surah-quran`, `youtube`. If your audio comes from a new source, create the directory and add a `SOURCE` file:
+Existing sources: `mp3quran`, `everyayah`, `qul`, `surah-quran`, `youtube`, `archive`, `soundcloud`, `spreaker`. If your audio comes from a new source, create the directory and add a `SOURCE` file:
 
 ```bash
 mkdir data/audio/by_surah/my-source
@@ -150,32 +150,39 @@ The validator checks:
 
 Fix any errors before submitting. Warnings (e.g., `"unknown"` metadata values, missing surahs) are acceptable but should be resolved where possible.
 
-## YouTube Audio
+## Playlist / Collection Audio
 
-For YouTube-hosted recitations, use the helper script instead of creating the manifest manually. It supports two modes:
+For audio hosted on YouTube, archive.org, SoundCloud, Spreaker, or any other yt-dlp-supported site, use the helper script instead of creating the manifest manually. It auto-detects the source and writes to the appropriate subdirectory.
 
-### From a playlist
+### From a playlist or collection
 
 ```bash
-python3 scripts/youtube_manifest.py <playlist_url>
+# YouTube playlist
+python3 scripts/playlist_manifest.py "https://www.youtube.com/playlist?list=..."
+
+# archive.org item (direct MP3 URLs — no yt-dlp needed at download time)
+python3 scripts/playlist_manifest.py "https://archive.org/details/<item-id>"
+
+# SoundCloud set
+python3 scripts/playlist_manifest.py "https://soundcloud.com/<user>/sets/<playlist>"
 ```
 
-The script will fetch playlist metadata (title, channel, video count), match each video title to a surah by name (fuzzy English/Arabic matching with surah number fallback), then prompt you for reciter metadata.
+The script fetches collection metadata, matches each entry's title to a surah by name (fuzzy English/Arabic matching with surah number fallback), then prompts you for reciter metadata. The source subdirectory (e.g., `youtube/`, `archive/`) is auto-detected from the URL; override with `--source <name>`.
 
-### From individual videos
+### From individual URLs
 
-If the recitation is spread across separate uploads rather than a single playlist, create a text file with one `<surah_number> <youtube_url>` per line:
+If the recitation is spread across separate uploads rather than a single playlist, create a text file with one `<surah_number> <url>` per line (any URL supported):
 
 ```
 1 https://www.youtube.com/watch?v=abc123
-2 https://www.youtube.com/watch?v=def456
-3 https://www.youtube.com/watch?v=ghi789
+2 https://archive.org/download/some-item/002.mp3
+3 https://soundcloud.com/user/surah-003
 ```
 
 Then run:
 
 ```bash
-python3 scripts/youtube_manifest.py --from-file urls.txt
+python3 scripts/playlist_manifest.py --from-file urls.txt
 ```
 
 **Requirements:** `yt-dlp` and `thefuzz` — the script will prompt to install them if missing.
