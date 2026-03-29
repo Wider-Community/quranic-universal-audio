@@ -70,6 +70,7 @@ NGRAM_INDEX_PATH = DATA_PATH / f"phoneme_ngram_index_{NGRAM_SIZE}.pkl"
 # =============================================================================
 
 ZEROGPU_MAX_DURATION = 120  # Hard cap enforced by HF ZeroGPU
+AUDIO_DURATION_WARNING_MINUTES = 300  # Warn user on upload if audio exceeds this (minutes)
 
 def get_vad_duration(minutes):
     """GPU seconds needed for VAD based on audio minutes."""

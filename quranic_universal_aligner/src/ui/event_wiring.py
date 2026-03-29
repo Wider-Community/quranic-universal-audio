@@ -101,8 +101,21 @@ def _wire_url_input(c):
 
 def _wire_audio_input(c):
     """Clear outputs when new audio is uploaded/recorded + wire example buttons."""
-    c.audio_input.change(
-        fn=lambda: (
+
+    def _on_audio_change(audio_path):
+        # Warn early if audio is very long (before user wastes GPU clicking Extract)
+        if audio_path and isinstance(audio_path, str):
+            try:
+                import soundfile as _sf
+                from config import AUDIO_DURATION_WARNING_MINUTES
+                _info = _sf.info(audio_path)
+                dur_min = _info.duration / 60
+                if dur_min > AUDIO_DURATION_WARNING_MINUTES:
+                    hr = dur_min / 60
+                    gr.Warning(f"Audio is {hr:.1f} hours — processing will likely time out or crash. Consider splitting into separate surahs.")
+            except Exception:
+                pass
+        return (
             _EMPTY_PLACEHOLDER, None, None,
             None, None, None, None, None, None, None, None,
             gr.update(visible=True),                                          # extract_btn
@@ -113,8 +126,11 @@ def _wire_audio_input(c):
             gr.update(visible=False),                                         # resegment_toggle_btn
             gr.update(visible=False),                                         # retranscribe_btn
             gr.update(visible=False),                                         # resegment_panel
-        ),
-        inputs=[],
+        )
+
+    c.audio_input.change(
+        fn=_on_audio_change,
+        inputs=[c.audio_input],
         outputs=[
             c.output_html, c.output_json, c.export_file,
             c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
