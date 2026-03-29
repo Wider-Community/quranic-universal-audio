@@ -668,6 +668,9 @@ function syncChapterSegsToAll() {
 // ---------------------------------------------------------------------------
 
 async function decodeSegAudio(url) {
+    // Mark as loading to prevent scroll preload from double-fetching
+    const ch = parseInt(segChapterSelect.value);
+    if (ch) segAudioBuffers.set(ch, null);  // sentinel
     try {
         if (!segAudioCtx) {
             segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -677,18 +680,21 @@ async function decodeSegAudio(url) {
         segAudioBuffer = await segAudioCtx.decodeAudioData(buf);
         segAudioBufferUrl = url;
         // Also cache in per-chapter map
-        const ch = parseInt(segChapterSelect.value);
         if (ch) segAudioBuffers.set(ch, segAudioBuffer);
     } catch (e) {
         console.error('Seg audio decode failed:', e);
         segAudioBuffer = null;
         segAudioBufferUrl = '';
+        // Remove sentinel so scroll preload can retry
+        if (ch && segAudioBuffers.get(ch) === null) segAudioBuffers.delete(ch);
     }
 }
 
 /** Decode and cache audio buffer for a specific chapter. Returns the AudioBuffer or null. */
 async function ensureChapterAudioBuffer(chapter) {
-    if (segAudioBuffers.has(chapter)) return segAudioBuffers.get(chapter);
+    const cached = segAudioBuffers.get(chapter);
+    if (cached) return cached;  // actual buffer (not null sentinel)
+    if (segAudioBuffers.has(chapter)) return null;  // null sentinel = loading in progress, don't duplicate
     const url = segAllData?.audio_by_chapter?.[chapter];
     if (!url) return null;
     try {
@@ -766,6 +772,7 @@ function _ensureWaveformObserver() {
                                 segAudioBuffers.set(segUrl, decoded);
                             } catch (e) { segAudioBuffers.delete(segUrl); }
                             if (canvas.hasAttribute('data-needs-waveform') && _waveformObserver) {
+                                _waveformObserver.unobserve(canvas);
                                 _waveformObserver.observe(canvas);
                             }
                         })();
@@ -778,7 +785,8 @@ function _ensureWaveformObserver() {
                 buffer = segAudioBuffers.get(chapter) || null;
                 if (!buffer) {
                     ensureChapterAudioBuffer(chapter).then(buf => {
-                        if (buf && canvas.hasAttribute('data-needs-waveform')) {
+                        if (buf && canvas.hasAttribute('data-needs-waveform') && _waveformObserver) {
+                            _waveformObserver.unobserve(canvas);
                             _waveformObserver.observe(canvas);
                         }
                     });
@@ -789,7 +797,8 @@ function _ensureWaveformObserver() {
                 buffer = segAudioBuffer;
                 if (!buffer) {
                     ensureChapterAudioBuffer(chapter).then(buf => {
-                        if (buf && canvas.hasAttribute('data-needs-waveform')) {
+                        if (buf && canvas.hasAttribute('data-needs-waveform') && _waveformObserver) {
+                            _waveformObserver.unobserve(canvas);
                             _waveformObserver.observe(canvas);
                         }
                     });
@@ -814,6 +823,7 @@ function drawAllSegWaveforms() {
     if (!segAudioBuffer || !segDisplayedSegments) return;
     const observer = _ensureWaveformObserver();
     segListEl.querySelectorAll('canvas[data-needs-waveform]').forEach(canvas => {
+        observer.unobserve(canvas);
         observer.observe(canvas);
     });
 }
@@ -840,9 +850,11 @@ function _fetchPeaks(reciter, chapters) {
 
 function _redrawPeaksWaveforms() {
     const observer = _ensureWaveformObserver();
-    [segListEl, segValidationEl, segValidationGlobalEl].forEach(container => {
+    [segListEl, segValidationEl, segValidationGlobalEl, segHistoryView].forEach(container => {
         if (!container) return;
         container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => {
+            // Unobserve then re-observe to force a fresh intersection check
+            observer.unobserve(c);
             observer.observe(c);
         });
     });
@@ -866,9 +878,10 @@ function _attachScrollPreload(container) {
     container.addEventListener('scroll', handler, { passive: true });
     _scrollListeners.push({ el: container, handler });
 
-    // Initial preload after short delay (for first render before any scroll)
-    clearTimeout(_scrollDebounceTimer);
-    _scrollDebounceTimer = setTimeout(_onScrollSettled, 500);
+    // Initial preload after short delay (only if not already scheduled)
+    if (!_scrollDebounceTimer) {
+        _scrollDebounceTimer = setTimeout(_onScrollSettled, 500);
+    }
 }
 
 function _teardownScrollPreloading() {
@@ -932,12 +945,16 @@ function _getViewportSegments() {
                 if (justBelow) belowCount++;
                 const seg = resolveSegFromRow(row);
                 if (!seg) continue;
+                const isByAyah = !!seg.audio_url;
                 const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(seg.chapter)] || '';
                 if (!audioUrl || seen.has(audioUrl)) continue;
-                // Skip if already cached (including null sentinel = already loading)
-                if (segAudioBuffers.has(audioUrl) || segAudioBuffers.has(seg.chapter)) continue;
+                // Skip if already cached or being loaded (null sentinel)
+                const cacheKey = isByAyah ? audioUrl : seg.chapter;
+                if (segAudioBuffers.has(cacheKey)) continue;
+                // Also skip by_surah if the eager decode already loaded it
+                if (!isByAyah && segAudioBuffer && segAudioBufferUrl === audioUrl) continue;
                 seen.add(audioUrl);
-                results.push({ seg, audioUrl, chapter: seg.chapter });
+                results.push({ seg, audioUrl, chapter: seg.chapter, isByAyah });
             } else if (rRect.top > cRect.bottom && belowCount >= 3) {
                 break;  // past buffer zone
             }
@@ -946,7 +963,7 @@ function _getViewportSegments() {
     return results;
 }
 
-async function _preloadAudioForSeg({ seg, audioUrl, chapter }, signal) {
+async function _preloadAudioForSeg({ seg, audioUrl, chapter, isByAyah }, signal) {
     if (signal.aborted) return;
     try {
         if (!segAudioCtx) {
@@ -957,11 +974,18 @@ async function _preloadAudioForSeg({ seg, audioUrl, chapter }, signal) {
         const buf = await resp.arrayBuffer();
         if (signal.aborted) return;
         const decoded = await segAudioCtx.decodeAudioData(buf);
-        // Cache: by URL for by_ayah, by chapter for by_surah
-        if (seg.audio_url) {
+        if (isByAyah) {
             segAudioBuffers.set(audioUrl, decoded);
         } else {
             segAudioBuffers.set(chapter, decoded);
+            // For by_surah: also set the global buffer so waveform drawing works
+            // (don't touch segAudioEl — the eager load in onSegChapterChange handles that)
+            const currentChapter = parseInt(segChapterSelect.value);
+            if (chapter === currentChapter && !segAudioBuffer) {
+                segAudioBuffer = decoded;
+                segAudioBufferUrl = audioUrl;
+                drawAllSegWaveforms();
+            }
         }
     } catch (e) {
         if (e.name !== 'AbortError') {
@@ -1502,7 +1526,13 @@ function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs) {
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
     } else {
-        drawSegmentWaveform(canvas, startMs, endMs);
+        // Try AudioBuffer first, fall back to peaks
+        if (segAudioBuffer) {
+            drawSegmentWaveform(canvas, startMs, endMs);
+        } else if (segPeaksByAudio && segAudioBufferUrl) {
+            const pe = segPeaksByAudio[segAudioBufferUrl];
+            if (pe?.peaks?.length) drawSegmentWaveformFromPeaks(canvas, startMs, endMs, pe.peaks, pe.duration_ms);
+        }
         canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
         canvas._wfCacheKey = cacheKey;
     }
