@@ -196,6 +196,7 @@ _SESSION_ERROR = {"error": "Session not found or expired", "segments": []}
 
 _ESTIMABLE_ENDPOINTS = {
     "process_audio_session",
+    "process_url_session",
     "resegment",
     "retranscribe",
     "realign_from_timestamps",
@@ -204,7 +205,7 @@ _ESTIMABLE_ENDPOINTS = {
 }
 
 _MFA_ENDPOINTS = {"timestamps", "timestamps_direct"}
-_VAD_ENDPOINTS = {"process_audio_session"}
+_VAD_ENDPOINTS = {"process_audio_session", "process_url_session"}
 
 
 def _load_session_metadata(audio_id):
@@ -377,6 +378,80 @@ def process_audio_session(audio_data, min_silence_ms, min_speech_ms, pad_ms,
         audio, speech_intervals, is_complete, intervals, model_name,
     )
     return _format_response(audio_id, json_output, warning=quota_warning)
+
+
+def process_url_session(url, min_silence_ms, min_speech_ms, pad_ms,
+                        model_name="Base", device="GPU",
+                        request: gr.Request = None):
+    """Full pipeline from URL: download -> preprocess -> VAD -> ASR -> alignment.
+
+    Downloads audio via yt-dlp, then runs the same pipeline as
+    process_audio_session. Returns the same response format with an
+    additional url_metadata field.
+    """
+    err = _validate_model_name(model_name)
+    if err:
+        return err
+
+    if not url or not isinstance(url, str) or not url.strip():
+        return {"error": "URL is required", "segments": []}
+
+    url = url.strip()
+
+    # Download audio
+    try:
+        from src.ui.handlers import _download_url_core
+        wav_path, url_meta = _download_url_core(url)
+    except Exception as e:
+        return {"error": f"Download failed: {e}", "segments": []}
+
+    # Run the standard pipeline with the downloaded WAV path
+    from src.pipeline import process_audio
+
+    quota_warning = None
+    try:
+        result = process_audio(
+            wav_path, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
+            model_name, device, request=request, endpoint="process_url",
+        )
+    except QuotaExhaustedError as e:
+        reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
+        quota_warning = f"GPU quota reached — processed on CPU (slower).{reset_msg}"
+        result = process_audio(
+            wav_path, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
+            model_name, "CPU", request=request, endpoint="process_url",
+        )
+
+    json_output = result[1]
+    if json_output is None:
+        return {"error": "No speech detected in audio", "segments": []}
+
+    speech_intervals = result[2]
+    is_complete = result[3]
+    audio_ref = result[4]
+    intervals = result[6]
+
+    from src.pipeline import _load_audio
+    audio, _ = _load_audio(audio_ref)
+
+    audio_id = create_session(
+        audio, speech_intervals, is_complete, intervals, model_name,
+    )
+
+    response = _format_response(audio_id, json_output, warning=quota_warning)
+    response["url_metadata"] = {
+        "title": url_meta.get("title"),
+        "duration": url_meta.get("duration"),
+        "source_url": url_meta.get("source_url"),
+    }
+
+    # Clean up downloaded WAV (audio is now cached in session)
+    try:
+        os.remove(wav_path)
+    except OSError:
+        pass
+
+    return response
 
 
 def resegment(audio_id, min_silence_ms, min_speech_ms, pad_ms,

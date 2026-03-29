@@ -441,9 +441,8 @@ def build_css() -> str:
     #input-mode-row button:first-child {{ border-radius: 8px 0 0 8px !important; }}
     #input-mode-row button:last-child {{ border-radius: 0 8px 8px 0 !important; }}
     #input-mode-row button:not(:first-child) {{ border-left: none !important; }}
-    #upload-panel, #record-panel, #link-panel {{ overflow: visible !important; }}
-    #upload-panel .audio-container, #link-panel .audio-container,
-    #upload-panel audio, #link-panel audio {{ overflow: visible !important; }}
+    #upload-panel, #record-panel, #link-panel,
+    #upload-panel > div, #record-panel > div, #link-panel > div {{ overflow: visible !important; }}
     .mode-active {{
         background: var(--button-primary-background-fill) !important;
         color: var(--button-primary-text-color) !important;

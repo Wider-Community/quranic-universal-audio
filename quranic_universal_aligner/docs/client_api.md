@@ -2,12 +2,15 @@
 
 - [Quick Start](#quick-start)
 - [Sessions](#sessions)
-- [Alignment Endpoints](#alignment-endpoints) — `/process_audio_session`, `/resegment`, `/retranscribe`, `/realign_from_timestamps`
+- [Alignment Endpoints](#alignment-endpoints) — `/process_audio_session`, `/process_url_session`, `/resegment`, `/retranscribe`, `/realign_from_timestamps`
 - [Word Timestamps](#word-timestamps) — `/timestamps`, `/timestamps_direct`
 - [Utilities](#utilities) — `/estimate_duration`
 - [Response Reference](#response-reference) — segment fields, special types, word arrays, GPU warning, errors
 
 ## API Changelog
+
+**30/03/2026**
+- New `/process_url_session` endpoint: pass a URL (YouTube, SoundCloud, MP3Quran, etc.) instead of uploading audio
 
 **29/03/2026**
 - API calls now skip HTML rendering and audio file I/O, returning JSON faster
@@ -62,6 +65,15 @@ ts = client.predict(audio_id, None, "words", api_name="/timestamps")
 
 # Get timestamps without a session (standalone)
 ts = client.predict("recitation.mp3", result["segments"], "words", api_name="/timestamps_direct")
+
+# From URL (YouTube, SoundCloud, MP3Quran, etc.)
+result = client.predict(
+    "https://server8.mp3quran.net/afs/112.mp3",
+    200, 1000, 100, "Base", "GPU",
+    api_name="/process_url_session"
+)
+print(result["url_metadata"]["title"])  # Source metadata
+# All follow-up calls work the same as with /process_audio_session
 ```
 
 ---
@@ -145,6 +157,39 @@ If the GPU is temporarily unavailable, processing continues on CPU (slower). Whe
 ```
 
 See [Segment Object](#segment-object) for field descriptions. See [Special Segment Types](#special-segment-types) for non-Quranic segments.
+
+---
+
+### `POST /process_url_session`
+
+Downloads audio from a URL, then runs the same pipeline as `/process_audio_session`. Supports YouTube, SoundCloud, MP3Quran, TikTok, and [500+ sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) via yt-dlp.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `url` | str | required | URL to download audio from |
+| `min_silence_ms` | int | 200 | Minimum silence gap to split segments |
+| `min_speech_ms` | int | 1000 | Minimum speech duration to keep a segment |
+| `pad_ms` | int | 100 | Padding added to each side of a segment |
+| `model_name` | str | `"Base"` | `"Base"` or `"Large"` only |
+| `device` | str | `"GPU"` | `"GPU"` or `"CPU"` |
+
+**Response:** Same as `/process_audio_session`, plus a `url_metadata` field:
+```json
+{
+  "audio_id": "a1b2c3d4e5f67890a1b2c3d4e5f67890",
+  "url_metadata": {
+    "title": "Surah Al-Ikhlas - Sheikh Mishary",
+    "duration": 45.0,
+    "source_url": "https://..."
+  },
+  "segments": [...]
+}
+```
+
+**Notes:**
+- Playlists are rejected — pass a single video/audio URL.
+- Some sites (YouTube, Facebook, Instagram) may not work from the server due to IP restrictions. If a download fails, download the audio locally and use `/process_audio_session` instead.
+- After the session is created, all follow-up endpoints (`/resegment`, `/retranscribe`, etc.) work identically.
 
 ---
 
@@ -440,3 +485,5 @@ All errors follow the same shape: `{"error": "...", "segments": []}`. Endpoints 
 | No segments in session (timestamps) | `"No segments found in session"` | Yes |
 | Timestamp alignment failed | `"Alignment failed: ..."` | Yes (session) / No (direct) |
 | No segments provided (timestamps direct) | `"No segments provided"` | No |
+| URL is empty (process_url) | `"URL is required"` | No |
+| URL download failed (process_url) | `"Download failed: ..."` | No |

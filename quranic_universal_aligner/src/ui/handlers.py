@@ -72,8 +72,12 @@ def fetch_url_info(url: str):
     return _build_info_html(title, duration, thumbnail), warning
 
 
-def download_url_audio(url: str):
-    """Full download of audio from URL. Returns (wav_path, info_html). Raises Exception on error."""
+def _download_url_core(url: str):
+    """Download audio from URL. Returns (wav_path, info_dict).
+
+    info_dict keys: title, duration, thumbnail, source_url.
+    Raises Exception on error (empty URL, playlist, download failure).
+    """
     import yt_dlp
 
     if not url or not url.strip():
@@ -99,11 +103,18 @@ def download_url_audio(url: str):
     if not Path(wav_path).exists():
         raise Exception("Download completed but audio file was not created.")
 
-    title = info.get("title", "Unknown")
-    duration = info.get("duration")
-    thumbnail = info.get("thumbnail", "")
+    return wav_path, {
+        "title": info.get("title", "Unknown"),
+        "duration": info.get("duration"),
+        "thumbnail": info.get("thumbnail", ""),
+        "source_url": url,
+    }
 
-    return wav_path, _build_info_html(title, duration, thumbnail)
+
+def download_url_audio(url: str):
+    """Full download of audio from URL. Returns (wav_path, info_html). Raises Exception on error."""
+    wav_path, info = _download_url_core(url)
+    return wav_path, _build_info_html(info["title"], info["duration"], info["thumbnail"])
 
 
 def create_segmentation_settings(id_suffix=""):

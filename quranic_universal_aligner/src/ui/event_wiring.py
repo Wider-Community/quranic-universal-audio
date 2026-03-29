@@ -9,8 +9,8 @@ from src.pipeline import (
 )
 from src.api.session_api import (
     estimate_duration,
-    process_audio_session, resegment,
-    retranscribe, realign_from_timestamps,
+    process_audio_session, process_url_session,
+    resegment, retranscribe, realign_from_timestamps,
     timestamps, timestamps_direct,
 )
 from src.mfa import compute_mfa_timestamps
@@ -720,6 +720,13 @@ def _wire_api_endpoint(c):
                 c.api_model, c.api_device],
         outputs=[c.api_result],
         api_name="process_audio_session",
+    )
+    gr.Button(visible=False).click(
+        fn=process_url_session,
+        inputs=[c.api_url, c.api_silence, c.api_speech, c.api_pad,
+                c.api_model, c.api_device],
+        outputs=[c.api_result],
+        api_name="process_url_session",
     )
     gr.Button(visible=False).click(
         fn=resegment,
