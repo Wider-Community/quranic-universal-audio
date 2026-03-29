@@ -49,6 +49,11 @@ def _mfa_upload_and_submit(refs, audio_paths,
             timeout=MFA_TIMEOUT,
         )
         resp.raise_for_status()
+        if "application/json" not in resp.headers.get("content-type", ""):
+            raise gr.Error(
+                "MFA Space is not running (may be paused or restarting). "
+                "Please try again in a minute."
+            )
         uploaded_paths = resp.json()
     finally:
         for fh in open_handles:
@@ -69,6 +74,11 @@ def _mfa_upload_and_submit(refs, audio_paths,
         timeout=MFA_TIMEOUT,
     )
     submit_resp.raise_for_status()
+    if "application/json" not in submit_resp.headers.get("content-type", ""):
+        raise gr.Error(
+            "MFA Space is not running (may be paused or restarting). "
+            "Please try again in a minute."
+        )
     event_id = submit_resp.json()["event_id"]
     return event_id, headers, base
 
