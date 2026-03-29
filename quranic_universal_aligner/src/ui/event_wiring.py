@@ -21,10 +21,7 @@ from src.ui.handlers import (
     fetch_url_info, download_url_audio,
 )
 
-_EMPTY_PLACEHOLDER = (
-    '<div style="text-align: center; color: #666; padding: 60px;">'
-    'Upload audio and click "Extract Segments" to begin</div>'
-)
+_EMPTY_PLACEHOLDER = ""
 
 
 def wire_events(app, c):
@@ -218,10 +215,11 @@ def _wire_audio_input(c):
     c.audio_upload.change(fn=lambda x: x, inputs=[c.audio_upload], outputs=[c.audio_input], api_name=False, show_progress="hidden")
     c.audio_record.change(fn=lambda x: x, inputs=[c.audio_record], outputs=[c.audio_input], api_name=False, show_progress="hidden")
 
-    c.btn_ex_112.click(fn=lambda: ("data/112.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
-    c.btn_ex_84.click(fn=lambda: ("data/84.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
-    c.btn_ex_7.click(fn=lambda: ("data/7.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
-    c.btn_ex_juz30.click(fn=lambda: ("data/Juz' 30.mp3", "GPU", True), inputs=[], outputs=[c.audio_input, c.device_radio, c.is_preset], api_name=False)
+    _ex_outputs = [c.audio_upload, c.audio_input, c.device_radio, c.is_preset]
+    c.btn_ex_112.click(fn=lambda: ("data/112.mp3", "data/112.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
+    c.btn_ex_84.click(fn=lambda: ("data/84.mp3", "data/84.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
+    c.btn_ex_7.click(fn=lambda: ("data/7.mp3", "data/7.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
+    c.btn_ex_juz30.click(fn=lambda: ("data/Juz' 30.mp3", "data/Juz' 30.mp3", "GPU", True), inputs=[], outputs=_ex_outputs, api_name=False)
 
     # Reset is_preset when user uploads/records their own audio
     c.audio_upload.input(fn=lambda: False, inputs=[], outputs=[c.is_preset], api_name=False, show_progress="hidden")

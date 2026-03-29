@@ -56,11 +56,8 @@ def fetch_url_info(url: str):
     if info.get("_type") == "playlist":
         raise Exception("Playlists are not supported. Please paste a single video/audio URL.")
 
-    duration = info.get("duration")
-    if duration is None:
-        raise Exception("Live streams are not supported. Please use a completed video/audio.")
-
     title = info.get("title", "Unknown")
+    duration = info.get("duration")
     thumbnail = info.get("thumbnail", "")
 
     # Warn for sites that may require auth from server IPs

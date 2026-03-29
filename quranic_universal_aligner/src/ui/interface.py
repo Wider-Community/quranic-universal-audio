@@ -121,26 +121,19 @@ def _build_left_column(c):
                                        elem_classes=["mode-active"] if _is_record else [])
 
         # Link panel
-        with gr.Group(visible=_is_link, elem_id="link-panel") as c.link_panel:
+        with gr.Column(visible=_is_link, elem_id="link-panel") as c.link_panel:
             c.url_input = gr.Textbox(
                 label="Paste a link",
-                placeholder="e.g. TikTok, SoundCloud, Archive.org",
+                info='mp3quran.net · TikTok · SoundCloud · Archive.org · [all supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)',
                 lines=1,
             )
             c.url_status = gr.HTML(value="", visible=False)
             c.url_info_html = gr.HTML(value="", visible=False)
             c.url_download_btn = gr.Button("Download", size="sm", variant="primary", visible=False)
             c.url_audio_player = gr.Audio(label="Downloaded Audio", visible=False, interactive=False)
-            gr.HTML(
-                '<div id="url-help">'
-                '<a href="https://mp3quran.net" target="_blank">mp3quran.net</a> · '
-                'TikTok · SoundCloud · Archive.org · '
-                '<a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md" target="_blank">all supported sites</a>'
-                '</div>',
-            )
 
         # Upload panel
-        with gr.Group(visible=_is_upload, elem_id="upload-panel") as c.upload_panel:
+        with gr.Column(visible=_is_upload, elem_id="upload-panel") as c.upload_panel:
             with gr.Row(elem_id="example-row"):
                 c.btn_ex_112 = gr.Button("112", size="sm", min_width=0)
                 c.btn_ex_84 = gr.Button("84", size="sm", min_width=0)
@@ -149,7 +142,7 @@ def _build_left_column(c):
             c.audio_upload = gr.Audio(label="Upload Recitation", sources=["upload"], type="filepath")
 
         # Record panel
-        with gr.Group(visible=_is_record, elem_id="record-panel") as c.record_panel:
+        with gr.Column(visible=_is_record, elem_id="record-panel") as c.record_panel:
             c.audio_record = gr.Audio(label="Record Recitation", sources=["microphone"], type="filepath")
 
         # Hidden unified audio (fed by upload, record, or URL download)

@@ -441,12 +441,11 @@ def build_css() -> str:
     #input-mode-row button:first-child {{ border-radius: 8px 0 0 8px !important; }}
     #input-mode-row button:last-child {{ border-radius: 0 8px 8px 0 !important; }}
     #input-mode-row button:not(:first-child) {{ border-left: none !important; }}
+    #upload-panel, #record-panel, #link-panel {{ overflow: visible !important; }}
     .mode-active {{
         background: var(--button-primary-background-fill) !important;
         color: var(--button-primary-text-color) !important;
         border-color: var(--button-primary-background-fill) !important;
     }}
-    #url-help {{ font-size: 12px; opacity: 0.7; margin-top: -8px; }}
-    #url-help a {{ color: var(--link-text-color); }}
 
     """
