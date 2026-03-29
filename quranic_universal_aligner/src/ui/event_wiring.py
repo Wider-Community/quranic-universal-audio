@@ -203,6 +203,8 @@ def _wire_audio_input(c):
             gr.update(visible=False),                                         # resegment_toggle_btn
             gr.update(visible=False),                                         # retranscribe_btn
             gr.update(visible=False),                                         # resegment_panel
+            gr.Accordion(open=True),                                          # re-expand model_accordion
+            gr.Accordion(open=True),                                          # re-expand seg_accordion
         )
 
     c.audio_input.change(
@@ -214,6 +216,7 @@ def _wire_audio_input(c):
             c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
             c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
             c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
+            c.model_accordion, c.seg_accordion,
         ],
         api_name=False, show_progress="hidden"
     )
@@ -255,6 +258,7 @@ def _wire_extract_chain(c):
             _skip,                                                              # compute_ts_btn
             _skip, _skip,                                                       # resegment/retranscribe btns
             _skip, _skip, _skip, _skip,                                         # rs sliders + model
+            _skip, _skip,                                                       # accordions
         )
 
         try:
@@ -276,6 +280,7 @@ def _wire_extract_chain(c):
                 _skip,                                                              # compute_ts_btn
                 _skip, _skip,                                                       # resegment/retranscribe
                 _skip, _skip, _skip, _skip,                                         # rs sliders + model
+                _skip, _skip,                                                       # accordions
             )
             return
         # result: (html, json, speech_intervals, is_complete, audio, sr, intervals, seg_dir, log_row)
@@ -295,6 +300,8 @@ def _wire_extract_chain(c):
             ),
             silence, speech, pad,                                               # sync to resegment panel
             model,                                                              # cache model name
+            gr.Accordion(open=False),                                           # collapse model_accordion
+            gr.Accordion(open=False),                                           # collapse seg_accordion
         )
 
     c.extract_btn.click(
@@ -314,6 +321,7 @@ def _wire_extract_chain(c):
             c.export_file, c.extract_btn, c.pipeline_progress, c.compute_ts_btn,
             c.resegment_toggle_btn, c.retranscribe_btn,
             c.rs_silence, c.rs_speech, c.rs_pad, c.cached_model_name,
+            c.model_accordion, c.seg_accordion,
         ],
         api_name=False, show_progress="hidden"
     )

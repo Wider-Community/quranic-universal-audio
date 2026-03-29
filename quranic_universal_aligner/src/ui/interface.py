@@ -151,7 +151,7 @@ def _build_left_column(c):
         _build_animation_settings(c)
 
         c.anim_cached_settings = gr.JSON(value=None, visible=False)
-        with gr.Accordion("Model Settings", open=True):
+        with gr.Accordion("Model Settings", open=True) as c.model_accordion:
             with gr.Row():
                 c.model_radio = gr.Radio(
                     choices=["Base", "Large"],
@@ -166,7 +166,7 @@ def _build_left_column(c):
                     info="Daily GPU usage limits. Unlimitted CPU usage but slower"
                 )
 
-        with gr.Accordion("Segmentation Settings", open=True):
+        with gr.Accordion("Segmentation Settings", open=True) as c.seg_accordion:
             c.min_silence_slider, c.min_speech_slider, c.pad_slider, \
                 c.preset_mujawwad, c.preset_murattal, c.preset_fast = create_segmentation_settings()
 
