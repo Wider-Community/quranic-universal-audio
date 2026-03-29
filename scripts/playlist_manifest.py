@@ -325,51 +325,137 @@ def extract_surah_name(title: str) -> tuple:
     return name, number
 
 
-def match_title(title: str, en_map: dict, ar_map: dict, alias_map: dict) -> tuple:
-    """Match a video title to a surah number.
+def _score_title(title: str, en_map: dict, ar_map: dict, alias_map: dict) -> list:
+    """Score a title against all 114 surahs using multiple signals.
 
-    Returns (surah_number, method) or (None, None).
-    method is one of: 'exact', 'alias', 'fuzzy_en', 'fuzzy_ar', 'number'.
+    Returns ALL (surah_num, score, method) candidates with score >= 70 so the
+    greedy assigner can pick optimal 1:1 pairings.
     """
     name, number = extract_surah_name(title)
+    segments = [s.strip() for s in re.split(r"[|]", title) if s.strip()]
+
+    candidates = []
 
     if name:
         norm = normalize_en(name)
 
-        # 1. Exact match against canonical names
         if norm in en_map:
-            return en_map[norm], "exact"
-
-        # 2. Alias match
+            candidates.append((en_map[norm], 100, "exact"))
         if norm in alias_map:
-            return alias_map[norm], "alias"
+            candidates.append((alias_map[norm], 100, "alias"))
 
-        # 3. Fuzzy match against English names
-        best_score, best_num = 0, None
+        # All English fuzzy matches above threshold
         for ref_norm, num in en_map.items():
-            score = fuzz.ratio(norm, ref_norm)
-            if score > best_score:
-                best_score, best_num = score, num
-        if best_score >= 70:
-            return best_num, "fuzzy_en"
+            score = fuzz.ratio(ref_norm, norm)
+            if score >= 70:
+                candidates.append((num, score, "fuzzy_en"))
 
-        # 4. Check Arabic content in title
-        arabic_chars = re.findall(r"[\u0600-\u06FF]+", title)
-        if arabic_chars:
-            title_ar = normalize_ar(" ".join(arabic_chars))
-            best_score, best_num = 0, None
-            for ref_norm, num in ar_map.items():
-                score = fuzz.ratio(title_ar, ref_norm)
-                if score > best_score:
-                    best_score, best_num = score, num
-            if best_score >= 70:
-                return best_num, "fuzzy_ar"
+    # English on each | segment — extract surah name from segment first
+    for seg in segments:
+        seg_name, seg_number = extract_surah_name(seg)
+        seg_norm = normalize_en(seg_name) if seg_name else normalize_en(seg)
 
-    # 5. Fallback: surah number
+        if seg_norm in en_map:
+            candidates.append((en_map[seg_norm], 100, "exact"))
+        if seg_norm in alias_map:
+            candidates.append((alias_map[seg_norm], 100, "alias"))
+        for ref_norm, num in en_map.items():
+            score = fuzz.ratio(ref_norm, seg_norm)
+            if score >= 70:
+                candidates.append((num, score, "fuzzy_en"))
+
+        if seg_number and 1 <= seg_number <= 114:
+            candidates.append((seg_number, 80, "number"))
+
+    # Arabic — return ALL matches above threshold
+    arabic_chars = re.findall(r"[\u0600-\u06FF]+", title)
+    if arabic_chars:
+        title_ar = normalize_ar(" ".join(arabic_chars))
+        ar_words = set(title_ar.split())
+        for ref_norm, num in ar_map.items():
+            if len(ref_norm) <= 2:
+                score = 100 if ref_norm in ar_words else 0
+            else:
+                score = fuzz.partial_ratio(ref_norm, title_ar)
+            if score >= 70:
+                candidates.append((num, score, "fuzzy_ar"))
+
+    # Number from title
     if number and 1 <= number <= 114:
-        return number, "number"
+        candidates.append((number, 80, "number"))
 
-    return None, None
+    return candidates
+
+
+def _resolve_candidates(candidates: list) -> tuple:
+    """Pick best surah from a list of (num, score, method) candidates.
+
+    Returns (surah_number, method) or (None, None).
+    """
+    if not candidates:
+        return None, None
+
+    votes = {}  # surah_num → (vote_count, best_score, best_method)
+    for num, score, method in candidates:
+        if num not in votes:
+            votes[num] = (0, 0, method)
+        count, prev_score, prev_method = votes[num]
+        best_method = method if score > prev_score else prev_method
+        votes[num] = (count + 1, max(prev_score, score), best_method)
+
+    METHOD_RANK = {"exact": 0, "alias": 1, "fuzzy_en": 2, "fuzzy_ar": 3, "number": 4}
+    ranked = sorted(
+        votes.items(),
+        key=lambda kv: (-kv[1][0], -kv[1][1], METHOD_RANK.get(kv[1][2], 9)),
+    )
+
+    best_num, (best_votes, best_score, best_method) = ranked[0]
+
+    if best_votes == 1 and best_method.startswith("fuzzy") and best_score < 80:
+        return None, None
+
+    return best_num, best_method
+
+
+def match_title(title: str, en_map: dict, ar_map: dict, alias_map: dict) -> tuple:
+    """Match a single title to a surah (non-greedy, for from-file mode)."""
+    return _resolve_candidates(_score_title(title, en_map, ar_map, alias_map))
+
+
+def match_entries(entries: list, en_map: dict, ar_map: dict, alias_map: dict) -> tuple:
+    """Match playlist entries to surahs using greedy 1:1 assignment.
+
+    When the entry count is close to 114 (complete Quran), each entry maps to
+    exactly one surah — no duplicates.  Scores all entries against all surahs,
+    then greedily assigns highest-scoring pairs first.
+
+    Returns (matched, failed) where matched is {surah_num: entry_dict} and
+    failed is a list of unmatched entries.
+    """
+    # Score every entry
+    entry_scores = []  # (entry_idx, surah_num, score, method)
+    for idx, entry in enumerate(entries):
+        for num, score, method in _score_title(entry["title"], en_map, ar_map, alias_map):
+            entry_scores.append((idx, num, score, method))
+
+    # Sort: highest score first, prefer exact/alias
+    METHOD_RANK = {"exact": 0, "alias": 1, "fuzzy_en": 2, "fuzzy_ar": 3, "number": 4}
+    entry_scores.sort(key=lambda t: (-t[2], METHOD_RANK.get(t[3], 9)))
+
+    # Greedy assign: each entry and each surah used at most once
+    assigned_entries = set()
+    assigned_surahs = set()
+    matched = {}
+
+    for idx, num, score, method in entry_scores:
+        if idx in assigned_entries or num in assigned_surahs:
+            continue
+        assigned_entries.add(idx)
+        assigned_surahs.add(num)
+        matched[num] = {**entries[idx], "method": method}
+
+    failed = [entries[i] for i in range(len(entries)) if i not in assigned_entries]
+    return matched, failed
 
 
 def parse_url_file(path: str) -> dict:
@@ -571,7 +657,7 @@ def main():
         source_for_meta = first_url
         source_name = args.source or _detect_source_name(first_url)
     else:
-        # ── Playlist mode: fuzzy title matching ──
+        # ── Playlist mode: greedy 1:1 matching ──
         en_map, ar_map, alias_map, name_to_num = build_matchers(surah_info)
 
         playlist_info, entries = fetch_playlist(args.playlist_url)
@@ -579,19 +665,7 @@ def main():
             print("No entries found in playlist/collection.", file=sys.stderr)
             sys.exit(1)
 
-        matched = {}
-        failed = []
-        duplicates = []
-
-        for entry in entries:
-            num, method = match_title(entry["title"], en_map, ar_map, alias_map)
-            if num is None:
-                failed.append(entry)
-                continue
-            if num in matched:
-                duplicates.append((num, entry["title"], matched[num]["title"]))
-                continue
-            matched[num] = {**entry, "method": method}
+        matched, failed = match_entries(entries, en_map, ar_map, alias_map)
 
         print(f"\nMatched {len(matched)} of 114 surahs ({len(entries)} entries in collection)")
 
@@ -599,14 +673,6 @@ def main():
             print(f"\nCould not match {len(failed)} entry/entries:")
             for entry in failed:
                 print(f"  - {entry['title']}")
-
-        if duplicates:
-            print(f"\nDuplicate matches ({len(duplicates)}):")
-            for num, title, existing in duplicates:
-                print(f"  - Surah {num}: \"{title}\" conflicts with \"{existing}\"")
-
-        if failed:
-            print(f"\n{len(failed)} title(s) could not be matched. Fix the playlist or add aliases.")
 
         source_for_meta = args.playlist_url
         source_name = args.source or _detect_source_name(args.playlist_url)
