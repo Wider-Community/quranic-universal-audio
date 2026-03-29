@@ -1611,9 +1611,9 @@ function _nextDisplayedSeg(afterIndex) {
  */
 function _prefetchNextSegAudio(currentIndex) {
     const next = _nextDisplayedSeg(currentIndex);
-    if (!next || !next.audio_url) return;
+    if (!next) return;
     const currentUrl = segAudioBufferUrl || (segAudioEl.src || '');
-    if (next.audio_url === currentUrl) return;
+    if (!next.audio_url || next.audio_url === currentUrl) return;
     if (_segPrefetchCache[next.audio_url]) return; // already prefetching/prefetched
     // Prefetch: download into browser cache so the <audio> src switch is instant
     _segPrefetchCache[next.audio_url] = fetch(next.audio_url)
@@ -1653,12 +1653,11 @@ function onSegTimeUpdate() {
     if (segDisplayedSegments && segDisplayedSegments.length > 0) {
         for (let i = segDisplayedSegments.length - 1; i >= 0; i--) {
             const s = segDisplayedSegments[i];
-            if (!s.audio_url || s.audio_url === currentSrc) {
+            if (s.audio_url === currentSrc) {
                 lastSegOnAudio = s;
                 break;
             }
         }
-        // Fallback for by_surah (no per-segment audio_url)
         if (!lastSegOnAudio) lastSegOnAudio = segDisplayedSegments[segDisplayedSegments.length - 1];
     }
 
@@ -1666,7 +1665,7 @@ function onSegTimeUpdate() {
     if (lastSegOnAudio && timeMs >= lastSegOnAudio.time_end) {
         const nextSeg = _nextDisplayedSeg(lastSegOnAudio.index);
         const isConsecutive = nextSeg && nextSeg.index === lastSegOnAudio.index + 1;
-        if (_segContinuousPlay && isConsecutive && nextSeg.audio_url && nextSeg.audio_url !== currentSrc) {
+        if (_segContinuousPlay && isConsecutive && nextSeg.audio_url !== currentSrc) {
             // Auto-advance to next segment on a different audio file (only if consecutive)
             playFromSegment(nextSeg.index, nextSeg.chapter);
             return;
@@ -1685,7 +1684,7 @@ function onSegTimeUpdate() {
     if (segDisplayedSegments) {
         for (const seg of segDisplayedSegments) {
             if (timeMs >= seg.time_start && timeMs < seg.time_end) {
-                if (seg.audio_url && segAudioBufferUrl && seg.audio_url !== segAudioBufferUrl) continue;
+                if (segAudioBufferUrl && seg.audio_url !== segAudioBufferUrl) continue;
                 segCurrentIdx = seg.index;
                 break;
             }
@@ -1698,10 +1697,10 @@ function onSegTimeUpdate() {
         if (_segContinuousPlay && segDisplayedSegments) {
             // Find the next segment after the one that just ended
             const justEnded = segDisplayedSegments.find(s => s.time_end === _segPlayEndMs
-                && (!s.audio_url || s.audio_url === currentSrc));
+                && s.audio_url === currentSrc);
             if (justEnded) {
                 const nextSeg2 = _nextDisplayedSeg(justEnded.index);
-                if (nextSeg2 && (!nextSeg2.audio_url || nextSeg2.audio_url === currentSrc)) {
+                if (nextSeg2 && nextSeg2.audio_url === currentSrc) {
                     return; // same audio file — wait for next segment to start
                 }
             }
@@ -2278,6 +2277,12 @@ async function enterEditWithBuffer(seg, row, mode) {
     const currentChapter = parseInt(segChapterSelect.value);
     const isErrorCard = !segListEl.contains(row);
 
+    // Abort in-flight scroll preloads to free browser connections for edit audio fetch
+    if (_scrollAbortController) _scrollAbortController.abort();
+
+    const chapterAudio = segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const isByAyah = seg.audio_url && seg.audio_url !== chapterAudio;
+
     if (isErrorCard && chapter !== currentChapter) {
         // Cross-chapter error card: need to load the other chapter's audio
         const buffer = await ensureChapterAudioBuffer(chapter);
@@ -2289,33 +2294,29 @@ async function enterEditWithBuffer(seg, row, mode) {
         row._savedAudioBuffer = segAudioBuffer;
         row._savedAudioBufferUrl = segAudioBufferUrl;
         segAudioBuffer = buffer;
-        segAudioBufferUrl = segAllData?.audio_by_chapter?.[chapter] || '';
+        segAudioBufferUrl = chapterAudio;
     } else if (isErrorCard && !segAudioBuffer) {
         // Same chapter but no buffer yet
         const buffer = await ensureChapterAudioBuffer(chapter);
         if (buffer) {
             segAudioBuffer = buffer;
-            segAudioBufferUrl = segAllData?.audio_by_chapter?.[chapter] || '';
+            segAudioBufferUrl = chapterAudio;
         }
-    } else if (!segAudioBuffer || (seg.audio_url && seg.audio_url !== segAudioBufferUrl)) {
-        // Main section segment: no buffer, or wrong buffer for this segment's audio
-        const segUrl = seg.audio_url;
-        if (segUrl) {
-            // by_ayah: check URL-keyed cache first (populated by IntersectionObserver)
-            const cached = segAudioBuffers.get(segUrl);
-            if (cached) {
-                segAudioBuffer = cached;
-                segAudioBufferUrl = segUrl;
-            } else {
-                await decodeSegAudio(segUrl);
-            }
+    } else if (isByAyah && seg.audio_url !== segAudioBufferUrl) {
+        // by_ayah: different audio per verse — check URL-keyed cache first
+        const cached = segAudioBuffers.get(seg.audio_url);
+        if (cached) {
+            segAudioBuffer = cached;
+            segAudioBufferUrl = seg.audio_url;
         } else {
-            // by_surah: ensure chapter buffer
-            const buffer = await ensureChapterAudioBuffer(chapter);
-            if (buffer) {
-                segAudioBuffer = buffer;
-                segAudioBufferUrl = segAllData?.audio_by_chapter?.[chapter] || '';
-            }
+            await decodeSegAudio(seg.audio_url);
+        }
+    } else if (!segAudioBuffer) {
+        // by_surah: no buffer loaded yet — ensure chapter buffer
+        const buffer = await ensureChapterAudioBuffer(chapter);
+        if (buffer) {
+            segAudioBuffer = buffer;
+            segAudioBufferUrl = chapterAudio;
         }
     }
 
