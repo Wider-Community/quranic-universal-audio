@@ -18,7 +18,7 @@ from src.ui.progress_bar import pipeline_progress_bar_html
 from src.ui.handlers import (
     wire_presets, toggle_resegment_panel,
     on_mode_change, on_verse_toggle, restore_anim_settings,
-    fetch_url_info, download_url_audio,
+    download_url_audio,
 )
 
 _EMPTY_PLACEHOLDER = ""
@@ -64,16 +64,16 @@ def _wire_input_mode_toggle(c):
             gr.update(visible=is_upload),    # upload_panel
             gr.update(visible=is_record),    # record_panel
             # Clear link panel state so returning starts fresh
-            gr.update(value=""),             # url_input
-            gr.update(visible=False),        # url_info_html
-            gr.update(visible=False),        # url_download_btn
-            gr.update(visible=False),        # url_audio_player
+            gr.update(value=""),                                      # url_input
+            gr.update(value="Download", variant="secondary",
+                      interactive=False),                             # url_download_btn
+            gr.update(visible=False),                                 # url_audio_player
         )
 
     _toggle_outputs = [
         c.mode_link, c.mode_upload, c.mode_record,
         c.link_panel, c.upload_panel, c.record_panel,
-        c.url_input, c.url_info_html, c.url_download_btn, c.url_audio_player,
+        c.url_input, c.url_download_btn, c.url_audio_player,
     ]
     c.mode_link.click(fn=lambda: _switch_to("Link"), inputs=[], outputs=_toggle_outputs, api_name=False)
     c.mode_upload.click(fn=lambda: _switch_to("Upload"), inputs=[], outputs=_toggle_outputs, api_name=False)
@@ -82,77 +82,46 @@ def _wire_input_mode_toggle(c):
 
 
 def _wire_url_input(c):
-    """Wire URL paste → auto-fetch metadata → download button."""
+    """Wire URL input → enable download button, download on click."""
 
-    def _on_url_change(url):
-        """Auto-fetch metadata when a URL is pasted."""
-        _hide_all = (
-            gr.update(visible=False),    # url_info_html
-            gr.update(visible=False),    # url_download_btn
-            gr.update(visible=False),    # url_audio_player
-        )
-        if not url or not url.strip():
-            return _hide_all
-
-        try:
-            info_html, warning = fetch_url_info(url)
-            if info_html is None:
-                yield _hide_all
-                return
-            if warning:
-                info_html += f'<div style="padding:6px 8px;font-size:12px;opacity:0.7;color:var(--body-text-color);">{warning}</div>'
-            yield (
-                gr.update(value=info_html, visible=True),
-                gr.update(visible=True),     # show Download button
-                gr.update(visible=False),
-            )
-        except Exception as e:
-            yield (
-                gr.update(
-                    value=f'<div style="color:var(--error-text-color);padding:8px;">{str(e)[:300]}</div>',
-                    visible=True,
-                ),
-                gr.update(visible=False),
-                gr.update(visible=False),
-            )
-
-    _fetch_outputs = [c.url_info_html, c.url_download_btn, c.url_audio_player]
+    # Enable/disable download button based on whether URL is present
     c.url_input.change(
-        fn=_on_url_change, inputs=[c.url_input], outputs=_fetch_outputs,
+        fn=lambda url: gr.update(
+            interactive=bool(url and url.strip()),
+            variant="primary" if url and url.strip() else "secondary",
+            value="Download",
+        ),
+        inputs=[c.url_input],
+        outputs=[c.url_download_btn],
         api_name=False, show_progress="hidden",
     )
 
     def _on_download(url):
-        """Download audio after metadata was fetched."""
-        # Yield 1: animate button to show downloading state
+        """Download audio from URL."""
+        # Yield 1: button shows downloading state
         yield (
             gr.update(),                                              # audio_input
-            gr.update(visible=False),                                 # hide info
             gr.update(value="Downloading…", interactive=False),       # animate btn
-            gr.update(),                                              # url_audio_player
+            gr.update(visible=False),                                 # hide prev player
         )
 
-        # Yield 2: result
         try:
             wav_path, _info_html = download_url_audio(url)
             yield (
                 wav_path,                                             # set audio_input
-                gr.update(visible=False),                             # info stays hidden
-                gr.update(visible=False),                             # hide download btn
+                gr.update(value="Download", variant="primary",
+                          interactive=True),                          # reset btn
                 gr.update(value=wav_path, visible=True),              # show audio player
             )
         except Exception as e:
             yield (
                 gr.update(),
-                gr.update(visible=False),                             # info stays hidden
-                gr.update(
-                    value=f"Download failed: {str(e)[:120]}",
-                    variant="stop", interactive=True,
-                ),
+                gr.update(value=f"Error: {str(e)[:100]}",
+                          variant="stop", interactive=True),          # error on btn
                 gr.update(),
             )
 
-    _dl_outputs = [c.audio_input, c.url_info_html, c.url_download_btn, c.url_audio_player]
+    _dl_outputs = [c.audio_input, c.url_download_btn, c.url_audio_player]
     c.url_download_btn.click(
         fn=_on_download, inputs=[c.url_input], outputs=_dl_outputs,
         api_name=False, show_progress="hidden",

@@ -128,8 +128,7 @@ def _build_left_column(c):
                 info='e.g. TikTok · SoundCloud · [MP3Quran](https://www.mp3quran.net/) · [all supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)',
                 lines=1,
             )
-            c.url_info_html = gr.HTML(value="", visible=False)
-            c.url_download_btn = gr.Button("Download", size="sm", variant="primary", visible=False)
+            c.url_download_btn = gr.Button("Download", size="sm", variant="secondary", interactive=False)
             c.url_audio_player = gr.Audio(label="Downloaded Audio", visible=False, interactive=False)
 
         # Upload panel
