@@ -804,7 +804,9 @@ def _run_post_vad_pipeline(
 
     json_output = {"segments": segments_list}
 
+    t_render = time.time()
     html = render_segments(segments, audio_int16, sample_rate, segment_dir=segment_dir)
+    print(f"[PROFILE] render_segments: {time.time() - t_render:.3f}s ({len(segments)} segments, HTML={len(html)/1e6:.2f}MB)")
 
     print("[STAGE] Done!")
 

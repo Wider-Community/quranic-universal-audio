@@ -20,7 +20,6 @@ PORT = 6902
 
 RESAMPLE_TYPE = "soxr_lq"
 SEGMENT_AUDIO_DIR = Path("/tmp/segments")   # WAV files written here per request
-AUDIO_PRELOAD_COUNT = 5                     # First N segments use preload="auto"
 DELETE_CACHE_FREQUENCY = 3600*5             # Gradio cache cleanup interval (seconds)
 DELETE_CACHE_AGE = 3600*5                   # Delete cached files older than this (seconds)
 
