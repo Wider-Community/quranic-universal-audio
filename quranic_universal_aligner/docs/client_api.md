@@ -6,7 +6,6 @@
 - [Word Timestamps](#word-timestamps) — `/timestamps`, `/timestamps_direct`
 - [Utilities](#utilities) — `/estimate_duration`
 - [Response Reference](#response-reference) — segment fields, special types, word arrays, GPU warning, errors
-- [API Changelog](#api-changelog)
 
 ## API Changelog
 
