@@ -27,6 +27,41 @@ from src.ui.segments import (
     check_undersegmented, is_end_of_verse,
 )
 
+# ---------------------------------------------------------------------------
+# Audio cache — avoids passing large numpy arrays through Gradio gr.State
+# (Gradio deep-copies State values, which would double ~1GB+ audio memory)
+# ---------------------------------------------------------------------------
+import uuid as _uuid
+
+_AUDIO_STORE: dict[str, tuple] = {}   # key → (audio_array, sample_rate)
+
+def _store_audio(audio: np.ndarray, sample_rate: int) -> str:
+    """Cache audio in-process, return a lightweight reference key."""
+    key = _uuid.uuid4().hex
+    _AUDIO_STORE[key] = (audio, sample_rate)
+    return key
+
+def _load_audio(ref) -> tuple:
+    """Retrieve (audio, sample_rate) from a cache key or pass-through arrays."""
+    if isinstance(ref, str):
+        entry = _AUDIO_STORE.get(ref)
+        if entry is not None:
+            return entry
+        raise ValueError(f"Audio cache miss: {ref}")
+    # Backward compat: raw numpy array (shouldn't happen in normal flow)
+    return (ref, None)
+
+def _audio_duration_from_ref(ref, fallback_sr=16000) -> float | None:
+    """Get audio duration in seconds from a cache key."""
+    if isinstance(ref, str):
+        entry = _AUDIO_STORE.get(ref)
+        if entry:
+            audio, sr = entry
+            return len(audio) / (sr or fallback_sr)
+    elif ref is not None and hasattr(ref, '__len__'):
+        return len(ref) / fallback_sr
+    return None
+
 
 _gpu_info_logged = False
 _gpu_info_cache = {}
@@ -983,7 +1018,8 @@ def process_audio(
         endpoint=endpoint,
     )
 
-    return html, json_output, raw_speech_intervals, raw_is_complete, audio, sample_rate, intervals, seg_dir, log_row
+    audio_ref = _store_audio(audio, sample_rate)
+    return html, json_output, raw_speech_intervals, raw_is_complete, audio_ref, sample_rate, intervals, seg_dir, log_row
 
 
 def resegment_audio(
@@ -1008,6 +1044,11 @@ def resegment_audio(
 
     if cached_speech_intervals is None or cached_audio is None:
         return "<div>No cached data. Please run Extract Segments first.</div>", None, None, None, None, None, None, None, None
+
+    # Resolve audio from cache key
+    audio, sr = _load_audio(cached_audio)
+    if cached_sample_rate:
+        sr = cached_sample_rate
 
     # Normalize device label
     device = device.lower()
@@ -1055,11 +1096,11 @@ def resegment_audio(
           f"({removed} removed by silence merge + min_speech={min_speech_ms}ms filter)")
 
     if not intervals:
-        return "<div>No speech segments detected with these settings</div>", None, cached_speech_intervals, cached_is_complete, cached_audio, cached_sample_rate, None, None, cached_log_row
+        return "<div>No speech segments detected with these settings</div>", None, cached_speech_intervals, cached_is_complete, cached_audio, sr, None, None, cached_log_row
 
     # Run post-VAD pipeline
     html, json_output, seg_dir, log_row = _run_post_vad_pipeline(
-        cached_audio, cached_sample_rate, intervals,
+        audio, sr, intervals,
         model_name, device, profiling, pipeline_start,
         min_silence_ms=min_silence_ms, min_speech_ms=min_speech_ms, pad_ms=pad_ms,
         request=request, log_row=cached_log_row,
@@ -1067,8 +1108,8 @@ def resegment_audio(
         endpoint=endpoint,
     )
 
-    # Pass through cached state unchanged, but update intervals
-    return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, cached_sample_rate, intervals, seg_dir, log_row
+    # Pass through cached state unchanged (audio_ref key stays the same), but update intervals
+    return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, sr, intervals, seg_dir, log_row
 
 
 def retranscribe_audio(
@@ -1096,6 +1137,11 @@ def retranscribe_audio(
     if cached_intervals is None or cached_audio is None:
         return "<div>No cached data. Please run Extract Segments first.</div>", None, None, None, None, None, None, None, None
 
+    # Resolve audio from cache key
+    audio, sr = _load_audio(cached_audio)
+    if cached_sample_rate:
+        sr = cached_sample_rate
+
     device = device.lower()
 
     from src.core.zero_gpu import reset_quota_flag, force_cpu_mode
@@ -1113,7 +1159,7 @@ def retranscribe_audio(
     print(f"[STAGE] Retranscribing with {model_name} model...")
 
     html, json_output, seg_dir, log_row = _run_post_vad_pipeline(
-        cached_audio, cached_sample_rate, cached_intervals,
+        audio, sr, cached_intervals,
         model_name, device, profiling, pipeline_start,
         min_silence_ms=min_silence_ms, min_speech_ms=min_speech_ms, pad_ms=pad_ms,
         request=request, log_row=cached_log_row,
@@ -1121,8 +1167,8 @@ def retranscribe_audio(
         endpoint=endpoint,
     )
 
-    # Pass through all cached state unchanged
-    return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, cached_sample_rate, cached_intervals, seg_dir, log_row
+    # Pass through all cached state unchanged (audio_ref key stays the same)
+    return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, sr, cached_intervals, seg_dir, log_row
 
 
 def realign_audio(
@@ -1148,6 +1194,11 @@ def realign_audio(
     if cached_audio is None:
         return "<div>No cached data.</div>", None, None, None, None, None, None, None, None
 
+    # Resolve audio from cache key
+    audio, sr = _load_audio(cached_audio)
+    if cached_sample_rate:
+        sr = cached_sample_rate
+
     device = device.lower()
 
     from src.core.zero_gpu import reset_quota_flag, force_cpu_mode
@@ -1163,13 +1214,13 @@ def realign_audio(
     pipeline_start = time.time()
 
     html, json_output, seg_dir, log_row = _run_post_vad_pipeline(
-        cached_audio, cached_sample_rate, intervals,
+        audio, sr, intervals,
         model_name, device, profiling, pipeline_start,
         request=request, log_row=cached_log_row,
         endpoint=endpoint,
     )
 
-    return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, cached_sample_rate, intervals, seg_dir, log_row
+    return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, sr, intervals, seg_dir, log_row
 
 
 def _retranscribe_wrapper(

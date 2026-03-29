@@ -366,8 +366,12 @@ def process_audio_session(audio_data, min_silence_ms, min_speech_ms, pad_ms,
 
     speech_intervals = result[2]
     is_complete = result[3]
-    audio = result[4]
+    audio_ref = result[4]
     intervals = result[6]
+
+    # Resolve audio from pipeline cache (result[4] is now a cache key, not array)
+    from src.pipeline import _load_audio
+    audio, _ = _load_audio(audio_ref)
 
     audio_id = create_session(
         audio, speech_intervals, is_complete, intervals, model_name,

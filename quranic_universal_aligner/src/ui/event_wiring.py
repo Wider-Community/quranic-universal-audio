@@ -251,7 +251,8 @@ def _wire_resegment_chain(c):
                        silence, speech, pad, model, device, log_row, is_preset,
                        request: gr.Request = None):
         # Compute estimate and show progress bar
-        audio_dur = len(audio) / 16000 if audio is not None and hasattr(audio, '__len__') else None
+        from src.pipeline import _audio_duration_from_ref
+        audio_dur = _audio_duration_from_ref(audio)
         est = estimate_duration("resegment", audio_dur, model_name=model, device=device)
         est_s = est.get("estimated_duration_s") or 15
         bar_html = pipeline_progress_bar_html(est_s)
@@ -326,7 +327,8 @@ def _wire_retranscribe_chain(c):
                           model_name, device, log_row, silence, speech, pad, is_preset,
                           request: gr.Request = None):
         # Compute estimate and show progress bar
-        audio_dur = len(audio) / 16000 if audio is not None and hasattr(audio, '__len__') else None
+        from src.pipeline import _audio_duration_from_ref
+        audio_dur = _audio_duration_from_ref(audio)
         est = estimate_duration("retranscribe", audio_dur, model_name=model_name, device=device)
         est_s = est.get("estimated_duration_s") or 15
         bar_html = pipeline_progress_bar_html(est_s)
