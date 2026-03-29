@@ -3791,15 +3791,19 @@ function _startValCardAnimation(btn, seg) {
     const currentChapter = parseInt(segChapterSelect.value);
 
     function getBuffer() {
-        // By-ayah: prefer URL-keyed buffer
-        if (seg.audio_url) return segAudioBuffers.get(seg.audio_url) || null;
+        const chapterAudio = segAllData?.audio_by_chapter?.[String(chapter)] || '';
+        if (seg.audio_url && seg.audio_url !== chapterAudio) {
+            // by_ayah: keyed by URL
+            return segAudioBuffers.get(seg.audio_url) || null;
+        }
+        // by_surah: try current chapter buffer, then per-chapter cache
         if (chapter === currentChapter) return segAudioBuffer;
         return segAudioBuffers.get(chapter) || null;
     }
 
     function frame() {
         if (valCardPlayingBtn !== btn) {
-            // Stopped — redraw static waveform
+            // Stopped — redraw static waveform only if buffer available
             const buf = getBuffer();
             if (buf && canvas) {
                 const saved = segAudioBuffer;
@@ -3812,13 +3816,19 @@ function _startValCardAnimation(btn, seg) {
             return;
         }
         const buf = getBuffer();
+        const timeMs = getValCardAudio().currentTime * 1000;
+        const saved = segAudioBuffer;
         if (buf) {
-            const timeMs = getValCardAudio().currentTime * 1000;
-            const saved = segAudioBuffer;
             segAudioBuffer = buf;
-            drawSegPlayhead(canvas, seg.time_start, seg.time_end, timeMs);
-            segAudioBuffer = saved;
+        } else if (!canvas._wfCache) {
+            // No decoded buffer — snapshot peaks-drawn waveform as cache
+            // so drawSegPlayhead can restore it before overlaying the playhead
+            const cacheKey = `${seg.time_start}:${seg.time_end}`;
+            canvas._wfCache = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+            canvas._wfCacheKey = cacheKey;
         }
+        drawSegPlayhead(canvas, seg.time_start, seg.time_end, timeMs);
+        segAudioBuffer = saved;
         valCardAnimId = requestAnimationFrame(frame);
     }
     valCardAnimId = requestAnimationFrame(frame);
