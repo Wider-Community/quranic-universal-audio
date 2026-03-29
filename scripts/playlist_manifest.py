@@ -430,7 +430,8 @@ def match_entries(entries: list, en_map: dict, ar_map: dict, alias_map: dict) ->
     then greedily assigns highest-scoring pairs first.
 
     Returns (matched, failed) where matched is {surah_num: entry_dict} and
-    failed is a list of unmatched entries.
+    failed is a list of dicts with 'title', 'url', and 'near_miss' (best
+    candidate that was already taken, or None).
     """
     # Score every entry
     entry_scores = []  # (entry_idx, surah_num, score, method)
@@ -454,7 +455,20 @@ def match_entries(entries: list, en_map: dict, ar_map: dict, alias_map: dict) ->
         assigned_surahs.add(num)
         matched[num] = {**entries[idx], "method": method}
 
-    failed = [entries[i] for i in range(len(entries)) if i not in assigned_entries]
+    # For failed entries, find their best candidate (even if taken)
+    failed = []
+    for i in range(len(entries)):
+        if i in assigned_entries:
+            continue
+        best = None
+        for idx, num, score, method in entry_scores:
+            if idx == i:
+                best = (num, score, method)
+                break  # already sorted by score, first hit is best
+        entry = {**entries[i]}
+        entry["near_miss"] = best
+        failed.append(entry)
+
     return matched, failed
 
 
@@ -672,7 +686,15 @@ def main():
         if failed:
             print(f"\nCould not match {len(failed)} entry/entries:")
             for entry in failed:
-                print(f"  - {entry['title']}")
+                nm = entry.get("near_miss")
+                if nm:
+                    nm_num, nm_score, nm_method = nm
+                    nm_name = surah_info[str(nm_num)]["name_en"]
+                    print(f"  - \"{entry['title']}\"")
+                    print(f"    best guess: surah {nm_num} ({nm_name}), "
+                          f"score={nm_score} via {nm_method} — already taken")
+                else:
+                    print(f"  - \"{entry['title']}\"  (no candidates found)")
 
         source_for_meta = args.playlist_url
         source_name = args.source or _detect_source_name(args.playlist_url)
@@ -683,8 +705,9 @@ def main():
         print(f"\nMissing surahs ({len(missing)}):")
         for n in missing:
             print(f"  - {n}. {surah_info[str(n)]['name_en']}")
-
-    if not missing:
+        print(f"\n  Fix: add missing entries to the manifest JSON after generation:")
+        print(f"    \"{missing[0]}\": \"<url>\"")
+    else:
         print("\n  All 114 surahs covered!")
 
     # Collect metadata
