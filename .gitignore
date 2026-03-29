@@ -30,7 +30,7 @@ data/recitation_segments/validation.log
 data/timestamps/by_ayah_audio/validation.log
 data/timestamps/by_surah_audio/validation.log
 
-# Large files (keep minshawy_murattal, ignore future reciters)
+# Letter timestamps (keep minshawy_murattal, ignore future reciters)
 data/timestamps/**/timestamps_full.json
 !data/timestamps/by_ayah_audio/minshawy_murattal/timestamps_full.json
 
