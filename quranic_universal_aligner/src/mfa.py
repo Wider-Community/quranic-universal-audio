@@ -876,6 +876,29 @@ def inject_timestamps_into_html(current_html, segments, results, seg_to_result_i
     # Enable per-segment animate buttons
     html = re.sub(r'(<button class="animate-btn"[^>]*?)\s+disabled(?:="[^"]*")?', r'\1', html)
 
+    # Create char spans for timestamped words that don't have them yet
+    # (char spans are deferred from initial render to reduce HTML size)
+    from src.ui.segments import split_into_char_groups, ZWSP, DAGGER_ALEF
+
+    def _create_char_spans(m):
+        word_open = m.group(1)
+        inner = m.group(2)
+        if '<span class="char">' in inner:
+            return m.group(0)  # Already has char spans
+        chars = []
+        for g in split_into_char_groups(inner):
+            if g.startswith(DAGGER_ALEF):
+                chars.append(f'<span class="char">{ZWSP}{g}</span>')
+            else:
+                chars.append(f'<span class="char">{g}</span>')
+        return f'{word_open}{"".join(chars)}</span>'
+
+    html = re.sub(
+        r'(<span class="word"[^>]*data-start="[\d.]+"[^>]*>)(.*?)</span>',
+        _create_char_spans,
+        html,
+    )
+
     # Stamp char spans with MFA letter timestamps
     def _stamp_chars_with_mfa(word_m):
         word_open = word_m.group(1)

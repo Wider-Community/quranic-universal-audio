@@ -580,6 +580,7 @@ def _run_post_vad_pipeline(
 
     # Post-processing: split combined/fused segments via MFA timestamps
     segments = _split_fused_segments(segments, audio_int16, sample_rate)
+    del audio_int16  # Free ~576MB — no longer needed (full.wav written from float32)
 
     # Recompute stats from final segments list (after splits may have changed it)
     _seg_word_counts = []
@@ -804,9 +805,27 @@ def _run_post_vad_pipeline(
 
     json_output = {"segments": segments_list}
 
+    # Compute full audio URL (file written in background after render)
+    full_path = segment_dir / "full.wav"
+    full_audio_url = f"/gradio_api/file={full_path}"
+
     t_render = time.time()
-    html = render_segments(segments, audio_int16, sample_rate, segment_dir=segment_dir)
+    html = render_segments(segments, full_audio_url=full_audio_url)
     print(f"[PROFILE] render_segments: {time.time() - t_render:.3f}s ({len(segments)} segments, HTML={len(html)/1e6:.2f}MB)")
+
+    # Write full.wav in background thread from float32 audio
+    # sf.write converts float32→PCM16 internally (no extra int16 copy in memory)
+    # File ready before user can click play (browser still rendering cards)
+    import threading
+    import soundfile as sf
+    _audio_ref = audio  # prevent GC while thread runs
+    _sr_ref = sample_rate
+    _path_ref = str(full_path)
+    def _write_full_wav():
+        t = time.time()
+        sf.write(_path_ref, _audio_ref, _sr_ref, format='WAV', subtype='PCM_16')
+        print(f"[PROFILE] Full audio write (bg): {time.time() - t:.3f}s")
+    threading.Thread(target=_write_full_wav, daemon=True).start()
 
     print("[STAGE] Done!")
 
@@ -858,6 +877,12 @@ def process_audio(
     pipeline_start = time.time()
 
     if isinstance(audio_data, str):
+        # Check duration before loading (cheap metadata probe)
+        import soundfile as _sf
+        _info = _sf.info(audio_data)
+        if _info.duration / 60 > 300:
+            gr.Warning("Audio is over 5 hours — GPU processing will likely time out. Consider splitting into separate surahs.")
+
         # File path from gr.Audio(type="filepath")
         load_start = time.time()
         audio, sample_rate = librosa.load(audio_data, sr=16000, mono=True, res_type=RESAMPLE_TYPE)
@@ -885,10 +910,6 @@ def process_audio(
             profiling.resample_time = time.time() - resample_start
             print(f"[PROFILE] Resampling {sample_rate}Hz -> 16000Hz took {profiling.resample_time:.3f}s (audio length: {len(audio)/16000:.1f}s, res_type={RESAMPLE_TYPE})")
             sample_rate = 16000
-
-    audio_duration_min = len(audio) / sample_rate / 60
-    if audio_duration_min > 300:
-        gr.Warning("Audio is over 5 hours — GPU processing will likely time out. Consider splitting into separate surahs.")
 
     print("[STAGE] Running VAD + ASR...")
 

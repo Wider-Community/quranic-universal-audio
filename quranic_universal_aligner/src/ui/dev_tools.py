@@ -701,8 +701,15 @@ def _build_segments_from_log(row, audio_id):
     if not segments:
         return ('<div style="color: #999; padding: 20px;">No valid segments to display.</div>', [], None)
 
-    html = render_segments(segments, audio_int16=audio_int16, sample_rate=sample_rate,
-                           segment_dir=segment_dir)
+    # Write full.wav for playback (dev tools uses shorter recordings — sync write is fine)
+    full_audio_url = ""
+    if audio_int16 is not None and sample_rate > 0 and segment_dir:
+        import soundfile as sf
+        full_path = segment_dir / "full.wav"
+        sf.write(str(full_path), audio_int16, sample_rate, format='WAV', subtype='PCM_16')
+        full_audio_url = f"/gradio_api/file={full_path}"
+
+    html = render_segments(segments, full_audio_url=full_audio_url)
     return html, json_segments, segment_dir
 
 

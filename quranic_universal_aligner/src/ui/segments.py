@@ -2,10 +2,6 @@
 import json
 import time
 import unicodedata
-from pathlib import Path
-
-import numpy as np
-import soundfile as sf
 
 from config import (
     CONFIDENCE_HIGH, CONFIDENCE_MED,
@@ -158,18 +154,10 @@ def split_into_char_groups(text):
 ZWSP = '\u2060'  # Word Joiner: zero-width non-breaking (avoids mid-word line breaks)
 DAGGER_ALEF = '\u0670'
 
-def _wrap_word_with_chars(word_text, pos=None):
-    """Wrap a word in <span class="word"> with nested <span class="char"> per letter group."""
-    # Insert ZWSP before dagger alef so it can be highlighted independently
-    spans = []
-    for g in split_into_char_groups(word_text):
-        if g.startswith(DAGGER_ALEF):
-            spans.append(f'<span class="char">{ZWSP}{g}</span>')
-        else:
-            spans.append(f'<span class="char">{g}</span>')
-    char_spans = "".join(spans)
+def _wrap_word(word_text, pos=None):
+    """Wrap a word in <span class="word">. Char spans are deferred to MFA timestamp injection."""
     pos_attr = f' data-pos="{pos}"' if pos else ''
-    return f'<span class="word"{pos_attr}>{char_spans}</span>'
+    return f'<span class="word"{pos_attr}>{word_text}</span>'
 
 
 def get_text_with_markers(matched_ref: str) -> str | None:
@@ -200,7 +188,7 @@ def get_text_with_markers(matched_ref: str) -> str | None:
 
     parts = []
     for w in index.words[start_idx:end_idx + 1]:
-        parts.append(_wrap_word_with_chars(w.display_text, pos=f"{w.surah}:{w.ayah}:{w.word}"))
+        parts.append(_wrap_word(w.display_text, pos=f"{w.surah}:{w.ayah}:{w.word}"))
         # Check if this is the last word of its verse
         num_words = verse_word_counts.get(w.surah, {}).get(w.ayah, 0)
         if num_words > 0 and w.word == num_words:
@@ -226,16 +214,7 @@ def simplify_ref(ref: str) -> str:
 
 
 def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "") -> str:
-    """Render a single segment as an HTML card with optional audio player.
-
-    Args:
-        seg: Segment info
-        idx: Segment index
-        audio_int16: Full audio as int16 array for writing per-segment WAV files
-        sample_rate: Audio sample rate in Hz
-        render_key: Unique key to prevent browser caching between renders
-        segment_dir: Directory to write segment WAV files into
-    """
+    """Render a single segment as an HTML card with optional audio player."""
     is_special = seg.matched_ref in ALL_SPECIAL_REFS
     confidence_class = get_confidence_class(seg.match_score)
     confidence_badge_class = confidence_class  # preserve original for badge color
@@ -298,7 +277,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
 
     # Helper to wrap words in spans
     def wrap_words_in_spans(text):
-        return " ".join(_wrap_word_with_chars(w) for w in text.split())
+        return " ".join(_wrap_word(w) for w in text.split())
 
     if seg.matched_ref:
         # Generate text with markers from the index
@@ -311,7 +290,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
                     mfa_prefix = f"{_sp_name}+{seg.matched_ref}"
                     words = _sp.replace(" ۝ ", " ").split()
                     prefix_html = " ".join(
-                        _wrap_word_with_chars(w, pos=f"{mfa_prefix}:0:0:{i+1}")
+                        _wrap_word(w, pos=f"{mfa_prefix}:0:0:{i+1}")
                         for i, w in enumerate(words)
                     )
                     text_html = prefix_html + " " + text_html
@@ -322,7 +301,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
             if seg.matched_ref and seg.matched_text:
                 words = seg.matched_text.replace(" \u06dd ", " ").split()
                 text_html = " ".join(
-                    _wrap_word_with_chars(w, pos=f"{seg.matched_ref}:0:0:{i+1}")
+                    _wrap_word(w, pos=f"{seg.matched_ref}:0:0:{i+1}")
                     for i, w in enumerate(words)
                 )
             else:
@@ -371,29 +350,18 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     return html
 
 
-def render_segments(segments: list, audio_int16: np.ndarray = None, sample_rate: int = 0, segment_dir: Path = None, skip_full_audio: bool = False) -> str:
+def render_segments(segments: list, full_audio_url: str = "") -> str:
     """Render all segments as HTML with optional audio players.
 
     Args:
         segments: List of SegmentInfo objects
-        audio_int16: Full audio as int16 array for writing per-segment WAV files
-        sample_rate: Audio sample rate in Hz
-        segment_dir: Directory containing per-segment WAV files
+        full_audio_url: URL to full audio WAV (media fragments used for per-segment playback)
     """
     if not segments:
         return '<div class="no-segments">No segments detected</div>'
 
     # Generate unique key for this render to prevent audio caching
     render_key = str(int(time.time() * 1000))
-
-    # Write full audio file (WAV via soundfile — avoids tobytes() copy)
-    full_audio_url = ""
-    if audio_int16 is not None and sample_rate > 0 and segment_dir and not skip_full_audio:
-        t_full = time.time()
-        full_path = segment_dir / "full.wav"
-        sf.write(str(full_path), audio_int16, sample_rate, format='WAV', subtype='PCM_16')
-        full_audio_url = f"/gradio_api/file={full_path}"
-        print(f"[PROFILE] Full audio write: {time.time() - t_full:.3f}s (WAV via soundfile)")
 
     # Categorize segments by confidence level (1-indexed for display), excluding specials
     med_segments = [i + 1 for i, s in enumerate(segments)
