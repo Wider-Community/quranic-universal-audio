@@ -1,0 +1,116 @@
+Generated: 2026-03-30 00:49:13
+
+========================================================================
+  abdullah_ali_jabir
+  data/recitation_segments/abdullah_ali_jabir
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   250 ms
+  Min speech:    250 ms
+  Padding:       100 ms
+
+--- Coverage ---
+  Verses found:       5634 / 6236
+  Missing verses:     0
+  Partial words:      7 verses with word gaps
+
+--- Segments ---
+  Total segments:     8800
+  Single-seg verses:  3622
+  Multi-seg verses:   2012 (5178 segments)
+  Cross-verse segs:   507
+  Empty verse keys:   0
+  Max segs/verse:     14
+
+--- Segment Duration ---
+  Min:      1.08s
+  Median:   8.97s
+  Mean:     9.47s
+  Max:      25.43s
+
+--- True Silence Duration (padding reversed) ---
+  Min:      0.26s
+  Median:   0.88s
+  Mean:     0.91s
+  Max:      2.46s
+
+--- Alignment Confidence ---
+  Min:        0.7000
+  Median:     1.0000
+  Mean:       0.9900
+  Max:        1.0000
+  Below 60%:  0
+  Below 80%:  6
+  Failed:     0 (no alignment)
+  Empty ASR:  0 (matched but no phonemes)
+
+--- Lowest 6 of 6 Segments Below 80% Confidence ---
+   1. [0.7000]  3:1:1-3:1:1  @ 0:13.0 - 0:20.4
+      audio: https://download.quranicaudio.com/quran/ali_jaber//003.mp3
+      text:  الٓمٓ
+      asr:   l i f l a: m̃ i: m
+
+   2. [0.7000]  32:1:1-32:1:1  @ 0:00.4 - 0:08.1
+      audio: https://download.quranicaudio.com/quran/ali_jaber//032.mp3
+      text:  الٓمٓ
+      asr:   l i f l a: m̃ i: m
+
+   3. [0.7000]  41:44:9-41:44:10  @ 11:01.2 - 11:04.1
+      audio: https://download.quranicaudio.com/quran/ali_jaber//041.mp3
+      text:  ءَا۬عْجَمِىٌّ وَعَرَبِىٌّ ۗ
+      asr:   ʔ a: ʕ a ʒ a m i jj u a ʕ a rˤ aˤ b i:
+
+   4. [0.7600]  42:2:1-42:2:1  @ 0:18.3 - 0:28.0
+      audio: https://download.quranicaudio.com/quran/ali_jaber//042.mp3
+      text:  عٓسٓقٓ
+      asr:   ʕ a j ʔ i ŋ s i: ŋ q aˤ:
+
+   5. [0.7800]  7:1:1-7:1:1  @ 0:14.7 - 0:26.8
+      audio: https://download.quranicaudio.com/quran/ali_jaber//007.mp3
+      text:  الٓمٓصٓ
+      asr:   a l i f l a: m̃ i i m sˤ aˤ: d Q
+
+   6. [0.7900]  5:3:29-5:3:30  @ 2:01.5 - 2:03.7
+      audio: https://download.quranicaudio.com/quran/ali_jaber//005.mp3
+      text:  ذَٰلِكُمْ فِسْقٌ ۗ
+      asr:   ð a: l i k u m f i s q Q
+
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches:     0
+
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   7
+
+  Warnings:
+    WARN   2:68  @ 23:54.6 - 24:19.0
+           missing words: [8]
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
+
+    WARN   2:271  @ 2:00:56.1 - 2:01:22.5
+           missing words: [5]
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
+
+    WARN   3:64  @ 22:58.3 - 23:40.7
+           missing words: [17]
+           audio: https://download.quranicaudio.com/quran/ali_jaber//003.mp3
+
+    WARN   3:154  @ 55:45.7 - 57:14.9
+           missing words: [40]
+           audio: https://download.quranicaudio.com/quran/ali_jaber//003.mp3
+
+    WARN   4:36  @ 20:05.6 - 20:44.3
+           missing words: [6]
+           audio: https://download.quranicaudio.com/quran/ali_jaber//004.mp3
+
+    WARN   5:67  @ 32:37.0 - 33:00.5
+           missing words: [9]
+           audio: https://download.quranicaudio.com/quran/ali_jaber//005.mp3
+
+    WARN   31:33  @ 8:55.8 - 9:28.3
+           missing words: [18]
+           audio: https://download.quranicaudio.com/quran/ali_jaber//031.mp3
+
+
