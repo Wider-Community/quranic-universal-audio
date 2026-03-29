@@ -1,0 +1,27 @@
+name: Bot Comment
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue or PR number
+        required: true
+      body:
+        description: Comment body (markdown)
+        required: true
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ inputs.issue }},
+              body: ${{ toJSON(inputs.body) }}
+            });
