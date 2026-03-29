@@ -21,6 +21,8 @@ size_categories:
 configs:
 - config_name: hafs_an_asim
   data_files:
+  - split: ali_jaber
+    path: hafs_an_asim/ali_jaber-*
   - split: minshawy_murattal
     path: hafs_an_asim/minshawy_murattal-*
 dataset_info:
@@ -41,6 +43,9 @@ dataset_info:
     sequence:
       sequence: int32
   splits:
+  - name: ali_jaber
+    num_bytes: 0
+    num_examples: 6236
   - name: minshawy_murattal
     num_bytes: 1571705367
     num_examples: 6236
@@ -49,9 +54,9 @@ dataset_info:
 ---
 
 <p align="center">
-  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Audio%20Only-295%20Full%20%C2%B7%2086%20Partial%20%C2%B7%207,853h-d4842a" alt="Audio Only"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Audio%20Only-252%20Full%20%C2%B7%2086%20Partial%20%C2%B7%207,853h-d4842a" alt="Audio Only"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-14%20%2F%2020-f0ad4e" alt="Riwayat"></a>
-  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Timestamped-2%20Full%20%C2%B7%201%20Partial%20%C2%B7%2025h-d4842a" alt="Timestamped"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Timestamped-2%20Full%20%C2%B7%200%20Partial%20%C2%B7%2025h-d4842a" alt="Timestamped"></a>
   <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'anic%20Universal%20Aligner-E8C32E" alt="Demo - Qur'anic Universal Aligner"></a>
   <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Align%20a%20Reciter-E8C32E" alt="Request - Align a Reciter"></a>
   <br>
@@ -64,7 +69,7 @@ dataset_info:
 
 <p align="center">
   Word-level aligned Qur'an recitation audio with precise timestamps derived from phoneme-level forced alignment.<br>
-  A community-verified dataset of 350+ reciters across 14 riwayat.
+  A community-verified dataset of 300+ reciters across 14 riwayat.
 </p>
 
 
@@ -115,9 +120,12 @@ Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 
 Subset (config) is the riwayah, split is the reciter.
 
-| Subset | Split | Reciter | Verses | Audio Source |
-|--------|-------|---------|--------|-------------|
-| `hafs_an_asim` | `minshawy_murattal` | Mohamed Siddiq El-Minshawi (Murattal) | 6,236 | everyayah.com |
+### `hafs_an_asim`
+
+| Reciter | Style | Verses | Audio Source |
+|---------|-------|--------|-------------|
+| [Ali Jaber](#ali_jaber) | murattal | 6,235 | everyayah.com |
+| [Minshawy Murattal](#minshawy_murattal) | unknown | 6,235 | everyayah.com |
 
 ## Pipeline
 
