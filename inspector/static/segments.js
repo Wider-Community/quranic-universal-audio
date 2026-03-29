@@ -1167,6 +1167,18 @@ function handleSegRowClick(e) {
         if (seg) deleteSegment(seg, row);
         return;
     }
+    // Edit Ref button
+    const editRefBtn = e.target.closest('.btn-edit-ref');
+    if (editRefBtn) {
+        e.stopPropagation();
+        const row = editRefBtn.closest('.seg-row');
+        const seg = resolveSegFromRow(row);
+        if (seg && row) {
+            const refSpan = row.querySelector('.seg-text-ref');
+            if (refSpan) startRefEdit(refSpan, seg, row);
+        }
+        return;
+    }
     // Row click to play (ignore if clicking on actions)
     const row = e.target.closest('.seg-row');
     if (row && !e.target.closest('.seg-actions')) {
@@ -1218,19 +1230,74 @@ function renderSegCard(seg, options = {}) {
         if (seg.audio_url) row.dataset.histAudioUrl = seg.audio_url;
     }
 
-    // Canvas for waveform
+    // Left column: canvas + action buttons
+    const leftCol = document.createElement('div');
+    leftCol.className = 'seg-left';
+
     const canvas = document.createElement('canvas');
-    canvas.width = 300;
+    canvas.width = 380;
     canvas.height = 60;
     canvas.setAttribute('data-needs-waveform', '');
-    row.appendChild(canvas);
+    leftCol.appendChild(canvas);
 
-    // Text box
+    // Action buttons below waveform (3×2 grid)
+    if (!isContext && !readOnly) {
+        const actions = document.createElement('div');
+        actions.className = 'seg-actions';
+
+        const trimBtn = document.createElement('button');
+        trimBtn.className = 'btn btn-sm btn-adjust';
+        trimBtn.textContent = 'Adjust';
+
+        const mergePrevBtn = document.createElement('button');
+        mergePrevBtn.className = 'btn btn-sm btn-merge-prev';
+        mergePrevBtn.textContent = 'Merge \u2191';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-sm btn-delete';
+        deleteBtn.textContent = 'Delete';
+
+        const splitBtn = document.createElement('button');
+        splitBtn.className = 'btn btn-sm btn-split';
+        splitBtn.textContent = 'Split';
+
+        const mergeNextBtn = document.createElement('button');
+        mergeNextBtn.className = 'btn btn-sm btn-merge-next';
+        mergeNextBtn.textContent = 'Merge \u2193';
+
+        const editRefBtn = document.createElement('button');
+        editRefBtn.className = 'btn btn-sm btn-edit-ref';
+        editRefBtn.textContent = 'Edit Ref';
+
+        actions.append(trimBtn, mergePrevBtn, deleteBtn, splitBtn, mergeNextBtn, editRefBtn);
+
+        if (showGotoBtn) {
+            const gotoBtn = document.createElement('button');
+            gotoBtn.className = 'btn btn-sm seg-card-goto-btn';
+            gotoBtn.textContent = 'Go to';
+            actions.appendChild(gotoBtn);
+        }
+
+        leftCol.appendChild(actions);
+    } else if (!isContext && showPlayBtn) {
+        const actions = document.createElement('div');
+        actions.className = 'seg-actions';
+        const playBtn = document.createElement('button');
+        playBtn.className = 'btn btn-sm seg-card-play-btn';
+        playBtn.textContent = '\u25B6';
+        playBtn.title = 'Play segment audio';
+        actions.appendChild(playBtn);
+        leftCol.appendChild(actions);
+    }
+
+    row.appendChild(leftCol);
+
+    // Text box (right column)
     const textBox = document.createElement('div');
     const confClass = getConfClass(seg);
     textBox.className = `seg-text ${confClass}`;
 
-    // Header row: index + ref (clickable) + confidence
+    // Compact header: #N | ref | duration ... confidence
     const header = document.createElement('div');
     header.className = 'seg-text-header';
 
@@ -1238,15 +1305,37 @@ function renderSegCard(seg, options = {}) {
     indexSpan.className = 'seg-text-index';
     indexSpan.textContent = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
+    const sep1 = document.createElement('span');
+    sep1.className = 'seg-text-sep';
+    sep1.textContent = '|';
+
     const refSpan = document.createElement('span');
     refSpan.className = 'seg-text-ref';
     refSpan.textContent = formatRef(seg.matched_ref);
 
+    const sep2 = document.createElement('span');
+    sep2.className = 'seg-text-sep';
+    sep2.textContent = '|';
+
+    const durSpan = document.createElement('span');
+    durSpan.className = 'seg-text-duration';
+    const durSec = (seg.time_end - seg.time_start) / 1000;
+    durSpan.textContent = durSec.toFixed(1) + 's';
+    durSpan.title = `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`;
+
     const confSpan = document.createElement('span');
     confSpan.className = `seg-text-conf ${confClass}`;
+    confSpan.style.marginLeft = 'auto';
     confSpan.textContent = seg.matched_ref ? (seg.confidence * 100).toFixed(1) + '%' : 'FAIL';
 
-    header.append(indexSpan, refSpan, confSpan);
+    header.append(indexSpan, sep1, refSpan, sep2, durSpan);
+    if (missingWordSegIndices && missingWordSegIndices.has(seg.index)) {
+        const tag = document.createElement('span');
+        tag.className = 'seg-tag seg-tag-missing';
+        tag.textContent = 'Missing words';
+        header.appendChild(tag);
+    }
+    header.appendChild(confSpan);
     textBox.appendChild(header);
 
     // Context label (for context cards)
@@ -1262,67 +1351,6 @@ function renderSegCard(seg, options = {}) {
     body.className = 'seg-text-body';
     body.textContent = seg.display_text || seg.matched_text || '(alignment failed)';
     textBox.appendChild(body);
-
-    // Time info + missing words tag
-    const timeInfo = document.createElement('div');
-    timeInfo.className = 'seg-text-time';
-    timeInfo.textContent = `${formatTimeMs(seg.time_start)} - ${formatTimeMs(seg.time_end)} (${((seg.time_end - seg.time_start) / 1000).toFixed(1)}s)`;
-    if (missingWordSegIndices && missingWordSegIndices.has(seg.index)) {
-        const tag = document.createElement('span');
-        tag.className = 'seg-tag seg-tag-missing';
-        tag.textContent = 'Missing words';
-        timeInfo.appendChild(tag);
-    }
-    textBox.appendChild(timeInfo);
-
-    // Play button (allowed even on read-only history cards)
-    if (!isContext && showPlayBtn) {
-        const actions = row.querySelector('.seg-actions') || document.createElement('div');
-        actions.className = 'seg-actions';
-        const playBtn = document.createElement('button');
-        playBtn.className = 'btn btn-sm seg-card-play-btn';
-        playBtn.textContent = '\u25B6';
-        playBtn.title = 'Play segment audio';
-        actions.appendChild(playBtn);
-        if (!actions.parentNode) textBox.appendChild(actions);
-    }
-
-    // Editing action buttons (skip for read-only history cards)
-    if (!isContext && !readOnly) {
-        const actions = textBox.querySelector('.seg-actions') || document.createElement('div');
-        actions.className = 'seg-actions';
-
-        const trimBtn = document.createElement('button');
-        trimBtn.className = 'btn btn-sm btn-adjust';
-        trimBtn.textContent = 'Adjust';
-
-        const splitBtn = document.createElement('button');
-        splitBtn.className = 'btn btn-sm btn-split';
-        splitBtn.textContent = 'Split';
-
-        const mergePrevBtn = document.createElement('button');
-        mergePrevBtn.className = 'btn btn-sm btn-merge-prev';
-        mergePrevBtn.textContent = 'Merge \u2191';
-
-        const mergeNextBtn = document.createElement('button');
-        mergeNextBtn.className = 'btn btn-sm btn-merge-next';
-        mergeNextBtn.textContent = 'Merge \u2193';
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'btn btn-sm btn-delete';
-        deleteBtn.textContent = 'Delete';
-
-        actions.append(trimBtn, splitBtn, mergePrevBtn, mergeNextBtn, deleteBtn);
-
-        if (showGotoBtn) {
-            const gotoBtn = document.createElement('button');
-            gotoBtn.className = 'btn btn-sm seg-card-goto-btn';
-            gotoBtn.textContent = 'Go to';
-            actions.appendChild(gotoBtn);
-        }
-
-        if (!actions.parentNode) textBox.appendChild(actions);
-    }
 
     row.appendChild(textBox);
     return row;
@@ -2011,12 +2039,11 @@ function updateSegCard(row, seg) {
     const body = row.querySelector('.seg-text-body');
     if (body) body.textContent = seg.display_text || seg.matched_text || '(alignment failed)';
 
-    const timeInfo = row.querySelector('.seg-text-time');
-    if (timeInfo) {
-        // Preserve any tags (e.g. missing words)
-        const tags = timeInfo.querySelectorAll('.seg-tag');
-        timeInfo.textContent = `${formatTimeMs(seg.time_start)} - ${formatTimeMs(seg.time_end)} (${((seg.time_end - seg.time_start) / 1000).toFixed(1)}s)`;
-        tags.forEach(t => timeInfo.appendChild(t));
+    const durSpan = row.querySelector('.seg-text-duration');
+    if (durSpan) {
+        const durSec = (seg.time_end - seg.time_start) / 1000;
+        durSpan.textContent = durSec.toFixed(1) + 's';
+        durSpan.title = `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`;
     }
 }
 
@@ -4916,7 +4943,7 @@ function _highlightChanges(beforeSnap, afterSnap, beforeCard, afterCard) {
         if (el) el.classList.add('seg-history-changed');
     }
     if (beforeSnap.time_start !== afterSnap.time_start || beforeSnap.time_end !== afterSnap.time_end) {
-        const el = afterCard.querySelector('.seg-text-time');
+        const el = afterCard.querySelector('.seg-text-duration');
         if (el) el.classList.add('seg-history-changed');
     }
     if (beforeSnap.confidence !== afterSnap.confidence) {

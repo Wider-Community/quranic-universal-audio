@@ -538,8 +538,15 @@ footer {
     background: #1a2a4e;
 }
 
+.seg-left {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 380px;
+    gap: 4px;
+}
+
 .seg-row canvas {
-    flex: 0 0 300px;
+    width: 100%;
     height: 60px;
     background: #0f0f23;
     border-radius: 6px;
@@ -580,9 +587,8 @@ footer {
 
 .seg-text-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     margin-bottom: 4px;
 }
 
@@ -639,11 +645,16 @@ footer {
     line-height: 1.5;
 }
 
-.seg-text-time {
-    font-size: 0.7rem;
-    color: #555;
+.seg-text-duration {
+    font-size: 0.75rem;
+    color: #888;
     font-family: monospace;
-    margin-top: 2px;
+}
+
+.seg-text-sep {
+    color: #444;
+    font-size: 0.75rem;
+    user-select: none;
 }
 
 .seg-tag {
@@ -696,13 +707,11 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     pointer-events: none;
 }
 
-/* Action buttons (Trim/Split/Merge/Delete) per segment row */
+/* Action buttons (Trim/Split/Merge/Delete/Edit Ref) per segment row */
 .seg-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 4px;
-    margin-top: 4px;
-    justify-content: center;
-    flex-wrap: wrap;
 }
 
 .btn-sm {
@@ -715,12 +724,14 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 }
 
 .btn-adjust,
-.btn-split {
+.btn-split,
+.btn-edit-ref {
     background: #37474f;
 }
 
 .btn-adjust:hover,
-.btn-split:hover {
+.btn-split:hover,
+.btn-edit-ref:hover {
     background: #455a64;
 }
 
@@ -1557,8 +1568,10 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     flex-direction: column;
     gap: 4px;
 }
-.seg-history-diff .seg-row canvas {
+.seg-history-diff .seg-left {
     flex: 0 0 auto;
+}
+.seg-history-diff .seg-row canvas {
     width: 100%;
     height: 40px;
 }
