@@ -200,6 +200,37 @@ def cmd_triage(args):
     save_state(state)
     print(f"\nState saved to {state['batch_id']}")
 
+    # Auto-send rejection emails
+    rejected = [r for r in state["requests"] if r["action"] == "reject"]
+    if rejected:
+        print(f"\nSending rejection emails ({len(rejected)})...")
+        for req in rejected:
+            if not req.get("requester_email"):
+                print(f"  {req['name']}: No email, skipping")
+                continue
+            reason = req.get("reject_reason", "")
+            try:
+                if reason == "non-hafs":
+                    subj, html = email_rejected_non_hafs(
+                        req["name"], req["requester_name"],
+                        req.get("riwayah", "unknown"), req["issue_url"],
+                    )
+                elif reason == "duplicate":
+                    subj, html = email_rejected_duplicate(
+                        req["name"], req["requester_name"],
+                        req["issue_url"], "pending", req["issue_url"],
+                    )
+                elif reason == "already-processed":
+                    subj, html = email_rejected_already_processed(
+                        req["name"], req["requester_name"], req["issue_url"],
+                    )
+                else:
+                    continue
+                send_email(req["requester_email"], subj, html)
+                print(f"  {req['name']}: sent to {req['requester_email']}")
+            except Exception as e:
+                print(f"  {req['name']}: failed — {e}")
+
 
 def _triage_one(req, processed_slugs, open_by_slug, processed):
     """Triage a single request. Returns dict with action and reason."""
@@ -389,6 +420,21 @@ def cmd_generate_pbs(args):
     print("  bash scripts/sync_mfa.sh")
     print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub jobs/extract_segments.pbs"')
 
+    # Auto-send receipt emails for accepted requests
+    print("\nSending receipt emails...")
+    for req in accepted:
+        if not req.get("requester_email"):
+            print(f"  {req['name']}: No email, skipping")
+            continue
+        try:
+            subj, html = email_receipt(
+                req["name"], req["requester_name"], req["issue_url"],
+            )
+            send_email(req["requester_email"], subj, html)
+            print(f"  {req['name']}: sent to {req['requester_email']}")
+        except Exception as e:
+            print(f"  {req['name']}: failed — {e}")
+
 
 # ---------------------------------------------------------------------------
 # set-status
@@ -532,14 +578,20 @@ def cmd_prepare_pr(args):
         print("No accepted requests to include in PR.")
         return
 
-    # Ensure working tree is clean before branch operations
+    # Ensure no staged or tracked-modified files before branch operations
+    # (untracked files are fine — they don't affect checkout)
     status = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "diff", "--name-only", "HEAD"],
         cwd=str(REPO_ROOT), capture_output=True, text=True,
     )
-    if status.stdout.strip():
-        print("ERROR: Working tree is not clean. Commit or stash changes first.")
-        print(status.stdout)
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=str(REPO_ROOT), capture_output=True, text=True,
+    )
+    dirty = (status.stdout.strip() + "\n" + staged.stdout.strip()).strip()
+    if dirty:
+        print("ERROR: Working tree has staged or modified tracked files. Commit or stash first.")
+        print(dirty)
         return
 
     print(f"\nCreating draft PRs for {len(accepted)} reciter(s)...\n")
@@ -632,6 +684,18 @@ def cmd_prepare_pr(args):
             # Invite collaborator if GitHub username provided
             if req.get("github_username"):
                 gh_invite_collaborator(req["github_username"])
+
+            # Send segments-ready email
+            if req.get("requester_email"):
+                try:
+                    subj, html = email_segments_ready(
+                        req["name"], req["requester_name"],
+                        req["issue_url"], pr_url,
+                    )
+                    send_email(req["requester_email"], subj, html)
+                    print(f"    Email sent to {req['requester_email']}")
+                except Exception as e:
+                    print(f"    Warning: failed to send email: {e}")
 
         except subprocess.CalledProcessError as e:
             print(f"    ERROR: {e.cmd[0]} failed: {e.stderr.strip()}")
