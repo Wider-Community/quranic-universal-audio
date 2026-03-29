@@ -4,12 +4,14 @@ Alignment Inspector Server
 Flask server for browsing alignment timestamps, recitation segments, and audio.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import random
 import re
 import shutil
 import statistics
+import struct
 import subprocess
 import sys
 import tempfile
@@ -705,6 +707,118 @@ _SEG_CACHE: dict[str, list[dict]] = {}
 _SEG_META_CACHE: dict[str, dict] = {}
 _SEG_RECITERS_CACHE: list[dict] | None = None
 
+# Waveform peaks cache — { reciter: { audio_url: { duration_ms, peaks } } }
+_PEAKS_CACHE: dict[str, dict[str, dict]] = {}
+_PEAKS_LOCK = threading.Lock()
+_PEAKS_COMPUTING: set[str] = set()  # keys currently being computed in background
+
+_PEAKS_DIR = CACHE_DIR / "peaks"
+
+
+def _compute_audio_peaks(audio_url: str) -> dict | None:
+    """Compute waveform peaks for an audio URL. Returns {duration_ms, peaks} or None."""
+    url_hash = hashlib.sha256(audio_url.encode()).hexdigest()[:32]
+    cache_path = _PEAKS_DIR / f"{url_hash}.json"
+    if cache_path.exists():
+        try:
+            with open(cache_path, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Decode to raw mono 16-bit PCM at 8kHz via ffmpeg (reads URLs directly)
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-i", audio_url, "-f", "s16le", "-ac", "1", "-ar", "8000",
+             "-v", "quiet", "-"],
+            capture_output=True, timeout=60,
+        )
+        if result.returncode != 0 or len(result.stdout) < 4:
+            return None
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+
+    raw = result.stdout
+    num_samples = len(raw) // 2
+    if num_samples == 0:
+        return None
+    samples = struct.unpack(f"<{num_samples}h", raw)
+
+    duration_ms = int(num_samples / 8000 * 1000)
+    duration_sec = num_samples / 8000
+    num_buckets = max(100, int(duration_sec * 10))
+
+    block_size = max(1, num_samples // num_buckets)
+    peaks = []
+    for i in range(num_buckets):
+        start = i * block_size
+        end = min(start + block_size, num_samples)
+        if start >= num_samples:
+            break
+        block = samples[start:end]
+        mn = min(block) / 32768.0
+        mx = max(block) / 32768.0
+        peaks.append([round(mn, 4), round(mx, 4)])
+
+    data = {"duration_ms": duration_ms, "peaks": peaks}
+
+    # Write to disk cache
+    _PEAKS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, separators=(",", ":"))
+    except OSError:
+        pass
+
+    return data
+
+
+def _get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None) -> dict:
+    """Compute and cache peaks for a reciter's audio URLs. Returns {url: peaks_data}."""
+    entries = _load_detailed(reciter)
+    if not entries:
+        return {}
+
+    # Collect unique audio URLs (optionally filtered by chapter)
+    urls = {}  # url -> True
+    for entry in entries:
+        chapter = _chapter_from_ref(entry["ref"])
+        if chapter_filter and chapter not in chapter_filter:
+            continue
+        url = entry.get("audio", "")
+        if url and url not in urls:
+            urls[url] = True
+
+    # Check what's already cached in memory
+    with _PEAKS_LOCK:
+        cached = _PEAKS_CACHE.get(reciter, {})
+
+    to_compute = [u for u in urls if u not in cached]
+    if not to_compute:
+        return {u: cached[u] for u in urls if u in cached}
+
+    # Compute missing peaks in parallel
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        future_to_url = {pool.submit(_compute_audio_peaks, u): u for u in to_compute}
+        for future in concurrent.futures.as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                data = future.result()
+                if data:
+                    results[url] = data
+            except Exception:
+                pass
+
+    # Merge into memory cache
+    with _PEAKS_LOCK:
+        if reciter not in _PEAKS_CACHE:
+            _PEAKS_CACHE[reciter] = {}
+        _PEAKS_CACHE[reciter].update(results)
+        all_cached = _PEAKS_CACHE[reciter]
+
+    return {u: all_cached[u] for u in urls if u in all_cached}
+
 
 def _chapter_from_ref(ref: str) -> int:
     """Extract chapter (surah) number from a ref string.
@@ -968,6 +1082,54 @@ def get_seg_all(reciter):
         "verse_word_counts": verse_word_counts,
         "pad_ms": _SEG_META_CACHE.get(reciter, {}).get("pad_ms", 0),
     })
+
+
+@app.route("/api/seg/peaks/<reciter>")
+def get_seg_peaks(reciter):
+    """Return pre-computed waveform peaks for a reciter's audio files."""
+    entries = _load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter not found"}), 404
+
+    # Optional chapter filter
+    chapters_param = request.args.get("chapters", "")
+    chapter_filter = None
+    if chapters_param:
+        try:
+            chapter_filter = {int(c) for c in chapters_param.split(",") if c.strip()}
+        except ValueError:
+            pass
+
+    # Collect all target URLs to know total count
+    target_urls = set()
+    for entry in entries:
+        ch = _chapter_from_ref(entry["ref"])
+        if chapter_filter and ch not in chapter_filter:
+            continue
+        url = entry.get("audio", "")
+        if url:
+            target_urls.add(url)
+
+    # Return whatever is already cached
+    with _PEAKS_LOCK:
+        cached = _PEAKS_CACHE.get(reciter, {})
+    result = {u: cached[u] for u in target_urls if u in cached}
+    complete = len(result) >= len(target_urls)
+
+    # Start background computation for missing URLs
+    cache_key = f"{reciter}:{chapters_param}"
+    if not complete and cache_key not in _PEAKS_COMPUTING:
+        _PEAKS_COMPUTING.add(cache_key)
+
+        def _bg():
+            try:
+                _get_peaks_for_reciter(reciter, chapter_filter)
+            finally:
+                _PEAKS_COMPUTING.discard(cache_key)
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    return jsonify({"peaks": result, "complete": complete})
 
 
 @app.route("/api/seg/resolve_ref")

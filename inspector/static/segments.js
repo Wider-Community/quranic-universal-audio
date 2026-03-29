@@ -29,6 +29,11 @@ let _activeAudioSource = null;      // 'main' | 'error' | null — which audio i
 let _segIndexMap = null;         // Map<index, segment> for O(1) lookups
 let _waveformObserver = null;    // IntersectionObserver for lazy waveform drawing
 let _segSavedFilterView = null;  // { filters, chapter, verse, scrollTop } — saved when "Go To" from filter results
+let segPeaksByAudio = null;      // {url: {duration_ms, peaks}} from server — instant waveforms
+let _peaksPollTimer = null;      // setTimeout handle for peaks polling
+let _scrollAbortController = null;  // AbortController for in-flight audio preloads
+let _scrollDebounceTimer = null;    // 1s debounce timer for scroll-based preloading
+let _scrollListeners = [];          // [{el, handler}] for cleanup
 
 // ---------------------------------------------------------------------------
 // Edit history — operation log (sent with save payload)
@@ -324,6 +329,8 @@ async function onSegReciterChange() {
         computeSilenceAfter();
         if (segFilterBarEl) segFilterBarEl.hidden = false;
         applyFiltersAndRender();
+        // Start fetching waveform peaks (non-blocking)
+        _fetchPeaks(reciter);
     } else {
         console.error('Error loading all segments:', allResult.reason);
     }
@@ -345,6 +352,8 @@ async function onSegChapterChange() {
     segAudioEl.src = '';
     segPlayBtn.disabled = true;
     stopSegAnimation();
+    // Abort in-flight audio preloads (peaks and buffers persist across chapters)
+    if (_scrollAbortController) _scrollAbortController.abort();
 
     // Stats panel: leave open/closed state as user left it
 
@@ -723,6 +732,19 @@ function _ensureWaveformObserver() {
             }
             if (!seg) return;
 
+            // Peaks fast path — draw from pre-computed peaks without audio download
+            if (segPeaksByAudio) {
+                const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
+                const peaksEntry = segPeaksByAudio[audioUrl];
+                if (peaksEntry?.peaks?.length > 0) {
+                    drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end,
+                                                  peaksEntry.peaks, peaksEntry.duration_ms);
+                    _waveformObserver.unobserve(canvas);
+                    canvas.removeAttribute('data-needs-waveform');
+                    return;
+                }
+            }
+
             // Determine which audio buffer to use
             const currentChapter = parseInt(segChapterSelect.value);
             let buffer = null;
@@ -798,6 +820,158 @@ function drawAllSegWaveforms() {
 
 
 // ---------------------------------------------------------------------------
+// Peaks loading + polling
+// ---------------------------------------------------------------------------
+
+function _fetchPeaks(reciter, chapters) {
+    if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
+    let url = `/api/seg/peaks/${reciter}`;
+    if (chapters && chapters.length > 0) url += `?chapters=${chapters.join(',')}`;
+    fetch(url).then(r => r.json()).then(data => {
+        if (!segAllData) return;  // reciter changed
+        if (!segPeaksByAudio) segPeaksByAudio = {};
+        Object.assign(segPeaksByAudio, data.peaks || {});
+        _redrawPeaksWaveforms();
+        if (!data.complete) {
+            _peaksPollTimer = setTimeout(() => _fetchPeaks(reciter, chapters), 3000);
+        }
+    }).catch(() => {});
+}
+
+function _redrawPeaksWaveforms() {
+    const observer = _ensureWaveformObserver();
+    [segListEl, segValidationEl, segValidationGlobalEl].forEach(container => {
+        if (!container) return;
+        container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => {
+            observer.observe(c);
+        });
+    });
+}
+
+
+// ---------------------------------------------------------------------------
+// Debounced viewport-based audio preloading
+// ---------------------------------------------------------------------------
+
+function _attachScrollPreload(container) {
+    if (!container) return;
+    if (_scrollListeners.some(sl => sl.el === container)) return;  // already tracked
+
+    const handler = () => {
+        // Abort in-flight preloads
+        if (_scrollAbortController) _scrollAbortController.abort();
+        clearTimeout(_scrollDebounceTimer);
+        _scrollDebounceTimer = setTimeout(_onScrollSettled, 1000);
+    };
+    container.addEventListener('scroll', handler, { passive: true });
+    _scrollListeners.push({ el: container, handler });
+
+    // Initial preload after short delay (for first render before any scroll)
+    clearTimeout(_scrollDebounceTimer);
+    _scrollDebounceTimer = setTimeout(_onScrollSettled, 500);
+}
+
+function _teardownScrollPreloading() {
+    if (_scrollAbortController) { _scrollAbortController.abort(); _scrollAbortController = null; }
+    clearTimeout(_scrollDebounceTimer);
+    _scrollDebounceTimer = null;
+    _scrollListeners.forEach(({ el, handler }) => {
+        el.removeEventListener('scroll', handler);
+    });
+    _scrollListeners = [];
+}
+
+function _onScrollSettled() {
+    const segs = _getViewportSegments();
+    if (segs.length === 0) return;
+
+    _scrollAbortController = new AbortController();
+    const signal = _scrollAbortController.signal;
+
+    // Batch with concurrency limit of 4
+    const queue = [...segs];
+    let active = 0;
+    const MAX_CONCURRENT = 4;
+
+    function next() {
+        while (active < MAX_CONCURRENT && queue.length > 0) {
+            if (signal.aborted) return;
+            const item = queue.shift();
+            active++;
+            _preloadAudioForSeg(item, signal).finally(() => {
+                active--;
+                next();
+            });
+        }
+    }
+    next();
+}
+
+function _getViewportSegments() {
+    const results = [];
+    const seen = new Set();
+
+    // Check all active scroll containers
+    const containers = [segListEl];
+    document.querySelectorAll('.val-cards-container').forEach(c => {
+        if (!c.hidden && c.children.length > 0) containers.push(c);
+    });
+
+    for (const container of containers) {
+        if (!container) continue;
+        const cRect = container.getBoundingClientRect();
+        const rows = container.querySelectorAll('.seg-row');
+        let belowCount = 0;
+
+        for (const row of rows) {
+            const rRect = row.getBoundingClientRect();
+            const inView = rRect.bottom > cRect.top && rRect.top < cRect.bottom;
+            const justBelow = rRect.top >= cRect.bottom;
+
+            if (inView || (justBelow && belowCount < 3)) {
+                if (justBelow) belowCount++;
+                const seg = resolveSegFromRow(row);
+                if (!seg) continue;
+                const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(seg.chapter)] || '';
+                if (!audioUrl || seen.has(audioUrl)) continue;
+                // Skip if already cached (including null sentinel = already loading)
+                if (segAudioBuffers.has(audioUrl) || segAudioBuffers.has(seg.chapter)) continue;
+                seen.add(audioUrl);
+                results.push({ seg, audioUrl, chapter: seg.chapter });
+            } else if (rRect.top > cRect.bottom && belowCount >= 3) {
+                break;  // past buffer zone
+            }
+        }
+    }
+    return results;
+}
+
+async function _preloadAudioForSeg({ seg, audioUrl, chapter }, signal) {
+    if (signal.aborted) return;
+    try {
+        if (!segAudioCtx) {
+            segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const resp = await fetch(audioUrl, { signal });
+        if (signal.aborted) return;
+        const buf = await resp.arrayBuffer();
+        if (signal.aborted) return;
+        const decoded = await segAudioCtx.decodeAudioData(buf);
+        // Cache: by URL for by_ayah, by chapter for by_surah
+        if (seg.audio_url) {
+            segAudioBuffers.set(audioUrl, decoded);
+        } else {
+            segAudioBuffers.set(chapter, decoded);
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            console.warn('Audio preload failed:', audioUrl, e);
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
@@ -832,6 +1006,9 @@ function clearSegDisplay() {
     _segPrefetchCache = {};
     _segContinuousPlay = false;
     _segPlayEndMs = 0;
+    segPeaksByAudio = null;
+    if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
+    _teardownScrollPreloading();
     segListEl.innerHTML = '';
     segPlayBtn.disabled = true;
     segSaveBtn.disabled = true;
@@ -1164,6 +1341,8 @@ function renderSegList(segments) {
     // Observe canvases for lazy waveform drawing
     segListEl.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
 
+    // Attach scroll-based audio preloading
+    _attachScrollPreload(segListEl);
 }
 
 function getConfClass(seg) {
@@ -1177,6 +1356,68 @@ function getConfClass(seg) {
 // ---------------------------------------------------------------------------
 // Waveform drawing
 // ---------------------------------------------------------------------------
+
+function drawSegmentWaveformFromPeaks(canvas, startMs, endMs, peaks, totalDurationMs) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, width, height);
+
+    if (!peaks || peaks.length === 0 || totalDurationMs <= 0) return;
+
+    // Slice peaks for this segment's time range
+    const startIdx = Math.floor((startMs / totalDurationMs) * peaks.length);
+    const endIdx = Math.ceil((endMs / totalDurationMs) * peaks.length);
+    const slice = peaks.slice(Math.max(0, startIdx), Math.min(peaks.length, endIdx));
+    if (slice.length === 0) return;
+
+    const buckets = width;
+    const scale = height / 2 * 0.9;
+
+    // Resample slice to canvas width via linear interpolation
+    function sampleAt(arr, idx, component) {
+        const fi = (idx / buckets) * (arr.length - 1);
+        const lo = Math.floor(fi);
+        const hi = Math.min(lo + 1, arr.length - 1);
+        const t = fi - lo;
+        return arr[lo][component] * (1 - t) + arr[hi][component] * t;
+    }
+
+    // Filled waveform
+    ctx.beginPath();
+    for (let i = 0; i < buckets; i++) {
+        const x = (i / buckets) * width;
+        const maxVal = sampleAt(slice, i, 1);
+        const y = centerY - maxVal * scale;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    for (let i = buckets - 1; i >= 0; i--) {
+        const x = (i / buckets) * width;
+        const minVal = sampleAt(slice, i, 0);
+        const y = centerY - minVal * scale;
+        ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+    ctx.fill();
+
+    // Stroke outline (max envelope)
+    ctx.strokeStyle = '#4361ee';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < buckets; i++) {
+        const x = (i / buckets) * width;
+        const maxVal = sampleAt(slice, i, 1);
+        const y = centerY - maxVal * scale;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    canvas._wfCache = null;
+}
 
 function drawSegmentWaveform(canvas, startMs, endMs) {
     if (!segAudioBuffer) return;
@@ -3823,6 +4064,24 @@ function renderCategoryCards(type, items, container) {
     // Observe error card canvases for lazy waveform drawing
     const observer = _ensureWaveformObserver();
     container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+
+    // Attach scroll-based audio preloading for this container
+    _attachScrollPreload(container);
+
+    // Fetch peaks for chapters referenced by these error items if not yet available
+    if (segPeaksByAudio) {
+        const missingChapters = new Set();
+        items.forEach(item => {
+            const ch = item.chapter;
+            if (!ch) return;
+            const url = segAllData?.audio_by_chapter?.[String(ch)] || '';
+            if (url && !segPeaksByAudio[url]) missingChapters.add(ch);
+        });
+        if (missingChapters.size > 0) {
+            const reciter = segReciterSelect.value;
+            if (reciter) _fetchPeaks(reciter, [...missingChapters]);
+        }
+    }
 }
 
 function resolveIssueToSegment(type, issue) {
