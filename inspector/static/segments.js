@@ -757,7 +757,10 @@ function _ensureWaveformObserver() {
             const currentChapter = parseInt(segChapterSelect.value);
             let buffer = null;
 
-            if (seg.audio_url) {
+            const chapterAudio = segAllData?.audio_by_chapter?.[String(chapter)] || '';
+            const segIsByAyah = seg.audio_url && seg.audio_url !== chapterAudio;
+
+            if (segIsByAyah) {
                 // By-ayah: use buffer only if already cached
                 buffer = segAudioBuffers.get(seg.audio_url) || null;
                 if (!buffer) return;  // scroll preloader will handle downloading
@@ -918,8 +921,9 @@ function _getViewportSegments() {
                 if (justBelow) belowCount++;
                 const seg = resolveSegFromRow(row);
                 if (!seg) continue;
-                const isByAyah = !!seg.audio_url;
                 const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(seg.chapter)] || '';
+                const chapterAudio = segAllData?.audio_by_chapter?.[String(seg.chapter)] || '';
+                const isByAyah = seg.audio_url && seg.audio_url !== chapterAudio;
                 if (!audioUrl || seen.has(audioUrl)) continue;
                 // Skip if already cached or being loaded (null sentinel)
                 const cacheKey = isByAyah ? audioUrl : seg.chapter;
@@ -1552,6 +1556,9 @@ function playFromSegment(segIndex, chapterOverride) {
         : (segDisplayedSegments ? segDisplayedSegments.find(s => s.index === segIndex) : null);
     if (!seg) return;
 
+    // Abort in-flight scroll preloads to free browser connections for playback
+    if (_scrollAbortController) _scrollAbortController.abort();
+
     _segContinuousPlay = true;
     _segPlayEndMs = seg.time_end;
 
@@ -1561,11 +1568,19 @@ function playFromSegment(segIndex, chapterOverride) {
 
     if (needsSwitch) {
         segAudioEl.src = segAudioUrl;
-        segAudioBuffer = null;
-        segAudioBufferUrl = '';
-        decodeSegAudio(segAudioUrl).then(() => {
-            if (segAudioBuffer) drawAllSegWaveforms();
-        });
+        // Check if scroll preloader already decoded this URL
+        const cached = segAudioBuffers.get(segAudioUrl);
+        if (cached && cached instanceof AudioBuffer) {
+            segAudioBuffer = cached;
+            segAudioBufferUrl = segAudioUrl;
+            drawAllSegWaveforms();
+        } else {
+            segAudioBuffer = null;
+            segAudioBufferUrl = '';
+            decodeSegAudio(segAudioUrl).then(() => {
+                if (segAudioBuffer) drawAllSegWaveforms();
+            });
+        }
     }
 
     segAudioEl.playbackRate = parseFloat(segSpeedSelect.value);
@@ -3817,6 +3832,9 @@ function playErrorCardAudio(seg, btn) {
         stopErrorCardAudio();
         return;
     }
+
+    // Abort in-flight scroll preloads to free browser connections for playback
+    if (_scrollAbortController) _scrollAbortController.abort();
 
     // Pause main audio if playing
     if (!segAudioEl.paused) {

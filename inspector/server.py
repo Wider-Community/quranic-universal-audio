@@ -731,7 +731,7 @@ def _compute_audio_peaks(audio_url: str) -> dict | None:
         result = subprocess.run(
             ["ffmpeg", "-i", audio_url, "-f", "s16le", "-ac", "1", "-ar", "8000",
              "-v", "quiet", "-"],
-            capture_output=True, timeout=60,
+            capture_output=True, timeout=300,
         )
         if result.returncode != 0 or len(result.stdout) < 4:
             return None
