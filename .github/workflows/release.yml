@@ -110,3 +110,56 @@ jobs:
           except Exception as e:
               print(f'Warning: Could not update dataset README: {e}')
           "
+
+      - name: Update release history cache
+        if: steps.package.outputs.skip != 'true'
+        run: |
+          python -c "
+          import json
+          from pathlib import Path
+          from datetime import date
+
+          manifest = json.loads(Path('dist/manifest.json').read_text())
+          cache_path = Path('data/.release_history.json')
+          cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+
+          version = manifest['version']
+          today = date.today().isoformat()
+
+          for rec in manifest.get('reciters', []):
+              slug = rec['slug']
+              if slug not in cache:
+                  cache[slug] = {
+                      'release_count': 0,
+                      'first_release': version,
+                      'first_release_date': today,
+                  }
+              cache[slug]['release_count'] = cache[slug].get('release_count', 0) + 1
+              cache[slug]['latest_release'] = version
+              cache[slug]['latest_release_date'] = today
+              cache[slug]['latest_download_url'] = rec.get('download_url', '')
+              cache[slug]['latest_zip_sha256'] = rec.get('zip_sha256', '')
+
+          cache_path.write_text(json.dumps(cache, indent=2, sort_keys=True) + '\n')
+          print(f'Updated release history: {len(manifest.get(\"reciters\", []))} reciters in {version}')
+          "
+
+          # Commit the updated cache
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/.release_history.json
+          git diff --cached --quiet || git commit -m "chore: update release history cache for ${{ steps.package.outputs.version }}"
+          git push origin HEAD:main || echo "Warning: Could not push release history update"
+
+      - name: Notify watchers
+        if: steps.package.outputs.skip != 'true'
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_WATCHERS_DB_ID: ${{ secrets.NOTION_WATCHERS_DB_ID }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          pip install httpx
+          python scripts/notify_watchers.py \
+            --manifest dist/manifest.json \
+            --version ${{ steps.package.outputs.version }}
