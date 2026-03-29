@@ -393,14 +393,25 @@ def push_reciter(slug, audio_type):
 
     riwayah = get_riwayah(slug)
     log.info("Pushing to hub as %s/%s...", riwayah, slug)
-    ds.push_to_hub(
-        REPO_ID,
+
+    push_kwargs = dict(
         config_name=riwayah,
         split=slug,
         token=HF_TOKEN,
         max_shard_size="10GB",
         commit_message=f"Add {riwayah}/{slug}",
     )
+    try:
+        ds.push_to_hub(REPO_ID, **push_kwargs)
+    except ValueError as e:
+        if "Features of the new split don't match" not in str(e):
+            raise
+        log.warning("Feature mismatch on hub for config '%s' — updating README and retrying", riwayah)
+        # The mismatch lives in the README.md YAML frontmatter on the hub.
+        # Re-upload the local dataset card to fix it, then retry.
+        update_dataset_readme()
+        ds.push_to_hub(REPO_ID, **push_kwargs)
+
     log.info("Done: %s uploaded to %s", slug, REPO_ID)
 
     # Clear surah cache to free memory before next reciter
@@ -695,19 +706,30 @@ def update_dataset_readme():
 # ---------------------------------------------------------------------------
 def delete_reciter(slug):
     """Delete a reciter's parquet data from HF dataset."""
+    from huggingface_hub import CommitOperationDelete
     api = HfApi(token=HF_TOKEN)
     riwayah = get_riwayah(slug)
-    path = f"data/{riwayah}/{slug}"
+    prefix = f"{riwayah}/{slug}-"
     try:
-        api.delete_folder(
-            repo_id=REPO_ID,
-            path_in_repo=path,
-            repo_type="dataset",
-            commit_message=f"Remove {riwayah}/{slug}",
-        )
-        log.info("Deleted %s from %s", path, REPO_ID)
+        all_files = list(api.list_repo_tree(
+            REPO_ID, path_in_repo=riwayah, repo_type="dataset",
+        ))
+        to_delete = [
+            CommitOperationDelete(path_in_repo=f.rfilename)
+            for f in all_files
+            if hasattr(f, "rfilename") and f.rfilename.startswith(prefix)
+        ]
+        if not to_delete:
+            log.warning("No files found matching %s*", prefix)
+        else:
+            api.create_commit(
+                repo_id=REPO_ID, repo_type="dataset",
+                operations=to_delete,
+                commit_message=f"Remove {riwayah}/{slug}",
+            )
+            log.info("Deleted %d files for %s from %s", len(to_delete), slug, REPO_ID)
     except Exception as e:
-        log.error("Failed to delete %s: %s", path, e)
+        log.error("Failed to delete %s: %s", prefix, e)
 
     update_dataset_readme()
 
