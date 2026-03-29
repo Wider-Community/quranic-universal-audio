@@ -66,17 +66,16 @@ def _wire_input_mode_toggle(c):
             gr.update(visible=is_link),      # link_panel
             gr.update(visible=is_upload),    # upload_panel
             gr.update(visible=is_record),    # record_panel
-            gr.update(visible=not is_link),  # example_row
         )
 
     _toggle_outputs = [
         c.mode_link, c.mode_upload, c.mode_record,
         c.link_panel, c.upload_panel, c.record_panel,
-        c.example_row,
     ]
     c.mode_link.click(fn=lambda: _switch_to("Link"), inputs=[], outputs=_toggle_outputs, api_name=False)
     c.mode_upload.click(fn=lambda: _switch_to("Upload"), inputs=[], outputs=_toggle_outputs, api_name=False)
     c.mode_record.click(fn=lambda: _switch_to("Record"), inputs=[], outputs=_toggle_outputs, api_name=False)
+
 
 
 def _wire_url_input(c):
@@ -84,43 +83,48 @@ def _wire_url_input(c):
 
     def _on_url_change(url):
         """Auto-fetch metadata when a URL is pasted."""
+        _hide_all = (
+            gr.update(visible=False),    # url_info_html
+            gr.update(visible=False),    # url_status
+            gr.update(visible=False),    # url_download_btn
+            gr.update(visible=False),    # url_audio_player
+        )
         if not url or not url.strip():
-            return (
-                gr.update(visible=False),    # url_info_html
-                gr.update(visible=False),    # url_status
-                gr.update(visible=False),    # url_download_btn
-            )
+            return _hide_all
 
-        # Show fetching status
+        # Show fetching status, hide previous state
         yield (
             gr.update(visible=False),
             gr.update(value='<div style="text-align:center;padding:8px;opacity:0.7;">Fetching info...</div>', visible=True),
             gr.update(visible=False),
+            gr.update(visible=False),
         )
 
         try:
-            info_html = fetch_url_info(url)
+            info_html, warning = fetch_url_info(url)
             if info_html is None:
-                yield (gr.update(visible=False), gr.update(visible=False), gr.update(visible=False))
+                yield _hide_all
                 return
+            if warning:
+                info_html += f'<div style="padding:6px 8px;font-size:12px;opacity:0.7;color:var(--body-text-color);">{warning}</div>'
             yield (
                 gr.update(value=info_html, visible=True),
                 gr.update(visible=False),
                 gr.update(visible=True),     # show Download button
+                gr.update(visible=False),
             )
-        except gr.Error:
-            raise
         except Exception as e:
             yield (
                 gr.update(visible=False),
                 gr.update(
-                    value=f'<div style="color:var(--error-text-color);padding:8px;">Error: {str(e)[:200]}</div>',
+                    value=f'<div style="color:var(--error-text-color);padding:8px;">{str(e)[:300]}</div>',
                     visible=True,
                 ),
                 gr.update(visible=False),
+                gr.update(visible=False),
             )
 
-    _fetch_outputs = [c.url_info_html, c.url_status, c.url_download_btn]
+    _fetch_outputs = [c.url_info_html, c.url_status, c.url_download_btn, c.url_audio_player]
     c.url_input.change(
         fn=_on_url_change, inputs=[c.url_input], outputs=_fetch_outputs,
         api_name=False, show_progress="hidden",
@@ -136,29 +140,30 @@ def _wire_url_input(c):
                 visible=True,
             ),                               # url_status
             gr.update(interactive=False),    # disable download btn
+            gr.update(),                     # url_audio_player unchanged
         )
 
         # Yield 2: result
         try:
             wav_path, info_html = download_url_audio(url)
             yield (
-                wav_path,
-                gr.update(visible=False),
-                gr.update(interactive=True),
+                wav_path,                            # set audio_input
+                gr.update(visible=False),            # hide status
+                gr.update(visible=False),            # hide download btn (done)
+                gr.update(value=wav_path, visible=True),  # show audio player
             )
-        except gr.Error:
-            raise
         except Exception as e:
             yield (
                 gr.update(),
                 gr.update(
-                    value=f'<div style="color:var(--error-text-color);padding:8px;">Download failed: {str(e)[:200]}</div>',
+                    value=f'<div style="color:var(--error-text-color);padding:8px;">Download failed: {str(e)[:300]}</div>',
                     visible=True,
                 ),
                 gr.update(interactive=True),
+                gr.update(),
             )
 
-    _dl_outputs = [c.audio_input, c.url_status, c.url_download_btn]
+    _dl_outputs = [c.audio_input, c.url_status, c.url_download_btn, c.url_audio_player]
     c.url_download_btn.click(
         fn=_on_download, inputs=[c.url_input], outputs=_dl_outputs,
         api_name=False, show_progress="hidden",
@@ -181,10 +186,12 @@ def _wire_audio_input(c):
                     gr.Warning(f"Audio is {hr:.1f} hours — processing will likely time out or crash. Consider splitting into separate surahs.")
             except Exception:
                 pass
+        has_audio = bool(audio_path)
         return (
             _EMPTY_PLACEHOLDER, None, None,
             None, None, None, None, None, None, None, None,
-            gr.update(visible=True),                                          # extract_btn
+            gr.update(visible=True, interactive=has_audio,                    # extract_btn
+                      variant="primary" if has_audio else "secondary"),
             gr.update(visible=False),                                         # pipeline_progress
             gr.update(visible=False, interactive=False, variant="secondary"), # compute_ts_btn
             gr.update(visible=False),                                         # compute_ts_progress

@@ -37,40 +37,50 @@ def _build_info_html(title, duration, thumbnail):
     )
 
 
+_WARN_DOMAINS = ("youtube.com", "youtu.be", "facebook.com", "fb.watch", "instagram.com")
+
+
 def fetch_url_info(url: str):
-    """Fetch metadata only (no download). Returns info_html or raises gr.Error."""
+    """Fetch metadata only (no download). Returns (info_html, warning) tuple. Raises Exception on error."""
     import yt_dlp
+    from urllib.parse import urlparse
 
     if not url or not url.strip():
-        return None
+        return None, None
 
     url = url.strip()
 
     with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
-        try:
-            info = ydl.extract_info(url, download=False)
-        except yt_dlp.utils.DownloadError as e:
-            raise gr.Error(f"Could not fetch URL: {str(e)[:200]}")
+        info = ydl.extract_info(url, download=False)
 
     if info.get("_type") == "playlist":
-        raise gr.Error("Playlists are not supported. Please paste a single video/audio URL.")
+        raise Exception("Playlists are not supported. Please paste a single video/audio URL.")
 
     duration = info.get("duration")
     if duration is None:
-        raise gr.Error("Live streams are not supported. Please use a completed video/audio.")
+        raise Exception("Live streams are not supported. Please use a completed video/audio.")
 
     title = info.get("title", "Unknown")
     thumbnail = info.get("thumbnail", "")
 
-    return _build_info_html(title, duration, thumbnail)
+    # Warn for sites that may require auth from server IPs
+    warning = None
+    try:
+        host = urlparse(url).hostname or ""
+        if any(d in host for d in _WARN_DOMAINS):
+            warning = "This site may not work from our server — download could fail. Try it, or upload the file directly."
+    except Exception:
+        pass
+
+    return _build_info_html(title, duration, thumbnail), warning
 
 
 def download_url_audio(url: str):
-    """Full download of audio from URL. Returns (wav_path, info_html)."""
+    """Full download of audio from URL. Returns (wav_path, info_html). Raises Exception on error."""
     import yt_dlp
 
     if not url or not url.strip():
-        raise gr.Error("Please enter a URL")
+        raise Exception("Please enter a URL")
 
     url = url.strip()
 
@@ -86,16 +96,11 @@ def download_url_audio(url: str):
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(url, download=True)
-        except yt_dlp.utils.DownloadError as e:
-            raise gr.Error(f"Could not fetch URL: {str(e)[:200]}")
-        except Exception as e:
-            raise gr.Error(f"Download failed: {str(e)[:200]}")
+        info = ydl.extract_info(url, download=True)
 
     wav_path = str(out_path) + ".wav"
     if not Path(wav_path).exists():
-        raise gr.Error("Download completed but audio file was not created.")
+        raise Exception("Download completed but audio file was not created.")
 
     title = info.get("title", "Unknown")
     duration = info.get("duration")
