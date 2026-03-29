@@ -840,6 +840,10 @@ def _run_post_vad_pipeline(
 
     json_output = {"segments": segments_list}
 
+    # API callers only need json_output; skip HTML render and audio file writes
+    if endpoint != "ui":
+        return "", json_output, str(segment_dir), log_row
+
     # Compute full audio URL (file written in background after render)
     full_path = segment_dir / "full.wav"
     full_audio_url = f"/gradio_api/file={full_path}"
@@ -858,18 +862,20 @@ def _run_post_vad_pipeline(
     print(f"[DIAG] Before render_segments: RSS={_rss:.0f}MB, segments={len(segments)}")
 
     t_render = time.time()
-    html = render_segments(segments, full_audio_url=full_audio_url)
+    html = render_segments(segments, full_audio_url=full_audio_url, segment_dir=str(segment_dir))
     print(f"[PROFILE] render_segments: {time.time() - t_render:.3f}s ({len(segments)} segments, HTML={len(html)/1e6:.2f}MB)")
 
-    # Write full.wav in background thread from float32 audio
+    # Write full.wav + per-segment WAVs in background thread
     # sf.write converts float32→PCM16 internally (no extra int16 copy in memory)
-    # File ready before user can click play (browser still rendering cards)
+    # Files ready before user can click play (browser still rendering cards)
     import threading
     import soundfile as sf
     _audio_ref = audio  # prevent GC while thread runs
     _sr_ref = sample_rate
     _path_ref = str(full_path)
-    def _write_full_wav():
+    _seg_dir_ref = str(segment_dir)
+    _segments_ref = segments
+    def _write_audio_files():
         import os
         # Diagnostics: memory + disk before write
         rss_mb = -1
@@ -894,7 +900,19 @@ def _run_post_vad_pipeline(
             print(f"[PROFILE] Full audio write (bg): {time.time() - t:.3f}s ({expected_mb:.0f}MB)")
         except Exception as e:
             print(f"[ERROR] Full audio write failed: {e}")
-    threading.Thread(target=_write_full_wav, daemon=True).start()
+            return  # Can't write per-segment files without full.wav succeeding
+        # Per-segment WAVs (slices from float32 array, converted to PCM16 by soundfile)
+        t_segs = time.time()
+        try:
+            for i, seg in enumerate(_segments_ref):
+                start = int(seg.start_time * _sr_ref)
+                end = int(seg.end_time * _sr_ref)
+                sf.write(os.path.join(_seg_dir_ref, f"seg_{i}.wav"),
+                         _audio_ref[start:end], _sr_ref, format='WAV', subtype='PCM_16')
+            print(f"[PROFILE] Per-segment WAVs (bg): {time.time() - t_segs:.3f}s ({len(_segments_ref)} files)")
+        except Exception as e:
+            print(f"[ERROR] Per-segment WAV write failed: {e}")
+    threading.Thread(target=_write_audio_files, daemon=True).start()
 
     print("[STAGE] Done!")
 

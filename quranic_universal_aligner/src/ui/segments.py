@@ -213,7 +213,7 @@ def simplify_ref(ref: str) -> str:
     return ref
 
 
-def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "") -> str:
+def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "", segment_dir: str = "") -> str:
     """Render a single segment as an HTML card with optional audio player."""
     is_special = seg.matched_ref in ALL_SPECIAL_REFS
     confidence_class = get_confidence_class(seg.match_score)
@@ -249,10 +249,13 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     if seg.error:
         error_html = f'<div class="segment-error">{seg.error}</div>'
 
-    # Audio player HTML — uses media fragment of the full recording
+    # Audio player HTML — per-segment WAV (preferred) or media fragment fallback
     audio_html = ""
-    if full_audio_url:
-        audio_src = f"{full_audio_url}#t={seg.start_time:.3f},{seg.end_time:.3f}"
+    if segment_dir or full_audio_url:
+        if segment_dir:
+            audio_src = f"/gradio_api/file={segment_dir}/seg_{idx}.wav"
+        else:
+            audio_src = f"{full_audio_url}#t={seg.start_time:.3f},{seg.end_time:.3f}"
         # Add animate button only if segment has a Quran verse ref (word spans for animation).
         # Basmala/Isti'adha get animate because they have indexed word spans for MFA.
         # Transition segments (Amin, Takbir, Tahmeed) don't.
@@ -350,12 +353,13 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     return html
 
 
-def render_segments(segments: list, full_audio_url: str = "") -> str:
+def render_segments(segments: list, full_audio_url: str = "", segment_dir: str = "") -> str:
     """Render all segments as HTML with optional audio players.
 
     Args:
         segments: List of SegmentInfo objects
-        full_audio_url: URL to full audio WAV (media fragments used for per-segment playback)
+        full_audio_url: URL to full audio WAV (used by mega card / Animate All)
+        segment_dir: Path to segment directory containing per-segment WAV files
     """
     if not segments:
         return '<div class="no-segments">No segments detected</div>'
@@ -443,7 +447,7 @@ def render_segments(segments: list, full_audio_url: str = "") -> str:
 
     t_cards = time.time()
     for idx, seg in enumerate(segments):
-        html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key))
+        html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir))
 
     html_parts.append('</div>')
     print(f"[PROFILE] Segment cards: {time.time() - t_cards:.3f}s ({len(segments)} cards, HTML only)")
