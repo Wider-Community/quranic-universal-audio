@@ -215,12 +215,16 @@ def _triage_one(req, processed_slugs, open_by_slug, processed):
         }
 
     # Check 2: Non-Hafs riwayah
-    if req["riwayah"] and req["riwayah"] != "Hafs an Asim":
+    # Normalize: strip, lowercase, remove punctuation for fuzzy match
+    riwayah_raw = (req["riwayah"] or "").strip()
+    riwayah_norm = re.sub(r"[^a-z\s]", "", riwayah_raw.lower())
+    hafs_variants = {"hafs an asim", "hafs an assem", "hafs an asem"}
+    if riwayah_raw and riwayah_norm not in hafs_variants:
         return {
             "req": req,
             "action": "reject",
             "reason": "non-hafs",
-            "context": f"Riwayah is {req['riwayah']}, only Hafs an Asim supported",
+            "context": f"Riwayah is {riwayah_raw}, only Hafs an Asim supported",
         }
 
     # Check 3: Duplicate open issue
@@ -313,7 +317,7 @@ def _fallback_pending_from_github():
             "slug": extract("Slug"),
             "audio_source": extract("Audio Source"),
             "request_type": extract("Request Type"),
-            "riwayah": extract("Riwayah") or "Hafs an Asim",
+            "riwayah": extract("Riwayah") or "Hafs A'n Assem",
             "style": extract("Style") or "Unknown",
             "country": extract("Country") or "unknown",
             "min_silence": extract("Suggested Min Silence").replace("ms", ""),
