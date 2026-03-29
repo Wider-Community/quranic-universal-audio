@@ -258,6 +258,19 @@ def _wire_extract_chain(c):
             gr.Warning(f"GPU quota reached — retrying on CPU (slower).{reset_msg}")
             result = process_audio(audio_data, silence, speech, pad, model, "CPU",
                                    is_preset=is_preset, request=request)
+        except Exception as e:
+            gr.Warning(f"Processing failed: {e}")
+            yield (
+                _skip, _skip,                                                       # output_html, output_json
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
+                _skip,                                                              # export_file
+                gr.update(visible=True, interactive=True),                          # re-show extract_btn
+                gr.update(visible=False),                                           # hide pipeline_progress
+                _skip,                                                              # compute_ts_btn
+                _skip, _skip,                                                       # resegment/retranscribe
+                _skip, _skip, _skip, _skip,                                         # rs sliders + model
+            )
+            return
         # result: (html, json, speech_intervals, is_complete, audio, sr, intervals, seg_dir, log_row)
         json_data = result[1]
 
@@ -355,6 +368,19 @@ def _wire_resegment_chain(c):
             result = resegment_audio(speech_intervals, is_complete, audio, sr,
                                      silence, speech, pad, model, "CPU", log_row,
                                      is_preset=is_preset, request=request)
+        except Exception as e:
+            gr.Warning(f"Processing failed: {e}")
+            yield (
+                _skip, _skip,                                                       # output_html, output_json
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
+                _skip, _skip,                                                       # resegment_panel, panel_visible
+                _skip,                                                              # export_file
+                _skip, _skip, _skip, _skip,                                         # sliders + model
+                _skip,                                                              # compute_ts_btn
+                gr.update(visible=False),                                           # hide pipeline_progress
+                _skip, _skip,                                                       # animate_all, retranscribe
+            )
+            return
         json_data = result[1]
         yield (
             *result,                                                            # 9 pipeline outputs
@@ -432,6 +458,18 @@ def _wire_retranscribe_chain(c):
                                            is_complete, model_name, "CPU", log_row,
                                            silence, speech, pad,
                                            is_preset=is_preset, request=request)
+        except Exception as e:
+            gr.Warning(f"Processing failed: {e}")
+            yield (
+                _skip, _skip,                                                       # output_html, output_json
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
+                _skip,                                                              # export_file
+                _skip,                                                              # retranscribe_btn
+                _skip,                                                              # compute_ts_btn
+                gr.update(visible=False),                                           # hide pipeline_progress
+                _skip, _skip,                                                       # animate_all, model
+            )
+            return
         json_data = result[1]
         yield (
             *result,                                                            # 9 pipeline outputs
