@@ -92,11 +92,7 @@ jobs:
             edited_by="No external edits — pipeline output accepted as-is."
           fi
 
-          EDITED_BY="$edited_by" python3 -c "
-import os, sys
-tpl = open('.github/templates/workflows/pr-merge-summary.md').read()
-sys.stdout.write(tpl.format(edited_by=os.environ['EDITED_BY']))
-" > /tmp/pr_comment.md
+          EDITED_BY="$edited_by" python3 -c "import os, sys; tpl = open('.github/templates/workflows/pr-merge-summary.md').read(); sys.stdout.write(tpl.format(edited_by=os.environ['EDITED_BY']))" > /tmp/pr_comment.md
           cat /tmp/edit_summary.md >> /tmp/pr_comment.md
 
           gh pr comment "$pr_number" \
@@ -122,11 +118,7 @@ sys.stdout.write(tpl.format(edited_by=os.environ['EDITED_BY']))
             edited_by="No external edits — pipeline output accepted as-is."
           fi
 
-          EDITED_BY="$edited_by" PR_NUMBER="$pr_number" python3 -c "
-import os, sys
-tpl = open('.github/templates/workflows/issue-merge-summary.md').read()
-sys.stdout.write(tpl.format(pr_number=os.environ['PR_NUMBER'], edited_by=os.environ['EDITED_BY']))
-" > /tmp/issue_comment.md
+          EDITED_BY="$edited_by" PR_NUMBER="$pr_number" python3 -c "import os, sys; tpl = open('.github/templates/workflows/issue-merge-summary.md').read(); sys.stdout.write(tpl.format(pr_number=os.environ['PR_NUMBER'], edited_by=os.environ['EDITED_BY']))" > /tmp/issue_comment.md
           cat /tmp/edit_summary.md >> /tmp/issue_comment.md
           echo "" >> /tmp/issue_comment.md
           echo "Thank you for your contribution!" >> /tmp/issue_comment.md
