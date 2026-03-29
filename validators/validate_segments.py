@@ -327,7 +327,7 @@ def validate_reciter(
 
     stats = {
         "reciter": reciter,
-        "verses": len(verses),
+        "verses": len(all_verses_in_file),
         "total_verses": len(word_counts),
         "segments": total_segments,
         "single": single_seg,
