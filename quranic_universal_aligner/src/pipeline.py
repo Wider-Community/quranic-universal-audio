@@ -809,6 +809,19 @@ def _run_post_vad_pipeline(
     full_path = segment_dir / "full.wav"
     full_audio_url = f"/gradio_api/file={full_path}"
 
+    # Diagnostics before render
+    import os as _os
+    _rss = -1
+    try:
+        with open('/proc/self/status') as _f:
+            for _line in _f:
+                if _line.startswith('VmRSS:'):
+                    _rss = int(_line.split()[1]) / 1024
+                    break
+    except Exception:
+        pass
+    print(f"[DIAG] Before render_segments: RSS={_rss:.0f}MB, segments={len(segments)}")
+
     t_render = time.time()
     html = render_segments(segments, full_audio_url=full_audio_url)
     print(f"[PROFILE] render_segments: {time.time() - t_render:.3f}s ({len(segments)} segments, HTML={len(html)/1e6:.2f}MB)")
@@ -822,9 +835,30 @@ def _run_post_vad_pipeline(
     _sr_ref = sample_rate
     _path_ref = str(full_path)
     def _write_full_wav():
+        import os
+        # Diagnostics: memory + disk before write
+        rss_mb = -1
+        try:
+            with open('/proc/self/status') as f:
+                for line in f:
+                    if line.startswith('VmRSS:'):
+                        rss_mb = int(line.split()[1]) / 1024  # kB → MB
+                        break
+        except Exception:
+            pass
+        try:
+            disk = os.statvfs('/tmp')
+            free_mb = disk.f_bavail * disk.f_frsize / 1e6
+        except Exception:
+            free_mb = -1
+        expected_mb = len(_audio_ref) * 2 / 1e6  # int16 = 2 bytes/sample
+        print(f"[DIAG] Before full.wav write: RSS={rss_mb:.0f}MB, /tmp free={free_mb:.0f}MB, expected file={expected_mb:.0f}MB")
         t = time.time()
-        sf.write(_path_ref, _audio_ref, _sr_ref, format='WAV', subtype='PCM_16')
-        print(f"[PROFILE] Full audio write (bg): {time.time() - t:.3f}s")
+        try:
+            sf.write(_path_ref, _audio_ref, _sr_ref, format='WAV', subtype='PCM_16')
+            print(f"[PROFILE] Full audio write (bg): {time.time() - t:.3f}s ({expected_mb:.0f}MB)")
+        except Exception as e:
+            print(f"[ERROR] Full audio write failed: {e}")
     threading.Thread(target=_write_full_wav, daemon=True).start()
 
     print("[STAGE] Done!")
@@ -877,12 +911,6 @@ def process_audio(
     pipeline_start = time.time()
 
     if isinstance(audio_data, str):
-        # Check duration before loading (cheap metadata probe)
-        import soundfile as _sf
-        _info = _sf.info(audio_data)
-        if _info.duration / 60 > 300:
-            gr.Warning("Audio is over 5 hours — GPU processing will likely time out. Consider splitting into separate surahs.")
-
         # File path from gr.Audio(type="filepath")
         load_start = time.time()
         audio, sample_rate = librosa.load(audio_data, sr=16000, mono=True, res_type=RESAMPLE_TYPE)
