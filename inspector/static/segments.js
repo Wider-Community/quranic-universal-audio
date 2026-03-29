@@ -3765,19 +3765,32 @@ function renderCategoryCards(type, items, container) {
                 (type === 'low_confidence' && seg.confidence < 1.0)) {
                 const ignoreBtn = document.createElement('button');
                 ignoreBtn.className = 'val-autofix-btn';
-                ignoreBtn.textContent = 'Ignore';
-                ignoreBtn.title = 'Set confidence to 100% (dismiss this issue)';
+                // If confidence is already 1.0 (e.g., set by another panel or after index renumber),
+                // show as already-ignored to avoid a no-op click
+                if (seg.confidence >= 1.0) {
+                    ignoreBtn.disabled = true;
+                    ignoreBtn.textContent = 'Ignored';
+                    wrapper.style.opacity = '0.5';
+                } else {
+                    ignoreBtn.textContent = 'Ignore';
+                    ignoreBtn.title = 'Set confidence to 100% (dismiss this issue)';
+                }
                 ignoreBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (seg.confidence >= 1.0) return;
                     const segChapter = seg.chapter || parseInt(segChapterSelect.value);
 
-                    // Edit history: ignore op
-                    const ignoreOp = createOp('ignore_issue', {
-                        contextCategory: type, fixKind: 'ignore'
-                    });
-                    ignoreOp.targets_before = [snapshotSeg(seg)];
-                    ignoreOp.applied_at_utc = ignoreOp.started_at_utc;
+                    // Edit history: snapshot before modification
+                    let ignoreOp;
+                    try {
+                        ignoreOp = createOp('ignore_issue', {
+                            contextCategory: type, fixKind: 'ignore'
+                        });
+                        ignoreOp.targets_before = [snapshotSeg(seg)];
+                        ignoreOp.applied_at_utc = ignoreOp.started_at_utc;
+                    } catch (err) {
+                        console.warn('Ignore: edit history snapshot failed:', err);
+                    }
 
                     seg.confidence = 1.0;
                     delete seg._derived;
@@ -3785,8 +3798,14 @@ function renderCategoryCards(type, items, container) {
                     syncAllCardsForSegment(seg);
 
                     // Edit history: finalize
-                    ignoreOp.targets_after = [snapshotSeg(seg)];
-                    finalizeOp(segChapter, ignoreOp);
+                    if (ignoreOp) {
+                        try {
+                            ignoreOp.targets_after = [snapshotSeg(seg)];
+                            finalizeOp(segChapter, ignoreOp);
+                        } catch (err) {
+                            console.warn('Ignore: edit history finalize failed:', err);
+                        }
+                    }
 
                     ignoreBtn.disabled = true;
                     ignoreBtn.textContent = 'Ignored';
@@ -3808,7 +3827,14 @@ function renderCategoryCards(type, items, container) {
 
 function resolveIssueToSegment(type, issue) {
     if (type === 'failed' || type === 'low_confidence' || type === 'oversegmented' || type === 'cross_verse' || type === 'audio_bleeding') {
-        return getSegByChapterIndex(issue.chapter, issue.seg_index);
+        const seg = getSegByChapterIndex(issue.chapter, issue.seg_index);
+        // After structural ops (split/merge/delete), indices are renumbered but
+        // stale validation data still references old indices. Fall back to ref match.
+        if (seg && issue.ref && seg.matched_ref !== issue.ref) {
+            const byRef = getChapterSegments(issue.chapter).find(s => s.matched_ref === issue.ref);
+            if (byRef) return byRef;
+        }
+        return seg;
     }
     if (type === 'errors') {
         // Try to find a segment whose matched_ref starts with the verse_key prefix
