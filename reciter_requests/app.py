@@ -12,6 +12,7 @@ import os
 import re
 import threading
 import time
+import uuid
 from base64 import b64decode
 from pathlib import Path
 
@@ -117,6 +118,57 @@ def _verify_github_user(username):
         return r.status_code == 200
     except Exception:
         return None  # Don't block on API errors
+
+
+def _trigger_bot_issue(title, body, labels, assignees):
+    """Create a GitHub issue via the bot-create-issue workflow (appears as github-actions[bot]).
+
+    Triggers the workflow, then polls the GitHub search API for the created issue
+    using a unique nonce embedded in the body. Returns {"html_url": ..., "number": ...}
+    or None on timeout.
+    """
+    nonce = uuid.uuid4().hex[:12]
+    body_with_nonce = body + f"\n<!-- nonce:{nonce} -->"
+
+    # Trigger workflow_dispatch
+    resp = httpx.post(
+        f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
+        "/actions/workflows/bot-create-issue.yml/dispatches",
+        headers=_gh_headers(),
+        json={
+            "ref": "main",
+            "inputs": {
+                "title": title,
+                "body": body_with_nonce,
+                "labels": ",".join(labels),
+                "assignees": ",".join(assignees),
+            },
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+
+    # Poll for the issue by nonce (appears once the workflow step runs)
+    for attempt in range(12):
+        time.sleep(5)
+        try:
+            search_resp = httpx.get(
+                "https://api.github.com/search/issues",
+                headers=_gh_headers(),
+                params={
+                    "q": f"repo:{REPO_OWNER}/{REPO_NAME} nonce:{nonce} in:body",
+                    "per_page": 1,
+                },
+                timeout=15,
+            )
+            search_resp.raise_for_status()
+            items = search_resp.json().get("items", [])
+            if items:
+                return {"html_url": items[0]["html_url"], "number": items[0]["number"]}
+        except Exception as e:
+            logger.warning(f"Issue search attempt {attempt + 1} failed: {e}")
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -748,21 +800,28 @@ def submit_request(
     )
 
     try:
-        issue_json = {
-            "title": f"{title_prefix} {reciter_name}",
-            "body": issue_body,
-            "labels": _msgs["issue_labels"]["new_reciter"],
-        }
-        if github_username:
-            issue_json["assignees"] = [github_username]
-        issue_resp = httpx.post(
-            f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues",
-            headers=_gh_headers(),
-            json=issue_json,
-            timeout=30,
-        )
-        issue_resp.raise_for_status()
-        issue_data = issue_resp.json()
+        title = f"{title_prefix} {reciter_name}"
+        labels = _msgs["issue_labels"]["new_reciter"]
+        assignees = [github_username] if github_username else []
+
+        # Try bot creation first (appears as github-actions[bot])
+        issue_data = _trigger_bot_issue(title, issue_body, labels, assignees)
+
+        if issue_data is None:
+            # Fallback: direct creation (appears as personal account)
+            logger.warning("Bot issue creation timed out, falling back to direct API")
+            issue_json = {"title": title, "body": issue_body, "labels": labels}
+            if assignees:
+                issue_json["assignees"] = assignees
+            resp = httpx.post(
+                f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues",
+                headers=_gh_headers(),
+                json=issue_json,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            issue_data = resp.json()
+
         issue_url = issue_data["html_url"]
         issue_number = issue_data["number"]
     except Exception as e:
