@@ -31,7 +31,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libsndfile1
 
       - name: Install Python dependencies
-        run: pip install "datasets>=3.0,<4.0" huggingface_hub pydub soundfile
+        run: pip install "datasets>=3.0,<4.0" huggingface_hub pydub soundfile pyyaml
 
       - name: Detect changed reciters
         id: detect
