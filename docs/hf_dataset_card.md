@@ -25,8 +25,12 @@ configs:
     path: hafs_an_asim/ali_jaber-*
   - split: minshawy_murattal
     path: hafs_an_asim/minshawy_murattal-*
+- config_name: reciters
+  data_files:
+  - split: all
+    path: reciters/all-*
 dataset_info:
-  config_name: hafs_an_asim
+- config_name: hafs_an_asim
   features:
   - name: audio
     dtype: audio
@@ -42,6 +46,10 @@ dataset_info:
   - name: word_timestamps
     sequence:
       sequence: int32
+  - name: source_url
+    dtype: string
+  - name: source_offset_ms
+    dtype: int32
   splits:
   - name: ali_jaber
     num_bytes: 0
@@ -51,6 +59,36 @@ dataset_info:
     num_examples: 6236
   download_size: 1569809077
   dataset_size: 1571705367
+- config_name: reciters
+  features:
+  - name: reciter
+    dtype: string
+  - name: name_en
+    dtype: string
+  - name: name_ar
+    dtype: string
+  - name: riwayah
+    dtype: string
+  - name: style
+    dtype: string
+  - name: country
+    dtype: string
+  - name: source
+    dtype: string
+  - name: audio_category
+    dtype: string
+  - name: url_template
+    dtype: string
+  - name: coverage_surahs
+    dtype: int32
+  - name: coverage_ayahs
+    dtype: int32
+  - name: is_timestamped
+    dtype: bool
+  splits:
+  - name: all
+    num_bytes: 0
+    num_examples: 338
 ---
 
 <p align="center">
@@ -109,12 +147,31 @@ Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 | `text` | `string` | Arabic text of the verse from alignment |
 | `segments` | `[[int, int, int, int]]` | Pause-based segments (ms, relative to clip) |
 | `word_timestamps` | `[[int, int, int]]` | Word-level timestamps (ms, relative to clip) |
+| `source_url` | `string` | Original audio file URL (chapter or verse) |
+| `source_offset_ms` | `int32` | Offset in source audio where this verse starts (ms) |
 
 ### Column Details
 
 **`segments`** — Each segment is `[word_from, word_to, start_ms, end_ms]`. Represents a continuous speech region between pauses. Word indices are 1-based.
 
 **`word_timestamps`** — Each word is `[word_index, start_ms, end_ms]`. Word-level timestamps from phoneme-level forced alignment (MFA). Word indices are 1-based.
+
+**`source_url`** — URL of the original audio file this verse was extracted from. For by-surah reciters, all verses in a surah share the same URL (a full chapter recording). For by-ayah reciters, each verse has its own URL.
+
+**`source_offset_ms`** — Millisecond offset from the start of `source_url` where this verse begins. Convert clip-relative timestamps to source-relative: `source_ms = clip_ms + source_offset_ms`. This enables gapless chapter playback with verse-level seeking.
+
+### Gapless Playback
+
+For by-surah reciters, combine `source_url` + `source_offset_ms` to seek within the original chapter audio:
+
+```python
+fatiha = ds.filter(lambda x: x["surah"] == 1)
+chapter_url = fatiha[0]["source_url"]  # all verses share the same chapter URL
+for verse in fatiha:
+    offset = verse["source_offset_ms"]
+    for word_idx, start, end in verse["word_timestamps"]:
+        source_start = start + offset  # seek position in chapter audio
+```
 
 ## Configs
 
@@ -126,6 +183,38 @@ Subset (config) is the riwayah, split is the reciter.
 |---------|-------|--------|-------------|
 | [Ali Jaber](#ali_jaber) | murattal | 6,235 | everyayah.com |
 | [Minshawy Murattal](#minshawy_murattal) | unknown | 6,235 | everyayah.com |
+
+## Reciters Catalog
+
+The `reciters` config is a lightweight index of all available reciters (no audio data). Use it to discover reciters, filter by riwayah/style, and construct audio URLs:
+
+```python
+from datasets import load_dataset
+
+reciters = load_dataset("hetchyy/quranic-universal-ayahs", "reciters", split="all")
+
+# All Hafs murattal reciters with full coverage
+hafs = reciters.filter(lambda r: r["riwayah"] == "hafs_an_asim" and r["coverage_surahs"] == 114)
+
+# Construct a direct audio URL (add https:// prefix to url_template)
+r = hafs[0]
+url = "https://" + r["url_template"].format(surah=2)  # Al-Baqarah chapter audio
+```
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `reciter` | `string` | Reciter slug |
+| `name_en` | `string` | English display name |
+| `name_ar` | `string` | Arabic name |
+| `riwayah` | `string` | Riwayah slug (e.g. `hafs_an_asim`) |
+| `style` | `string` | Recitation style (`murattal`, `mujawwad`, `muallim`) |
+| `country` | `string` | Country of origin |
+| `source` | `string` | Audio source (e.g. `mp3quran`, `everyayah`) |
+| `audio_category` | `string` | `by_surah` or `by_ayah` |
+| `url_template` | `string` | URL pattern (without `https://`). Use `.format(surah=N)` or `.format(surah=N, ayah=M)` |
+| `coverage_surahs` | `int32` | Number of surahs with audio (max 114) |
+| `coverage_ayahs` | `int32` | Number of ayahs with audio (max 6,236) |
+| `is_timestamped` | `bool` | Whether word-level timestamps are available in the dataset |
 
 ## Pipeline
 
