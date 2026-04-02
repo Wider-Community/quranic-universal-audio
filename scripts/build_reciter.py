@@ -973,6 +973,7 @@ def main():
 
     if args.delete:
         delete_reciter(args.delete)
+        build_reciters_config()
         return
 
     if args.all:

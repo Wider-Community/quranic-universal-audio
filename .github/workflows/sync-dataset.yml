@@ -94,7 +94,6 @@ jobs:
           done
 
       - name: Rebuild reciters catalog
-        if: steps.detect.outputs.slugs != '' || github.event_name == 'workflow_dispatch'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python scripts/build_reciter.py --reciters-config
