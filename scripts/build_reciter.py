@@ -356,6 +356,8 @@ def push_reciter(slug, audio_type):
         "text": [],
         "segments": [],
         "word_timestamps": [],
+        "source_url": [],
+        "source_offset_ms": [],
     }
 
     skipped = 0
@@ -372,6 +374,8 @@ def push_reciter(slug, audio_type):
         data["text"].append(row["text"])
         data["segments"].append(row["segments"])
         data["word_timestamps"].append(row["word_timestamps"])
+        data["source_url"].append(row["audio_url"])
+        data["source_offset_ms"].append(row["clip_start"])
 
     if skipped:
         log.warning("Skipped %d verses due to download failures", skipped)
@@ -384,6 +388,8 @@ def push_reciter(slug, audio_type):
         "text": Value("string"),
         "segments": Sequence(Sequence(Value("int32"))),
         "word_timestamps": Sequence(Sequence(Value("int32"))),
+        "source_url": Value("string"),
+        "source_offset_ms": Value("int32"),
     })
 
     ds = Dataset.from_dict(data, features=features)
@@ -473,8 +479,8 @@ def get_coverage(slug):
     return 0
 
 
-def _find_audio_manifest_meta(slug):
-    """Find first audio manifest for slug and return its _meta dict."""
+def _find_audio_manifest(slug):
+    """Find first audio manifest for slug and return full parsed dict."""
     audio_dir = ROOT / "data" / "audio"
     for category in ("by_surah", "by_ayah"):
         cat_dir = audio_dir / category
@@ -486,10 +492,106 @@ def _find_audio_manifest_meta(slug):
             manifest = source_dir / f"{slug}.json"
             if manifest.exists():
                 try:
-                    return json.loads(manifest.read_text()).get("_meta", {})
+                    return json.loads(manifest.read_text())
                 except (json.JSONDecodeError, OSError):
                     pass
     return None
+
+
+def _find_audio_manifest_meta(slug):
+    """Find first audio manifest for slug and return its _meta dict."""
+    data = _find_audio_manifest(slug)
+    return data.get("_meta", {}) if data else None
+
+
+def _derive_url_template(manifest_data, audio_cat):
+    """Derive a URL template from manifest entries.
+
+    Returns a template string with protocol stripped (e.g.
+    'server8.mp3quran.net/afs/{surah:03d}.mp3') or empty string on failure.
+    Only replaces in the filename portion to avoid hitting patterns in hostnames.
+    """
+    entries = {k: v for k, v in manifest_data.items() if k != "_meta"}
+    if not entries:
+        return ""
+
+    if audio_cat == "by_surah":
+        if "1" in entries:
+            url, surah_num = entries["1"], 1
+        else:
+            first_key = min(entries.keys(), key=int)
+            url, surah_num = entries[first_key], int(first_key)
+
+        base, _, filename = url.rpartition("/")
+        if not base:
+            return ""
+        padded = f"{surah_num:03d}"
+        if padded in filename:
+            template = base + "/" + filename.replace(padded, "{surah:03d}", 1)
+        else:
+            s = str(surah_num)
+            if s in filename:
+                template = base + "/" + filename.replace(s, "{surah}", 1)
+            else:
+                return ""
+
+        # Validate against another entry
+        val_key = "2" if "2" in entries else ("3" if "3" in entries else None)
+        if val_key:
+            expected = template.format(surah=int(val_key))
+            if expected != entries[val_key]:
+                return ""
+
+    elif audio_cat == "by_ayah":
+        url = entries.get("1:1")
+        if not url:
+            return ""
+        base, _, filename = url.rpartition("/")
+        if not base:
+            return ""
+        if "001001" in filename:
+            template = base + "/" + filename.replace("001001", "{surah:03d}{ayah:03d}", 1)
+        else:
+            return ""
+        val = entries.get("2:1")
+        if val:
+            expected = template.format(surah=2, ayah=1)
+            if expected != val:
+                return ""
+    else:
+        return ""
+
+    # Strip protocol so HF dataset viewer doesn't render as audio widget
+    for prefix in ("https://", "http://"):
+        if template.startswith(prefix):
+            template = template[len(prefix):]
+            break
+    return template
+
+
+_git_tracked_cache = None
+
+
+def _get_git_tracked_files():
+    """Return cached set of git-tracked files under data/."""
+    global _git_tracked_cache
+    if _git_tracked_cache is None:
+        import subprocess
+        result = subprocess.run(
+            ["git", "ls-files", "data/timestamps/", "data/recitation_segments/"],
+            capture_output=True, text=True, cwd=ROOT,
+        )
+        _git_tracked_cache = set(result.stdout.strip().splitlines())
+    return _git_tracked_cache
+
+
+def _has_git_tracked_timestamps(slug):
+    """Check if timestamps.json is git-tracked for this reciter."""
+    tracked = _get_git_tracked_files()
+    for audio_type in ("by_ayah_audio", "by_surah_audio"):
+        if f"data/timestamps/{audio_type}/{slug}/timestamps.json" in tracked:
+            return True
+    return False
 
 
 def _build_reciter_info(eligible):
@@ -540,16 +642,23 @@ def update_dataset_readme():
                 f"    num_examples: 6236"
             )
 
-    # Replace configs block
+    # Replace configs block (riwayah configs + reciters catalog)
+    configs_str = "configs:\n" + "".join(
+        f"- config_name: {riwayah}\n  data_files:\n"
+        + "\n".join(df for df in data_files_lines
+                    if f"path: {riwayah}/" in df)
+        + "\n"
+        for riwayah in sorted(by_riwayah)
+    )
+    configs_str += (
+        "- config_name: reciters\n"
+        "  data_files:\n"
+        "  - split: all\n"
+        "    path: reciters/all-*\n"
+    )
     yaml_text = re.sub(
         r"configs:\n(?:- config_name:.*\n(?:  .*\n)*)*",
-        "configs:\n" + "".join(
-            f"- config_name: {riwayah}\n  data_files:\n"
-            + "\n".join(df for df in data_files_lines
-                        if f"path: {riwayah}/" in df)
-            + "\n"
-            for riwayah in sorted(by_riwayah)
-        ),
+        configs_str,
         yaml_text,
     )
 
@@ -571,6 +680,7 @@ def update_dataset_readme():
         r"  splits:\n(?:  - name: [^\n]+\n    num_bytes: \d+\n    num_examples: \d+\n)+",
         new_splits,
         yaml_text,
+        count=1,  # Only replace the first (riwayah) splits block, not reciters
     )
 
     # --- Rebuild markdown tables (one per subset) ---
@@ -735,6 +845,108 @@ def delete_reciter(slug):
 
 
 # ---------------------------------------------------------------------------
+# Reciters catalog config
+# ---------------------------------------------------------------------------
+def build_reciters_config():
+    """Build and push the 'reciters' config — a lightweight catalog of all reciters."""
+    from list_reciters import discover_reciters
+
+    with open(ROOT / "data" / "surah_info.json") as f:
+        surah_info = json.load(f)
+
+    all_records = discover_reciters()
+    log.info("Found %d manifest records", len(all_records))
+
+    # Deduplicate: one row per slug, prefer by_surah
+    seen = {}
+    for rec in all_records:
+        slug = rec["slug"]
+        if slug not in seen:
+            seen[slug] = rec
+        elif rec["audio_cat"] == "by_surah" and seen[slug]["audio_cat"] == "by_ayah":
+            seen[slug] = rec
+
+    data = {
+        "reciter": [], "name_en": [], "name_ar": [],
+        "riwayah": [], "style": [], "country": [], "source": [],
+        "audio_category": [], "url_template": [],
+        "coverage_surahs": [], "coverage_ayahs": [],
+        "is_timestamped": [],
+    }
+
+    for slug in sorted(seen):
+        rec = seen[slug]
+        manifest = _find_audio_manifest(slug)
+        meta = manifest.get("_meta", {}) if manifest else {}
+
+        url_template = ""
+        if manifest:
+            url_template = _derive_url_template(manifest, rec["audio_cat"])
+
+        if rec["audio_cat"] == "by_surah":
+            coverage_surahs = rec["coverage"]
+            if manifest:
+                entries = {k for k in manifest if k != "_meta"}
+                coverage_ayahs = sum(
+                    len(surah_info[s]["verses"])
+                    for s in entries if s in surah_info
+                )
+            else:
+                coverage_ayahs = 0
+        else:
+            coverage_ayahs = rec["coverage"]
+            if manifest:
+                surahs = {k.split(":")[0] for k in manifest if k != "_meta" and ":" in k}
+                coverage_surahs = len(surahs)
+            else:
+                coverage_surahs = 0
+
+        data["reciter"].append(slug)
+        data["name_en"].append(rec["name_en"])
+        data["name_ar"].append(meta.get("name_ar", "") or "")
+        data["riwayah"].append(rec["riwayah"])
+        data["style"].append(rec["style"])
+        data["country"].append(rec["country"])
+        data["source"].append(rec["source"])
+        data["audio_category"].append(rec["audio_cat"])
+        data["url_template"].append(url_template)
+        data["coverage_surahs"].append(coverage_surahs)
+        data["coverage_ayahs"].append(coverage_ayahs)
+        data["is_timestamped"].append(_has_git_tracked_timestamps(slug))
+
+    log.info("Built %d reciters catalog rows", len(data["reciter"]))
+
+    features = Features({
+        "reciter": Value("string"),
+        "name_en": Value("string"),
+        "name_ar": Value("string"),
+        "riwayah": Value("string"),
+        "style": Value("string"),
+        "country": Value("string"),
+        "source": Value("string"),
+        "audio_category": Value("string"),
+        "url_template": Value("string"),
+        "coverage_surahs": Value("int32"),
+        "coverage_ayahs": Value("int32"),
+        "is_timestamped": Value("bool"),
+    })
+
+    ds = Dataset.from_dict(data, features=features)
+
+    api = HfApi(token=HF_TOKEN)
+    api.create_repo(repo_id=REPO_ID, repo_type="dataset", exist_ok=True)
+
+    ds.push_to_hub(
+        REPO_ID,
+        config_name="reciters",
+        split="all",
+        token=HF_TOKEN,
+        commit_message="Update reciters catalog",
+    )
+    log.info("Reciters config pushed to %s (%d rows)", REPO_ID, len(data["reciter"]))
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
@@ -743,12 +955,19 @@ def main():
     parser.add_argument("--all", action="store_true", help="Upload all eligible reciters")
     parser.add_argument("--delete", metavar="SLUG", help="Delete a reciter from the dataset")
     parser.add_argument("--update-readme", action="store_true", help="Update dataset card only")
+    parser.add_argument("--reciters-config", action="store_true",
+                        help="Build and push reciters catalog config")
     args = parser.parse_args()
 
     if not HF_TOKEN:
         sys.exit("HF_TOKEN not set")
 
+    if args.reciters_config:
+        build_reciters_config()
+        return
+
     if args.update_readme:
+        build_reciters_config()
         update_dataset_readme()
         return
 
@@ -768,6 +987,7 @@ def main():
                 log.warning("Could not detect audio source for %s, skipping", slug)
                 continue
             push_reciter(slug, audio_type)
+        build_reciters_config()
         update_dataset_readme()
         return
 
