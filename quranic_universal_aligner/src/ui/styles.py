@@ -41,33 +41,6 @@ def build_css() -> str:
         overflow: visible !important;
     }}
 
-    /* Missing-words pair group — wraps two consecutive cards */
-    .missing-words-group {{
-        border: 2px solid #dc3545;
-        border-radius: 10px;
-        padding: 8px 8px 0;
-        margin-bottom: 12px;
-        position: relative;
-    }}
-    .missing-words-group .segment-card {{
-        margin-bottom: 8px;
-    }}
-    .missing-words-group-badge {{
-        display: flex;
-        justify-content: center;
-        margin-bottom: 6px;
-    }}
-    @media (prefers-color-scheme: dark) {{
-        .missing-words-group {{
-            border-color: #dc3545;
-            background: rgba(220, 53, 69, 0.06);
-        }}
-    }}
-    .dark .missing-words-group {{
-        border-color: #dc3545;
-        background: rgba(220, 53, 69, 0.06);
-    }}
-
     /* Segment cards - theme adaptive */
     .segment-card {{
         border-radius: 8px;
@@ -430,6 +403,25 @@ def build_css() -> str:
     .segment-special {{ background: #e8eaf6; border-color: #5c6bc0; border-style: dashed; }}
     .segment-special-badge {{ background: #5c6bc0; }}
 
+    /* Missing words group — wraps two consecutive segments sharing a gap */
+    .missing-words-group {{
+        border: 2px dashed #dc3545;
+        border-radius: 10px;
+        padding: 8px 8px 0;
+        margin-bottom: 12px;
+    }}
+    .missing-words-group .segment-card:last-child {{ margin-bottom: 8px; }}
+    .missing-words-group-tag {{
+        background: #dc3545;
+        color: white;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        width: fit-content;
+        margin: 0 auto 8px;
+    }}
+
     /* Review summary text colors */
     .segments-review-summary {{ margin-bottom: 8px; font-size: 14px; }}
     .segment-med-text {{ color: #856404; }}
@@ -451,6 +443,7 @@ def build_css() -> str:
         .segment-low {{ background: rgba(220, 53, 69, 0.2); border-color: #dc3545; }}
         .segment-underseg {{ background: rgba(255, 140, 0, 0.2); border-color: #ff8c00; }}
         .segment-special {{ background: rgba(92, 107, 192, 0.2); border-color: #5c6bc0; border-style: dashed; }}
+        .missing-words-group {{ background: rgba(220, 53, 69, 0.05); }}
     }}
     /* Also support Gradio's dark class */
     .dark .segment-high {{ background: rgba(40, 167, 69, 0.2); border-color: #28a745; }}
@@ -458,6 +451,7 @@ def build_css() -> str:
     .dark .segment-low {{ background: rgba(220, 53, 69, 0.2); border-color: #dc3545; }}
     .dark .segment-underseg {{ background: rgba(255, 140, 0, 0.2); border-color: #ff8c00; }}
     .dark .segment-special {{ background: rgba(92, 107, 192, 0.2); border-color: #5c6bc0; border-style: dashed; }}
+    .dark .missing-words-group {{ background: rgba(220, 53, 69, 0.05); }}
 
     /* Input mode toggle */
     #input-mode-row {{ gap: 0 !important; }}
