@@ -183,6 +183,9 @@ let prevActivePhonemeIdx = -1;
 let tsSegOffset = 0;   // segment start in seconds (absolute in surah audio)
 let tsSegEnd = 0;      // segment end in seconds
 
+// Track the current loadedmetadata handler for cleanup
+let _currentOnMeta = null;
+
 // All reciters (cached for optgroup rendering)
 let tsAllReciters = [];
 
@@ -304,6 +307,19 @@ function setupEventListeners() {
         cacheWaveformSnapshot();
     });
 
+    audio.addEventListener('error', () => {
+        const err = audio.error;
+        const code = err ? err.code : 0;
+        const msgs = { 1: 'aborted', 2: 'network error', 3: 'decode error', 4: 'unsupported format' };
+        console.error('Audio load error:', msgs[code] || `code ${code}`, audio.src);
+        // Clean up pending listener
+        if (_currentOnMeta) {
+            audio.removeEventListener('loadedmetadata', _currentOnMeta);
+            _currentOnMeta = null;
+        }
+        tsAutoAdvancing = false;
+    });
+
     audio.addEventListener('play', startAnimation);
     audio.addEventListener('pause', stopAnimation);
     audio.addEventListener('ended', stopAnimation);
@@ -332,9 +348,13 @@ function setupEventListeners() {
 
     document.addEventListener('keydown', handleKeydown);
 
+    let _resizeTimer = null;
     window.addEventListener('resize', () => {
-        setupCanvas();
-        cacheWaveformSnapshot();
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => {
+            setupCanvas();
+            cacheWaveformSnapshot();
+        }, 150);
     });
 
     // Unified mode toggle (context-sensitive: Letters/Phonemes in analysis, Words/Characters in animation)
@@ -605,6 +625,43 @@ function toggleAutoMode(mode) {
     autoRandomBtn.classList.toggle('active', tsAutoMode === 'random');
 }
 
+/**
+ * Clean up any pending loadedmetadata listener and load+play the given audio URL.
+ * Handles: empty URLs, same-source seeks, new source loads, autoplay rejection.
+ */
+function _loadAudioAndPlay(url) {
+    // Remove stale listener from previous load
+    if (_currentOnMeta) {
+        audio.removeEventListener('loadedmetadata', _currentOnMeta);
+        _currentOnMeta = null;
+    }
+
+    if (!url) {
+        audio.removeAttribute('src');
+        audio.load();
+        return;
+    }
+
+    const isSameSource = audio.src === url || audio.src === location.origin + url;
+
+    if (!isSameSource) {
+        const onMeta = function() {
+            audio.removeEventListener('loadedmetadata', onMeta);
+            if (_currentOnMeta === onMeta) _currentOnMeta = null;
+            audio.currentTime = tsSegOffset;
+            tsAutoAdvancing = false;
+            audio.play().catch(() => {});
+        };
+        _currentOnMeta = onMeta;
+        audio.src = url;
+        audio.addEventListener('loadedmetadata', onMeta);
+    } else {
+        audio.currentTime = tsSegOffset;
+        tsAutoAdvancing = false;
+        audio.play().catch(() => {});
+    }
+}
+
 function navigateVerse(delta) {
     const newIdx = tsSegmentSelect.selectedIndex + delta;
     if (newIdx < 1 || newIdx >= tsSegmentSelect.options.length) {
@@ -659,20 +716,7 @@ async function loadTimestampVerse(reciter, verseRef) {
         tsSegmentSelect.value = data.verse_ref;
 
         // Load audio and seek to start
-        const newSrc = data.audio_url;
-        if (newSrc && audio.src !== newSrc && audio.src !== location.origin + newSrc) {
-            audio.src = newSrc;
-            audio.addEventListener('loadedmetadata', function onMeta() {
-                audio.removeEventListener('loadedmetadata', onMeta);
-                audio.currentTime = tsSegOffset;
-                tsAutoAdvancing = false;
-                audio.play();
-            });
-        } else {
-            audio.currentTime = tsSegOffset;
-            tsAutoAdvancing = false;
-            audio.play();
-        }
+        _loadAudioAndPlay(data.audio_url);
 
         // Decode waveform for the verse
         decodeWaveform(data.audio_url);
@@ -757,16 +801,7 @@ async function loadRandomTimestamp(reciter = null) {
         await Promise.all(fetches);
         tsSegmentSelect.value = data.verse_ref;
 
-        const newSrc = data.audio_url;
-        if (newSrc) {
-            audio.src = newSrc;
-            audio.addEventListener('loadedmetadata', function onMeta() {
-                audio.removeEventListener('loadedmetadata', onMeta);
-                audio.currentTime = tsSegOffset;
-                tsAutoAdvancing = false;
-                audio.play();
-            });
-        }
+        _loadAudioAndPlay(data.audio_url);
 
         decodeWaveform(data.audio_url);
         buildUnifiedDisplay();

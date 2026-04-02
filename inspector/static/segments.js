@@ -7,9 +7,6 @@ let segData = null;          // { audio_url, summary, verse_word_counts, segment
 let segAllData = null;       // { segments, audio_by_chapter, verse_word_counts } — reciter-level
 let segActiveFilters = [];   // [{ field, op, value }, ...]
 let segAvgSpeechRate = 0;    // computed from currently visible segments
-let segAudioCtx = null;      // AudioContext for waveform decoding
-let segAudioBuffer = null;   // decoded full-chapter audio buffer
-let segAudioBufferUrl = '';  // URL of the currently decoded audio buffer
 let segAnimId = null;        // animation frame ID for playback
 let segCurrentIdx = -1;      // currently playing segment index
 let segDisplayedSegments = null; // segments currently shown (may be filtered)
@@ -17,9 +14,9 @@ let segDirtyMap = new Map();     // Map<chapter, {indices: Set, structural: bool
 let segEditMode = null;          // null | 'trim' | 'split'
 let segEditIndex = -1;           // index of segment being edited
 // (merge is now button-driven, no merge selection state needed)
-let segAudioBuffers = new Map();  // chapter → AudioBuffer for multi-chapter waveform support
 let _segPrefetchCache = {};      // url → Promise<void> for prefetched audio
 let _segContinuousPlay = false;  // true while continuous playback is active across audio files
+let _segAutoPlayEnabled = true;  // user preference: auto-advance through consecutive segments
 let _segPlayEndMs = 0;           // time_end (ms) of the currently playing displayed segment
 let segValidation = null;        // cached validation data for current reciter
 let segAllReciters = [];         // full list from /api/seg/reciters
@@ -29,17 +26,17 @@ let _activeAudioSource = null;      // 'main' | 'error' | null — which audio i
 let _segIndexMap = null;         // Map<index, segment> for O(1) lookups
 let _waveformObserver = null;    // IntersectionObserver for lazy waveform drawing
 let _segSavedFilterView = null;  // { filters, chapter, verse, scrollTop } — saved when "Go To" from filter results
+let _segSavedPreviewState = null; // { scrollTop } — saved when entering save preview, restored on cancel/after save
 let segPeaksByAudio = null;      // {url: {duration_ms, peaks}} from server — instant waveforms
 let _peaksPollTimer = null;      // setTimeout handle for peaks polling
-let _scrollAbortController = null;  // AbortController for in-flight audio preloads
-let _scrollDebounceTimer = null;    // 1s debounce timer for scroll-based preloading
-let _scrollListeners = [];          // [{el, handler}] for cleanup
+let _cardRenderRafId = null;     // rAF handle for chunked card rendering
 
 // ---------------------------------------------------------------------------
 // Edit history — operation log (sent with save payload)
 // ---------------------------------------------------------------------------
 let segOpLog = new Map();   // Map<chapter, Array<operation>>
 let _pendingOp = null;      // stashed op for multi-step edits (trim, split, ref edit)
+let _splitChainUid = null;  // after split ref-edit on first half, chain to second half's UID
 
 function createOp(opType, { contextCategory = null, fixKind = 'manual' } = {}) {
     return {
@@ -64,6 +61,7 @@ function snapshotSeg(seg) {
         time_end: seg.time_end,
         matched_ref: seg.matched_ref || '',
         matched_text: seg.matched_text || '',
+        display_text: seg.display_text || '',
         confidence: seg.confidence ?? 0,
     };
 }
@@ -125,6 +123,7 @@ const segVerseSelect = document.getElementById('seg-verse-select');
 const segListEl = document.getElementById('seg-list');
 const segAudioEl = document.getElementById('seg-audio-player');
 const segPlayBtn = document.getElementById('seg-play-btn');
+const segAutoPlayBtn = document.getElementById('seg-autoplay-btn');
 const segSpeedSelect = document.getElementById('seg-speed-select');
 const segSaveBtn = document.getElementById('seg-save-btn');
 const segPlayStatus = document.getElementById('seg-play-status');
@@ -148,6 +147,14 @@ const segHistoryBackBtn = document.getElementById('seg-history-back-btn');
 const segHistoryStats   = document.getElementById('seg-history-stats');
 const segHistoryBatches = document.getElementById('seg-history-batches');
 
+// History filter state
+let _histFilterOpTypes = new Set();
+let _histFilterErrCats = new Set();
+const segHistoryFilters      = document.getElementById('seg-history-filters');
+const segHistoryFilterOps    = document.getElementById('seg-history-filter-ops');
+const segHistoryFilterCats   = document.getElementById('seg-history-filter-cats');
+const segHistoryFilterClear  = document.getElementById('seg-history-filter-clear');
+
 // Save confirmation preview
 const segSavePreview        = document.getElementById('seg-save-preview');
 const segSavePreviewCancel  = document.getElementById('seg-save-preview-cancel');
@@ -162,6 +169,12 @@ const EDIT_OP_LABELS = {
     auto_fix_missing_word: 'Auto-fix missing word', ignore_issue: 'Ignored issue',
     waqf_sakt: 'Waqf sakt merge', remove_sadaqa: 'Remove Sadaqa',
 };
+const ERROR_CAT_LABELS = {
+    failed: 'Failed', low_confidence: 'Low confidence',
+    boundary_adj: 'Boundary adj.',
+    cross_verse: 'Cross-verse', missing_words: 'Missing words',
+    audio_bleeding: 'Audio bleeding',
+};
 
 // SearchableSelect instance for segments chapter dropdown
 let segChapterSS = null;
@@ -172,6 +185,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     segChapterSelect.addEventListener('change', onSegChapterChange);
     segVerseSelect.addEventListener('change', applyFiltersAndRender);
     segPlayBtn.addEventListener('click', onSegPlayClick);
+    segAutoPlayBtn.addEventListener('click', () => {
+        _segAutoPlayEnabled = !_segAutoPlayEnabled;
+        _segContinuousPlay = _segAutoPlayEnabled;
+        segAutoPlayBtn.className = 'btn ' + (_segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
+    });
     segSaveBtn.addEventListener('click', onSegSaveClick);
     segSpeedSelect.addEventListener('change', () => {
         const rate = parseFloat(segSpeedSelect.value);
@@ -191,12 +209,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     segHistoryBtn.addEventListener('click', showHistoryView);
     segHistoryBackBtn.addEventListener('click', hideHistoryView);
+    segHistoryFilterClear.addEventListener('click', clearHistoryFilters);
     segSavePreviewCancel.addEventListener('click', hideSavePreview);
     segSavePreviewConfirm.addEventListener('click', confirmSaveFromPreview);
 
     // Delegated event listeners for segment card actions — shared across main, error, history & preview sections
     [segListEl, segValidationEl, segValidationGlobalEl, segHistoryView, segSavePreview].forEach(el => {
         el.addEventListener('click', handleSegRowClick);
+        el.addEventListener('mousedown', _handleSegCanvasMousedown);
     });
 
     // Load display config
@@ -207,6 +227,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const root = document.documentElement.style;
             if (cfg.seg_font_size) root.setProperty('--seg-font-size', cfg.seg_font_size);
             if (cfg.seg_word_spacing) root.setProperty('--seg-word-spacing', cfg.seg_word_spacing);
+            if (cfg.trim_pad_left != null) TRIM_PAD_LEFT = cfg.trim_pad_left;
+            if (cfg.trim_pad_right != null) TRIM_PAD_RIGHT = cfg.trim_pad_right;
+            if (cfg.trim_dim_alpha != null) TRIM_DIM_ALPHA = cfg.trim_dim_alpha;
+            if (cfg.show_boundary_phonemes != null) SHOW_BOUNDARY_PHONEMES = cfg.show_boundary_phonemes;
         }
     } catch (_) { /* use CSS defaults */ }
 
@@ -339,11 +363,15 @@ async function onSegReciterChange() {
 
     if (allResult.status === 'fulfilled') {
         segAllData = allResult.value;
+        _rewriteAudioUrls();
         computeSilenceAfter();
         if (segFilterBarEl) segFilterBarEl.hidden = false;
         applyFiltersAndRender();
-        // Start fetching waveform peaks (non-blocking)
-        _fetchPeaks(reciter);
+        // Preload peaks only for chapters with validation errors (on-demand for the rest)
+        const errorChapters = _collectErrorChapters(segValidation);
+        if (errorChapters.length > 0) _fetchPeaks(reciter, errorChapters);
+        // Fetch cache status then show panel (fast — cached in memory on server)
+        if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
     } else {
         console.error('Error loading all segments:', allResult.reason);
     }
@@ -359,14 +387,11 @@ async function onSegChapterChange() {
     const chapter = segChapterSelect.value;
     segVerseSelect.innerHTML = '<option value="">All</option>';
 
-    // Clear audio/waveform state
-    segAudioBuffer = null;
-    segAudioBufferUrl = '';
+    // Clear audio state
     segAudioEl.src = '';
     segPlayBtn.disabled = true;
     stopSegAnimation();
-    // Abort in-flight audio preloads (peaks and buffers persist across chapters)
-    if (_scrollAbortController) _scrollAbortController.abort();
+    _segPrefetchCache = {};
 
     // Stats panel: leave open/closed state as user left it
 
@@ -392,9 +417,6 @@ async function onSegChapterChange() {
 
     // Re-compute avg speech rate and re-render (chapter filter changes the set)
     applyFiltersAndRender();
-    // Schedule fresh viewport preload for the newly rendered segments
-    clearTimeout(_scrollDebounceTimer);
-    _scrollDebounceTimer = setTimeout(_onScrollSettled, 500);
 
     if (!reciter || !chapter) return;
     segPlayBtn.disabled = false;  // Enable early — playFromSegment loads audio on demand
@@ -406,6 +428,10 @@ async function onSegChapterChange() {
         if (segReciterSelect.value !== reciter || segChapterSelect.value !== chapter) return;
         segData = await resp.json();
         if (segData.error) return;
+        // Rewrite audio URL to use proxy (by_surah only)
+        if (_isCurrentReciterBySurah() && segData.audio_url && !segData.audio_url.startsWith('/api/')) {
+            segData.audio_url = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(segData.audio_url)}`;
+        }
 
         // Populate verse filter from segAllData (not segData.segments)
         const verses = new Set();
@@ -425,18 +451,14 @@ async function onSegChapterChange() {
         const chNum = parseInt(chapter);
         segData.segments = (segAllData?.segments || []).filter(s => s.chapter === chNum);
 
-        // Check if all segments share the same audio URL (by_surah) or differ (by_ayah)
-        const audioUrls = new Set(
-            segData.segments.filter(s => s.audio_url).map(s => s.audio_url)
-        );
-        const singleAudio = audioUrls.size <= 1;
+        // Fetch peaks for this chapter if not already loaded
+        _fetchChapterPeaksIfNeeded(reciter, chNum);
 
-        if (singleAudio && segData.audio_url) {
-            // by_surah: one audio per chapter — load eagerly
+        // Preload audio src so browser fetches metadata in the background
+        // (eliminates delay on first play click)
+        if (segData.audio_url) {
             segAudioEl.src = segData.audio_url;
-            decodeSegAudio(segData.audio_url).then(() => {
-                if (segAudioBuffer) drawAllSegWaveforms();
-            });
+            segAudioEl.preload = 'metadata';
         }
 
     } catch (e) {
@@ -481,6 +503,59 @@ function countSegWords(ref) {
         else                        total += vwc?.[key] ?? 0;
     }
     return total;
+}
+
+const _ARABIC_DIGITS = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+function _toArabicNumeral(n) {
+    return String(n).split('').map(d => _ARABIC_DIGITS[+d]).join('');
+}
+
+/** Normalize a short ref to canonical surah:ayah:word-surah:ayah:word format. */
+function _normalizeRef(ref) {
+    if (!ref) return ref;
+    const vwc = (segAllData || segData || {}).verse_word_counts;
+    const parts = ref.split('-');
+    if (parts.length === 2) {
+        const s = parts[0].split(':'), e = parts[1].split(':');
+        if (s.length === 3 && e.length === 3) return ref; // already canonical
+        if (s.length === 2 && e.length === 2) {
+            const n = vwc?.[`${e[0]}:${e[1]}`] || 1;
+            return `${s[0]}:${s[1]}:1-${e[0]}:${e[1]}:${n}`;
+        }
+    } else if (parts.length === 1) {
+        const c = ref.split(':');
+        if (c.length === 2) {
+            const n = vwc?.[`${c[0]}:${c[1]}`] || 1;
+            return `${c[0]}:${c[1]}:1-${c[0]}:${c[1]}:${n}`;
+        }
+        if (c.length === 3) return `${ref}-${ref}`;
+    }
+    return ref;
+}
+
+/** Insert verse end markers (۝N) at verse boundaries within segment text. */
+function _addVerseMarkers(text, ref) {
+    if (!text || !ref) return text;
+    const vwc = (segAllData || segData || {}).verse_word_counts;
+    const p = parseSegRef(_normalizeRef(ref));
+    if (!p || !vwc) return text;
+
+    const words = text.split(/\s+/).filter(Boolean);
+    const out = [];
+    let ay = p.ayah_from, w = p.word_from;
+
+    for (let i = 0; i < words.length; i++) {
+        out.push(words[i]);
+        const total = vwc[`${p.surah}:${ay}`] || 0;
+        if (total > 0 && w >= total) {
+            out.push('\u06DD' + _toArabicNumeral(ay));
+            ay++;
+            w = 1;
+        } else {
+            w++;
+        }
+    }
+    return out.join(' ');
 }
 
 function segDerivedProps(seg) {
@@ -681,71 +756,6 @@ function syncChapterSegsToAll() {
 }
 
 
-// ---------------------------------------------------------------------------
-// Audio decoding
-// ---------------------------------------------------------------------------
-
-async function decodeSegAudio(url) {
-    // Mark as loading to prevent scroll preload from double-fetching
-    const ch = parseInt(segChapterSelect.value);
-    if (ch) segAudioBuffers.set(ch, null);  // sentinel
-    try {
-        if (!segAudioCtx) {
-            segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        const resp = await fetch(url);
-        const buf = await resp.arrayBuffer();
-        const decoded = await segAudioCtx.decodeAudioData(buf);
-        // Always cache in per-chapter map (useful even if chapter changed)
-        if (ch) segAudioBuffers.set(ch, decoded);
-        // Only set as active buffer if chapter hasn't changed
-        if (parseInt(segChapterSelect.value) === ch) {
-            segAudioBuffer = decoded;
-            segAudioBufferUrl = url;
-        }
-    } catch (e) {
-        console.error('Seg audio decode failed:', e);
-        // Only clear active buffer if chapter hasn't changed (avoid clobbering new chapter's buffer)
-        if (parseInt(segChapterSelect.value) === ch) {
-            segAudioBuffer = null;
-            segAudioBufferUrl = '';
-        }
-        // Remove sentinel so scroll preload can retry
-        if (ch && segAudioBuffers.get(ch) === null) segAudioBuffers.delete(ch);
-    }
-}
-
-/** Decode and cache audio buffer for a specific chapter. Returns the AudioBuffer or null. */
-async function ensureChapterAudioBuffer(chapter) {
-    const cached = segAudioBuffers.get(chapter);
-    if (cached) return cached;  // actual buffer (not null sentinel)
-    if (segAudioBuffers.has(chapter)) {
-        // null sentinel = decode in progress — wait for it to finish
-        for (let i = 0; i < 150; i++) {  // up to 30s (150 × 200ms)
-            await new Promise(r => setTimeout(r, 200));
-            const buf = segAudioBuffers.get(chapter);
-            if (buf) return buf;  // decode completed
-            if (!segAudioBuffers.has(chapter)) break;  // sentinel removed = decode failed
-        }
-        return null;
-    }
-    const url = segAllData?.audio_by_chapter?.[chapter];
-    if (!url) return null;
-    try {
-        if (!segAudioCtx) {
-            segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        const resp = await fetch(url);
-        const buf = await resp.arrayBuffer();
-        const decoded = await segAudioCtx.decodeAudioData(buf);
-        segAudioBuffers.set(chapter, decoded);
-        return decoded;
-    } catch (e) {
-        console.error(`Audio decode failed for chapter ${chapter}:`, e);
-        return null;
-    }
-}
-
 function _ensureWaveformObserver() {
     if (_waveformObserver) return _waveformObserver;
     _waveformObserver = new IntersectionObserver((entries) => {
@@ -772,57 +782,21 @@ function _ensureWaveformObserver() {
             }
             if (!seg) return;
 
-            // Peaks fast path — draw from pre-computed peaks without audio download
-            if (segPeaksByAudio) {
-                const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
-                const peaksEntry = segPeaksByAudio[audioUrl];
-                if (peaksEntry?.peaks?.length > 0) {
-                    drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end,
-                                                  peaksEntry.peaks, peaksEntry.duration_ms);
-                    _waveformObserver.unobserve(canvas);
-                    canvas.removeAttribute('data-needs-waveform');
-                    return;
-                }
+            // Draw from pre-computed peaks (no audio download needed)
+            if (drawWaveformFromPeaksForSeg(canvas, seg, chapter)) {
+                _drawTrimHighlight(canvas, seg);
+                _waveformObserver.unobserve(canvas);
+                canvas.removeAttribute('data-needs-waveform');
             }
-
-            // Draw from already-cached audio buffers only — never start fetches here.
-            // Audio downloading is handled by the debounced scroll preloader to avoid
-            // firing requests for segments that merely scroll through the viewport.
-            const currentChapter = parseInt(segChapterSelect.value);
-            let buffer = null;
-
-            const chapterAudio = segAllData?.audio_by_chapter?.[String(chapter)] || '';
-            const segIsByAyah = seg.audio_url && seg.audio_url !== chapterAudio;
-
-            if (segIsByAyah) {
-                // By-ayah: use buffer only if already cached
-                buffer = segAudioBuffers.get(seg.audio_url) || null;
-                if (!buffer) return;  // scroll preloader will handle downloading
-            } else if (chapter && chapter !== currentChapter) {
-                // Error card from different chapter
-                buffer = segAudioBuffers.get(chapter) || null;
-                if (!buffer) return;
-            } else {
-                // Same-chapter by-surah
-                buffer = segAudioBuffer;
-                if (!buffer) return;
-            }
-
-            // Temporarily swap buffer for drawing if needed
-            const savedBuffer = segAudioBuffer;
-            segAudioBuffer = buffer;
-            drawSegmentWaveform(canvas, seg.time_start, seg.time_end);
-            segAudioBuffer = savedBuffer;
-
-            _waveformObserver.unobserve(canvas);
-            canvas.removeAttribute('data-needs-waveform');
+            // No peaks yet — leave canvas as-is; _fetchPeaks polling will
+            // call _redrawPeaksWaveforms when they arrive.
         });
     }, { rootMargin: '200px' });
     return _waveformObserver;
 }
 
 function drawAllSegWaveforms() {
-    if (!segAudioBuffer || !segDisplayedSegments) return;
+    if (!segDisplayedSegments) return;
     const observer = _ensureWaveformObserver();
     segListEl.querySelectorAll('canvas[data-needs-waveform]').forEach(canvas => {
         observer.unobserve(canvas);
@@ -837,17 +811,171 @@ function drawAllSegWaveforms() {
 
 function _fetchPeaks(reciter, chapters) {
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
-    let url = `/api/seg/peaks/${reciter}`;
-    if (chapters && chapters.length > 0) url += `?chapters=${chapters.join(',')}`;
+    if (!chapters || chapters.length === 0) return;  // always require explicit chapters
+    let url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
     fetch(url).then(r => r.json()).then(data => {
-        if (!segAllData || segReciterSelect.value !== reciter) return;  // reciter changed
+        if (!segAllData || segReciterSelect.value !== reciter) return;
         if (!segPeaksByAudio) segPeaksByAudio = {};
         Object.assign(segPeaksByAudio, data.peaks || {});
+        // Also key by proxy URL so rewritten audio URLs can find peaks
+        if (_isCurrentReciterBySurah()) {
+            for (const [origUrl, pe] of Object.entries(data.peaks || {})) {
+                if (origUrl && !origUrl.startsWith('/api/')) {
+                    segPeaksByAudio[`/api/seg/audio-proxy/${segReciterSelect.value}?url=${encodeURIComponent(origUrl)}`] = pe;
+                }
+            }
+        }
         _redrawPeaksWaveforms();
         if (!data.complete) {
             _peaksPollTimer = setTimeout(() => _fetchPeaks(reciter, chapters), 3000);
         }
     }).catch(() => {});
+}
+
+/** Fetch peaks for a single chapter if the audio URL's peaks aren't already loaded. */
+function _fetchChapterPeaksIfNeeded(reciter, chapter) {
+    if (!segAllData) return;
+    const audioUrl = segAllData.audio_by_chapter?.[String(chapter)] || '';
+    if (!audioUrl) return;
+    // Check both original URL and proxy URL
+    if (segPeaksByAudio?.[audioUrl]) return;
+    const proxyUrl = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
+    if (segPeaksByAudio?.[proxyUrl]) return;
+    _fetchPeaks(reciter, [chapter]);
+}
+
+/** Extract unique chapter numbers from all validation error categories. */
+function _collectErrorChapters(validation) {
+    if (!validation) return [];
+    const chapters = new Set();
+    const cats = ['errors', 'missing_verses', 'missing_words', 'failed',
+                  'low_confidence', 'boundary_adj',
+                  'cross_verse', 'audio_bleeding'];
+    for (const cat of cats) {
+        const items = validation[cat];
+        if (items) items.forEach(i => { if (i.chapter) chapters.add(i.chapter); });
+    }
+    return [...chapters].sort((a, b) => a - b);
+}
+
+// ---------------------------------------------------------------------------
+// Audio cache — proxy CDN audio through server for local caching
+// ---------------------------------------------------------------------------
+
+let _audioCachePollTimer = null;
+
+function _isCurrentReciterBySurah() {
+    const reciter = segReciterSelect.value;
+    const info = segAllReciters.find(r => r.slug === reciter);
+    return info && info.audio_source && info.audio_source.startsWith('by_surah');
+}
+
+/** Compare a segment's audio_url (may be relative) against segAudioEl.src (always absolute). */
+function _audioSrcMatch(segUrl, elSrc) {
+    if (!segUrl || !elSrc) return false;
+    if (segUrl === elSrc) return true;
+    return elSrc.endsWith(segUrl);
+}
+
+/** Rewrite all audio URLs in segAllData to go through the server proxy (by_surah only). */
+function _rewriteAudioUrls() {
+    if (!segAllData || !_isCurrentReciterBySurah()) return;
+    const reciter = segReciterSelect.value;
+    const rewrite = url => url && !url.startsWith('/api/') ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(url)}` : url;
+    if (segAllData.audio_by_chapter) {
+        for (const ch of Object.keys(segAllData.audio_by_chapter)) {
+            segAllData.audio_by_chapter[ch] = rewrite(segAllData.audio_by_chapter[ch]);
+        }
+    }
+    if (segAllData.segments) {
+        segAllData.segments.forEach(s => { if (s.audio_url) s.audio_url = rewrite(s.audio_url); });
+    }
+}
+
+function _formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function _updateCacheStatusUI(data) {
+    const statusEl = document.getElementById('seg-cache-status');
+    const progressEl = document.getElementById('seg-cache-progress');
+    const progressFill = document.getElementById('seg-cache-progress-fill');
+    const progressText = document.getElementById('seg-cache-progress-text');
+    const prepBtn = document.getElementById('seg-prepare-btn');
+    const delBtn = document.getElementById('seg-delete-cache-btn');
+    if (!statusEl) return;
+    if (!data || data.error) {
+        statusEl.textContent = '';
+        if (progressEl) progressEl.hidden = true;
+        return;
+    }
+
+    const allCached = data.cached_count >= data.total;
+    if (prepBtn) prepBtn.hidden = allCached;
+    if (delBtn) delBtn.hidden = data.cached_count === 0;
+
+    if (data.downloading && data.download_progress) {
+        const dp = data.download_progress;
+        const pct = dp.total > 0 ? Math.round(dp.downloaded / dp.total * 100) : 0;
+        if (progressEl) progressEl.hidden = false;
+        if (progressFill) progressFill.style.width = pct + '%';
+        if (progressText) progressText.textContent = `Downloading ${dp.downloaded} / ${dp.total} chapters (${_formatBytes(data.cached_bytes)})`;
+        statusEl.textContent = '';
+        if (prepBtn) prepBtn.hidden = true;
+    } else {
+        if (progressEl) progressEl.hidden = true;
+        if (allCached) {
+            statusEl.textContent = `All cached (${_formatBytes(data.cached_bytes)})`;
+        } else {
+            statusEl.textContent = 'Download audio for faster playback while editing';
+        }
+    }
+}
+
+async function _fetchCacheStatus(reciter) {
+    try {
+        const resp = await fetch(`/api/seg/audio-cache-status/${reciter}`);
+        const data = await resp.json();
+        const bar = document.getElementById('seg-cache-bar');
+        if (bar) bar.hidden = false;
+        _updateCacheStatusUI(data);
+        return data;
+    } catch { return null; }
+}
+
+async function _prepareAudio(reciter) {
+    const prepBtn = document.getElementById('seg-prepare-btn');
+    if (prepBtn) { prepBtn.disabled = true; prepBtn.hidden = true; }
+    try {
+        await fetch(`/api/seg/prepare-audio/${reciter}`, { method: 'POST' });
+    } catch { /* poll will handle */ }
+    // Poll progress
+    if (_audioCachePollTimer) clearInterval(_audioCachePollTimer);
+    _audioCachePollTimer = setInterval(async () => {
+        if (segReciterSelect.value !== reciter) {
+            clearInterval(_audioCachePollTimer); _audioCachePollTimer = null; return;
+        }
+        const data = await _fetchCacheStatus(reciter);
+        if (data && (!data.downloading || data.cached_count >= data.total)) {
+            clearInterval(_audioCachePollTimer); _audioCachePollTimer = null;
+            if (prepBtn) { prepBtn.disabled = false; prepBtn.textContent = 'Download All Audio'; }
+            _updateCacheStatusUI(data);
+        }
+    }, 2000);
+}
+
+async function _deleteAudioCache(reciter) {
+    if (!confirm('Delete cached audio for this reciter?\nOnly delete once you are finished editing.')) return;
+    const delBtn = document.getElementById('seg-delete-cache-btn');
+    if (delBtn) { delBtn.disabled = true; delBtn.textContent = 'Deleting...'; }
+    try {
+        await fetch(`/api/seg/delete-audio-cache/${reciter}`, { method: 'DELETE' });
+    } catch { /* ignore */ }
+    if (delBtn) { delBtn.disabled = false; delBtn.textContent = 'Delete Cache'; }
+    await _fetchCacheStatus(reciter);
 }
 
 function _redrawPeaksWaveforms() {
@@ -864,151 +992,6 @@ function _redrawPeaksWaveforms() {
 
 
 // ---------------------------------------------------------------------------
-// Debounced viewport-based audio preloading
-// ---------------------------------------------------------------------------
-
-function _attachScrollPreload(container) {
-    if (!container) return;
-    if (_scrollListeners.some(sl => sl.el === container)) return;  // already tracked
-
-    const handler = () => {
-        // Abort in-flight preloads
-        if (_scrollAbortController) _scrollAbortController.abort();
-        clearTimeout(_scrollDebounceTimer);
-        _scrollDebounceTimer = setTimeout(_onScrollSettled, 1000);
-    };
-    container.addEventListener('scroll', handler, { passive: true });
-    _scrollListeners.push({ el: container, handler });
-
-    // Initial preload after short delay (only if not already scheduled)
-    if (!_scrollDebounceTimer) {
-        _scrollDebounceTimer = setTimeout(_onScrollSettled, 500);
-    }
-}
-
-function _teardownScrollPreloading() {
-    if (_scrollAbortController) { _scrollAbortController.abort(); _scrollAbortController = null; }
-    clearTimeout(_scrollDebounceTimer);
-    _scrollDebounceTimer = null;
-    _scrollListeners.forEach(({ el, handler }) => {
-        el.removeEventListener('scroll', handler);
-    });
-    _scrollListeners = [];
-}
-
-function _detachScrollPreload(container) {
-    const idx = _scrollListeners.findIndex(sl => sl.el === container);
-    if (idx !== -1) {
-        container.removeEventListener('scroll', _scrollListeners[idx].handler);
-        _scrollListeners.splice(idx, 1);
-    }
-}
-
-function _onScrollSettled() {
-    const segs = _getViewportSegments();
-    if (segs.length === 0) return;
-
-    _scrollAbortController = new AbortController();
-    const signal = _scrollAbortController.signal;
-
-    // Batch with concurrency limit of 4
-    const queue = [...segs];
-    let active = 0;
-    const MAX_CONCURRENT = 4;
-
-    function next() {
-        while (active < MAX_CONCURRENT && queue.length > 0) {
-            if (signal.aborted) return;
-            const item = queue.shift();
-            active++;
-            _preloadAudioForSeg(item, signal).finally(() => {
-                active--;
-                next();
-            });
-        }
-    }
-    next();
-}
-
-function _getViewportSegments() {
-    const results = [];
-    const seen = new Set();
-
-    // Check all active scroll containers
-    const containers = [segListEl];
-    document.querySelectorAll('.val-cards-container').forEach(c => {
-        if (!c.hidden && c.children.length > 0) containers.push(c);
-    });
-
-    for (const container of containers) {
-        if (!container) continue;
-        const cRect = container.getBoundingClientRect();
-        const rows = container.querySelectorAll('.seg-row');
-        let belowCount = 0;
-
-        for (const row of rows) {
-            const rRect = row.getBoundingClientRect();
-            const inView = rRect.bottom > cRect.top && rRect.top < cRect.bottom;
-            const justBelow = rRect.top >= cRect.bottom;
-
-            if (inView || (justBelow && belowCount < 3)) {
-                if (justBelow) belowCount++;
-                const seg = resolveSegFromRow(row);
-                if (!seg) continue;
-                const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(seg.chapter)] || '';
-                const chapterAudio = segAllData?.audio_by_chapter?.[String(seg.chapter)] || '';
-                const isByAyah = seg.audio_url && seg.audio_url !== chapterAudio;
-                if (!audioUrl || seen.has(audioUrl)) continue;
-                // Skip if already cached or being loaded (null sentinel)
-                const cacheKey = isByAyah ? audioUrl : seg.chapter;
-                if (segAudioBuffers.has(cacheKey)) continue;
-                // Also skip by_surah if the eager decode already loaded it
-                if (!isByAyah && segAudioBuffer && segAudioBufferUrl === audioUrl) continue;
-                seen.add(audioUrl);
-                results.push({ seg, audioUrl, chapter: seg.chapter, isByAyah });
-            } else if (rRect.top > cRect.bottom && belowCount >= 3) {
-                break;  // past buffer zone
-            }
-        }
-    }
-    return results;
-}
-
-async function _preloadAudioForSeg({ seg, audioUrl, chapter, isByAyah }, signal) {
-    if (signal.aborted) return;
-    try {
-        if (!segAudioCtx) {
-            segAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        const resp = await fetch(audioUrl, { signal });
-        if (signal.aborted) return;
-        const buf = await resp.arrayBuffer();
-        if (signal.aborted) return;
-        const decoded = await segAudioCtx.decodeAudioData(buf);
-        if (signal.aborted) return;
-        if (isByAyah) {
-            segAudioBuffers.set(audioUrl, decoded);
-        } else {
-            segAudioBuffers.set(chapter, decoded);
-            // For by_surah: also set the global buffer so waveform drawing works
-            // (don't touch segAudioEl — the eager load in onSegChapterChange handles that)
-            const currentChapter = parseInt(segChapterSelect.value);
-            if (chapter === currentChapter && !segAudioBuffer) {
-                segAudioBuffer = decoded;
-                segAudioBufferUrl = audioUrl;
-            }
-        }
-        // Trigger waveform drawing for canvases that now have a buffer available
-        _redrawPeaksWaveforms();
-    } catch (e) {
-        if (e.name !== 'AbortError') {
-            console.warn('Audio preload failed:', audioUrl, e);
-        }
-    }
-}
-
-
-// ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
@@ -1016,16 +999,16 @@ function clearSegDisplay() {
     if (_waveformObserver) { _waveformObserver.disconnect(); _waveformObserver = null; }
     _segIndexMap = null;
     segAllData = null;
-    segAudioBuffers.clear();
     segActiveFilters = [];
     segAvgSpeechRate = 0;
     if (segFilterBarEl) { segFilterBarEl.hidden = true; segFilterRowsEl.innerHTML = ''; }
+    const cacheBar = document.getElementById('seg-cache-bar');
+    if (cacheBar) cacheBar.hidden = true;
+    if (_audioCachePollTimer) { clearInterval(_audioCachePollTimer); _audioCachePollTimer = null; }
     if (segFilterCountEl) segFilterCountEl.textContent = '';
     if (segFilterClearBtn) segFilterClearBtn.hidden = true;
     if (segFilterStatusEl) segFilterStatusEl.textContent = '';
     segData = null;
-    segAudioBuffer = null;
-    segAudioBufferUrl = '';
     segDisplayedSegments = null;
     segCurrentIdx = -1;
     segDirtyMap.clear();
@@ -1048,7 +1031,6 @@ function clearSegDisplay() {
     _segPlayEndMs = 0;
     segPeaksByAudio = null;
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
-    _teardownScrollPreloading();
     segListEl.innerHTML = '';
     segPlayBtn.disabled = true;
     segSaveBtn.disabled = true;
@@ -1083,7 +1065,73 @@ function resolveSegFromRow(row) {
     return null;
 }
 
+// ---------------------------------------------------------------------------
+// Canvas click-to-seek / drag-to-scrub
+// ---------------------------------------------------------------------------
+
+let _segScrubActive = false;
+
+function _seekFromCanvasEvent(e, canvas, row) {
+    const seg = resolveSegFromRow(row);
+    if (!seg) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const progress = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const timeMs = seg.time_start + progress * (seg.time_end - seg.time_start);
+
+    if (segListEl.contains(row)) {
+        // Main section
+        const idx = parseInt(row.dataset.segIndex);
+        const chapter = parseInt(row.dataset.segChapter);
+        if (idx === segCurrentIdx && !segAudioEl.paused) {
+            segAudioEl.currentTime = timeMs / 1000;
+        } else {
+            playFromSegment(idx, chapter, timeMs);
+        }
+    } else {
+        // Error / history / save / context cards
+        const playBtn = row.querySelector('.seg-card-play-btn');
+        if (!playBtn) return;
+        if (valCardPlayingBtn === playBtn && valCardAudio && !valCardAudio.paused) {
+            valCardAudio.currentTime = timeMs / 1000;
+        } else {
+            playErrorCardAudio(seg, playBtn, timeMs);
+        }
+    }
+}
+
+function _handleSegCanvasMousedown(e) {
+    const canvas = e.target.closest('canvas');
+    if (!canvas) return;
+    const row = canvas.closest('.seg-row');
+    if (!row || segEditMode) return;
+
+    e.preventDefault();
+    _segScrubActive = true;
+    _seekFromCanvasEvent(e, canvas, row);
+
+    function onMove(ev) {
+        _seekFromCanvasEvent(ev, canvas, row);
+    }
+    function onUp() {
+        _segScrubActive = false;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+}
+
 function handleSegRowClick(e) {
+
+    // Canvas click-to-seek (intercept before other handlers)
+    const clickedCanvas = e.target.closest('canvas');
+    if (clickedCanvas) {
+        e.stopPropagation();
+        const row = clickedCanvas.closest('.seg-row');
+        if (row && !segEditMode) _seekFromCanvasEvent(e, clickedCanvas, row);
+        return;
+    }
 
     // Ref edit (skip for read-only history cards)
     const refSpan = e.target.closest('.seg-text-ref');
@@ -1095,13 +1143,24 @@ function handleSegRowClick(e) {
         if (seg && row) startRefEdit(refSpan, seg, row);
         return;
     }
-    // Play button (error cards)
+    // Play button
     const playBtn = e.target.closest('.seg-card-play-btn');
     if (playBtn) {
         e.stopPropagation();
         const row = playBtn.closest('.seg-row');
-        const seg = resolveSegFromRow(row);
-        if (seg) playErrorCardAudio(seg, playBtn);
+        if (segListEl.contains(row)) {
+            // Main section: toggle play/pause
+            const idx = parseInt(row.dataset.segIndex);
+            if (idx === segCurrentIdx && !segAudioEl.paused) {
+                segAudioEl.pause();
+            } else {
+                playFromSegment(idx, parseInt(row.dataset.segChapter));
+            }
+        } else {
+            // Accordion / history: use valCardAudio
+            const seg = resolveSegFromRow(row);
+            if (seg) playErrorCardAudio(seg, playBtn);
+        }
         return;
     }
     // Go To button (error cards + filter results)
@@ -1138,7 +1197,14 @@ function handleSegRowClick(e) {
         e.stopPropagation();
         const row = splitBtn.closest('.seg-row');
         const seg = resolveSegFromRow(row);
-        if (seg && row) enterEditWithBuffer(seg, row, 'split');
+        if (!seg || !row) return;
+        if (!segListEl.contains(row)) {
+            ensureContextShown(row);
+            // Delay so browser repaints context cards before edit panel appears
+            setTimeout(() => enterEditWithBuffer(seg, row, 'split'), 1000);
+            return;
+        }
+        enterEditWithBuffer(seg, row, 'split');
         return;
     }
     // Merge prev/next buttons
@@ -1147,7 +1213,19 @@ function handleSegRowClick(e) {
         e.stopPropagation();
         const row = mergePrev.closest('.seg-row');
         const seg = resolveSegFromRow(row);
-        if (seg) mergeAdjacent(seg, 'prev');
+        if (!seg) return;
+        if (!segListEl.contains(row)) {
+            ensureContextShown(row);
+            const { prev } = getAdjacentSegments(seg.chapter, seg.index);
+            if (!prev) { segPlayStatus.textContent = 'No previous segment to merge with'; return; }
+            // Delay so browser repaints context cards before confirm blocks
+            setTimeout(() => {
+                if (!confirm(`Merge #${seg.index} (${formatRef(seg.matched_ref) || 'no ref'}) with previous #${prev.index} (${formatRef(prev.matched_ref) || 'no ref'})?`)) return;
+                mergeAdjacent(seg, 'prev');
+            }, 1000);
+            return;
+        }
+        mergeAdjacent(seg, 'prev');
         return;
     }
     const mergeNext = e.target.closest('.btn-merge-next');
@@ -1155,7 +1233,18 @@ function handleSegRowClick(e) {
         e.stopPropagation();
         const row = mergeNext.closest('.seg-row');
         const seg = resolveSegFromRow(row);
-        if (seg) mergeAdjacent(seg, 'next');
+        if (!seg) return;
+        if (!segListEl.contains(row)) {
+            ensureContextShown(row);
+            const { next } = getAdjacentSegments(seg.chapter, seg.index);
+            if (!next) { segPlayStatus.textContent = 'No next segment to merge with'; return; }
+            setTimeout(() => {
+                if (!confirm(`Merge #${seg.index} (${formatRef(seg.matched_ref) || 'no ref'}) with next #${next.index} (${formatRef(next.matched_ref) || 'no ref'})?`)) return;
+                mergeAdjacent(seg, 'next');
+            }, 1000);
+            return;
+        }
+        mergeAdjacent(seg, 'next');
         return;
     }
     // Delete button
@@ -1181,7 +1270,7 @@ function handleSegRowClick(e) {
     }
     // Row click to play (ignore if clicking on actions)
     const row = e.target.closest('.seg-row');
-    if (row && !e.target.closest('.seg-actions')) {
+    if (row && !e.target.closest('.seg-play-col') && !e.target.closest('.seg-actions')) {
         if (segEditMode) return;
         if (segListEl.contains(row)) {
             const idx = parseInt(row.dataset.segIndex);
@@ -1230,6 +1319,27 @@ function renderSegCard(seg, options = {}) {
         if (seg.audio_url) row.dataset.histAudioUrl = seg.audio_url;
     }
 
+    // Play column at the far left (between waveforms of adjacent cards)
+    if (!isContext && !readOnly) {
+        const playCol = document.createElement('div');
+        playCol.className = 'seg-play-col';
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'btn btn-sm seg-card-play-btn';
+        playBtn.textContent = '\u25B6';
+        playBtn.title = 'Play segment audio';
+        playCol.appendChild(playBtn);
+
+        if (showGotoBtn) {
+            const gotoBtn = document.createElement('button');
+            gotoBtn.className = 'btn btn-sm seg-card-goto-btn';
+            gotoBtn.textContent = 'Go to';
+            playCol.appendChild(gotoBtn);
+        }
+
+        row.appendChild(playCol);
+    }
+
     // Left column: canvas + action buttons
     const leftCol = document.createElement('div');
     leftCol.className = 'seg-left';
@@ -1238,9 +1348,20 @@ function renderSegCard(seg, options = {}) {
     canvas.width = 380;
     canvas.height = 60;
     canvas.setAttribute('data-needs-waveform', '');
-    leftCol.appendChild(canvas);
 
-    // Action buttons below waveform (3×2 grid)
+    if (readOnly && showPlayBtn) {
+        // History cards: play button to the left of the waveform
+        const playBtn = document.createElement('button');
+        playBtn.className = 'btn btn-sm seg-card-play-btn';
+        playBtn.textContent = '\u25B6';
+        playBtn.title = 'Play segment audio';
+        leftCol.appendChild(playBtn);
+        leftCol.appendChild(canvas);
+    } else {
+        leftCol.appendChild(canvas);
+    }
+
+    // Editing grid below waveform (no play column — it's at row level now)
     if (!isContext && !readOnly) {
         const actions = document.createElement('div');
         actions.className = 'seg-actions';
@@ -1249,9 +1370,18 @@ function renderSegCard(seg, options = {}) {
         trimBtn.className = 'btn btn-sm btn-adjust';
         trimBtn.textContent = 'Adjust';
 
+        const { prev: adjPrev, next: adjNext } = getAdjacentSegments(seg.chapter, seg.index);
+
         const mergePrevBtn = document.createElement('button');
         mergePrevBtn.className = 'btn btn-sm btn-merge-prev';
         mergePrevBtn.textContent = 'Merge \u2191';
+        if (!adjPrev) {
+            mergePrevBtn.disabled = true;
+            mergePrevBtn.title = 'No previous segment to merge with';
+        } else if (adjPrev.audio_url && seg.audio_url && adjPrev.audio_url !== seg.audio_url) {
+            mergePrevBtn.disabled = true;
+            mergePrevBtn.title = 'Cannot merge segments from different audio files';
+        }
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-sm btn-delete';
@@ -1264,40 +1394,40 @@ function renderSegCard(seg, options = {}) {
         const mergeNextBtn = document.createElement('button');
         mergeNextBtn.className = 'btn btn-sm btn-merge-next';
         mergeNextBtn.textContent = 'Merge \u2193';
+        if (!adjNext) {
+            mergeNextBtn.disabled = true;
+            mergeNextBtn.title = 'No next segment to merge with';
+        } else if (adjNext.audio_url && seg.audio_url && adjNext.audio_url !== seg.audio_url) {
+            mergeNextBtn.disabled = true;
+            mergeNextBtn.title = 'Cannot merge segments from different audio files';
+        }
 
         const editRefBtn = document.createElement('button');
         editRefBtn.className = 'btn btn-sm btn-edit-ref';
         editRefBtn.textContent = 'Edit Ref';
 
         actions.append(trimBtn, mergePrevBtn, deleteBtn, splitBtn, mergeNextBtn, editRefBtn);
-
-        if (showGotoBtn) {
-            const gotoBtn = document.createElement('button');
-            gotoBtn.className = 'btn btn-sm seg-card-goto-btn';
-            gotoBtn.textContent = 'Go to';
-            actions.appendChild(gotoBtn);
-        }
-
         leftCol.appendChild(actions);
-    } else if (!isContext && showPlayBtn) {
-        const actions = document.createElement('div');
-        actions.className = 'seg-actions';
+    } else if (isContext) {
+        // Context cards: hidden play button for click-to-play via row click
         const playBtn = document.createElement('button');
         playBtn.className = 'btn btn-sm seg-card-play-btn';
-        playBtn.textContent = '\u25B6';
-        playBtn.title = 'Play segment audio';
-        actions.appendChild(playBtn);
-        leftCol.appendChild(actions);
+        playBtn.hidden = true;
+        leftCol.appendChild(playBtn);
     }
 
     row.appendChild(leftCol);
 
-    // Text box (right column)
+    // Text box (right column): metadata left, Arabic text right
     const textBox = document.createElement('div');
     const confClass = getConfClass(seg);
     textBox.className = `seg-text ${confClass}`;
 
-    // Compact header: #N | ref | duration ... confidence
+    // Metadata column (left side of text box)
+    const metaCol = document.createElement('div');
+    metaCol.className = 'seg-text-meta';
+
+    // Header: #N | ref | duration
     const header = document.createElement('div');
     header.className = 'seg-text-header';
 
@@ -1323,11 +1453,6 @@ function renderSegCard(seg, options = {}) {
     durSpan.textContent = durSec.toFixed(1) + 's';
     durSpan.title = `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`;
 
-    const confSpan = document.createElement('span');
-    confSpan.className = `seg-text-conf ${confClass}`;
-    confSpan.style.marginLeft = 'auto';
-    confSpan.textContent = seg.matched_ref ? (seg.confidence * 100).toFixed(1) + '%' : 'FAIL';
-
     header.append(indexSpan, sep1, refSpan, sep2, durSpan);
     if (missingWordSegIndices && missingWordSegIndices.has(seg.index)) {
         const tag = document.createElement('span');
@@ -1335,21 +1460,28 @@ function renderSegCard(seg, options = {}) {
         tag.textContent = 'Missing words';
         header.appendChild(tag);
     }
-    header.appendChild(confSpan);
-    textBox.appendChild(header);
+    metaCol.appendChild(header);
+
+    // Confidence below header
+    const confSpan = document.createElement('span');
+    confSpan.className = `seg-text-conf ${confClass}`;
+    confSpan.textContent = seg.matched_ref ? (seg.confidence * 100).toFixed(1) + '%' : 'FAIL';
+    metaCol.appendChild(confSpan);
 
     // Context label (for context cards)
     if (contextLabel) {
         const lbl = document.createElement('div');
         lbl.className = 'seg-text-label';
         lbl.textContent = contextLabel;
-        textBox.appendChild(lbl);
+        metaCol.appendChild(lbl);
     }
 
-    // Arabic text
+    textBox.appendChild(metaCol);
+
+    // Arabic text (right side, top-aligned)
     const body = document.createElement('div');
     body.className = 'seg-text-body';
-    body.textContent = seg.display_text || seg.matched_text || '(alignment failed)';
+    body.textContent = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref) || '(alignment failed)';
     textBox.appendChild(body);
 
     row.appendChild(textBox);
@@ -1409,9 +1541,6 @@ function renderSegList(segments) {
 
     // Observe canvases for lazy waveform drawing
     segListEl.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-
-    // Attach scroll-based audio preloading
-    _attachScrollPreload(segListEl);
 }
 
 function getConfClass(seg) {
@@ -1488,95 +1617,30 @@ function drawSegmentWaveformFromPeaks(canvas, startMs, endMs, peaks, totalDurati
     canvas._wfCache = null;
 }
 
-function drawSegmentWaveform(canvas, startMs, endMs) {
-    if (!segAudioBuffer) return;
-
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    const centerY = height / 2;
-
-    // Clear
-    ctx.fillStyle = '#0f0f23';
-    ctx.fillRect(0, 0, width, height);
-
-    // Extract samples for this segment (convert ms to seconds for sample math)
-    const sampleRate = segAudioBuffer.sampleRate;
-    const rawData = segAudioBuffer.getChannelData(0);
-    const startSample = Math.floor((startMs / 1000) * sampleRate);
-    const endSample = Math.min(Math.floor((endMs / 1000) * sampleRate), rawData.length);
-    const totalSamples = endSample - startSample;
-
-    if (totalSamples <= 0) return;
-
-    const buckets = width;
-    const blockSize = Math.max(1, Math.floor(totalSamples / buckets));
-    const scale = height / 2 * 0.9;
-
-    // Draw filled waveform
-    ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const offset = startSample + i * blockSize;
-        let max = -1.0;
-        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
-            const val = rawData[offset + j];
-            if (val > max) max = val;
-        }
-        const x = (i / buckets) * width;
-        const y = centerY - max * scale;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+/** Draw waveform from peaks for a segment, resolving its audio URL. Returns true if drawn. */
+function drawWaveformFromPeaksForSeg(canvas, seg, chapter) {
+    if (!segPeaksByAudio) return false;
+    const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const pe = segPeaksByAudio[audioUrl];
+    if (pe?.peaks?.length > 0) {
+        drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);
+        return true;
     }
-    for (let i = buckets - 1; i >= 0; i--) {
-        const offset = startSample + i * blockSize;
-        let min = 1.0;
-        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
-            const val = rawData[offset + j];
-            if (val < min) min = val;
-        }
-        const x = (i / buckets) * width;
-        const y = centerY - min * scale;
-        ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
-    ctx.fill();
-
-    // Waveform outline
-    ctx.strokeStyle = '#4361ee';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const offset = startSample + i * blockSize;
-        let max = -1.0;
-        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
-            const val = rawData[offset + j];
-            if (val > max) max = val;
-        }
-        const x = (i / buckets) * width;
-        const y = centerY - max * scale;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-
-    // Invalidate playhead cache so next drawSegPlayhead re-caches the fresh waveform
-    canvas._wfCache = null;
+    return false;
 }
 
-function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs) {
+function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs, audioUrl) {
     // Restore cached waveform image if available (avoids recomputing from raw samples every frame)
     const ctx = canvas.getContext('2d');
     const cacheKey = `${startMs}:${endMs}`;
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
     } else {
-        // Try AudioBuffer first, fall back to peaks
-        if (segAudioBuffer) {
-            drawSegmentWaveform(canvas, startMs, endMs);
-        } else if (segPeaksByAudio && segAudioBufferUrl) {
-            const pe = segPeaksByAudio[segAudioBufferUrl];
-            if (pe?.peaks?.length) drawSegmentWaveformFromPeaks(canvas, startMs, endMs, pe.peaks, pe.duration_ms);
+        if (segPeaksByAudio && audioUrl) {
+            const pe = segPeaksByAudio[audioUrl];
+            if (pe?.peaks?.length) {
+                drawSegmentWaveformFromPeaks(canvas, startMs, endMs, pe.peaks, pe.duration_ms);
+            }
         }
         canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
         canvas._wfCacheKey = cacheKey;
@@ -1612,7 +1676,7 @@ function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs) {
 // Playback
 // ---------------------------------------------------------------------------
 
-function playFromSegment(segIndex, chapterOverride) {
+function playFromSegment(segIndex, chapterOverride, seekToMs) {
     if (!segAllData) return;
     stopErrorCardAudio();
     _activeAudioSource = 'main';
@@ -1622,36 +1686,17 @@ function playFromSegment(segIndex, chapterOverride) {
         : (segDisplayedSegments ? segDisplayedSegments.find(s => s.index === segIndex) : null);
     if (!seg) return;
 
-    // Abort in-flight scroll preloads to free browser connections for playback
-    if (_scrollAbortController) _scrollAbortController.abort();
-
-    _segContinuousPlay = true;
+    _segContinuousPlay = _segAutoPlayEnabled;
     _segPlayEndMs = seg.time_end;
 
-    // Switch audio source if needed (by_ayah has different audio per verse)
+    // Ensure audio element has a src (deferred from chapter select)
     const segAudioUrl = seg.audio_url || '';
-    const needsSwitch = segAudioUrl && segAudioUrl !== segAudioBufferUrl
-        && !segAudioEl.src.endsWith(segAudioUrl);
-
-    if (needsSwitch) {
+    if (segAudioUrl && !segAudioEl.src.endsWith(segAudioUrl)) {
         segAudioEl.src = segAudioUrl;
-        // Check if scroll preloader already decoded this URL
-        const cached = segAudioBuffers.get(segAudioUrl);
-        if (cached && cached instanceof AudioBuffer) {
-            segAudioBuffer = cached;
-            segAudioBufferUrl = segAudioUrl;
-            drawAllSegWaveforms();
-        } else {
-            segAudioBuffer = null;
-            segAudioBufferUrl = '';
-            decodeSegAudio(segAudioUrl).then(() => {
-                if (segAudioBuffer) drawAllSegWaveforms();
-            });
-        }
     }
 
     segAudioEl.playbackRate = parseFloat(segSpeedSelect.value);
-    segAudioEl.currentTime = seg.time_start / 1000;
+    segAudioEl.currentTime = (seekToMs != null ? seekToMs : seg.time_start) / 1000;
     segAudioEl.play();
     segCurrentIdx = segIndex;
     updateSegPlayStatus();
@@ -1679,8 +1724,8 @@ function _nextDisplayedSeg(afterIndex) {
 function _prefetchNextSegAudio(currentIndex) {
     const next = _nextDisplayedSeg(currentIndex);
     if (!next) return;
-    const currentUrl = segAudioBufferUrl || (segAudioEl.src || '');
-    if (!next.audio_url || next.audio_url === currentUrl) return;
+    const currentUrl = segAudioEl.src || '';
+    if (!next.audio_url || _audioSrcMatch(next.audio_url, currentUrl)) return;
     if (_segPrefetchCache[next.audio_url]) return; // already prefetching/prefetched
     // Prefetch: download into browser cache so the <audio> src switch is instant
     _segPrefetchCache[next.audio_url] = fetch(next.audio_url)
@@ -1700,7 +1745,7 @@ function onSegPlayClick() {
             const first = segDisplayedSegments[0];
             playFromSegment(first.index, first.chapter);
         } else {
-            _segContinuousPlay = true;
+            _segContinuousPlay = _segAutoPlayEnabled;
             _activeAudioSource = 'main';
             segAudioEl.playbackRate = parseFloat(segSpeedSelect.value);
             segAudioEl.play();
@@ -1713,14 +1758,14 @@ function onSegPlayClick() {
 
 function onSegTimeUpdate() {
     const timeMs = segAudioEl.currentTime * 1000;
-    const currentSrc = segAudioEl.src || segAudioBufferUrl || '';
+    const currentSrc = segAudioEl.src || '';
 
     // Find the last displayed segment on the *current* audio file
     let lastSegOnAudio = null;
     if (segDisplayedSegments && segDisplayedSegments.length > 0) {
         for (let i = segDisplayedSegments.length - 1; i >= 0; i--) {
             const s = segDisplayedSegments[i];
-            if (s.audio_url === currentSrc) {
+            if (_audioSrcMatch(s.audio_url, currentSrc)) {
                 lastSegOnAudio = s;
                 break;
             }
@@ -1732,7 +1777,7 @@ function onSegTimeUpdate() {
     if (lastSegOnAudio && timeMs >= lastSegOnAudio.time_end) {
         const nextSeg = _nextDisplayedSeg(lastSegOnAudio.index);
         const isConsecutive = nextSeg && nextSeg.index === lastSegOnAudio.index + 1;
-        if (_segContinuousPlay && isConsecutive && nextSeg.audio_url !== currentSrc) {
+        if (_segContinuousPlay && isConsecutive && !_audioSrcMatch(nextSeg.audio_url, currentSrc)) {
             // Auto-advance to next segment on a different audio file (only if consecutive)
             playFromSegment(nextSeg.index, nextSeg.chapter);
             return;
@@ -1751,7 +1796,7 @@ function onSegTimeUpdate() {
     if (segDisplayedSegments) {
         for (const seg of segDisplayedSegments) {
             if (timeMs >= seg.time_start && timeMs < seg.time_end) {
-                if (segAudioBufferUrl && seg.audio_url !== segAudioBufferUrl) continue;
+                if (currentSrc && !_audioSrcMatch(seg.audio_url, currentSrc)) continue;
                 segCurrentIdx = seg.index;
                 break;
             }
@@ -1764,10 +1809,10 @@ function onSegTimeUpdate() {
         if (_segContinuousPlay && segDisplayedSegments) {
             // Find the next segment after the one that just ended
             const justEnded = segDisplayedSegments.find(s => s.time_end === _segPlayEndMs
-                && s.audio_url === currentSrc);
+                && _audioSrcMatch(s.audio_url, currentSrc));
             if (justEnded) {
                 const nextSeg2 = _nextDisplayedSeg(justEnded.index);
-                if (nextSeg2 && nextSeg2.audio_url === currentSrc) {
+                if (nextSeg2 && _audioSrcMatch(nextSeg2.audio_url, currentSrc)) {
                     return; // same audio file — wait for next segment to start
                 }
             }
@@ -1780,6 +1825,14 @@ function onSegTimeUpdate() {
     }
 
     if (segCurrentIdx !== prevIdx) {
+        // When autoplay is off and we drift into a new segment (zero-gap adjacency),
+        // stop playback — the user only intended to play the original segment.
+        if (!_segContinuousPlay && prevIdx >= 0 && segCurrentIdx >= 0) {
+            segAudioEl.pause();
+            stopSegAnimation();
+            _segPlayEndMs = 0;
+            return;
+        }
         if (segCurrentIdx >= 0) {
             const curSeg = segDisplayedSegments.find(s => s.index === segCurrentIdx);
             if (curSeg) _segPlayEndMs = curSeg.time_end;
@@ -1794,6 +1847,11 @@ function onSegTimeUpdate() {
 function startSegAnimation() {
     segPlayBtn.textContent = 'Pause';
     _activeAudioSource = 'main';
+    // Sync play button icon on the active row
+    if (_prevHighlightedRow) {
+        const btn = _prevHighlightedRow.querySelector('.seg-card-play-btn');
+        if (btn) btn.textContent = '\u25A0';
+    }
     animateSeg();
 }
 
@@ -1806,6 +1864,11 @@ function stopSegAnimation() {
     if (segAnimId) {
         cancelAnimationFrame(segAnimId);
         segAnimId = null;
+    }
+    // Sync play button icon on the active row
+    if (_prevHighlightedRow) {
+        const btn = _prevHighlightedRow.querySelector('.seg-card-play-btn');
+        if (btn) btn.textContent = '\u25B6';
     }
 }
 
@@ -1835,6 +1898,8 @@ function updateSegHighlight() {
     if (segCurrentIdx === _prevHighlightedIdx) return;
     if (_prevHighlightedRow) {
         _prevHighlightedRow.classList.remove('playing');
+        const prevBtn = _prevHighlightedRow.querySelector('.seg-card-play-btn');
+        if (prevBtn) prevBtn.textContent = '\u25B6';
     }
     _prevHighlightedRow = null;
     _prevHighlightedIdx = segCurrentIdx;
@@ -1843,6 +1908,10 @@ function updateSegHighlight() {
         if (row) {
             row.classList.add('playing');
             _prevHighlightedRow = row;
+            if (!segAudioEl.paused) {
+                const btn = row.querySelector('.seg-card-play-btn');
+                if (btn) btn.textContent = '\u25A0';
+            }
         }
     }
 }
@@ -1853,6 +1922,8 @@ let _currentPlayheadRow = null;
 
 function drawActivePlayhead() {
     if (!segAllData || !segChapterSelect.value) return;
+    // Don't overwrite the edit-mode waveform with playhead animation
+    if (segEditMode && segCurrentIdx === segEditIndex) return;
     const chapter = parseInt(segChapterSelect.value);
     const time = segAudioEl.currentTime * 1000; // convert to ms
 
@@ -1864,7 +1935,9 @@ function drawActivePlayhead() {
         if (prevRow) {
             const canvas = prevRow.querySelector('canvas');
             const seg = getSegByChapterIndex(chapter, _prevPlayheadIdx);
-            if (canvas && seg) drawSegmentWaveform(canvas, seg.time_start, seg.time_end);
+            if (canvas && seg) {
+                drawWaveformFromPeaksForSeg(canvas, seg, chapter);
+            }
         }
     }
 
@@ -1882,7 +1955,10 @@ function drawActivePlayhead() {
         if (row) {
             const canvas = row.querySelector('canvas');
             const seg = getSegByChapterIndex(chapter, segCurrentIdx);
-            if (canvas && seg) drawSegPlayhead(canvas, seg.time_start, seg.time_end, time);
+            if (canvas && seg) {
+                const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
+                drawSegPlayhead(canvas, seg.time_start, seg.time_end, time, audioUrl);
+            }
         }
     }
 }
@@ -1907,6 +1983,10 @@ function updateSegPlayStatus() {
 function startRefEdit(refSpan, seg, row) {
     // Already editing
     if (refSpan.querySelector('input')) return;
+
+    // Pause audio and disable continuous play so auto-advance doesn't interrupt editing
+    if (!segAudioEl.paused) { segAudioEl.pause(); stopSegAnimation(); }
+    _segContinuousPlay = false;
 
     // Edit history: snapshot before ref edit
     _pendingOp = createOp('edit_reference');
@@ -1941,6 +2021,7 @@ function startRefEdit(refSpan, seg, row) {
             e.preventDefault();
             committed = true;
             _pendingOp = null;  // discard edit history op on cancel
+            _splitChainUid = null;  // cancel split chain on Escape
             refSpan.textContent = formatRef(originalRef);
         }
     });
@@ -1949,9 +2030,31 @@ function startRefEdit(refSpan, seg, row) {
     input.addEventListener('click', (e) => e.stopPropagation());
 }
 
+/** After split ref-edit on first half, chain to editing the second half. */
+function _chainSplitRefEdit(chapter) {
+    if (!_splitChainUid) return;
+    const chainUid = _splitChainUid;
+    _splitChainUid = null;
+    const allSegs = segData?.segments || segAllData?.segments || [];
+    const secondSeg = allSegs.find(s => s.segment_uid === chainUid);
+    if (!secondSeg) return;
+    const secondRow = segListEl.querySelector(
+        `.seg-row[data-seg-chapter="${secondSeg.chapter}"][data-seg-index="${secondSeg.index}"]`
+    );
+    if (!secondRow) return;
+    secondRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const refSpan = secondRow.querySelector('.seg-text-ref');
+    if (refSpan) {
+        segPlayStatus.textContent = 'Now edit second half reference';
+        setTimeout(() => startRefEdit(refSpan, secondSeg, secondRow), 100);
+    }
+}
+
 async function commitRefEdit(seg, newRef, row) {
     const oldRef = seg.matched_ref || '';
     const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    // Normalize short refs: "1:7" → "1:7:1-1:7:N"
+    newRef = _normalizeRef(newRef);
     if (newRef === oldRef) {
         // Same ref confirmed — mark as validated (100% confidence)
         if (seg.confidence < 1.0) {
@@ -1975,6 +2078,7 @@ async function commitRefEdit(seg, newRef, row) {
             const refSpan = row.querySelector('.seg-text-ref');
             if (refSpan) refSpan.textContent = formatRef(oldRef);
         }
+        _chainSplitRefEdit(chapter);
         return;
     }
 
@@ -2017,6 +2121,8 @@ async function commitRefEdit(seg, newRef, row) {
         _pendingOp.targets_after = [snapshotSeg(seg)];
         finalizeOp(chapter, _pendingOp);
     }
+
+    _chainSplitRefEdit(chapter);
 }
 
 /** Update a single .seg-row card in-place (works for both main and error section cards). */
@@ -2037,7 +2143,7 @@ function updateSegCard(row, seg) {
     }
 
     const body = row.querySelector('.seg-text-body');
-    if (body) body.textContent = seg.display_text || seg.matched_text || '(alignment failed)';
+    if (body) body.textContent = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref) || '(alignment failed)';
 
     const durSpan = row.querySelector('.seg-text-duration');
     if (durSpan) {
@@ -2102,6 +2208,7 @@ function buildSavePreviewData() {
         total_operations: totalOps,
         total_batches: batches.length + warningChapters.length,
         chapters_edited: batches.length + warningChapters.length,
+        verses_edited: _countVersesFromBatches(batches),
         op_counts: opCounts,
         fix_kind_counts: fixKindCounts,
     };
@@ -2110,6 +2217,7 @@ function buildSavePreviewData() {
 
 function showSavePreview() {
     if (!segSavePreview.hidden) return;
+    _segSavedPreviewState = { scrollTop: segListEl.scrollTop };
     const data = buildSavePreviewData();
 
     // Render stats
@@ -2155,7 +2263,7 @@ function showSavePreview() {
     });
 }
 
-function hideSavePreview() {
+function hideSavePreview(restoreScroll = true) {
     stopErrorCardAudio();
     segSavePreview.hidden = true;
     segSavePreviewStats.innerHTML = '';
@@ -2175,12 +2283,17 @@ function hideSavePreview() {
     // If pending edits were discarded, reload data to restore clean state
     if (_segDataStale) {
         _segDataStale = false;
+        _segSavedPreviewState = null;
         onSegReciterChange();
+    } else if (restoreScroll && _segSavedPreviewState) {
+        const saved = _segSavedPreviewState;
+        _segSavedPreviewState = null;
+        requestAnimationFrame(() => { segListEl.scrollTop = saved.scrollTop; });
     }
 }
 
 async function confirmSaveFromPreview() {
-    hideSavePreview();
+    hideSavePreview(false);  // defer scroll restore to refreshValidation
     await executeSave();
 }
 
@@ -2502,62 +2615,34 @@ function handleSegKeydown(e) {
 }
 
 
+/** Find the card canvas that's currently in edit mode. */
+function _getEditCanvas() {
+    const row = document.querySelector('.seg-row.seg-edit-target');
+    return row?.querySelector('canvas') || null;
+}
+
 // ---------------------------------------------------------------------------
 // Adjust mode
 // ---------------------------------------------------------------------------
 
+let TRIM_PAD_LEFT = 500;          // ms padding before segment in adjust mode (overridden by config)
+let TRIM_PAD_RIGHT = 500;         // ms padding after segment in adjust mode (overridden by config)
+let TRIM_DIM_ALPHA = 0.45;        // dimming opacity for padded regions (overridden by config)
+let SHOW_BOUNDARY_PHONEMES = true; // show GT/ASR tail phonemes on boundary_adj cards (overridden by config)
+
 /**
- * Enter trim or split mode, ensuring the audio buffer is available.
- * For error cards from different chapters, loads the chapter's audio first.
+ * Enter trim or split mode. Waveforms are drawn from peaks (no audio buffer needed).
  */
-async function enterEditWithBuffer(seg, row, mode) {
+function enterEditWithBuffer(seg, row, mode) {
     if (segEditMode) return;
-    const chapter = seg.chapter || parseInt(segChapterSelect.value);
-    const currentChapter = parseInt(segChapterSelect.value);
-    const isErrorCard = !segListEl.contains(row);
 
-    // Abort in-flight scroll preloads to free browser connections for edit audio fetch
-    if (_scrollAbortController) _scrollAbortController.abort();
+    // Pause audio and disable continuous play so auto-advance doesn't interrupt editing
+    if (!segAudioEl.paused) { segAudioEl.pause(); stopSegAnimation(); }
+    _segContinuousPlay = false;
 
-    const chapterAudio = segAllData?.audio_by_chapter?.[String(chapter)] || '';
-    const isByAyah = seg.audio_url && seg.audio_url !== chapterAudio;
-
-    if (isErrorCard && chapter !== currentChapter) {
-        // Cross-chapter error card: need to load the other chapter's audio
-        const buffer = await ensureChapterAudioBuffer(chapter);
-        if (!buffer) {
-            segPlayStatus.textContent = 'Could not load audio for chapter ' + chapter;
-            return;
-        }
-        // Temporarily swap segAudioBuffer for edit mode
-        row._savedAudioBuffer = segAudioBuffer;
-        row._savedAudioBufferUrl = segAudioBufferUrl;
-        segAudioBuffer = buffer;
-        segAudioBufferUrl = chapterAudio;
-    } else if (isErrorCard && !segAudioBuffer) {
-        // Same chapter but no buffer yet
-        const buffer = await ensureChapterAudioBuffer(chapter);
-        if (buffer) {
-            segAudioBuffer = buffer;
-            segAudioBufferUrl = chapterAudio;
-        }
-    } else if (isByAyah && seg.audio_url !== segAudioBufferUrl) {
-        // by_ayah: different audio per verse — check URL-keyed cache first
-        const cached = segAudioBuffers.get(seg.audio_url);
-        if (cached) {
-            segAudioBuffer = cached;
-            segAudioBufferUrl = seg.audio_url;
-        } else {
-            await decodeSegAudio(seg.audio_url);
-        }
-    } else if (!segAudioBuffer) {
-        // by_surah: no buffer loaded yet — ensure chapter buffer
-        const buffer = await ensureChapterAudioBuffer(chapter);
-        if (buffer) {
-            segAudioBuffer = buffer;
-            segAudioBufferUrl = chapterAudio;
-        }
-    }
+    // Hide play button — edit mode has its own preview controls
+    const playCol = row.querySelector('.seg-play-col');
+    if (playCol) playCol.hidden = true;
 
     // Edit history: snapshot before entering edit mode
     _pendingOp = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment');
@@ -2572,7 +2657,13 @@ async function enterEditWithBuffer(seg, row, mode) {
         segEditMode = null;
         segEditIndex = -1;
         document.body.classList.remove('seg-edit-active');
-        document.querySelector('.seg-row.seg-edit-target')?.classList.remove('seg-edit-target');
+        const targetRow = document.querySelector('.seg-row.seg-edit-target');
+        if (targetRow) {
+            targetRow.querySelector('.seg-edit-inline')?.remove();
+            const acts = targetRow.querySelector('.seg-actions');
+            if (acts) acts.hidden = false;
+            targetRow.classList.remove('seg-edit-target');
+        }
     }
 }
 
@@ -2584,85 +2675,105 @@ function enterTrimMode(seg, row) {
     segEditMode = 'trim';
     segEditIndex = seg.index;
 
-    // Dim other rows via CSS (O(1) instead of per-element mutation)
+    // Dim other rows via CSS
     row.classList.add('seg-edit-target');
     document.body.classList.add('seg-edit-active');
 
-    // Create edit panel
-    const panel = document.createElement('div');
-    panel.className = 'seg-edit-panel';
-    panel.id = 'seg-edit-panel';
+    // Hide normal action buttons, create inline controls
+    const actions = row.querySelector('.seg-actions');
+    if (actions) actions.hidden = true;
 
-    // Expanded waveform canvas
-    const trimCanvas = document.createElement('canvas');
-    trimCanvas.width = 600;
-    trimCanvas.height = 80;
-    trimCanvas.id = 'seg-trim-canvas';
-    panel.appendChild(trimCanvas);
+    const canvas = row.querySelector('canvas');
+    const segLeft = row.querySelector('.seg-left');
 
-    // Time inputs
-    const inputRow = document.createElement('div');
-    inputRow.className = 'seg-trim-inputs';
-    inputRow.innerHTML = `
-        <label>Start (ms): <input type="number" id="trim-start" value="${seg.time_start}" step="10" min="0"></label>
-        <label>End (ms): <input type="number" id="trim-end" value="${seg.time_end}" step="10" min="0"></label>
-        <span class="seg-trim-duration" id="trim-duration">Duration: ${((seg.time_end - seg.time_start) / 1000).toFixed(2)}s</span>
-    `;
-    panel.appendChild(inputRow);
+    // Build inline edit controls (visual-only, no number inputs)
+    const inline = document.createElement('div');
+    inline.className = 'seg-edit-inline';
 
-    // Buttons
+    const durationSpan = document.createElement('span');
+    durationSpan.className = 'seg-edit-duration';
+    durationSpan.textContent = `${((seg.time_end - seg.time_start) / 1000).toFixed(2)}s`;
+
+    const statusSpan = document.createElement('span');
+    statusSpan.className = 'seg-edit-status';
     const btnRow = document.createElement('div');
     btnRow.className = 'seg-edit-buttons';
-    btnRow.innerHTML = `
-        <button class="btn btn-sm btn-confirm" id="trim-confirm">Apply</button>
-        <button class="btn btn-sm btn-cancel" id="trim-cancel">Cancel</button>
-        <button class="btn btn-sm btn-preview" id="trim-preview">Preview</button>
-        <span class="seg-trim-status" id="trim-status"></span>
-    `;
-    panel.appendChild(btnRow);
+    const mkBtn = (text, cls, fn) => { const b = document.createElement('button'); b.className = `btn btn-sm ${cls}`; b.textContent = text; b.addEventListener('click', fn); return b; };
+    btnRow.appendChild(mkBtn('Cancel', 'btn-cancel', exitEditMode));
+    btnRow.appendChild(mkBtn('Preview', 'btn-preview', previewTrimAudio));
+    btnRow.appendChild(mkBtn('Apply', 'btn-confirm', () => confirmTrim(seg)));
+    btnRow.appendChild(durationSpan);
+    btnRow.appendChild(statusSpan);
+    inline.appendChild(btnRow);
 
-    row.after(panel);
+    segLeft.appendChild(inline);
 
-    // Compute context window: extend to adjacent segment boundaries (or audio edges)
+    // Store element refs on canvas for other functions to access
+    canvas._trimEls = { durationSpan, statusSpan };
+
+    // Compute context window: segment + small padding (clamped to adjacent boundaries)
     const chapter = seg.chapter || parseInt(segChapterSelect.value);
     const currentChapter = parseInt(segChapterSelect.value);
     const chapterSegs = (chapter === currentChapter) ? _getChapterSegs() : getChapterSegments(chapter);
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevEnd = segIdx > 0 ? chapterSegs[segIdx - 1].time_end : 0;
+    const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const peaksDuration = segPeaksByAudio?.[audioUrl]?.duration_ms;
     const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
         ? chapterSegs[segIdx + 1].time_start
-        : (segAudioBuffer ? segAudioBuffer.duration * 1000 : seg.time_end + 1000);
-    const windowStart = prevEnd;
-    const windowEnd = nextStart;
-    trimCanvas._trimWindow = { windowStart, windowEnd, currentStart: seg.time_start, currentEnd: seg.time_end };
+        : (peaksDuration || seg.time_end + 1000);
+    const windowStart = Math.max(prevEnd, seg.time_start - TRIM_PAD_LEFT);
+    const windowEnd = Math.min(nextStart, seg.time_end + TRIM_PAD_RIGHT);
+    canvas._trimWindow = { windowStart, windowEnd, currentStart: seg.time_start, currentEnd: seg.time_end, audioUrl };
+    canvas._wfCache = null; // clear cached normal waveform
+    canvas._trimBaseCache = null;
 
-    drawTrimWaveform(trimCanvas);
-    setupTrimDragHandles(trimCanvas, seg);
-
-    document.getElementById('trim-start').addEventListener('input', () => {
-        const val = parseInt(document.getElementById('trim-start').value);
-        if (!isNaN(val)) {
-            trimCanvas._trimWindow.currentStart = val;
-            drawTrimWaveform(trimCanvas);
-            updateTrimDuration();
-        }
-    });
-    document.getElementById('trim-end').addEventListener('input', () => {
-        const val = parseInt(document.getElementById('trim-end').value);
-        if (!isNaN(val)) {
-            trimCanvas._trimWindow.currentEnd = val;
-            drawTrimWaveform(trimCanvas);
-            updateTrimDuration();
-        }
-    });
-
-    document.getElementById('trim-confirm').addEventListener('click', () => confirmTrim(seg));
-    document.getElementById('trim-cancel').addEventListener('click', exitEditMode);
-    document.getElementById('trim-preview').addEventListener('click', previewTrimAudio);
+    drawTrimWaveform(canvas);
+    setupTrimDragHandles(canvas, seg);
 }
 
-function drawTrimWaveform(canvas) {
-    if (!segAudioBuffer) return;
+/** Slice peaks for a time range and resample to `buckets` bins. Returns {maxVals, minVals} or null. */
+function _slicePeaks(audioUrl, startMs, endMs, buckets) {
+    if (!segPeaksByAudio) return null;
+    const pe = segPeaksByAudio[audioUrl];
+    if (!pe?.peaks?.length) return null;
+    const pps = pe.peaks.length / pe.duration_ms;  // peaks per ms
+    const startIdx = Math.max(0, Math.floor(startMs * pps));
+    const endIdx = Math.min(pe.peaks.length, Math.ceil(endMs * pps));
+    const slice = pe.peaks.slice(startIdx, endIdx);
+    if (slice.length === 0) return null;
+    const maxVals = new Float32Array(buckets);
+    const minVals = new Float32Array(buckets);
+    if (slice.length >= buckets) {
+        // More data than pixels: block min/max
+        const blockSize = slice.length / buckets;
+        for (let i = 0; i < buckets; i++) {
+            const from = Math.floor(i * blockSize);
+            const to = Math.min(Math.ceil((i + 1) * blockSize), slice.length);
+            let mx = -1, mn = 1;
+            for (let j = from; j < to; j++) {
+                if (slice[j][1] > mx) mx = slice[j][1];
+                if (slice[j][0] < mn) mn = slice[j][0];
+            }
+            maxVals[i] = mx;
+            minVals[i] = mn;
+        }
+    } else {
+        // Fewer data points than pixels: linear interpolation
+        for (let i = 0; i < buckets; i++) {
+            const fi = (i / buckets) * (slice.length - 1);
+            const lo = Math.floor(fi);
+            const hi = Math.min(lo + 1, slice.length - 1);
+            const t = fi - lo;
+            minVals[i] = slice[lo][0] * (1 - t) + slice[hi][0] * t;
+            maxVals[i] = slice[lo][1] * (1 - t) + slice[hi][1] * t;
+        }
+    }
+    return { maxVals, minVals };
+}
+
+function _ensureTrimBaseCache(canvas) {
+    if (canvas._trimBaseCache) return true;
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
@@ -2672,42 +2783,19 @@ function drawTrimWaveform(canvas) {
     ctx.fillStyle = '#0f0f23';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw waveform for the full window
-    const sampleRate = segAudioBuffer.sampleRate;
-    const rawData = segAudioBuffer.getChannelData(0);
-    const startSample = Math.floor((tw.windowStart / 1000) * sampleRate);
-    const endSample = Math.min(Math.floor((tw.windowEnd / 1000) * sampleRate), rawData.length);
-    const totalSamples = endSample - startSample;
-    if (totalSamples <= 0) return;
+    const audioUrl = tw.audioUrl || '';
+    const data = _slicePeaks(audioUrl, tw.windowStart, tw.windowEnd, width);
+    if (!data) return false;
 
-    const buckets = width;
-    const blockSize = Math.max(1, Math.floor(totalSamples / buckets));
     const scale = height / 2 * 0.9;
 
-    // Filled waveform
     ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const offset = startSample + i * blockSize;
-        let max = -1.0;
-        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
-            const val = rawData[offset + j];
-            if (val > max) max = val;
-        }
-        const x = (i / buckets) * width;
-        const y = centerY - max * scale;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+    for (let i = 0; i < width; i++) {
+        const y = centerY - data.maxVals[i] * scale;
+        if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
     }
-    for (let i = buckets - 1; i >= 0; i--) {
-        const offset = startSample + i * blockSize;
-        let min = 1.0;
-        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
-            const val = rawData[offset + j];
-            if (val < min) min = val;
-        }
-        const x = (i / buckets) * width;
-        const y = centerY - min * scale;
-        ctx.lineTo(x, y);
+    for (let i = width - 1; i >= 0; i--) {
+        ctx.lineTo(i, centerY - data.minVals[i] * scale);
     }
     ctx.closePath();
     ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
@@ -2716,11 +2804,24 @@ function drawTrimWaveform(canvas) {
     ctx.lineWidth = 1;
     ctx.stroke();
 
+    canvas._trimBaseCache = ctx.getImageData(0, 0, width, height);
+    return true;
+}
+
+function drawTrimWaveform(canvas) {
+    if (!_ensureTrimBaseCache(canvas)) return;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const tw = canvas._trimWindow;
+
+    ctx.putImageData(canvas._trimBaseCache, 0, 0);
+
     // Dim outside the trim region
     const startX = ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
     const endX = ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillStyle = `rgba(0, 0, 0, ${TRIM_DIM_ALPHA})`;
     ctx.fillRect(0, 0, startX, height);
     ctx.fillRect(endX, 0, width - endX, height);
 
@@ -2731,7 +2832,6 @@ function drawTrimWaveform(canvas) {
     ctx.moveTo(startX, 0);
     ctx.lineTo(startX, height);
     ctx.stroke();
-    // Handle grip
     ctx.fillStyle = '#4caf50';
     ctx.fillRect(startX - 4, height / 2 - 10, 8, 20);
 
@@ -2748,59 +2848,93 @@ function drawTrimWaveform(canvas) {
 
 function setupTrimDragHandles(canvas, seg) {
     let dragging = null;
+    let didDrag = false;
     const HANDLE_THRESHOLD = 12;
 
-    canvas.addEventListener('mousedown', (e) => {
+    function _getHandleXs() {
+        const tw = canvas._trimWindow, w = canvas.width;
+        return {
+            startX: ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * w,
+            endX: ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * w,
+        };
+    }
+
+    function onMousedown(e) {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-        const tw = canvas._trimWindow;
-        const width = canvas.width;
-        const startX = ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
-        const endX = ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
+        const { startX, endX } = _getHandleXs();
+        didDrag = false;
 
         if (Math.abs(x - startX) < HANDLE_THRESHOLD) dragging = 'start';
         else if (Math.abs(x - endX) < HANDLE_THRESHOLD) dragging = 'end';
         if (dragging) canvas.style.cursor = 'col-resize';
-    });
+    }
 
-    canvas.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
+    function onMousemove(e) {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
         const tw = canvas._trimWindow;
         const width = canvas.width;
+
+        if (!dragging) {
+            const { startX, endX } = _getHandleXs();
+            canvas.style.cursor = (Math.abs(x - startX) < HANDLE_THRESHOLD || Math.abs(x - endX) < HANDLE_THRESHOLD) ? 'col-resize' : 'pointer';
+            return;
+        }
+        didDrag = true;
         const timeAtX = tw.windowStart + (x / width) * (tw.windowEnd - tw.windowStart);
         const snapped = Math.round(timeAtX / 10) * 10;
 
         if (dragging === 'start') {
-            tw.currentStart = Math.max(0, Math.min(snapped, tw.currentEnd - 50));
-            document.getElementById('trim-start').value = tw.currentStart;
+            tw.currentStart = Math.max(tw.windowStart, Math.min(snapped, tw.currentEnd - 50));
         } else {
-            tw.currentEnd = Math.max(tw.currentStart + 50, snapped);
-            document.getElementById('trim-end').value = tw.currentEnd;
+            tw.currentEnd = Math.max(tw.currentStart + 50, Math.min(snapped, tw.windowEnd));
         }
-        updateTrimDuration();
+        updateTrimDuration(canvas);
         drawTrimWaveform(canvas);
-    });
+    }
 
-    canvas.addEventListener('mouseup', () => { dragging = null; canvas.style.cursor = 'col-resize'; });
-    canvas.addEventListener('mouseleave', () => { dragging = null; canvas.style.cursor = 'col-resize'; });
+    function onMouseup(e) {
+        if (!dragging && !didDrag) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const tw = canvas._trimWindow;
+            const timeAtX = tw.windowStart + (x / canvas.width) * (tw.windowEnd - tw.windowStart);
+            _playRange(timeAtX, tw.currentEnd);
+        }
+        dragging = null;
+        canvas.style.cursor = '';
+    }
+    function onMouseleave() { dragging = null; canvas.style.cursor = ''; }
+
+    canvas.addEventListener('mousedown', onMousedown);
+    canvas.addEventListener('mousemove', onMousemove);
+    canvas.addEventListener('mouseup', onMouseup);
+    canvas.addEventListener('mouseleave', onMouseleave);
+
+    canvas._editCleanup = () => {
+        canvas.removeEventListener('mousedown', onMousedown);
+        canvas.removeEventListener('mousemove', onMousemove);
+        canvas.removeEventListener('mouseup', onMouseup);
+        canvas.removeEventListener('mouseleave', onMouseleave);
+    };
 }
 
-function updateTrimDuration() {
-    const s = parseInt(document.getElementById('trim-start').value);
-    const e = parseInt(document.getElementById('trim-end').value);
-    const el = document.getElementById('trim-duration');
-    if (el && !isNaN(s) && !isNaN(e)) {
-        el.textContent = `Duration: ${((e - s) / 1000).toFixed(2)}s`;
-    }
+function updateTrimDuration(canvas) {
+    canvas = canvas || _getEditCanvas();
+    const tw = canvas?._trimWindow;
+    const el = canvas?._trimEls?.durationSpan;
+    if (!tw || !el) return;
+    el.textContent = `${((tw.currentEnd - tw.currentStart) / 1000).toFixed(2)}s`;
 }
 
 function confirmTrim(seg) {
-    const trimStatus = document.getElementById('trim-status');
-    const newStart = parseInt(document.getElementById('trim-start').value);
-    const newEnd = parseInt(document.getElementById('trim-end').value);
-    if (isNaN(newStart) || isNaN(newEnd) || newStart >= newEnd) {
+    const canvas = _getEditCanvas();
+    const tw = canvas?._trimWindow;
+    const trimStatus = canvas?._trimEls?.statusSpan || null;
+    const newStart = tw?.currentStart;
+    const newEnd = tw?.currentEnd;
+    if (newStart == null || newEnd == null || newStart >= newEnd) {
         if (trimStatus) trimStatus.textContent = 'Invalid time range';
         return;
     }
@@ -2826,6 +2960,7 @@ function confirmTrim(seg) {
     // Update in-memory
     seg.time_start = newStart;
     seg.time_end = newEnd;
+    seg.confidence = 1.0;
     markDirty(chapter, undefined, true);
 
     // Edit history: record applied state
@@ -2856,27 +2991,72 @@ function confirmTrim(seg) {
 let _previewStopHandler = null;
 
 function previewTrimAudio() {
-    // Remove any previous preview handler
+    const canvas = _getEditCanvas();
+    const tw = canvas?._trimWindow;
+    if (!tw) return;
+    _playRange(tw.currentStart, tw.currentEnd);
+}
+
+
+let _playRangeRAF = null;
+
+function _playRange(startMs, endMs) {
     if (_previewStopHandler) {
         segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
         _previewStopHandler = null;
     }
-    const start = parseInt(document.getElementById('trim-start').value) / 1000;
-    const end = parseInt(document.getElementById('trim-end').value) / 1000;
-    if (isNaN(start) || isNaN(end)) return;
+    if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
+    const start = startMs / 1000;
+    const canvas = _getEditCanvas();
+
+    // Map playhead to waveform coordinate space
+    let wfStart, wfEnd;
+    if (canvas?._trimWindow) { wfStart = canvas._trimWindow.windowStart; wfEnd = canvas._trimWindow.windowEnd; }
+    else if (canvas?._splitData) { wfStart = canvas._splitData.seg.time_start; wfEnd = canvas._splitData.seg.time_end; }
+    else { wfStart = startMs; wfEnd = endMs; }
+
+    const cleanup = () => {
+        if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
+        if (canvas?._splitData) drawSplitWaveform(canvas);
+        else if (canvas?._trimWindow) drawTrimWaveform(canvas);
+    };
+
+    // Snapshot the current overlaid waveform once for playhead animation
+    let _playRangeSnapshot = null;
+    if (canvas) {
+        // Ensure the overlaid waveform (with handles/tint) is drawn before snapshot
+        if (canvas._splitData) drawSplitWaveform(canvas);
+        else if (canvas._trimWindow) drawTrimWaveform(canvas);
+        _playRangeSnapshot = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    }
+
+    function animatePlayhead() {
+        if (!canvas || segAudioEl.paused) return;
+        const curMs = segAudioEl.currentTime * 1000;
+        if (curMs >= endMs) {
+            segAudioEl.pause();
+            cleanup();
+            return;
+        }
+        if (_playRangeSnapshot) {
+            canvas.getContext('2d').putImageData(_playRangeSnapshot, 0, 0);
+        }
+        if (curMs >= wfStart && curMs <= wfEnd) {
+            const ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
+            const x = ((curMs - wfStart) / (wfEnd - wfStart)) * w;
+            ctx.strokeStyle = '#f72585'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+            ctx.fillStyle = '#f72585';
+            ctx.beginPath(); ctx.moveTo(x - 4, 0); ctx.lineTo(x + 4, 0); ctx.lineTo(x, 6); ctx.closePath(); ctx.fill();
+        }
+        _playRangeRAF = requestAnimationFrame(animatePlayhead);
+    }
 
     const doPlay = () => {
         segAudioEl.currentTime = start;
         segAudioEl.playbackRate = parseFloat(segSpeedSelect.value);
         segAudioEl.play();
-        _previewStopHandler = () => {
-            if (segAudioEl.currentTime >= end) {
-                segAudioEl.pause();
-                segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
-                _previewStopHandler = null;
-            }
-        };
-        segAudioEl.addEventListener('timeupdate', _previewStopHandler);
+        _playRangeRAF = requestAnimationFrame(animatePlayhead);
     };
 
     const editChapter = segChapterSelect.value ? parseInt(segChapterSelect.value) : null;
@@ -2891,6 +3071,16 @@ function previewTrimAudio() {
     }
 }
 
+function previewSplitAudio(side) {
+    const canvas = _getEditCanvas();
+    const sd = canvas?._splitData;
+    if (!sd) return;
+    const splitTime = sd.currentSplit;
+    _playRange(
+        side === 'left' ? sd.seg.time_start : splitTime,
+        side === 'left' ? splitTime : sd.seg.time_end
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Split mode
@@ -2904,137 +3094,117 @@ function enterSplitMode(seg, row) {
     segEditMode = 'split';
     segEditIndex = seg.index;
 
-    // Dim other rows via CSS (O(1) instead of per-element mutation)
+    // Dim other rows via CSS
     row.classList.add('seg-edit-target');
     document.body.classList.add('seg-edit-active');
 
-    const panel = document.createElement('div');
-    panel.className = 'seg-edit-panel';
-    panel.id = 'seg-edit-panel';
+    // Hide normal action buttons, create inline controls
+    const actions = row.querySelector('.seg-actions');
+    if (actions) actions.hidden = true;
 
-    const splitCanvas = document.createElement('canvas');
-    splitCanvas.width = 600;
-    splitCanvas.height = 80;
-    splitCanvas.id = 'seg-split-canvas';
-    panel.appendChild(splitCanvas);
+    const canvas = row.querySelector('canvas');
+    const segLeft = row.querySelector('.seg-left');
 
     const defaultSplit = Math.round((seg.time_start + seg.time_end) / 2);
 
-    const inputRow = document.createElement('div');
-    inputRow.className = 'seg-split-inputs';
-    inputRow.innerHTML = `
-        <label>Split at (ms): <input type="number" id="split-time" value="${defaultSplit}" step="10"
-            min="${seg.time_start + 50}" max="${seg.time_end - 50}"></label>
-        <span class="seg-split-info" id="split-info">
-            Left: ${((defaultSplit - seg.time_start) / 1000).toFixed(2)}s |
-            Right: ${((seg.time_end - defaultSplit) / 1000).toFixed(2)}s
-        </span>
-    `;
-    panel.appendChild(inputRow);
+    // Build inline edit controls (visual-only, no number inputs)
+    const inline = document.createElement('div');
+    inline.className = 'seg-edit-inline';
+
+    const infoSpan = document.createElement('span');
+    infoSpan.className = 'seg-edit-info';
+    infoSpan.textContent = `L ${((defaultSplit - seg.time_start) / 1000).toFixed(2)}s | R ${((seg.time_end - defaultSplit) / 1000).toFixed(2)}s`;
 
     const btnRow = document.createElement('div');
     btnRow.className = 'seg-edit-buttons';
-    btnRow.innerHTML = `
-        <button class="btn btn-sm btn-confirm" id="split-confirm">Split</button>
-        <button class="btn btn-sm btn-cancel" id="split-cancel">Cancel</button>
-    `;
-    panel.appendChild(btnRow);
+    const mkBtn = (text, cls, fn) => { const b = document.createElement('button'); b.className = `btn btn-sm ${cls}`; b.textContent = text; b.addEventListener('click', fn); return b; };
+    btnRow.appendChild(mkBtn('Cancel', 'btn-cancel', exitEditMode));
+    btnRow.appendChild(mkBtn('Play Left', 'btn-preview', () => previewSplitAudio('left')));
+    btnRow.appendChild(mkBtn('Play Right', 'btn-preview', () => previewSplitAudio('right')));
+    btnRow.appendChild(mkBtn('Split', 'btn-confirm', () => confirmSplit(seg)));
+    btnRow.appendChild(infoSpan);
+    inline.appendChild(btnRow);
 
-    row.after(panel);
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    segLeft.appendChild(inline);
 
-    splitCanvas._splitData = { seg, currentSplit: defaultSplit };
-    drawSplitWaveform(splitCanvas);
-    setupSplitDragHandle(splitCanvas, seg);
+    // Store element refs on canvas
+    canvas._splitEls = { infoSpan };
+    canvas._wfCache = null; // clear cached normal waveform
 
-    document.getElementById('split-time').addEventListener('input', () => {
-        const val = parseInt(document.getElementById('split-time').value);
-        if (!isNaN(val)) {
-            splitCanvas._splitData.currentSplit = val;
-            drawSplitWaveform(splitCanvas);
-            updateSplitInfo(seg, val);
-        }
-    });
-
-    document.getElementById('split-confirm').addEventListener('click', () => confirmSplit(seg));
-    document.getElementById('split-cancel').addEventListener('click', exitEditMode);
+    const chapter = seg.chapter || parseInt(segChapterSelect.value);
+    const splitAudioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    canvas._splitData = { seg, currentSplit: defaultSplit, audioUrl: splitAudioUrl };
+    canvas._splitBaseCache = null;
+    drawSplitWaveform(canvas);
+    setupSplitDragHandle(canvas, seg);
 }
 
-function drawSplitWaveform(canvas) {
+function _ensureSplitBaseCache(canvas) {
+    if (canvas._splitBaseCache) return true;
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
-    ctx.fillStyle = '#0f0f23';
-    ctx.fillRect(0, 0, width, height);
-    if (!segAudioBuffer) {
-        ctx.fillStyle = '#888';
-        ctx.font = '14px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('No audio loaded', width / 2, height / 2);
-        return;
-    }
     const centerY = height / 2;
     const sd = canvas._splitData;
     const seg = sd.seg;
 
-    const sampleRate = segAudioBuffer.sampleRate;
-    const rawData = segAudioBuffer.getChannelData(0);
-    const startSample = Math.floor((seg.time_start / 1000) * sampleRate);
-    const endSample = Math.min(Math.floor((seg.time_end / 1000) * sampleRate), rawData.length);
-    const totalSamples = endSample - startSample;
-    if (totalSamples <= 0) return;
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, width, height);
 
-    const buckets = width;
-    const blockSize = Math.max(1, Math.floor(totalSamples / buckets));
+    const audioUrl = sd.audioUrl || '';
+    const data = _slicePeaks(audioUrl, seg.time_start, seg.time_end, width);
+    if (!data) {
+        ctx.fillStyle = '#888';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('No waveform data', width / 2, height / 2);
+        return false;
+    }
+
     const scale = height / 2 * 0.9;
 
-    // Compute max/min per bucket
-    const maxVals = new Float32Array(buckets);
-    const minVals = new Float32Array(buckets);
-    for (let i = 0; i < buckets; i++) {
-        const offset = startSample + i * blockSize;
-        let mx = -1.0, mn = 1.0;
-        for (let j = 0; j < blockSize && offset + j < rawData.length; j++) {
-            const val = rawData[offset + j];
-            if (val > mx) mx = val;
-            if (val < mn) mn = val;
-        }
-        maxVals[i] = mx;
-        minVals[i] = mn;
-    }
-
-    const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * width;
-
-    // Draw left half (blue tint)
+    // Filled waveform
     ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const x = (i / buckets) * width;
-        const y = centerY - maxVals[i] * scale;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    for (let i = 0; i < width; i++) {
+        const y = centerY - data.maxVals[i] * scale;
+        if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
     }
-    for (let i = buckets - 1; i >= 0; i--) {
-        const x = (i / buckets) * width;
-        const y = centerY - minVals[i] * scale;
-        ctx.lineTo(x, y);
+    for (let i = width - 1; i >= 0; i--) {
+        ctx.lineTo(i, centerY - data.minVals[i] * scale);
     }
     ctx.closePath();
     ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
     ctx.fill();
 
-    // Tint right half differently
-    ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
-    ctx.fillRect(splitX, 0, width - splitX, height);
-
     // Waveform outline
     ctx.strokeStyle = '#4361ee';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const x = (i / buckets) * width;
-        const y = centerY - maxVals[i] * scale;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    for (let i = 0; i < width; i++) {
+        const y = centerY - data.maxVals[i] * scale;
+        if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
     }
     ctx.stroke();
+
+    canvas._splitBaseCache = ctx.getImageData(0, 0, width, height);
+    return true;
+}
+
+function drawSplitWaveform(canvas) {
+    if (!_ensureSplitBaseCache(canvas)) return;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const sd = canvas._splitData;
+    const seg = sd.seg;
+
+    ctx.putImageData(canvas._splitBaseCache, 0, 0);
+
+    const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * width;
+
+    // Tint right half differently
+    ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
+    ctx.fillRect(splitX, 0, width - splitX, height);
 
     // Split line (yellow)
     ctx.strokeStyle = '#ffeb3b';
@@ -3061,45 +3231,82 @@ function drawSplitWaveform(canvas) {
 
 function setupSplitDragHandle(canvas, seg) {
     let dragging = false;
+    let didDrag = false;
 
-    canvas.addEventListener('mousedown', (e) => {
+    function onMousedown(e) {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
         const sd = canvas._splitData;
         const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * canvas.width;
+        didDrag = false;
         if (Math.abs(x - splitX) < 15) {
             dragging = true;
             canvas.style.cursor = 'col-resize';
         }
-    });
+    }
 
-    canvas.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
+    function onMousemove(e) {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
         const sd = canvas._splitData;
+        const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * canvas.width;
+
+        if (!dragging) {
+            // Hover cursor: col-resize near handle, pointer elsewhere
+            canvas.style.cursor = Math.abs(x - splitX) < 15 ? 'col-resize' : 'pointer';
+            return;
+        }
+        didDrag = true;
         const timeAtX = seg.time_start + (x / canvas.width) * (seg.time_end - seg.time_start);
         const snapped = Math.round(timeAtX / 10) * 10;
         sd.currentSplit = Math.max(seg.time_start + 50, Math.min(snapped, seg.time_end - 50));
-        document.getElementById('split-time').value = sd.currentSplit;
-        updateSplitInfo(seg, sd.currentSplit);
+        updateSplitInfo(canvas, seg, sd.currentSplit);
         drawSplitWaveform(canvas);
-    });
+    }
 
-    canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'col-resize'; });
-    canvas.addEventListener('mouseleave', () => { dragging = false; canvas.style.cursor = 'col-resize'; });
+    function onMouseup(e) {
+        if (!dragging && !didDrag) {
+            // Click outside drag handle — play from click position
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const sd = canvas._splitData;
+            const timeAtX = seg.time_start + (x / canvas.width) * (seg.time_end - seg.time_start);
+            if (timeAtX < sd.currentSplit) {
+                _playRange(timeAtX, sd.currentSplit);
+            } else {
+                _playRange(timeAtX, seg.time_end);
+            }
+        }
+        dragging = false;
+        canvas.style.cursor = '';
+    }
+    function onMouseleave() { dragging = false; canvas.style.cursor = ''; }
+
+    canvas.addEventListener('mousedown', onMousedown);
+    canvas.addEventListener('mousemove', onMousemove);
+    canvas.addEventListener('mouseup', onMouseup);
+    canvas.addEventListener('mouseleave', onMouseleave);
+
+    canvas._editCleanup = () => {
+        canvas.removeEventListener('mousedown', onMousedown);
+        canvas.removeEventListener('mousemove', onMousemove);
+        canvas.removeEventListener('mouseup', onMouseup);
+        canvas.removeEventListener('mouseleave', onMouseleave);
+    };
 }
 
-function updateSplitInfo(seg, splitTime) {
-    const el = document.getElementById('split-info');
+function updateSplitInfo(canvas, seg, splitTime) {
+    canvas = canvas || _getEditCanvas();
+    const el = canvas?._splitEls?.infoSpan;
     if (el) {
-        el.textContent = `Left: ${((splitTime - seg.time_start) / 1000).toFixed(2)}s | Right: ${((seg.time_end - splitTime) / 1000).toFixed(2)}s`;
+        el.textContent = `L ${((splitTime - seg.time_start) / 1000).toFixed(2)}s | R ${((seg.time_end - splitTime) / 1000).toFixed(2)}s`;
     }
 }
 
 function confirmSplit(seg) {
-    const splitTime = parseInt(document.getElementById('split-time').value);
-    if (isNaN(splitTime) || splitTime <= seg.time_start || splitTime >= seg.time_end) {
+    const canvas = _getEditCanvas();
+    const splitTime = canvas?._splitData?.currentSplit;
+    if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
         segPlayStatus.textContent = 'Invalid split point';
         return;
     }
@@ -3118,10 +3325,6 @@ function confirmSplit(seg) {
         segment_uid: crypto.randomUUID(),
         index: seg.index + 1,
         time_start: splitTime,
-        matched_ref: '',
-        matched_text: '',
-        display_text: '',
-        confidence: 0,
     };
 
     // Edit history: record applied state with new UIDs
@@ -3154,12 +3357,23 @@ function confirmSplit(seg) {
     computeSilenceAfter();
     exitEditMode();
     applyVerseFilterAndRender();
-    invalidateLoadedErrorCards();
+    refreshOpenAccordionCards();
 
     // Edit history: finalize after re-render
     if (splitOp) finalizeOp(chapter, splitOp);
 
-    segPlayStatus.textContent = 'Segment split (unsaved)';
+    segPlayStatus.textContent = 'Split — edit first half reference, then second';
+
+    // Chain ref editing: first half → second half
+    _splitChainUid = secondHalf.segment_uid;
+    const firstRow = segListEl.querySelector(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
+    if (firstRow) {
+        firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const refSpan = firstRow.querySelector('.seg-text-ref');
+        if (refSpan) {
+            startRefEdit(refSpan, firstHalf, firstRow);
+        }
+    }
 }
 
 
@@ -3168,7 +3382,7 @@ function confirmSplit(seg) {
 // ---------------------------------------------------------------------------
 
 /** Merge a segment with its previous or next neighbour in the same chapter. */
-function mergeAdjacent(seg, direction) {
+async function mergeAdjacent(seg, direction) {
     const chapter = seg.chapter || parseInt(segChapterSelect.value);
     const currentChapter = parseInt(segChapterSelect.value);
 
@@ -3197,9 +3411,7 @@ function mergeAdjacent(seg, direction) {
     const firstAudio = first.audio_url || '';
     const secondAudio = second.audio_url || '';
     if (firstAudio !== secondAudio) {
-        const msg = 'Cannot merge segments from different audio clips. Reassign references instead.';
-        segPlayStatus.textContent = msg;
-        alert(msg);
+        // Safety guard — buttons should already be disabled for different audio files
         return;
     }
 
@@ -3212,6 +3424,22 @@ function mergeAdjacent(seg, direction) {
         mergedRef = `${s}-${e}`;
     }
 
+    // Resolve text from merged ref (avoids duplicate words at overlap boundaries)
+    let mergedText = [first.matched_text, second.matched_text].filter(Boolean).join(' ');
+    let mergedDisplay = [first.display_text, second.display_text].filter(Boolean).join(' ');
+    if (mergedRef) {
+        try {
+            const resp = await fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(mergedRef)}`);
+            const data = await resp.json();
+            if (data.text) {
+                mergedText = data.text;
+                mergedDisplay = data.display_text || data.text;
+            }
+        } catch (e) {
+            console.warn('Failed to resolve merged ref, using concatenated text:', e);
+        }
+    }
+
     const merged = {
         ...first,
         segment_uid: crypto.randomUUID(),
@@ -3219,8 +3447,8 @@ function mergeAdjacent(seg, direction) {
         time_start: first.time_start,
         time_end: second.time_end,
         matched_ref: mergedRef,
-        matched_text: [first.matched_text, second.matched_text].filter(Boolean).join(' '),
-        display_text: [first.display_text, second.display_text].filter(Boolean).join(' '),
+        matched_text: mergedText,
+        display_text: mergedDisplay,
         confidence: 1.0,
     };
 
@@ -3249,7 +3477,7 @@ function mergeAdjacent(seg, direction) {
     }
     computeSilenceAfter();
     applyVerseFilterAndRender();
-    invalidateLoadedErrorCards();
+    refreshOpenAccordionCards();
 
     // Edit history: finalize after re-render
     finalizeOp(chapter, mergeOp);
@@ -3297,13 +3525,6 @@ function deleteSegment(seg, row) {
 
     markDirty(chapter, undefined, true);
 
-
-    // Remove the error card wrapper from DOM if applicable
-    if (row) {
-        const wrapper = row.closest('.val-card-wrapper');
-        if (wrapper) wrapper.remove();
-    }
-
     // If deleted segment's chapter matches current chapter, re-render
     if (chapter === currentChapter && segData) {
         segData.segments = getChapterSegments(chapter);
@@ -3311,7 +3532,7 @@ function deleteSegment(seg, row) {
 
     computeSilenceAfter();
     applyVerseFilterAndRender();
-    invalidateLoadedErrorCards();
+    refreshOpenAccordionCards();
 
     // Edit history: finalize after re-render
     finalizeOp(chapter, deleteOp);
@@ -3328,29 +3549,42 @@ function exitEditMode() {
     // Discard any pending edit history op (user cancelled)
     _pendingOp = null;
 
-    // Restore audio buffer if it was swapped for cross-chapter editing
-    const panel = document.getElementById('seg-edit-panel');
-    if (panel) {
-        const editRow = panel.previousElementSibling;
-        if (editRow?._savedAudioBuffer !== undefined) {
-            segAudioBuffer = editRow._savedAudioBuffer;
-            segAudioBufferUrl = editRow._savedAudioBufferUrl;
-            delete editRow._savedAudioBuffer;
-            delete editRow._savedAudioBufferUrl;
+    // Restore the edit-target card to normal state
+    const editRow = document.querySelector('.seg-row.seg-edit-target');
+    if (editRow) {
+        // Remove inline edit controls, restore normal action buttons and play column
+        editRow.querySelector('.seg-edit-inline')?.remove();
+        const actions = editRow.querySelector('.seg-actions');
+        if (actions) actions.hidden = false;
+        const playCol = editRow.querySelector('.seg-play-col');
+        if (playCol) playCol.hidden = false;
+
+        // Clean up canvas edit state
+        const canvas = editRow.querySelector('canvas');
+        if (canvas) {
+            canvas._editCleanup?.();
+            delete canvas._trimWindow; delete canvas._splitData;
+            delete canvas._trimEls; delete canvas._splitEls;
+            delete canvas._editCleanup;
+            canvas._wfCache = null;
+            canvas.style.cursor = '';
+            // Redraw normal waveform (only needed on cancel — apply re-renders the list)
+            const seg = resolveSegFromRow(editRow);
+            if (seg) drawWaveformFromPeaksForSeg(canvas, seg, seg.chapter);
         }
-        panel.remove();
     }
 
     segEditMode = null;
     segEditIndex = -1;
-    // Stop any preview playback
+    // Stop any preview playback and animation
+    if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
     if (_previewStopHandler) {
         segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
         _previewStopHandler = null;
     }
     // Un-dim rows (O(1) — remove container class + target marker)
     document.body.classList.remove('seg-edit-active');
-    document.querySelector('.seg-row.seg-edit-target')?.classList.remove('seg-edit-target');
+    editRow?.classList.remove('seg-edit-target');
 }
 
 function applyVerseFilterAndRender() {
@@ -3442,36 +3676,25 @@ function clearAllSegFilters() {
 function captureValPanelState(targetEl) {
     const state = {};
     targetEl.querySelectorAll('details[data-category]').forEach(d => {
-        const cat = d.getAttribute('data-category');
-        const cardsDiv = d.querySelector('.val-cards-container');
-        state[cat] = {
-            open: d.open,
-            loaded: cardsDiv && !cardsDiv.hidden && cardsDiv.children.length > 0
-        };
+        state[d.getAttribute('data-category')] = { open: d.open };
     });
     return state;
 }
 
 function restoreValPanelState(targetEl, state) {
     targetEl.querySelectorAll('details[data-category]').forEach(d => {
-        const cat = d.getAttribute('data-category');
-        const s = state[cat];
-        if (!s) return;
-        if (s.open) d.open = true;
-        if (s.loaded) {
-            const loadBtn = d.querySelector('.val-load-all-btn');
-            if (loadBtn) loadBtn.click();
-        }
+        const s = state[d.getAttribute('data-category')];
+        if (s && s.open) d.open = true;  // toggle handler renders badges + cards
     });
 }
 
-/** Close all accordion cards except the given one across both validation panels. */
+/** Close all accordions except the given one across both validation panels. */
 function _collapseAccordionExcept(exceptDetails) {
     [segValidationEl, segValidationGlobalEl].forEach(panel => {
         if (!panel) return;
         panel.querySelectorAll('details[data-category]').forEach(d => {
             if (d === exceptDetails) return;
-            if (d.open) d.open = false;  // toggle handler cleans up cards
+            if (d.open) d.open = false;  // toggle handler hides badges + clears cards
         });
     });
 }
@@ -3480,7 +3703,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
     targetEl.innerHTML = '';
     if (!data) { targetEl.hidden = true; return; }
 
-    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, oversegmented: os, cross_verse: cv, audio_bleeding: ab } = data;
+    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, boundary_adj: ba, cross_verse: cv, audio_bleeding: ab } = data;
 
     if (chapter !== null) {
         errs           = (errs           || []).filter(i => i.chapter === chapter);
@@ -3488,12 +3711,12 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         mw             = (mw             || []).filter(i => i.chapter === chapter);
         failed         = (failed         || []).filter(i => i.chapter === chapter);
         low_confidence = (low_confidence || []).filter(i => i.chapter === chapter);
-        os             = (os             || []).filter(i => i.chapter === chapter);
+        ba             = (ba             || []).filter(i => i.chapter === chapter);
         cv             = (cv             || []).filter(i => i.chapter === chapter);
         ab             = (ab             || []).filter(i => i.chapter === chapter);
     }
     const hasAny = (errs && errs.length > 0) || (mv && mv.length > 0) || (mw && mw.length > 0)
-        || (failed && failed.length > 0) || (low_confidence && low_confidence.length > 0) || (os && os.length > 0)
+        || (failed && failed.length > 0) || (low_confidence && low_confidence.length > 0) || (ba && ba.length > 0)
         || (cv && cv.length > 0) || (ab && ab.length > 0);
     if (!hasAny) {
         targetEl.hidden = true;
@@ -3547,7 +3770,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             onClick: i => jumpToSegment(i.chapter, i.seg_index)
         },
         {
-            name: 'Potentially Oversegmented', items: os, type: 'oversegmented', countClass: 'has-warnings',
+            name: 'May Require Boundary Adjustment', items: ba, type: 'boundary_adj', countClass: 'has-warnings',
             getLabel: i => i.ref, getTitle: i => i.verse_key, btnClass: 'val-conf-mid',
             onClick: i => jumpToSegment(i.chapter, i.seg_index)
         },
@@ -3570,40 +3793,17 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
 
         const details = document.createElement('details');
         details.setAttribute('data-category', cat.type);
+        details._valCatType = cat.type;
+        details._valCatItems = cat.items;
         const summary = document.createElement('summary');
         summary.innerHTML = `${cat.name} <span class="val-count ${cat.countClass}">${cat.items.length}</span>`;
 
-        // Load All button
-        const loadBtn = document.createElement('button');
-        loadBtn.className = 'val-load-all-btn';
-        loadBtn.textContent = 'Load All';
-        loadBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            const cardsDiv = details.querySelector('.val-cards-container');
-            if (!cardsDiv) return;
-            if (cardsDiv.children.length > 0) {
-                // Hide: clear cards and detach scroll preload
-                _detachScrollPreload(cardsDiv);
-                cardsDiv.innerHTML = '';
-                cardsDiv.hidden = true;
-                loadBtn.textContent = 'Load All';
-            } else {
-                // Collapse all other accordions first
-                _collapseAccordionExcept(details);
-                renderCategoryCards(cat.type, cat.items, cardsDiv);
-                cardsDiv.hidden = false;
-                loadBtn.textContent = 'Hide All';
-                details.open = true;
-            }
-        });
-        summary.appendChild(loadBtn);
-
         details.appendChild(summary);
 
-        // Button list
+        // Button list (hidden until accordion opens)
         const itemsDiv = document.createElement('div');
         itemsDiv.className = 'val-items';
+        itemsDiv.hidden = true;
         cat.items.forEach(issue => {
             const btn = document.createElement('button');
             const cls = typeof cat.btnClass === 'function' ? cat.btnClass(issue) : cat.btnClass;
@@ -3615,29 +3815,24 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         });
         details.appendChild(itemsDiv);
 
-        // Cards container (hidden initially)
+        // Cards container (hidden until accordion opens)
         const cardsDiv = document.createElement('div');
         cardsDiv.className = 'val-cards-container';
         cardsDiv.hidden = true;
         details.appendChild(cardsDiv);
 
-        // Mutual exclusivity: opening this accordion closes all others;
-        // closing clears loaded cards and aborts in-flight audio fetches
+        // Opening shows badges + cards; closing hides both and clears cards
         details.addEventListener('toggle', () => {
             if (details.open) {
                 _collapseAccordionExcept(details);
+                itemsDiv.hidden = false;
+                renderCategoryCards(cat.type, cat.items, cardsDiv);
+                cardsDiv.hidden = false;
             } else {
-                const cd = details.querySelector('.val-cards-container');
-                if (cd) {
-                    _detachScrollPreload(cd);
-                    if (cd.children.length > 0) {
-                        cd.innerHTML = '';
-                        cd.hidden = true;
-                        const btn = details.querySelector('.val-load-all-btn');
-                        if (btn) btn.textContent = 'Load All';
-                    }
-                }
-                if (_scrollAbortController) _scrollAbortController.abort();
+                if (_cardRenderRafId) { cancelAnimationFrame(_cardRenderRafId); _cardRenderRafId = null; }
+                itemsDiv.hidden = true;
+                cardsDiv.innerHTML = '';
+                cardsDiv.hidden = true;
             }
         });
 
@@ -3850,6 +4045,12 @@ async function refreshValidation() {
         } else if (segDisplayedSegments) {
             renderSegList(segDisplayedSegments);
         }
+        // Restore scroll position if returning from save preview
+        if (_segSavedPreviewState) {
+            const saved = _segSavedPreviewState;
+            _segSavedPreviewState = null;
+            requestAnimationFrame(() => { segListEl.scrollTop = saved.scrollTop; });
+        }
     } catch (e) {
         console.error('Error refreshing validation:', e);
     }
@@ -4028,63 +4229,37 @@ function _startValCardAnimation(btn, seg) {
     if (!canvas) return;
 
     const chapter = seg.chapter;
-    const currentChapter = parseInt(segChapterSelect.value);
-
-    function getBuffer() {
-        const chapterAudio = segAllData?.audio_by_chapter?.[String(chapter)] || '';
-        if (seg.audio_url && seg.audio_url !== chapterAudio) {
-            // by_ayah: keyed by URL
-            return segAudioBuffers.get(seg.audio_url) || null;
-        }
-        // by_surah: try current chapter buffer, then per-chapter cache
-        if (chapter === currentChapter) return segAudioBuffer;
-        return segAudioBuffers.get(chapter) || null;
-    }
+    const segAudioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
 
     function frame() {
         if (valCardPlayingBtn !== btn) {
-            // Stopped — redraw static waveform only if buffer available
-            const buf = getBuffer();
-            if (buf && canvas) {
-                const saved = segAudioBuffer;
-                segAudioBuffer = buf;
-                drawSegmentWaveform(canvas, seg.time_start, seg.time_end);
-                segAudioBuffer = saved;
-            }
+            // Stopped — redraw static waveform from peaks
+            if (canvas) drawWaveformFromPeaksForSeg(canvas, seg, chapter);
             valCardAnimId = null;
             valCardAnimSeg = null;
             return;
         }
-        const buf = getBuffer();
         const timeMs = getValCardAudio().currentTime * 1000;
-        const saved = segAudioBuffer;
-        if (buf) {
-            segAudioBuffer = buf;
-        } else if (!canvas._wfCache) {
-            // No decoded buffer — snapshot peaks-drawn waveform as cache
-            // so drawSegPlayhead can restore it before overlaying the playhead
+        if (!canvas._wfCache) {
+            // Snapshot peaks-drawn waveform as cache for drawSegPlayhead
             const cacheKey = `${seg.time_start}:${seg.time_end}`;
             canvas._wfCache = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
             canvas._wfCacheKey = cacheKey;
         }
-        drawSegPlayhead(canvas, seg.time_start, seg.time_end, timeMs);
-        segAudioBuffer = saved;
+        drawSegPlayhead(canvas, seg.time_start, seg.time_end, timeMs, segAudioUrl);
         valCardAnimId = requestAnimationFrame(frame);
     }
     valCardAnimId = requestAnimationFrame(frame);
 }
 
-function playErrorCardAudio(seg, btn) {
+function playErrorCardAudio(seg, btn, seekToMs) {
     const audio = getValCardAudio();
 
-    // If already playing this button, stop
-    if (valCardPlayingBtn === btn && !audio.paused) {
+    // If already playing this button, stop (unless seeking to a specific position)
+    if (valCardPlayingBtn === btn && !audio.paused && seekToMs == null) {
         stopErrorCardAudio();
         return;
     }
-
-    // Abort in-flight scroll preloads to free browser connections for playback
-    if (_scrollAbortController) _scrollAbortController.abort();
 
     // Pause main audio if playing
     if (!segAudioEl.paused) {
@@ -4099,7 +4274,7 @@ function playErrorCardAudio(seg, btn) {
     const audioUrl = seg.audio_url || (segAllData && segAllData.audio_by_chapter && segAllData.audio_by_chapter[seg.chapter]) || '';
     if (!audioUrl) return;
 
-    const startSec = (seg.time_start || 0) / 1000;
+    const seekSec = seekToMs != null ? seekToMs / 1000 : (seg.time_start || 0) / 1000;
     const endSec = (seg.time_end || 0) / 1000;
 
     if (audio.src !== audioUrl && audio.getAttribute('data-url') !== audioUrl) {
@@ -4107,13 +4282,13 @@ function playErrorCardAudio(seg, btn) {
         audio.setAttribute('data-url', audioUrl);
         audio.addEventListener('loadedmetadata', function onLoad() {
             audio.removeEventListener('loadedmetadata', onLoad);
-            audio.currentTime = startSec;
+            audio.currentTime = seekSec;
             valCardStopTime = endSec;
             audio.playbackRate = parseFloat(segSpeedSelect.value);
             audio.play();
         });
     } else {
-        audio.currentTime = startSec;
+        audio.currentTime = seekSec;
         valCardStopTime = endSec;
         audio.playbackRate = parseFloat(segSpeedSelect.value);
         audio.play();
@@ -4125,18 +4300,18 @@ function playErrorCardAudio(seg, btn) {
 }
 
 function invalidateLoadedErrorCards() {
-    if (_scrollAbortController) _scrollAbortController.abort();
-    document.querySelectorAll('.val-cards-container').forEach(container => {
-        if (container.children.length > 0) {
-            _detachScrollPreload(container);
-            container.innerHTML = '';
-            container.hidden = true;
-            const details = container.closest('details');
-            if (details) {
-                const loadBtn = details.querySelector('.val-load-all-btn');
-                if (loadBtn) loadBtn.textContent = 'Load All';
-            }
-        }
+    document.querySelectorAll('details[data-category]').forEach(details => {
+        if (details.open) details.open = false;  // toggle handler clears cards + hides badges
+    });
+}
+
+/** Re-render cards for any currently open accordion (preserves open state after structural edits). */
+function refreshOpenAccordionCards() {
+    document.querySelectorAll('details[data-category]').forEach(details => {
+        if (!details.open) return;
+        const cardsDiv = details.querySelector('.val-cards-container');
+        if (!cardsDiv || !details._valCatItems) return;
+        renderCategoryCards(details._valCatType, details._valCatItems, cardsDiv);
     });
 }
 
@@ -4146,13 +4321,14 @@ function invalidateLoadedErrorCards() {
  * @param {object} options — { isContext, contextLabel }
  */
 function renderErrorCard(seg, options = {}) {
-    const { isContext = false, contextLabel = '' } = options;
+    const { isContext = false, contextLabel = '', readOnly = false } = options;
     return renderSegCard(seg, {
         showChapter: true,
-        showPlayBtn: !isContext,
-        showGotoBtn: true,
+        showPlayBtn: true,
+        showGotoBtn: !isContext && !readOnly,
         isContext,
         contextLabel,
+        readOnly,
     });
 }
 
@@ -4163,10 +4339,29 @@ function renderErrorCard(seg, options = {}) {
  * @param {HTMLElement} container — target container div
  */
 function renderCategoryCards(type, items, container) {
+    if (_cardRenderRafId) { cancelAnimationFrame(_cardRenderRafId); _cardRenderRafId = null; }
     container.innerHTML = '';
     if (!segAllData || !items || items.length === 0) return;
 
-    items.forEach(issue => {
+    const BATCH_SIZE = 30;
+    const observer = _ensureWaveformObserver();
+
+    // Kick off peak fetch upfront (cheap URL lookups, non-blocking network)
+    if (segPeaksByAudio) {
+        const missingChapters = new Set();
+        items.forEach(item => {
+            const ch = item.chapter;
+            if (!ch) return;
+            const url = segAllData?.audio_by_chapter?.[String(ch)] || '';
+            if (url && !segPeaksByAudio[url]) missingChapters.add(ch);
+        });
+        if (missingChapters.size > 0) {
+            const reciter = segReciterSelect.value;
+            if (reciter) _fetchPeaks(reciter, [...missingChapters]);
+        }
+    }
+
+    function renderOneItem(issue) {
         if (type === 'missing_words') {
             // Combined card: gap label + bordering segments
             const wrapper = document.createElement('div');
@@ -4188,10 +4383,13 @@ function renderCategoryCards(type, items, container) {
                 }
             });
 
-            // Auto Fix button (only present when backend computed a fix)
+            // Action buttons row (Auto Fix + Show Context, side by side)
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'val-card-actions';
+
             if (issue.auto_fix) {
                 const fixBtn = document.createElement('button');
-                fixBtn.className = 'val-autofix-btn';
+                fixBtn.className = 'val-action-btn';
                 fixBtn.textContent = 'Auto Fix';
                 fixBtn.title = 'Extend segment ref to cover the missing word';
                 fixBtn.addEventListener('click', async () => {
@@ -4224,7 +4422,7 @@ function renderCategoryCards(type, items, container) {
 
                     // Add Undo button
                     const undoBtn = document.createElement('button');
-                    undoBtn.className = 'val-undo-btn';
+                    undoBtn.className = 'val-action-btn val-action-btn-danger';
                     undoBtn.textContent = 'Undo';
                     undoBtn.title = 'Revert auto-fix';
                     undoBtn.addEventListener('click', () => {
@@ -4248,14 +4446,14 @@ function renderCategoryCards(type, items, container) {
                     });
                     fixBtn.after(undoBtn);
                 });
-                wrapper.appendChild(fixBtn);
+                actionsRow.appendChild(fixBtn);
             }
 
-            // Show Context button
             if (segsInWrapper.length > 0) {
-                addContextToggle(wrapper, segsInWrapper);
+                addContextToggle(actionsRow, segsInWrapper);
             }
 
+            wrapper.appendChild(actionsRow);
             container.appendChild(wrapper);
         } else if (type === 'missing_verses') {
             // Missing verse context: show boundary cards around where the verse should appear.
@@ -4271,12 +4469,12 @@ function renderCategoryCards(type, items, container) {
             const segsInWrapper = [];
 
             if (prev) {
-                const prevCard = renderErrorCard(prev, { contextLabel: 'Previous verse boundary' });
+                const prevCard = renderErrorCard(prev, { contextLabel: 'Previous verse boundary', readOnly: true });
                 wrapper.appendChild(prevCard);
                 segsInWrapper.push({ seg: prev, card: prevCard });
             }
             if (next && (!prev || next.index !== prev.index)) {
-                const nextCard = renderErrorCard(next, { contextLabel: 'Next verse boundary' });
+                const nextCard = renderErrorCard(next, { contextLabel: 'Next verse boundary', readOnly: true });
                 wrapper.appendChild(nextCard);
                 segsInWrapper.push({ seg: next, card: nextCard });
             }
@@ -4287,7 +4485,10 @@ function renderCategoryCards(type, items, container) {
                 empty.textContent = 'No boundary segments found for this missing verse.';
                 wrapper.appendChild(empty);
             } else {
-                addContextToggle(wrapper, segsInWrapper);
+                const actionsRow = document.createElement('div');
+                actionsRow.className = 'val-card-actions';
+                addContextToggle(actionsRow, segsInWrapper);
+                wrapper.appendChild(actionsRow);
             }
 
             container.appendChild(wrapper);
@@ -4309,15 +4510,29 @@ function renderCategoryCards(type, items, container) {
             const card = renderErrorCard(seg);
             wrapper.appendChild(card);
 
-            // Ignore button for low confidence, oversegmented, and cross-verse segments
-            // For oversegmented/cross_verse, always show (confidence=1.0 items are filtered server-side)
-            // For low_confidence, only show when confidence is still below 1.0
-            if ((type === 'oversegmented' || type === 'cross_verse') ||
+            // Phoneme tail comparison inside the card's left column
+            if (type === 'boundary_adj' && SHOW_BOUNDARY_PHONEMES && (issue.gt_tail || issue.asr_tail)) {
+                const textBox = card.querySelector('.seg-text');
+                if (textBox) {
+                    const tailEl = document.createElement('div');
+                    tailEl.className = 'val-phoneme-tail';
+                    const gt = issue.gt_tail || '';
+                    const asr = issue.asr_tail || '';
+                    tailEl.innerHTML =
+                        `<span class="val-tail-label">GT:</span> <span class="val-tail-phonemes">${gt}</span>\n` +
+                        `<span class="val-tail-label">ASR:</span> <span class="val-tail-phonemes">${asr}</span>`;
+                    textBox.appendChild(tailEl);
+                }
+            }
+
+            // Action buttons row (Ignore + Show Context, side by side)
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'val-card-actions';
+
+            if ((type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding') ||
                 (type === 'low_confidence' && seg.confidence < 1.0)) {
                 const ignoreBtn = document.createElement('button');
-                ignoreBtn.className = 'val-autofix-btn';
-                // If confidence is already 1.0 (e.g., set by another panel or after index renumber),
-                // show as already-ignored to avoid a no-op click
+                ignoreBtn.className = 'val-action-btn';
                 if (seg.confidence >= 1.0) {
                     ignoreBtn.disabled = true;
                     ignoreBtn.textContent = 'Ignored';
@@ -4362,40 +4577,33 @@ function renderCategoryCards(type, items, container) {
                     ignoreBtn.textContent = 'Ignored';
                     wrapper.style.opacity = '0.5';
                 });
-                wrapper.appendChild(ignoreBtn);
+                actionsRow.appendChild(ignoreBtn);
             }
 
-            const contextDefault = type === 'failed' || type === 'oversegmented' || type === 'audio_bleeding';
-            addContextToggle(wrapper, [{ seg, card }], { defaultOpen: contextDefault });
+            wrapper.appendChild(actionsRow);
+            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding';
+            addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: contextDefault });
             container.appendChild(wrapper);
         }
-    });
+    }
 
-    // Observe error card canvases for lazy waveform drawing
-    const observer = _ensureWaveformObserver();
-    container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-
-    // Attach scroll-based audio preloading for this container
-    _attachScrollPreload(container);
-
-    // Fetch peaks for chapters referenced by these error items if not yet available
-    if (segPeaksByAudio) {
-        const missingChapters = new Set();
-        items.forEach(item => {
-            const ch = item.chapter;
-            if (!ch) return;
-            const url = segAllData?.audio_by_chapter?.[String(ch)] || '';
-            if (url && !segPeaksByAudio[url]) missingChapters.add(ch);
-        });
-        if (missingChapters.size > 0) {
-            const reciter = segReciterSelect.value;
-            if (reciter) _fetchPeaks(reciter, [...missingChapters]);
+    function processBatch(startIdx) {
+        const end = Math.min(startIdx + BATCH_SIZE, items.length);
+        for (let i = startIdx; i < end; i++) renderOneItem(items[i]);
+        // Observe canvases added in this batch
+        container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+        if (end < items.length) {
+            _cardRenderRafId = requestAnimationFrame(() => processBatch(end));
+        } else {
+            _cardRenderRafId = null;
         }
     }
+
+    processBatch(0);
 }
 
 function resolveIssueToSegment(type, issue) {
-    if (type === 'failed' || type === 'low_confidence' || type === 'oversegmented' || type === 'cross_verse' || type === 'audio_bleeding') {
+    if (type === 'failed' || type === 'low_confidence' || type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding') {
         const seg = getSegByChapterIndex(issue.chapter, issue.seg_index);
         // After structural ops (split/merge/delete), indices are renumbered but
         // stale validation data still references old indices. Fall back to ref match.
@@ -4415,31 +4623,35 @@ function resolveIssueToSegment(type, issue) {
     return null;
 }
 
-function addContextToggle(wrapper, segsInWrapper, { defaultOpen = false } = {}) {
+function addContextToggle(actionsContainer, segsInWrapper, { defaultOpen = false } = {}) {
     const ctxBtn = document.createElement('button');
-    ctxBtn.className = 'val-context-btn';
+    ctxBtn.className = 'val-action-btn val-action-btn-muted';
     ctxBtn.textContent = 'Show Context';
     let contextShown = false;
     let contextEls = [];
 
+    // Context cards are inserted into the wrapper (parent of cards),
+    // not the actionsContainer (which is a row of buttons inside wrapper)
     function showContext() {
         const first = segsInWrapper[0];
         const last = segsInWrapper[segsInWrapper.length - 1];
+        const cardParent = first.card.parentNode;
 
         const { prev } = getAdjacentSegments(first.seg.chapter, first.seg.index);
         const { next } = getAdjacentSegments(last.seg.chapter, last.seg.index);
 
         if (prev) {
             const prevCard = renderErrorCard(prev, { isContext: true, contextLabel: 'Previous' });
-            first.card.parentNode.insertBefore(prevCard, first.card);
+            cardParent.insertBefore(prevCard, first.card);
             contextEls.push(prevCard);
         }
         if (next) {
             const nextCard = renderErrorCard(next, { isContext: true, contextLabel: 'Next' });
             if (last.card.nextSibling) {
-                last.card.parentNode.insertBefore(nextCard, last.card.nextSibling);
+                cardParent.insertBefore(nextCard, last.card.nextSibling);
             } else {
-                last.card.parentNode.insertBefore(nextCard, ctxBtn);
+                // Insert before the actions row
+                cardParent.insertBefore(nextCard, actionsContainer);
             }
             contextEls.push(nextCard);
         }
@@ -4454,14 +4666,32 @@ function addContextToggle(wrapper, segsInWrapper, { defaultOpen = false } = {}) 
         contextShown = false;
     }
 
+    // Expose for programmatic access (e.g. ensureContextShown before merge/split)
+    ctxBtn._showContext = showContext;
+    ctxBtn._isContextShown = () => contextShown;
+
     ctxBtn.addEventListener('click', () => {
         if (contextShown) hideContext();
         else showContext();
     });
 
-    wrapper.appendChild(ctxBtn);
+    actionsContainer.appendChild(ctxBtn);
 
     if (defaultOpen) showContext();
+}
+
+/** Auto-show context on an accordion card wrapper if not already visible. */
+function ensureContextShown(row) {
+    const wrapper = row.closest('.val-card-wrapper');
+    if (!wrapper) return;
+    const actionsRow = wrapper.querySelector('.val-card-actions');
+    if (!actionsRow) return;
+    for (const btn of actionsRow.children) {
+        if (typeof btn._showContext === 'function') {
+            if (!btn._isContextShown()) btn._showContext();
+            return;
+        }
+    }
 }
 
 
@@ -4654,6 +4884,12 @@ function showHistoryView() {
     if (shortcuts) { shortcuts.dataset.hiddenByHistory = shortcuts.hidden ? '1' : ''; shortcuts.hidden = true; }
 
     segHistoryView.hidden = false;
+    // Reset filters on view enter
+    _histFilterOpTypes.clear();
+    _histFilterErrCats.clear();
+    segHistoryFilters.querySelectorAll('.seg-history-filter-pill.active')
+        .forEach(p => p.classList.remove('active'));
+    segHistoryFilterClear.hidden = true;
     // Observe all waveform canvases + draw arrows
     const observer = _ensureWaveformObserver();
     segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
@@ -4664,6 +4900,8 @@ function showHistoryView() {
 
 function hideHistoryView() {
     stopErrorCardAudio();
+    _histFilterOpTypes.clear();
+    _histFilterErrCats.clear();
     segHistoryView.hidden = true;
     // Restore normal view elements
     for (const id of _SEG_NORMAL_IDS) {
@@ -4686,11 +4924,20 @@ function hideHistoryView() {
 function renderEditHistoryPanel(data) {
     if (!data || !data.batches || data.batches.length === 0) {
         segHistoryBtn.hidden = true;
+        segHistoryFilters.hidden = true;
         return;
     }
     segHistoryBtn.hidden = false;
 
-    if (data.summary) renderHistorySummaryStats(data.summary);
+    // Clear any active filters from previous data
+    _histFilterOpTypes.clear();
+    _histFilterErrCats.clear();
+
+    if (data.summary) {
+        data.summary.verses_edited = _countVersesFromBatches(data.batches);
+        renderHistorySummaryStats(data.summary);
+    }
+    renderHistoryFilterBar(data);
     renderHistoryBatches(data.batches);
 }
 
@@ -4705,6 +4952,7 @@ function renderHistorySummaryStats(summary, container = segHistoryStats) {
         { value: summary.total_operations, label: 'Operations' },
         { value: summary.total_batches, label: 'Saves' },
         { value: summary.chapters_edited, label: 'Chapters' },
+        { value: summary.verses_edited ?? '–', label: 'Verses' },
     ];
     for (const s of stats) {
         const card = document.createElement('div');
@@ -4714,34 +4962,191 @@ function renderHistorySummaryStats(summary, container = segHistoryStats) {
         cardsRow.appendChild(card);
     }
     container.appendChild(cardsRow);
+}
 
-    // Op type pills
-    if (summary.op_counts && Object.keys(summary.op_counts).length > 0) {
-        const pills = document.createElement('div');
-        pills.className = 'seg-history-op-pills';
-        const sorted = Object.entries(summary.op_counts).sort((a, b) => b[1] - a[1]);
-        for (const [opType, count] of sorted) {
-            const pill = document.createElement('span');
-            pill.className = 'seg-history-op-pill';
-            pill.innerHTML = `${EDIT_OP_LABELS[opType] || opType} <span class="pill-count">${count}</span>`;
-            pills.appendChild(pill);
+/** Extract unique surah:ayah keys from a matched_ref (handles cross-verse). */
+function _versesFromRef(ref) {
+    if (!ref) return [];
+    const parts = ref.split('-');
+    if (parts.length !== 2) return [];
+    const sb = parts[0].split(':'), se = parts[1].split(':');
+    if (sb.length < 2 || se.length < 2) return [];
+    const surah = parseInt(sb[0]), ayahStart = parseInt(sb[1]);
+    const surahEnd = parseInt(se[0]), ayahEnd = parseInt(se[1]);
+    if (surah !== surahEnd) return [`${surah}:${ayahStart}`, `${surahEnd}:${ayahEnd}`];
+    const out = [];
+    for (let a = ayahStart; a <= ayahEnd; a++) out.push(`${surah}:${a}`);
+    return out;
+}
+
+/** Count unique verses touched across all operations in the given batches. */
+function _countVersesFromBatches(batches) {
+    const verses = new Set();
+    for (const batch of batches) {
+        for (const op of (batch.operations || [])) {
+            for (const snap of [...(op.targets_before || []), ...(op.targets_after || [])]) {
+                for (const v of _versesFromRef(snap.matched_ref)) verses.add(v);
+            }
         }
-        container.appendChild(pills);
+    }
+    return verses.size;
+}
+
+// ---------------------------------------------------------------------------
+// History Filters
+// ---------------------------------------------------------------------------
+
+function renderHistoryFilterBar(data) {
+    segHistoryFilterOps.innerHTML = '';
+    segHistoryFilterCats.innerHTML = '';
+    segHistoryFilterClear.hidden = true;
+
+    if (!data.summary && (!data.batches || data.batches.length === 0)) {
+        segHistoryFilters.hidden = true;
+        return;
     }
 
-    // Fix kind breakdown
-    const fk = summary.fix_kind_counts || {};
-    const parts = [];
-    if (fk.manual) parts.push(`${fk.manual} manual`);
-    if (fk.auto_fix) parts.push(`${fk.auto_fix} auto-fix`);
-    if (fk.ignore) parts.push(`${fk.ignore} ignored`);
-    if (fk.audit) parts.push(`${fk.audit} audit`);
-    if (parts.length > 0) {
-        const fkDiv = document.createElement('div');
-        fkDiv.className = 'seg-history-fix-kinds';
-        fkDiv.textContent = `Fix breakdown: ${parts.join(', ')}`;
-        container.appendChild(fkDiv);
+    // Op type pills from summary
+    const opCounts = data.summary?.op_counts || {};
+    const sortedOps = Object.entries(opCounts).sort((a, b) => b[1] - a[1]);
+    for (const [opType, count] of sortedOps) {
+        const pill = document.createElement('button');
+        pill.className = 'seg-history-filter-pill';
+        pill.dataset.filterType = 'op';
+        pill.dataset.filterValue = opType;
+        pill.innerHTML = `${EDIT_OP_LABELS[opType] || opType} <span class="pill-count">${count}</span>`;
+        pill.addEventListener('click', () => toggleHistoryFilter('op', opType, pill));
+        segHistoryFilterOps.appendChild(pill);
     }
+
+    // Error category pills from aggregated validation deltas + op_context_category
+    const catCounts = {};
+    for (const batch of data.batches) {
+        const before = batch.validation_summary_before || {};
+        const after = batch.validation_summary_after || {};
+        const opCats = new Set(
+            (batch.operations || []).map(op => op.op_context_category).filter(Boolean)
+        );
+        for (const cat of Object.keys(ERROR_CAT_LABELS)) {
+            const delta = (after[cat] || 0) - (before[cat] || 0);
+            if (delta !== 0 || opCats.has(cat)) {
+                catCounts[cat] = (catCounts[cat] || 0) + 1;
+            }
+        }
+    }
+    const sortedCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]);
+    for (const [cat, count] of sortedCats) {
+        const pill = document.createElement('button');
+        pill.className = 'seg-history-filter-pill';
+        pill.dataset.filterType = 'cat';
+        pill.dataset.filterValue = cat;
+        pill.innerHTML = `${ERROR_CAT_LABELS[cat]} <span class="pill-count">${count}</span>`;
+        pill.addEventListener('click', () => toggleHistoryFilter('cat', cat, pill));
+        segHistoryFilterCats.appendChild(pill);
+    }
+
+    // Only show filter bar if there are meaningful options
+    segHistoryFilters.hidden = (sortedOps.length < 2 && sortedCats.length < 2);
+}
+
+function toggleHistoryFilter(type, value, pill) {
+    const set = type === 'op' ? _histFilterOpTypes : _histFilterErrCats;
+    if (set.has(value)) {
+        set.delete(value);
+        pill.classList.remove('active');
+    } else {
+        set.add(value);
+        pill.classList.add('active');
+    }
+    applyHistoryFilters();
+}
+
+function applyHistoryFilters() {
+    if (!segHistoryData) return;
+    const allBatches = segHistoryData.batches;
+    const hasFilters = _histFilterOpTypes.size > 0 || _histFilterErrCats.size > 0;
+
+    segHistoryFilterClear.hidden = !hasFilters;
+
+    const filtered = hasFilters ? allBatches.filter(batch => {
+        // Op type filter (OR within)
+        if (_histFilterOpTypes.size > 0) {
+            const batchOpTypes = new Set((batch.operations || []).map(op => op.op_type));
+            if (![..._histFilterOpTypes].some(t => batchOpTypes.has(t))) return false;
+        }
+        // Error category filter (OR within)
+        if (_histFilterErrCats.size > 0) {
+            const before = batch.validation_summary_before || {};
+            const after = batch.validation_summary_after || {};
+            const opCats = new Set(
+                (batch.operations || []).map(op => op.op_context_category).filter(Boolean)
+            );
+            if (![..._histFilterErrCats].some(cat => {
+                const delta = (after[cat] || 0) - (before[cat] || 0);
+                return delta !== 0 || opCats.has(cat);
+            })) return false;
+        }
+        return true;
+    }) : allBatches;
+
+    // Recompute and render summary stats
+    if (hasFilters) {
+        renderHistorySummaryStats(_computeFilteredSummary(filtered));
+    } else {
+        renderHistorySummaryStats(segHistoryData.summary);
+    }
+
+    // Render filtered batches (or empty placeholder)
+    if (filtered.length === 0 && hasFilters) {
+        segHistoryBatches.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.className = 'seg-history-empty';
+        empty.textContent = 'No batches match the active filters.';
+        segHistoryBatches.appendChild(empty);
+        return;
+    }
+
+    renderHistoryBatches(filtered);
+
+    // Redraw waveforms + arrows if history view is visible
+    if (!segHistoryView.hidden) {
+        const observer = _ensureWaveformObserver();
+        segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+        requestAnimationFrame(() => {
+            segHistoryView.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
+        });
+    }
+}
+
+function _computeFilteredSummary(filteredBatches) {
+    const opCounts = {};
+    const fixKindCounts = {};
+    const chaptersEdited = new Set();
+    for (const batch of filteredBatches) {
+        if (batch.chapter != null) chaptersEdited.add(batch.chapter);
+        if (Array.isArray(batch.chapters)) batch.chapters.forEach(ch => chaptersEdited.add(ch));
+        for (const op of (batch.operations || [])) {
+            opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
+            const fk = op.fix_kind || 'unknown';
+            fixKindCounts[fk] = (fixKindCounts[fk] || 0) + 1;
+        }
+    }
+    return {
+        total_operations: Object.values(opCounts).reduce((s, v) => s + v, 0),
+        total_batches: filteredBatches.filter(b => (b.operations || []).length > 0).length,
+        chapters_edited: chaptersEdited.size,
+        verses_edited: _countVersesFromBatches(filteredBatches),
+        op_counts: opCounts,
+        fix_kind_counts: fixKindCounts,
+    };
+}
+
+function clearHistoryFilters() {
+    _histFilterOpTypes.clear();
+    _histFilterErrCats.clear();
+    segHistoryFilters.querySelectorAll('.seg-history-filter-pill.active')
+        .forEach(p => p.classList.remove('active'));
+    applyHistoryFilters();
 }
 
 function renderHistoryBatches(batches, container = segHistoryBatches) {
@@ -5085,6 +5490,7 @@ function _snapToSeg(snap, chapter) {
         time_end: snap.time_end,
         matched_ref: snap.matched_ref || '',
         matched_text: snap.matched_text || '',
+        display_text: snap.display_text || '',
         confidence: snap.confidence ?? 0,
     };
 }
@@ -5098,6 +5504,11 @@ function _highlightChanges(beforeSnap, afterSnap, beforeCard, afterCard) {
     if (beforeSnap.time_start !== afterSnap.time_start || beforeSnap.time_end !== afterSnap.time_end) {
         const el = afterCard.querySelector('.seg-text-duration');
         if (el) el.classList.add('seg-history-changed');
+        // Store trim highlight data on canvases for waveform overlay
+        const bCanvas = beforeCard.querySelector('canvas');
+        const aCanvas = afterCard.querySelector('canvas');
+        if (bCanvas) bCanvas._trimHL = { color: 'red', otherStart: afterSnap.time_start, otherEnd: afterSnap.time_end };
+        if (aCanvas) aCanvas._trimHL = { color: 'green', otherStart: beforeSnap.time_start, otherEnd: beforeSnap.time_end };
     }
     if (beforeSnap.confidence !== afterSnap.confidence) {
         const el = afterCard.querySelector('.seg-text-conf');
@@ -5109,11 +5520,46 @@ function _highlightChanges(beforeSnap, afterSnap, beforeCard, afterCard) {
     }
 }
 
+/** Draw red/green overlay on history card waveforms to show trim changes. */
+function _drawTrimHighlight(canvas, seg) {
+    const hl = canvas._trimHL;
+    if (!hl) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const dur = seg.time_end - seg.time_start;
+    if (dur <= 0) return;
+
+    const rgba = hl.color === 'red' ? 'rgba(244, 67, 54, 0.3)' : 'rgba(76, 175, 80, 0.3)';
+    ctx.fillStyle = rgba;
+
+    if (hl.color === 'red') {
+        // Before card: highlight regions that were removed (present in before, absent in after)
+        if (seg.time_start < hl.otherStart) {
+            const x2 = ((hl.otherStart - seg.time_start) / dur) * w;
+            ctx.fillRect(0, 0, x2, h);
+        }
+        if (seg.time_end > hl.otherEnd) {
+            const x1 = ((hl.otherEnd - seg.time_start) / dur) * w;
+            ctx.fillRect(x1, 0, w - x1, h);
+        }
+    } else {
+        // After card: highlight regions that were added (present in after, absent in before)
+        if (seg.time_start < hl.otherStart) {
+            const x2 = ((hl.otherStart - seg.time_start) / dur) * w;
+            ctx.fillRect(0, 0, x2, h);
+        }
+        if (seg.time_end > hl.otherEnd) {
+            const x1 = ((hl.otherEnd - seg.time_start) / dur) * w;
+            ctx.fillRect(x1, 0, w - x1, h);
+        }
+    }
+}
+
 function _appendValDeltas(container, before, after) {
     if (!before || !after) return;
-    const cats = ['failed', 'low_confidence', 'oversegmented', 'cross_verse', 'missing_words', 'audio_bleeding'];
+    const cats = ['failed', 'low_confidence', 'boundary_adj', 'cross_verse', 'missing_words', 'audio_bleeding'];
     const shortLabels = {
-        failed: 'fail', low_confidence: 'low conf', oversegmented: 'overseg',
+        failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
         cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
     };
     for (const cat of cats) {

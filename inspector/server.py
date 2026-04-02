@@ -7,6 +7,8 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import os
+import pickle
 import random
 import re
 import shutil
@@ -47,6 +49,8 @@ from config import (
     ANIM_WORD_SPACING, ANIM_LINE_HEIGHT, ANIM_FONT_SIZE,
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
     SEG_FONT_SIZE, SEG_WORD_SPACING,
+    TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
+    BOUNDARY_TAIL_K, SHOW_BOUNDARY_PHONEMES,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -176,6 +180,61 @@ def get_phonemizer():
             raise RuntimeError("Phonemizer not available")
         _phonemizer = Phonemizer()
     return _phonemizer
+
+
+def _get_canonical_phonemes(reciter: str) -> dict[str, list[str]] | None:
+    """Load or build canonical phoneme cache for a reciter.
+
+    Returns dict mapping word location key (e.g. "1:1:4") to phoneme list,
+    or None if phonemizer is unavailable.
+    """
+    global _CANONICAL_PHONEMES_CACHE
+    if reciter in _CANONICAL_PHONEMES_CACHE:
+        return _CANONICAL_PHONEMES_CACHE[reciter]
+
+    cache_path = CACHE_DIR / reciter / "canonical_phonemes.pkl"
+
+    # Try loading from disk
+    if cache_path.exists():
+        with open(cache_path, "rb") as f:
+            data = pickle.load(f)
+        _CANONICAL_PHONEMES_CACHE[reciter] = data
+        return data
+
+    # Build from scratch — need phonemizer and loaded segments
+    if not _HAS_PHONEMIZER:
+        return None
+    entries = _load_detailed(reciter)
+    if not entries:
+        return None
+
+    # Collect all segment-end word refs as stop points
+    stop_refs = set()
+    for entry in entries:
+        for seg in entry.get("segments", []):
+            matched_ref = seg.get("matched_ref", "")
+            if not matched_ref:
+                continue
+            parts = matched_ref.split("-")
+            if len(parts) == 2:
+                stop_refs.add(parts[1])  # end word ref, e.g. "1:1:4"
+
+    # Phonemize entire Quran with reciter's stop points
+    pm = get_phonemizer()
+    result = pm.phonemize(ref="1-114", stop_refs=list(stop_refs))
+
+    # Build word_ref -> phonemes mapping
+    data = {}
+    for word in result._words:
+        data[word.location.location_key] = word.get_phonemes()
+
+    # Persist to disk
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "wb") as f:
+        pickle.dump(data, f)
+
+    _CANONICAL_PHONEMES_CACHE[reciter] = data
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +390,10 @@ def seg_config():
     return jsonify({
         "seg_font_size": SEG_FONT_SIZE,
         "seg_word_spacing": SEG_WORD_SPACING,
+        "trim_pad_left": TRIM_PAD_LEFT,
+        "trim_pad_right": TRIM_PAD_RIGHT,
+        "trim_dim_alpha": TRIM_DIM_ALPHA,
+        "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
     })
 
 
@@ -388,7 +451,8 @@ def get_ts_verses(reciter, chapter):
 
     # Resolve audio URLs
     audio_source = data["meta"].get("audio_source", "")
-    urls = _load_audio_urls(audio_source, reciter) if audio_source else {}
+    audio_reciter = data["meta"].get("audio_reciter", reciter)
+    urls = _load_audio_urls(audio_source, audio_reciter) if audio_source else {}
 
     verses = []
     for ref in verse_refs:
@@ -487,9 +551,10 @@ def get_ts_data(reciter, verse_ref):
 
     # Audio URL
     audio_source = data["meta"].get("audio_source", "")
+    audio_reciter = data["meta"].get("audio_reciter", reciter)
     audio_url = ""
     if audio_source:
-        urls = _load_audio_urls(audio_source, reciter)
+        urls = _load_audio_urls(audio_source, audio_reciter)
         audio_url = urls.get(verse_ref, urls.get(str(chapter), ""))
 
     # time_start/end offset based on audio category
@@ -712,24 +777,35 @@ _PEAKS_CACHE: dict[str, dict[str, dict]] = {}
 _PEAKS_LOCK = threading.Lock()
 _PEAKS_COMPUTING: set[str] = set()  # keys currently being computed in background
 
-_PEAKS_DIR = CACHE_DIR / "peaks"
+# Canonical phoneme cache — { reciter: { word_location_key: [phoneme, ...] } }
+_CANONICAL_PHONEMES_CACHE: dict[str, dict[str, list[str]]] = {}
+
+# Phoneme substitution equivalences (frozenset pairs) — loaded lazily
+_PHONEME_SUB_PAIRS: set[frozenset] | None = None
+
+def _peaks_cache_path(reciter: str, key: str) -> Path:
+    """Return disk cache path for peaks JSON under the reciter's cache dir."""
+    url_hash = hashlib.sha256(key.encode()).hexdigest()[:32]
+    return CACHE_DIR / reciter / "peaks" / f"{url_hash}.json"
 
 
-def _compute_audio_peaks(audio_url: str) -> dict | None:
-    """Compute waveform peaks for an audio URL. Returns {duration_ms, peaks} or None."""
-    url_hash = hashlib.sha256(audio_url.encode()).hexdigest()[:32]
-    cache_path = _PEAKS_DIR / f"{url_hash}.json"
-    if cache_path.exists():
+def _compute_audio_peaks(audio_source: str, cache_key: str | None = None,
+                         reciter: str | None = None) -> dict | None:
+    """Compute waveform peaks for a local file path or URL. Returns {duration_ms, peaks} or None."""
+    key = cache_key or audio_source
+    # Disk cache lookup — need reciter for the new per-reciter layout
+    cache_path = _peaks_cache_path(reciter, key) if reciter else None
+    if cache_path and cache_path.exists():
         try:
             with open(cache_path, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             pass
 
-    # Decode to raw mono 16-bit PCM at 8kHz via ffmpeg (reads URLs directly)
+    # Decode to raw mono 16-bit PCM at 8kHz via ffmpeg
     try:
         result = subprocess.run(
-            ["ffmpeg", "-i", audio_url, "-f", "s16le", "-ac", "1", "-ar", "8000",
+            ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1", "-ar", "8000",
              "-v", "quiet", "-"],
             capture_output=True, timeout=300,
         )
@@ -763,12 +839,13 @@ def _compute_audio_peaks(audio_url: str) -> dict | None:
     data = {"duration_ms": duration_ms, "peaks": peaks}
 
     # Write to disk cache
-    _PEAKS_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(cache_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, separators=(",", ":"))
-    except OSError:
-        pass
+    if cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, separators=(",", ":"))
+        except OSError:
+            pass
 
     return data
 
@@ -797,10 +874,15 @@ def _get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None)
     if not to_compute:
         return {u: cached[u] for u in urls if u in cached}
 
-    # Compute missing peaks in parallel
+    # Compute missing peaks in parallel — use local cached audio if available
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        future_to_url = {pool.submit(_compute_audio_peaks, u): u for u in to_compute}
+        future_to_url = {}
+        for u in to_compute:
+            local_path = _audio_cache_path(reciter, u)
+            if not local_path.exists():
+                continue  # no local audio, skip
+            future_to_url[pool.submit(_compute_audio_peaks, str(local_path), u, reciter)] = u
         for future in concurrent.futures.as_completed(future_to_url):
             url = future_to_url[future]
             try:
@@ -1130,6 +1212,189 @@ def get_seg_peaks(reciter):
         threading.Thread(target=_bg, daemon=True).start()
 
     return jsonify({"peaks": result, "complete": complete})
+
+
+# ---------------------------------------------------------------------------
+# Audio proxy cache — download from CDN, cache locally, serve instantly
+# ---------------------------------------------------------------------------
+
+# Audio files cached at CACHE_DIR/<reciter>/audio/<hash>.ext
+_AUDIO_DL_LOCK = threading.Lock()
+_AUDIO_DL_PROGRESS: dict[str, dict] = {}  # reciter -> {total, downloaded, complete}
+_AUDIO_CACHE_STATUS: dict[str, dict] = {}  # reciter -> {cached_count, total, cached_bytes}
+
+
+def _reciter_audio_total(reciter: str) -> int:
+    """Return the number of unique audio URLs for a reciter."""
+    entries = _load_detailed(reciter)
+    if not entries:
+        return 0
+    urls = set()
+    for entry in entries:
+        url = entry.get("audio", "")
+        if url:
+            urls.add(url)
+    return len(urls)
+
+
+def _scan_audio_cache(reciter: str, force: bool = False) -> dict:
+    """Scan reciter's cache directory. Returns {cached_count, total, cached_bytes}."""
+    if not force and reciter in _AUDIO_CACHE_STATUS:
+        return _AUDIO_CACHE_STATUS[reciter]
+    total = _reciter_audio_total(reciter)
+    reciter_dir = CACHE_DIR / reciter / "audio"
+    cached_count = 0
+    total_bytes = 0
+    if reciter_dir.is_dir():
+        for f in reciter_dir.iterdir():
+            if f.is_file() and not f.name.startswith('.'):
+                cached_count += 1
+                try:
+                    total_bytes += f.stat().st_size
+                except OSError:
+                    pass
+    result = {"cached_count": cached_count, "total": total, "cached_bytes": total_bytes}
+    _AUDIO_CACHE_STATUS[reciter] = result
+    return result
+
+
+def _audio_cache_path(reciter: str, url: str) -> Path:
+    """Return disk cache path for an audio URL under the reciter's cache dir."""
+    ext = Path(url.split("?")[0].split("#")[0]).suffix or ".mp3"
+    url_hash = hashlib.sha256(url.encode()).hexdigest()[:32]
+    return CACHE_DIR / reciter / "audio" / f"{url_hash}{ext}"
+
+
+def _download_audio(reciter: str, url: str) -> Path | None:
+    """Download audio from URL to disk cache, then compute peaks. Returns cache path or None."""
+    cache_path = _audio_cache_path(reciter, url)
+    if not cache_path.exists():
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            import urllib.request
+            import tempfile
+            fd, tmp_name = tempfile.mkstemp(suffix=".mp3", dir=cache_path.parent)
+            os.close(fd)
+            tmp_path = Path(tmp_name)
+            urllib.request.urlretrieve(url, tmp_path)
+            os.replace(tmp_path, cache_path)
+        except Exception as e:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            print(f"Audio download failed: {url}: {e}")
+            return None
+    # Compute peaks from local file, keyed by original URL for client lookup
+    peaks_data = _compute_audio_peaks(str(cache_path), cache_key=url, reciter=reciter)
+    if peaks_data:
+        with _PEAKS_LOCK:
+            if reciter not in _PEAKS_CACHE:
+                _PEAKS_CACHE[reciter] = {}
+            _PEAKS_CACHE[reciter][url] = peaks_data
+    return cache_path
+
+
+@app.route("/api/seg/audio-proxy/<reciter>")
+def audio_proxy(reciter):
+    """Proxy and cache audio from CDN. Serves from disk cache if available."""
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "No url provided"}), 400
+    cache_path = _audio_cache_path(reciter, url)
+    if not cache_path.exists():
+        result = _download_audio(reciter, url)
+        if not result:
+            return jsonify({"error": "Download failed"}), 502
+    mime_types = {
+        ".mp3": "audio/mpeg", ".wav": "audio/wav",
+        ".flac": "audio/flac", ".ogg": "audio/ogg",
+    }
+    mime = mime_types.get(cache_path.suffix.lower(), "audio/mpeg")
+    resp = send_file(cache_path, mimetype=mime)
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
+
+
+@app.route("/api/seg/audio-cache-status/<reciter>")
+def audio_cache_status(reciter):
+    """Return cache status for a reciter's audio files."""
+    status = _scan_audio_cache(reciter)
+    if status["total"] == 0:
+        return jsonify({"error": "Reciter not found"}), 404
+    progress = _AUDIO_DL_PROGRESS.get(reciter)
+    return jsonify({
+        **status,
+        "downloading": progress and not progress.get("complete", False),
+        "download_progress": progress,
+    })
+
+
+@app.route("/api/seg/prepare-audio/<reciter>", methods=["POST"])
+def prepare_audio(reciter):
+    """Start background download of all audio for a reciter."""
+    entries = _load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter not found"}), 404
+    urls = {}
+    for entry in entries:
+        ch = _chapter_from_ref(entry["ref"])
+        url = entry.get("audio", "")
+        if url and str(ch) not in urls:
+            urls[str(ch)] = url
+    # Filter to uncached only
+    to_download = {ch: u for ch, u in urls.items() if not _audio_cache_path(reciter, u).exists()}
+    total = len(urls)
+    already_cached = total - len(to_download)
+
+    with _AUDIO_DL_LOCK:
+        existing = _AUDIO_DL_PROGRESS.get(reciter)
+        if existing and not existing.get("complete", False):
+            return jsonify({"status": "already_running", **existing})
+        _AUDIO_DL_PROGRESS[reciter] = {
+            "total": total, "downloaded": already_cached, "complete": False
+        }
+
+    def _bg():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {pool.submit(_download_audio, reciter, u): ch for ch, u in to_download.items()}
+            for future in concurrent.futures.as_completed(futures):
+                with _AUDIO_DL_LOCK:
+                    prog = _AUDIO_DL_PROGRESS.get(reciter)
+                    if prog:
+                        prog["downloaded"] = prog["downloaded"] + 1
+            with _AUDIO_DL_LOCK:
+                prog = _AUDIO_DL_PROGRESS.get(reciter)
+                if prog:
+                    prog["complete"] = True
+            _AUDIO_CACHE_STATUS.pop(reciter, None)  # force rescan on next status check
+
+    threading.Thread(target=_bg, daemon=True).start()
+    return jsonify({"status": "started", "total": total, "to_download": len(to_download)})
+
+
+@app.route("/api/seg/delete-audio-cache/<reciter>", methods=["DELETE"])
+def delete_audio_cache(reciter):
+    """Delete all cached data (audio + peaks) for a reciter."""
+    reciter_dir = CACHE_DIR / reciter
+    deleted = 0
+    freed_bytes = 0
+    if reciter_dir.is_dir():
+        for f in reciter_dir.rglob("*"):
+            if f.is_file():
+                try:
+                    freed_bytes += f.stat().st_size
+                    f.unlink()
+                    deleted += 1
+                except OSError:
+                    pass
+        import shutil
+        shutil.rmtree(reciter_dir, ignore_errors=True)
+    with _AUDIO_DL_LOCK:
+        _AUDIO_DL_PROGRESS.pop(reciter, None)
+    _AUDIO_CACHE_STATUS.pop(reciter, None)
+    _PEAKS_CACHE.pop(reciter, None)
+    return jsonify({"deleted": deleted, "freed_bytes": freed_bytes})
 
 
 @app.route("/api/seg/resolve_ref")
@@ -1462,7 +1727,7 @@ def undo_seg_batch(reciter):
     # Merge validation summaries across affected chapters
     val_before = {}
     val_after = {}
-    for cat in ("failed", "low_confidence", "oversegmented", "cross_verse", "missing_words", "audio_bleeding"):
+    for cat in ("failed", "low_confidence", "boundary_adj", "cross_verse", "missing_words", "audio_bleeding"):
         val_before[cat] = sum(v.get(cat, 0) for v in val_before_all.values())
         val_after[cat] = sum(v.get(cat, 0) for v in val_after_all.values())
 
@@ -1754,10 +2019,8 @@ _STANDALONE_REFS = {
     (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
     (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
 }
-_STANDALONE_WORDS = {"كلا", "ذلك", "سبحنهۥ"}
+_STANDALONE_WORDS = {"كلا", "ذلك", "كذلك", "سبحنهۥ"}
 _STRIP_CHARS = set("\u0640\u06de\u06e6\u06e9\u200f")
-
-
 def _strip_quran_deco(text):
     """Strip Quranic decoration and diacritics for bare-skeleton comparison."""
     text = _ud.normalize("NFD", text)
@@ -1771,14 +2034,129 @@ def _strip_quran_deco(text):
     return "".join(out).strip()
 
 
-def _chapter_validation_counts(entries: list, chapter: int, meta: dict) -> dict:
+def _get_phoneme_sub_pairs() -> set[frozenset]:
+    """Load phoneme substitution equivalence pairs (lazy, cached)."""
+    global _PHONEME_SUB_PAIRS
+    if _PHONEME_SUB_PAIRS is not None:
+        return _PHONEME_SUB_PAIRS
+    sub_path = Path(__file__).resolve().parent.parent / "quranic_universal_aligner" / "data" / "phoneme_sub_costs.json"
+    pairs: set[frozenset] = set()
+    if sub_path.exists():
+        with open(sub_path, encoding="utf-8") as f:
+            data = json.load(f)
+        for category, entries in data.items():
+            if category == "_meta":
+                continue
+            for key in entries:
+                a, b = key.split("|", 1)
+                pairs.add(frozenset((a, b)))
+    _PHONEME_SUB_PAIRS = pairs
+    return pairs
+
+
+def _phonemes_match(a: str, b: str, sub_pairs: set[frozenset]) -> bool:
+    """Check if two phonemes are equal or equivalent via substitution costs."""
+    return a == b or frozenset((a, b)) in sub_pairs
+
+
+def _tails_match(canonical_tail: list[str], asr_tail: list[str],
+                 sub_pairs: set[frozenset]) -> bool:
+    """Check if two phoneme tails match, allowing known substitutions."""
+    if len(canonical_tail) != len(asr_tail):
+        return False
+    return all(_phonemes_match(c, a, sub_pairs) for c, a in zip(canonical_tail, asr_tail))
+
+
+def _get_phoneme_tails(phonemes_asr: str, matched_ref: str,
+                       canonical: dict[str, list[str]], n: int
+                       ) -> tuple[list[str], list[str]] | None:
+    """Return (canonical_tail, asr_tail) of length n, or None if unavailable."""
+    if not phonemes_asr or not matched_ref or not canonical:
+        return None
+
+    asr_tokens = phonemes_asr.split()
+    if len(asr_tokens) < n:
+        return None
+
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return None
+    sp = parts[0].split(":")
+    ep = parts[1].split(":")
+    if len(sp) != 3 or len(ep) != 3:
+        return None
+    try:
+        surah = int(sp[0])
+        s_ayah, s_word = int(sp[1]), int(sp[2])
+        e_ayah, e_word = int(ep[1]), int(ep[2])
+    except (ValueError, IndexError):
+        return None
+
+    # Build canonical phoneme list from end words backwards until we have >= n
+    canonical_tail: list[str] = []
+    if s_ayah == e_ayah:
+        for w in range(e_word, s_word - 1, -1):
+            word_phonemes = canonical.get(f"{surah}:{s_ayah}:{w}", [])
+            canonical_tail = word_phonemes + canonical_tail
+            if len(canonical_tail) >= n:
+                break
+    else:
+        word_counts = _get_word_counts()
+        for ayah in range(e_ayah, s_ayah - 1, -1):
+            w_start = s_word if ayah == s_ayah else 1
+            w_end = e_word if ayah == e_ayah else word_counts.get((surah, ayah), 1)
+            for w in range(w_end, w_start - 1, -1):
+                word_phonemes = canonical.get(f"{surah}:{ayah}:{w}", [])
+                canonical_tail = word_phonemes + canonical_tail
+                if len(canonical_tail) >= n:
+                    break
+            if len(canonical_tail) >= n:
+                break
+
+    if len(canonical_tail) < n:
+        return None
+
+    return canonical_tail[-n:], asr_tokens[-n:]
+
+
+_BOUNDARY_VOWELS = {'a:', 'aˤ:', 'u:', 'i:'}
+
+
+def _tail_phoneme_mismatch(phonemes_asr: str, matched_ref: str,
+                           canonical: dict[str, list[str]], k: int) -> bool:
+    """Detect segment cutting off early: canonical 2nd-to-last phoneme is a long vowel
+    and ASR ends on that vowel (last canonical phoneme missing).
+    """
+    tails = _get_phoneme_tails(phonemes_asr, matched_ref, canonical, 2)
+    if tails is None:
+        return False
+    canon_tail, asr_tail_2 = tails
+    asr_last = phonemes_asr.split()[-1]
+    canon_last = canon_tail[1]
+
+    # Case 1: canonical ends with long vowel + consonant, ASR ends on the vowel
+    # Exception: long vowel + glottal stop (ʔ) is normal — ASR routinely drops it
+    if (canon_tail[0] in _BOUNDARY_VOWELS
+        and canon_last != 'ʔ'
+        and _phonemes_match(canon_tail[0], asr_last, _get_phoneme_sub_pairs())):
+        return True
+
+    # Case 2: canonical last phoneme is Q (qalqala marker) but ASR doesn't end with Q
+    if canon_last == 'Q' and asr_last != 'Q':
+        return True
+
+    return False
+
+
+def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
+                               canonical: dict | None = None) -> dict:
     """Count validation issues for a single chapter. Returns {category: count}."""
     word_counts = _get_word_counts()
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
     is_by_ayah = "by_ayah" in meta.get("audio_source", "")
 
     counts = {
-        "failed": 0, "low_confidence": 0, "oversegmented": 0,
+        "failed": 0, "low_confidence": 0, "boundary_adj": 0,
         "cross_verse": 0, "missing_words": 0, "audio_bleeding": 0,
     }
     verse_segments: dict[tuple, list] = defaultdict(list)
@@ -1829,13 +2207,24 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict) -> dict:
                         verse_segments[(surah, ayah)].append((1, wc))
             else:
                 verse_segments[(surah, s_ayah)].append((s_word, e_word))
+                is_boundary_adj = False
                 if (s_word == e_word
                     and confidence < 1.0
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
                     and _strip_quran_deco(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
-                    counts["oversegmented"] += 1
+                    is_boundary_adj = True
+
+                # Phoneme tail mismatch (only if not already flagged)
+                if (not is_boundary_adj and canonical and confidence < 1.0
+                    and seg.get("phonemes_asr")):
+                    if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
+                                              canonical, BOUNDARY_TAIL_K):
+                        is_boundary_adj = True
+
+                if is_boundary_adj:
+                    counts["boundary_adj"] += 1
 
     # Missing words
     for (surah, ayah), seg_list in verse_segments.items():
@@ -1860,13 +2249,14 @@ def validate_reciter_segments(reciter):
         return jsonify({"error": "Reciter not found"}), 404
 
     word_counts = _get_word_counts()
+    canonical = _get_canonical_phonemes(reciter)
 
     errors = []
     missing_verses = []
     missing_words = []
     failed = []
     low_confidence = []
-    oversegmented = []
+    boundary_adj = []
     cross_verse = []
     audio_bleeding = []
     chapter_seg_idx = {}  # chapter -> next index (running counter)
@@ -1959,13 +2349,15 @@ def validate_reciter_segments(reciter):
                 continue
 
             # Cross-verse detection (skip if already ignored / confidence=1.0)
-            if s_ayah != e_ayah and confidence < 1.0:
-                cross_verse.append({
-                    "chapter": chapter,
-                    "seg_index": i,
-                    "ref": matched_ref,
-                })
+            if s_ayah != e_ayah:
+                if confidence < 1.0:
+                    cross_verse.append({
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "ref": matched_ref,
+                    })
                 # Coverage for cross-verse: start verse from s_word to end, end verse from 1 to e_word
+                # Always register coverage regardless of confidence
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
                         wc = word_counts.get((surah, ayah), s_word)
@@ -1978,21 +2370,40 @@ def validate_reciter_segments(reciter):
             else:
                 verse_segments[(surah, s_ayah)].append((s_word, e_word, i))
 
-                # Potentially oversegmented: 1-word segment, not muqattaat, not single-word verse,
+                # May require boundary adjustment: 1-word segment, not muqattaat, not single-word verse,
                 # not a known standalone word (by ref or matched_text).
                 # Skip if already ignored (confidence=1.0).
+                is_boundary_adj = False
                 if (s_word == e_word
                     and confidence < 1.0
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in _single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
                     and _strip_quran_deco(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
-                    oversegmented.append({
+                    is_boundary_adj = True
+
+                # Phoneme tail mismatch (only if not already flagged)
+                if (not is_boundary_adj and canonical and confidence < 1.0
+                    and seg.get("phonemes_asr")):
+                    if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
+                                              canonical, BOUNDARY_TAIL_K):
+                        is_boundary_adj = True
+
+                if is_boundary_adj:
+                    item = {
                         "chapter": chapter,
                         "seg_index": i,
                         "ref": matched_ref,
                         "verse_key": f"{surah}:{s_ayah}",
-                    })
+                    }
+                    if SHOW_BOUNDARY_PHONEMES and canonical and seg.get("phonemes_asr"):
+                        display_n = BOUNDARY_TAIL_K + 2
+                        tails = _get_phoneme_tails(seg["phonemes_asr"], matched_ref,
+                                                   canonical, display_n)
+                        if tails:
+                            item["gt_tail"] = " ".join(tails[0])
+                            item["asr_tail"] = " ".join(tails[1])
+                    boundary_adj.append(item)
 
     # Detect missing word pairs from detailed.json segments (global across all entries)
     for (surah, ayah), seg_list in verse_segments.items():
@@ -2200,7 +2611,7 @@ def validate_reciter_segments(reciter):
         "missing_words": missing_words,
         "failed": failed,
         "low_confidence": low_confidence,
-        "oversegmented": oversegmented,
+        "boundary_adj": boundary_adj,
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
         "stats": stats,
@@ -2570,4 +2981,11 @@ if __name__ == "__main__":
 
     # Run server
     print(f"Starting server at http://localhost:{args.port}")
-    app.run(host="0.0.0.0", port=args.port, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=args.port, debug=True, use_reloader=True,
+            extra_files=[
+                str(Path(__file__).parent / "static" / "segments.js"),
+                str(Path(__file__).parent / "static" / "app.js"),
+                str(Path(__file__).parent / "static" / "audio.js"),
+                str(Path(__file__).parent / "static" / "style.css"),
+                str(Path(__file__).parent / "static" / "index.html"),
+            ])

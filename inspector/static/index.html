@@ -156,6 +156,19 @@
                     <button id="seg-history-btn" class="btn btn-history" hidden>History</button>
                 </div>
             </div>
+            <div class="seg-cache-panel" id="seg-cache-bar" hidden>
+                <div class="seg-cache-actions">
+                    <button id="seg-prepare-btn" class="btn seg-cache-download-btn" hidden onclick="_prepareAudio(segReciterSelect.value)">Download All Audio</button>
+                    <button id="seg-delete-cache-btn" class="btn seg-cache-delete-btn" hidden onclick="_deleteAudioCache(segReciterSelect.value)">Delete Cache</button>
+                </div>
+                <div id="seg-cache-progress" class="seg-cache-progress" hidden>
+                    <div class="seg-cache-progress-bar">
+                        <div id="seg-cache-progress-fill" class="seg-cache-progress-fill"></div>
+                    </div>
+                    <span id="seg-cache-progress-text" class="seg-cache-progress-text"></span>
+                </div>
+                <span id="seg-cache-status" class="seg-cache-status"></span>
+            </div>
 
             <details class="shortcuts-guide">
                 <summary class="shortcuts-guide-summary">Shortcuts &amp; Guide</summary>
@@ -212,6 +225,17 @@
                     <span class="seg-history-title">Edit History</span>
                 </div>
                 <div id="seg-history-stats" class="seg-history-stats"></div>
+                <div id="seg-history-filters" class="seg-history-filters" hidden>
+                    <div class="seg-history-filter-section">
+                        <span class="seg-history-filter-label">Edit type:</span>
+                        <div id="seg-history-filter-ops" class="seg-history-filter-pills"></div>
+                    </div>
+                    <div class="seg-history-filter-section">
+                        <span class="seg-history-filter-label">Error type:</span>
+                        <div id="seg-history-filter-cats" class="seg-history-filter-pills"></div>
+                    </div>
+                    <button id="seg-history-filter-clear" class="btn btn-sm btn-cancel" hidden>Clear Filters</button>
+                </div>
                 <div id="seg-history-batches" class="seg-history-batches"></div>
             </div>
 
@@ -241,6 +265,7 @@
             <div class="seg-controls">
                 <audio id="seg-audio-player"></audio>
                 <button id="seg-play-btn" class="btn" disabled>Play</button>
+                <button id="seg-autoplay-btn" class="btn seg-autoplay-on" title="Auto-play consecutive segments">Auto-play</button>
                 <span id="seg-play-status" class="seg-play-status"></span>
             </div>
 
@@ -250,6 +275,10 @@
         <!-- ============ Audio Tab ============ -->
         <div id="audio-panel" hidden>
             <div class="info-bar">
+                <div class="ts-view-toggle" id="aud-category-toggle">
+                    <button class="ts-view-btn active" data-cat="by_surah">By Surah</button>
+                    <button class="ts-view-btn" data-cat="by_ayah">By Ayah</button>
+                </div>
                 <label>Reciter:
                     <select id="aud-reciter-select"><option value="">Loading...</option></select>
                 </label>

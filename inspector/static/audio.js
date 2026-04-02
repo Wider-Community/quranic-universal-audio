@@ -6,6 +6,7 @@
  */
 
 (function () {
+    const categoryToggle = document.getElementById('aud-category-toggle');
     const reciterSelect = document.getElementById('aud-reciter-select');
     const surahSelect = document.getElementById('aud-surah-select');
     const ayahSelect = document.getElementById('aud-ayah-select');
@@ -15,7 +16,8 @@
     const nextBtn = document.getElementById('aud-next-btn');
 
     // State
-    let currentCategory = null;  // derived from selected reciter
+    let selectedCategory = 'by_surah';  // driven by toggle
+    let currentCategory = null;  // derived from selected reciter (may differ until reciter chosen)
     let audioSources = {};
     // Cache: "category/source/slug" -> {key: url}
     const urlCache = {};
@@ -25,6 +27,17 @@
 
     let audReciterSS = null;  // SearchableSelect for reciter dropdown
     let audSurahSS = null;  // SearchableSelect for surah dropdown
+
+    categoryToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-cat]');
+        if (!btn) return;
+        const cat = btn.dataset.cat;
+        if (cat === selectedCategory) return;
+        selectedCategory = cat;
+        categoryToggle.querySelectorAll('.ts-view-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+        ayahLabel.hidden = (selectedCategory !== 'by_ayah');
+        populateReciters();
+    });
 
     document.addEventListener('DOMContentLoaded', loadSources);
 
@@ -47,20 +60,19 @@
         resetSurahSelect();
         resetAyahSelect();
         clearPlayer();
+        currentCategory = null;
 
-        for (const category of ['by_surah', 'by_ayah']) {
-            const catData = audioSources[category];
-            if (!catData) continue;
-
+        const catData = audioSources[selectedCategory];
+        if (catData) {
             for (const source of Object.keys(catData).sort()) {
                 const reciters = catData[source];
                 if (!reciters || reciters.length === 0) continue;
 
                 const optgroup = document.createElement('optgroup');
-                optgroup.label = `${category}/${source}`;
+                optgroup.label = source;
                 for (const r of reciters) {
                     const opt = document.createElement('option');
-                    opt.value = `${category}/${source}/${r.slug}`;
+                    opt.value = `${selectedCategory}/${source}/${r.slug}`;
                     opt.textContent = r.name;
                     optgroup.appendChild(opt);
                 }
@@ -69,7 +81,7 @@
         }
 
         if (audReciterSS) audReciterSS.refresh();
-        ayahLabel.hidden = true;
+        ayahLabel.hidden = (selectedCategory !== 'by_ayah');
         updateNavButtons();
     }
 
@@ -81,7 +93,6 @@
 
         if (!val) {
             currentCategory = null;
-            ayahLabel.hidden = true;
             return;
         }
 
@@ -89,9 +100,6 @@
         const parts = val.split('/');
         currentCategory = parts[0];
         const sourceSlug = parts.slice(1).join('/');  // "source/slug"
-
-        // Show/hide ayah dropdown based on category
-        ayahLabel.hidden = currentCategory !== 'by_ayah';
 
         const cacheKey = val;
 

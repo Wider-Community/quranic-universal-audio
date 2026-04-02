@@ -455,12 +455,86 @@ footer {
     margin-left: auto;
 }
 
+/* Audio cache panel */
+.seg-cache-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #0d1b2a;
+    border: 1px solid #1b2838;
+    border-radius: 6px;
+    margin: 8px 12px 4px;
+}
+.seg-cache-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+.seg-cache-download-btn {
+    padding: 8px 28px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    background: #1a5c2a;
+    color: #8f8;
+    border: 1px solid #2a8c3a;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.seg-cache-download-btn:hover { background: #237a35; }
+.seg-cache-download-btn:disabled { opacity: 0.6; cursor: default; }
+.seg-cache-delete-btn {
+    padding: 6px 16px;
+    font-size: 0.8rem;
+    background: #3a1515;
+    color: #e88;
+    border: 1px solid #5a2020;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.seg-cache-delete-btn:hover { background: #5a2020; }
+.seg-cache-delete-btn:disabled { opacity: 0.6; cursor: default; }
+.seg-cache-progress {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.seg-cache-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #1b2838;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.seg-cache-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2a8c3a, #4caf50);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+.seg-cache-progress-text {
+    font-size: 0.82rem;
+    color: #8ab4f8;
+}
+.seg-cache-status {
+    font-size: 0.8rem;
+    color: #7a8a9a;
+}
+
 .seg-controls {
     display: flex;
     align-items: center;
     gap: 15px;
     padding: 10px 20px;
     margin-bottom: 15px;
+}
+.seg-controls .btn {
+    margin-left: 0;
 }
 
 .seg-controls audio {
@@ -482,6 +556,13 @@ footer {
     border: 1px solid #333;
     border-radius: 6px;
     font-size: 14px;
+}
+
+#seg-autoplay-btn.seg-autoplay-on {
+    background: #4361ee;
+}
+#seg-autoplay-btn.seg-autoplay-off {
+    background: #555;
 }
 
 .seg-play-status {
@@ -550,19 +631,27 @@ footer {
     height: 60px;
     background: #0f0f23;
     border-radius: 6px;
-    cursor: pointer;
+    cursor: crosshair;
 }
 
 /* Segment text box */
 .seg-text {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 6px 10px;
     border-radius: 6px;
     border-left: 4px solid #666;
     min-width: 0;
+}
+
+.seg-text-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-self: start;
 }
 
 .seg-text.conf-high {
@@ -589,7 +678,6 @@ footer {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 4px;
 }
 
 .seg-text-index {
@@ -643,6 +731,7 @@ footer {
     color: #eee;
     direction: rtl;
     line-height: 1.5;
+    text-align: right;
 }
 
 .seg-text-duration {
@@ -707,11 +796,30 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     pointer-events: none;
 }
 
+/* Play / Go-to column at the far left of the row (between waveforms) */
+.seg-play-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 auto;
+    justify-content: center;
+}
+.seg-play-col .seg-card-play-btn,
+.seg-play-col .seg-card-goto-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 6px 8px;
+}
+
 /* Action buttons (Trim/Split/Merge/Delete/Edit Ref) per segment row */
 .seg-actions {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 4px;
+    flex: 1;
 }
 
 .btn-sm {
@@ -770,74 +878,46 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     background: #4a148c;
 }
 
-/* Edit panel (shared trim/split) */
-.seg-edit-panel {
-    padding: 12px 16px;
-    background: #1a2a4e;
-    border: 2px solid #4cc9f0;
-    border-radius: 8px;
-    margin: 4px 0;
+/* Inline edit controls (replaces .seg-actions when Adjust/Split is active) */
+.seg-edit-inline {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 4px;
 }
 
-.seg-edit-panel canvas {
-    background: #0f0f23;
-    border-radius: 6px;
-    cursor: col-resize;
-    width: 100%;
-    height: 80px;
-}
-
-/* Trim / Split inputs */
-.seg-trim-inputs,
-.seg-split-inputs {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-
-.seg-trim-inputs label,
-.seg-split-inputs label {
-    color: #aaa;
-    font-size: 0.85rem;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.seg-trim-inputs input,
-.seg-split-inputs input {
-    width: 100px;
-    padding: 4px 8px;
-    background: #0f0f23;
-    color: #4cc9f0;
-    border: 1px solid #333;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 0.85rem;
-}
-
-.seg-trim-duration,
-.seg-split-info {
+.seg-edit-inline .seg-edit-duration,
+.seg-edit-inline .seg-edit-info {
     color: #888;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-family: monospace;
+    flex: none;
 }
 
-/* Edit mode buttons row */
-.seg-edit-buttons {
+.seg-edit-inline .seg-edit-buttons {
     display: flex;
-    gap: 8px;
-    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
 }
 
-.seg-trim-status {
+.seg-edit-inline .seg-edit-buttons .btn-sm {
+    flex: 1;
+}
+
+.seg-edit-inline .seg-edit-status {
     color: #ff4444;
-    font-size: 0.8rem;
-    margin-left: 8px;
+    font-size: 0.75rem;
+    flex: none;
+    width: 100%;
+}
+
+/* Edit-target card gets an active border */
+.seg-row.seg-edit-target {
+    border-color: #4cc9f0;
+    background: #1a2a4e;
+}
+
+.seg-row.seg-edit-target canvas {
+    cursor: col-resize;
 }
 
 /* ============ Validation Panel ============ */
@@ -1074,23 +1154,7 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 }
 .seg-filter-remove { padding: 2px 8px; font-size: 0.9rem; }
 
-/* ============ Validation Error Cards (Load All) ============ */
-
-.val-load-all-btn {
-    float: right;
-    padding: 2px 10px;
-    font-size: 0.7rem;
-    background: #2a2a4a;
-    color: #4cc9f0;
-    border: 1px solid #4cc9f0;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-left: 8px;
-}
-
-.val-load-all-btn:hover {
-    background: #3a3a6a;
-}
+/* ============ Validation Error Cards ============ */
 
 .val-cards-container {
     display: flex;
@@ -1168,6 +1232,7 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     border: 1px dashed #f44336;
     border-radius: 4px;
     background: rgba(244, 67, 54, 0.08);
+    text-align: center;
 }
 
 .val-card-issue-label {
@@ -1176,45 +1241,45 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     padding: 2px 0 4px;
 }
 
-.val-autofix-btn {
-    margin: 4px 8px;
-    padding: 2px 10px;
+/* Action buttons row (Ignore/AutoFix + Show Context side by side) */
+.val-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.val-phoneme-tail {
+    font-family: monospace;
+    font-size: 0.7rem;
+    color: #8888aa;
+    padding: 3px 4px 0;
+    text-align: left;
+    white-space: pre-line;
+    line-height: 1.4;
+    margin-top: 2px;
+}
+.val-tail-label { color: #6a6a8a; font-weight: 600; }
+.val-tail-phonemes { color: #aaaacc; letter-spacing: 0.5px; }
+
+/* Unified action button style */
+.val-action-btn {
+    padding: 3px 12px;
     background: #28a745;
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.85em;
+    font-size: 0.78rem;
 }
-.val-autofix-btn:hover { background: #218838; }
-.val-autofix-btn:disabled { background: #6c757d; cursor: default; }
-.val-undo-btn {
-    margin: 4px 4px;
-    padding: 2px 10px;
-    background: #dc3545;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.85em;
-}
-.val-undo-btn:hover { background: #c82333; }
-.val-context-btn {
-    display: block;
-    margin-top: 6px;
-    padding: 2px 10px;
-    font-size: 0.7rem;
-    background: #1a1a3e;
-    color: #888;
-    border: 1px solid #333;
-    border-radius: 4px;
-    cursor: pointer;
-}
+.val-action-btn:hover { background: #218838; }
+.val-action-btn:disabled { background: #6c757d; cursor: default; }
 
-.val-context-btn:hover {
-    color: #ccc;
-    border-color: #555;
-}
+.val-action-btn-danger { background: #dc3545; }
+.val-action-btn-danger:hover { background: #c82333; }
+
+.val-action-btn-muted { background: #37474f; }
+.val-action-btn-muted:hover { background: #455a64; }
 
 /* ============ Shortcuts & Guide ============ */
 
@@ -1355,11 +1420,13 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     padding: 8px 12px 4px;
 }
 .seg-history-stat-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    display: flex;
+    justify-content: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 .seg-history-stat-card {
+    min-width: 100px;
     background: #0f0f23;
     border-radius: 4px;
     padding: 8px 12px;
@@ -1378,14 +1445,32 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     letter-spacing: 0.03em;
 }
 
-/* Op pills */
-.seg-history-op-pills {
+/* History filter bar */
+.seg-history-filters {
+    padding: 6px 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-bottom: 1px solid #2a2a4a;
+}
+.seg-history-filter-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.seg-history-filter-label {
+    font-size: 0.73rem;
+    color: #666;
+    min-width: 80px;
+    white-space: nowrap;
+}
+.seg-history-filter-pills {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    padding: 4px 12px 8px;
+    gap: 5px;
 }
-.seg-history-op-pill {
+.seg-history-filter-pill {
     display: inline-block;
     background: #1a1a3e;
     border: 1px solid #3a3a5a;
@@ -1393,18 +1478,33 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     padding: 2px 10px;
     font-size: 0.73rem;
     color: #aaa;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    user-select: none;
 }
-.seg-history-op-pill .pill-count {
+.seg-history-filter-pill:hover {
+    background: #1a2a4e;
+    color: #ccc;
+}
+.seg-history-filter-pill.active {
+    background: #4361ee;
+    border-color: #4361ee;
+    color: #fff;
+}
+.seg-history-filter-pill .pill-count {
     color: #4cc9f0;
     font-weight: 600;
 }
-
-/* Fix kind line */
-.seg-history-fix-kinds {
-    padding: 0 12px 10px;
-    font-size: 0.73rem;
-    color: #888;
+.seg-history-filter-pill.active .pill-count {
+    color: #fff;
 }
+.seg-history-empty {
+    padding: 24px;
+    text-align: center;
+    color: #666;
+    font-size: 0.85rem;
+}
+
 
 /* Batches container */
 .seg-history-batches {
@@ -1575,12 +1675,28 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 }
 .seg-history-diff .seg-left {
     flex: 0 0 auto;
+    flex-direction: row;
+    align-items: stretch;
+}
+.seg-history-diff .seg-left > .seg-card-play-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+.seg-history-diff .seg-left > canvas {
+    flex: 1;
+    min-width: 0;
 }
 .seg-history-diff .seg-row canvas {
     width: 100%;
     height: 40px;
 }
 .seg-history-diff .seg-text {
+    display: flex;
+    flex-direction: column;
     border-left: none;
     border-top: 4px solid #666;
     padding: 4px 8px;
@@ -1725,7 +1841,7 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 
 .seg-silence-gap-wrapper {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     margin: 2px 0;
     padding-left: 290px;
 }
