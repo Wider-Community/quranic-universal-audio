@@ -213,14 +213,20 @@ def simplify_ref(ref: str) -> str:
     return ref
 
 
-def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "", segment_dir: str = "") -> str:
-    """Render a single segment as an HTML card with optional audio player."""
+def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "", segment_dir: str = "", in_missing_pair: bool = False) -> str:
+    """Render a single segment as an HTML card with optional audio player.
+
+    Args:
+        in_missing_pair: If True, this card is part of a two-segment missing-words
+            group — the group wrapper handles the badge and border, so this card
+            keeps its natural confidence styling.
+    """
     is_special = seg.matched_ref in ALL_SPECIAL_REFS
     confidence_class = get_confidence_class(seg.match_score)
     confidence_badge_class = confidence_class  # preserve original for badge color
     if is_special:
         confidence_class = "segment-special"
-    elif seg.has_missing_words:
+    elif seg.has_missing_words and not in_missing_pair:
         confidence_class = "segment-low"
     elif seg.potentially_undersegmented and confidence_class != "segment-low":
         confidence_class = "segment-underseg"
@@ -239,9 +245,9 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     if seg.potentially_undersegmented:
         underseg_badge = '<div class="segment-badge segment-underseg-badge">Potentially Undersegmented</div>'
 
-    # Missing words badge
+    # Missing words badge (only for standalone missing, not when in a pair group)
     missing_badge = ""
-    if seg.has_missing_words:
+    if seg.has_missing_words and not in_missing_pair:
         missing_badge = '<div class="segment-badge segment-low-badge">Missing Words</div>'
 
     # Error display
@@ -317,7 +323,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
 
     if is_special:
         confidence_badge = f'<div class="segment-badge segment-special-badge">{seg.matched_ref}</div>'
-    elif seg.has_missing_words:
+    elif seg.has_missing_words and not in_missing_pair:
         confidence_badge = ""
     else:
         confidence_badge = f'<div class="segment-badge {confidence_badge_class}-badge">{confidence_pct}</div>'
@@ -440,6 +446,22 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
             f'</div>'
         )
 
+    # Pre-compute missing-words pairs: consecutive segments that share a gap
+    # get grouped; standalone missing segments stay individual.
+    missing_pair_starts: set[int] = set()  # indices that start a pair group
+    missing_in_pair: set[int] = set()      # all indices that belong to a pair
+    missing_indices = [i for i, s in enumerate(segments) if s.has_missing_words]
+    i = 0
+    while i < len(missing_indices):
+        if (i + 1 < len(missing_indices)
+                and missing_indices[i + 1] == missing_indices[i] + 1):
+            missing_pair_starts.add(missing_indices[i])
+            missing_in_pair.add(missing_indices[i])
+            missing_in_pair.add(missing_indices[i + 1])
+            i += 2
+        else:
+            i += 1
+
     html_parts = [
         f'<div class="segments-container" data-render-key="{render_key}" data-full-audio="{full_audio_url}">',
         "\n".join(header_parts),
@@ -447,7 +469,19 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
 
     t_cards = time.time()
     for idx, seg in enumerate(segments):
-        html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir))
+        in_pair = idx in missing_in_pair
+        # Open group wrapper before the first card of a pair
+        if idx in missing_pair_starts:
+            html_parts.append(
+                '<div class="missing-words-group">'
+                '<div class="missing-words-group-badge">'
+                '<div class="segment-badge segment-low-badge">Missing Words</div>'
+                '</div>'
+            )
+        html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir, in_missing_pair=in_pair))
+        # Close group wrapper after the second card of a pair
+        if idx - 1 in missing_pair_starts:
+            html_parts.append('</div>')
 
     html_parts.append('</div>')
     print(f"[PROFILE] Segment cards: {time.time() - t_cards:.3f}s ({len(segments)} cards, HTML only)")

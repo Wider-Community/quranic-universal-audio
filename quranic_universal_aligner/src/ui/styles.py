@@ -41,6 +41,33 @@ def build_css() -> str:
         overflow: visible !important;
     }}
 
+    /* Missing-words pair group — wraps two consecutive cards */
+    .missing-words-group {{
+        border: 2px solid #dc3545;
+        border-radius: 10px;
+        padding: 8px 8px 0;
+        margin-bottom: 12px;
+        position: relative;
+    }}
+    .missing-words-group .segment-card {{
+        margin-bottom: 8px;
+    }}
+    .missing-words-group-badge {{
+        display: flex;
+        justify-content: center;
+        margin-bottom: 6px;
+    }}
+    @media (prefers-color-scheme: dark) {{
+        .missing-words-group {{
+            border-color: #dc3545;
+            background: rgba(220, 53, 69, 0.06);
+        }}
+    }}
+    .dark .missing-words-group {{
+        border-color: #dc3545;
+        background: rgba(220, 53, 69, 0.06);
+    }}
+
     /* Segment cards - theme adaptive */
     .segment-card {{
         border-radius: 8px;
