@@ -1,0 +1,39 @@
+name: Bot Create Issue
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: Issue title
+        required: true
+      body:
+        description: Issue body (markdown)
+        required: true
+      labels:
+        description: Comma-separated labels
+        required: false
+        default: ''
+      assignees:
+        description: Comma-separated assignees
+        required: false
+        default: ''
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = '${{ inputs.labels }}'.split(',').map(l => l.trim()).filter(Boolean);
+            const assignees = '${{ inputs.assignees }}'.split(',').map(a => a.trim()).filter(Boolean);
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: ${{ toJSON(inputs.title) }},
+              body: ${{ toJSON(inputs.body) }},
+              labels,
+              assignees,
+            });
+            core.info(`Created issue #${issue.data.number}: ${issue.data.html_url}`);
