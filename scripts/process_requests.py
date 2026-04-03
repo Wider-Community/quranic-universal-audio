@@ -423,20 +423,8 @@ def cmd_generate_pbs(args):
     print("  bash scripts/sync_mfa.sh")
     print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub jobs/extract_segments.pbs"')
 
-    # Auto-send receipt emails for accepted requests
-    print("\nSending receipt emails...")
-    for req in accepted:
-        if not req.get("requester_email"):
-            print(f"  {req['name']}: No email, skipping")
-            continue
-        try:
-            subj, html = email_receipt(
-                req["name"], req["requester_name"], req["issue_url"],
-            )
-            send_email(req["requester_email"], subj, html)
-            print(f"  {req['name']}: sent to {req['requester_email']}")
-        except Exception as e:
-            print(f"  {req['name']}: failed — {e}")
+    # Receipt emails are now sent at form submission (HF Space),
+    # not here.  Use `notify receipt` to manually re-send if needed.
 
 
 # ---------------------------------------------------------------------------
