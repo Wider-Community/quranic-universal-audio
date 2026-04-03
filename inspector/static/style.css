@@ -1068,6 +1068,19 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     background: rgba(224, 124, 58, 0.15);
 }
 
+.val-rep-count {
+    background: rgba(168, 130, 255, 0.2);
+    color: #a882ff;
+}
+
+.val-btn.val-rep {
+    border-color: #a882ff;
+    color: #a882ff;
+}
+
+.val-btn.val-rep:hover {
+    background: rgba(168, 130, 255, 0.15);
+}
 
 .val-section-label {
     font-size: 0.7rem;

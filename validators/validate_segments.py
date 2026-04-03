@@ -85,7 +85,7 @@ def parse_detailed(path: Path) -> list[dict]:
         audio = entry.get("audio", "")
         ref = entry.get("ref", "")
         for seg in entry.get("segments", []):
-            segments.append({
+            d = {
                 "audio": audio,
                 "ref": ref,
                 "time_start": seg.get("time_start", 0),
@@ -94,7 +94,10 @@ def parse_detailed(path: Path) -> list[dict]:
                 "matched_text": seg.get("matched_text", ""),
                 "phonemes_asr": seg.get("phonemes_asr", ""),
                 "confidence": seg.get("confidence", 0.0),
-            })
+            }
+            if seg.get("wrap_word_ranges"):
+                d["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            segments.append(d)
     return segments
 
 
@@ -543,6 +546,17 @@ def _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
     else:
         print(f"\n--- Cross-file Consistency ---")
         print(f"  (no detailed.json)")
+
+    # ── Detected Repetitions ──
+    if has_detailed:
+        rep_segs = [s for s in detailed_segs if s.get("wrap_word_ranges")]
+        if rep_segs:
+            print(f"\n--- Detected Repetitions ({len(rep_segs)}) ---")
+            for i, s in enumerate(rep_segs, 1):
+                print(f"  {i:>2}. [{s['confidence']:.4f}]  {s['matched_ref']}  @ {_ms_to_hms(s['time_start'])} - {_ms_to_hms(s['time_end'])}")
+                print(f"      audio: {s['audio']}")
+                print(f"      text:  {s['matched_text']}")
+                print()
 
     # ── Errors & Warnings ──
     # Build audio lookup for error/warning context

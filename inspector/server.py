@@ -1140,7 +1140,7 @@ def get_seg_all(reciter):
             if not seg_uid:
                 seg_uid = _uuid7()
                 seg["segment_uid"] = seg_uid
-            segments.append({
+            seg_dict = {
                 "chapter":      chapter,
                 "entry_idx":    entry_idx,
                 "index":        idx,
@@ -1152,7 +1152,10 @@ def get_seg_all(reciter):
                 "display_text": _dk_text_for_ref(mref),
                 "confidence":   round(seg.get("confidence", 0.0), 4),
                 "audio_url":    entry_audio,
-            })
+            }
+            if seg.get("wrap_word_ranges"):
+                seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            segments.append(seg_dict)
 
     verse_word_counts = {}
     for (surah, ayah), n in _get_word_counts().items():
@@ -2259,6 +2262,7 @@ def validate_reciter_segments(reciter):
     boundary_adj = []
     cross_verse = []
     audio_bleeding = []
+    repetitions = []
     chapter_seg_idx = {}  # chapter -> next index (running counter)
 
     _single_word_verses = {k for k, v in word_counts.items() if v == 1}
@@ -2310,6 +2314,25 @@ def validate_reciter_segments(reciter):
                     "confidence": round(confidence, 4),
                     "time": f"{_format_ms(t_start)}-{_format_ms(t_end)}",
                     "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
+                })
+
+            # Detected repetitions
+            if seg.get("wrap_word_ranges"):
+                parts = matched_ref.split("-")
+                display_ref = matched_ref
+                if len(parts) == 2:
+                    s_parts = parts[0].split(":")
+                    e_parts = parts[1].split(":")
+                    if len(s_parts) >= 2 and len(e_parts) >= 2 and s_parts[1] == e_parts[1]:
+                        display_ref = f"{s_parts[0]}:{s_parts[1]}"
+                repetitions.append({
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "ref": matched_ref,
+                    "display_ref": display_ref,
+                    "confidence": round(confidence, 4),
+                    "time": f"{_format_ms(t_start)}-{_format_ms(t_end)}",
+                    "text": seg.get("matched_text", ""),
                 })
 
             # Low confidence
@@ -2614,6 +2637,7 @@ def validate_reciter_segments(reciter):
         "boundary_adj": boundary_adj,
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
+        "repetitions": repetitions,
         "stats": stats,
     })
 

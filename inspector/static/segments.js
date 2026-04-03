@@ -174,6 +174,7 @@ const ERROR_CAT_LABELS = {
     boundary_adj: 'Boundary adj.',
     cross_verse: 'Cross-verse', missing_words: 'Missing words',
     audio_bleeding: 'Audio bleeding',
+    repetitions: 'Repetitions',
 };
 
 // SearchableSelect instance for segments chapter dropdown
@@ -850,7 +851,7 @@ function _collectErrorChapters(validation) {
     const chapters = new Set();
     const cats = ['errors', 'missing_verses', 'missing_words', 'failed',
                   'low_confidence', 'boundary_adj',
-                  'cross_verse', 'audio_bleeding'];
+                  'cross_verse', 'audio_bleeding', 'repetitions'];
     for (const cat of cats) {
         const items = validation[cat];
         if (items) items.forEach(i => { if (i.chapter) chapters.add(i.chapter); });
@@ -3703,7 +3704,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
     targetEl.innerHTML = '';
     if (!data) { targetEl.hidden = true; return; }
 
-    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, boundary_adj: ba, cross_verse: cv, audio_bleeding: ab } = data;
+    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, boundary_adj: ba, cross_verse: cv, audio_bleeding: ab, repetitions: rep } = data;
 
     if (chapter !== null) {
         errs           = (errs           || []).filter(i => i.chapter === chapter);
@@ -3714,10 +3715,11 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         ba             = (ba             || []).filter(i => i.chapter === chapter);
         cv             = (cv             || []).filter(i => i.chapter === chapter);
         ab             = (ab             || []).filter(i => i.chapter === chapter);
+        rep            = (rep            || []).filter(i => i.chapter === chapter);
     }
     const hasAny = (errs && errs.length > 0) || (mv && mv.length > 0) || (mw && mw.length > 0)
         || (failed && failed.length > 0) || (low_confidence && low_confidence.length > 0) || (ba && ba.length > 0)
-        || (cv && cv.length > 0) || (ab && ab.length > 0);
+        || (cv && cv.length > 0) || (ab && ab.length > 0) || (rep && rep.length > 0);
     if (!hasAny) {
         targetEl.hidden = true;
         return;
@@ -3784,6 +3786,13 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             getLabel: i => `${i.entry_ref}\u2192${i.matched_verse}`,
             getTitle: i => `audio ${i.entry_ref} contains segment matching ${i.ref} (${i.time})`,
             btnClass: 'val-bleed',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        },
+        {
+            name: 'Detected Repetitions', items: rep, type: 'repetitions', countClass: 'val-rep-count',
+            getLabel: i => i.display_ref || i.ref,
+            getTitle: i => i.text,
+            btnClass: 'val-rep',
             onClick: i => jumpToSegment(i.chapter, i.seg_index)
         }
     ];
@@ -4581,7 +4590,7 @@ function renderCategoryCards(type, items, container) {
             }
 
             wrapper.appendChild(actionsRow);
-            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding';
+            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding' || type === 'repetitions';
             addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: contextDefault });
             container.appendChild(wrapper);
         }
