@@ -131,9 +131,10 @@ COST_INSERTION = 1.0                # Insert phoneme from reference (R)
 COST_DELETION = 0.8                 # Delete phoneme from ASR (P)
 
 # Repetition detection (wraparound DP)
-WRAP_PENALTY = 2.0                  # Cost per wrap transition in DP
-WRAP_SCORE_COST = 0.01              # Per-wrap additive penalty in scoring
-MAX_WRAPS = 5                       # Max wraps for all segments
+WRAP_PENALTY = 3.5                  # Cost per wrap transition in DP
+WRAP_SCORE_COST = 0.005             # Per-wrap additive penalty in scoring
+WRAP_SPAN_WEIGHT = 0.1              # Per-word cost for wrap span width (penalizes wide jumps)
+MAX_WRAPS = 8                       # Max wraps for all segments
 
 # Alignment thresholds (normalized edit distance: 0 = identical, 1 = completely different)
 LOOKBACK_WORDS = 30                 # Window words to look back from pointer for starting positions

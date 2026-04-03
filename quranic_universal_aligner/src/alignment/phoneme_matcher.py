@@ -20,6 +20,7 @@ from config import (
     COST_INSERTION,
     WRAP_PENALTY,
     WRAP_SCORE_COST,
+    WRAP_SPAN_WEIGHT,
     MAX_WRAPS,
     PHONEME_ALIGNMENT_DEBUG,
     PHONEME_ALIGNMENT_PROFILING,
@@ -303,6 +304,7 @@ def align_wraparound(
     max_wraps: int = 0,
     scoring_mode: str = "additive",
     wrap_score_cost: float = WRAP_SCORE_COST,
+    wrap_span_weight: float = WRAP_SPAN_WEIGHT,
 ):
     """
     Word-boundary-constrained substring alignment with optional wraparound.
@@ -321,6 +323,7 @@ def align_wraparound(
             cost_sub, cost_del, cost_ins,
             wrap_penalty, max_wraps,
             scoring_mode, wrap_score_cost,
+            wrap_span_weight,
         )
 
     # --- Pure Python fallback ---
@@ -452,7 +455,8 @@ def align_wraparound(
                 for j_s in word_starts:
                     if j_s >= j_end:
                         continue
-                    new_cost = cost_at_end + wrap_penalty
+                    word_span = abs(R_phone_to_word[j_end - 1] - R_phone_to_word[j_s])
+                    new_cost = cost_at_end + wrap_penalty + wrap_span_weight * word_span
                     if new_cost < dp[i][k+1][j_s]:
                         dp[i][k+1][j_s] = new_cost
                         parent[i][k+1][j_s] = (i, k, j_end, 'W')
@@ -641,6 +645,7 @@ def align_segment(
         wrap_penalty=WRAP_PENALTY,
         max_wraps=MAX_WRAPS,
         scoring_mode="no_subtract",
+        wrap_span_weight=WRAP_SPAN_WEIGHT,
     )
 
     if PHONEME_ALIGNMENT_PROFILING:
@@ -705,15 +710,21 @@ def align_segment(
     )
 
     # Compute wrap word ranges for UI display
+    # Each entry is (jump_to, jump_from, repeat_end):
+    #   jump_to: where the wrap lands (start of repeated section)
+    #   jump_from: where the wrap originated (end of forward section before wrap)
+    #   repeat_end: where the DP actually finishes after the wrap (actual end of repeated content)
     if n_wraps > 0 and wrap_points:
         wrap_word_ranges = []
-        for (_i_pos, _j_end, _j_start) in wrap_points:
-            ws = R_phone_to_word[_j_start]
-            we = R_phone_to_word[_j_end - 1]
-            wrap_word_ranges.append((
-                words[ws].location,
-                words[we].location,
-            ))
+        for wp_idx, (_i_pos, _j_end, _j_start) in enumerate(wrap_points):
+            jump_to = words[R_phone_to_word[_j_start]].location
+            jump_from = words[R_phone_to_word[_j_end - 1]].location
+            if wp_idx < len(wrap_points) - 1:
+                post_end = wrap_points[wp_idx + 1][1]
+            else:
+                post_end = best_j
+            repeat_end = words[R_phone_to_word[post_end - 1]].location
+            wrap_word_ranges.append((jump_to, jump_from, repeat_end))
         result.wrap_word_ranges = wrap_word_ranges
 
     if PHONEME_ALIGNMENT_PROFILING:

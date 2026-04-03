@@ -1,7 +1,7 @@
 ## 03/04/2026
 
 - **Inline reference editing** — click any segment's reference to edit it directly
-  - Supports full refs (`2:255:1-2:255:5`), short forms (`2:255:1-5`), whole verses (`2:255`), verse ranges (`2:255-2:256`), and special keywords (`Basmala`, `Isti'adha`, `Amin`, `Takbir`, `Tahmeed`, `Tasleem`, `Sadaqa`)
+  - Supports full refs (2:255:1-2:255:5), short forms (2:255:1-5), whole verses (2:255), verse ranges (2:255-2:256), and special keywords (Basmala, Isti'adha, Amin, Takbir, Tahmeed, Tasleem, Sadaqa)
   - Automatically updates "Missing Words" flags on neighbouring segments when a reference changes
   - Can convert between segment types — e.g. re-label a misidentified segment as a special keyword or vice versa
 - **Repetition detection** — single segments where the reciter repeated words  are now automatically detected and flagged with a "Repeated Words" badge

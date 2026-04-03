@@ -20,10 +20,23 @@ def compute_reading_sequence(ref_from: str, ref_to: str,
     full recitation sequence showing how the text was actually read
     (including repeated sections).
 
-    Example: ref "2:255:1" to "2:255:10", wrap [("2:255:3", "2:255:5")]
-    → [["2:255:1", "2:255:5"], ["2:255:3", "2:255:10"]]
-    (read words 1-5, then jumped back to 3 and continued to 10)
+    Supports 3-element tuples (jump_to, jump_from, repeat_end) and
+    legacy 2-element tuples (jump_to, jump_from).
+
+    Example: ref "2:255:1" to "2:255:10", wrap [("2:255:3", "2:255:5", "2:255:8")]
+    → [["2:255:1", "2:255:5"], ["2:255:3", "2:255:8"]]
+    (read words 1-5 forward, then repeated 3-8)
     """
+    if wrap_word_ranges and len(wrap_word_ranges[0]) >= 3:
+        # 3-element format: (jump_to, jump_from, repeat_end)
+        # Forward section: ref_from to first wrap's jump_from
+        sections = [[ref_from, wrap_word_ranges[0][1]]]
+        # Each wrap's actual repeated content
+        for wr in wrap_word_ranges:
+            sections.append([wr[0], wr[2]])
+        return sections
+
+    # Legacy 2-element format: (jump_to, jump_from)
     sections = [[ref_from, wrap_word_ranges[0][1]]]
     for i in range(len(wrap_word_ranges) - 1):
         sections.append([wrap_word_ranges[i][0], wrap_word_ranges[i + 1][1]])

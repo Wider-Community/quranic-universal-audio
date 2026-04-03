@@ -394,6 +394,7 @@ cdef tuple _align_full_3d(
     int max_wraps,
     int sc_mode,           # 0=subtract, 1=no_subtract, 2=additive
     double wrap_score_cost,
+    double wrap_span_weight,
 ):
     """Wraparound DP with full 3D matrix and parent pointers for traceback."""
     cdef int m = enc.m, n = enc.n
@@ -458,7 +459,7 @@ cdef tuple _align_full_3d(
 
     # Variables for DP transitions
     cdef double del_opt, ins_opt, sub_opt, sc, new_cost, cost_at_end, best_val
-    cdef int j_end, j_sw, mj_val
+    cdef int j_end, j_sw, mj_val, word_span
     cdef int we_i, ws_i
 
     # Fill DP
@@ -533,7 +534,10 @@ cdef tuple _align_full_3d(
                     j_sw = enc.ws_pos[ws_i]
                     if j_sw >= j_end:
                         continue
-                    new_cost = cost_at_end + wrap_penalty
+                    word_span = enc.R_w[j_end - 1] - enc.R_w[j_sw]
+                    if word_span < 0:
+                        word_span = -word_span
+                    new_cost = cost_at_end + wrap_penalty + wrap_span_weight * word_span
                     idx = base_i + koff_dst + j_sw
                     if new_cost < cost_3d[idx]:
                         cost_3d[idx] = new_cost
@@ -664,6 +668,7 @@ def cy_align_wraparound(
     int max_wraps = 0,
     str scoring_mode = "subtract",
     double wrap_score_cost = 0.01,
+    double wrap_span_weight = 0.1,
 ):
     """Wraparound word-boundary-constrained substring alignment (Cython).
 
@@ -711,6 +716,7 @@ def cy_align_wraparound(
                 cost_sub, cost_del, cost_ins,
                 wrap_penalty, max_wraps,
                 sc_mode, wrap_score_cost,
+                wrap_span_weight,
             )
     finally:
         _free_encoded(&enc)
