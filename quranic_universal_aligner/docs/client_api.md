@@ -32,10 +32,10 @@
 ```python
 from gradio_client import Client
 
-client = Client("https://hetchyy-quran-multi-aligner.hf.space")
+client = Client("https://hetchyy-quranic-universal-aligner.hf.space")
 
 # Or pass your HF token to use your own account's ZeroGPU quota
-client = Client("https://hetchyy-quran-multi-aligner.hf.space", token="hf_...")
+client = Client("https://hetchyy-quranic-universal-aligner.hf.space", token="hf_...")
 
 # Full pipeline
 result = client.predict(

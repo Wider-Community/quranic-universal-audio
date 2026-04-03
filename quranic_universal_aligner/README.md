@@ -1,5 +1,5 @@
 ---
-title: Quran Multi-Aligner
+title: Quranic Universal Aligner
 emoji: 🎯
 colorFrom: blue
 colorTo: green
@@ -13,7 +13,7 @@ thumbnail: >-
   https://cdn-uploads.huggingface.co/production/uploads/684abe5b6327ae8863d106d2/O-S42Itgk6PbM-xaxgxcD.png
 ---
 
-# Quran Multi-Aligner
+# Quranic Universal Aligner
 
 Automatic forced alignment for Quran recitations. Upload an audio recording of any surah and get word-level timestamps aligned to the Quranic text.
 

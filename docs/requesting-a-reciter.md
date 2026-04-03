@@ -8,7 +8,7 @@ The pipeline takes full-surah or per-ayah audio recordings and produces word-lev
 
 ## Step 1: Find a good min silence value
 
-Before submitting a request, spend a few minutes testing the parameter on the [Quran Multi-Aligner](https://huggingface.co/spaces/hetchyy/Quran-multi-aligner) to find a value that works well for your reciter.
+Before submitting a request, spend a few minutes testing the parameter on the [Quranic Universal Aligner](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) to find a value that works well for your reciter.
 
 ### Download a test chapter
 
@@ -16,9 +16,9 @@ Before submitting a request, spend a few minutes testing the parameter on the [Q
 2. Select your reciter and pick one or two medium-length chapters (e.g. chapters 18, 36, or 67)
 3. Download the audio file from the audio player widget
 
-### Test on the Multi-Aligner
+### Test on the Aligner
 
-1. Go to the [Quran Multi-Aligner Space](https://huggingface.co/spaces/hetchyy/Quran-multi-aligner)
+1. Go to the [Quranic Universal Aligner Space](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner)
 2. Upload the downloaded audio
 3. Click Extract Segments to run alignment
 4. Look at the results:

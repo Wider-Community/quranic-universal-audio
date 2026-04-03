@@ -25,7 +25,7 @@ POST /api/debug_process
 ```python
 from gradio_client import Client
 
-client = Client("hetchyy/Quran-multi-aligner")
+client = Client("hetchyy/quranic-universal-aligner")
 result = client.predict(
     "path/to/audio.mp3",
     300, 100, 50,        # silence, speech, pad

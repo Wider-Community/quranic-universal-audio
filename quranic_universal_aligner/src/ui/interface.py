@@ -38,8 +38,8 @@ def build_interface():
     css = build_css()
     js = build_js_head(_SURAH_LIGATURES)
 
-    with gr.Blocks(title="Quran Multi-Aligner", css=css, head=js, delete_cache=(DELETE_CACHE_FREQUENCY, DELETE_CACHE_AGE)) as app:
-        gr.Markdown("# \U0001f399\ufe0f Quran Multi-Aligner")
+    with gr.Blocks(title="Quranic Universal Aligner", css=css, head=js, delete_cache=(DELETE_CACHE_FREQUENCY, DELETE_CACHE_AGE)) as app:
+        gr.Markdown("# \U0001f399\ufe0f Quranic Universal Aligner")
         gr.Markdown("""
 - Transcribe and split any recitation by pauses within 1-2 minutes
 - Get precise pause-, verse-, word- and character-level timestamps, exportable as JSON
