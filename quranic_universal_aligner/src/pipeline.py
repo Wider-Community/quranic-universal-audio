@@ -633,6 +633,27 @@ def _run_post_vad_pipeline(
         # Extend end_time if this segment absorbed a merged segment
         seg_end_time = _merged_end_times.get(idx, seg.end_time)
 
+        # Compute reading sequence for repeated segments
+        rep_ranges = None
+        rep_text = None
+        if wrap_ranges and matched_ref and "-" in matched_ref:
+            from src.core.segment_types import compute_reading_sequence
+            from src.core.quran_index import get_quran_index
+            ref_from, ref_to = matched_ref.split("-", 1)
+            rep_ranges = compute_reading_sequence(ref_from, ref_to, wrap_ranges)
+            qi = get_quran_index()
+            rep_text = []
+            for sec_from, sec_to in rep_ranges:
+                sec_ref = f"{sec_from}-{sec_to}"
+                indices = qi.ref_to_indices(sec_ref)
+                if indices:
+                    s_i, e_i = indices
+                    rep_text.append(" ".join(
+                        w.display_text for w in qi.words[s_i:e_i + 1]
+                    ))
+                else:
+                    rep_text.append("")
+
         segments.append(SegmentInfo(
             start_time=seg.start_time,
             end_time=seg_end_time,
@@ -644,6 +665,8 @@ def _run_post_vad_pipeline(
             has_missing_words=idx in gap_segments,
             has_repeated_words=idx in repetition_segments,
             wrap_word_ranges=wrap_ranges,
+            repeated_ranges=rep_ranges,
+            repeated_text=rep_text,
         ))
 
     # Post-processing: split combined/fused segments via MFA timestamps

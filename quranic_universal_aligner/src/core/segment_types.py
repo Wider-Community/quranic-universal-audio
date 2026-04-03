@@ -12,6 +12,25 @@ class VadSegment:
     segment_idx: int
 
 
+def compute_reading_sequence(ref_from: str, ref_to: str,
+                             wrap_word_ranges: list) -> list:
+    """Return reading-order [[ref_from, ref_to], ...] from wrap data.
+
+    Given the overall matched range and the wrap points, reconstructs the
+    full recitation sequence showing how the text was actually read
+    (including repeated sections).
+
+    Example: ref "2:255:1" to "2:255:10", wrap [("2:255:3", "2:255:5")]
+    → [["2:255:1", "2:255:5"], ["2:255:3", "2:255:10"]]
+    (read words 1-5, then jumped back to 3 and continued to 10)
+    """
+    sections = [[ref_from, wrap_word_ranges[0][1]]]
+    for i in range(len(wrap_word_ranges) - 1):
+        sections.append([wrap_word_ranges[i][0], wrap_word_ranges[i + 1][1]])
+    sections.append([wrap_word_ranges[-1][0], ref_to])
+    return sections
+
+
 @dataclass
 class SegmentInfo:
     """Processed segment with transcription and matching results."""
@@ -25,6 +44,8 @@ class SegmentInfo:
     has_missing_words: bool = False
     has_repeated_words: bool = False
     wrap_word_ranges: Optional[list] = None
+    repeated_ranges: Optional[list] = None   # [["2:255:1", "2:255:5"], ...]
+    repeated_text: Optional[list] = None     # ["text section 1", "text section 2"]
     # 1-based segment index
     segment_number: int = 0
     # MFA word/letter timestamps (list of dicts with location, start, end, letters)
@@ -56,6 +77,10 @@ class SegmentInfo:
         }
         if self.wrap_word_ranges:
             d["wrap_word_ranges"] = self.wrap_word_ranges
+        if self.repeated_ranges:
+            d["repeated_ranges"] = self.repeated_ranges
+        if self.repeated_text:
+            d["repeated_text"] = self.repeated_text
         if self.words is not None:
             d["words"] = self.words
         return d
@@ -80,6 +105,8 @@ class SegmentInfo:
             has_missing_words=d.get("has_missing_words", False),
             has_repeated_words=d.get("has_repeated_words", False),
             wrap_word_ranges=d.get("wrap_word_ranges"),
+            repeated_ranges=d.get("repeated_ranges"),
+            repeated_text=d.get("repeated_text"),
             segment_number=d.get("segment", index + 1),
             words=d.get("words"),
         )

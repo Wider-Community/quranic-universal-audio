@@ -321,10 +321,14 @@ def _format_response(audio_id, json_output, warning=None):
             "matched_text": seg["matched_text"],
             "confidence": seg["confidence"],
             "has_missing_words": seg.get("has_missing_words", False),
+            "has_repeated_words": seg.get("has_repeated_words", False),
             "error": seg["error"],
         }
         if seg.get("special_type"):
             entry["special_type"] = seg["special_type"]
+        if seg.get("repeated_ranges"):
+            entry["repeated_ranges"] = seg["repeated_ranges"]
+            entry["repeated_text"] = seg["repeated_text"]
         segments.append(entry)
     _save_segments(audio_id, segments)
     resp = {"audio_id": audio_id, "segments": segments}
@@ -818,10 +822,14 @@ def debug_process(audio_data, min_silence_ms, min_speech_ms, pad_ms,
             "matched_text": seg["matched_text"],
             "confidence": seg["confidence"],
             "has_missing_words": seg.get("has_missing_words", False),
+            "has_repeated_words": seg.get("has_repeated_words", False),
             "error": seg["error"],
         }
         if seg.get("special_type"):
             entry["special_type"] = seg["special_type"]
+        if seg.get("repeated_ranges"):
+            entry["repeated_ranges"] = seg["repeated_ranges"]
+            entry["repeated_text"] = seg["repeated_text"]
         segments.append(entry)
 
     # Build final response

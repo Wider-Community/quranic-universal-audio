@@ -458,25 +458,12 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
         text_html = ""
 
     # Rebuild text as reading-order sections when wraps detected
-    if seg.wrap_word_ranges and seg.matched_ref and "-" in seg.matched_ref:
-        match_start, match_end = seg.matched_ref.split("-", 1)
+    if seg.repeated_ranges:
         sections = []
-        # Section 0: match start → first wrap end
-        sec0_ref = f"{match_start}-{seg.wrap_word_ranges[0][1]}"
-        sec0 = get_text_with_markers(sec0_ref)
-        if sec0:
-            sections.append(sec0)
-        # Middle sections (between consecutive wraps)
-        for wi in range(len(seg.wrap_word_ranges) - 1):
-            sec_ref = f"{seg.wrap_word_ranges[wi][0]}-{seg.wrap_word_ranges[wi + 1][1]}"
-            sec = get_text_with_markers(sec_ref)
+        for sec_from, sec_to in seg.repeated_ranges:
+            sec = get_text_with_markers(f"{sec_from}-{sec_to}")
             if sec:
                 sections.append(sec)
-        # Last section: last wrap target → match end
-        last_ref = f"{seg.wrap_word_ranges[-1][0]}-{match_end}"
-        last_sec = get_text_with_markers(last_ref)
-        if last_sec:
-            sections.append(last_sec)
         if sections:
             text_html = '<hr class="repeat-divider">'.join(sections)
 
