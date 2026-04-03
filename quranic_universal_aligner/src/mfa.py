@@ -684,24 +684,29 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
     import re
     import traceback
 
-    # Re-render HTML from json_output to pick up any inline edits
-    # (patch-based edits update json_output but skip output_html)
-    segments = json_output.get("segments", []) if json_output else []
-    if segments and segment_dir:
-        from src.pipeline import _json_to_segments
+    # json_output is now List[SegmentInfo] from gr.State (not a JSON dict)
+    segments_state = json_output if isinstance(json_output, list) else []
+    if not segments_state:
+        yield current_html, gr.update(), gr.update(), gr.update(), gr.update()
+        return
+
+    # Re-render HTML from SegmentInfo to pick up any inline edits
+    # (patch-based edits update state but skip output_html)
+    if segment_dir:
         from src.ui.segments import render_segments
-        seg_objects = _json_to_segments(json_output)
-        current_html = render_segments(seg_objects, segment_dir=str(segment_dir),
-                                       json_segments=segments)
+        current_html = render_segments(segments_state, segment_dir=str(segment_dir))
 
     if not current_html or '<span class="word"' not in current_html:
         yield current_html, gr.update(), gr.update(), gr.update(), gr.update()
         return
 
-    # Write individual segment WAVs on demand (sliced from full.wav)
-    _ensure_segment_wavs(segments, segment_dir)
+    # Convert to dicts at the MFA boundary (MFA internals expect dict-based segments)
+    segment_dicts = [seg.to_json_dict() for seg in segments_state]
 
-    refs, audio_paths, seg_to_result_idx = _build_mfa_refs(segments, segment_dir)
+    # Write individual segment WAVs on demand (sliced from full.wav)
+    _ensure_segment_wavs(segment_dicts, segment_dir)
+
+    refs, audio_paths, seg_to_result_idx = _build_mfa_refs(segment_dicts, segment_dir)
 
     if not refs:
         yield current_html, gr.update(), gr.update(), gr.update(), gr.update()
@@ -759,7 +764,7 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
         raise
 
     html, enriched_json = inject_timestamps_into_html(
-        current_html, segments, results, seg_to_result_idx, segment_dir
+        current_html, segment_dicts, results, seg_to_result_idx, segment_dir
     )
 
     # Log word and char timestamps to usage logger
@@ -801,14 +806,21 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
         except Exception as e:
             print(f"[USAGE_LOG] Failed to log word timestamps: {e}")
 
-    # Final yield: updated HTML, hide progress bar, show Animate All, enriched JSON
+    # Copy MFA word/letter data back onto SegmentInfo objects
+    enriched_segs = enriched_json.get("segments", []) if enriched_json else []
+    for seg in segments_state:
+        idx = seg.segment_number - 1
+        if 0 <= idx < len(enriched_segs) and "words" in enriched_segs[idx]:
+            seg.words = enriched_segs[idx]["words"]
+
+    # Final yield: updated HTML, hide progress bar, show Animate All, SegmentInfo list
     animate_all_btn_html = '<button class="animate-all-btn">Animate All</button>'
     yield (
         html,
         gr.update(visible=False),
         gr.update(value=animate_all_btn_html, visible=True),
         gr.update(visible=False),
-        enriched_json,
+        segments_state,
     )
 
 

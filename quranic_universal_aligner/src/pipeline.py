@@ -18,7 +18,7 @@ from src.segmenter.segmenter_model import load_segmenter, ensure_models_on_gpu
 from src.segmenter.vad import detect_speech_segments
 from src.segmenter.segmenter_aoti import test_vad_aoti_export
 from src.alignment.alignment_pipeline import run_phoneme_matching
-from src.core.segment_types import VadSegment, SegmentInfo, ProfilingData
+from src.core.segment_types import VadSegment, SegmentInfo, ProfilingData, segments_to_json
 from src.ui.segments import (
     render_segments, get_segment_word_stats,
     is_end_of_verse,
@@ -439,7 +439,8 @@ def _run_post_vad_pipeline(
     import time
 
     if not intervals:
-        return "<div>No speech segments detected in audio</div>", {"segments": []}, None
+        empty = {"segments": []} if endpoint != "ui" else []
+        return "<div>No speech segments detected in audio</div>", empty, None, None
 
     # Build VAD segments and extract audio arrays
     vad_segments = []
@@ -829,40 +830,15 @@ def _run_post_vad_pipeline(
         except Exception as e:
             print(f"[USAGE_LOG] Failed: {e}")
 
-    # Build JSON output for API consumers
-    def parse_ref(matched_ref):
-        if not matched_ref:
-            return "", ""
-        if "-" in matched_ref:
-            parts = matched_ref.split("-")
-            return parts[0], parts[1] if len(parts) > 1 else parts[0]
-        return matched_ref, matched_ref
-
-    segments_list = []
-    for i, seg in enumerate(segments):
-        is_special = seg.matched_ref in ALL_SPECIAL_REFS
-        segment_data = {
-            "segment": i + 1,
-            "time_from": round(seg.start_time, 3),
-            "time_to": round(seg.end_time, 3),
-            "ref_from": "" if is_special else parse_ref(seg.matched_ref)[0],
-            "ref_to": "" if is_special else parse_ref(seg.matched_ref)[1],
-            "matched_text": seg.matched_text or "",
-            "confidence": round(seg.match_score, 3),
-            "has_missing_words": seg.has_missing_words,
-            "has_repeated_words": seg.has_repeated_words,
-            "special_type": seg.matched_ref if is_special else None,
-            "error": seg.error,
-        }
-        if seg.wrap_word_ranges:
-            segment_data["wrap_word_ranges"] = seg.wrap_word_ranges
-        segments_list.append(segment_data)
-
-    json_output = {"segments": segments_list}
-
-    # API callers only need json_output; skip HTML render and audio file writes
+    # API callers get a JSON dict; UI callers get the SegmentInfo list directly
     if endpoint != "ui":
+        json_output = segments_to_json(segments)
         return "", json_output, str(segment_dir), log_row
+
+    # UI path: stamp segment_number and pass SegmentInfo list through as json_output
+    for i, seg in enumerate(segments):
+        seg.segment_number = i + 1
+    json_output = segments  # List[SegmentInfo] — Gradio gr.State is type-agnostic
 
     # Compute full audio URL (file written in background after render)
     full_path = segment_dir / "full.wav"
@@ -1305,16 +1281,26 @@ def process_audio_json(audio_data, min_silence_ms, min_speech_ms, pad_ms, model_
 
 
 def save_json_export(json_data):
-    """Save JSON results to a temp file for download."""
+    """Save JSON results to a temp file for download.
+
+    Accepts either a List[SegmentInfo] (UI path) or a dict (API/legacy path).
+    """
     import tempfile
     import json
 
-    if not json_data or not json_data.get("segments"):
-        return None
+    # Convert SegmentInfo list to JSON dict if needed
+    if isinstance(json_data, list):
+        if not json_data:
+            return None
+        data = segments_to_json(json_data)
+    else:
+        if not json_data or not json_data.get("segments"):
+            return None
+        data = json_data
 
     # Create temp file with JSON
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
-        json.dump(json_data, f, separators=(',', ':'), ensure_ascii=False)
+        json.dump(data, f, separators=(',', ':'), ensure_ascii=False)
         return f.name
 
 
@@ -1404,7 +1390,11 @@ def _normalize_ref(raw_ref: str) -> str | None:
 
 
 def _json_to_segments(json_output: dict) -> list:
-    """Reconstruct SegmentInfo list from json_output."""
+    """Reconstruct SegmentInfo list from json_output.
+
+    DEPRECATED: Only used by mfa.py's MFA loading path (Phase 4).
+    Use SegmentInfo.from_json_dict() for new code.
+    """
     segments = []
     for s in json_output.get("segments", []):
         if s.get("special_type"):
@@ -1427,7 +1417,11 @@ def _json_to_segments(json_output: dict) -> list:
 
 
 def _segments_to_json(segments: list, old_json_segments: list | None = None) -> dict:
-    """Build json_output from SegmentInfo list, preserving extra keys from old json."""
+    """Build json_output from SegmentInfo list, preserving extra keys from old json.
+
+    DEPRECATED: No remaining callers after Phase 3. Can be removed.
+    Use segments_to_json() from segment_types for new code.
+    """
     from src.alignment.special_segments import ALL_SPECIAL_REFS
 
     def parse_ref(matched_ref):
@@ -1485,14 +1479,17 @@ def _inject_word_timing(text_html: str, words_data: list, seg_offset: float = 0)
     return re.sub(r'<span class="word"[^>]*>', _inject, text_html)
 
 
-def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
-    """Apply an inline ref edit from the JS UI. Returns (json_output, export_file, patch_json)."""
+def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str):
+    """Apply an inline ref edit from the JS UI.
+
+    Operates directly on List[SegmentInfo]. Returns (segments_state, export_file, patch_json).
+    """
     from src.ui.segments import recompute_missing_words, resolve_ref_text, get_text_with_markers, _wrap_word, simplify_ref
     from src.alignment.special_segments import ALL_SPECIAL_REFS
 
     _skip3 = (gr.skip(), gr.skip(), gr.skip())
 
-    if not edit_payload_str or not json_output:
+    if not edit_payload_str or not segments_state:
         return _skip3
 
     try:
@@ -1502,7 +1499,7 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
 
     # Route special actions
     if payload.get("action") == "recompute_mfa":
-        return _recompute_single_mfa(payload.get("idx"), json_output, segment_dir)
+        return _recompute_single_mfa(payload.get("idx"), segments_state, segment_dir)
 
     idx = payload.get("idx")
     raw_ref = payload.get("new_ref", "")
@@ -1513,18 +1510,11 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
     if idx is None or not raw_ref:
         return _skip3
 
-    old_segments = json_output.get("segments", [])
-    if idx < 0 or idx >= len(old_segments):
+    if idx < 0 or idx >= len(segments_state):
         return _skip3
 
-    # Build the old ref for error revert
-    old_seg = old_segments[idx]
-    if old_seg.get("special_type"):
-        old_ref = old_seg["special_type"]
-    elif old_seg.get("ref_to"):
-        old_ref = f"{old_seg['ref_from']}-{old_seg['ref_to']}"
-    else:
-        old_ref = old_seg.get("ref_from", "")
+    seg = segments_state[idx]
+    old_ref = seg.matched_ref
 
     def _error_patch(message):
         return (gr.skip(), gr.skip(), json.dumps({
@@ -1550,12 +1540,28 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
             print(f"[REF-EDIT] Ref not found in QuranIndex: {new_ref}")
             return _error_patch(f"Ref not found: {new_ref}")
 
-    # Reconstruct segments
-    segments = _json_to_segments(json_output)
-    seg = segments[idx]
-
     # Snapshot old missing-words flags before mutation
-    old_flags = [s.has_missing_words for s in segments]
+    old_flags = [s.has_missing_words for s in segments_state]
+
+    # MFA timestamp handling: stash on edit, restore when ref matches stashed ref
+    # (Must read before mutating ref, since we compare new_ref against stale_ref)
+    had_mfa = bool(seg.words)
+    mfa_restored = False
+    has_stale = bool(seg.stale_words)
+    stale_ref = seg.stale_ref or ""
+
+    if has_stale and new_ref == stale_ref:
+        # Ref reverted to original (undo or manual edit-back): restore stashed timestamps
+        seg.words = seg.stale_words
+        seg.stale_words = None
+        seg.stale_ref = None
+        mfa_restored = True
+        had_mfa = False  # Don't report as stripped
+    elif had_mfa:
+        # Edit: stash timestamps + original ref for potential restore
+        seg.stale_words = seg.words
+        seg.stale_ref = old_ref
+        seg.words = None
 
     # Apply the edit
     seg.matched_ref = new_ref
@@ -1565,46 +1571,16 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
 
     # Track autofix undo data
     if is_autofix and original_ref:
-        if idx < len(old_segments):
-            old_segments[idx]["_autofix_original_ref"] = original_ref
+        seg.autofix_original_ref = original_ref
     if clear_autofix:
-        if idx < len(old_segments):
-            old_segments[idx].pop("_autofix_original_ref", None)
+        seg.autofix_original_ref = None
 
     # Recompute missing words flags and track changes
-    recompute_missing_words(segments)
+    recompute_missing_words(segments_state)
     flag_changes = []
-    for i, s in enumerate(segments):
+    for i, s in enumerate(segments_state):
         if old_flags[i] != s.has_missing_words:
             flag_changes.append({"idx": i, "has_missing_words": s.has_missing_words})
-
-    # Rebuild json_output
-    new_json = _segments_to_json(segments, old_json_segments=old_segments)
-
-    # Handle autofix undo tracking in new json
-    if is_autofix and original_ref:
-        new_json["segments"][idx]["_autofix_original_ref"] = original_ref
-    if clear_autofix and "_autofix_original_ref" in new_json["segments"][idx]:
-        del new_json["segments"][idx]["_autofix_original_ref"]
-
-    # MFA timestamp handling: stash on edit, restore when ref matches stashed ref
-    had_mfa = bool(old_segments[idx].get("words"))
-    mfa_restored = False
-    stale_ref = old_segments[idx].get("_stale_ref", "")
-    has_stale = bool(old_segments[idx].get("_stale_words"))
-
-    if has_stale and new_ref == stale_ref:
-        # Ref reverted to original (undo or manual edit-back): restore stashed timestamps
-        new_json["segments"][idx]["words"] = old_segments[idx]["_stale_words"]
-        new_json["segments"][idx].pop("_stale_words", None)
-        new_json["segments"][idx].pop("_stale_ref", None)
-        mfa_restored = True
-        had_mfa = False  # Don't report as stripped
-    elif had_mfa:
-        # Edit: stash timestamps + original ref for potential restore
-        new_json["segments"][idx]["_stale_words"] = old_segments[idx]["words"]
-        new_json["segments"][idx]["_stale_ref"] = old_ref
-        new_json["segments"][idx].pop("words", None)
 
     # Build patch for JS (no full HTML re-render)
     is_special = new_ref in ALL_SPECIAL_REFS
@@ -1621,8 +1597,8 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
 
     # When restoring MFA, inject timing attributes into word spans
     if mfa_restored and matched_text_html:
-        restored_words = new_json["segments"][idx].get("words", [])
-        seg_offset = new_json["segments"][idx].get("time_from", 0)
+        restored_words = seg.words or []
+        seg_offset = seg.start_time
         matched_text_html = _inject_word_timing(matched_text_html, restored_words, seg_offset)
 
     patch = json.dumps({
@@ -1635,15 +1611,18 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
         "is_special": is_special,
         "mfa_stripped": had_mfa,
         "mfa_restored": mfa_restored,
-        "edited_has_missing_words": segments[idx].has_missing_words,
+        "edited_has_missing_words": seg.has_missing_words,
     })
 
-    print(f"[REF-EDIT] idx={idx} {old_ref!r} → {new_ref!r} is_special={is_special} has_mw={segments[idx].has_missing_words} text_len={len(matched_text_html)}")
-    return new_json, save_json_export(new_json), patch
+    print(f"[REF-EDIT] idx={idx} {old_ref!r} → {new_ref!r} is_special={is_special} has_mw={seg.has_missing_words} text_len={len(matched_text_html)}")
+    return segments_state, save_json_export(segments_state), patch
 
 
-def _recompute_single_mfa(seg_idx, json_output, segment_dir):
-    """Recompute MFA timestamps for a single segment. Returns (json, export, patch)."""
+def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir):
+    """Recompute MFA timestamps for a single segment.
+
+    Operates directly on List[SegmentInfo]. Returns (segments_state, export, patch).
+    """
     import os
     from src.mfa import (
         _build_mfa_ref, _mfa_upload_and_submit, _mfa_wait_result,
@@ -1654,17 +1633,18 @@ def _recompute_single_mfa(seg_idx, json_output, segment_dir):
 
     _skip3 = (gr.skip(), gr.skip(), gr.skip())
 
-    if seg_idx is None or not json_output:
+    if seg_idx is None or not segments_state:
         return _skip3
 
-    segments = json_output.get("segments", [])
-    if seg_idx < 0 or seg_idx >= len(segments):
+    if seg_idx < 0 or seg_idx >= len(segments_state):
         return _skip3
 
-    seg = segments[seg_idx]
+    seg = segments_state[seg_idx]
     seg_dir_str = str(segment_dir) if segment_dir else ""
 
-    mfa_ref = _build_mfa_ref(seg)
+    # _build_mfa_ref expects a dict — convert the single segment
+    seg_dict = seg.to_json_dict()
+    mfa_ref = _build_mfa_ref(seg_dict)
     if mfa_ref is None:
         return (gr.skip(), gr.skip(),
                 json.dumps({"status": "mfa_failed", "idx": seg_idx}))
@@ -1690,8 +1670,11 @@ def _recompute_single_mfa(seg_idx, json_output, segment_dir):
     # Build timestamp lookups
     word_ts, letter_ts, _ = _build_timestamp_lookups(results)
     _build_crossword_groups(results, letter_ts)
+    # _extend_word_timestamps and inject_timestamps_into_html expect dict-based segments;
+    # convert to dicts for these MFA helpers, then write results back to SegmentInfo
+    seg_dicts = [s.to_json_dict() for s in segments_state]
     seg_to_result_idx = {seg_idx: 0}
-    _extend_word_timestamps(word_ts, segments, seg_to_result_idx, results, seg_dir_str)
+    _extend_word_timestamps(word_ts, seg_dicts, seg_to_result_idx, results, seg_dir_str)
 
     # Build text HTML with timestamps injected
     # Wrap text in a fake card div so inject_timestamps_into_html's boundary detection works
@@ -1703,7 +1686,7 @@ def _recompute_single_mfa(seg_idx, json_output, segment_dir):
         f'</div>'
     )
     enriched_html, _ = inject_timestamps_into_html(
-        fake_html, segments, results, seg_to_result_idx, seg_dir_str
+        fake_html, seg_dicts, results, seg_to_result_idx, seg_dir_str
     )
 
     # Extract just the text content (strip the fake wrapper)
@@ -1711,9 +1694,7 @@ def _recompute_single_mfa(seg_idx, json_output, segment_dir):
     inner_match = re.search(r'data-pos="BOUNDARY"></span>(.*)</div>', enriched_html, re.DOTALL)
     enriched_text = inner_match.group(1) if inner_match else text_html
 
-    # Store timestamps back in the segment JSON
-    # _extend_word_timestamps already enriched via _build_timestamp_lookups
-    # We need to store word-level data from the MFA result
+    # Store timestamps back in the SegmentInfo
     words_data = []
     result = results[0]
     for w in result.get("words", []):
@@ -1725,11 +1706,11 @@ def _recompute_single_mfa(seg_idx, json_output, segment_dir):
         if w.get("letters"):
             word_entry["letters"] = w["letters"]
         words_data.append(word_entry)
-    seg["words"] = words_data
-    seg.pop("_stale_words", None)  # Clear any stashed timestamps
+    seg.words = words_data
+    seg.stale_words = None  # Clear any stashed timestamps
 
     print(f"[MFA-RECOMPUTE] Success for segment {seg_idx + 1}")
-    return (json_output, save_json_export(json_output),
+    return (segments_state, save_json_export(segments_state),
             json.dumps({"status": "mfa_done", "idx": seg_idx, "text_html": enriched_text}))
 
 

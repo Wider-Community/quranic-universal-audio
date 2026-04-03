@@ -647,7 +647,7 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
         segments: List of SegmentInfo objects
         full_audio_url: URL to full audio WAV (used by mega card / Animate All)
         segment_dir: Path to segment directory containing per-segment WAV files
-        json_segments: Optional raw json segment dicts (carries _autofix_original_ref for undo)
+        json_segments: Deprecated — autofix_original_ref now read from SegmentInfo directly
     """
     if not segments:
         return '<div class="no-segments">No segments detected</div>'
@@ -760,9 +760,8 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
 
     def _get_autofix_original(idx):
         """Check if segment had autofix applied (for undo button)."""
-        if json_segments and idx < len(json_segments):
-            return json_segments[idx].get("_autofix_original_ref", "")
-        return ""
+        seg = segments[idx]
+        return getattr(seg, 'autofix_original_ref', '') or ''
 
     t_cards = time.time()
     skip_next = False
