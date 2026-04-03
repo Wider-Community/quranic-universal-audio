@@ -465,7 +465,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
             if sec:
                 sections.append(sec)
         if sections:
-            text_html = '<hr class="repeat-divider">'.join(sections)
+            text_html = '<div class="repeat-divider"></div>'.join(sections)
 
     if is_special:
         confidence_badge = f'<div class="segment-badge segment-special-badge">{seg.matched_ref}</div>'
@@ -489,8 +489,8 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
             <div class="segment-title">{header_text}</div>
             <div class="segment-badges">
                 {repeated_badge}
-                {confidence_badge}
                 {missing_badge}
+                {confidence_badge}
             </div>
         </div>
 

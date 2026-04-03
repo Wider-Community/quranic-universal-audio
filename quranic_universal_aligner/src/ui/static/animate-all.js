@@ -1175,10 +1175,12 @@ document.addEventListener('click', function(e) {
         if (group) {
             var segIdx = parseInt(group.getAttribute('data-segment-idx')) + 1;
             group.querySelectorAll('.repeat-fb-btn').forEach(function(b) { b.remove(); });
+            var badge = group.querySelector('.segment-repeated-badge');
             var thanks = document.createElement('span');
             thanks.className = 'repeat-fb-thanks';
-            thanks.textContent = 'Thanks! This helps improve the AI.';
-            group.appendChild(thanks);
+            thanks.textContent = 'Thanks!';
+            if (badge) group.insertBefore(thanks, badge);
+            else group.appendChild(thanks);
             submitRepeatFeedback(segIdx, 'up');
         }
         return;
@@ -1188,12 +1190,13 @@ document.addEventListener('click', function(e) {
         if (group) {
             var segIdx = parseInt(group.getAttribute('data-segment-idx')) + 1;
             group.querySelectorAll('.repeat-fb-btn').forEach(function(b) { b.remove(); });
+            var badge = group.querySelector('.segment-repeated-badge');
             var form = document.createElement('div');
             form.className = 'repeat-fb-form';
-            var ta = document.createElement('textarea');
+            var ta = document.createElement('input');
+            ta.type = 'text';
             ta.className = 'repeat-fb-textarea';
-            ta.placeholder = 'What went wrong? (optional)';
-            ta.rows = 1;
+            ta.placeholder = 'What went wrong?';
             var submit = document.createElement('button');
             submit.className = 'repeat-fb-submit';
             submit.textContent = 'Submit';
@@ -1202,13 +1205,15 @@ document.addEventListener('click', function(e) {
                 form.remove();
                 var thanks = document.createElement('span');
                 thanks.className = 'repeat-fb-thanks';
-                thanks.textContent = 'Thanks! This helps improve the AI.';
-                group.appendChild(thanks);
+                thanks.textContent = 'Thanks!';
+                if (badge) group.insertBefore(thanks, badge);
+                else group.appendChild(thanks);
                 submitRepeatFeedback(segIdx, 'down', comment || undefined);
             });
             form.appendChild(ta);
             form.appendChild(submit);
-            group.appendChild(form);
+            if (badge) group.insertBefore(form, badge);
+            else group.appendChild(form);
             ta.focus();
         }
         return;
@@ -1398,6 +1403,30 @@ document.addEventListener('play', function(e) {
                 if (mwBadge) mwBadge.remove();
                 var confBadge = badges && badges.querySelector('.' + confClass + '-badge');
                 if (confBadge) confBadge.style.display = '';
+
+                // If card was in a grouped pair, unwrap when all cards are cleared
+                var group = card.closest('.missing-words-group');
+                if (group) {
+                    var otherCards = group.querySelectorAll('.segment-card');
+                    var allCleared = true;
+                    otherCards.forEach(function(c) {
+                        if (c === card) return;
+                        var otherIdx = parseInt(c.getAttribute('data-segment-idx'));
+                        var otherChange = (patch.flag_changes || []).find(function(fc) {
+                            return fc.idx === otherIdx && !fc.has_missing_words;
+                        });
+                        if (!otherChange) allCleared = false;
+                    });
+                    if (allCleared) {
+                        var tag = group.querySelector('.missing-words-group-tag');
+                        if (tag) tag.remove();
+                        var gParent = group.parentNode;
+                        while (group.firstChild) {
+                            gParent.insertBefore(group.firstChild, group);
+                        }
+                        group.remove();
+                    }
+                }
             }
         });
 

@@ -411,20 +411,29 @@ def build_css() -> str:
     }}
     .repeat-fb-btn {{
         background: none;
-        border: none;
+        border: 1px solid rgba(0,0,0,0.2);
+        border-radius: 8px;
         cursor: pointer;
-        font-size: 14px;
-        padding: 0 2px;
-        line-height: 1;
+        font-size: 10px;
+        padding: 0 5px;
+        height: 20px;
+        min-height: 0;
+        min-width: 0;
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         opacity: 0.7;
         transition: opacity 0.15s, transform 0.15s;
+        position: relative;
+        top: 2px;
     }}
     .repeat-fb-btn:hover {{
         opacity: 1;
         transform: scale(1.2);
     }}
     .repeat-fb-thanks {{
-        font-size: 11px;
+        font-size: 10px;
         color: #28a745;
         font-weight: 600;
         white-space: nowrap;
@@ -432,43 +441,49 @@ def build_css() -> str:
     .repeat-fb-form {{
         display: flex;
         gap: 4px;
-        align-items: flex-start;
-        margin-top: 4px;
-        width: 100%;
+        align-items: center;
     }}
     .repeat-fb-textarea {{
-        flex: 1;
-        font-size: 12px;
+        font-size: 10px;
         font-family: inherit;
-        padding: 4px 6px;
+        padding: 0 5px;
         border: 1px solid var(--border-color-primary, #ccc);
-        border-radius: 6px;
+        border-radius: 8px;
         background: var(--input-background-fill, white);
         color: var(--body-text-color, #333);
-        resize: vertical;
-        min-height: 28px;
-        max-height: 80px;
+        resize: none;
+        height: 20px;
+        min-height: 0;
+        box-sizing: border-box;
+        width: 156px;
+        overflow: hidden;
     }}
     .repeat-fb-submit {{
-        font-size: 11px;
-        padding: 4px 10px;
+        font-size: 10px;
+        padding: 0 6px;
         border: none;
-        border-radius: 6px;
+        border-radius: 8px;
         background: #28a745;
         color: white;
         cursor: pointer;
         font-weight: 600;
         white-space: nowrap;
-        align-self: flex-end;
+        height: 20px;
+        min-height: 0;
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
     }}
     .repeat-fb-submit:hover {{ background: #218838; }}
 
     /* Divider between repeated text lines */
     .repeat-divider {{
+        height: 0;
         border: none;
-        border-top: 1px dashed rgba(0,0,0,0.25);
+        border-top: 1px dashed var(--border-color-primary, rgba(128,128,128,0.5));
         margin: 2px 0;
-        padding: 0;
     }}
 
     /* Missing words group — wraps two consecutive segments sharing a gap */
