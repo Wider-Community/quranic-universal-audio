@@ -10,10 +10,13 @@ import json
 import logging
 import os
 import re
+import smtplib
 import threading
 import time
 import uuid
 from base64 import b64decode
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import yaml
@@ -44,6 +47,8 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
 NOTION_WATCHERS_DB_ID = os.environ.get("NOTION_WATCHERS_DB_ID", "")
+GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 REPO_OWNER = "Wider-Community"
 REPO_NAME = "quranic-universal-audio"
 
@@ -52,6 +57,44 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("request_app")
+
+
+def _send_confirmation_email(to: str, requester_name: str, reciter_name: str,
+                             issue_url: str) -> bool:
+    """Send a confirmation email when a request is submitted."""
+    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
+        logger.info(f"No Gmail credentials — skipping confirmation to {to}")
+        return False
+    subject = f"Your request for {reciter_name} has been received"
+    body = f"""\
+<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+<h2>Request Received</h2>
+<p>Hi {requester_name},</p>
+<p>Your request to align <strong>{reciter_name}</strong> has been received
+and will be queued for processing soon.</p>
+<p>You'll receive another email when the segments are ready for review.</p>
+<p>Track this request: <a href="{issue_url}">{issue_url}</a></p>
+<hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0">
+<p style="font-size:12px;color:#888">
+  Qur'anic Universal Audio &mdash;
+  <a href="https://github.com/Wider-Community/quranic-universal-audio">GitHub</a>
+</p>
+</div>"""
+    msg = MIMEMultipart("alternative")
+    msg["From"] = GMAIL_ADDRESS
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "html"))
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_ADDRESS, to, msg.as_string())
+        logger.info(f"Confirmation email sent to {to} for {reciter_name}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to send confirmation to {to}: {e}")
+        return False
 
 # ---------------------------------------------------------------------------
 # Cache with TTL
@@ -866,6 +909,14 @@ def submit_request(
     # Invalidate caches
     _set_cached("requests", None)
     _set_cached("available", None)
+
+    # Send confirmation email (non-blocking)
+    if requester_email:
+        threading.Thread(
+            target=_send_confirmation_email,
+            args=(requester_email, requester_name, reciter_name, issue_url),
+            daemon=True,
+        ).start()
 
     return _load_app_template("success").format(issue_url=issue_url)
 
