@@ -107,6 +107,11 @@ def build_interface():
             c.ref_edit_payload = gr.Textbox(elem_id="ref-edit-payload", show_label=False, container=False)
             c.ref_edit_trigger = gr.Button("", elem_id="ref-edit-trigger", size="sm")
 
+        # Repetition feedback bridge (JS → Python)
+        with gr.Row(visible=True, elem_id="repeat-fb-bridge"):
+            c.repeat_fb_payload = gr.Textbox(elem_id="repeat-fb-payload", show_label=False, container=False)
+            c.repeat_fb_trigger = gr.Button("", elem_id="repeat-fb-trigger", size="sm")
+
         # Edit patch channel (Python → JS, carries surgical patch instructions)
         with gr.Row(visible=True, elem_id="edit-patch"):
             c.edit_patch = gr.Textbox(elem_id="edit-patch-data", show_label=False, container=False)

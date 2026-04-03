@@ -380,9 +380,9 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     if seg.has_repeated_words:
         repeated_badge = (
             f'<div class="repeat-feedback-group" data-segment-idx="{idx}">'
+            '<button class="repeat-fb-btn repeat-fb-up" title="Correct">&#x2713;</button>'
+            '<button class="repeat-fb-btn repeat-fb-down" title="Incorrect">&#x2717;</button>'
             '<div class="segment-badge segment-repeated-badge">Repeated Words</div>'
-            '<button class="repeat-fb-btn repeat-fb-up" title="Correct">&#x1F44D;</button>'
-            '<button class="repeat-fb-btn repeat-fb-down" title="Incorrect">&#x1F44E;</button>'
             '</div>'
         )
 

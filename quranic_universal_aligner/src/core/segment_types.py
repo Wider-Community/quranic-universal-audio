@@ -48,6 +48,8 @@ class SegmentInfo:
     repeated_text: Optional[list] = None     # ["text section 1", "text section 2"]
     # 1-based segment index
     segment_number: int = 0
+    # Pipeline-assigned ref before any user edits (set once on first edit, not serialized)
+    _original_ref: Optional[str] = None
     # MFA word/letter timestamps (list of dicts with location, start, end, letters)
     words: Optional[list] = None
 

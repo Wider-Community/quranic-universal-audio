@@ -1101,6 +1101,18 @@ function setGradioValue(elemId, value) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function submitRepeatFeedback(segIdx, vote, comment) {
+    var payload = {idx: segIdx, vote: vote};
+    if (comment) payload.comment = comment;
+    var payloadStr = JSON.stringify(payload);
+    console.log('[FEEDBACK] submitting:', payloadStr);
+    setGradioValue('repeat-fb-payload', payloadStr);
+    setTimeout(function() {
+        var btn = document.getElementById('repeat-fb-trigger');
+        if (btn) btn.click();
+    }, 50);
+}
+
 function submitRefEdit(segIdx, newRef, extra) {
     var payload = {idx: segIdx, new_ref: newRef};
     if (extra) {
@@ -1161,17 +1173,20 @@ document.addEventListener('click', function(e) {
     if (e.target.closest('.repeat-fb-up')) {
         var group = e.target.closest('.repeat-feedback-group');
         if (group) {
+            var segIdx = parseInt(group.getAttribute('data-segment-idx')) + 1;
             group.querySelectorAll('.repeat-fb-btn').forEach(function(b) { b.remove(); });
             var thanks = document.createElement('span');
             thanks.className = 'repeat-fb-thanks';
             thanks.textContent = 'Thanks! This helps improve the AI.';
             group.appendChild(thanks);
+            submitRepeatFeedback(segIdx, 'up');
         }
         return;
     }
     if (e.target.closest('.repeat-fb-down')) {
         var group = e.target.closest('.repeat-feedback-group');
         if (group) {
+            var segIdx = parseInt(group.getAttribute('data-segment-idx')) + 1;
             group.querySelectorAll('.repeat-fb-btn').forEach(function(b) { b.remove(); });
             var form = document.createElement('div');
             form.className = 'repeat-fb-form';
@@ -1183,11 +1198,13 @@ document.addEventListener('click', function(e) {
             submit.className = 'repeat-fb-submit';
             submit.textContent = 'Submit';
             submit.addEventListener('click', function() {
+                var comment = ta.value.trim();
                 form.remove();
                 var thanks = document.createElement('span');
                 thanks.className = 'repeat-fb-thanks';
                 thanks.textContent = 'Thanks! This helps improve the AI.';
                 group.appendChild(thanks);
+                submitRepeatFeedback(segIdx, 'down', comment || undefined);
             });
             form.appendChild(ta);
             form.appendChild(submit);

@@ -6,7 +6,7 @@ from src.core.zero_gpu import QuotaExhaustedError
 from src.pipeline import (
     process_audio, resegment_audio,
     _retranscribe_wrapper, save_json_export,
-    apply_ref_edit,
+    apply_ref_edit, apply_repeat_feedback,
 )
 from src.api.session_api import (
     estimate_duration,
@@ -71,6 +71,7 @@ def wire_events(app, c):
     _wire_animation_settings(c)
     _wire_settings_restoration(app, c)
     _wire_ref_edit(c)
+    _wire_repeat_feedback(c)
     _wire_api_endpoint(c)
     if DEV_TAB_VISIBLE:
         _wire_dev_tab(c)
@@ -737,13 +738,25 @@ def _wire_ref_edit(c):
     """Wire inline ref editing — JS edits trigger Python state sync + patch."""
     _edit_io = dict(
         fn=apply_ref_edit,
-        inputs=[c.ref_edit_payload, c.output_json, c.cached_segment_dir],
-        outputs=[c.output_json, c.export_file, c.edit_patch],
+        inputs=[c.ref_edit_payload, c.output_json, c.cached_segment_dir, c.cached_log_row],
+        outputs=[c.output_json, c.export_file, c.edit_patch, c.cached_log_row],
         show_progress="hidden",
     )
     # Both paths: button click (primary) and textbox submit (Enter key fallback)
     c.ref_edit_trigger.click(**_edit_io)
     c.ref_edit_payload.submit(**_edit_io)
+
+
+def _wire_repeat_feedback(c):
+    """Wire repetition feedback — JS thumbs up/down triggers Python log update."""
+    _fb_io = dict(
+        fn=apply_repeat_feedback,
+        inputs=[c.repeat_fb_payload, c.cached_log_row],
+        outputs=[c.cached_log_row],
+        show_progress="hidden",
+    )
+    c.repeat_fb_trigger.click(**_fb_io)
+    c.repeat_fb_payload.submit(**_fb_io)
 
 
 def _wire_api_endpoint(c):

@@ -762,7 +762,7 @@ def _run_post_vad_pipeline(
             _log_segments = []
             for i, seg in enumerate(segments):
                 sp_type = seg.matched_ref if seg.matched_ref in ALL_SPECIAL_REFS else None
-                _log_segments.append({
+                entry = {
                     "idx": i + 1,
                     "start": round(seg.start_time, 2),
                     "end": round(seg.end_time, 2),
@@ -772,10 +772,16 @@ def _run_post_vad_pipeline(
                     "word_count": _seg_word_counts[i] if i < len(_seg_word_counts) else 0,
                     "ayah_span": _seg_ayah_spans[i] if i < len(_seg_ayah_spans) else 0,
                     "phoneme_count": _seg_phoneme_counts[i] if i < len(_seg_phoneme_counts) else 0,
+                    "has_repeated_words": seg.has_repeated_words,
                     "missing_words": seg.has_missing_words,
                     "special_type": sp_type,
                     "error": seg.error,
-                })
+                }
+                if seg.repeated_ranges:
+                    entry["repeated_ranges"] = seg.repeated_ranges
+                if seg.repeated_text:
+                    entry["repeated_text"] = seg.repeated_text
+                _log_segments.append(entry)
 
             _r = lambda v: round(v, 2)
             actual_device = device
@@ -824,6 +830,7 @@ def _run_post_vad_pipeline(
                     "reanchors": profiling.consec_reanchors,
                     "special_merges": profiling.special_merges,
                     "transition_skips": profiling.transition_skips,
+                    "wraps_detected": profiling.phoneme_wraps_detected,
                 },
                 reciter_stats={
                     "wpm": _r(_log_wpm),
@@ -1480,36 +1487,58 @@ def _segments_to_json(segments: list, old_json_segments: list | None = None) -> 
     return {"segments": segments_list}
 
 
-def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str):
+def apply_repeat_feedback(payload_str: str, log_row):
+    """Handle repetition feedback from the JS UI (thumbs up/down)."""
+    if not payload_str or not log_row:
+        return log_row
+    try:
+        payload = json.loads(payload_str)
+    except (json.JSONDecodeError, TypeError):
+        return log_row
+    seg_idx = payload.get("idx")
+    vote = payload.get("vote")
+    if seg_idx is None or vote not in ("up", "down"):
+        return log_row
+    try:
+        from src.core.usage_logger import update_feedback
+        update_feedback(log_row, seg_idx, vote, payload.get("comment"))
+        print(f"[FEEDBACK] idx={seg_idx} vote={vote} comment={payload.get('comment', '')!r}")
+    except Exception as e:
+        print(f"[FEEDBACK] Failed: {e}")
+    return log_row
+
+
+def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str, log_row=None):
     """Apply an inline ref edit from the JS UI.
 
-    Operates directly on List[SegmentInfo]. Returns (segments_state, export_file, patch_json).
+    Operates directly on List[SegmentInfo]. Returns (segments_state, export_file, patch_json, log_row).
     """
     from src.ui.segments import recompute_missing_words, resolve_ref_text, get_text_with_markers, _wrap_word, simplify_ref
     from src.alignment.special_segments import ALL_SPECIAL_REFS
 
-    _skip3 = (gr.skip(), gr.skip(), gr.skip())
+    _skip = (gr.skip(), gr.skip(), gr.skip(), gr.skip())
 
     if not edit_payload_str or not segments_state:
-        return _skip3
+        return _skip
 
     try:
         payload = json.loads(edit_payload_str)
     except (json.JSONDecodeError, TypeError):
-        return _skip3
+        return _skip
 
     # Route special actions
     if payload.get("action") == "recompute_mfa":
-        return _recompute_single_mfa(payload.get("idx"), segments_state, segment_dir)
+        mfa_result = _recompute_single_mfa(payload.get("idx"), segments_state, segment_dir)
+        return (*mfa_result, gr.skip())
 
     idx = payload.get("idx")
     raw_ref = payload.get("new_ref", "")
 
     if idx is None or not raw_ref:
-        return _skip3
+        return _skip
 
     if idx < 0 or idx >= len(segments_state):
-        return _skip3
+        return _skip
 
     seg = segments_state[idx]
     old_ref = seg.matched_ref
@@ -1518,7 +1547,7 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
         return (gr.skip(), gr.skip(), json.dumps({
             "status": "error", "message": message,
             "edited_idx": idx, "old_ref": simplify_ref(old_ref),
-        }))
+        }), gr.skip())
 
     # Normalize the ref
     new_ref = _normalize_ref(raw_ref)
@@ -1528,7 +1557,7 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
 
     # No-op if normalized ref matches the current ref (handles shortcut variations)
     if new_ref == old_ref:
-        return _skip3
+        return _skip
 
     # Validate non-special refs against QuranIndex
     if new_ref not in ALL_SPECIAL_REFS:
@@ -1545,6 +1574,10 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
     had_mfa = bool(seg.words)
     if had_mfa:
         seg.words = None
+
+    # Stash pipeline-assigned ref on first edit (for usage logging)
+    if seg._original_ref is None:
+        seg._original_ref = old_ref
 
     # Apply the edit
     seg.matched_ref = new_ref
@@ -1584,7 +1617,16 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
     })
 
     print(f"[REF-EDIT] idx={idx} {old_ref!r} → {new_ref!r} is_special={is_special} has_mw={seg.has_missing_words} text_len={len(matched_text_html)}")
-    return segments_state, save_json_export(segments_state), patch
+
+    # Log edited ref to usage logger (1-based segment idx)
+    if log_row:
+        try:
+            from src.core.usage_logger import update_edited_ref
+            update_edited_ref(log_row, idx + 1, new_ref)
+        except Exception as e:
+            print(f"[REF-EDIT] Failed to log edited ref: {e}")
+
+    return segments_state, save_json_export(segments_state), patch, log_row
 
 
 def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir):

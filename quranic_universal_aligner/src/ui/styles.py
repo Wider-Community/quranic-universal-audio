@@ -467,7 +467,8 @@ def build_css() -> str:
     .repeat-divider {{
         border: none;
         border-top: 1px dashed rgba(0,0,0,0.25);
-        margin: 6px 0;
+        margin: 2px 0;
+        padding: 0;
     }}
 
     /* Missing words group — wraps two consecutive segments sharing a gap */
@@ -490,14 +491,14 @@ def build_css() -> str:
     }}
 
     /* Hidden JS→Python bridge (must be in DOM but invisible) */
-    #ref-edit-bridge, #edit-patch {{
+    #ref-edit-bridge, #repeat-fb-bridge, #edit-patch {{
         position: absolute !important;
         left: -9999px !important;
         height: 0 !important;
         overflow: hidden !important;
         pointer-events: none;
     }}
-    #ref-edit-bridge *, #edit-patch * {{ pointer-events: auto; }}
+    #ref-edit-bridge *, #repeat-fb-bridge *, #edit-patch * {{ pointer-events: auto; }}
 
     /* Clickable ref for inline editing */
     .ref-editable {{

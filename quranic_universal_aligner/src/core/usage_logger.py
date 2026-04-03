@@ -505,6 +505,52 @@ def update_word_timestamps(
 
 
 
+def update_feedback(
+    row: Dict[str, Any],
+    segment_idx: int,
+    vote: str,
+    comment: Optional[str] = None,
+) -> None:
+    """Add repetition feedback to a segment in the latest results_detailed run."""
+    try:
+        runs = json.loads(row.get("results_detailed") or "[]")
+        if not runs:
+            return
+        segments = runs[-1].get("segments", [])
+        for seg in segments:
+            if seg.get("idx") == segment_idx:
+                fb = {"vote": vote}
+                if comment:
+                    fb["comment"] = comment
+                seg["repetition_feedback"] = fb
+                break
+        row["results_detailed"] = json.dumps(runs)
+        _sync_row_to_scheduler(row)
+    except Exception as e:
+        print(f"[USAGE_LOG] Failed to update feedback: {e}")
+
+
+def update_edited_ref(
+    row: Dict[str, Any],
+    segment_idx: int,
+    edited_ref: str,
+) -> None:
+    """Set edited_ref on a segment in the latest results_detailed run."""
+    try:
+        runs = json.loads(row.get("results_detailed") or "[]")
+        if not runs:
+            return
+        segments = runs[-1].get("segments", [])
+        for seg in segments:
+            if seg.get("idx") == segment_idx:
+                seg["edited_ref"] = edited_ref
+                break
+        row["results_detailed"] = json.dumps(runs)
+        _sync_row_to_scheduler(row)
+    except Exception as e:
+        print(f"[USAGE_LOG] Failed to update edited ref: {e}")
+
+
 def _write_fallback(row: Dict[str, Any]) -> None:
     """Local-only fallback: write JSONL (without audio)."""
     fallback_path = LOG_DIR / "alignments_fallback.jsonl"
