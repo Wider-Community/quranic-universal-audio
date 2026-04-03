@@ -745,3 +745,101 @@ def timestamps_direct(audio_data, segments_json, granularity="words"):
         return {"error": f"MFA alignment failed: {e}", "segments": []}
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Hidden debug endpoint
+# ---------------------------------------------------------------------------
+
+import dataclasses
+import threading
+from datetime import datetime, timezone
+
+_debug_lock = threading.Lock()
+
+
+def debug_process(audio_data, min_silence_ms, min_speech_ms, pad_ms,
+                  model_name="Base", device="GPU", hf_token="",
+                  request: gr.Request = None):
+    """Hidden debug endpoint: full pipeline with comprehensive debug output.
+
+    Authenticated via HF token comparison against the Space secret.
+    Returns structured debug data from every pipeline stage.
+    """
+    # --- Auth ---
+    space_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token or (space_token and hf_token != space_token):
+        return {"error": "Unauthorized"}
+
+    err = _validate_model_name(model_name)
+    if err:
+        return err
+
+    from src.core.debug_collector import start_debug_collection, stop_debug_collection
+    from src.pipeline import process_audio
+
+    with _debug_lock:
+        try:
+            start_debug_collection()
+
+            result = process_audio(
+                audio_data, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
+                model_name, device, request=request, endpoint="process",
+            )
+
+            collector = stop_debug_collection()
+        except Exception as e:
+            stop_debug_collection()
+            return {"error": f"Pipeline failed: {e}"}
+
+    # --- Assemble response ---
+    json_output = result[1]
+    if json_output is None:
+        return {"error": "No speech detected in audio", "segments": []}
+
+    # Extract profiling from collector (stored by _run_post_vad_pipeline)
+    profiling_dict = {}
+    if collector and collector._profiling is not None:
+        p = collector._profiling
+        profiling_dict = dataclasses.asdict(p)
+        # Add computed fields
+        profiling_dict["phoneme_dp_avg_time"] = p.phoneme_dp_avg_time
+        profiling_dict["summary_text"] = p.summary()
+
+    # Format segments (same as _format_response but without session)
+    segments = []
+    for seg in json_output.get("segments", []):
+        entry = {
+            "segment": seg["segment"],
+            "time_from": seg["time_from"],
+            "time_to": seg["time_to"],
+            "ref_from": seg["ref_from"],
+            "ref_to": seg["ref_to"],
+            "matched_text": seg["matched_text"],
+            "confidence": seg["confidence"],
+            "has_missing_words": seg.get("has_missing_words", False),
+            "error": seg["error"],
+        }
+        if seg.get("special_type"):
+            entry["special_type"] = seg["special_type"]
+        segments.append(entry)
+
+    # Build final response
+    response = {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "profiling": profiling_dict,
+        "segments": segments,
+    }
+
+    # Merge collector sections
+    if collector:
+        debug_data = collector.to_dict()
+        response["vad"] = debug_data["vad"]
+        response["asr"] = debug_data["asr"]
+        response["anchor"] = debug_data["anchor"]
+        response["specials"] = debug_data["specials"]
+        response["alignment_detail"] = debug_data["alignment_detail"]
+        response["events"] = debug_data["events"]
+
+    return response

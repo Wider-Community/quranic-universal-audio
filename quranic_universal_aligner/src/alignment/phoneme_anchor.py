@@ -14,6 +14,7 @@ from typing import Dict, List, Tuple
 from config import ANCHOR_DEBUG, ANCHOR_RARITY_WEIGHTING, ANCHOR_RUN_TRIM_RATIO, ANCHOR_TOP_CANDIDATES
 from .ngram_index import PhonemeNgramIndex
 from .phoneme_matcher import ChapterReference
+from src.core.debug_collector import get_debug_collector
 
 
 def _find_best_contiguous_run(
@@ -150,6 +151,19 @@ def find_anchor_by_voting(
         if ANCHOR_DEBUG:
             print(f"  RESULT: No votes cast — returning (0, 0)")
             print(f"{'=' * 60}\n")
+        _dc = get_debug_collector()
+        if _dc is not None:
+            _dc.anchor = {
+                "segments_used": segments_used,
+                "combined_phoneme_count": len(combined),
+                "ngrams_extracted": 0,
+                "ngrams_matched": 0,
+                "ngrams_missed": 0,
+                "distinct_pairs": 0,
+                "surah_ranking": [],
+                "winner_surah": 0,
+                "winner_ayah": 0,
+            }
         return (0, 0)
 
     # =========================================================================
@@ -196,6 +210,26 @@ def find_anchor_by_voting(
 
         print(f"\n  RESULT: Surah {best_surah}, Ayah {best_run_start} (start of best run)")
         print(f"{'=' * 60}\n")
+
+    _dc = get_debug_collector()
+    if _dc is not None:
+        _dc.anchor = {
+            "segments_used": segments_used,
+            "combined_phoneme_count": len(combined),
+            "ngrams_extracted": len(asr_ngrams),
+            "ngrams_matched": matched_ngrams,
+            "ngrams_missed": missed_ngrams,
+            "distinct_pairs": len(votes),
+            "surah_ranking": [
+                {
+                    "surah": s, "total_weight": round(total, 3),
+                    "best_run": {"start_ayah": rs, "end_ayah": re_, "weight": round(rw, 3)},
+                }
+                for s, total, rs, re_, rw in sorted(candidate_results, key=lambda x: x[4], reverse=True)
+            ],
+            "winner_surah": best_surah,
+            "winner_ayah": best_run_start,
+        }
 
     return (best_surah, best_run_start)
 
