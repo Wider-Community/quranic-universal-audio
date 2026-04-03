@@ -165,7 +165,14 @@ def load_data(slug, audio_type):
 # Row building
 # ---------------------------------------------------------------------------
 def build_rows(timestamps, detailed_by_ref, segments, surah_info):
-    """Build row metadata (without audio bytes) in canonical verse order."""
+    """Build row metadata (without audio bytes) in canonical verse order.
+
+    Clip boundaries are defined by word timestamps (deduplicated, canonical).
+    Segments and text are filtered to only those within the clip range so
+    the HF dataset row is internally consistent.  Content outside the clip
+    (repetitions, cross-verse bleed) is preserved in the raw files but not
+    included in the dataset row.
+    """
     rows = []
     for surah_num in sorted(surah_info.keys(), key=int):
         surah = surah_info[surah_num]
@@ -178,7 +185,7 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info):
                 log.warning("No detailed entry for %s, skipping", ref)
                 continue
 
-            # Clip boundaries
+            # Clip boundaries from word timestamps (canonical, deduplicated)
             if ref in timestamps and ref != "_meta":
                 verse_data = timestamps[ref]
                 clip_start = verse_data["verse_start_ms"]
@@ -191,16 +198,32 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info):
                 log.warning("No timing data for %s, skipping", ref)
                 continue
 
-            text = " ".join(seg["matched_text"] for seg in entry["segments"])
-
+            # Filter segments to those overlapping the clip range
             verse_segments = []
             if ref in segments and ref != "_meta":
                 for seg in segments[ref]:
+                    if seg[3] <= clip_start or seg[2] >= clip_end:
+                        continue  # segment fully outside clip
                     verse_segments.append([
                         seg[0], seg[1],
                         max(0, seg[2] - clip_start),
                         seg[3] - clip_start,
                     ])
+
+            # Text from detailed.json segments that overlap the clip range
+            if ref in segments and ref != "_meta":
+                seg_list = segments[ref]
+                filtered_text_parts = []
+                for i, det_seg in enumerate(entry["segments"]):
+                    t_start = det_seg.get("time_start", 0)
+                    t_end = det_seg.get("time_end", 0)
+                    if t_end <= clip_start or t_start >= clip_end:
+                        continue  # outside clip
+                    filtered_text_parts.append(det_seg.get("matched_text", ""))
+                text = " ".join(filtered_text_parts)
+            else:
+                text = " ".join(
+                    seg.get("matched_text", "") for seg in entry["segments"])
 
             verse_words = []
             if ref in timestamps and ref != "_meta":
