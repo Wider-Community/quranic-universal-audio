@@ -1,0 +1,177 @@
+Generated: 2026-04-04 04:33:10
+
+========================================================================
+  saad_al_ghamdi
+  data/recitation_segments/saad_al_ghamdi
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   200 ms
+  Min speech:    200 ms
+  Padding:       80 ms
+
+--- Coverage ---
+  Verses found:       6234 / 6236
+  Missing verses:     2
+  Partial words:      12 verses with word gaps
+
+--- Segments ---
+  Total segments:     10889
+  Single-seg verses:  3069
+  Multi-seg verses:   2821 (7820 segments)
+  Cross-verse segs:   350
+  Empty verse keys:   0
+  Max segs/verse:     17
+
+--- Segment Duration ---
+  Min:      1.08s
+  Median:   7.46s
+  Mean:     7.67s
+  Max:      26.20s
+
+--- True Silence Duration (padding reversed) ---
+  Min:      0.20s
+  Median:   0.54s
+  Mean:     0.58s
+  Max:      10.49s
+
+--- Alignment Confidence ---
+  Min:        0.7000
+  Median:     1.0000
+  Mean:       0.9839
+  Max:        1.0000
+  Below 60%:  0
+  Below 80%:  9
+  Failed:     5 (no alignment)
+  Empty ASR:  0 (matched but no phonemes)
+
+--- First 5 of 5 Alignment Failures ---
+   1. 22:39.2 - 22:41.9  (2.69s)
+      audio: https://server7.mp3quran.net/s_gmd/022.mp3
+      asr:   ʔ a ñ a: rˤ
+
+   2. 24:39.9 - 24:42.2  (2.36s)
+      audio: https://server7.mp3quran.net/s_gmd/028.mp3
+      asr:   n
+
+   3. 16:40.0 - 16:40.5  (0.46s)
+      audio: https://server7.mp3quran.net/s_gmd/043.mp3
+      asr:   
+
+   4. 0:41.0 - 0:41.5  (0.46s)
+      audio: https://server7.mp3quran.net/s_gmd/102.mp3
+      asr:   
+
+   5. 0:41.5 - 0:42.9  (1.36s)
+      audio: https://server7.mp3quran.net/s_gmd/102.mp3
+      asr:   m
+
+
+--- Lowest 9 of 9 Segments Below 80% Confidence ---
+   1. [0.7000]  3:1:1-3:1:1  @ 0:06.8 - 0:14.1
+      audio: https://server7.mp3quran.net/s_gmd/003.mp3
+      text:  الٓمٓ
+      asr:   l i f l a: m̃ i: m
+
+   2. [0.7100]  46:35:22-46:35:22  @ 11:47.6 - 11:50.1
+      audio: https://server7.mp3quran.net/s_gmd/046.mp3
+      text:  بَلَـٰغٌ ۚ
+      asr:   b a l a: ɣ
+
+   3. [0.7200]  24:35:10-24:35:12  @ 12:45.7 - 12:48.5
+      audio: https://server7.mp3quran.net/s_gmd/024.mp3
+      text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
+      asr:   ʔ a l m i sˤ b a: ħ u f i: z u ʒ a: ʒ a h
+
+   4. [0.7300]  7:1:1-7:1:1  @ 0:09.6 - 0:20.3
+      audio: https://server7.mp3quran.net/s_gmd/007.mp3
+      text:  الٓمٓصٓ
+      asr:   a l i f l a: m̃ i i m sˤ aˤ: d Q
+
+   5. [0.7500]  24:53:11-24:53:12  @ 19:44.7 - 19:47.3
+      audio: https://server7.mp3quran.net/s_gmd/024.mp3
+      text:  طَاعَةٌ مَّعْرُوفَةٌ ۚ
+      asr:   sˤ aˤ: ʕ a t u m̃ a ʕ rˤ u: f a h
+
+   6. [0.7500]  60:7:11-60:7:12  @ 3:23.1 - 3:26.1
+      audio: https://server7.mp3quran.net/s_gmd/060.mp3
+      text:  وَٱللَّهُ قَدِيرٌ ۚ
+      asr:   w a lˤlˤ aˤ: h u q aˤ d i: r
+
+   7. [0.7700]  24:35:33-24:35:35  @ 13:12.8 - 13:15.9
+      audio: https://server7.mp3quran.net/s_gmd/024.mp3
+      text:  نُّورٌ عَلَىٰ نُورٍ ۗ
+      asr:   n u: rˤ u n ʕ a l a: n u: rˤ
+
+   8. [0.7900]  5:3:29-5:3:30  @ 2:05.1 - 2:07.0
+      audio: https://server7.mp3quran.net/s_gmd/005.mp3
+      text:  ذَٰلِكُمْ فِسْقٌ ۗ
+      asr:   ð a: l i k u m f i s q Q h
+
+   9. [0.7900]  10:4:4-10:4:6  @ 1:27.2 - 1:29.8
+      audio: https://server7.mp3quran.net/s_gmd/010.mp3
+      text:  وَعْدَ ٱللَّهِ حَقًّا ۚ
+      asr:   w a ʕ d a lˤlˤ aˤ: h i ħ a qq a:
+
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches:     0
+
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   12
+
+  Missing verses (first 2 of 2):
+    MISS   26:1  (1 words)
+    MISS   52:1  (1 words)
+
+  Warnings:
+    WARN   2:60  @ 17:54.5 - 18:18.9
+           missing words: [13]
+           audio: https://server7.mp3quran.net/s_gmd/002.mp3
+
+    WARN   2:68  @ 21:10.0 - 21:30.2
+           missing words: [8]
+           audio: https://server7.mp3quran.net/s_gmd/002.mp3
+
+    WARN   2:103  @ 35:34.2 - 35:42.8
+           missing words: [10, 11, 12]
+           audio: https://server7.mp3quran.net/s_gmd/002.mp3
+
+    WARN   3:64  @ 20:11.4 - 20:48.5
+           missing words: [17]
+           audio: https://server7.mp3quran.net/s_gmd/003.mp3
+
+    WARN   3:154  @ 49:19.0 - 50:27.0
+           missing words: [40]
+           audio: https://server7.mp3quran.net/s_gmd/003.mp3
+
+    WARN   4:36  @ 18:17.3 - 18:52.7
+           missing words: [6]
+           audio: https://server7.mp3quran.net/s_gmd/004.mp3
+
+    WARN   6:80  @ 24:01.0 - 24:33.2
+           missing words: [18]
+           audio: https://server7.mp3quran.net/s_gmd/006.mp3
+
+    WARN   11:57  @ 17:23.3 - 17:44.6
+           missing words: [15]
+           audio: https://server7.mp3quran.net/s_gmd/011.mp3
+
+    WARN   22:72  @ 22:14.7 - 22:47.9
+           missing words: [23]
+           audio: https://server7.mp3quran.net/s_gmd/022.mp3
+
+    WARN   31:33  @ 8:29.2 - 8:58.8
+           missing words: [18]
+           audio: https://server7.mp3quran.net/s_gmd/031.mp3
+
+    WARN   71:28  @ 4:01.7 - 4:20.0
+           missing words: [15]
+           audio: https://server7.mp3quran.net/s_gmd/071.mp3
+
+    WARN   102:8  @ 0:34.6 - 0:40.1
+           missing words: [5]
+           audio: https://server7.mp3quran.net/s_gmd/102.mp3
+
+
