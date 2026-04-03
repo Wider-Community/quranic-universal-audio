@@ -13,6 +13,7 @@ from src.api.session_api import (
     process_audio_session, process_url_session,
     resegment, retranscribe, realign_from_timestamps,
     timestamps, timestamps_direct,
+    debug_process,
 )
 from src.mfa import compute_mfa_timestamps
 from src.ui.progress_bar import pipeline_progress_bar_html
@@ -798,6 +799,13 @@ def _wire_api_endpoint(c):
         inputs=[c.api_audio, c.api_mfa_segments, c.api_mfa_granularity],
         outputs=[c.api_result],
         api_name="timestamps_direct",
+    )
+    gr.Button(visible=False).click(
+        fn=debug_process,
+        inputs=[c.api_audio, c.api_silence, c.api_speech, c.api_pad,
+                c.api_model, c.api_device, c.api_debug_token],
+        outputs=[c.api_result],
+        api_name="debug_process",
     )
 
 

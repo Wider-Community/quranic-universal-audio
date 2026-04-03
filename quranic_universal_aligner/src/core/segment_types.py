@@ -19,11 +19,89 @@ class SegmentInfo:
     end_time: float
     transcribed_text: str
     matched_text: str
-    matched_ref: str  # e.g. "2:255:1-2:255:5"
+    matched_ref: str  # e.g. "2:255:1-2:255:5" or "Basmala"
     match_score: float
     error: Optional[str] = None
     has_missing_words: bool = False
-    potentially_undersegmented: bool = False
+    has_repeated_words: bool = False
+    wrap_word_ranges: Optional[list] = None
+    # 1-based segment index
+    segment_number: int = 0
+    # MFA word/letter timestamps (list of dicts with location, start, end, letters)
+    words: Optional[list] = None
+    # Autofix undo tracking
+    autofix_original_ref: Optional[str] = None
+    # Stashed MFA data for undo (restored when ref reverts)
+    stale_words: Optional[list] = None
+    stale_ref: Optional[str] = None
+
+    def to_json_dict(self) -> dict:
+        """Convert to the JSON dict format used by exports and API."""
+        from src.alignment.special_segments import ALL_SPECIAL_REFS
+        is_special = self.matched_ref in ALL_SPECIAL_REFS
+        if is_special:
+            ref_from, ref_to = "", ""
+        elif self.matched_ref and "-" in self.matched_ref:
+            parts = self.matched_ref.split("-", 1)
+            ref_from, ref_to = parts[0], parts[1]
+        else:
+            ref_from = ref_to = self.matched_ref or ""
+        d = {
+            "segment": self.segment_number,
+            "time_from": round(self.start_time, 3),
+            "time_to": round(self.end_time, 3),
+            "ref_from": ref_from,
+            "ref_to": ref_to,
+            "matched_text": self.matched_text or "",
+            "confidence": round(self.match_score, 3),
+            "has_missing_words": self.has_missing_words,
+            "has_repeated_words": self.has_repeated_words,
+            "special_type": self.matched_ref if is_special else None,
+            "error": self.error,
+        }
+        if self.wrap_word_ranges:
+            d["wrap_word_ranges"] = self.wrap_word_ranges
+        if self.words is not None:
+            d["words"] = self.words
+        if self.autofix_original_ref:
+            d["_autofix_original_ref"] = self.autofix_original_ref
+        if self.stale_words is not None:
+            d["_stale_words"] = self.stale_words
+        if self.stale_ref:
+            d["_stale_ref"] = self.stale_ref
+        return d
+
+    @classmethod
+    def from_json_dict(cls, d: dict, index: int = 0) -> 'SegmentInfo':
+        """Reconstruct from a JSON dict (for loading old sessions)."""
+        if d.get("special_type"):
+            ref = d["special_type"]
+        elif d.get("ref_to"):
+            ref = f"{d['ref_from']}-{d['ref_to']}"
+        else:
+            ref = d.get("ref_from", "")
+        return cls(
+            start_time=d.get("time_from", 0),
+            end_time=d.get("time_to", 0),
+            transcribed_text="",
+            matched_text=d.get("matched_text", ""),
+            matched_ref=ref,
+            match_score=d.get("confidence", 0),
+            error=d.get("error"),
+            has_missing_words=d.get("has_missing_words", False),
+            has_repeated_words=d.get("has_repeated_words", False),
+            wrap_word_ranges=d.get("wrap_word_ranges"),
+            segment_number=d.get("segment", index + 1),
+            words=d.get("words"),
+            autofix_original_ref=d.get("_autofix_original_ref"),
+            stale_words=d.get("_stale_words"),
+            stale_ref=d.get("_stale_ref"),
+        )
+
+
+def segments_to_json(segments: list) -> dict:
+    """Convert a list of SegmentInfo to the {"segments": [...]} JSON structure."""
+    return {"segments": [seg.to_json_dict() for seg in segments]}
 
 
 @dataclass
@@ -68,6 +146,7 @@ class ProfilingData:
     segments_passed: int = 0
     special_merges: int = 0
     transition_skips: int = 0
+    phoneme_wraps_detected: int = 0
     # Result building profiling
     result_build_time: float = 0.0           # Total result building time
     result_audio_encode_time: float = 0.0    # Audio-to-data-URL encoding
@@ -145,6 +224,7 @@ class ProfilingData:
             f"    Reanchors (consec failures): {self.consec_reanchors}",
             f"    Special Merges:  {self.special_merges}",
             f"    Transition Skips: {self.transition_skips}",
+            f"    Wraps Detected:  {self.phoneme_wraps_detected}",
             "-" * 60,
         ]
         profiled_sum = (self.resample_time + self.vad_wall_time + self.asr_time

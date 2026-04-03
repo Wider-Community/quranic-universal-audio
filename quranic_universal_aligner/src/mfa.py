@@ -684,12 +684,19 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
     import re
     import traceback
 
+    # Re-render HTML from json_output to pick up any inline edits
+    # (patch-based edits update json_output but skip output_html)
+    segments = json_output.get("segments", []) if json_output else []
+    if segments and segment_dir:
+        from src.pipeline import _json_to_segments
+        from src.ui.segments import render_segments
+        seg_objects = _json_to_segments(json_output)
+        current_html = render_segments(seg_objects, segment_dir=str(segment_dir),
+                                       json_segments=segments)
+
     if not current_html or '<span class="word"' not in current_html:
         yield current_html, gr.update(), gr.update(), gr.update(), gr.update()
         return
-
-    # Build refs and audio paths using shared helper
-    segments = json_output.get("segments", []) if json_output else []
 
     # Write individual segment WAVs on demand (sliced from full.wav)
     _ensure_segment_wavs(segments, segment_dir)

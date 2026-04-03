@@ -1139,6 +1139,15 @@ document.addEventListener('click', function(e) {
             audio.play().catch(function(){});
         }
     }
+    if (e.target.matches('.animate-btn.mfa-stale')) {
+        // Recompute MFA for this single segment
+        var btn = e.target;
+        var segIdx = parseInt(btn.getAttribute('data-segment'));
+        btn.textContent = '...';
+        btn.disabled = true;
+        submitRefEdit(segIdx, '', {action: 'recompute_mfa'});
+        return;
+    }
     if (e.target.matches('.animate-btn')) {
         toggleAnimation(e.target);
     }
@@ -1331,27 +1340,84 @@ document.addEventListener('play', function(e) {
 
 // --- Edit patch observer (Python → JS surgical updates) ---
 (function() {
-    // Grey out animate button on a card (MFA timestamps stripped)
-    function disableAnimate(card) {
+    // Mark animate button as stale (MFA timestamps stripped — clickable "Recompute")
+    function markAnimateStale(card) {
         if (!card) return;
         var btn = card.querySelector('.animate-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Animate'; btn.classList.remove('active'); }
+        if (btn) {
+            btn.textContent = 'Recompute';
+            btn.classList.add('mfa-stale');
+            btn.classList.remove('active');
+            btn.disabled = false;
+        }
+    }
+    // Restore animate button (MFA timestamps restored from stash)
+    function restoreAnimate(card) {
+        if (!card) return;
+        var btn = card.querySelector('.animate-btn');
+        if (btn) {
+            btn.textContent = 'Animate';
+            btn.classList.remove('mfa-stale', 'active');
+            btn.disabled = false;
+        }
     }
 
     function applyEditPatch(patch) {
         var container = document.querySelector('.segments-container');
 
+        // MFA single-segment recompute completed
+        if (patch.status === 'mfa_done' && container) {
+            var card = container.querySelector('.segment-card[data-segment-idx="' + patch.idx + '"]');
+            if (card) {
+                // Replace text with timestamped HTML (has data-start/data-end on word spans)
+                var textDiv = card.querySelector('.segment-text');
+                if (textDiv && patch.text_html) textDiv.innerHTML = patch.text_html;
+                // Re-enable animate button
+                restoreAnimate(card);
+            }
+            return;
+        }
+        if (patch.status === 'mfa_failed' && container) {
+            var card = container.querySelector('.segment-card[data-segment-idx="' + patch.idx + '"]');
+            if (card) markAnimateStale(card);
+            console.warn('[REF-EDIT] MFA recompute failed for segment', patch.idx + 1);
+            return;
+        }
+
         if (patch.status === 'error') {
             console.warn('[REF-EDIT] Server rejected edit:', patch.message);
+            // Revert the ref span text to the original
+            if (container && patch.edited_idx != null && patch.old_ref) {
+                var card = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
+                if (card) {
+                    var refSpan = card.querySelector('.ref-editable');
+                    if (refSpan) {
+                        refSpan.textContent = patch.old_ref;
+                        refSpan.setAttribute('data-full-ref', patch.old_ref);
+                        // Flash red briefly to indicate rejection
+                        refSpan.style.color = '#dc3545';
+                        setTimeout(function() { refSpan.style.color = ''; }, 1500);
+                    }
+                }
+            }
             return;
         }
         if (patch.status !== 'ok') return;
         if (!container) return;
 
-        // Grey out animate if MFA timestamps were stripped
+        // MFA timestamp state changes
         if (patch.mfa_stripped) {
             var card = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
-            disableAnimate(card);
+            markAnimateStale(card);
+        }
+        if (patch.mfa_restored) {
+            var card = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
+            restoreAnimate(card);
+            // Replace text with timestamped HTML so animation works
+            if (card && patch.matched_text_html) {
+                var textDiv = card.querySelector('.segment-text:not([style*="display: none"]):not([style*="display:none"])') || card.querySelector('.segment-text');
+                if (textDiv) textDiv.innerHTML = patch.matched_text_html;
+            }
         }
 
         // Apply missing-words flag changes on affected segments
@@ -1392,7 +1458,7 @@ document.addEventListener('play', function(e) {
                 if (patch.new_ref) edited.setAttribute('data-matched-ref', patch.new_ref);
 
                 // Remove ALL visual classes for clean transition
-                edited.classList.remove('segment-high', 'segment-med', 'segment-low', 'segment-special', 'segment-underseg');
+                edited.classList.remove('segment-high', 'segment-med', 'segment-low', 'segment-special');
                 edited.setAttribute('data-confidence-class', 'segment-high');
 
                 var badges = edited.querySelector('.segment-badges');
@@ -1455,13 +1521,19 @@ document.addEventListener('play', function(e) {
         var patchEl = document.getElementById('edit-patch');
         if (!patchEl) { setTimeout(setupPatchObserver, 500); return; }
 
+        var _clearing = false;
         var observer = new MutationObserver(function() {
+            if (_clearing) return;
             var input = patchEl.querySelector('textarea') || patchEl.querySelector('input');
             if (!input || !input.value) return;
             try {
                 var patch = JSON.parse(input.value);
+                console.log('[EDIT-PATCH] received:', patch.status, patch);
                 applyEditPatch(patch);
-            } catch(e) { /* ignore parse errors */ }
+            } catch(e) { console.error('[EDIT-PATCH] error:', e); }
+            // Clear after processing to prevent stale re-application
+            _clearing = true;
+            try { if (input) input.value = ''; } finally { _clearing = false; }
         });
         observer.observe(patchEl, {childList: true, subtree: true, characterData: true, attributes: true});
     }

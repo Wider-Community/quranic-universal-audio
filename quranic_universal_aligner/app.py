@@ -29,6 +29,13 @@ subprocess.run(
     capture_output=True,
 )
 
+# Log Cython DP status
+try:
+    from src.alignment.phoneme_matcher import _USE_CYTHON_DP
+    print(f"Cython DP: {'enabled' if _USE_CYTHON_DP else 'disabled (pure Python fallback)'}")
+except ImportError:
+    print("Cython DP: disabled (import error)")
+
 # Start YouTube PO token server (needed for yt-dlp on datacenter IPs)
 _pot_server_dir = _app_path / ".pot-server"
 _pot_main = _pot_server_dir / "server" / "build" / "main.js"

@@ -130,6 +130,11 @@ COST_SUBSTITUTION = 1.0             # Default phoneme substitution cost
 COST_INSERTION = 1.0                # Insert phoneme from reference (R)
 COST_DELETION = 0.8                 # Delete phoneme from ASR (P)
 
+# Repetition detection (wraparound DP)
+WRAP_PENALTY = 2.0                  # Cost per wrap transition in DP
+WRAP_SCORE_COST = 0.01              # Per-wrap additive penalty in scoring
+MAX_WRAPS = 5                       # Max wraps for all segments (fixed — no dynamic gating)
+
 # Alignment thresholds (normalized edit distance: 0 = identical, 1 = completely different)
 LOOKBACK_WORDS = 30                 # Window words to look back from pointer for starting positions
 LOOKAHEAD_WORDS = 10                # Window words to look ahead after expected end position
@@ -178,12 +183,6 @@ PAD_STEP = 25
 CONFIDENCE_HIGH = 0.8    # >= this: Green
 CONFIDENCE_MED = 0.6     # >= this: Yellow, below: Red
 REVIEW_SUMMARY_MAX_SEGMENTS = 15  # Max segment numbers to list before truncating
-
-# Undersegmentation detection thresholds
-# Flagged when (word_count >= MIN_WORDS OR ayah_span >= MIN_AYAH_SPAN) AND duration >= MIN_DURATION
-UNDERSEG_MIN_WORDS = 25         # Word count threshold
-UNDERSEG_MIN_AYAH_SPAN = 2      # Ayah span threshold (segment crosses ayah boundary)
-UNDERSEG_MIN_DURATION = 15      # Duration gate (seconds)
 
 # =============================================================================
 # MFA forced alignment (word-level timestamps via HF Space)

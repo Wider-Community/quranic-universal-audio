@@ -5,7 +5,6 @@ import unicodedata
 
 from config import (
     CONFIDENCE_HIGH, CONFIDENCE_MED,
-    UNDERSEG_MIN_WORDS, UNDERSEG_MIN_AYAH_SPAN, UNDERSEG_MIN_DURATION,
     REVIEW_SUMMARY_MAX_SEGMENTS,
     SURAH_INFO_PATH,
     QURAN_SCRIPT_PATH_COMPUTE,
@@ -61,16 +60,6 @@ def get_segment_word_stats(matched_ref: str) -> tuple[int, int]:
     except Exception:
         return 0, 1
 
-
-def check_undersegmented(matched_ref: str, duration: float) -> bool:
-    """Check if a segment is potentially undersegmented.
-
-    Criteria: (word_count >= threshold OR ayah_span >= threshold) AND duration >= threshold.
-    """
-    if duration < UNDERSEG_MIN_DURATION:
-        return False
-    word_count, ayah_span = get_segment_word_stats(matched_ref)
-    return word_count >= UNDERSEG_MIN_WORDS or ayah_span >= UNDERSEG_MIN_AYAH_SPAN
 
 
 # Arabic-Indic digits for verse markers
@@ -221,44 +210,105 @@ def _compute_autofix(seg_a: SegmentInfo, seg_b: SegmentInfo | None = None) -> di
         return None
 
 
+def _parse_ref_verse_ranges(matched_ref: str) -> list[tuple[int, int, int, int]]:
+    """Decompose a ref into per-verse (surah, ayah, word_from, word_to) ranges.
+
+    Handles same-verse refs like '2:255:1-2:255:5' and cross-verse refs
+    like '76:1:11-76:2:7'. Returns empty list for special/unparseable refs.
+    """
+    if not matched_ref or "-" not in matched_ref:
+        return []
+    try:
+        start_ref, end_ref = matched_ref.split("-", 1)
+        sp = start_ref.split(":")
+        ep = end_ref.split(":")
+        if len(sp) < 3 or len(ep) < 3:
+            return []
+        s_surah, s_ayah, s_word = int(sp[0]), int(sp[1]), int(sp[2])
+        e_surah, e_ayah, e_word = int(ep[0]), int(ep[1]), int(ep[2])
+    except (ValueError, IndexError):
+        return []
+
+    if s_surah != e_surah:
+        return []  # cross-surah not expected
+
+    surah = s_surah
+    if s_ayah == e_ayah:
+        return [(surah, s_ayah, s_word, e_word)]
+
+    # Cross-verse: decompose into per-verse ranges
+    verse_wc = _load_verse_word_counts()
+    ranges = []
+    for ayah in range(s_ayah, e_ayah + 1):
+        expected = verse_wc.get(surah, {}).get(ayah, 0)
+        if expected == 0:
+            continue
+        if ayah == s_ayah:
+            ranges.append((surah, ayah, s_word, expected))
+        elif ayah == e_ayah:
+            ranges.append((surah, ayah, 1, e_word))
+        else:
+            ranges.append((surah, ayah, 1, expected))
+    return ranges
+
+
 def recompute_missing_words(segments: list) -> None:
-    """Recompute has_missing_words flags for all segments based on word gaps."""
+    """Recompute has_missing_words flags for all segments based on word gaps.
+
+    Uses coverage-based analysis: decomposes all refs (including cross-verse)
+    into per-verse word ranges, then checks each verse for uncovered words.
+    """
     verse_wc = _load_verse_word_counts()
 
     # Reset all flags
     for seg in segments:
         seg.has_missing_words = False
 
-    # Build (idx, surah, ayah, wf, wt) for segments with parseable refs
-    parsed = []
+    # Build per-verse coverage: {(surah, ayah): [(word_from, word_to, seg_idx), ...]}
+    coverage: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
     for i, seg in enumerate(segments):
-        ep = _parse_ref_endpoints(seg.matched_ref)
-        if ep:
-            parsed.append((i, *ep))
+        for surah, ayah, wf, wt in _parse_ref_verse_ranges(seg.matched_ref):
+            coverage.setdefault((surah, ayah), []).append((wf, wt, i))
 
-    # Check gaps between consecutive segments in the same verse
-    for j in range(len(parsed)):
-        idx_j, s_j, a_j, wf_j, wt_j = parsed[j]
-        expected = verse_wc.get(s_j, {}).get(a_j, 0)
+    # Check each verse for gaps
+    for (surah, ayah), entries in coverage.items():
+        expected = verse_wc.get(surah, {}).get(ayah, 0)
         if expected == 0:
             continue
 
-        # Gap at start of verse (first segment of this verse doesn't start at word 1)
-        if j == 0 or (parsed[j - 1][1], parsed[j - 1][2]) != (s_j, a_j):
-            if wf_j > 1:
-                segments[idx_j].has_missing_words = True
+        entries.sort()  # sort by word_from
 
-        # Gap between consecutive segments in same verse
-        if j + 1 < len(parsed):
-            idx_k, s_k, a_k, wf_k, wt_k = parsed[j + 1]
-            if s_j == s_k and a_j == a_k and wf_k > wt_j + 1:
-                segments[idx_j].has_missing_words = True
-                segments[idx_k].has_missing_words = True
+        # Gap at start of verse
+        if entries[0][0] > 1:
+            segments[entries[0][2]].has_missing_words = True
 
-        # Gap at end of verse (last segment of this verse doesn't reach last word)
-        if j + 1 >= len(parsed) or (parsed[j + 1][1], parsed[j + 1][2]) != (s_j, a_j):
-            if wt_j < expected:
-                segments[idx_j].has_missing_words = True
+        # Gaps between consecutive coverage entries
+        for j in range(len(entries) - 1):
+            wf_j, wt_j, idx_j = entries[j]
+            wf_k, wt_k, idx_k = entries[j + 1]
+            if wf_k > wt_j + 1:
+                gap_words = list(range(wt_j + 1, wf_k))
+                if len(gap_words) == 1:
+                    # Single missing word — use stop signs to decide which side
+                    mw = gap_words[0]
+                    if _word_has_stop(surah, ayah, wt_j):
+                        # Stop at end of prev seg → missing word belongs to next seg
+                        segments[idx_k].has_missing_words = True
+                    elif _word_has_stop(surah, ayah, mw):
+                        # Stop on missing word → it belongs to prev seg
+                        segments[idx_j].has_missing_words = True
+                    else:
+                        # Ambiguous — flag both
+                        segments[idx_j].has_missing_words = True
+                        segments[idx_k].has_missing_words = True
+                else:
+                    # Multiple missing words — flag both
+                    segments[idx_j].has_missing_words = True
+                    segments[idx_k].has_missing_words = True
+
+        # Gap at end of verse
+        if entries[-1][1] < expected:
+            segments[entries[-1][2]].has_missing_words = True
 
 
 def resolve_ref_text(matched_ref: str) -> str:
@@ -387,10 +437,10 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     confidence_badge_class = confidence_class  # preserve original for badge color
     if is_special:
         confidence_class = "segment-special"
+    elif seg.has_repeated_words:
+        confidence_class = "segment-med"
     elif seg.has_missing_words and not in_missing_pair:
         confidence_class = "segment-low"
-    elif seg.potentially_undersegmented and confidence_class != "segment-low":
-        confidence_class = "segment-underseg"
 
     timestamp = f"{format_timestamp(seg.start_time)} - {format_timestamp(seg.end_time)}"
     duration = seg.end_time - seg.start_time
@@ -401,15 +451,15 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     # Confidence percentage with label
     confidence_pct = f"Confidence: {seg.match_score:.0%}"
 
-    # Undersegmented badge
-    underseg_badge = ""
-    if seg.potentially_undersegmented:
-        underseg_badge = '<div class="segment-badge segment-underseg-badge">Potentially Undersegmented</div>'
-
     # Missing words badge (only for single-segment cases; pairs use a group wrapper)
     missing_badge = ""
     if seg.has_missing_words and not in_missing_pair:
         missing_badge = '<div class="segment-badge segment-low-badge">Missing Words</div>'
+
+    # Repeated words badge
+    repeated_badge = ""
+    if seg.has_repeated_words:
+        repeated_badge = '<div class="segment-badge segment-repeated-badge">Repeated Words</div>'
 
     # Error display
     error_html = ""
@@ -482,6 +532,29 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     else:
         text_html = ""
 
+    # Rebuild text as reading-order sections when wraps detected
+    if seg.wrap_word_ranges and seg.matched_ref and "-" in seg.matched_ref:
+        match_start, match_end = seg.matched_ref.split("-", 1)
+        sections = []
+        # Section 0: match start → first wrap end
+        sec0_ref = f"{match_start}-{seg.wrap_word_ranges[0][1]}"
+        sec0 = get_text_with_markers(sec0_ref)
+        if sec0:
+            sections.append(sec0)
+        # Middle sections (between consecutive wraps)
+        for wi in range(len(seg.wrap_word_ranges) - 1):
+            sec_ref = f"{seg.wrap_word_ranges[wi][0]}-{seg.wrap_word_ranges[wi + 1][1]}"
+            sec = get_text_with_markers(sec_ref)
+            if sec:
+                sections.append(sec)
+        # Last section: last wrap target → match end
+        last_ref = f"{seg.wrap_word_ranges[-1][0]}-{match_end}"
+        last_sec = get_text_with_markers(last_ref)
+        if last_sec:
+            sections.append(last_sec)
+        if sections:
+            text_html = "<br>".join(sections)
+
     if is_special:
         confidence_badge = f'<div class="segment-badge segment-special-badge">{seg.matched_ref}</div>'
     elif seg.has_missing_words and not in_missing_pair:
@@ -548,7 +621,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
             <div class="segment-title">{header_text}</div>
             <div class="segment-badges">
                 {action_btns}
-                {underseg_badge}
+                {repeated_badge}
                 {confidence_badge}
                 {missing_badge}
             </div>
@@ -645,18 +718,18 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
             f'</div>'
         )
 
-    underseg_segments = [i + 1 for i, s in enumerate(segments) if s.potentially_undersegmented]
-    if underseg_segments:
-        if len(underseg_segments) <= REVIEW_SUMMARY_MAX_SEGMENTS:
-            underseg_display = ", ".join(str(n) for n in underseg_segments)
+    repeated_segments = [i + 1 for i, s in enumerate(segments) if s.has_repeated_words]
+    if repeated_segments:
+        if len(repeated_segments) <= REVIEW_SUMMARY_MAX_SEGMENTS:
+            rep_display = ", ".join(str(n) for n in repeated_segments)
         else:
-            underseg_display = ", ".join(str(n) for n in underseg_segments[:REVIEW_SUMMARY_MAX_SEGMENTS])
-            remaining = len(underseg_segments) - REVIEW_SUMMARY_MAX_SEGMENTS
-            underseg_display += f" ... and {remaining} more"
+            rep_display = ", ".join(str(n) for n in repeated_segments[:REVIEW_SUMMARY_MAX_SEGMENTS])
+            remaining = len(repeated_segments) - REVIEW_SUMMARY_MAX_SEGMENTS
+            rep_display += f" ... and {remaining} more"
 
         header_parts.append(
             f'<div class="segments-review-summary">'
-            f'Potentially undersegmented: <span class="segment-underseg-text">{len(underseg_segments)} (segments {underseg_display})</span>'
+            f'Segments with repeated words: <span class="segment-med-text">{len(repeated_segments)} (segments {rep_display})</span>'
             f'</div>'
         )
 

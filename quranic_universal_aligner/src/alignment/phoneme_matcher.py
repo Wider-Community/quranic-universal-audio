@@ -18,6 +18,9 @@ from config import (
     COST_SUBSTITUTION,
     COST_DELETION,
     COST_INSERTION,
+    WRAP_PENALTY,
+    WRAP_SCORE_COST,
+    MAX_WRAPS,
     PHONEME_ALIGNMENT_DEBUG,
     PHONEME_ALIGNMENT_PROFILING,
 )
@@ -56,7 +59,7 @@ _SUBSTITUTION_COSTS: Dict[Tuple[str, str], float] = _load_substitution_costs()
 
 # Try to load Cython-accelerated DP; fall back to pure Python silently.
 try:
-    from ._dp_core import cy_align_with_word_boundaries, init_substitution_matrix
+    from ._dp_core import cy_align_wraparound, init_substitution_matrix
     init_substitution_matrix(_SUBSTITUTION_COSTS, COST_SUBSTITUTION)
     _USE_CYTHON_DP = True
 except ImportError:
@@ -128,6 +131,12 @@ class AlignmentResult:
 
     # Whether Basmala prefix was consumed by the alignment
     basmala_consumed: bool = False
+
+    # Repetition detection (wraparound DP)
+    n_wraps: int = 0
+    max_j_reached: int = 0
+    wrap_points: list = None       # List of (i, j_end, j_start) tuples
+    wrap_word_ranges: list = None  # List of (start_ref, end_ref) for repeated sections
 
     @property
     def ref_from(self) -> str:
@@ -275,12 +284,13 @@ def build_chapter_reference(surah_num: int) -> ChapterReference:
     )
 
 
+
 # =============================================================================
-# Word-Boundary-Constrained Alignment (DP)
+# Wraparound DP (unified — replaces align_with_word_boundaries)
 # =============================================================================
 
 
-def align_with_word_boundaries(
+def align_wraparound(
     P: List[str],
     R: List[str],
     R_phone_to_word: List[int],
@@ -289,32 +299,28 @@ def align_with_word_boundaries(
     cost_sub: float = COST_SUBSTITUTION,
     cost_del: float = COST_DELETION,
     cost_ins: float = COST_INSERTION,
-) -> Tuple[Optional[int], Optional[int], float, float]:
+    wrap_penalty: float = WRAP_PENALTY,
+    max_wraps: int = 0,
+    scoring_mode: str = "additive",
+    wrap_score_cost: float = WRAP_SCORE_COST,
+):
     """
-    Word-boundary-constrained substring alignment.
+    Word-boundary-constrained substring alignment with optional wraparound.
 
-    Combines DP computation with best-match selection:
-    - Start: only word-start positions allowed (INF cost otherwise)
-    - End: only word-end positions evaluated as candidates
-
-    Args:
-        P: ASR phoneme sequence
-        R: Reference phoneme window
-        R_phone_to_word: Maps phoneme index -> word index (GLOBAL indices)
-        expected_word: Expected starting word index (for position prior)
-        prior_weight: Penalty per word distance from expected
-        cost_sub: Substitution cost
-        cost_del: Deletion cost (delete from P)
-        cost_ins: Insertion cost (insert from R)
+    When max_wraps=0, equivalent to the old align_with_word_boundaries.
+    When max_wraps>0, allows R to loop back at word boundaries for repetition detection.
 
     Returns:
-        (best_j, best_j_start, best_cost, best_norm_dist) or (None, None, INF, INF)
+        (best_j, j_start, best_cost, norm_dist, n_wraps, max_j_reached, wrap_points)
+        wrap_points: list of (i, j_end, j_start) tuples (empty when no wraps)
     """
     if _USE_CYTHON_DP:
-        return cy_align_with_word_boundaries(
+        return cy_align_wraparound(
             P, R, R_phone_to_word,
             expected_word, prior_weight,
             cost_sub, cost_del, cost_ins,
+            wrap_penalty, max_wraps,
+            scoring_mode, wrap_score_cost,
         )
 
     # --- Pure Python fallback ---
@@ -322,99 +328,206 @@ def align_with_word_boundaries(
     INF = float('inf')
 
     if m == 0 or n == 0:
-        return None, None, INF, float('inf')
+        return None, None, INF, INF, 0, 0, []
 
-    # DP column semantics:
-    #   Column j represents "consumed j phonemes" / boundary after phoneme j-1
-    #   Column 0 = before any phonemes, Column n = after all phonemes
-    #   Phoneme indices are 0..n-1, DP columns are 0..n
+    # Precompute word boundary sets
+    word_starts = set()
+    word_ends = set()
+    for j in range(n + 1):
+        if j == 0 or (j < n and R_phone_to_word[j] != R_phone_to_word[j - 1]):
+            word_starts.add(j)
+        if j == n or (j > 0 and j < n and R_phone_to_word[j] != R_phone_to_word[j - 1]):
+            word_ends.add(j)
 
-    def is_start_boundary(j: int) -> bool:
-        """Can alignment START at DP column j? (before phoneme j)"""
-        if j >= n:
-            return False  # Can't start at or past end
-        if j == 0:
-            return True   # Column 0 is always valid start (first word)
-        # Valid if phoneme j begins a new word
-        return R_phone_to_word[j] != R_phone_to_word[j - 1]
+    K = max_wraps
 
-    def is_end_boundary(j: int) -> bool:
-        """Can alignment END at DP column j? (after phoneme j-1)"""
-        if j == 0:
-            return False  # Can't end before consuming anything
-        if j == n:
-            return True   # Column n (end of reference) always valid
-        # Valid if phoneme j starts a new word (meaning j-1 ended a word)
-        return R_phone_to_word[j] != R_phone_to_word[j - 1]
+    if K == 0:
+        # ---- Rolling-row fast path (no wraparound) ----
+        prev_cost = [0.0 if j in word_starts else INF for j in range(n + 1)]
+        prev_start = [j if j in word_starts else -1 for j in range(n + 1)]
+        curr_cost = [0.0] * (n + 1)
+        curr_start = [0] * (n + 1)
 
-    # Initialize: free start ONLY at word boundaries
-    prev_cost = [0.0 if is_start_boundary(j) else INF for j in range(n + 1)]
-    prev_start = [j if is_start_boundary(j) else -1 for j in range(n + 1)]
+        for i in range(1, m + 1):
+            curr_cost[0] = i * cost_del if 0 in word_starts else INF
+            curr_start[0] = 0 if 0 in word_starts else -1
 
-    curr_cost = [0.0] * (n + 1)
-    curr_start = [0] * (n + 1)
+            for j in range(1, n + 1):
+                del_option = prev_cost[j] + cost_del
+                ins_option = curr_cost[j-1] + cost_ins
+                sub_option = prev_cost[j-1] + get_sub_cost(P[i-1], R[j-1], cost_sub)
 
-    # DP computation
-    for i in range(1, m + 1):
-        curr_cost[0] = i * cost_del if is_start_boundary(0) else INF
-        curr_start[0] = 0 if is_start_boundary(0) else -1
+                if sub_option <= del_option and sub_option <= ins_option:
+                    curr_cost[j] = sub_option
+                    curr_start[j] = prev_start[j-1]
+                elif del_option <= ins_option:
+                    curr_cost[j] = del_option
+                    curr_start[j] = prev_start[j]
+                else:
+                    curr_cost[j] = ins_option
+                    curr_start[j] = curr_start[j-1]
+
+            prev_cost, curr_cost = curr_cost, prev_cost
+            prev_start, curr_start = curr_start, prev_start
+
+        best_score = INF
+        best_j = None
+        best_j_start = None
+        best_cost_val = INF
+        best_norm = INF
 
         for j in range(1, n + 1):
-            del_option = prev_cost[j] + cost_del
-            ins_option = curr_cost[j-1] + cost_ins
-            sub_option = prev_cost[j-1] + get_sub_cost(P[i-1], R[j-1], cost_sub)
+            if j not in word_ends:
+                continue
+            if prev_cost[j] >= INF:
+                continue
+            dist = prev_cost[j]
+            j_s = prev_start[j]
+            ref_len = j - j_s
+            denom = max(m, ref_len, 1)
+            nd = dist / denom
+            sw = R_phone_to_word[j_s] if j_s < n else R_phone_to_word[j - 1]
+            prior = prior_weight * abs(sw - expected_word)
+            score = nd + prior
+            if score < best_score:
+                best_score = score
+                best_j = j
+                best_j_start = j_s
+                best_cost_val = dist
+                best_norm = nd
 
-            if sub_option <= del_option and sub_option <= ins_option:
-                curr_cost[j] = sub_option
-                curr_start[j] = prev_start[j-1]
-            elif del_option <= ins_option:
-                curr_cost[j] = del_option
-                curr_start[j] = prev_start[j]
-            else:
-                curr_cost[j] = ins_option
-                curr_start[j] = curr_start[j-1]
+        if best_j is None:
+            return None, None, INF, INF, 0, 0, []
+        return best_j, best_j_start, best_cost_val, best_norm, 0, best_j, []
 
-        prev_cost, curr_cost = curr_cost, prev_cost
-        prev_start, curr_start = curr_start, prev_start
+    # ---- Full 3D matrix with traceback (max_wraps > 0) ----
+    dp = [[[INF] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
+    parent = [[[None] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
+    start_arr = [[[-1] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
+    max_j_arr = [[[-1] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
 
-    # After DP: evaluate only valid end boundary positions
-    # prev_cost/prev_start now contain the final row (after m iterations)
-    best_score = float('inf')  # Score includes float norm_dist, so keep as float
+    # Initialize: k=0, free starts at word boundaries
+    for j in word_starts:
+        dp[0][0][j] = 0.0
+        start_arr[0][0][j] = j
+        max_j_arr[0][0][j] = j
+
+    # Fill DP
+    for i in range(1, m + 1):
+        for k in range(K + 1):
+            if k == 0 and 0 in word_starts:
+                dp[i][k][0] = i * cost_del
+                parent[i][k][0] = (i - 1, k, 0, 'D')
+                start_arr[i][k][0] = 0
+                max_j_arr[i][k][0] = 0
+
+            for j in range(1, n + 1):
+                del_opt = dp[i-1][k][j] + cost_del if dp[i-1][k][j] < INF else INF
+                ins_opt = dp[i][k][j-1] + cost_ins if dp[i][k][j-1] < INF else INF
+                sub_opt = dp[i-1][k][j-1] + get_sub_cost(P[i-1], R[j-1], cost_sub) \
+                          if dp[i-1][k][j-1] < INF else INF
+
+                best = min(del_opt, ins_opt, sub_opt)
+                if best < INF:
+                    dp[i][k][j] = best
+                    if best == sub_opt:
+                        parent[i][k][j] = (i - 1, k, j - 1, 'S')
+                        start_arr[i][k][j] = start_arr[i-1][k][j-1]
+                        max_j_arr[i][k][j] = max(max_j_arr[i-1][k][j-1], j)
+                    elif best == del_opt:
+                        parent[i][k][j] = (i - 1, k, j, 'D')
+                        start_arr[i][k][j] = start_arr[i-1][k][j]
+                        max_j_arr[i][k][j] = max_j_arr[i-1][k][j]
+                    else:
+                        parent[i][k][j] = (i, k, j - 1, 'I')
+                        start_arr[i][k][j] = start_arr[i][k][j-1]
+                        max_j_arr[i][k][j] = max(max_j_arr[i][k][j-1], j)
+
+        # Wrap transitions
+        for k in range(K):
+            for j_end in word_ends:
+                if dp[i][k][j_end] >= INF:
+                    continue
+                cost_at_end = dp[i][k][j_end]
+                for j_s in word_starts:
+                    if j_s >= j_end:
+                        continue
+                    new_cost = cost_at_end + wrap_penalty
+                    if new_cost < dp[i][k+1][j_s]:
+                        dp[i][k+1][j_s] = new_cost
+                        parent[i][k+1][j_s] = (i, k, j_end, 'W')
+                        start_arr[i][k+1][j_s] = start_arr[i][k][j_end]
+                        max_j_arr[i][k+1][j_s] = max(max_j_arr[i][k][j_end], j_end)
+
+            # Re-propagate insertions from wrap positions
+            for j in range(1, n + 1):
+                ins_opt = dp[i][k+1][j-1] + cost_ins if dp[i][k+1][j-1] < INF else INF
+                if ins_opt < dp[i][k+1][j]:
+                    dp[i][k+1][j] = ins_opt
+                    parent[i][k+1][j] = (i, k+1, j-1, 'I')
+                    start_arr[i][k+1][j] = start_arr[i][k+1][j-1]
+                    max_j_arr[i][k+1][j] = max(max_j_arr[i][k+1][j-1], j)
+
+    # Best-match selection
+    best_score = INF
     best_j = None
     best_j_start = None
-    best_cost = INF
-    best_norm_dist = float('inf')
+    best_cost_val = INF
+    best_norm = INF
+    best_k = 0
+    best_max_j = 0
 
-    for j in range(1, n + 1):
-        # Skip non-end-boundary positions
-        if not is_end_boundary(j):
-            continue
+    for k in range(K + 1):
+        for j in range(1, n + 1):
+            if j not in word_ends:
+                continue
+            if dp[m][k][j] >= INF:
+                continue
+            dist = dp[m][k][j]
+            j_s = start_arr[m][k][j]
+            if j_s < 0:
+                continue
+            mj = max_j_arr[m][k][j]
+            ref_len = max(mj, j) - j_s
+            if ref_len <= 0:
+                continue
+            denom = max(m, ref_len, 1)
 
-        # Skip infinite cost (no valid alignment ends here)
-        if prev_cost[j] >= INF:
-            continue
+            if scoring_mode == "no_subtract":
+                pc = dist
+            else:
+                pc = dist - k * wrap_penalty
+            nd = pc / denom
 
-        dist = prev_cost[j]
-        j_start = prev_start[j]
+            sw = R_phone_to_word[j_s] if j_s < n else R_phone_to_word[j - 1]
+            prior = prior_weight * abs(sw - expected_word)
+            score = nd + prior
+            if scoring_mode == "additive":
+                score += k * wrap_score_cost
 
-        # Compute normalized edit distance
-        ref_len = j - j_start
-        denom = max(m, ref_len, 1)
-        norm_dist = dist / denom
+            if score < best_score:
+                best_score = score
+                best_j = j
+                best_j_start = j_s
+                best_cost_val = dist
+                best_norm = nd
+                best_k = k
+                best_max_j = mj
 
-        # Position prior on start word
-        start_word = R_phone_to_word[j_start] if j_start < n else R_phone_to_word[j - 1]
-        prior = prior_weight * abs(start_word - expected_word)
-        score = norm_dist + prior
+    if best_j is None:
+        return None, None, INF, INF, 0, 0, []
 
-        if score < best_score:
-            best_score = score
-            best_j = j
-            best_j_start = j_start
-            best_cost = dist
-            best_norm_dist = norm_dist
+    # Traceback: walk parent pointers, collect wrap points
+    wrap_points = []
+    ci, ck, cj = m, best_k, best_j
+    while parent[ci][ck][cj] is not None:
+        pi, pk, pj, trans = parent[ci][ck][cj]
+        if trans == 'W':
+            wrap_points.append((ci, pj, cj))
+        ci, ck, cj = pi, pk, pj
+    wrap_points.reverse()
 
-    return best_j, best_j_start, best_cost, best_norm_dist
+    return best_j, best_j_start, best_cost_val, best_norm, best_k, best_max_j, wrap_points
 
 
 # =============================================================================
@@ -520,11 +633,14 @@ def align_segment(
     if PHONEME_ALIGNMENT_PROFILING:
         t0 = time.perf_counter()
 
-    # 4. Run word-boundary-constrained alignment (DP + selection in one pass)
-    best_j, j_start, best_cost, norm_dist = align_with_word_boundaries(
+    # 4. Run wraparound DP
+    best_j, j_start, best_cost, norm_dist, n_wraps, max_j_reached, wrap_points = align_wraparound(
         P, R, R_phone_to_word,
         expected_word=pointer,
-        prior_weight=START_PRIOR_WEIGHT
+        prior_weight=START_PRIOR_WEIGHT,
+        wrap_penalty=WRAP_PENALTY,
+        max_wraps=MAX_WRAPS,
+        scoring_mode="no_subtract",
     )
 
     if PHONEME_ALIGNMENT_PROFILING:
@@ -540,7 +656,7 @@ def align_segment(
         print_debug_info(P, R, None, segment_idx, pointer, win_start, win_end, words)
         return None, timing
 
-    # 5. Check acceptance threshold
+    # 6. Check acceptance threshold
     threshold = max_edit_distance_override if max_edit_distance_override is not None else MAX_EDIT_DISTANCE
     if norm_dist > threshold:
         if PHONEME_ALIGNMENT_PROFILING:
@@ -548,12 +664,16 @@ def align_segment(
         print_debug_info(P, R, None, segment_idx, pointer, win_start, win_end, words)
         return None, timing
 
-    # 6. Confidence is 1 - normalized distance
+    # 7. Confidence is 1 - normalized distance
     confidence = 1.0 - norm_dist
 
-    # 7. Map phoneme indices to word indices
+    # 8. Map phoneme indices to word indices
     start_word_idx = R_phone_to_word[j_start]
     end_word_idx = R_phone_to_word[best_j - 1]
+
+    # When wraps detected, use max_j_reached for end word (furthest position reached)
+    if n_wraps > 0 and max_j_reached > best_j:
+        end_word_idx = R_phone_to_word[max_j_reached - 1]
 
     # Handle prefix: if alignment starts in the prefix region, find the first real word
     basmala_consumed = False
@@ -579,7 +699,22 @@ def align_segment(
         start_word=words[start_word_idx],
         end_word=words[end_word_idx],
         basmala_consumed=basmala_consumed,
+        n_wraps=n_wraps,
+        max_j_reached=max_j_reached,
+        wrap_points=wrap_points,
     )
+
+    # Compute wrap word ranges for UI display
+    if n_wraps > 0 and wrap_points:
+        wrap_word_ranges = []
+        for (_i_pos, _j_end, _j_start) in wrap_points:
+            ws = R_phone_to_word[_j_start]
+            we = R_phone_to_word[_j_end - 1]
+            wrap_word_ranges.append((
+                words[ws].location,
+                words[we].location,
+            ))
+        result.wrap_word_ranges = wrap_word_ranges
 
     if PHONEME_ALIGNMENT_PROFILING:
         timing['result_build_time'] = time.perf_counter() - t0

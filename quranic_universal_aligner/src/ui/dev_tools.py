@@ -633,7 +633,7 @@ def _build_segments_from_log(row, audio_id):
     # Build SegmentInfo objects and json_segments in parallel
     from src.core.segment_types import SegmentInfo
     from src.alignment.special_segments import ALL_SPECIAL_REFS, SPECIAL_TEXT
-    from src.ui.segments import render_segments, get_text_with_markers, check_undersegmented
+    from src.ui.segments import render_segments, get_text_with_markers
 
     segments = []
     json_segments = []
@@ -664,11 +664,6 @@ def _build_segments_from_log(row, audio_id):
         elif ref:
             matched_text = get_text_with_markers(ref) or ""
 
-        # Check for undersegmentation
-        underseg = False
-        if ref and ref not in ALL_SPECIAL_REFS:
-            underseg = check_undersegmented(ref, duration)
-
         # Check for missing words
         has_missing = seg_data.get("missing_words", False) or False
 
@@ -681,7 +676,6 @@ def _build_segments_from_log(row, audio_id):
             match_score=confidence,
             error=error,
             has_missing_words=has_missing,
-            potentially_undersegmented=underseg,
         )
         segments.append(seg_info)
 

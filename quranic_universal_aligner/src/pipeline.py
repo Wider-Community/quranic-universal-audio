@@ -11,7 +11,6 @@ import gradio as gr
 from config import (
     get_vad_duration, get_asr_duration, ZEROGPU_MAX_DURATION,
     ANCHOR_SEGMENTS, PHONEME_ALIGNMENT_PROFILING,
-    UNDERSEG_MIN_WORDS, UNDERSEG_MIN_AYAH_SPAN,
     SEGMENT_AUDIO_DIR, RESAMPLE_TYPE,
 )
 from src.core.zero_gpu import gpu_with_fallback
@@ -22,7 +21,7 @@ from src.alignment.alignment_pipeline import run_phoneme_matching
 from src.core.segment_types import VadSegment, SegmentInfo, ProfilingData
 from src.ui.segments import (
     render_segments, get_segment_word_stats,
-    check_undersegmented, is_end_of_verse,
+    is_end_of_verse,
 )
 
 # ---------------------------------------------------------------------------
@@ -334,7 +333,6 @@ def _split_fused_segments(segments, audio_int16, sample_rate):
                 transcribed_text=seg.transcribed_text, matched_text=verse_text,
                 matched_ref=verse_ref, match_score=seg.match_score,
                 error=seg.error, has_missing_words=seg.has_missing_words,
-                potentially_undersegmented=seg.potentially_undersegmented,
             ))
             print(f"[MFA_SPLIT] Segment {idx}: fused_combined split at "
                   f"{istiatha_end:.3f}s / {basmala_end:.3f}s")
@@ -367,7 +365,6 @@ def _split_fused_segments(segments, audio_int16, sample_rate):
                 transcribed_text=seg.transcribed_text, matched_text=verse_text,
                 matched_ref=verse_ref, match_score=seg.match_score,
                 error=seg.error, has_missing_words=seg.has_missing_words,
-                potentially_undersegmented=seg.potentially_undersegmented,
             ))
             print(f"[MFA_SPLIT] Segment {idx}: fused_istiatha split at {istiatha_end:.3f}s")
 
@@ -398,7 +395,6 @@ def _split_fused_segments(segments, audio_int16, sample_rate):
                 transcribed_text=seg.transcribed_text, matched_text=verse_text,
                 matched_ref=verse_ref, match_score=seg.match_score,
                 error=seg.error, has_missing_words=seg.has_missing_words,
-                potentially_undersegmented=seg.potentially_undersegmented,
             ))
             print(f"[MFA_SPLIT] Segment {idx}: fused_basmala split at {basmala_end:.3f}s")
 
@@ -456,6 +452,20 @@ def _run_post_vad_pipeline(
 
     print(f"[VAD] {len(vad_segments)} segments")
 
+    # Store VAD intervals on debug collector if active
+    from src.core.debug_collector import get_debug_collector as _get_dc
+    _dc = _get_dc()
+    if _dc is not None:
+        _dc.vad = {
+            "cleaned_interval_count": len(intervals),
+            "cleaned_intervals": [[round(s, 4), round(e, 4)] for s, e in intervals],
+            "params": {
+                "min_silence_ms": int(min_silence_ms),
+                "min_speech_ms": int(min_speech_ms),
+                "pad_ms": int(pad_ms),
+            },
+        }
+
     if precomputed_asr is not None:
         # ASR already ran within the combined GPU lease
         phoneme_texts, asr_batch_profiling, asr_sorting_time, asr_batch_build_time, asr_gpu_move_time, asr_gpu_time = precomputed_asr
@@ -484,6 +494,18 @@ def _run_post_vad_pipeline(
                   f"{b['min_dur']:.2f}-{b['max_dur']:.2f}s "
                   f"(A {b['avg_dur']:.2f}s, T {b['total_seconds']:.1f}s, W {b['pad_waste']:.0%})")
 
+    # Store ASR results on debug collector if active
+    _dc = _get_dc()
+    if _dc is not None:
+        _dc.asr = {
+            "model_name": model_name,
+            "num_segments": len(phoneme_texts),
+            "per_segment_phonemes": [
+                {"segment_idx": i, "phonemes": ph}
+                for i, ph in enumerate(phoneme_texts)
+            ],
+        }
+
     # Phoneme-based special segment detection
     print(f"[STAGE] Detecting special segments...")
     from src.alignment.special_segments import detect_special_segments
@@ -510,6 +532,12 @@ def _run_post_vad_pipeline(
     profiling.anchor_time = time.time() - anchor_start
     print(f"[ANCHOR] Anchored to Surah {surah}, Ayah {ayah}")
 
+    # Store anchor result on debug collector
+    _dc = _get_dc()
+    if _dc is not None:
+        _dc.anchor["start_pointer"] = verse_to_word_index(
+            get_chapter_reference(surah), ayah)
+
     # Build chapter reference and set pointer
     chapter_ref = get_chapter_reference(surah)
     pointer = verse_to_word_index(chapter_ref, ayah)
@@ -518,7 +546,7 @@ def _run_post_vad_pipeline(
 
     # Phoneme-based DP alignment
     match_start = time.time()
-    match_results, match_profiling, gap_segments, merged_into = run_phoneme_matching(
+    match_results, match_profiling, gap_segments, merged_into, repetition_segments = run_phoneme_matching(
         phoneme_texts,
         surah,
         first_quran_idx,
@@ -552,6 +580,7 @@ def _run_post_vad_pipeline(
     profiling.transition_skips = match_profiling.get("transition_skips", 0)
     profiling.segments_attempted = match_profiling.get("segments_attempted", 0)
     profiling.segments_passed = match_profiling.get("segments_passed", 0)
+    profiling.phoneme_wraps_detected = match_profiling.get("phoneme_wraps_detected", 0)
 
     print(f"[STAGE] Building results...")
 
@@ -577,9 +606,13 @@ def _run_post_vad_pipeline(
         if consumed_idx < len(vad_segments):
             _merged_end_times[target_idx] = vad_segments[consumed_idx].end_time
 
-    for idx, (seg, (matched_text, score, matched_ref)) in enumerate(
+    for idx, (seg, result_tuple) in enumerate(
         zip(vad_segments, match_results)
     ):
+        # Unpack result tuple (4 elements for alignment results, 3 for legacy specials)
+        matched_text, score, matched_ref = result_tuple[0], result_tuple[1], result_tuple[2]
+        wrap_ranges = result_tuple[3] if len(result_tuple) > 3 else None
+
         # Skip segments consumed by Tahmeed merge
         if idx in merged_into:
             continue
@@ -608,7 +641,8 @@ def _run_post_vad_pipeline(
             match_score=score,
             error=error,
             has_missing_words=idx in gap_segments,
-            potentially_undersegmented=False,  # Recomputed after splits
+            has_repeated_words=idx in repetition_segments,
+            wrap_word_ranges=wrap_ranges,
         ))
 
     # Post-processing: split combined/fused segments via MFA timestamps
@@ -620,23 +654,13 @@ def _run_post_vad_pipeline(
     _seg_durations = []
     _seg_phoneme_counts = []
     _seg_ayah_spans = []
-    _underseg_indices = []
-    _underseg_by_words = []
-    _underseg_by_ayah = []
     for i, seg in enumerate(segments):
         word_count, ayah_span = get_segment_word_stats(seg.matched_ref)
         duration = seg.end_time - seg.start_time
-        underseg = check_undersegmented(seg.matched_ref, duration) if seg.matched_ref else False
         _seg_word_counts.append(word_count)
         _seg_durations.append(duration)
         _seg_phoneme_counts.append(0)  # phoneme counts not available after split
         _seg_ayah_spans.append(ayah_span)
-        if underseg:
-            _underseg_indices.append(i + 1)
-            if word_count >= UNDERSEG_MIN_WORDS:
-                _underseg_by_words.append(i + 1)
-            if ayah_span >= UNDERSEG_MIN_AYAH_SPAN:
-                _underseg_by_ayah.append(i + 1)
 
     profiling.segments_attempted = len(segments)
     profiling.segments_passed = sum(1 for s in segments if s.match_score > 0.0)
@@ -648,6 +672,12 @@ def _run_post_vad_pipeline(
     # Print profiling summary
     profiling.total_time = time.time() - pipeline_start
     print(profiling.summary())
+
+    # Store profiling on debug collector if active
+    from src.core.debug_collector import get_debug_collector as _get_dc
+    _dc = _get_dc()
+    if _dc is not None:
+        _dc._profiling = profiling
 
     # Segment distribution stats
     matched_words = [w for w in _seg_word_counts if w > 0]
@@ -683,15 +713,6 @@ def _run_post_vad_pipeline(
             std_p = _std(pauses)
             print(f"  Pause (s)     : min={min(pauses):.1f}, max={max(pauses):.1f}, avg={avg_p:.1f}\u00b1{std_p:.1f}")
         print(f"  Speech pace   : {wpm:.1f} words/min, {pps:.1f} phonemes/sec (speech time only)")
-    if _underseg_indices:
-        print(f"  Undersegmented: {len(_underseg_indices)} (segments {', '.join(str(n) for n in _underseg_indices)})")
-        if _underseg_by_words:
-            print(f"    by word count (>={UNDERSEG_MIN_WORDS}): {', '.join(str(n) for n in _underseg_by_words)}")
-        if _underseg_by_ayah:
-            print(f"    by ayah span  (>={UNDERSEG_MIN_AYAH_SPAN}): {', '.join(str(n) for n in _underseg_by_ayah)}")
-    else:
-        print(f"  Undersegmented: 0")
-
     from src.alignment.special_segments import ALL_SPECIAL_REFS
 
     # --- Usage logging ---
@@ -727,7 +748,6 @@ def _run_post_vad_pipeline(
                     "word_count": _seg_word_counts[i] if i < len(_seg_word_counts) else 0,
                     "ayah_span": _seg_ayah_spans[i] if i < len(_seg_ayah_spans) else 0,
                     "phoneme_count": _seg_phoneme_counts[i] if i < len(_seg_phoneme_counts) else 0,
-                    "undersegmented": seg.potentially_undersegmented,
                     "missing_words": seg.has_missing_words,
                     "special_type": sp_type,
                     "error": seg.error,
@@ -830,10 +850,12 @@ def _run_post_vad_pipeline(
             "matched_text": seg.matched_text or "",
             "confidence": round(seg.match_score, 3),
             "has_missing_words": seg.has_missing_words,
-            "potentially_undersegmented": seg.potentially_undersegmented,
+            "has_repeated_words": seg.has_repeated_words,
             "special_type": seg.matched_ref if is_special else None,
-            "error": seg.error
+            "error": seg.error,
         }
+        if seg.wrap_word_ranges:
+            segment_data["wrap_word_ranges"] = seg.wrap_word_ranges
         segments_list.append(segment_data)
 
     json_output = {"segments": segments_list}
@@ -1010,6 +1032,19 @@ def process_audio(
     profiling.vad_gpu_time = vad_gpu_time
     profiling.vad_wall_time = wall_time - asr_gpu_time
     print(f"[GPU] VAD completed in {profiling.vad_wall_time:.2f}s (gpu {vad_gpu_time:.2f}s)")
+
+    # Store raw VAD intervals on debug collector if active
+    from src.core.debug_collector import get_debug_collector as _get_dc_top
+    _dc_top = _get_dc_top()
+    if _dc_top is not None:
+        import torch as _torch
+        raw_intervals_list = raw_speech_intervals
+        if _torch.is_tensor(raw_intervals_list):
+            raw_intervals_list = raw_intervals_list.cpu().numpy().tolist()
+        elif hasattr(raw_intervals_list, 'tolist'):
+            raw_intervals_list = raw_intervals_list.tolist()
+        _dc_top.vad["raw_interval_count"] = len(raw_intervals_list) if raw_intervals_list is not None else 0
+        _dc_top.vad["raw_intervals"] = [[round(s, 4), round(e, 4)] for s, e in raw_intervals_list] if raw_intervals_list is not None else []
 
     if not intervals:
         return "<div>No speech segments detected in audio</div>", None, None, None, None, None, None, None, None
@@ -1290,10 +1325,16 @@ def save_json_export(json_data):
 def _normalize_ref(raw_ref: str) -> str | None:
     """Normalize a user-typed ref to full form. Returns None if invalid.
 
-    Handles: "2:255:1-6" → "2:255:1-2:255:6", "2:255:5" → "2:255:5-2:255:5",
-    special codes kept as-is.
+    Handles:
+      "2:255:1-2:255:6"  → canonical (unchanged)
+      "2:255:1-6"        → "2:255:1-2:255:6"
+      "2:255:5"          → "2:255:5-2:255:5"
+      "76:5"             → "76:5:1-76:5:N" (whole verse)
+      "76:1-76:2"        → "76:1:1-76:2:N" (verse range)
+      Special codes kept as-is (case-insensitive).
     """
     from src.alignment.special_segments import ALL_SPECIAL_REFS
+    from src.ui.segments import _load_verse_word_counts
 
     raw = raw_ref.strip()
     if not raw:
@@ -1308,11 +1349,25 @@ def _normalize_ref(raw_ref: str) -> str | None:
         if raw.lower() == sp.lower():
             return sp
 
+    verse_wc = _load_verse_word_counts()
+
     # Parse ref parts
     if "-" in raw:
         start, end = raw.split("-", 1)
         sp = start.split(":")
         ep = end.split(":")
+
+        # Verse range: "76:1-76:2" → "76:1:1-76:2:N"
+        if len(sp) == 2 and len(ep) == 2:
+            try:
+                e_surah, e_ayah = int(ep[0]), int(ep[1])
+                n = verse_wc.get(e_surah, {}).get(e_ayah, 0)
+                if n == 0:
+                    return None
+                return f"{int(sp[0])}:{int(sp[1])}:1-{e_surah}:{e_ayah}:{n}"
+            except (ValueError, IndexError):
+                return None
+
         if len(sp) < 3:
             return None
         # Short form: "2:255:1-6" → expand end
@@ -1327,8 +1382,18 @@ def _normalize_ref(raw_ref: str) -> str | None:
             return None
         return f"{s}-{e}"
     else:
-        # Single word: "2:255:5" → "2:255:5-2:255:5"
         parts = raw.split(":")
+        # Whole verse: "76:5" → "76:5:1-76:5:N"
+        if len(parts) == 2:
+            try:
+                surah, ayah = int(parts[0]), int(parts[1])
+                n = verse_wc.get(surah, {}).get(ayah, 0)
+                if n == 0:
+                    return None
+                return f"{surah}:{ayah}:1-{surah}:{ayah}:{n}"
+            except (ValueError, IndexError):
+                return None
+        # Single word: "2:255:5" → "2:255:5-2:255:5"
         if len(parts) < 3:
             return None
         try:
@@ -1355,7 +1420,8 @@ def _json_to_segments(json_output: dict) -> list:
             matched_ref=ref, match_score=s.get("confidence", 0),
             error=s.get("error"),
             has_missing_words=s.get("has_missing_words", False),
-            potentially_undersegmented=s.get("potentially_undersegmented", False),
+            has_repeated_words=s.get("has_repeated_words", False),
+            wrap_word_ranges=s.get("wrap_word_ranges"),
         ))
     return segments
 
@@ -1382,22 +1448,46 @@ def _segments_to_json(segments: list, old_json_segments: list | None = None) -> 
             "matched_text": seg.matched_text or "",
             "confidence": round(seg.match_score, 3),
             "has_missing_words": seg.has_missing_words,
-            "potentially_undersegmented": seg.potentially_undersegmented,
+            "has_repeated_words": seg.has_repeated_words,
             "special_type": seg.matched_ref if is_special else None,
             "error": seg.error,
         }
-        # Preserve extra keys from previous json (e.g. _autofix_original_ref, words)
+        if seg.wrap_word_ranges:
+            segment_data["wrap_word_ranges"] = seg.wrap_word_ranges
+        # Preserve extra keys from previous json (e.g. _autofix_original_ref, words, _stale_words, _stale_ref)
         if old_json_segments and i < len(old_json_segments):
-            for key in ("_autofix_original_ref", "words"):
-                if key in old_json_segments[i]:
+            for key in ("_autofix_original_ref", "words", "_stale_words", "_stale_ref", "wrap_word_ranges"):
+                if key in old_json_segments[i] and key not in segment_data:
                     segment_data[key] = old_json_segments[i][key]
         segments_list.append(segment_data)
     return {"segments": segments_list}
 
 
+def _inject_word_timing(text_html: str, words_data: list, seg_offset: float = 0) -> str:
+    """Inject data-start/data-end into word spans from stored MFA words data."""
+    import re
+    ts_map = {}
+    for w in words_data:
+        loc = w.get("location", "")
+        if loc:
+            ts_map[loc] = (w["start"], w["end"])
+
+    def _inject(m):
+        orig = m.group(0)
+        pos_m = re.search(r'data-pos="([^"]+)"', orig)
+        if not pos_m:
+            return orig
+        ts = ts_map.get(pos_m.group(1))
+        if not ts:
+            return orig
+        return orig[:-1] + f' data-start="{ts[0] + seg_offset:.4f}" data-end="{ts[1] + seg_offset:.4f}">'
+
+    return re.sub(r'<span class="word"[^>]*>', _inject, text_html)
+
+
 def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
     """Apply an inline ref edit from the JS UI. Returns (json_output, export_file, patch_json)."""
-    from src.ui.segments import recompute_missing_words, resolve_ref_text, get_text_with_markers, _wrap_word
+    from src.ui.segments import recompute_missing_words, resolve_ref_text, get_text_with_markers, _wrap_word, simplify_ref
     from src.alignment.special_segments import ALL_SPECIAL_REFS
 
     _skip3 = (gr.skip(), gr.skip(), gr.skip())
@@ -1409,6 +1499,10 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
         payload = json.loads(edit_payload_str)
     except (json.JSONDecodeError, TypeError):
         return _skip3
+
+    # Route special actions
+    if payload.get("action") == "recompute_mfa":
+        return _recompute_single_mfa(payload.get("idx"), json_output, segment_dir)
 
     idx = payload.get("idx")
     raw_ref = payload.get("new_ref", "")
@@ -1423,11 +1517,30 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
     if idx < 0 or idx >= len(old_segments):
         return _skip3
 
+    # Build the old ref for error revert
+    old_seg = old_segments[idx]
+    if old_seg.get("special_type"):
+        old_ref = old_seg["special_type"]
+    elif old_seg.get("ref_to"):
+        old_ref = f"{old_seg['ref_from']}-{old_seg['ref_to']}"
+    else:
+        old_ref = old_seg.get("ref_from", "")
+
+    def _error_patch(message):
+        return (gr.skip(), gr.skip(), json.dumps({
+            "status": "error", "message": message,
+            "edited_idx": idx, "old_ref": simplify_ref(old_ref),
+        }))
+
     # Normalize the ref
     new_ref = _normalize_ref(raw_ref)
     if not new_ref:
         print(f"[REF-EDIT] Invalid ref: {raw_ref!r}")
-        return (gr.skip(), gr.skip(), json.dumps({"status": "error", "message": f"Invalid ref: {raw_ref}"}))
+        return _error_patch(f"Invalid ref: {raw_ref}")
+
+    # No-op if normalized ref matches the current ref (handles shortcut variations)
+    if new_ref == old_ref:
+        return _skip3
 
     # Validate non-special refs against QuranIndex
     if new_ref not in ALL_SPECIAL_REFS:
@@ -1435,7 +1548,7 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
         index = get_quran_index()
         if not index.ref_to_indices(new_ref):
             print(f"[REF-EDIT] Ref not found in QuranIndex: {new_ref}")
-            return (gr.skip(), gr.skip(), json.dumps({"status": "error", "message": f"Ref not found: {new_ref}"}))
+            return _error_patch(f"Ref not found: {new_ref}")
 
     # Reconstruct segments
     segments = _json_to_segments(json_output)
@@ -1474,9 +1587,23 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
     if clear_autofix and "_autofix_original_ref" in new_json["segments"][idx]:
         del new_json["segments"][idx]["_autofix_original_ref"]
 
-    # Strip stale MFA timestamps from the edited segment
+    # MFA timestamp handling: stash on edit, restore when ref matches stashed ref
     had_mfa = bool(old_segments[idx].get("words"))
-    if had_mfa:
+    mfa_restored = False
+    stale_ref = old_segments[idx].get("_stale_ref", "")
+    has_stale = bool(old_segments[idx].get("_stale_words"))
+
+    if has_stale and new_ref == stale_ref:
+        # Ref reverted to original (undo or manual edit-back): restore stashed timestamps
+        new_json["segments"][idx]["words"] = old_segments[idx]["_stale_words"]
+        new_json["segments"][idx].pop("_stale_words", None)
+        new_json["segments"][idx].pop("_stale_ref", None)
+        mfa_restored = True
+        had_mfa = False  # Don't report as stripped
+    elif had_mfa:
+        # Edit: stash timestamps + original ref for potential restore
+        new_json["segments"][idx]["_stale_words"] = old_segments[idx]["words"]
+        new_json["segments"][idx]["_stale_ref"] = old_ref
         new_json["segments"][idx].pop("words", None)
 
     # Build patch for JS (no full HTML re-render)
@@ -1491,6 +1618,13 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
             )
     if not matched_text_html:
         matched_text_html = ""
+
+    # When restoring MFA, inject timing attributes into word spans
+    if mfa_restored and matched_text_html:
+        restored_words = new_json["segments"][idx].get("words", [])
+        seg_offset = new_json["segments"][idx].get("time_from", 0)
+        matched_text_html = _inject_word_timing(matched_text_html, restored_words, seg_offset)
+
     patch = json.dumps({
         "status": "ok",
         "edited_idx": idx,
@@ -1500,9 +1634,102 @@ def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
         "is_autofix": is_autofix,
         "is_special": is_special,
         "mfa_stripped": had_mfa,
+        "mfa_restored": mfa_restored,
         "edited_has_missing_words": segments[idx].has_missing_words,
     })
 
+    print(f"[REF-EDIT] idx={idx} {old_ref!r} → {new_ref!r} is_special={is_special} has_mw={segments[idx].has_missing_words} text_len={len(matched_text_html)}")
     return new_json, save_json_export(new_json), patch
+
+
+def _recompute_single_mfa(seg_idx, json_output, segment_dir):
+    """Recompute MFA timestamps for a single segment. Returns (json, export, patch)."""
+    import os
+    from src.mfa import (
+        _build_mfa_ref, _mfa_upload_and_submit, _mfa_wait_result,
+        _build_timestamp_lookups, _build_crossword_groups,
+        _extend_word_timestamps, inject_timestamps_into_html,
+    )
+    from src.ui.segments import get_text_with_markers
+
+    _skip3 = (gr.skip(), gr.skip(), gr.skip())
+
+    if seg_idx is None or not json_output:
+        return _skip3
+
+    segments = json_output.get("segments", [])
+    if seg_idx < 0 or seg_idx >= len(segments):
+        return _skip3
+
+    seg = segments[seg_idx]
+    seg_dir_str = str(segment_dir) if segment_dir else ""
+
+    mfa_ref = _build_mfa_ref(seg)
+    if mfa_ref is None:
+        return (gr.skip(), gr.skip(),
+                json.dumps({"status": "mfa_failed", "idx": seg_idx}))
+
+    audio_path = os.path.join(seg_dir_str, f"seg_{seg_idx}.wav") if seg_dir_str else None
+    if not audio_path or not os.path.exists(audio_path):
+        return (gr.skip(), gr.skip(),
+                json.dumps({"status": "mfa_failed", "idx": seg_idx}))
+
+    try:
+        print(f"[MFA-RECOMPUTE] Sending segment {seg_idx + 1} to MFA...")
+        event_id, headers, base = _mfa_upload_and_submit([mfa_ref], [audio_path])
+        results = _mfa_wait_result(event_id, headers, base)
+    except Exception as e:
+        print(f"[MFA-RECOMPUTE] Failed for segment {seg_idx + 1}: {e}")
+        return (gr.skip(), gr.skip(),
+                json.dumps({"status": "mfa_failed", "idx": seg_idx}))
+
+    if not results or results[0].get("status") != "ok":
+        return (gr.skip(), gr.skip(),
+                json.dumps({"status": "mfa_failed", "idx": seg_idx}))
+
+    # Build timestamp lookups
+    word_ts, letter_ts, _ = _build_timestamp_lookups(results)
+    _build_crossword_groups(results, letter_ts)
+    seg_to_result_idx = {seg_idx: 0}
+    _extend_word_timestamps(word_ts, segments, seg_to_result_idx, results, seg_dir_str)
+
+    # Build text HTML with timestamps injected
+    # Wrap text in a fake card div so inject_timestamps_into_html's boundary detection works
+    text_html = get_text_with_markers(mfa_ref.split("+")[-1]) or ""
+    fake_html = (
+        f'<div data-segment-idx="{seg_idx}">'
+        f'<span class="word" data-pos="BOUNDARY"></span>'
+        f'{text_html}'
+        f'</div>'
+    )
+    enriched_html, _ = inject_timestamps_into_html(
+        fake_html, segments, results, seg_to_result_idx, seg_dir_str
+    )
+
+    # Extract just the text content (strip the fake wrapper)
+    import re
+    inner_match = re.search(r'data-pos="BOUNDARY"></span>(.*)</div>', enriched_html, re.DOTALL)
+    enriched_text = inner_match.group(1) if inner_match else text_html
+
+    # Store timestamps back in the segment JSON
+    # _extend_word_timestamps already enriched via _build_timestamp_lookups
+    # We need to store word-level data from the MFA result
+    words_data = []
+    result = results[0]
+    for w in result.get("words", []):
+        word_entry = {
+            "location": w.get("location", ""),
+            "start": w.get("start", 0),
+            "end": w.get("end", 0),
+        }
+        if w.get("letters"):
+            word_entry["letters"] = w["letters"]
+        words_data.append(word_entry)
+    seg["words"] = words_data
+    seg.pop("_stale_words", None)  # Clear any stashed timestamps
+
+    print(f"[MFA-RECOMPUTE] Success for segment {seg_idx + 1}")
+    return (json_output, save_json_export(json_output),
+            json.dumps({"status": "mfa_done", "idx": seg_idx, "text_html": enriched_text}))
 
 

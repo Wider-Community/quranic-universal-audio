@@ -98,6 +98,7 @@ def build_interface():
         c.api_estimate_endpoint = gr.Textbox(visible=False)
         c.api_estimate_audio_duration = gr.Number(visible=False)
         c.api_url = gr.Textbox(visible=False)
+        c.api_debug_token = gr.Textbox(visible=False)
         c.api_result = gr.JSON(visible=False)
 
         # Inline ref editing bridge (JS → Python)
@@ -301,8 +302,8 @@ def _build_results_content(c):
         value='<div style="text-align: center; color: #666; padding: 60px;">Upload audio and click "Extract Segments" to begin</div>',
         elem_classes=["output-html"]
     )
-    # Hidden JSON output for API consumers
-    c.output_json = gr.JSON(visible=False, label="JSON Output")
+    # Server-side state (gr.State avoids serializing the full JSON to the browser on every update)
+    c.output_json = gr.State(None)
 
 
 def _build_dev_tab(c):
