@@ -92,11 +92,12 @@ dataset_info:
 ---
 
 <p align="center">
+  <a href="https://huggingface.co/spaces/hetchyy/quranic-universal-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'anic%20Universal%20Aligner-E8C32E" alt="Demo - Qur'anic Universal Aligner"></a>
+  <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Align%20a%20Reciter-E8C32E" alt="Request - Align a Reciter"></a>
+  <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Audio%20Only-252%20Full%20%C2%B7%2086%20Partial%20%C2%B7%207,853h-d4842a" alt="Audio Only"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-14%20%2F%2020-f0ad4e" alt="Riwayat"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Timestamped-2%20Full%20%C2%B7%200%20Partial%20%C2%B7%2025h-d4842a" alt="Timestamped"></a>
-  <a href="https://huggingface.co/spaces/hetchyy/Quran-multi-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'anic%20Universal%20Aligner-E8C32E" alt="Demo - Qur'anic Universal Aligner"></a>
-  <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Align%20a%20Reciter-E8C32E" alt="Request - Align a Reciter"></a>
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
@@ -141,7 +142,7 @@ Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `audio` | `Audio` | Verse audio clip, trimmed to speech boundaries |
+| `audio` | `Audio` | Verse audio (MP3), trimmed to speech boundaries |
 | `surah` | `int32` | Surah number (1-114) |
 | `ayah` | `int32` | Verse number within surah |
 | `text` | `string` | Arabic text of the verse from alignment |
@@ -152,13 +153,32 @@ Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 
 ### Column Details
 
-**`segments`** — Each segment is `[word_from, word_to, start_ms, end_ms]`. Represents a continuous speech region between pauses. Word indices are 1-based.
+**`segments`** — Each segment is `[word_from, word_to, start_ms, end_ms]`. A continuous speech region between pauses.
 
-**`word_timestamps`** — Each word is `[word_index, start_ms, end_ms]`. Word-level timestamps from phoneme-level forced alignment (MFA). Word indices are 1-based.
+Segments capture the natural pausing points in a recitation. A gap between consecutive segments is a pause. The word ranges tell you whether the reciter continued from where they left off or went back and repeated:
 
-**`source_url`** — URL of the original audio file this verse was extracted from. For by-surah reciters, all verses in a surah share the same URL (a full chapter recording). For by-ayah reciters, each verse has its own URL.
+- **Sequential** word ranges (next `word_from` = previous `word_to` + 1) — the reciter paused and continued.
+- **Overlapping** word ranges (next `word_from` ≤ previous `word_to`) — the reciter paused and **repeated** those words before continuing. The `text` field includes the repeated words.
 
-**`source_offset_ms`** — Millisecond offset from the start of `source_url` where this verse begins. Convert clip-relative timestamps to source-relative: `source_ms = clip_ms + source_offset_ms`. This enables gapless chapter playback with verse-level seeking.
+**`word_timestamps`** — Each entry is `[word_index, start_ms, end_ms]`. When a verse contains repeated segments, the same word index appears multiple times.
+
+**`source_url`** — URL of the original audio file. For by-surah reciters, all verses in a surah share one URL; for by-ayah reciters, each verse has its own.
+
+**`source_offset_ms`** — Millisecond offset in `source_url` where this verse begins. Convert clip-relative timestamps to source-relative: `source_ms = clip_ms + source_offset_ms`.
+
+### Example: Segments & Repetitions
+
+Verse **21:73**
+
+| # | Words | Time (ms) | Text |
+|---|-------|-----------|------|
+| 1 | 1–8 | 0–15,030 | وَجَعَلْنَـٰهُمْ أَئِمَّةً يَهْدُونَ بِأَمْرِنَا **وَأَوْحَيْنَآ إِلَيْهِمْ فِعْلَ ٱلْخَيْرَٰتِ** |
+| | | *pause (repeat back)* | |
+| 2 | 5–12 | 16,310–30,125 | **وَأَوْحَيْنَآ إِلَيْهِمْ فِعْلَ ٱلْخَيْرَٰتِ** وَإِقَامَ ٱلصَّلَوٰةِ وَإِيتَآءَ ٱلزَّكَوٰةِ |
+| | | *pause (continue)* | |
+| 3 | 13–15 | 30,345–34,725 | وَكَانُوا۟ لَنَا عَـٰبِدِينَ |
+
+The `text` field contains 19 words (the 4 repeated words appear twice), and `word_timestamps` has entries for words 5–8 twice.
 
 ### Gapless Playback
 
@@ -173,20 +193,17 @@ for verse in fatiha:
         source_start = start + offset  # seek position in chapter audio
 ```
 
-## Configs
+## Notes
 
-Subset (config) is the riwayah, split is the reciter.
-
-### `hafs_an_asim`
-
-| Reciter | Style | Verses | Audio Source |
-|---------|-------|--------|-------------|
-| [Ali Jaber](#ali_jaber) | murattal | 6,235 | everyayah.com |
-| [Minshawy Murattal](#minshawy_murattal) | unknown | 6,235 | everyayah.com |
+- All timestamps are in **milliseconds**, relative to the start of the audio clip
+- Word indices are **1-based**
+- Word timestamps are padded forward within each segment so there are no gaps between consecutive words. Gaps only occur across segment boundaries (pauses in recitation).
+- Audio clips are trimmed to the first/last canonical word boundaries. Segments and text are filtered to match the clip range — repetitions and cross-verse content outside the clip are not included in the dataset row (they remain in the raw pipeline files).
+- For **gapless chapter playback**, use `source_url` directly (don't concatenate clips). Compute source-relative timestamps with `source_ms = clip_ms + source_offset_ms`. Content not covered by timestamps (basmalas, repetitions, cross-verse transitions) plays naturally in the original audio without word highlighting.
 
 ## Reciters Catalog
 
-The `reciters` config is a lightweight index of all available reciters (no audio data). Use it to discover reciters, filter by riwayah/style, and construct audio URLs:
+The `reciters` config is a lightweight index of all available reciters. Use it to discover reciters, filter by riwayah/style, and construct audio URLs:
 
 ```python
 from datasets import load_dataset
@@ -216,6 +233,18 @@ url = "https://" + r["url_template"].format(surah=2)  # Al-Baqarah chapter audio
 | `coverage_ayahs` | `int32` | Number of ayahs with audio (max 6,236) |
 | `is_timestamped` | `bool` | Whether word-level timestamps are available in the dataset |
 
+## Configs
+
+Subset (config) is the riwayah, split is the reciter.
+
+### `hafs_an_asim`
+
+| Reciter | Style | Verses | Audio Source |
+|---------|-------|--------|-------------|
+| [Ali Jaber](#ali_jaber) | murattal | 6,235 | everyayah.com |
+| [Minshawy Murattal](#minshawy_murattal) | unknown | 6,235 | everyayah.com |
+
+
 ## Pipeline
 
 Audio is processed through a multi-stage pipeline:
@@ -223,14 +252,6 @@ Audio is processed through a multi-stage pipeline:
 2. **Phoneme-level ASR** — CTC-based recognition with wav2vec2
 3. **Dynamic programming alignment** — Match recognized phonemes against known Qur'anic reference text
 4. **MFA forced alignment** — Montreal Forced Aligner produces phoneme-level timestamps, from which word boundaries are derived
-
-## Notes
-
-- All timestamps are in **milliseconds**, relative to the start of the audio clip
-- Word indices are **1-based**
-- Word timestamps are padded forward within each segment so there are no gaps between consecutive words. Gaps only occur across segment boundaries (pauses in recitation).
-- Text is derived from segment alignment and preserves any repetitions in the recitation
-- Audio clips are trimmed to the first/last word boundaries (silence before/after is removed)
 
 ## License
 
