@@ -8,10 +8,6 @@ Hidden endpoint for development debugging. Returns comprehensive structured data
 POST /api/debug_process
 ```
 
-## Authentication
-
-Requires `hf_token` parameter matching the `HF_TOKEN` Space secret. Returns `{"error": "Unauthorized"}` on mismatch.
-
 ## Parameters
 
 | Parameter | Type | Description |

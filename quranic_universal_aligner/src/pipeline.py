@@ -1448,35 +1448,13 @@ def _segments_to_json(segments: list, old_json_segments: list | None = None) -> 
         }
         if seg.wrap_word_ranges:
             segment_data["wrap_word_ranges"] = seg.wrap_word_ranges
-        # Preserve extra keys from previous json (e.g. _autofix_original_ref, words, _stale_words, _stale_ref)
+        # Preserve extra keys from previous json (e.g. words, wrap_word_ranges)
         if old_json_segments and i < len(old_json_segments):
-            for key in ("_autofix_original_ref", "words", "_stale_words", "_stale_ref", "wrap_word_ranges"):
+            for key in ("words", "wrap_word_ranges"):
                 if key in old_json_segments[i] and key not in segment_data:
                     segment_data[key] = old_json_segments[i][key]
         segments_list.append(segment_data)
     return {"segments": segments_list}
-
-
-def _inject_word_timing(text_html: str, words_data: list, seg_offset: float = 0) -> str:
-    """Inject data-start/data-end into word spans from stored MFA words data."""
-    import re
-    ts_map = {}
-    for w in words_data:
-        loc = w.get("location", "")
-        if loc:
-            ts_map[loc] = (w["start"], w["end"])
-
-    def _inject(m):
-        orig = m.group(0)
-        pos_m = re.search(r'data-pos="([^"]+)"', orig)
-        if not pos_m:
-            return orig
-        ts = ts_map.get(pos_m.group(1))
-        if not ts:
-            return orig
-        return orig[:-1] + f' data-start="{ts[0] + seg_offset:.4f}" data-end="{ts[1] + seg_offset:.4f}">'
-
-    return re.sub(r'<span class="word"[^>]*>', _inject, text_html)
 
 
 def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str):
@@ -1503,9 +1481,6 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
 
     idx = payload.get("idx")
     raw_ref = payload.get("new_ref", "")
-    is_autofix = payload.get("is_autofix", False)
-    original_ref = payload.get("original_ref", "")
-    clear_autofix = payload.get("clear_autofix", False)
 
     if idx is None or not raw_ref:
         return _skip3
@@ -1543,24 +1518,9 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
     # Snapshot old missing-words flags before mutation
     old_flags = [s.has_missing_words for s in segments_state]
 
-    # MFA timestamp handling: stash on edit, restore when ref matches stashed ref
-    # (Must read before mutating ref, since we compare new_ref against stale_ref)
+    # MFA timestamp handling: clear on ref change
     had_mfa = bool(seg.words)
-    mfa_restored = False
-    has_stale = bool(seg.stale_words)
-    stale_ref = seg.stale_ref or ""
-
-    if has_stale and new_ref == stale_ref:
-        # Ref reverted to original (undo or manual edit-back): restore stashed timestamps
-        seg.words = seg.stale_words
-        seg.stale_words = None
-        seg.stale_ref = None
-        mfa_restored = True
-        had_mfa = False  # Don't report as stripped
-    elif had_mfa:
-        # Edit: stash timestamps + original ref for potential restore
-        seg.stale_words = seg.words
-        seg.stale_ref = old_ref
+    if had_mfa:
         seg.words = None
 
     # Apply the edit
@@ -1568,12 +1528,6 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
     seg.matched_text = resolve_ref_text(new_ref)
     seg.match_score = 1.0
     seg.error = None
-
-    # Track autofix undo data
-    if is_autofix and original_ref:
-        seg.autofix_original_ref = original_ref
-    if clear_autofix:
-        seg.autofix_original_ref = None
 
     # Recompute missing words flags and track changes
     recompute_missing_words(segments_state)
@@ -1595,22 +1549,14 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
     if not matched_text_html:
         matched_text_html = ""
 
-    # When restoring MFA, inject timing attributes into word spans
-    if mfa_restored and matched_text_html:
-        restored_words = seg.words or []
-        seg_offset = seg.start_time
-        matched_text_html = _inject_word_timing(matched_text_html, restored_words, seg_offset)
-
     patch = json.dumps({
         "status": "ok",
         "edited_idx": idx,
         "flag_changes": flag_changes,
         "matched_text_html": matched_text_html,
         "new_ref": new_ref,
-        "is_autofix": is_autofix,
         "is_special": is_special,
         "mfa_stripped": had_mfa,
-        "mfa_restored": mfa_restored,
         "edited_has_missing_words": seg.has_missing_words,
     })
 
@@ -1707,7 +1653,6 @@ def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir):
             word_entry["letters"] = w["letters"]
         words_data.append(word_entry)
     seg.words = words_data
-    seg.stale_words = None  # Clear any stashed timestamps
 
     print(f"[MFA-RECOMPUTE] Success for segment {seg_idx + 1}")
     return (segments_state, save_json_export(segments_state),

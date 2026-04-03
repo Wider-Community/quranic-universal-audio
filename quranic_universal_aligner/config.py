@@ -133,7 +133,7 @@ COST_DELETION = 0.8                 # Delete phoneme from ASR (P)
 # Repetition detection (wraparound DP)
 WRAP_PENALTY = 2.0                  # Cost per wrap transition in DP
 WRAP_SCORE_COST = 0.01              # Per-wrap additive penalty in scoring
-MAX_WRAPS = 5                       # Max wraps for all segments (fixed — no dynamic gating)
+MAX_WRAPS = 5                       # Max wraps for all segments
 
 # Alignment thresholds (normalized edit distance: 0 = identical, 1 = completely different)
 LOOKBACK_WORDS = 30                 # Window words to look back from pointer for starting positions

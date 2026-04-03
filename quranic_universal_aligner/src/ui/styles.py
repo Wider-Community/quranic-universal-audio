@@ -403,6 +403,73 @@ def build_css() -> str:
     .segment-special-badge {{ background: #5c6bc0; }}
     .segment-repeated-badge {{ background: #ffc107; color: #333 !important; }}
 
+    /* Repetition feedback widget */
+    .repeat-feedback-group {{
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }}
+    .repeat-fb-btn {{
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 0 2px;
+        line-height: 1;
+        opacity: 0.7;
+        transition: opacity 0.15s, transform 0.15s;
+    }}
+    .repeat-fb-btn:hover {{
+        opacity: 1;
+        transform: scale(1.2);
+    }}
+    .repeat-fb-thanks {{
+        font-size: 11px;
+        color: #28a745;
+        font-weight: 600;
+        white-space: nowrap;
+    }}
+    .repeat-fb-form {{
+        display: flex;
+        gap: 4px;
+        align-items: flex-start;
+        margin-top: 4px;
+        width: 100%;
+    }}
+    .repeat-fb-textarea {{
+        flex: 1;
+        font-size: 12px;
+        font-family: inherit;
+        padding: 4px 6px;
+        border: 1px solid var(--border-color-primary, #ccc);
+        border-radius: 6px;
+        background: var(--input-background-fill, white);
+        color: var(--body-text-color, #333);
+        resize: vertical;
+        min-height: 28px;
+        max-height: 80px;
+    }}
+    .repeat-fb-submit {{
+        font-size: 11px;
+        padding: 4px 10px;
+        border: none;
+        border-radius: 6px;
+        background: #28a745;
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+        white-space: nowrap;
+        align-self: flex-end;
+    }}
+    .repeat-fb-submit:hover {{ background: #218838; }}
+
+    /* Divider between repeated text lines */
+    .repeat-divider {{
+        border: none;
+        border-top: 1px dashed rgba(0,0,0,0.25);
+        margin: 6px 0;
+    }}
+
     /* Missing words group — wraps two consecutive segments sharing a gap */
     .missing-words-group {{
         border: 2px dashed #dc3545;
@@ -420,41 +487,6 @@ def build_css() -> str:
         font-weight: bold;
         width: fit-content;
         margin: 0 auto 8px;
-    }}
-
-    /* Autofix header — flex row holding tag + action button */
-    .missing-words-group-header {{
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        margin-bottom: 8px;
-    }}
-    .missing-words-group-header .missing-words-group-tag {{
-        margin-bottom: 0;
-    }}
-    /* Autofix buttons — pill style matching segment-badge */
-    .autofix-btn, .autofix-undo-btn {{
-        color: white !important;
-        border: none !important;
-        padding: 2px 8px !important;
-        border-radius: 12px !important;
-        font-size: 12px !important;
-        font-weight: bold !important;
-        cursor: pointer !important;
-        transition: opacity 0.15s;
-        line-height: normal;
-        vertical-align: middle;
-        box-sizing: border-box;
-    }}
-    .autofix-btn {{
-        background: #28a745 !important;
-    }}
-    .autofix-undo-btn {{
-        background: #6c757d !important;
-    }}
-    .autofix-btn:hover, .autofix-undo-btn:hover {{
-        opacity: 0.85;
     }}
 
     /* Hidden JS→Python bridge (must be in DOM but invisible) */

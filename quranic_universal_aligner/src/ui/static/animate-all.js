@@ -1157,13 +1157,51 @@ document.addEventListener('click', function(e) {
     if (e.target.matches('.mega-exit-btn')) {
         stopAnimateAll();
     }
-    // --- Inline ref editing + autofix (optimistic DOM + background sync) ---
+    // --- Repetition feedback (thumbs up / thumbs down) ---
+    if (e.target.closest('.repeat-fb-up')) {
+        var group = e.target.closest('.repeat-feedback-group');
+        if (group) {
+            group.querySelectorAll('.repeat-fb-btn').forEach(function(b) { b.remove(); });
+            var thanks = document.createElement('span');
+            thanks.className = 'repeat-fb-thanks';
+            thanks.textContent = 'Thanks! This helps improve the AI.';
+            group.appendChild(thanks);
+        }
+        return;
+    }
+    if (e.target.closest('.repeat-fb-down')) {
+        var group = e.target.closest('.repeat-feedback-group');
+        if (group) {
+            group.querySelectorAll('.repeat-fb-btn').forEach(function(b) { b.remove(); });
+            var form = document.createElement('div');
+            form.className = 'repeat-fb-form';
+            var ta = document.createElement('textarea');
+            ta.className = 'repeat-fb-textarea';
+            ta.placeholder = 'What went wrong? (optional)';
+            ta.rows = 1;
+            var submit = document.createElement('button');
+            submit.className = 'repeat-fb-submit';
+            submit.textContent = 'Submit';
+            submit.addEventListener('click', function() {
+                form.remove();
+                var thanks = document.createElement('span');
+                thanks.className = 'repeat-fb-thanks';
+                thanks.textContent = 'Thanks! This helps improve the AI.';
+                group.appendChild(thanks);
+            });
+            form.appendChild(ta);
+            form.appendChild(submit);
+            group.appendChild(form);
+            ta.focus();
+        }
+        return;
+    }
 
-    // Ref click-to-edit (manual)
+    // --- Inline ref editing (optimistic DOM + background sync) ---
+
+    // Ref click-to-edit
     if (e.target.closest('.ref-editable') && !e.target.closest('.ref-edit-input')) {
         var span = e.target.closest('.ref-editable');
-        // Don't edit hidden autofix spans
-        if (span.style.display === 'none') return;
         var segIdx = span.getAttribute('data-segment-idx');
         var currentRef = span.getAttribute('data-full-ref') || '';
         var origText = span.textContent;
@@ -1201,100 +1239,6 @@ document.addEventListener('click', function(e) {
         return;  // Prevent other handlers
     }
 
-    // Autofix → optimistic DOM swap + background sync
-    if (e.target.matches('.autofix-btn')) {
-        var btn = e.target;
-        var targetIdx = parseInt(btn.getAttribute('data-autofix-target-idx'));
-        var autofixRef = btn.getAttribute('data-autofix-ref');
-        var currentRef = btn.getAttribute('data-current-ref');
-        if (!autofixRef) return;
-
-        var container = btn.closest('.segments-container') || document;
-        var card = container.querySelector('.segment-card[data-segment-idx="' + targetIdx + '"]');
-        if (card) {
-            // 1. Swap ref in header (original → fixed)
-            var origRef = card.querySelector('.autofix-original-ref');
-            var fixedRef = card.querySelector('.autofix-fixed-ref');
-            if (origRef) origRef.style.display = 'none';
-            if (fixedRef) fixedRef.style.display = '';
-
-            // 2. Swap text content (original → fixed)
-            var origText = card.querySelector('.autofix-original-text');
-            var fixedText = card.querySelector('.autofix-fixed-text');
-            if (origText) origText.style.display = 'none';
-            if (fixedText) fixedText.style.display = '';
-
-            // 3. Update data-matched-ref
-            if (!card.hasAttribute('data-original-ref')) {
-                card.setAttribute('data-original-ref', card.getAttribute('data-matched-ref') || '');
-            }
-            card.setAttribute('data-matched-ref', autofixRef);
-
-            // 4. Clear missing-words styling on this card
-            card.classList.remove('segment-low');
-            var confClass = card.getAttribute('data-confidence-class') || 'segment-high';
-            card.classList.add(confClass);
-            var mwBadge = card.querySelector('.segment-low-badge');
-            if (mwBadge) mwBadge.style.display = 'none';
-            // Show hidden confidence badge
-            var confBadge = card.querySelector('.' + confClass + '-badge');
-            if (confBadge) confBadge.style.display = '';
-        }
-
-        // 5. Swap buttons: hide autofix, show undo
-        btn.style.display = 'none';
-        // Find undo button (sibling in badges or group header)
-        var undoBtn = btn.parentElement.querySelector('.autofix-undo-btn');
-        if (undoBtn) undoBtn.style.display = '';
-
-        // 6. Background sync to Python
-        submitRefEdit(targetIdx, autofixRef, {is_autofix: true, original_ref: currentRef});
-    }
-
-    // Autofix undo → optimistic DOM revert + background sync
-    if (e.target.matches('.autofix-undo-btn')) {
-        var btn = e.target;
-        var targetIdx = parseInt(btn.getAttribute('data-autofix-target-idx'));
-        var originalRef = btn.getAttribute('data-original-ref');
-        if (!originalRef) return;
-
-        var container = btn.closest('.segments-container') || document;
-        var card = container.querySelector('.segment-card[data-segment-idx="' + targetIdx + '"]');
-        if (card) {
-            // 1. Swap ref in header (fixed → original)
-            var origRef = card.querySelector('.autofix-original-ref');
-            var fixedRef = card.querySelector('.autofix-fixed-ref');
-            if (origRef) origRef.style.display = '';
-            if (fixedRef) fixedRef.style.display = 'none';
-
-            // 2. Swap text content (fixed → original)
-            var origText = card.querySelector('.autofix-original-text');
-            var fixedText = card.querySelector('.autofix-fixed-text');
-            if (origText) origText.style.display = '';
-            if (fixedText) fixedText.style.display = 'none';
-
-            // 3. Restore data-matched-ref
-            var savedRef = card.getAttribute('data-original-ref');
-            if (savedRef) card.setAttribute('data-matched-ref', savedRef);
-
-            // 4. Restore missing-words styling
-            var confClass = card.getAttribute('data-confidence-class') || 'segment-high';
-            card.classList.remove(confClass);
-            card.classList.add('segment-low');
-            var mwBadge = card.querySelector('.segment-low-badge');
-            if (mwBadge) mwBadge.style.display = '';
-            var confBadge = card.querySelector('.' + confClass + '-badge');
-            if (confBadge) confBadge.style.display = 'none';
-        }
-
-        // 5. Swap buttons: show autofix, hide undo
-        btn.style.display = 'none';
-        var fixBtn = btn.parentElement.querySelector('.autofix-btn');
-        if (fixBtn) fixBtn.style.display = '';
-
-        // 6. Background sync to Python
-        submitRefEdit(targetIdx, originalRef, {clear_autofix: true});
-    }
 });
 
 // Clear highlights when audio ends (with delay so last word is visible)
@@ -1410,15 +1354,6 @@ document.addEventListener('play', function(e) {
             var card = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
             markAnimateStale(card);
         }
-        if (patch.mfa_restored) {
-            var card = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
-            restoreAnimate(card);
-            // Replace text with timestamped HTML so animation works
-            if (card && patch.matched_text_html) {
-                var textDiv = card.querySelector('.segment-text:not([style*="display: none"]):not([style*="display:none"])') || card.querySelector('.segment-text');
-                if (textDiv) textDiv.innerHTML = patch.matched_text_html;
-            }
-        }
 
         // Apply missing-words flag changes on affected segments
         (patch.flag_changes || []).forEach(function(change) {
@@ -1449,8 +1384,8 @@ document.addEventListener('play', function(e) {
             }
         });
 
-        // For manual ref edits: update the card's text, class, and badge
-        if (patch.matched_text_html && !patch.is_autofix) {
+        // For ref edits: update the card's text, class, and badge
+        if (patch.matched_text_html) {
             var edited = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
             if (edited) {
                 var textDiv = edited.querySelector('.segment-text');

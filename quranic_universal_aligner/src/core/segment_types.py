@@ -29,11 +29,6 @@ class SegmentInfo:
     segment_number: int = 0
     # MFA word/letter timestamps (list of dicts with location, start, end, letters)
     words: Optional[list] = None
-    # Autofix undo tracking
-    autofix_original_ref: Optional[str] = None
-    # Stashed MFA data for undo (restored when ref reverts)
-    stale_words: Optional[list] = None
-    stale_ref: Optional[str] = None
 
     def to_json_dict(self) -> dict:
         """Convert to the JSON dict format used by exports and API."""
@@ -63,12 +58,6 @@ class SegmentInfo:
             d["wrap_word_ranges"] = self.wrap_word_ranges
         if self.words is not None:
             d["words"] = self.words
-        if self.autofix_original_ref:
-            d["_autofix_original_ref"] = self.autofix_original_ref
-        if self.stale_words is not None:
-            d["_stale_words"] = self.stale_words
-        if self.stale_ref:
-            d["_stale_ref"] = self.stale_ref
         return d
 
     @classmethod
@@ -93,9 +82,6 @@ class SegmentInfo:
             wrap_word_ranges=d.get("wrap_word_ranges"),
             segment_number=d.get("segment", index + 1),
             words=d.get("words"),
-            autofix_original_ref=d.get("_autofix_original_ref"),
-            stale_words=d.get("_stale_words"),
-            stale_ref=d.get("_stale_ref"),
         )
 
 
