@@ -1089,6 +1089,33 @@ function toggleAnimateAll(btn) {
     animateSegment(0);
 }
 
+// --- Inline ref editing helpers (Gradio bridge) ---
+function setGradioValue(elemId, value) {
+    var el = document.getElementById(elemId);
+    if (!el) return;
+    var input = el.querySelector('textarea') || el.querySelector('input');
+    if (!input) return;
+    var proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+    setter.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function submitRefEdit(segIdx, newRef, extra) {
+    var payload = {idx: segIdx, new_ref: newRef};
+    if (extra) {
+        for (var k in extra) { if (extra.hasOwnProperty(k)) payload[k] = extra[k]; }
+    }
+    var payloadStr = JSON.stringify(payload);
+    console.log('[REF-EDIT] submitting:', payloadStr);
+    setGradioValue('ref-edit-payload', payloadStr);
+    setTimeout(function() {
+        var btn = document.getElementById('ref-edit-trigger');
+        console.log('[REF-EDIT] trigger button:', btn);
+        if (btn) btn.click();
+    }, 50);
+}
+
 // Event delegation for Animate button clicks and click-to-seek
 document.addEventListener('click', function(e) {
     // Click-to-seek in Animate All mode
@@ -1120,6 +1147,144 @@ document.addEventListener('click', function(e) {
     }
     if (e.target.matches('.mega-exit-btn')) {
         stopAnimateAll();
+    }
+    // --- Inline ref editing + autofix (optimistic DOM + background sync) ---
+
+    // Ref click-to-edit (manual)
+    if (e.target.closest('.ref-editable') && !e.target.closest('.ref-edit-input')) {
+        var span = e.target.closest('.ref-editable');
+        // Don't edit hidden autofix spans
+        if (span.style.display === 'none') return;
+        var segIdx = span.getAttribute('data-segment-idx');
+        var currentRef = span.getAttribute('data-full-ref') || '';
+        var origText = span.textContent;
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'ref-edit-input';
+        input.value = currentRef;
+        span.style.display = 'none';
+        span.parentNode.insertBefore(input, span.nextSibling);
+        input.focus();
+        input.select();
+        var committed = false;
+        function commit() {
+            if (committed) return;
+            committed = true;
+            var val = input.value.trim();
+            if (val && val !== currentRef) {
+                // Update ref display immediately, Python will validate + send text via patch
+                span.textContent = val;
+                span.setAttribute('data-full-ref', val);
+                span.style.display = '';
+                input.remove();
+                submitRefEdit(parseInt(segIdx), val);
+            } else {
+                // Cancel — restore original
+                span.style.display = '';
+                input.remove();
+            }
+        }
+        input.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+            if (ev.key === 'Escape') { committed = true; span.style.display = ''; input.remove(); }
+        });
+        input.addEventListener('blur', commit);
+        return;  // Prevent other handlers
+    }
+
+    // Autofix → optimistic DOM swap + background sync
+    if (e.target.matches('.autofix-btn')) {
+        var btn = e.target;
+        var targetIdx = parseInt(btn.getAttribute('data-autofix-target-idx'));
+        var autofixRef = btn.getAttribute('data-autofix-ref');
+        var currentRef = btn.getAttribute('data-current-ref');
+        if (!autofixRef) return;
+
+        var container = btn.closest('.segments-container') || document;
+        var card = container.querySelector('.segment-card[data-segment-idx="' + targetIdx + '"]');
+        if (card) {
+            // 1. Swap ref in header (original → fixed)
+            var origRef = card.querySelector('.autofix-original-ref');
+            var fixedRef = card.querySelector('.autofix-fixed-ref');
+            if (origRef) origRef.style.display = 'none';
+            if (fixedRef) fixedRef.style.display = '';
+
+            // 2. Swap text content (original → fixed)
+            var origText = card.querySelector('.autofix-original-text');
+            var fixedText = card.querySelector('.autofix-fixed-text');
+            if (origText) origText.style.display = 'none';
+            if (fixedText) fixedText.style.display = '';
+
+            // 3. Update data-matched-ref
+            if (!card.hasAttribute('data-original-ref')) {
+                card.setAttribute('data-original-ref', card.getAttribute('data-matched-ref') || '');
+            }
+            card.setAttribute('data-matched-ref', autofixRef);
+
+            // 4. Clear missing-words styling on this card
+            card.classList.remove('segment-low');
+            var confClass = card.getAttribute('data-confidence-class') || 'segment-high';
+            card.classList.add(confClass);
+            var mwBadge = card.querySelector('.segment-low-badge');
+            if (mwBadge) mwBadge.style.display = 'none';
+            // Show hidden confidence badge
+            var confBadge = card.querySelector('.' + confClass + '-badge');
+            if (confBadge) confBadge.style.display = '';
+        }
+
+        // 5. Swap buttons: hide autofix, show undo
+        btn.style.display = 'none';
+        // Find undo button (sibling in badges or group header)
+        var undoBtn = btn.parentElement.querySelector('.autofix-undo-btn');
+        if (undoBtn) undoBtn.style.display = '';
+
+        // 6. Background sync to Python
+        submitRefEdit(targetIdx, autofixRef, {is_autofix: true, original_ref: currentRef});
+    }
+
+    // Autofix undo → optimistic DOM revert + background sync
+    if (e.target.matches('.autofix-undo-btn')) {
+        var btn = e.target;
+        var targetIdx = parseInt(btn.getAttribute('data-autofix-target-idx'));
+        var originalRef = btn.getAttribute('data-original-ref');
+        if (!originalRef) return;
+
+        var container = btn.closest('.segments-container') || document;
+        var card = container.querySelector('.segment-card[data-segment-idx="' + targetIdx + '"]');
+        if (card) {
+            // 1. Swap ref in header (fixed → original)
+            var origRef = card.querySelector('.autofix-original-ref');
+            var fixedRef = card.querySelector('.autofix-fixed-ref');
+            if (origRef) origRef.style.display = '';
+            if (fixedRef) fixedRef.style.display = 'none';
+
+            // 2. Swap text content (fixed → original)
+            var origText = card.querySelector('.autofix-original-text');
+            var fixedText = card.querySelector('.autofix-fixed-text');
+            if (origText) origText.style.display = '';
+            if (fixedText) fixedText.style.display = 'none';
+
+            // 3. Restore data-matched-ref
+            var savedRef = card.getAttribute('data-original-ref');
+            if (savedRef) card.setAttribute('data-matched-ref', savedRef);
+
+            // 4. Restore missing-words styling
+            var confClass = card.getAttribute('data-confidence-class') || 'segment-high';
+            card.classList.remove(confClass);
+            card.classList.add('segment-low');
+            var mwBadge = card.querySelector('.segment-low-badge');
+            if (mwBadge) mwBadge.style.display = '';
+            var confBadge = card.querySelector('.' + confClass + '-badge');
+            if (confBadge) confBadge.style.display = 'none';
+        }
+
+        // 5. Swap buttons: show autofix, hide undo
+        btn.style.display = 'none';
+        var fixBtn = btn.parentElement.querySelector('.autofix-btn');
+        if (fixBtn) fixBtn.style.display = '';
+
+        // 6. Background sync to Python
+        submitRefEdit(targetIdx, originalRef, {clear_autofix: true});
     }
 });
 
@@ -1163,3 +1328,142 @@ document.addEventListener('play', function(e) {
         }
     }
 }, true);
+
+// --- Edit patch observer (Python → JS surgical updates) ---
+(function() {
+    // Grey out animate button on a card (MFA timestamps stripped)
+    function disableAnimate(card) {
+        if (!card) return;
+        var btn = card.querySelector('.animate-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Animate'; btn.classList.remove('active'); }
+    }
+
+    function applyEditPatch(patch) {
+        var container = document.querySelector('.segments-container');
+
+        if (patch.status === 'error') {
+            console.warn('[REF-EDIT] Server rejected edit:', patch.message);
+            return;
+        }
+        if (patch.status !== 'ok') return;
+        if (!container) return;
+
+        // Grey out animate if MFA timestamps were stripped
+        if (patch.mfa_stripped) {
+            var card = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
+            disableAnimate(card);
+        }
+
+        // Apply missing-words flag changes on affected segments
+        (patch.flag_changes || []).forEach(function(change) {
+            var card = container.querySelector('.segment-card[data-segment-idx="' + change.idx + '"]');
+            if (!card) return;
+
+            var confClass = card.getAttribute('data-confidence-class') || 'segment-high';
+            var badges = card.querySelector('.segment-badges');
+
+            if (change.has_missing_words) {
+                card.classList.remove('segment-high', 'segment-med', confClass);
+                card.classList.add('segment-low');
+                if (badges && !badges.querySelector('.segment-low-badge')) {
+                    var badge = document.createElement('div');
+                    badge.className = 'segment-badge segment-low-badge';
+                    badge.textContent = 'Missing Words';
+                    badges.appendChild(badge);
+                }
+                var confBadge = badges && badges.querySelector('.' + confClass + '-badge');
+                if (confBadge) confBadge.style.display = 'none';
+            } else {
+                card.classList.remove('segment-low');
+                card.classList.add(confClass);
+                var mwBadge = badges && badges.querySelector('.segment-low-badge');
+                if (mwBadge) mwBadge.remove();
+                var confBadge = badges && badges.querySelector('.' + confClass + '-badge');
+                if (confBadge) confBadge.style.display = '';
+            }
+        });
+
+        // For manual ref edits: update the card's text, class, and badge
+        if (patch.matched_text_html && !patch.is_autofix) {
+            var edited = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
+            if (edited) {
+                var textDiv = edited.querySelector('.segment-text');
+                if (textDiv) textDiv.innerHTML = patch.matched_text_html;
+                if (patch.new_ref) edited.setAttribute('data-matched-ref', patch.new_ref);
+
+                // Remove ALL visual classes for clean transition
+                edited.classList.remove('segment-high', 'segment-med', 'segment-low', 'segment-special', 'segment-underseg');
+                edited.setAttribute('data-confidence-class', 'segment-high');
+
+                var badges = edited.querySelector('.segment-badges');
+                if (patch.is_special) {
+                    edited.classList.add('segment-special');
+                    // Update or create special badge
+                    if (badges) {
+                        var oldConf = badges.querySelector('.segment-high-badge, .segment-med-badge');
+                        if (oldConf) oldConf.remove();
+                        var mwBadge = badges.querySelector('.segment-low-badge');
+                        if (mwBadge) mwBadge.remove();
+                        var oldSpecial = badges.querySelector('.segment-special-badge');
+                        if (oldSpecial) {
+                            oldSpecial.textContent = patch.new_ref;
+                        } else {
+                            var spBadge = document.createElement('div');
+                            spBadge.className = 'segment-badge segment-special-badge';
+                            spBadge.textContent = patch.new_ref;
+                            badges.appendChild(spBadge);
+                        }
+                    }
+                } else {
+                    // Quran ref: respect missing-words state
+                    edited.classList.add(patch.edited_has_missing_words ? 'segment-low' : 'segment-high');
+                    if (badges) {
+                        var oldSpecial = badges.querySelector('.segment-special-badge');
+                        if (oldSpecial) oldSpecial.remove();
+                        // Confidence badge
+                        var confBadge = badges.querySelector('.segment-high-badge, .segment-med-badge');
+                        if (confBadge) {
+                            confBadge.className = 'segment-badge segment-high-badge';
+                            confBadge.textContent = 'Confidence: 100%';
+                            confBadge.style.display = patch.edited_has_missing_words ? 'none' : '';
+                        } else {
+                            var newBadge = document.createElement('div');
+                            newBadge.className = 'segment-badge segment-high-badge';
+                            newBadge.textContent = 'Confidence: 100%';
+                            newBadge.style.display = patch.edited_has_missing_words ? 'none' : '';
+                            badges.appendChild(newBadge);
+                        }
+                        // Missing words badge
+                        var mwBadge = badges.querySelector('.segment-low-badge');
+                        if (patch.edited_has_missing_words) {
+                            if (!mwBadge) {
+                                mwBadge = document.createElement('div');
+                                mwBadge.className = 'segment-badge segment-low-badge';
+                                mwBadge.textContent = 'Missing Words';
+                                badges.appendChild(mwBadge);
+                            }
+                        } else if (mwBadge) {
+                            mwBadge.remove();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function setupPatchObserver() {
+        var patchEl = document.getElementById('edit-patch');
+        if (!patchEl) { setTimeout(setupPatchObserver, 500); return; }
+
+        var observer = new MutationObserver(function() {
+            var input = patchEl.querySelector('textarea') || patchEl.querySelector('input');
+            if (!input || !input.value) return;
+            try {
+                var patch = JSON.parse(input.value);
+                applyEditPatch(patch);
+            } catch(e) { /* ignore parse errors */ }
+        });
+        observer.observe(patchEl, {childList: true, subtree: true, characterData: true, attributes: true});
+    }
+    setupPatchObserver();
+})();

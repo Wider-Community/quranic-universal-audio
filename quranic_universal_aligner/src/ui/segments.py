@@ -8,6 +8,7 @@ from config import (
     UNDERSEG_MIN_WORDS, UNDERSEG_MIN_AYAH_SPAN, UNDERSEG_MIN_DURATION,
     REVIEW_SUMMARY_MAX_SEGMENTS,
     SURAH_INFO_PATH,
+    QURAN_SCRIPT_PATH_COMPUTE,
 )
 from src.core.segment_types import SegmentInfo
 from src.alignment.special_segments import ALL_SPECIAL_REFS
@@ -120,6 +121,168 @@ def _load_verse_word_counts() -> dict[int, dict[int, int]]:
     return _verse_word_counts_cache
 
 
+# ---------------------------------------------------------------------------
+# Autofix helpers — ported from inspector/server.py
+# ---------------------------------------------------------------------------
+
+_STOP_SIGNS = set('\u06D6\u06D7\u06D8\u06DA')  # sili, qili, small meem, jeem
+
+_qpc_cache: dict | None = None
+
+
+def _get_qpc() -> dict:
+    global _qpc_cache
+    if _qpc_cache is None:
+        with open(QURAN_SCRIPT_PATH_COMPUTE, 'r', encoding='utf-8') as f:
+            _qpc_cache = json.load(f)
+    return _qpc_cache
+
+
+def _word_has_stop(surah: int, ayah: int, word_num: int) -> bool:
+    """Check if a word in qpc_hafs.json contains a waqf stop sign."""
+    entry = _get_qpc().get(f"{surah}:{ayah}:{word_num}")
+    if not entry:
+        return False
+    return bool(_STOP_SIGNS & set(entry.get("text", "")))
+
+
+def _parse_ref_endpoints(matched_ref: str):
+    """Parse ref like '2:255:1-2:255:5' into (surah, ayah, word_from, word_to).
+
+    Returns None for cross-verse refs or unparseable strings.
+    """
+    if not matched_ref or "-" not in matched_ref:
+        return None
+    try:
+        start_ref, end_ref = matched_ref.split("-", 1)
+        sp = start_ref.split(":")
+        ep = end_ref.split(":")
+        if len(sp) < 3 or len(ep) < 3:
+            return None
+        s_surah, s_ayah, s_word = int(sp[0]), int(sp[1]), int(sp[2])
+        e_surah, e_ayah, e_word = int(ep[0]), int(ep[1]), int(ep[2])
+        # Only handle same-verse refs
+        if s_surah != e_surah or s_ayah != e_ayah:
+            return None
+        return (s_surah, s_ayah, s_word, e_word)
+    except (ValueError, IndexError):
+        return None
+
+
+def _compute_autofix(seg_a: SegmentInfo, seg_b: SegmentInfo | None = None) -> dict | None:
+    """Compute autofix suggestion for a missing-words group.
+
+    Args:
+        seg_a: First (or only) segment with has_missing_words=True
+        seg_b: Second segment in a pair, or None for singles
+
+    Returns:
+        {"target": "a"|"b", "new_ref": "s:a:wf-s:a:wt"} or None
+    """
+    ref_a = _parse_ref_endpoints(seg_a.matched_ref)
+    if ref_a is None:
+        return None
+
+    surah, ayah, wf_a, wt_a = ref_a
+    verse_wc = _load_verse_word_counts()
+    expected = verse_wc.get(surah, {}).get(ayah, 0)
+    if expected == 0:
+        return None
+
+    if seg_b is not None:
+        # Pair case: only look at the gap between the two segments
+        ref_b = _parse_ref_endpoints(seg_b.matched_ref)
+        if ref_b is None:
+            return None
+        _, _, wf_b, wt_b = ref_b
+
+        gap = list(range(wt_a + 1, wf_b))
+        if len(gap) != 1:
+            return None
+        mw = gap[0]
+
+        # Check stop signs to decide which segment to extend
+        if _word_has_stop(surah, ayah, wt_a):
+            # Stop at end of prev seg → extend next seg to include missing word
+            return {"target": "b", "new_ref": f"{surah}:{ayah}:{mw}-{surah}:{ayah}:{wt_b}"}
+        elif _word_has_stop(surah, ayah, mw):
+            # Stop on missing word → extend prev seg to include missing word
+            return {"target": "a", "new_ref": f"{surah}:{ayah}:{wf_a}-{surah}:{ayah}:{mw}"}
+        return None
+    else:
+        # Single segment case: missing at start or end of verse
+        start_gap = wf_a - 1        # words missing before this segment
+        end_gap = expected - wt_a    # words missing after this segment
+
+        if start_gap == 1 and end_gap == 0:
+            return {"target": "a", "new_ref": f"{surah}:{ayah}:1-{surah}:{ayah}:{wt_a}"}
+        elif end_gap == 1 and start_gap == 0:
+            return {"target": "a", "new_ref": f"{surah}:{ayah}:{wf_a}-{surah}:{ayah}:{expected}"}
+        return None
+
+
+def recompute_missing_words(segments: list) -> None:
+    """Recompute has_missing_words flags for all segments based on word gaps."""
+    verse_wc = _load_verse_word_counts()
+
+    # Reset all flags
+    for seg in segments:
+        seg.has_missing_words = False
+
+    # Build (idx, surah, ayah, wf, wt) for segments with parseable refs
+    parsed = []
+    for i, seg in enumerate(segments):
+        ep = _parse_ref_endpoints(seg.matched_ref)
+        if ep:
+            parsed.append((i, *ep))
+
+    # Check gaps between consecutive segments in the same verse
+    for j in range(len(parsed)):
+        idx_j, s_j, a_j, wf_j, wt_j = parsed[j]
+        expected = verse_wc.get(s_j, {}).get(a_j, 0)
+        if expected == 0:
+            continue
+
+        # Gap at start of verse (first segment of this verse doesn't start at word 1)
+        if j == 0 or (parsed[j - 1][1], parsed[j - 1][2]) != (s_j, a_j):
+            if wf_j > 1:
+                segments[idx_j].has_missing_words = True
+
+        # Gap between consecutive segments in same verse
+        if j + 1 < len(parsed):
+            idx_k, s_k, a_k, wf_k, wt_k = parsed[j + 1]
+            if s_j == s_k and a_j == a_k and wf_k > wt_j + 1:
+                segments[idx_j].has_missing_words = True
+                segments[idx_k].has_missing_words = True
+
+        # Gap at end of verse (last segment of this verse doesn't reach last word)
+        if j + 1 >= len(parsed) or (parsed[j + 1][1], parsed[j + 1][2]) != (s_j, a_j):
+            if wt_j < expected:
+                segments[idx_j].has_missing_words = True
+
+
+def resolve_ref_text(matched_ref: str) -> str:
+    """Return the matched_text for a given ref (display text from QuranIndex or special text)."""
+    from src.alignment.special_segments import ALL_SPECIAL_REFS, TRANSITION_TEXT
+
+    BASMALA_TEXT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم"
+    ISTIATHA_TEXT = "أَعُوذُ بِٱللَّهِ مِنَ الشَّيْطَانِ الرَّجِيم"
+
+    if matched_ref in ALL_SPECIAL_REFS:
+        if matched_ref == "Basmala":
+            return BASMALA_TEXT
+        elif matched_ref == "Isti'adha":
+            return ISTIATHA_TEXT
+        return TRANSITION_TEXT.get(matched_ref, matched_ref)
+
+    from src.core.quran_index import get_quran_index
+    index = get_quran_index()
+    indices = index.ref_to_indices(matched_ref)
+    if not indices:
+        return ""
+    return " ".join(w.display_text for w in index.words[indices[0]:indices[1] + 1])
+
+
 def split_into_char_groups(text):
     """Split text into groups of base character + following combining marks.
 
@@ -213,8 +376,12 @@ def simplify_ref(ref: str) -> str:
     return ref
 
 
-def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "", segment_dir: str = "", in_missing_pair: bool = False) -> str:
-    """Render a single segment as an HTML card with optional audio player."""
+def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", render_key: str = "", segment_dir: str = "", in_missing_pair: bool = False, autofix_original_ref: str = "", autofix_html: str = "", autofix_ref: str = "") -> str:
+    """Render a single segment as an HTML card with optional audio player.
+
+    Args:
+        autofix_ref: If set, pre-render fixed ref/text as hidden elements for instant JS swap.
+    """
     is_special = seg.matched_ref in ALL_SPECIAL_REFS
     confidence_class = get_confidence_class(seg.match_score)
     confidence_badge_class = confidence_class  # preserve original for badge color
@@ -318,23 +485,69 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     if is_special:
         confidence_badge = f'<div class="segment-badge segment-special-badge">{seg.matched_ref}</div>'
     elif seg.has_missing_words and not in_missing_pair:
-        confidence_badge = ""
+        # Hide confidence badge but keep in DOM for JS to restore after autofix
+        confidence_badge = f'<div class="segment-badge {confidence_badge_class}-badge" style="display:none">{confidence_pct}</div>'
     else:
         confidence_badge = f'<div class="segment-badge {confidence_badge_class}-badge">{confidence_pct}</div>'
 
     # Build inline header: Segment N | ref | duration | time range
     header_parts = [f"Segment {idx + 1}"]
+    fixed_ref_span = ""
     if ref_display:
-        header_parts.append(ref_display)
+        # Make ref clickable for inline editing
+        full_ref = seg.matched_ref or ""
+        ref_class = "ref-editable autofix-original-ref" if autofix_ref else "ref-editable"
+        header_parts.append(
+            f'<span class="{ref_class}" data-segment-idx="{idx}" data-full-ref="{full_ref}">{ref_display}</span>'
+        )
+        # Pre-render fixed ref for autofix (hidden until JS swap)
+        if autofix_ref:
+            fixed_ref_display = simplify_ref(autofix_ref)
+            fixed_ref_span = (
+                f'<span class="ref-editable autofix-fixed-ref" style="display:none"'
+                f' data-segment-idx="{idx}" data-full-ref="{autofix_ref}">{fixed_ref_display}</span>'
+            )
     header_parts.append(f"{duration:.1f}s")
     header_parts.append(timestamp)
     header_text = " | ".join(header_parts)
+    # Insert fixed ref span right after the original ref in the header
+    if fixed_ref_span:
+        header_text = header_text + fixed_ref_span
+
+    # Undo button for previously-applied autofix (survives re-renders via json data)
+    undo_html = ""
+    if autofix_original_ref:
+        undo_html = (
+            f'<button class="autofix-undo-btn" data-autofix-target-idx="{idx}"'
+            f' data-original-ref="{autofix_original_ref}">Undo</button>'
+        )
+    elif autofix_ref:
+        # Pre-render hidden undo button for JS to show after autofix
+        undo_html = (
+            f'<button class="autofix-undo-btn" style="display:none" data-autofix-target-idx="{idx}"'
+            f' data-original-ref="{seg.matched_ref}">Undo</button>'
+        )
+
+    # Combine autofix + undo into badge area
+    action_btns = autofix_html + undo_html
+
+    # Pre-render fixed text for autofix (hidden until JS swap)
+    fixed_text_html = ""
+    if autofix_ref:
+        fixed_text_content = get_text_with_markers(autofix_ref) or ""
+        fixed_text_html = f'\n        <div class="segment-text autofix-fixed-text" style="display:none">{fixed_text_content}</div>'
+
+    text_class = "segment-text autofix-original-text" if autofix_ref else "segment-text"
+
+    # Extra data attributes for JS patch support
+    autofix_ref_attr = f' data-autofix-ref="{autofix_ref}"' if autofix_ref else ""
 
     html = f'''
-    <div class="segment-card {confidence_class}" data-duration="{duration:.3f}" data-segment-idx="{idx}" data-matched-ref="{seg.matched_ref or ''}" data-start-time="{seg.start_time:.4f}" data-end-time="{seg.end_time:.4f}">
+    <div class="segment-card {confidence_class}" data-duration="{duration:.3f}" data-segment-idx="{idx}" data-matched-ref="{seg.matched_ref or ''}" data-confidence-class="{confidence_badge_class}" data-start-time="{seg.start_time:.4f}" data-end-time="{seg.end_time:.4f}"{autofix_ref_attr}>
         <div class="segment-header">
             <div class="segment-title">{header_text}</div>
             <div class="segment-badges">
+                {action_btns}
                 {underseg_badge}
                 {confidence_badge}
                 {missing_badge}
@@ -343,9 +556,9 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
 
         {audio_html}
 
-        <div class="segment-text">
+        <div class="{text_class}">
             {text_html}
-        </div>
+        </div>{fixed_text_html}
 
         {error_html}
     </div>
@@ -353,13 +566,15 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
     return html
 
 
-def render_segments(segments: list, full_audio_url: str = "", segment_dir: str = "") -> str:
+def render_segments(segments: list, full_audio_url: str = "", segment_dir: str = "",
+                    json_segments: list | None = None) -> str:
     """Render all segments as HTML with optional audio players.
 
     Args:
         segments: List of SegmentInfo objects
         full_audio_url: URL to full audio WAV (used by mega card / Animate All)
         segment_dir: Path to segment directory containing per-segment WAV files
+        json_segments: Optional raw json segment dicts (carries _autofix_original_ref for undo)
     """
     if not segments:
         return '<div class="no-segments">No segments detected</div>'
@@ -401,16 +616,21 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
 
     missing_segments = [i + 1 for i, s in enumerate(segments) if s.has_missing_words]
     if missing_segments:
-        # Group consecutive segment numbers into pairs (gaps always flag both neighbors)
+        # Group consecutive segment numbers into pairs (only if same verse)
         missing_pairs = []
         i = 0
         while i < len(missing_segments):
             if i + 1 < len(missing_segments) and missing_segments[i + 1] == missing_segments[i] + 1:
-                missing_pairs.append(f"{missing_segments[i]}/{missing_segments[i + 1]}")
-                i += 2
-            else:
-                missing_pairs.append(str(missing_segments[i]))
-                i += 1
+                idx_a = missing_segments[i] - 1  # 0-based
+                idx_b = missing_segments[i + 1] - 1
+                ref_a = _parse_ref_endpoints(segments[idx_a].matched_ref)
+                ref_b = _parse_ref_endpoints(segments[idx_b].matched_ref)
+                if ref_a and ref_b and (ref_a[0], ref_a[1]) == (ref_b[0], ref_b[1]):
+                    missing_pairs.append(f"{missing_segments[i]}/{missing_segments[i + 1]}")
+                    i += 2
+                    continue
+            missing_pairs.append(str(missing_segments[i]))
+            i += 1
 
         if len(missing_pairs) <= REVIEW_SUMMARY_MAX_SEGMENTS:
             pairs_display = ", ".join(missing_pairs)
@@ -446,6 +666,7 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
     ]
 
     # Classify missing-word segments into pairs vs singles
+    # Only pair consecutive segments if they share the same verse (same surah:ayah)
     missing_indices = [i for i, s in enumerate(segments) if s.has_missing_words]
     missing_in_pair = set()
     visited = set()
@@ -454,12 +675,21 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
         if idx in visited:
             continue
         if j + 1 < len(missing_indices) and missing_indices[j + 1] == idx + 1:
-            missing_in_pair.add(idx)
-            missing_in_pair.add(idx + 1)
-            visited.add(idx)
-            visited.add(idx + 1)
-        else:
-            visited.add(idx)
+            ref_a = _parse_ref_endpoints(segments[idx].matched_ref)
+            ref_b = _parse_ref_endpoints(segments[idx + 1].matched_ref)
+            if ref_a and ref_b and (ref_a[0], ref_a[1]) == (ref_b[0], ref_b[1]):
+                missing_in_pair.add(idx)
+                missing_in_pair.add(idx + 1)
+                visited.add(idx)
+                visited.add(idx + 1)
+                continue
+        visited.add(idx)
+
+    def _get_autofix_original(idx):
+        """Check if segment had autofix applied (for undo button)."""
+        if json_segments and idx < len(json_segments):
+            return json_segments[idx].get("_autofix_original_ref", "")
+        return ""
 
     t_cards = time.time()
     skip_next = False
@@ -468,15 +698,51 @@ def render_segments(segments: list, full_audio_url: str = "", segment_dir: str =
             skip_next = False
             continue
         if idx in missing_in_pair and (idx + 1) in missing_in_pair:
-            # Wrap paired missing-words segments in a group with one shared tag
+            seg_b = segments[idx + 1]
+            fix = _compute_autofix(seg, seg_b)
+
+            # Always group pairs under shared border with missing-words tag
             html_parts.append('<div class="missing-words-group">')
-            html_parts.append('<div class="missing-words-group-tag">Missing Words</div>')
-            html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir, in_missing_pair=True))
-            html_parts.append(render_segment_card(segments[idx + 1], idx + 1, full_audio_url, render_key, segment_dir, in_missing_pair=True))
+            fix_ref = fix["new_ref"] if fix else ""
+            if fix:
+                target_idx = idx if fix["target"] == "a" else idx + 1
+                target_ref = seg.matched_ref if fix["target"] == "a" else seg_b.matched_ref
+                autofix_btn = (
+                    f'<button class="autofix-btn" data-autofix-target-idx="{target_idx}"'
+                    f' data-autofix-ref="{fix_ref}" data-current-ref="{target_ref}">Auto Fix</button>'
+                )
+                undo_btn = (
+                    f'<button class="autofix-undo-btn" style="display:none" data-autofix-target-idx="{target_idx}"'
+                    f' data-original-ref="{target_ref}">Undo</button>'
+                )
+                html_parts.append(
+                    f'<div class="missing-words-group-header">'
+                    f'<div class="missing-words-group-tag">Missing Words</div>'
+                    f'{autofix_btn}{undo_btn}'
+                    f'</div>'
+                )
+            else:
+                html_parts.append('<div class="missing-words-group-tag">Missing Words</div>')
+            # Pass autofix_ref to the target card for pre-rendered fixed content
+            a_fix_ref = fix_ref if fix and fix["target"] == "a" else ""
+            b_fix_ref = fix_ref if fix and fix["target"] == "b" else ""
+            html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir, in_missing_pair=True, autofix_ref=a_fix_ref))
+            html_parts.append(render_segment_card(seg_b, idx + 1, full_audio_url, render_key, segment_dir, in_missing_pair=True, autofix_ref=b_fix_ref))
             html_parts.append('</div>')
             skip_next = True
+        elif seg.has_missing_words:
+            fix = _compute_autofix(seg)
+            autofix_btn = ""
+            fix_ref = ""
+            if fix:
+                fix_ref = fix["new_ref"]
+                autofix_btn = (
+                    f'<button class="autofix-btn" data-autofix-target-idx="{idx}"'
+                    f' data-autofix-ref="{fix_ref}" data-current-ref="{seg.matched_ref}">Auto Fix</button>'
+                )
+            html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir, autofix_original_ref=_get_autofix_original(idx), autofix_html=autofix_btn, autofix_ref=fix_ref))
         else:
-            html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir))
+            html_parts.append(render_segment_card(seg, idx, full_audio_url, render_key, segment_dir, autofix_original_ref=_get_autofix_original(idx)))
 
     html_parts.append('</div>')
     print(f"[PROFILE] Segment cards: {time.time() - t_cards:.3f}s ({len(segments)} cards, HTML only)")

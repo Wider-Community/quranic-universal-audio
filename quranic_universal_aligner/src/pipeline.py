@@ -1,7 +1,5 @@
 """
 Pipeline processing functions — GPU-decorated VAD/ASR + post-VAD alignment pipeline.
-
-Extracted from app.py (Phase 2 refactor).
 """
 import json
 import time
@@ -1283,3 +1281,228 @@ def save_json_export(json_data):
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
         json.dump(json_data, f, separators=(',', ':'), ensure_ascii=False)
         return f.name
+
+
+# ---------------------------------------------------------------------------
+# Inline ref editing — live sync from JS edits
+# ---------------------------------------------------------------------------
+
+def _normalize_ref(raw_ref: str) -> str | None:
+    """Normalize a user-typed ref to full form. Returns None if invalid.
+
+    Handles: "2:255:1-6" → "2:255:1-2:255:6", "2:255:5" → "2:255:5-2:255:5",
+    special codes kept as-is.
+    """
+    from src.alignment.special_segments import ALL_SPECIAL_REFS
+
+    raw = raw_ref.strip()
+    if not raw:
+        return None
+
+    # Special codes
+    if raw in ALL_SPECIAL_REFS:
+        return raw
+
+    # Case-insensitive special match
+    for sp in ALL_SPECIAL_REFS:
+        if raw.lower() == sp.lower():
+            return sp
+
+    # Parse ref parts
+    if "-" in raw:
+        start, end = raw.split("-", 1)
+        sp = start.split(":")
+        ep = end.split(":")
+        if len(sp) < 3:
+            return None
+        # Short form: "2:255:1-6" → expand end
+        if len(ep) == 1:
+            ep = [sp[0], sp[1], ep[0]]
+        elif len(ep) == 2:
+            ep = [sp[0], ep[0], ep[1]]
+        try:
+            s = f"{int(sp[0])}:{int(sp[1])}:{int(sp[2])}"
+            e = f"{int(ep[0])}:{int(ep[1])}:{int(ep[2])}"
+        except (ValueError, IndexError):
+            return None
+        return f"{s}-{e}"
+    else:
+        # Single word: "2:255:5" → "2:255:5-2:255:5"
+        parts = raw.split(":")
+        if len(parts) < 3:
+            return None
+        try:
+            r = f"{int(parts[0])}:{int(parts[1])}:{int(parts[2])}"
+        except (ValueError, IndexError):
+            return None
+        return f"{r}-{r}"
+
+
+def _json_to_segments(json_output: dict) -> list:
+    """Reconstruct SegmentInfo list from json_output."""
+    segments = []
+    for s in json_output.get("segments", []):
+        if s.get("special_type"):
+            ref = s["special_type"]
+        elif s.get("ref_to"):
+            ref = f"{s['ref_from']}-{s['ref_to']}"
+        else:
+            ref = s.get("ref_from", "")
+        segments.append(SegmentInfo(
+            start_time=s["time_from"], end_time=s["time_to"],
+            transcribed_text="",
+            matched_text=s.get("matched_text", ""),
+            matched_ref=ref, match_score=s.get("confidence", 0),
+            error=s.get("error"),
+            has_missing_words=s.get("has_missing_words", False),
+            potentially_undersegmented=s.get("potentially_undersegmented", False),
+        ))
+    return segments
+
+
+def _segments_to_json(segments: list, old_json_segments: list | None = None) -> dict:
+    """Build json_output from SegmentInfo list, preserving extra keys from old json."""
+    from src.alignment.special_segments import ALL_SPECIAL_REFS
+
+    def parse_ref(matched_ref):
+        if not matched_ref or "-" not in matched_ref:
+            return matched_ref, matched_ref
+        parts = matched_ref.split("-", 1)
+        return parts[0], parts[1] if len(parts) > 1 else parts[0]
+
+    segments_list = []
+    for i, seg in enumerate(segments):
+        is_special = seg.matched_ref in ALL_SPECIAL_REFS
+        segment_data = {
+            "segment": i + 1,
+            "time_from": round(seg.start_time, 3),
+            "time_to": round(seg.end_time, 3),
+            "ref_from": "" if is_special else parse_ref(seg.matched_ref)[0],
+            "ref_to": "" if is_special else parse_ref(seg.matched_ref)[1],
+            "matched_text": seg.matched_text or "",
+            "confidence": round(seg.match_score, 3),
+            "has_missing_words": seg.has_missing_words,
+            "potentially_undersegmented": seg.potentially_undersegmented,
+            "special_type": seg.matched_ref if is_special else None,
+            "error": seg.error,
+        }
+        # Preserve extra keys from previous json (e.g. _autofix_original_ref, words)
+        if old_json_segments and i < len(old_json_segments):
+            for key in ("_autofix_original_ref", "words"):
+                if key in old_json_segments[i]:
+                    segment_data[key] = old_json_segments[i][key]
+        segments_list.append(segment_data)
+    return {"segments": segments_list}
+
+
+def apply_ref_edit(edit_payload_str: str, json_output: dict, segment_dir: str):
+    """Apply an inline ref edit from the JS UI. Returns (json_output, export_file, patch_json)."""
+    from src.ui.segments import recompute_missing_words, resolve_ref_text, get_text_with_markers, _wrap_word
+    from src.alignment.special_segments import ALL_SPECIAL_REFS
+
+    _skip3 = (gr.skip(), gr.skip(), gr.skip())
+
+    if not edit_payload_str or not json_output:
+        return _skip3
+
+    try:
+        payload = json.loads(edit_payload_str)
+    except (json.JSONDecodeError, TypeError):
+        return _skip3
+
+    idx = payload.get("idx")
+    raw_ref = payload.get("new_ref", "")
+    is_autofix = payload.get("is_autofix", False)
+    original_ref = payload.get("original_ref", "")
+    clear_autofix = payload.get("clear_autofix", False)
+
+    if idx is None or not raw_ref:
+        return _skip3
+
+    old_segments = json_output.get("segments", [])
+    if idx < 0 or idx >= len(old_segments):
+        return _skip3
+
+    # Normalize the ref
+    new_ref = _normalize_ref(raw_ref)
+    if not new_ref:
+        print(f"[REF-EDIT] Invalid ref: {raw_ref!r}")
+        return (gr.skip(), gr.skip(), json.dumps({"status": "error", "message": f"Invalid ref: {raw_ref}"}))
+
+    # Validate non-special refs against QuranIndex
+    if new_ref not in ALL_SPECIAL_REFS:
+        from src.core.quran_index import get_quran_index
+        index = get_quran_index()
+        if not index.ref_to_indices(new_ref):
+            print(f"[REF-EDIT] Ref not found in QuranIndex: {new_ref}")
+            return (gr.skip(), gr.skip(), json.dumps({"status": "error", "message": f"Ref not found: {new_ref}"}))
+
+    # Reconstruct segments
+    segments = _json_to_segments(json_output)
+    seg = segments[idx]
+
+    # Snapshot old missing-words flags before mutation
+    old_flags = [s.has_missing_words for s in segments]
+
+    # Apply the edit
+    seg.matched_ref = new_ref
+    seg.matched_text = resolve_ref_text(new_ref)
+    seg.match_score = 1.0
+    seg.error = None
+
+    # Track autofix undo data
+    if is_autofix and original_ref:
+        if idx < len(old_segments):
+            old_segments[idx]["_autofix_original_ref"] = original_ref
+    if clear_autofix:
+        if idx < len(old_segments):
+            old_segments[idx].pop("_autofix_original_ref", None)
+
+    # Recompute missing words flags and track changes
+    recompute_missing_words(segments)
+    flag_changes = []
+    for i, s in enumerate(segments):
+        if old_flags[i] != s.has_missing_words:
+            flag_changes.append({"idx": i, "has_missing_words": s.has_missing_words})
+
+    # Rebuild json_output
+    new_json = _segments_to_json(segments, old_json_segments=old_segments)
+
+    # Handle autofix undo tracking in new json
+    if is_autofix and original_ref:
+        new_json["segments"][idx]["_autofix_original_ref"] = original_ref
+    if clear_autofix and "_autofix_original_ref" in new_json["segments"][idx]:
+        del new_json["segments"][idx]["_autofix_original_ref"]
+
+    # Strip stale MFA timestamps from the edited segment
+    had_mfa = bool(old_segments[idx].get("words"))
+    if had_mfa:
+        new_json["segments"][idx].pop("words", None)
+
+    # Build patch for JS (no full HTML re-render)
+    is_special = new_ref in ALL_SPECIAL_REFS
+    matched_text_html = get_text_with_markers(new_ref)
+    if not matched_text_html and is_special:
+        special_text = resolve_ref_text(new_ref)
+        if special_text:
+            words = special_text.replace(" \u06dd ", " ").split()
+            matched_text_html = " ".join(
+                _wrap_word(w, pos=f"{new_ref}:0:0:{i+1}") for i, w in enumerate(words)
+            )
+    if not matched_text_html:
+        matched_text_html = ""
+    patch = json.dumps({
+        "status": "ok",
+        "edited_idx": idx,
+        "flag_changes": flag_changes,
+        "matched_text_html": matched_text_html,
+        "new_ref": new_ref,
+        "is_autofix": is_autofix,
+        "is_special": is_special,
+        "mfa_stripped": had_mfa,
+        "edited_has_missing_words": segments[idx].has_missing_words,
+    })
+
+    return new_json, save_json_export(new_json), patch
+
+

@@ -91,7 +91,7 @@ def _download_url_core(url: str):
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": str(out_path),
-        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
+        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "128"}],
         "quiet": True,
         "no_warnings": True,
     }
@@ -99,11 +99,11 @@ def _download_url_core(url: str):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
 
-    wav_path = str(out_path) + ".wav"
-    if not Path(wav_path).exists():
+    mp3_path = str(out_path) + ".mp3"
+    if not Path(mp3_path).exists():
         raise Exception("Download completed but audio file was not created.")
 
-    return wav_path, {
+    return mp3_path, {
         "title": info.get("title", "Unknown"),
         "duration": info.get("duration"),
         "thumbnail": info.get("thumbnail", ""),

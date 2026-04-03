@@ -100,6 +100,16 @@ def build_interface():
         c.api_url = gr.Textbox(visible=False)
         c.api_result = gr.JSON(visible=False)
 
+        # Inline ref editing bridge (JS → Python)
+        # Must be visible=True + CSS hide (visible=False removes from DOM in Gradio 6)
+        with gr.Row(visible=True, elem_id="ref-edit-bridge"):
+            c.ref_edit_payload = gr.Textbox(elem_id="ref-edit-payload", show_label=False, container=False)
+            c.ref_edit_trigger = gr.Button("", elem_id="ref-edit-trigger", size="sm")
+
+        # Edit patch channel (Python → JS, carries surgical patch instructions)
+        with gr.Row(visible=True, elem_id="edit-patch"):
+            c.edit_patch = gr.Textbox(elem_id="edit-patch-data", show_label=False, container=False)
+
         wire_events(app, c)
 
     return app
@@ -123,13 +133,17 @@ def _build_left_column(c):
 
         # Link panel
         with gr.Column(visible=_is_link, elem_id="link-panel") as c.link_panel:
+            with gr.Row(elem_id="link-example-row"):
+                c.btn_site_tiktok = gr.Button("TikTok", size="sm", min_width=0)
+                c.btn_site_soundcloud = gr.Button("SoundCloud", size="sm", min_width=0)
+                c.btn_site_mp3quran = gr.Button("MP3Quran", size="sm", min_width=0)
             c.url_input = gr.Textbox(
                 label="Paste a link",
-                info='e.g. TikTok · SoundCloud · [MP3Quran](https://www.mp3quran.net/) · [all supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)',
+                info='[all supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)',
                 lines=1,
             )
             c.url_download_btn = gr.Button("Download", size="sm", variant="secondary", interactive=False)
-            c.url_audio_player = gr.Audio(label="Downloaded Audio", visible=False, interactive=False)
+            c.url_audio_player = gr.Audio(label="Downloaded Audio", visible=False, sources=[])
 
         # Upload panel
         with gr.Column(visible=_is_upload, elem_id="upload-panel") as c.upload_panel:

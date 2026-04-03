@@ -407,10 +407,10 @@ def build_css() -> str:
     .missing-words-group {{
         border: 2px dashed #dc3545;
         border-radius: 10px;
-        padding: 8px 8px 0;
+        padding: 8px;
         margin-bottom: 12px;
     }}
-    .missing-words-group .segment-card:last-child {{ margin-bottom: 8px; }}
+    .missing-words-group .segment-card:last-child {{ margin-bottom: 0; }}
     .missing-words-group-tag {{
         background: #dc3545;
         color: white;
@@ -420,6 +420,70 @@ def build_css() -> str:
         font-weight: bold;
         width: fit-content;
         margin: 0 auto 8px;
+    }}
+
+    /* Autofix header — flex row holding tag + action button */
+    .missing-words-group-header {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-bottom: 8px;
+    }}
+    .missing-words-group-header .missing-words-group-tag {{
+        margin-bottom: 0;
+    }}
+    /* Autofix buttons — pill style matching segment-badge */
+    .autofix-btn, .autofix-undo-btn {{
+        color: white !important;
+        border: none !important;
+        padding: 2px 8px !important;
+        border-radius: 12px !important;
+        font-size: 12px !important;
+        font-weight: bold !important;
+        cursor: pointer !important;
+        transition: opacity 0.15s;
+        line-height: normal;
+        vertical-align: middle;
+        box-sizing: border-box;
+    }}
+    .autofix-btn {{
+        background: #28a745 !important;
+    }}
+    .autofix-undo-btn {{
+        background: #6c757d !important;
+    }}
+    .autofix-btn:hover, .autofix-undo-btn:hover {{
+        opacity: 0.85;
+    }}
+
+    /* Hidden JS→Python bridge (must be in DOM but invisible) */
+    #ref-edit-bridge, #edit-patch {{
+        position: absolute !important;
+        left: -9999px !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none;
+    }}
+    #ref-edit-bridge *, #edit-patch * {{ pointer-events: auto; }}
+
+    /* Clickable ref for inline editing */
+    .ref-editable {{
+        cursor: pointer;
+        border-bottom: 1px dashed currentColor;
+    }}
+    .ref-editable:hover {{
+        opacity: 0.7;
+    }}
+    .ref-edit-input {{
+        font-size: inherit;
+        font-family: inherit;
+        background: var(--input-background-fill, white);
+        color: var(--body-text-color, #333);
+        border: 1px solid var(--border-color-primary, #ddd);
+        border-radius: 4px;
+        padding: 0 4px;
+        width: 16ch;
     }}
 
     /* Review summary text colors */
@@ -470,14 +534,14 @@ def build_css() -> str:
         border-color: var(--button-primary-background-fill) !important;
     }}
 
-    /* Example preset buttons — joined group */
-    #example-row {{ gap: 0 !important; }}
-    #example-row button {{
+    /* Example / site pill buttons — joined group */
+    #example-row, #link-example-row {{ gap: 0 !important; }}
+    #example-row button, #link-example-row button {{
         border-radius: 0 !important;
         border: 1px solid var(--border-color-primary) !important;
     }}
-    #example-row button:first-child {{ border-radius: 8px 0 0 8px !important; }}
-    #example-row button:last-child {{ border-radius: 0 8px 8px 0 !important; }}
-    #example-row button:not(:first-child) {{ border-left: none !important; }}
+    #example-row button:first-child, #link-example-row button:first-child {{ border-radius: 8px 0 0 8px !important; }}
+    #example-row button:last-child, #link-example-row button:last-child {{ border-radius: 0 8px 8px 0 !important; }}
+    #example-row button:not(:first-child), #link-example-row button:not(:first-child) {{ border-left: none !important; }}
 
     """

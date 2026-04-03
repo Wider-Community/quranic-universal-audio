@@ -6,6 +6,7 @@ from src.core.zero_gpu import QuotaExhaustedError
 from src.pipeline import (
     process_audio, resegment_audio,
     _retranscribe_wrapper, save_json_export,
+    apply_ref_edit,
 )
 from src.api.session_api import (
     estimate_duration,
@@ -68,6 +69,7 @@ def wire_events(app, c):
     _wire_retranscribe_chain(c)
     _wire_animation_settings(c)
     _wire_settings_restoration(app, c)
+    _wire_ref_edit(c)
     _wire_api_endpoint(c)
     if DEV_TAB_VISIBLE:
         _wire_dev_tab(c)
@@ -182,6 +184,28 @@ def _wire_url_input(c):
         fn=_on_audio_change, inputs=[c.audio_input], outputs=_dl_reset_outputs,
         api_name=False, show_progress="hidden",
     )
+
+    # Site pill buttons: set URL (+ optional slider override) → download → reset UI
+    _SITE_URLS = {
+        "tiktok": ("https://www.tiktok.com/@quraan_recit/video/7274127758484163847", None),
+        "soundcloud": ("https://soundcloud.com/quranmta/recitation-of-the-764269316?in=quranmta/sets/suras", None),
+        "mp3quran": ("https://server12.mp3quran.net/maher/027.mp3", 100),
+    }
+    _pill_outputs = [c.url_input, c.min_silence_slider]
+    for btn, key in [(c.btn_site_tiktok, "tiktok"),
+                     (c.btn_site_soundcloud, "soundcloud"),
+                     (c.btn_site_mp3quran, "mp3quran")]:
+        _url, _sil = _SITE_URLS[key]
+        btn.click(
+            fn=lambda u=_url, s=_sil: (u, gr.update() if s is None else s),
+            inputs=[], outputs=_pill_outputs, api_name=False,
+        ).then(
+            fn=_on_download, inputs=[c.url_input], outputs=_dl_outputs,
+            api_name=False, show_progress="hidden",
+        ).then(
+            fn=_on_audio_change, inputs=[c.audio_input], outputs=_dl_reset_outputs,
+            api_name=False, show_progress="hidden",
+        )
 
 
 def _wire_audio_input(c):
@@ -706,6 +730,19 @@ def _wire_settings_restoration(app, c):
             return s;
         }"""
     )
+
+
+def _wire_ref_edit(c):
+    """Wire inline ref editing — JS edits trigger Python state sync + patch."""
+    _edit_io = dict(
+        fn=apply_ref_edit,
+        inputs=[c.ref_edit_payload, c.output_json, c.cached_segment_dir],
+        outputs=[c.output_json, c.export_file, c.edit_patch],
+        show_progress="hidden",
+    )
+    # Both paths: button click (primary) and textbox submit (Enter key fallback)
+    c.ref_edit_trigger.click(**_edit_io)
+    c.ref_edit_payload.submit(**_edit_io)
 
 
 def _wire_api_endpoint(c):
