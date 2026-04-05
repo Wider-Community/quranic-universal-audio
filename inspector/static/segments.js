@@ -71,6 +71,59 @@ function snapshotSeg(seg) {
     return snap;
 }
 
+/**
+ * Classify a segment snapshot into validation issue categories.
+ * Returns an array of category strings (e.g. ['low_confidence', 'cross_verse']).
+ */
+function _classifySnapIssues(snap) {
+    const issues = [];
+    if (!snap || !snap.matched_ref) { if (snap) issues.push('failed'); return issues; }
+    if (snap.confidence < 0.80) issues.push('low_confidence');
+    if (snap.wrap_word_ranges || snap.has_repeated_words) issues.push('repetitions');
+    // Cross-verse: start ayah != end ayah in canonical ref (surah:ayah:word-surah:ayah:word)
+    const parts = snap.matched_ref.split('-');
+    if (parts.length === 2) {
+        const sp = parts[0].split(':'), ep = parts[1].split(':');
+        if (sp.length >= 2 && ep.length >= 2) {
+            const sAyah = parseInt(sp[1]), eAyah = parseInt(ep[1]);
+            if (sAyah !== eAyah && snap.confidence < 1.0) issues.push('cross_verse');
+        }
+    }
+    return issues;
+}
+
+/**
+ * Derive per-op-group issue delta from snapshot data.
+ * Uses first op's targets_before as initial state, and last-write-per-UID as final state
+ * (same logic as renderHistoryGroupedOp) to avoid intermediate snapshot pollution.
+ */
+function _deriveOpIssueDelta(group) {
+    if (!group || group.length === 0) return { resolved: [], introduced: [] };
+    const primary = group[0];
+
+    // Initial state: only the group's entry snapshots
+    const beforeIssues = new Set();
+    for (const snap of (primary.targets_before || []))
+        _classifySnapIssues(snap).forEach(i => beforeIssues.add(i));
+
+    // Final state: last write per UID (mirrors renderHistoryGroupedOp logic)
+    const finalSnaps = new Map();
+    for (const op of group) {
+        for (const snap of (op.targets_after || []))
+            if (snap.segment_uid) finalSnaps.set(snap.segment_uid, snap);
+    }
+    // For single ops with no UIDs in after (e.g. delete), finalSnaps stays empty
+
+    const afterIssues = new Set();
+    for (const snap of finalSnaps.values())
+        _classifySnapIssues(snap).forEach(i => afterIssues.add(i));
+
+    return {
+        resolved:   [...beforeIssues].filter(i => !afterIssues.has(i)),
+        introduced: [...afterIssues].filter(i => !beforeIssues.has(i)),
+    };
+}
+
 function finalizeOp(chapter, op) {
     op.ready_at_utc = new Date().toISOString();
     if (!segOpLog.has(chapter)) segOpLog.set(chapter, []);
@@ -5702,11 +5755,27 @@ function renderSplitChainRow(chain) {
     badge.textContent = `Split \u2192 ${leafSnaps.length}`;
     header.appendChild(badge);
 
-    // Validation delta badges: first batch's before → last batch's after
-    const firstBatch = chain.ops[0]?.batch;
-    const lastBatch  = chain.ops[chain.ops.length - 1]?.batch;
-    if (firstBatch && lastBatch) {
-        _appendValDeltas(header, firstBatch.validation_summary_before, lastBatch.validation_summary_after);
+    // Issue delta badges: root snapshot → leaf snapshots (derived from actual data)
+    {
+        const beforeIssues = new Set();
+        if (rootSnap) _classifySnapIssues(rootSnap).forEach(i => beforeIssues.add(i));
+        const afterIssues = new Set();
+        for (const ls of leafSnaps) _classifySnapIssues(ls).forEach(i => afterIssues.add(i));
+        const shortLabels = {
+            failed: 'fail', low_confidence: 'low conf', cross_verse: 'cross', repetitions: 'reps',
+        };
+        for (const cat of [...beforeIssues].filter(i => !afterIssues.has(i))) {
+            const b = document.createElement('span');
+            b.className = 'seg-history-val-delta improved';
+            b.textContent = `\u2212${shortLabels[cat] || cat}`;
+            header.appendChild(b);
+        }
+        for (const cat of [...afterIssues].filter(i => !beforeIssues.has(i))) {
+            const b = document.createElement('span');
+            b.className = 'seg-history-val-delta regression';
+            b.textContent = `+${shortLabels[cat] || cat}`;
+            header.appendChild(b);
+        }
     }
 
     // Undo button — undoes the chain's batches in reverse chronological order
@@ -5844,7 +5913,6 @@ function renderHistorySummaryStats(summary, container = segHistoryStats) {
     cardsRow.className = 'seg-history-stat-cards';
     const stats = [
         { value: summary.total_operations, label: 'Operations' },
-        { value: summary.total_batches, label: 'Saves' },
         { value: summary.chapters_edited, label: 'Chapters' },
         { value: summary.verses_edited ?? '–', label: 'Verses' },
     ];
@@ -6050,7 +6118,7 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
 
     const chainedOpIds = _chainedOpIds || new Set();
 
-    // Build sorted display items: chain rows + non-chain batch rows
+    // Build sorted display items: chain rows + flattened op cards
     const displayItems = [];
 
     // Add split chain rows — only show chains that have at least one op from the
@@ -6071,127 +6139,268 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
         }
     }
 
-    // Add non-chain batch rows (filter out ops absorbed into chains)
-    for (const batch of batches) {
-        const nonChainOps = (batch.operations || []).filter(op => !chainedOpIds.has(op.op_id));
-        const hasContent = nonChainOps.length > 0 || batch.is_revert;
-        if (!hasContent) continue;
-        const filteredBatch = nonChainOps.length === (batch.operations || []).length
-            ? batch
-            : { ...batch, operations: nonChainOps };
-        displayItems.push({ type: 'batch', batch: filteredBatch, date: batch.saved_at_utc || '' });
+    // Flatten batches into per-op-group items (replaces old batch-item loop)
+    const opItems = _flattenBatchesToItems(batches, chainedOpIds);
+    for (const item of opItems) {
+        displayItems.push({ type: 'op-item', item, date: item.date });
     }
 
-    // Sort most-recent first
-    displayItems.sort((a, b) => b.date.localeCompare(a.date));
+    // Sort most-recent first; chains before op-items at same date; then batchIdx desc, groupIdx asc
+    displayItems.sort((a, b) => {
+        const cmp = b.date.localeCompare(a.date);
+        if (cmp !== 0) return cmp;
+        // Chains first at same date (matches old behavior where chains were pushed before batches)
+        if (a.type === 'chain' && b.type !== 'chain') return -1;
+        if (b.type === 'chain' && a.type !== 'chain') return 1;
+        // For op-items: higher batchIdx = more recent batch
+        const aBIdx = a.item?.batchIdx ?? 0;
+        const bBIdx = b.item?.batchIdx ?? 0;
+        if (aBIdx !== bBIdx) return bBIdx - aBIdx;
+        return (a.item?.groupIdx ?? 0) - (b.item?.groupIdx ?? 0);
+    });
 
-    for (const item of displayItems) {
-        if (item.type === 'chain') {
-            container.appendChild(renderSplitChainRow(item.chain));
+    for (const di of displayItems) {
+        if (di.type === 'chain') {
+            container.appendChild(renderSplitChainRow(di.chain));
         } else {
-            container.appendChild(_renderBatchItem(item.batch));
+            container.appendChild(_renderOpCard(di.item));
         }
     }
 }
 
-function _renderBatchItem(batch) {
+/**
+ * Flatten batches into one display item per op-group (or special card type).
+ * Each item has: type, group (ops array), chapter, batchId, date, metadata for rendering.
+ */
+function _flattenBatchesToItems(batches, chainedOpIds) {
+    const items = [];
+    for (let bIdx = 0; bIdx < batches.length; bIdx++) {
+        const batch = batches[bIdx];
+        const nonChainOps = (batch.operations || []).filter(op => !chainedOpIds.has(op.op_id));
+        const isMultiChapter = batch.chapter == null && Array.isArray(batch.chapters);
+        const isStripSpecials = batch.batch_type === 'strip_specials';
+
+        if (isStripSpecials) {
+            // One item per ref-group within the strip_specials batch
+            const byRef = new Map();
+            for (const op of nonChainOps) {
+                const ref = op.targets_before?.[0]?.matched_ref || '(unknown)';
+                if (!byRef.has(ref)) byRef.set(ref, []);
+                byRef.get(ref).push(op);
+            }
+            let gIdx = 0;
+            for (const [, refOps] of byRef) {
+                items.push({
+                    type: 'strip-specials-card',
+                    group: refOps,
+                    chapter: batch.chapter,
+                    chapters: batch.chapters,
+                    batchId: batch.batch_id,
+                    date: batch.saved_at_utc || '',
+                    isRevert: !!batch.is_revert,
+                    isPending: !batch.batch_id && !batch.is_revert,
+                    batchIdx: bIdx, groupIdx: gIdx++,
+                });
+            }
+        } else if (isMultiChapter) {
+            // One card for the whole multi-chapter batch
+            items.push({
+                type: 'multi-chapter-card',
+                group: nonChainOps,
+                chapter: batch.chapter,
+                chapters: batch.chapters,
+                batchId: batch.batch_id,
+                date: batch.saved_at_utc || '',
+                isRevert: !!batch.is_revert,
+                isPending: !batch.batch_id && !batch.is_revert,
+                batchIdx: bIdx, groupIdx: 0,
+            });
+        } else if (batch.is_revert && nonChainOps.length === 0) {
+            // Pure revert with no remaining ops
+            items.push({
+                type: 'revert-card',
+                group: [],
+                chapter: batch.chapter,
+                chapters: batch.chapters,
+                batchId: batch.batch_id,
+                date: batch.saved_at_utc || '',
+                isRevert: true,
+                isPending: false,
+                batchIdx: bIdx, groupIdx: 0,
+            });
+        } else {
+            // Normal batch: one item per op-group
+            const groups = _groupRelatedOps(nonChainOps);
+            for (let gIdx = 0; gIdx < groups.length; gIdx++) {
+                items.push({
+                    type: 'op-card',
+                    group: groups[gIdx],
+                    chapter: batch.chapter,
+                    chapters: batch.chapters,
+                    batchId: batch.batch_id,
+                    date: batch.saved_at_utc || '',
+                    isRevert: !!batch.is_revert,
+                    isPending: !batch.batch_id && !batch.is_revert,
+                    batchIdx: bIdx, groupIdx: gIdx,
+                });
+            }
+            // If batch had ops but all were chained away, and it's not a revert, skip
+        }
+    }
+    return items;
+}
+
+/** Append resolved/introduced issue badges to a header element. */
+function _appendIssueDeltaBadges(container, group) {
+    const delta = _deriveOpIssueDelta(group);
+    const shortLabels = {
+        failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
+        cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
+        repetitions: 'reps',
+    };
+    for (const cat of delta.resolved) {
+        const badge = document.createElement('span');
+        badge.className = 'seg-history-val-delta improved';
+        badge.textContent = `\u2212${shortLabels[cat] || cat}`;
+        container.appendChild(badge);
+    }
+    for (const cat of delta.introduced) {
+        const badge = document.createElement('span');
+        badge.className = 'seg-history-val-delta regression';
+        badge.textContent = `+${shortLabels[cat] || cat}`;
+        container.appendChild(badge);
+    }
+}
+
+/**
+ * Render a single flattened display item as a top-level card.
+ * Replaces the old _renderBatchItem — each op-group is now its own card.
+ */
+function _renderOpCard(item) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'seg-history-batch' + (batch.is_revert ? ' is-revert' : '');
+    wrapper.className = 'seg-history-batch' + (item.isRevert ? ' is-revert' : '');
 
     // Header
     const header = document.createElement('div');
     header.className = 'seg-history-batch-header';
 
-    const time = document.createElement('span');
-    time.className = 'seg-history-batch-time';
-    time.textContent = _formatHistDate(batch.saved_at_utc);
-    header.appendChild(time);
+    // Op type badge(s) — primary + follow-ups
+    const group = item.group;
+    if (item.type === 'strip-specials-card') {
+        const badge = document.createElement('span');
+        badge.className = 'seg-history-op-type-badge';
+        badge.textContent = `Deletion \u00d7${group.length}`;
+        header.appendChild(badge);
+    } else if (item.type === 'multi-chapter-card') {
+        const opType = group[0]?.op_type;
+        const badge = document.createElement('span');
+        badge.className = 'seg-history-op-type-badge';
+        badge.textContent = `${EDIT_OP_LABELS[opType] || opType} \u00d7${group.length}`;
+        header.appendChild(badge);
+    } else if (item.type === 'revert-card') {
+        // No op badge needed — revert badge below covers it
+    } else if (group.length > 0) {
+        // op-card: primary badge
+        const primary = group[0];
+        const typeBadge = document.createElement('span');
+        typeBadge.className = 'seg-history-op-type-badge';
+        typeBadge.textContent = EDIT_OP_LABELS[primary.op_type] || primary.op_type;
+        header.appendChild(typeBadge);
 
-    // Multi-chapter auto-fix batch (e.g. remove_sadaqa across many surahs)
-    const isMultiChapter = batch.chapter == null && Array.isArray(batch.chapters);
-    const isStripSpecials = batch.batch_type === 'strip_specials';
-
-    if (batch.chapter != null) {
-        const ch = document.createElement('span');
-        ch.className = 'seg-history-batch-chapter';
-        ch.textContent = surahOptionText(batch.chapter);
-        header.appendChild(ch);
+        // Follow-up badges
+        const followUp = {};
+        for (let i = 1; i < group.length; i++) {
+            const t = group[i].op_type;
+            followUp[t] = (followUp[t] || 0) + 1;
+        }
+        for (const [t, count] of Object.entries(followUp)) {
+            const fb = document.createElement('span');
+            fb.className = 'seg-history-op-type-badge secondary';
+            fb.textContent = '+ ' + (EDIT_OP_LABELS[t] || t) + (count > 1 ? ` \u00d7${count}` : '');
+            header.appendChild(fb);
+        }
     }
 
-    const ops = batch.operations || [];
-    const groups = (isMultiChapter || isStripSpecials) ? null : _groupRelatedOps(ops);
-    const visualCount = groups ? groups.length : ops.length;
-
-    const opsCount = document.createElement('span');
-    opsCount.className = 'seg-history-batch-ops-count';
-    if (isStripSpecials) {
-        opsCount.textContent = `Strip specials (${ops.length} deleted)`;
-    } else if (isMultiChapter) {
-        const opType = ops[0]?.op_type;
-        const label = EDIT_OP_LABELS[opType] || opType;
-        opsCount.textContent = `${label} x${ops.length}`;
-    } else {
-        opsCount.textContent = visualCount === 0 ? 'revert' : `${visualCount} op${visualCount !== 1 ? 's' : ''}`;
-    }
-    header.appendChild(opsCount);
-
-    if (isStripSpecials || isMultiChapter) {
-        const fk = document.createElement('span');
-        fk.className = 'seg-history-op-fix-kind';
-        fk.textContent = 'auto_fix';
-        header.appendChild(fk);
+    // Fix kind badges
+    const fixKinds = new Set(group.map(op => op.fix_kind).filter(fk => fk && fk !== 'manual'));
+    if (item.type === 'strip-specials-card' || item.type === 'multi-chapter-card') fixKinds.add('auto_fix');
+    for (const fk of fixKinds) {
+        const fkBadge = document.createElement('span');
+        fkBadge.className = 'seg-history-op-fix-kind';
+        fkBadge.textContent = fk;
+        header.appendChild(fkBadge);
     }
 
-    if (batch.is_revert) {
+    // Issue delta badges (derived from snapshots)
+    if (group.length > 0) {
+        _appendIssueDeltaBadges(header, group);
+    }
+
+    // Revert badge
+    if (item.isRevert) {
         const badge = document.createElement('span');
         badge.className = 'seg-history-batch-revert-badge';
         badge.textContent = 'Reverted';
         header.appendChild(badge);
     }
 
-    _appendValDeltas(header, batch.validation_summary_before, batch.validation_summary_after);
+    // Chapter badge
+    const ch = item.chapter;
+    if (ch != null) {
+        const chSpan = document.createElement('span');
+        chSpan.className = 'seg-history-batch-chapter';
+        chSpan.textContent = surahOptionText(ch);
+        header.appendChild(chSpan);
+    }
 
-    if (!batch.is_revert && !batch.batch_id) {
-        // Discard button for unsaved pending batches only
+    // Date
+    const time = document.createElement('span');
+    time.className = 'seg-history-batch-time';
+    time.textContent = _formatHistDate(item.date || null);
+    header.appendChild(time);
+
+    // Undo / Discard button (margin-left:auto pushes it right)
+    if (item.isPending) {
+        const discardBtn = document.createElement('button');
+        discardBtn.className = 'btn btn-sm seg-history-undo-btn';
+        discardBtn.textContent = 'Discard';
+        discardBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onPendingBatchDiscard(item.chapter, discardBtn);
+        });
+        header.appendChild(discardBtn);
+    } else if (item.batchId && !item.isRevert) {
+        const opIds = group.map(op => op.op_id);
         const undoBtn = document.createElement('button');
         undoBtn.className = 'btn btn-sm seg-history-undo-btn';
-        undoBtn.textContent = 'Discard';
+        undoBtn.textContent = 'Undo';
         undoBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            onPendingBatchDiscard(batch.chapter, undoBtn);
+            onOpUndoClick(item.batchId, opIds, undoBtn);
         });
         header.appendChild(undoBtn);
     }
 
     wrapper.appendChild(header);
 
-    if (ops.length > 0) {
+    // Body — type-specific
+    if (group.length > 0 || item.type === 'multi-chapter-card') {
         const body = document.createElement('div');
         body.className = 'seg-history-batch-body';
-        if (isStripSpecials) {
-            const byRef = new Map();
-            for (const op of ops) {
-                const ref = op.targets_before?.[0]?.matched_ref || '(unknown)';
-                if (!byRef.has(ref)) byRef.set(ref, []);
-                byRef.get(ref).push(op);
-            }
-            for (const [, refOps] of byRef) {
-                body.appendChild(_renderSpecialDeleteGroup(refOps));
-            }
-        } else if (isMultiChapter) {
+
+        if (item.type === 'strip-specials-card') {
+            body.appendChild(_renderSpecialDeleteGroup(group));
+        } else if (item.type === 'multi-chapter-card') {
             const chList = document.createElement('div');
             chList.className = 'seg-history-chapter-list';
-            chList.textContent = 'Chapters: ' + batch.chapters.map(c => surahOptionText(c)).join(', ');
+            chList.textContent = 'Chapters: ' + (item.chapters || []).map(c => surahOptionText(c)).join(', ');
             body.appendChild(chList);
+        } else if (group.length === 1) {
+            body.appendChild(renderHistoryOp(group[0], item.chapter, item.batchId, { skipLabel: true }));
         } else {
-            for (const group of groups) {
-                if (group.length === 1) {
-                    body.appendChild(renderHistoryOp(group[0], batch.chapter, batch.batch_id));
-                } else {
-                    body.appendChild(renderHistoryGroupedOp(group, batch.chapter, batch.batch_id));
-                }
-            }
+            body.appendChild(renderHistoryGroupedOp(group, item.chapter, item.batchId, { skipLabel: true }));
         }
+
         wrapper.appendChild(body);
     }
 
@@ -6211,17 +6420,6 @@ function _renderSpecialDeleteGroup(refOps) {
 
     const beforeCol = document.createElement('div');
     beforeCol.className = 'seg-history-before';
-    const colLabel = document.createElement('div');
-    colLabel.className = 'seg-history-col-label';
-    const typeBadge = document.createElement('span');
-    typeBadge.className = 'seg-history-op-type-badge';
-    typeBadge.textContent = 'Deletion';
-    colLabel.appendChild(typeBadge);
-    const fkBadge = document.createElement('span');
-    fkBadge.className = 'seg-history-op-fix-kind';
-    fkBadge.textContent = 'auto_fix';
-    colLabel.appendChild(fkBadge);
-    beforeCol.appendChild(colLabel);
     if (snap) {
         beforeCol.appendChild(renderSegCard(_snapToSeg(snap, null), { readOnly: true, showPlayBtn: true }));
     }
@@ -6287,7 +6485,7 @@ function _groupRelatedOps(operations) {
  * Render a group of related ops as a single combined card.
  * Shows the original before (from first op) → final after (latest snapshot per UID).
  */
-function renderHistoryGroupedOp(group, chapter, batchId) {
+function renderHistoryGroupedOp(group, chapter, batchId, { skipLabel = false } = {}) {
     const primary = group[0];
 
     // Collect final snapshot for each output UID (last write wins)
@@ -6308,6 +6506,7 @@ function renderHistoryGroupedOp(group, chapter, batchId) {
     const wrap = document.createElement('div');
     wrap.className = 'seg-history-op seg-history-grouped-op';
 
+    if (!skipLabel) {
     // --- Label row: primary badge + follow-up badges ---
     const label = document.createElement('div');
     label.className = 'seg-history-op-label';
@@ -6349,6 +6548,7 @@ function renderHistoryGroupedOp(group, chapter, batchId) {
         label.appendChild(undoBtn);
     }
     wrap.appendChild(label);
+    }
 
     // --- 3-column diff grid ---
     const diff = document.createElement('div');
@@ -6405,10 +6605,11 @@ function renderHistoryGroupedOp(group, chapter, batchId) {
     return wrap;
 }
 
-function renderHistoryOp(op, chapter, batchId) {
+function renderHistoryOp(op, chapter, batchId, { skipLabel = false } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'seg-history-op';
 
+    if (!skipLabel) {
     // Label row
     const label = document.createElement('div');
     label.className = 'seg-history-op-label';
@@ -6433,6 +6634,7 @@ function renderHistoryOp(op, chapter, batchId) {
         label.appendChild(undoBtn);
     }
     wrap.appendChild(label);
+    }
 
     // 3-column diff grid
     const diff = document.createElement('div');
