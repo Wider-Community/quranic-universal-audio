@@ -53,14 +53,15 @@ jobs:
           merger="${{ github.event.pull_request.merged_by.login }}"
 
           # Fetch all commits on the PR, extract unique authors (exclude bots and merger)
+          # || true prevents grep exit code 1 (no matches) from failing the step
           authors=$(gh api "repos/$repo/pulls/$pr_number/commits" --paginate \
             --jq '.[].author.login // empty' | \
             grep -v '\[bot\]$' | \
             grep -v '^github-actions$' | \
-            sort -u)
+            sort -u || true)
 
           if [ -n "$merger" ]; then
-            authors=$(echo "$authors" | grep -v "^${merger}$")
+            authors=$(echo "$authors" | grep -v "^${merger}$" || true)
           fi
 
           authors=$(echo "$authors" | xargs)
