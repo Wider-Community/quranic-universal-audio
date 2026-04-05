@@ -120,10 +120,10 @@ def load_data(slug, audio_type):
 
     Loads timestamps.json (word-level) and derives verse boundaries from the
     word array (verse_start_ms = first word start, verse_end_ms = last word
-    end). This avoids requiring timestamps_full.json which contains large
-    letter/phoneme data not used by the HF dataset.
+    end). Optionally loads timestamps_full.json for letter-level data.
     """
     ts_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps.json"
+    ts_full_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
     detailed_path = ROOT / "data" / "recitation_segments" / slug / "detailed.json"
     segments_path = ROOT / "data" / "recitation_segments" / slug / "segments.json"
     surah_info_path = ROOT / "data" / "surah_info.json"
@@ -154,17 +154,64 @@ def load_data(slug, audio_type):
             "verse_end_ms": words[-1][2],
         }
 
+    # Optionally load letter data from timestamps_full.json
+    # Each word in full format: [word_idx, start, end, [[char,s,e],...], [[phone,s,e],...]]
+    letter_data = {}
+    if ts_full_path.exists():
+        log.info("Loading letter timestamps from %s...", ts_full_path.name)
+        with open(ts_full_path) as f:
+            ts_full_raw = json.load(f)
+        for ref, verse in ts_full_raw.items():
+            if ref == "_meta":
+                continue
+            words = verse.get("words") if isinstance(verse, dict) else verse
+            if not words:
+                letter_data[ref] = []
+                continue
+            word_letters = []
+            for word in words:
+                word_idx = word[0]
+                letters = word[3] if len(word) > 3 else []
+                word_letters.append((word_idx, letters))
+            letter_data[ref] = word_letters
+        del ts_full_raw
+
+    # Build verse-level lookup: by_ayah entries have ref="surah:ayah",
+    # by_surah entries have ref="chapter_num" (one entry per whole surah).
+    # Normalize both to "surah:ayah" keys for uniform lookup in build_rows.
     detailed_by_ref = {}
     for entry in detailed["entries"]:
-        detailed_by_ref[entry["ref"]] = entry
+        ref = entry["ref"]
+        if ":" in str(ref):
+            # by_ayah: ref is already "surah:ayah"
+            detailed_by_ref[ref] = entry
+        else:
+            # by_surah: ref is chapter number — map each verse to this entry
+            for seg in entry.get("segments", []):
+                mref = seg.get("matched_ref", "")
+                if not mref:
+                    continue
+                # Extract all verses covered by this segment's ref range
+                parts = mref.split("-")
+                start = parts[0].split(":")
+                s_surah, s_ayah = int(start[0]), int(start[1])
+                if len(parts) > 1:
+                    end = parts[1].split(":")
+                    e_ayah = int(end[1])
+                else:
+                    e_ayah = s_ayah
+                for a in range(s_ayah, e_ayah + 1):
+                    vref = f"{s_surah}:{a}"
+                    if vref not in detailed_by_ref:
+                        detailed_by_ref[vref] = entry
 
-    return timestamps, detailed_by_ref, segments, surah_info
+    return timestamps, detailed_by_ref, segments, surah_info, letter_data
 
 
 # ---------------------------------------------------------------------------
 # Row building
 # ---------------------------------------------------------------------------
-def build_rows(timestamps, detailed_by_ref, segments, surah_info):
+def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=None):
     """Build row metadata (without audio bytes) in canonical verse order.
 
     Clip boundaries are defined by word timestamps (deduplicated, canonical).
@@ -234,12 +281,24 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info):
                         word[2] - clip_start,
                     ])
 
+            verse_letters = []
+            if letter_data and ref in letter_data:
+                for word_idx, letters in letter_data[ref]:
+                    verse_letters.append({
+                        "word_idx": word_idx,
+                        "letters": [
+                            {"char": ch, "start_ms": s - clip_start, "end_ms": e - clip_start}
+                            for ch, s, e in letters
+                        ],
+                    })
+
             rows.append({
                 "surah": int(surah_num),
                 "ayah": ayah,
                 "text": text,
                 "segments": verse_segments,
                 "word_timestamps": verse_words,
+                "letter_timestamps": verse_letters,
                 "audio_url": entry["audio"],
                 "clip_start": clip_start,
                 "clip_end": clip_end,
@@ -361,8 +420,8 @@ def push_reciter(slug, audio_type):
     """Build and push a reciter to the HF dataset."""
     is_surah = "by_surah" in audio_type
 
-    timestamps, detailed_by_ref, segments, surah_info = load_data(slug, audio_type)
-    rows = build_rows(timestamps, detailed_by_ref, segments, surah_info)
+    timestamps, detailed_by_ref, segments, surah_info, letter_data = load_data(slug, audio_type)
+    rows = build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data)
     log.info("Built %d rows for %s", len(rows), slug)
 
     if SAMPLE_PCT > 0:
@@ -379,6 +438,7 @@ def push_reciter(slug, audio_type):
         "text": [],
         "segments": [],
         "word_timestamps": [],
+        "letter_timestamps": [],
         "source_url": [],
         "source_offset_ms": [],
     }
@@ -397,6 +457,7 @@ def push_reciter(slug, audio_type):
         data["text"].append(row["text"])
         data["segments"].append(row["segments"])
         data["word_timestamps"].append(row["word_timestamps"])
+        data["letter_timestamps"].append(row["letter_timestamps"])
         data["source_url"].append(row["audio_url"])
         data["source_offset_ms"].append(row["clip_start"])
 
@@ -411,6 +472,14 @@ def push_reciter(slug, audio_type):
         "text": Value("string"),
         "segments": Sequence(Sequence(Value("int32"))),
         "word_timestamps": Sequence(Sequence(Value("int32"))),
+        "letter_timestamps": Sequence({
+            "word_idx": Value("int32"),
+            "letters": Sequence({
+                "char": Value("string"),
+                "start_ms": Value("int32"),
+                "end_ms": Value("int32"),
+            }),
+        }),
         "source_url": Value("string"),
         "source_offset_ms": Value("int32"),
     })
