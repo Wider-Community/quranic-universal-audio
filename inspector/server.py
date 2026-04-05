@@ -70,6 +70,7 @@ _STOP_SIGNS = set('\u06D6\u06D7\u06D8\u06DA')  # sili, qili, small meem, jeem
 VALIDATION_CATEGORIES = (
     "failed", "low_confidence", "boundary_adj", "cross_verse",
     "missing_words", "audio_bleeding", "repetitions",
+    "muqattaat", "qalqala",
 )
 
 # ── Validation helper (for auto-revalidation on save) ────────────────────
@@ -2025,6 +2026,21 @@ _MUQATTAAT_VERSES = {
     (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
     (46,1),(50,1),(68,1),
 }
+_QALQALA_LETTERS = {'ق', 'ط', 'ب', 'ج', 'د'}
+
+def _last_arabic_letter(text: str) -> str | None:
+    """Return the last Arabic letter in text, ignoring diacritics and all non-letter markers.
+
+    Scans backward after stripping diacritics/decoration so that waqf markers,
+    sajdah signs, hizb markers, end-of-ayah (U+06DD), spaces, and any other
+    non-letter symbols are never mistakenly returned as the last letter.
+    """
+    stripped = _strip_quran_deco(text)
+    for ch in reversed(stripped):
+        if _ud.category(ch).startswith('L'):
+            return ch
+    return None
+
 _STANDALONE_REFS = {
     (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
     (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
@@ -2236,6 +2252,13 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 if is_boundary_adj:
                     counts["boundary_adj"] += 1
 
+            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES and confidence < 1.0:
+                counts["muqattaat"] += 1
+
+            last_letter = _last_arabic_letter(seg.get("matched_text", ""))
+            if last_letter in _QALQALA_LETTERS and confidence < 1.0:
+                counts["qalqala"] += 1
+
     # Missing words
     for (surah, ayah), seg_list in verse_segments.items():
         expected = word_counts.get((surah, ayah))
@@ -2280,6 +2303,8 @@ def validate_reciter_segments(reciter):
     cross_verse = []
     audio_bleeding = []
     repetitions = []
+    muqattaat = []
+    qalqala = []
     chapter_seg_idx = {}  # chapter -> next index (running counter)
 
     _single_word_verses = {k for k, v in word_counts.items() if v == 1}
@@ -2444,6 +2469,24 @@ def validate_reciter_segments(reciter):
                             item["gt_tail"] = " ".join(tails[0])
                             item["asr_tail"] = " ".join(tails[1])
                     boundary_adj.append(item)
+
+            # Muqatta'at: segment IS the muqatta'at word (starts at word 1 of a muqatta'at verse)
+            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES and confidence < 1.0:
+                muqattaat.append({
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "ref": matched_ref,
+                })
+
+            # Qalqala: segment ends with one of the 5 qalqala letters
+            _last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
+            if _last_ltr and _last_ltr in _QALQALA_LETTERS and confidence < 1.0:
+                qalqala.append({
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "ref": matched_ref,
+                    "qalqala_letter": _last_ltr,
+                })
 
     # Detect missing word pairs from detailed.json segments (global across all entries)
     for (surah, ayah), seg_list in verse_segments.items():
@@ -2655,6 +2698,8 @@ def validate_reciter_segments(reciter):
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
         "repetitions": repetitions,
+        "muqattaat": muqattaat,
+        "qalqala": qalqala,
         "stats": stats,
     })
 

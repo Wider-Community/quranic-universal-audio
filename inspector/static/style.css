@@ -1076,6 +1076,15 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     color: #4cc9f0;
 }
 
+.qalqala-filter-row { gap: 6px; }
+.val-btn.qalqala-letter-btn { font-size: 1.1em; min-width: 2.2em; }
+.val-btn.qalqala-letter-btn.active {
+    background: rgba(76, 201, 240, 0.3);
+    border-color: #4cc9f0;
+    color: #fff;
+}
+.val-ctx-all-row { padding: 4px 10px 2px; }
+
 .val-btn.val-bleed {
     border-color: #e07c3a;
     color: #e07c3a;

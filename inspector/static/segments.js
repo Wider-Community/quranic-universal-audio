@@ -2222,6 +2222,15 @@ async function commitRefEdit(seg, newRef, row) {
 function updateSegCard(row, seg) {
     row.classList.add('dirty');
 
+    // Grey out any ignore button on this card — segment already has a pending edit.
+    // The button lives in .val-card-wrapper (sibling of .seg-row), so walk up if not found inside row.
+    const ignoreBtn = row.querySelector('.val-action-btn.ignore-btn')
+        || row.closest('.val-card-wrapper')?.querySelector('.val-action-btn.ignore-btn');
+    if (ignoreBtn && !ignoreBtn.disabled) {
+        ignoreBtn.disabled = true;
+        ignoreBtn.title = 'Cannot ignore — this segment already has unsaved edits';
+    }
+
     const confClass = getConfClass(seg);
     const textBox = row.querySelector('.seg-text');
     if (textBox) textBox.className = `seg-text ${confClass}`;
@@ -3968,7 +3977,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
     targetEl.innerHTML = '';
     if (!data) { targetEl.hidden = true; return; }
 
-    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, boundary_adj: ba, cross_verse: cv, audio_bleeding: ab, repetitions: rep } = data;
+    let { errors: errs, missing_verses: mv, missing_words: mw, failed, low_confidence, boundary_adj: ba, cross_verse: cv, audio_bleeding: ab, repetitions: rep, muqattaat, qalqala } = data;
 
     if (chapter !== null) {
         errs           = (errs           || []).filter(i => i.chapter === chapter);
@@ -3980,10 +3989,13 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         cv             = (cv             || []).filter(i => i.chapter === chapter);
         ab             = (ab             || []).filter(i => i.chapter === chapter);
         rep            = (rep            || []).filter(i => i.chapter === chapter);
+        muqattaat      = (muqattaat      || []).filter(i => i.chapter === chapter);
+        qalqala        = (qalqala        || []).filter(i => i.chapter === chapter);
     }
     const hasAny = (errs && errs.length > 0) || (mv && mv.length > 0) || (mw && mw.length > 0)
         || (failed && failed.length > 0) || (low_confidence && low_confidence.length > 0) || (ba && ba.length > 0)
-        || (cv && cv.length > 0) || (ab && ab.length > 0) || (rep && rep.length > 0);
+        || (cv && cv.length > 0) || (ab && ab.length > 0) || (rep && rep.length > 0)
+        || (muqattaat && muqattaat.length > 0) || (qalqala && qalqala.length > 0);
     if (!hasAny) {
         targetEl.hidden = true;
         return;
@@ -4058,21 +4070,38 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             getTitle: i => `audio ${i.entry_ref} contains segment matching ${i.ref} (${i.time})`,
             btnClass: 'val-bleed',
             onClick: i => jumpToSegment(i.chapter, i.seg_index)
-        }
+        },
+        {
+            name: 'Muqatta\u02bcat', items: muqattaat || [], type: 'muqattaat', countClass: 'val-cross-count',
+            getLabel: i => i.ref, getTitle: () => '', btnClass: 'val-cross',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        },
+        {
+            name: 'Qalqala', items: qalqala || [], type: 'qalqala', countClass: 'val-cross-count',
+            isQalqala: true,
+            getLabel: i => i.ref, getTitle: () => '', btnClass: 'val-cross',
+            onClick: i => jumpToSegment(i.chapter, i.seg_index)
+        },
     ];
+
+    const QALQALA_LETTERS_ORDER = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
 
     categories.forEach(cat => {
         if (!cat.items || cat.items.length === 0) return;
 
         const isLowConf = cat.type === 'low_confidence';
+        const isQalqala = !!cat.isQalqala;
         const LC_DEFAULT = _lcDefaultThreshold;
 
-        // For low_confidence, items shown depend on current slider value
-        // allItems = full server list; getVisibleItems() filters by threshold
+        // For low_confidence, items shown depend on current slider value.
+        // For qalqala, items can be filtered by the active letter button.
         let lcThreshold = LC_DEFAULT;
-        const getVisibleItems = () => isLowConf
-            ? cat.items.filter(i => (i.confidence * 100) < lcThreshold).sort((a, b) => a.confidence - b.confidence)
-            : cat.items;
+        let activeQalqalaLetter = null;
+        const getVisibleItems = () => {
+            if (isLowConf) return cat.items.filter(i => (i.confidence * 100) < lcThreshold).sort((a, b) => a.confidence - b.confidence);
+            if (isQalqala && activeQalqalaLetter) return cat.items.filter(i => i.qalqala_letter === activeQalqalaLetter);
+            return cat.items;
+        };
 
         const details = document.createElement('details');
         details.setAttribute('data-category', cat.type);
@@ -4094,10 +4123,50 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             details.appendChild(sliderRow);
         }
 
-        // Button list (hidden until accordion opens)
+        // Qalqala letter filter (qalqala only, shown when open)
+        let qalqalaFilterRow = null;
+        if (isQalqala) {
+            qalqalaFilterRow = document.createElement('div');
+            qalqalaFilterRow.className = 'lc-slider-row qalqala-filter-row';
+            qalqalaFilterRow.hidden = true;
+            const filterLabel = document.createElement('span');
+            filterLabel.className = 'lc-slider-label';
+            filterLabel.textContent = 'Filter by letter:';
+            qalqalaFilterRow.appendChild(filterLabel);
+            QALQALA_LETTERS_ORDER.forEach(letter => {
+                if (!cat.items.some(i => i.qalqala_letter === letter)) return;
+                const btn = document.createElement('button');
+                btn.className = 'val-btn val-cross qalqala-letter-btn';
+                btn.textContent = letter;
+                btn.title = `Show only segments ending with ${letter}`;
+                btn.setAttribute('data-letter', letter);
+                btn.addEventListener('click', () => {
+                    const countEl = summary.querySelector('[data-lc-count]');
+                    if (activeQalqalaLetter === letter) {
+                        activeQalqalaLetter = null;
+                        btn.classList.remove('active');
+                    } else {
+                        activeQalqalaLetter = letter;
+                        qalqalaFilterRow.querySelectorAll('.qalqala-letter-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                    }
+                    const visible = getVisibleItems();
+                    if (countEl) countEl.textContent = visible.length;
+                    if (_cardRenderRafId) { cancelAnimationFrame(_cardRenderRafId); _cardRenderRafId = null; }
+                    cardsDiv.innerHTML = '';
+                    renderCategoryCards(cat.type, visible, cardsDiv);
+                    requestAnimationFrame(_updateCtxAllBtn);
+                });
+                qalqalaFilterRow.appendChild(btn);
+            });
+            details.appendChild(qalqalaFilterRow);
+        }
+
+        // Button list: hidden for qalqala (letter filter replaces it), otherwise hidden until open
         const itemsDiv = document.createElement('div');
         itemsDiv.className = 'val-items';
         itemsDiv.hidden = true;
+        if (isQalqala) itemsDiv.style.display = 'none';
 
         const rebuildButtons = (items) => {
             itemsDiv.innerHTML = '';
@@ -4118,6 +4187,32 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         const cardsDiv = document.createElement('div');
         cardsDiv.className = 'val-cards-container';
         cardsDiv.hidden = true;
+
+        // "Show/Hide All Context" bulk toggle — label reflects whether context is default-shown
+        const _ctxDefaultShown = cat.type === 'failed' || cat.type === 'boundary_adj' || cat.type === 'audio_bleeding' || cat.type === 'repetitions' || cat.type === 'muqattaat' || cat.type === 'qalqala';
+        const ctxAllRow = document.createElement('div');
+        ctxAllRow.className = 'val-ctx-all-row';
+        ctxAllRow.hidden = true;
+        const ctxAllBtn = document.createElement('button');
+        ctxAllBtn.className = 'val-action-btn val-action-btn-muted';
+        ctxAllBtn.textContent = _ctxDefaultShown ? 'Hide All Context' : 'Show All Context';
+        ctxAllRow.appendChild(ctxAllBtn);
+        details.appendChild(ctxAllRow);
+
+        function _updateCtxAllBtn() {
+            const anyShown = [...cardsDiv.querySelectorAll('.val-ctx-toggle-btn')].some(b => b._isContextShown && b._isContextShown());
+            ctxAllBtn.textContent = anyShown ? 'Hide All Context' : 'Show All Context';
+        }
+        ctxAllBtn.addEventListener('click', () => {
+            const allBtns = [...cardsDiv.querySelectorAll('.val-ctx-toggle-btn')];
+            const anyShown = allBtns.some(b => b._isContextShown && b._isContextShown());
+            allBtns.forEach(b => {
+                if (anyShown && b._isContextShown && b._isContextShown()) b.click();
+                else if (!anyShown && b._showContext && !b._isContextShown()) b.click();
+            });
+            _updateCtxAllBtn();
+        });
+
         details.appendChild(cardsDiv);
 
         if (isLowConf && sliderRow) {
@@ -4141,17 +4236,23 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
             if (details.open) {
                 _collapseAccordionExcept(details);
                 if (sliderRow) sliderRow.hidden = false;
-                itemsDiv.hidden = false;
+                if (qalqalaFilterRow) qalqalaFilterRow.hidden = false;
+                if (!isQalqala) itemsDiv.hidden = false;
                 const visible = getVisibleItems();
-                rebuildButtons(visible);
+                if (!isQalqala) rebuildButtons(visible);
                 renderCategoryCards(cat.type, visible, cardsDiv);
                 cardsDiv.hidden = false;
+                ctxAllRow.hidden = false;
+                // Update label after cards (and default-open contexts) have rendered
+                requestAnimationFrame(_updateCtxAllBtn);
             } else {
                 if (_cardRenderRafId) { cancelAnimationFrame(_cardRenderRafId); _cardRenderRafId = null; }
                 if (sliderRow) sliderRow.hidden = true;
+                if (qalqalaFilterRow) qalqalaFilterRow.hidden = true;
                 itemsDiv.hidden = true;
                 cardsDiv.innerHTML = '';
                 cardsDiv.hidden = true;
+                ctxAllRow.hidden = true;
             }
         });
 
@@ -4660,7 +4761,7 @@ function refreshOpenAccordionCards() {
 // Validation index fixup after structural ops (split/merge/delete)
 // ---------------------------------------------------------------------------
 
-const _VAL_SINGLE_INDEX_CATS = ['failed', 'low_confidence', 'boundary_adj', 'cross_verse', 'audio_bleeding', 'repetitions'];
+const _VAL_SINGLE_INDEX_CATS = ['failed', 'low_confidence', 'boundary_adj', 'cross_verse', 'audio_bleeding', 'repetitions', 'muqattaat', 'qalqala'];
 
 function _forEachValItem(chapter, fn) {
     if (!segValidation) return;
@@ -4924,14 +5025,20 @@ function renderCategoryCards(type, items, container) {
             const actionsRow = document.createElement('div');
             actionsRow.className = 'val-card-actions';
 
-            if ((type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions') ||
+            if ((type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions' || type === 'muqattaat' || type === 'qalqala') ||
                 (type === 'low_confidence' && seg.confidence < 1.0)) {
                 const ignoreBtn = document.createElement('button');
-                ignoreBtn.className = 'val-action-btn';
+                ignoreBtn.className = 'val-action-btn ignore-btn';
+                const segChapterForBtn = seg.chapter || parseInt(segChapterSelect.value);
+                const isDirtySegment = segDirtyMap.get(segChapterForBtn)?.indices?.has(seg.index);
                 if (seg.confidence >= 1.0) {
                     ignoreBtn.disabled = true;
                     ignoreBtn.textContent = 'Ignored';
                     wrapper.style.opacity = '0.5';
+                } else if (isDirtySegment) {
+                    ignoreBtn.disabled = true;
+                    ignoreBtn.textContent = 'Ignore';
+                    ignoreBtn.title = 'Cannot ignore — this segment already has unsaved edits';
                 } else {
                     ignoreBtn.textContent = 'Ignore';
                     ignoreBtn.title = 'Set confidence to 100% (dismiss this issue)';
@@ -4976,8 +5083,9 @@ function renderCategoryCards(type, items, container) {
             }
 
             wrapper.appendChild(actionsRow);
-            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding' || type === 'repetitions';
-            addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: contextDefault });
+            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding' || type === 'repetitions' || type === 'muqattaat' || type === 'qalqala';
+            const nextOnly = type === 'muqattaat' || type === 'qalqala';
+            addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: contextDefault, nextOnly });
             container.appendChild(wrapper);
         }
     }
@@ -4999,7 +5107,7 @@ function renderCategoryCards(type, items, container) {
 
 function resolveIssueToSegment(type, issue) {
     if (issue.seg_index != null && issue.seg_index < 0) return null;
-    if (type === 'failed' || type === 'low_confidence' || type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions') {
+    if (type === 'failed' || type === 'low_confidence' || type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions' || type === 'muqattaat' || type === 'qalqala') {
         const seg = getSegByChapterIndex(issue.chapter, issue.seg_index);
         // After structural ops (split/merge/delete), indices are renumbered but
         // stale validation data still references old indices. Fall back to ref match.
@@ -5019,9 +5127,9 @@ function resolveIssueToSegment(type, issue) {
     return null;
 }
 
-function addContextToggle(actionsContainer, segsInWrapper, { defaultOpen = false } = {}) {
+function addContextToggle(actionsContainer, segsInWrapper, { defaultOpen = false, nextOnly = false } = {}) {
     const ctxBtn = document.createElement('button');
-    ctxBtn.className = 'val-action-btn val-action-btn-muted';
+    ctxBtn.className = 'val-action-btn val-action-btn-muted val-ctx-toggle-btn';
     ctxBtn.textContent = 'Show Context';
     let contextShown = false;
     let contextEls = [];
@@ -5036,7 +5144,7 @@ function addContextToggle(actionsContainer, segsInWrapper, { defaultOpen = false
         const { prev } = getAdjacentSegments(first.seg.chapter, first.seg.index);
         const { next } = getAdjacentSegments(last.seg.chapter, last.seg.index);
 
-        if (prev) {
+        if (!nextOnly && prev) {
             const prevCard = renderErrorCard(prev, { isContext: true, contextLabel: 'Previous' });
             cardParent.insertBefore(prevCard, first.card);
             contextEls.push(prevCard);
