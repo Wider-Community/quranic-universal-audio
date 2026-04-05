@@ -694,7 +694,8 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
     # (patch-based edits update state but skip output_html)
     if segment_dir:
         from src.ui.segments import render_segments
-        current_html = render_segments(segments_state, segment_dir=str(segment_dir))
+        full_audio_url = f"/gradio_api/file={segment_dir}/full.wav"
+        current_html = render_segments(segments_state, full_audio_url=full_audio_url, segment_dir=str(segment_dir))
 
     if not current_html or '<span class="word"' not in current_html:
         yield current_html, gr.update(), gr.update(), gr.update(), gr.update()
