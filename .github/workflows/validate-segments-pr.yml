@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   validate:
@@ -20,6 +21,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
 
       - name: Detect changed reciters
         id: detect
@@ -37,3 +41,63 @@ jobs:
           python scripts/validate_edit_history.py \
             --base-sha ${{ github.event.pull_request.base.sha }} \
             --reciters ${{ steps.detect.outputs.reciters }}
+
+      - name: Validate segments
+        if: steps.detect.outputs.reciters != ''
+        run: |
+          failed=0
+          for reciter in ${{ steps.detect.outputs.reciters }}; do
+            echo "Validating $reciter..."
+            output=$(python validators/validate_segments.py "data/recitation_segments/$reciter/" 2>&1)
+            echo "$output"
+            # Fail on structural errors or consistency mismatches
+            if echo "$output" | grep -qE "Errors:\s+[1-9]|Mismatches:\s+[1-9]"; then
+              echo "::error::$reciter has validation errors"
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Generate edit summary
+        id: summary
+        if: steps.detect.outputs.reciters != ''
+        run: |
+          reciters="${{ steps.detect.outputs.reciters }}"
+          summary=$(python scripts/summarize_pr_edits.py $reciters)
+
+          # Build header from template
+          # For multi-reciter PRs, use generic name; for single, use slug
+          reciter_count=$(echo $reciters | wc -w)
+          if [ "$reciter_count" -eq 1 ]; then
+            reciter_name=$(echo $reciters | sed 's/_/ /g' | sed 's/\b\w/\U&/g')
+          else
+            reciter_name="$reciter_count reciters"
+          fi
+
+          RECITER_NAME="$reciter_name" python3 -c "
+          import os, sys
+          tpl = open('.github/templates/workflows/pr-edit-summary.md').read()
+          sys.stdout.write(tpl.format(reciter_name=os.environ['RECITER_NAME']))
+          " > /tmp/pr_comment.md
+          echo "$summary" >> /tmp/pr_comment.md
+
+          echo "generated=true" >> $GITHUB_OUTPUT
+
+      - name: Post or update PR comment
+        if: steps.summary.outputs.generated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr_number=${{ github.event.pull_request.number }}
+          marker="<!-- edit-summary -->"
+
+          # Find existing comment with marker
+          existing=$(gh api "repos/${{ github.repository }}/issues/${pr_number}/comments" \
+            --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+
+          if [ -n "$existing" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${existing}" \
+              -X PATCH -F body=@/tmp/pr_comment.md
+          else
+            gh pr comment "$pr_number" --body-file /tmp/pr_comment.md
+          fi

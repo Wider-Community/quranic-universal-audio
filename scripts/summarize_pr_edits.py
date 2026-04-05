@@ -70,6 +70,78 @@ def _summarize_edit_history(reciter_dir: Path) -> dict:
     }
 
 
+ISSUE_LABELS = load_config("labels")["issue_labels"]
+
+
+def _compute_issues_delta(reciter_dir: Path) -> dict | None:
+    """Compute before→after delta from first-touch validation_summary per chapter."""
+    history_path = reciter_dir / "edit_history.jsonl"
+    if not history_path.exists():
+        return None
+
+    chapter_initial = {}
+    chapter_final = {}
+
+    with open(history_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+            if record.get("record_type") == "genesis":
+                continue
+            ch = record.get("chapter")
+            if not ch:
+                continue
+            before = record.get("validation_summary_before")
+            after = record.get("validation_summary_after")
+            if before and ch not in chapter_initial:
+                chapter_initial[ch] = before
+            if after:
+                chapter_final[ch] = after
+
+    if not chapter_initial:
+        return None
+
+    before_totals = Counter()
+    after_totals = Counter()
+    for ch, summary in chapter_initial.items():
+        for k, v in summary.items():
+            before_totals[k] += v
+    for ch, summary in chapter_final.items():
+        for k, v in summary.items():
+            after_totals[k] += v
+
+    all_keys = sorted(set(list(before_totals.keys()) + list(after_totals.keys())))
+    rows = {}
+    for k in all_keys:
+        b = before_totals.get(k, 0)
+        a = after_totals.get(k, 0)
+        if b or a:
+            rows[k] = {"before": b, "after": a, "delta": a - b}
+    return rows
+
+
+def _format_issues_delta(delta: dict | None) -> str:
+    """Format issues-resolved delta as markdown table."""
+    if not delta:
+        return ""
+
+    # Only show rows where there was at least one issue initially
+    rows_with_issues = {k: v for k, v in delta.items() if v["before"] > 0}
+    if not rows_with_issues:
+        return ""
+
+    lines = ["| Issue type | Before | After | Delta |",
+             "|------------|--------|-------|-------|"]
+    for key, vals in sorted(rows_with_issues.items(), key=lambda x: -x[1]["before"]):
+        label = ISSUE_LABELS.get(key, key)
+        d = vals["delta"]
+        delta_str = str(d) if d >= 0 else str(d)
+        lines.append(f"| {label} | {vals['before']} | {vals['after']} | {delta_str} |")
+    return "\n".join(lines)
+
+
 def _format_validation(stats: dict) -> str:
     """Format validation stats as a markdown table."""
     rows = []
@@ -120,7 +192,6 @@ def _format_edits(edit_summary: dict) -> str:
     lines.append(_EDIT_SUMMARY_TPL.format(
         total_operations=edit_summary['total_operations'],
         chapters_edited=edit_summary['chapters_edited'],
-        total_batches=edit_summary['total_batches'],
     ))
 
     op_counts = edit_summary["op_counts"]
@@ -173,6 +244,13 @@ def generate_summary(slugs: list[str]) -> str:
         # Edits section
         parts.append("#### Edits\n")
         parts.append(_format_edits(edit_summary))
+
+        # Issues resolved section
+        delta = _compute_issues_delta(reciter_dir)
+        delta_text = _format_issues_delta(delta)
+        if delta_text:
+            parts.append("\n#### Issues resolved\n")
+            parts.append(delta_text)
 
         # Validation section
         parts.append("\n#### Validation\n")
