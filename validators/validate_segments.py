@@ -217,7 +217,7 @@ def validate_reciter(
 
         # Duration, pause, and time/word validity checks (same for both key types)
         for i, seg in enumerate(segs):
-            w_from, w_to, t_from, t_to = seg
+            w_from, w_to, t_from, t_to = seg[0], seg[1], seg[2], seg[3]
             dur = t_to - t_from
             seg_durations.append(dur)
 
