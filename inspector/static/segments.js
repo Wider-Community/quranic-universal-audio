@@ -3738,11 +3738,19 @@ async function mergeAdjacent(seg, direction) {
 
     const accCtx = _accordionOpCtx;
     _accordionOpCtx = null;
+    const accCategory = accCtx?.wrapper?.closest('details[data-category]')?.dataset?.category;
 
-    if (accCtx) {
-        _rebuildAccordionAfterMerge(accCtx.wrapper, chapter, merged, accCtx.direction);
-    } else {
-        refreshOpenAccordionCards();
+    // Always refresh all open accordion cards so sibling wrappers get updated indices.
+    refreshOpenAccordionCards();
+
+    // Re-apply the specialized merged+context view on the freshly rendered wrapper.
+    if (accCtx && accCategory) {
+        const freshDetails = document.querySelector(`details[data-category="${accCategory}"]`);
+        const mergedCard = freshDetails?.querySelector(`.seg-row[data-seg-uid="${merged.segment_uid}"]`);
+        const freshWrapper = mergedCard?.closest('.val-card-wrapper');
+        if (freshWrapper) {
+            _rebuildAccordionAfterMerge(freshWrapper, chapter, merged, accCtx.direction);
+        }
     }
 
     // Edit history: finalize after re-render
