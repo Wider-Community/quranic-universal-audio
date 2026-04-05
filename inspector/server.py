@@ -1596,9 +1596,11 @@ def save_seg_data(reciter, chapter):
     if segments_path.exists():
         shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
 
-    # Write detailed.json
-    with open(detailed_path, "w", encoding="utf-8") as f:
+    # Write detailed.json atomically (temp file + rename to avoid partial reads)
+    tmp_path = detailed_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
+    os.replace(tmp_path, detailed_path)
 
     # Compute file hash for tamper detection
     file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
@@ -1631,12 +1633,6 @@ def save_seg_data(reciter, chapter):
     _SEG_META_CACHE.pop(reciter, None)
     _SEG_VERSES_CACHE.pop(reciter, None)
     _SEG_RECITERS_CACHE = None
-
-    # Auto-revalidate in background thread so save returns immediately
-    threading.Thread(
-        target=lambda: _run_validation_log(RECITATION_SEGMENTS_PATH / reciter),
-        daemon=True,
-    ).start()
 
     return jsonify({"ok": True})
 
@@ -1726,8 +1722,10 @@ def undo_seg_batch(reciter):
     if segments_path.exists():
         shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
 
-    with open(detailed_path, "w", encoding="utf-8") as f:
+    tmp_path = detailed_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
+    os.replace(tmp_path, detailed_path)
 
     file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
     _rebuild_segments_json(reciter, entries)
@@ -1768,12 +1766,6 @@ def undo_seg_batch(reciter):
     _SEG_META_CACHE.pop(reciter, None)
     _SEG_VERSES_CACHE.pop(reciter, None)
     _SEG_RECITERS_CACHE = None
-
-    # Re-validate in background
-    threading.Thread(
-        target=lambda: _run_validation_log(RECITATION_SEGMENTS_PATH / reciter),
-        daemon=True,
-    ).start()
 
     return jsonify({"ok": True, "operations_reversed": len(operations)})
 
@@ -2257,6 +2249,16 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
             counts["missing_words"] += len(missing)
 
     return counts
+
+
+@app.route("/api/seg/trigger-validation/<reciter>", methods=["POST"])
+def trigger_validation_log(reciter):
+    """Kick off validation.log generation in background. Called once after all saves complete."""
+    threading.Thread(
+        target=lambda: _run_validation_log(RECITATION_SEGMENTS_PATH / reciter),
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/seg/validate/<reciter>")

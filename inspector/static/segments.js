@@ -2490,8 +2490,10 @@ async function executeSave() {
             // Clear dirty indicators on all cards (main + error sections)
             document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
             setTimeout(() => { segSaveBtn.textContent = 'Save'; }, 2500);
-            // Delay validation refresh to let server background thread finish
-            setTimeout(refreshValidation, 1500);
+            // Trigger validation.log generation once for all saves, then refresh UI
+            fetch(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
+                .then(() => refreshValidation())
+                .catch(() => refreshValidation());
             // Re-fetch edit history so the History view includes the just-saved batch
             try {
                 const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
@@ -2546,6 +2548,7 @@ async function onBatchUndoClick(batchId, chapter, btn) {
             } catch (_) { /* non-critical */ }
             // Flag segment data as stale (refresh when leaving History)
             _segDataStale = true;
+            fetch(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
             segPlayStatus.textContent = `Undo successful — ${result.operations_reversed} op${result.operations_reversed !== 1 ? 's' : ''} reversed`;
         } else {
             alert(`Undo failed: ${result.error}`);
