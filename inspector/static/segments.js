@@ -67,6 +67,7 @@ function snapshotSeg(seg) {
     };
     if (seg.has_repeated_words) snap.has_repeated_words = true;
     if (seg.wrap_word_ranges) snap.wrap_word_ranges = seg.wrap_word_ranges;
+    if (seg.phonemes_asr) snap.phonemes_asr = seg.phonemes_asr;
     return snap;
 }
 
@@ -2441,16 +2442,21 @@ async function executeSave() {
                 // Structural change (split/merge/delete/trim) — replace entire chapter
                 payload = {
                     full_replace: true,
-                    segments: chSegs.map(s => ({
-                        segment_uid: s.segment_uid || '',
-                        time_start: s.time_start,
-                        time_end: s.time_end,
-                        matched_ref: s.matched_ref,
-                        matched_text: s.matched_text,
-                        confidence: s.confidence,
-                        phonemes_asr: s.phonemes_asr || '',
-                        audio_url: s.audio_url || '',
-                    })),
+                    segments: chSegs.map(s => {
+                        const o = {
+                            segment_uid: s.segment_uid || '',
+                            time_start: s.time_start,
+                            time_end: s.time_end,
+                            matched_ref: s.matched_ref,
+                            matched_text: s.matched_text,
+                            confidence: s.confidence,
+                            phonemes_asr: s.phonemes_asr || '',
+                            audio_url: s.audio_url || '',
+                        };
+                        if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
+                        if (s.has_repeated_words) o.has_repeated_words = true;
+                        return o;
+                    }),
                     operations: chOps,
                 };
                 savedChanges += chOps.length;
@@ -6494,7 +6500,7 @@ function renderHistoryOp(op, chapter, batchId) {
 }
 
 function _snapToSeg(snap, chapter) {
-    return {
+    const seg = {
         index: snap.index_at_save,
         chapter: chapter,
         audio_url: snap.audio_url || '',
@@ -6505,6 +6511,9 @@ function _snapToSeg(snap, chapter) {
         display_text: snap.display_text || '',
         confidence: snap.confidence ?? 0,
     };
+    if (snap.wrap_word_ranges) seg.wrap_word_ranges = snap.wrap_word_ranges;
+    if (snap.has_repeated_words) seg.has_repeated_words = true;
+    return seg;
 }
 
 function _highlightChanges(beforeSnap, afterSnap, beforeCard, afterCard) {
@@ -6619,7 +6628,7 @@ function _appendValDeltas(container, before, after) {
     const shortLabels = {
         failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
         cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
-        repetitions: 'reps',
+        repetitions: 'reps', muqattaat: 'muqattaat', qalqala: 'qalqala',
     };
     for (const cat of cats) {
         const delta = (after[cat] || 0) - (before[cat] || 0);

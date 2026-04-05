@@ -1507,18 +1507,27 @@ def save_seg_data(reciter, chapter):
     if not matching:
         return jsonify({"error": "Chapter not found"}), 404
 
-    # Build lookup of existing segments by (time_start, time_end) for phonemes_asr preservation
+    # Build lookups of existing segments by time and by uid for field preservation
     existing_by_time = {}
+    existing_by_uid = {}
     for e in matching:
         for seg in e.get("segments", []):
             key = (seg.get("time_start", 0), seg.get("time_end", 0))
             existing_by_time[key] = seg
+            uid = seg.get("segment_uid", "")
+            if uid:
+                existing_by_uid[uid] = seg
 
     def _make_seg(s):
         existing = existing_by_time.get((s.get("time_start", 0), s.get("time_end", 0)), {})
+        if not existing:
+            # Trimmed segments change times, so fall back to uid lookup to preserve fields
+            uid = s.get("segment_uid", "")
+            if uid:
+                existing = existing_by_uid.get(uid, {})
         phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
         seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
-        return {
+        result = {
             "segment_uid": seg_uid,
             "time_start": s.get("time_start", 0),
             "time_end": s.get("time_end", 0),
@@ -1527,6 +1536,12 @@ def save_seg_data(reciter, chapter):
             "confidence": s.get("confidence", 0.0),
             "phonemes_asr": phonemes,
         }
+        wrap = s.get("wrap_word_ranges") or existing.get("wrap_word_ranges")
+        if wrap:
+            result["wrap_word_ranges"] = wrap
+        if s.get("has_repeated_words") or existing.get("has_repeated_words"):
+            result["has_repeated_words"] = True
+        return result
 
     # Edit history: snapshot validation counts before mutation
     meta = _SEG_META_CACHE.get(reciter, {})
@@ -1985,6 +2000,8 @@ def _snap_to_segment(snap: dict) -> dict:
         seg["has_repeated_words"] = True
     if snap.get("wrap_word_ranges"):
         seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
+    if snap.get("phonemes_asr"):
+        seg["phonemes_asr"] = snap["phonemes_asr"]
     return seg
 
 
