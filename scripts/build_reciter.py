@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import urllib.request
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -310,33 +311,22 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
 # ---------------------------------------------------------------------------
 # Audio download
 # ---------------------------------------------------------------------------
-_surah_cache = {}  # url -> AudioSegment (for by_surah sources)
-
-
 def _lazy_import_pydub():
     from pydub import AudioSegment as AS
     return AS
 
 
-def download_and_slice(url, clip_start_ms, clip_end_ms, is_surah=False, retries=3):
+def download_and_slice(url, clip_start_ms, clip_end_ms, retries=3):
     """Download audio and slice at clip boundaries, return MP3 bytes."""
     AS = _lazy_import_pydub()
 
     for attempt in range(retries):
         try:
-            if is_surah:
-                if url not in _surah_cache:
-                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req, timeout=60) as resp:
-                        audio_data = resp.read()
-                    _surah_cache[url] = AS.from_file(io.BytesIO(audio_data))
-                clip = _surah_cache[url][clip_start_ms:clip_end_ms]
-            else:
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    audio_data = resp.read()
-                audio = AS.from_file(io.BytesIO(audio_data))
-                clip = audio[clip_start_ms:clip_end_ms]
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                audio_data = resp.read()
+            audio = AS.from_file(io.BytesIO(audio_data))
+            clip = audio[clip_start_ms:clip_end_ms]
 
             buf = io.BytesIO()
             clip.export(buf, format="mp3", bitrate="128k")
@@ -354,35 +344,54 @@ def download_all_audio(rows, is_surah=False):
     failed = []
 
     if is_surah:
-        # For by_surah: download surahs first (limited parallel), then slice
-        unique_urls = list({row["audio_url"] for row in rows})
-        log.info("Pre-downloading %d surah audio files...", len(unique_urls))
+        # For by_surah: process one surah at a time to limit memory.
+        # Decoded PCM for a full recitation can exceed 10 GB (44.1kHz stereo),
+        # which OOM-kills GitHub Actions runners (7 GB RAM).  Instead, download
+        # each surah, slice all its verses, export to MP3 bytes, then free the
+        # decoded audio before moving to the next surah.
         AS = _lazy_import_pydub()
 
-        def dl_surah(url):
-            if url in _surah_cache:
-                return
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = resp.read()
-            _surah_cache[url] = AS.from_file(io.BytesIO(data))
-
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            list(pool.map(dl_surah, unique_urls))
-
-        # Slice verses from cached surahs (fast, no network)
+        # Group row indices by audio URL so we process one surah at a time
+        url_to_indices = defaultdict(list)
         for i, row in enumerate(rows):
+            url_to_indices[row["audio_url"]].append(i)
+
+        unique_urls = list(url_to_indices.keys())
+        log.info("Downloading and slicing %d surah audio files (one at a time)...", len(unique_urls))
+        completed_surahs = 0
+
+        for url in unique_urls:
             try:
-                clip = _surah_cache[row["audio_url"]][row["clip_start"]:row["clip_end"]]
-                buf = io.BytesIO()
-                clip.export(buf, format="mp3", bitrate="128k")
-                audio_bytes_list[i] = buf.getvalue()
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    raw_data = resp.read()
+                audio = AS.from_file(io.BytesIO(raw_data))
+                del raw_data  # free compressed bytes immediately
             except Exception as e:
-                ref = f"{row['surah']}:{row['ayah']}"
-                log.error("Failed to slice %s: %s", ref, e)
-                failed.append(ref)
-            if (i + 1) % 500 == 0:
-                log.info("Progress: %d/%d sliced", i + 1, len(rows))
+                for idx in url_to_indices[url]:
+                    ref = f"{rows[idx]['surah']}:{rows[idx]['ayah']}"
+                    log.error("Failed to download %s (%s): %s", ref, url, e)
+                    failed.append(ref)
+                completed_surahs += 1
+                continue
+
+            # Slice all verses for this surah
+            for idx in url_to_indices[url]:
+                row = rows[idx]
+                try:
+                    clip = audio[row["clip_start"]:row["clip_end"]]
+                    buf = io.BytesIO()
+                    clip.export(buf, format="mp3", bitrate="128k")
+                    audio_bytes_list[idx] = buf.getvalue()
+                except Exception as e:
+                    ref = f"{row['surah']}:{row['ayah']}"
+                    log.error("Failed to slice %s: %s", ref, e)
+                    failed.append(ref)
+
+            del audio  # free decoded PCM before next surah
+            completed_surahs += 1
+            if completed_surahs % 10 == 0:
+                log.info("Progress: %d/%d surahs processed", completed_surahs, len(unique_urls))
     else:
         # For by_ayah: parallel individual downloads
         def process(idx):
@@ -511,9 +520,6 @@ def push_reciter(slug, audio_type):
         ds.push_to_hub(REPO_ID, **push_kwargs)
 
     log.info("Done: %s uploaded to %s", slug, REPO_ID)
-
-    # Clear surah cache to free memory before next reciter
-    _surah_cache.clear()
 
 
 # ---------------------------------------------------------------------------
