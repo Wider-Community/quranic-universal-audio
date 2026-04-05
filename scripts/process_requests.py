@@ -903,8 +903,11 @@ def _create_timestamps_pr(rec):
 
         _run_git(["checkout", "-b", branch])
 
-        # Stage timestamp files (timestamps.json is sufficient for HF dataset)
+        # Stage timestamp files (force-add timestamps_full.json past gitignore)
         _run_git(["add", f"{ts_dir}/timestamps.json"])
+        ts_full = Path(ts_dir) / "timestamps_full.json"
+        if ts_full.exists():
+            _run_git(["add", "-f", str(ts_full)])
 
         # Check something was actually staged
         staged = _run_git(["diff", "--cached", "--name-only"])

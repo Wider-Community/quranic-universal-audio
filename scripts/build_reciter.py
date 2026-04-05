@@ -472,7 +472,13 @@ def push_reciter(slug, audio_type):
         data["segments"].append(row["segments"])
         data["word_timestamps"].append(row["word_timestamps"])
         data["letter_timestamps"].append(row["letter_timestamps"])
-        data["source_url"].append(row["audio_url"])
+        # Strip protocol so HF viewer doesn't render as audio widget
+        src_url = row["audio_url"]
+        for prefix in ("https://", "http://"):
+            if src_url.startswith(prefix):
+                src_url = src_url[len(prefix):]
+                break
+        data["source_url"].append(src_url)
         data["source_offset_ms"].append(row["clip_start"])
 
     if skipped:
