@@ -1,0 +1,142 @@
+Generated: 2026-04-05 23:27:20
+
+========================================================================
+  muhammad_al_hafiz
+  data/recitation_segments/muhammad_al_hafiz
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   300 ms
+  Min speech:    1000 ms
+  Padding:       100 ms
+
+--- Coverage ---
+  Verses found:       137 / 6236
+  Missing verses:     6099
+  Partial words:      1 verses with word gaps
+
+--- Segments ---
+  Total segments:     264
+  Single-seg verses:  59
+  Multi-seg verses:   78 (205 segments)
+  Cross-verse segs:   1
+  Empty verse keys:   0
+  Max segs/verse:     6
+
+--- Segment Duration ---
+  Min:      0.74s
+  Median:   8.57s
+  Mean:     8.90s
+  Max:      24.27s
+
+--- True Silence Duration (padding reversed) ---
+  Min:      0.20s
+  Median:   1.76s
+  Mean:     1.80s
+  Max:      4.38s
+
+--- Alignment Confidence ---
+  Min:        0.5100
+  Median:     0.9600
+  Mean:       0.9562
+  Max:        1.0000
+  Below 60%:  1
+  Below 80%:  3
+  Failed:     1 (no alignment)
+  Empty ASR:  17 (matched but no phonemes)
+
+--- First 10 of 17 Segments with Empty Phonemes ---
+   1. [0.9600]  1:2:1-1:2:4  @ 0:25.6 - 0:31.9
+      audio: https://server12.mp3quran.net/malaysia/hafz/001.mp3
+      text:  ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ
+
+   2. [1.0000]  1:4:1-1:4:3  @ 0:40.3 - 0:42.4
+      audio: https://server12.mp3quran.net/malaysia/hafz/001.mp3
+      text:  مَـٰلِكِ يَوْمِ ٱلدِّينِ
+
+   3. [1.0000]  1:4:1-1:4:3  @ 0:42.4 - 0:43.1
+      audio: https://server12.mp3quran.net/malaysia/hafz/001.mp3
+      text:  مَـٰلِكِ يَوْمِ ٱلدِّينِ
+
+   4. [1.0000]  1:4:1-1:4:3  @ 0:43.1 - 0:47.0
+      audio: https://server12.mp3quran.net/malaysia/hafz/001.mp3
+      text:  مَـٰلِكِ يَوْمِ ٱلدِّينِ
+
+   5. [1.0000]  19:1:1-19:1:1  @ 0:30.5 - 0:43.0
+      audio: https://server12.mp3quran.net/malaysia/hafz/019.mp3
+      text:  كٓهيعٓصٓ
+
+   6. [1.0000]  19:2:1-19:4:9  @ 0:45.4 - 0:52.2
+      audio: https://server12.mp3quran.net/malaysia/hafz/019.mp3
+      text:  ذِكْرُ رَحْمَتِ رَبِّكَ عَبْدَهُۥ زَكَرِيَّآ إِذْ نَادَىٰ رَبَّهُۥ نِدَآءً خَفِيًّا قَالَ رَبِّ إِنِّى وَهَنَ ٱلْعَظْمُ مِنِّى وَٱشْتَعَلَ ٱلرَّأْسُ شَيْبًا
+
+   7. [1.0000]  19:3:1-19:3:5  @ 0:52.2 - 1:01.3
+      audio: https://server12.mp3quran.net/malaysia/hafz/019.mp3
+      text:  إِذْ نَادَىٰ رَبَّهُۥ نِدَآءً خَفِيًّا
+
+   8. [1.0000]  19:4:1-19:4:14  @ 1:01.3 - 1:13.5
+      audio: https://server12.mp3quran.net/malaysia/hafz/019.mp3
+      text:  قَالَ رَبِّ إِنِّى وَهَنَ ٱلْعَظْمُ مِنِّى وَٱشْتَعَلَ ٱلرَّأْسُ شَيْبًا وَلَمْ أَكُن بِدُعَآئِكَ رَبِّ شَقِيًّا
+
+   9. [1.0000]  19:4:7-19:4:14  @ 1:14.0 - 1:21.7
+      audio: https://server12.mp3quran.net/malaysia/hafz/019.mp3
+      text:  وَٱشْتَعَلَ ٱلرَّأْسُ شَيْبًا وَلَمْ أَكُن بِدُعَآئِكَ رَبِّ شَقِيًّا
+
+  10. [1.0000]  19:4:11-19:4:14  @ 1:21.7 - 1:29.4
+      audio: https://server12.mp3quran.net/malaysia/hafz/019.mp3
+      text:  أَكُن بِدُعَآئِكَ رَبِّ شَقِيًّا
+
+
+--- First 1 of 1 Alignment Failures ---
+   1. 0:21.2 - 0:27.9  (6.64s)
+      audio: https://server12.mp3quran.net/malaysia/hafz/031.mp3
+      asr:   b i s m i ll a: h i rˤrˤ aˤ ħ m a: n i rˤrˤ aˤ ħ i: m
+
+
+--- Lowest 3 of 3 Segments Below 80% Confidence ---
+   1. [0.5100]  1:1:1-1:1:4  @ 0:07.3 - 0:15.2
+      audio: https://server12.mp3quran.net/malaysia/hafz/001.mp3
+      text:  بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ
+      asr:   ʔ a w ð u b i ll a: h i m i n a ʃʃ a j tˤ aˤ: n i rˤrˤ aˤ ʒ i: m
+
+   2. [0.6000]  Amin  @ 1:22.3 - 1:25.3
+      audio: https://server12.mp3quran.net/malaysia/hafz/001.mp3
+      text:  آمِين
+      asr:   ħ a: m i: m
+
+   3. [0.7900]  31:19:1-31:19:6  @ 9:08.4 - 9:15.4
+      audio: https://server12.mp3quran.net/malaysia/hafz/031.mp3
+      text:  وَٱقْصِدْ فِى مَشْيِكَ وَٱغْضُضْ مِن صَوْتِكَ ۚ
+      asr:   w a q u sˤ i l a f i: b a ʃ r i k a w a ɣ dˤ u q m i ŋ sˤ aˤ w t i k
+
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches:     0
+
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   2
+
+  Missing verses (first 10 of 6099):
+    MISS   2:1  (1 words)
+    MISS   2:2  (7 words)
+    MISS   2:3  (8 words)
+    MISS   2:4  (12 words)
+    MISS   2:5  (8 words)
+    MISS   2:6  (11 words)
+    MISS   2:7  (12 words)
+    MISS   2:8  (11 words)
+    MISS   2:9  (10 words)
+    MISS   2:10  (12 words)
+    ... and 6089 more
+
+  Warnings:
+    WARN   19:8  @ 2:38.7 - 3:00.8
+           extra words beyond 14: [15]
+           audio: https://server12.mp3quran.net/malaysia/hafz/019.mp3
+
+    WARN   31:14  @ 5:52.2 - 6:27.3
+           missing words: [8]
+           audio: https://server12.mp3quran.net/malaysia/hafz/031.mp3
+
+
