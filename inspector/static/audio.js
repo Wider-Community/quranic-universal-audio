@@ -48,6 +48,18 @@
             audSurahSS = new SearchableSelect(surahSelect);
             const res = await fetch('/api/audio/sources');
             audioSources = await res.json();
+
+            // Restore category from saved reciter before populating
+            const _savedAudReciter = localStorage.getItem('insp_aud_reciter');
+            if (_savedAudReciter) {
+                const _savedCat = _savedAudReciter.split('/')[0];
+                if ((_savedCat === 'by_surah' || _savedCat === 'by_ayah') && _savedCat !== selectedCategory) {
+                    selectedCategory = _savedCat;
+                    categoryToggle.querySelectorAll('[data-cat]').forEach(b => b.classList.toggle('active', b.dataset.cat === selectedCategory));
+                    ayahLabel.hidden = (selectedCategory !== 'by_ayah');
+                }
+            }
+
             populateReciters();
         } catch (e) {
             reciterSelect.innerHTML = '<option value="">Error loading sources</option>';
@@ -83,10 +95,21 @@
         if (audReciterSS) audReciterSS.refresh();
         ayahLabel.hidden = (selectedCategory !== 'by_ayah');
         updateNavButtons();
+
+        // Restore saved reciter (only when this is the category the user last used)
+        const _savedAudReciter = localStorage.getItem('insp_aud_reciter');
+        if (_savedAudReciter && _savedAudReciter.startsWith(selectedCategory + '/')) {
+            reciterSelect.value = _savedAudReciter;
+            if (reciterSelect.value === _savedAudReciter) {
+                if (audReciterSS) audReciterSS.refresh(); // sync SS input display
+                reciterSelect.dispatchEvent(new Event('change'));
+            }
+        }
     }
 
     reciterSelect.addEventListener('change', async () => {
         const val = reciterSelect.value;
+        if (val) localStorage.setItem('insp_aud_reciter', val);
         resetSurahSelect();
         resetAyahSelect();
         clearPlayer();

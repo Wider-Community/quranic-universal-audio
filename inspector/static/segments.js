@@ -194,6 +194,12 @@ let segChapterSS = null;
 
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
+    // Restore persistent settings before wiring up handlers
+    _segAutoPlayEnabled = localStorage.getItem('insp_seg_autoplay') !== 'false';
+    segAutoPlayBtn.className = 'btn ' + (_segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
+    const _savedSegSpeed = localStorage.getItem('insp_seg_speed');
+    if (_savedSegSpeed) segSpeedSelect.value = _savedSegSpeed;
+
     segReciterSelect.addEventListener('change', onSegReciterChange);
     segChapterSelect.addEventListener('change', onSegChapterChange);
     segVerseSelect.addEventListener('change', applyFiltersAndRender);
@@ -202,12 +208,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         _segAutoPlayEnabled = !_segAutoPlayEnabled;
         _segContinuousPlay = _segAutoPlayEnabled;
         segAutoPlayBtn.className = 'btn ' + (_segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
+        localStorage.setItem('insp_seg_autoplay', _segAutoPlayEnabled);
     });
     segSaveBtn.addEventListener('click', onSegSaveClick);
     segSpeedSelect.addEventListener('change', () => {
         const rate = parseFloat(segSpeedSelect.value);
         segAudioEl.playbackRate = rate;
         if (valCardAudio) valCardAudio.playbackRate = rate;
+        localStorage.setItem('insp_seg_speed', segSpeedSelect.value);
     });
 
     segAudioEl.addEventListener('play', startSegAnimation);
@@ -263,6 +271,15 @@ async function loadSegReciters() {
         const resp = await fetch('/api/seg/reciters');
         segAllReciters = await resp.json();
         filterAndRenderReciters();
+
+        // Restore saved reciter
+        const _savedSegReciter = localStorage.getItem('insp_seg_reciter');
+        if (_savedSegReciter) {
+            segReciterSelect.value = _savedSegReciter;
+            if (segReciterSelect.value === _savedSegReciter) {
+                onSegReciterChange();
+            }
+        }
     } catch (e) {
         console.error('Error loading seg reciters:', e);
     }
@@ -313,6 +330,7 @@ function filterAndRenderReciters() {
 
 async function onSegReciterChange() {
     const reciter = segReciterSelect.value;
+    if (reciter) localStorage.setItem('insp_seg_reciter', reciter);
     segChapterSelect.innerHTML = '<option value="">-- select --</option>';
     if (segChapterSS) segChapterSS.refresh();
     segVerseSelect.innerHTML = '<option value="">All</option>';
@@ -2747,6 +2765,7 @@ function handleSegKeydown(e) {
             segSpeedSelect.value = opts[newIdx];
             segAudioEl.playbackRate = opts[newIdx];
             if (valCardAudio) valCardAudio.playbackRate = opts[newIdx];
+            localStorage.setItem('insp_seg_speed', segSpeedSelect.value);
             break;
         }
         case 'KeyJ': {
