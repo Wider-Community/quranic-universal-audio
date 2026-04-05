@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - 'data/recitation_segments/**'
+  workflow_dispatch:
+    inputs:
+      reciters:
+        description: 'Space-separated reciter slugs (blank = all tracked)'
+        required: false
 
 permissions:
   contents: read
@@ -11,7 +16,6 @@ permissions:
 
 jobs:
   validate:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,18 +29,30 @@ jobs:
       - name: Install Python dependencies
         run: pip install pyyaml
 
-      - name: Detect changed reciters
+      - name: Detect reciters
         id: detect
         run: |
-          reciters=$(git diff ${{ github.event.pull_request.base.sha }}...HEAD \
-            --name-only -- data/recitation_segments/ | \
-            sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
-            sort -u | tr '\n' ' ')
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            input="${{ github.event.inputs.reciters }}"
+            if [ -n "$input" ]; then
+              reciters="$input"
+            else
+              # All tracked reciters
+              reciters=$(ls -d data/recitation_segments/*/segments.json 2>/dev/null | \
+                sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
+                sort -u | tr '\n' ' ')
+            fi
+          else
+            reciters=$(git diff ${{ github.event.pull_request.base.sha }}...HEAD \
+              --name-only -- data/recitation_segments/ | \
+              sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
+              sort -u | tr '\n' ' ')
+          fi
           echo "reciters=$(echo $reciters | xargs)" >> $GITHUB_OUTPUT
-          echo "Changed reciters: $reciters"
+          echo "Reciters: $reciters"
 
       - name: Validate edit history
-        if: steps.detect.outputs.reciters != ''
+        if: steps.detect.outputs.reciters != '' && github.event_name == 'pull_request'
         run: |
           python scripts/validate_edit_history.py \
             --base-sha ${{ github.event.pull_request.base.sha }} \
@@ -84,7 +100,7 @@ jobs:
           echo "generated=true" >> $GITHUB_OUTPUT
 
       - name: Post or update PR comment
-        if: steps.summary.outputs.generated == 'true'
+        if: steps.summary.outputs.generated == 'true' && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
