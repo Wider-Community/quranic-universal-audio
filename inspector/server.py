@@ -64,6 +64,13 @@ _DK: dict[str, dict] | None = None
 
 _STOP_SIGNS = set('\u06D6\u06D7\u06D8\u06DA')  # sili, qili, small meem, jeem
 
+# Canonical validation categories — single source of truth.
+# Every counting, summary, and delta function derives from this tuple.
+VALIDATION_CATEGORIES = (
+    "failed", "low_confidence", "boundary_adj", "cross_verse",
+    "missing_words", "audio_bleeding", "repetitions",
+)
+
 # ── Validation helper (for auto-revalidation on save) ────────────────────
 
 _VALIDATORS_DIR = Path(__file__).resolve().parent.parent / "validators"
@@ -394,6 +401,7 @@ def seg_config():
         "trim_pad_right": TRIM_PAD_RIGHT,
         "trim_dim_alpha": TRIM_DIM_ALPHA,
         "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
+        "validation_categories": list(VALIDATION_CATEGORIES),
     })
 
 
@@ -1730,7 +1738,7 @@ def undo_seg_batch(reciter):
     # Merge validation summaries across affected chapters
     val_before = {}
     val_after = {}
-    for cat in ("failed", "low_confidence", "boundary_adj", "cross_verse", "missing_words", "audio_bleeding"):
+    for cat in VALIDATION_CATEGORIES:
         val_before[cat] = sum(v.get(cat, 0) for v in val_before_all.values())
         val_after[cat] = sum(v.get(cat, 0) for v in val_after_all.values())
 
@@ -1808,7 +1816,7 @@ def _find_entry_for_insert(entries: list[dict], snap: dict, chapter_set: set[int
 
 def _snap_to_segment(snap: dict) -> dict:
     """Convert a snapshot to a segment dict for insertion."""
-    return {
+    seg = {
         "segment_uid": snap.get("segment_uid", _uuid7()),
         "time_start": snap["time_start"],
         "time_end": snap["time_end"],
@@ -1816,6 +1824,11 @@ def _snap_to_segment(snap: dict) -> dict:
         "matched_text": snap.get("matched_text", ""),
         "confidence": snap.get("confidence", 0),
     }
+    if snap.get("has_repeated_words"):
+        seg["has_repeated_words"] = True
+    if snap.get("wrap_word_ranges"):
+        seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
+    return seg
 
 
 def _verify_segment_matches_snapshot(seg: dict, snap: dict) -> str | None:
@@ -2158,10 +2171,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
     is_by_ayah = "by_ayah" in meta.get("audio_source", "")
 
-    counts = {
-        "failed": 0, "low_confidence": 0, "boundary_adj": 0,
-        "cross_verse": 0, "missing_words": 0, "audio_bleeding": 0,
-    }
+    counts = {cat: 0 for cat in VALIDATION_CATEGORIES}
     verse_segments: dict[tuple, list] = defaultdict(list)
 
     for entry in entries:
@@ -2179,6 +2189,9 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
 
             if is_by_ayah and ":" in entry_ref and not _seg_belongs_to_entry(matched_ref, entry_ref):
                 counts["audio_bleeding"] += 1
+
+            if seg.get("wrap_word_ranges"):
+                counts["repetitions"] += 1
 
             if confidence < 0.80:
                 counts["low_confidence"] += 1
@@ -2865,6 +2878,7 @@ def get_seg_edit_history(reciter):
         ops = record.get("operations", [])
         batch = {
             "batch_id": record.get("batch_id"),
+            "batch_type": record.get("batch_type"),
             "saved_at_utc": record.get("saved_at_utc"),
             "chapter": record.get("chapter"),
             "chapters": record.get("chapters"),
