@@ -51,6 +51,7 @@ from config import (
     SEG_FONT_SIZE, SEG_WORD_SPACING,
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
     BOUNDARY_TAIL_K, SHOW_BOUNDARY_PHONEMES,
+    LOW_CONF_DEFAULT_THRESHOLD,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -401,6 +402,7 @@ def seg_config():
         "trim_pad_right": TRIM_PAD_RIGHT,
         "trim_dim_alpha": TRIM_DIM_ALPHA,
         "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
+        "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
         "validation_categories": list(VALIDATION_CATEGORIES),
     })
 
@@ -2348,8 +2350,8 @@ def validate_reciter_segments(reciter):
                     "text": seg.get("matched_text", ""),
                 })
 
-            # Low confidence
-            if confidence < 0.80:
+            # Low confidence (send all non-100% for client-side slider filtering)
+            if confidence < 1.0:
                 parts = matched_ref.split("-")
                 display_ref = matched_ref
                 if len(parts) == 2:

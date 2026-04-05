@@ -983,6 +983,23 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 .seg-validation summary .val-count.has-errors { color: #f44336; }
 .seg-validation summary .val-count.has-warnings { color: #ff9800; }
 
+.lc-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 4px;
+    font-size: 0.78rem;
+    color: #aaa;
+}
+.lc-slider-label { white-space: nowrap; }
+.lc-slider-val { color: #f0a500; font-weight: 600; }
+.lc-slider {
+    flex: 1;
+    accent-color: #f0a500;
+    cursor: pointer;
+    max-width: 180px;
+}
+
 .seg-validation .val-items {
     display: flex;
     flex-wrap: wrap;

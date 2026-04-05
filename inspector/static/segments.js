@@ -186,6 +186,8 @@ const ERROR_CAT_LABELS = {
 };
 // Server-provided canonical category list (populated from /api/seg/config)
 let _validationCategories = null;
+// Default threshold % for low-confidence slider (overridden from config)
+let _lcDefaultThreshold = 80;
 
 // SearchableSelect instance for segments chapter dropdown
 let segChapterSS = null;
@@ -251,6 +253,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cfg.trim_dim_alpha != null) TRIM_DIM_ALPHA = cfg.trim_dim_alpha;
             if (cfg.show_boundary_phonemes != null) SHOW_BOUNDARY_PHONEMES = cfg.show_boundary_phonemes;
             if (cfg.validation_categories) _validationCategories = cfg.validation_categories;
+            if (cfg.low_conf_default_threshold != null) _lcDefaultThreshold = cfg.low_conf_default_threshold;
         }
     } catch (_) { /* use CSS defaults */ }
 
@@ -3950,12 +3953,11 @@ function restoreValPanelState(targetEl, state) {
 
 /** Close all accordions except the given one across both validation panels. */
 function _collapseAccordionExcept(exceptDetails) {
-    [segValidationEl, segValidationGlobalEl].forEach(panel => {
-        if (!panel) return;
-        panel.querySelectorAll('details[data-category]').forEach(d => {
-            if (d === exceptDetails) return;
-            if (d.open) d.open = false;  // toggle handler hides badges + clears cards
-        });
+    // Only collapse within the same panel — avoids cross-panel interference during restore
+    const panel = exceptDetails.closest('#seg-validation-global, #seg-validation') || exceptDetails.parentElement;
+    panel.querySelectorAll('details[data-category]').forEach(d => {
+        if (d === exceptDetails) return;
+        if (d.open) d.open = false;  // toggle handler hides badges + clears cards
     });
 }
 
@@ -4059,28 +4061,54 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
     categories.forEach(cat => {
         if (!cat.items || cat.items.length === 0) return;
 
+        const isLowConf = cat.type === 'low_confidence';
+        const LC_DEFAULT = _lcDefaultThreshold;
+
+        // For low_confidence, items shown depend on current slider value
+        // allItems = full server list; getVisibleItems() filters by threshold
+        let lcThreshold = LC_DEFAULT;
+        const getVisibleItems = () => isLowConf
+            ? cat.items.filter(i => (i.confidence * 100) < lcThreshold).sort((a, b) => a.confidence - b.confidence)
+            : cat.items;
+
         const details = document.createElement('details');
         details.setAttribute('data-category', cat.type);
         details._valCatType = cat.type;
         details._valCatItems = cat.items;
         const summary = document.createElement('summary');
-        summary.innerHTML = `${cat.name} <span class="val-count ${cat.countClass}">${cat.items.length}</span>`;
+        const countForSummary = isLowConf ? cat.items.filter(i => (i.confidence * 100) < LC_DEFAULT).length : cat.items.length;
+        summary.innerHTML = `${cat.name} <span class="val-count ${cat.countClass}" data-lc-count>${countForSummary}</span>`;
 
         details.appendChild(summary);
+
+        // Confidence slider (low_confidence only, shown when open)
+        let sliderRow = null;
+        if (isLowConf) {
+            sliderRow = document.createElement('div');
+            sliderRow.className = 'lc-slider-row';
+            sliderRow.hidden = true;
+            sliderRow.innerHTML = `<label class="lc-slider-label">Show confidence &lt; <span class="lc-slider-val">${LC_DEFAULT}%</span></label><input type="range" class="lc-slider" min="50" max="99" step="1" value="${LC_DEFAULT}">`;
+            details.appendChild(sliderRow);
+        }
 
         // Button list (hidden until accordion opens)
         const itemsDiv = document.createElement('div');
         itemsDiv.className = 'val-items';
         itemsDiv.hidden = true;
-        cat.items.forEach(issue => {
-            const btn = document.createElement('button');
-            const cls = typeof cat.btnClass === 'function' ? cat.btnClass(issue) : cat.btnClass;
-            btn.className = `val-btn ${cls}`;
-            btn.textContent = cat.getLabel(issue);
-            btn.title = cat.getTitle(issue) || '';
-            btn.addEventListener('click', () => cat.onClick(issue));
-            itemsDiv.appendChild(btn);
-        });
+
+        const rebuildButtons = (items) => {
+            itemsDiv.innerHTML = '';
+            items.forEach(issue => {
+                const btn = document.createElement('button');
+                const cls = typeof cat.btnClass === 'function' ? cat.btnClass(issue) : cat.btnClass;
+                btn.className = `val-btn ${cls}`;
+                btn.textContent = cat.getLabel(issue);
+                btn.title = cat.getTitle(issue) || '';
+                btn.addEventListener('click', () => cat.onClick(issue));
+                itemsDiv.appendChild(btn);
+            });
+        };
+        rebuildButtons(getVisibleItems());
         details.appendChild(itemsDiv);
 
         // Cards container (hidden until accordion opens)
@@ -4089,15 +4117,35 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         cardsDiv.hidden = true;
         details.appendChild(cardsDiv);
 
+        if (isLowConf && sliderRow) {
+            const sliderEl = sliderRow.querySelector('.lc-slider');
+            const sliderValEl = sliderRow.querySelector('.lc-slider-val');
+            const countEl = summary.querySelector('[data-lc-count]');
+            sliderEl.addEventListener('input', () => {
+                lcThreshold = parseInt(sliderEl.value);
+                sliderValEl.textContent = `${lcThreshold}%`;
+                const visible = getVisibleItems();
+                if (countEl) countEl.textContent = visible.length;
+                rebuildButtons(visible);
+                if (_cardRenderRafId) { cancelAnimationFrame(_cardRenderRafId); _cardRenderRafId = null; }
+                cardsDiv.innerHTML = '';
+                renderCategoryCards(cat.type, visible, cardsDiv);
+            });
+        }
+
         // Opening shows badges + cards; closing hides both and clears cards
         details.addEventListener('toggle', () => {
             if (details.open) {
                 _collapseAccordionExcept(details);
+                if (sliderRow) sliderRow.hidden = false;
                 itemsDiv.hidden = false;
-                renderCategoryCards(cat.type, cat.items, cardsDiv);
+                const visible = getVisibleItems();
+                rebuildButtons(visible);
+                renderCategoryCards(cat.type, visible, cardsDiv);
                 cardsDiv.hidden = false;
             } else {
                 if (_cardRenderRafId) { cancelAnimationFrame(_cardRenderRafId); _cardRenderRafId = null; }
+                if (sliderRow) sliderRow.hidden = true;
                 itemsDiv.hidden = true;
                 cardsDiv.innerHTML = '';
                 cardsDiv.hidden = true;
