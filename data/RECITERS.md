@@ -39,8 +39,6 @@ Timestamps: `✓✓` = words + letters/phonemes, `✓` = words only.
 
 | Reciter | Style | Source | Granularity | Coverage | Hours | Segmented | Manually Validated | Timestamped |
 |---------|-------|--------|-------------|:--------:|:-----:|:---------:|:------------------:|:-----------:|
-| Ali Jaber | Murattal | EveryAyah | Ayah | 114, 6,235 | 24.9 | ✓ | ✓ | ✓ |
-| Minshawy Murattal | Murattal | unknown | Surah | 114, 6,236 | 0.0 | ✓ | ✓ | ✓✓ |
 | Muhammad Al-Hafiz | Murattal | MP3Quran | Surah | 3, 137 | 0.8 | ✓ | ✓ | ✗ |
 
 

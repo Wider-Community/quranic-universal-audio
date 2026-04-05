@@ -7,6 +7,18 @@ op_labels:
   confirm_reference: "Reference confirmations"
   auto_fix_missing_word: "Auto-fix missing words"
   ignore_issue: "Ignored issues"
+  waqf_sakt: "Waqf/sakt markers"
+
+issue_labels:
+  failed: "Failed alignments"
+  cross_verse: "Cross-verse segments"
+  low_confidence: "Low confidence"
+  boundary_adj: "Boundary adjustments"
+  missing_words: "Missing words"
+  audio_bleeding: "Audio bleeding"
+  repetitions: "Repetitions"
+  muqattaat: "Muqattaat letters"
+  qalqala: "Qalqala"
 
 source_labels:
   mp3quran: "MP3Quran"

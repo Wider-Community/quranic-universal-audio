@@ -35,7 +35,7 @@ jobs:
 
       - name: Create PR if changed
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if git diff --quiet; then
             echo "No changes to commit"
@@ -60,5 +60,13 @@ jobs:
               --base main
           fi
 
-          gh pr merge "$branch" --auto --squash --delete-branch || \
-            gh pr merge "$branch" --squash --delete-branch
+      - name: Auto-merge PR
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          branch="auto/update-reciter-counts"
+          existing=$(gh pr list --head "$branch" --json number -q '.[0].number' 2>/dev/null || true)
+          if [ -n "$existing" ]; then
+            gh pr merge "$branch" --auto --squash --delete-branch || \
+              gh pr merge "$branch" --squash --delete-branch
+          fi

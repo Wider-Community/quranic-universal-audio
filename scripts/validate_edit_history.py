@@ -195,19 +195,23 @@ def check_file_hash(reciter: str) -> tuple[bool, str]:
     return True, "File hash matches"
 
 
-def check_meta_tampering(reciter: str, base_sha: str) -> tuple[bool, str]:
-    """Check 4: _meta in detailed.json must be unchanged from base."""
-    detailed_rel = f"data/recitation_segments/{reciter}/detailed.json"
-    base_content = _git_show(base_sha, detailed_rel)
+def _check_meta_for_file(reciter: str, base_sha: str, filename: str) -> tuple[bool, str]:
+    """Check _meta in a file is unchanged from base."""
+    rel_path = f"data/recitation_segments/{reciter}/{filename}"
+    base_content = _git_show(base_sha, rel_path)
     if base_content is None:
-        return True, "New reciter, no base _meta to compare"
+        return True, f"New reciter, no base {filename} _meta to compare"
 
     try:
         base_meta = json.loads(base_content).get("_meta", {})
     except json.JSONDecodeError:
-        return True, "Base detailed.json not parseable, skipping"
+        return True, f"Base {filename} not parseable, skipping"
 
-    head_content = (SEGMENTS_DIR / reciter / "detailed.json").read_text(encoding="utf-8")
+    head_path = SEGMENTS_DIR / reciter / filename
+    if not head_path.exists():
+        return False, f"{filename} missing from HEAD"
+
+    head_content = head_path.read_text(encoding="utf-8")
     head_meta = json.loads(head_content).get("_meta", {})
 
     if base_meta != head_meta:
@@ -217,6 +221,20 @@ def check_meta_tampering(reciter: str, base_sha: str) -> tuple[bool, str]:
         ]
         return False, f"_meta changed: {', '.join(changed_keys)}"
     return True, "_meta unchanged"
+
+
+def check_meta_tampering(reciter: str, base_sha: str) -> tuple[bool, str]:
+    """Check 4: _meta in detailed.json and segments.json must be unchanged from base."""
+    results = []
+    all_passed = True
+
+    for filename in ("detailed.json", "segments.json"):
+        passed, detail = _check_meta_for_file(reciter, base_sha, filename)
+        results.append(f"{filename}: {detail}")
+        if not passed:
+            all_passed = False
+
+    return all_passed, "; ".join(results)
 
 
 def check_diff_vs_history(reciter: str, base_sha: str) -> tuple[bool, str]:
