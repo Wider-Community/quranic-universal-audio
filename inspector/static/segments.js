@@ -6,7 +6,6 @@
 let segData = null;          // { audio_url, summary, verse_word_counts, segments } — chapter-specific
 let segAllData = null;       // { segments, audio_by_chapter, verse_word_counts } — reciter-level
 let segActiveFilters = [];   // [{ field, op, value }, ...]
-let segAvgSpeechRate = 0;    // computed from currently visible segments
 let segAnimId = null;        // animation frame ID for playback
 let segCurrentIdx = -1;      // currently playing segment index
 let segDisplayedSegments = null; // segments currently shown (may be filtered)
@@ -116,7 +115,6 @@ const SEG_FILTER_FIELDS = [
     { value: 'num_words',          label: 'Word count',          type: 'int'   },
     { value: 'num_verses',         label: 'Verses spanned',      type: 'int'   },
     { value: 'confidence_pct',     label: 'Confidence (%)',      type: 'float' },
-    { value: 'speech_rate_factor', label: 'Speech rate (× avg)', type: 'float' },
     { value: 'silence_after_ms',  label: 'Silence after (ms)',   type: 'float', neighbour: true },
 ];
 const SEG_FILTER_OPS = ['>', '>=', '<', '<=', '='];
@@ -597,29 +595,15 @@ function _addVerseMarkers(text, ref) {
 }
 
 function segDerivedProps(seg) {
-    if (seg._derived && seg._derivedAvgRate === segAvgSpeechRate) return seg._derived;
-    const duration_s         = (seg.time_end - seg.time_start) / 1000;
-    const num_words          = countSegWords(seg.matched_ref);
-    const p                  = parseSegRef(seg.matched_ref);
-    const num_verses         = p ? p.ayah_to - p.ayah_from + 1 : 0;
-    const confidence_pct     = (seg.confidence || 0) * 100;
-    const rate               = duration_s > 0 && num_words > 0 ? num_words / duration_s : 0;
-    const speech_rate_factor = segAvgSpeechRate > 0 ? rate / segAvgSpeechRate : 0;
+    if (seg._derived) return seg._derived;
+    const duration_s     = (seg.time_end - seg.time_start) / 1000;
+    const num_words      = countSegWords(seg.matched_ref);
+    const p              = parseSegRef(seg.matched_ref);
+    const num_verses     = p ? p.ayah_to - p.ayah_from + 1 : 0;
+    const confidence_pct = (seg.confidence || 0) * 100;
     const silence_after_ms = seg.silence_after_ms;
-    seg._derived = { duration_s, num_words, num_verses, confidence_pct, speech_rate_factor, silence_after_ms };
-    seg._derivedAvgRate = segAvgSpeechRate;
+    seg._derived = { duration_s, num_words, num_verses, confidence_pct, silence_after_ms };
     return seg._derived;
-}
-
-function computeAvgSpeechRate(segs) {
-    const rates = (segs || [])
-        .filter(s => s.matched_ref)
-        .map(s => {
-            const d = (s.time_end - s.time_start) / 1000;
-            const w = countSegWords(s.matched_ref);
-            return d > 0 && w > 0 ? w / d : 0;
-        }).filter(r => r > 0);
-    segAvgSpeechRate = rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
 }
 
 function computeSilenceAfter() {
@@ -686,10 +670,7 @@ function applyFiltersAndRender() {
         segs = segs.filter(s => s.matched_ref && s.matched_ref.startsWith(prefix));
     }
 
-    // 3. Compute avg speech rate from current chapter/global set (before condition filter)
-    computeAvgSpeechRate(segs);
-
-    // 4. Active filter conditions (AND logic; skip conditions with null value)
+    // 3. Active filter conditions (AND logic; skip conditions with null value)
     // Clear stale neighbour tags
     segAllData.segments.forEach(s => delete s._isNeighbour);
 
@@ -1067,7 +1048,6 @@ function clearSegDisplay() {
     _segIndexMap = null;
     segAllData = null;
     segActiveFilters = [];
-    segAvgSpeechRate = 0;
     if (segFilterBarEl) { segFilterBarEl.hidden = true; segFilterRowsEl.innerHTML = ''; }
     const cacheBar = document.getElementById('seg-cache-bar');
     if (cacheBar) cacheBar.hidden = true;
