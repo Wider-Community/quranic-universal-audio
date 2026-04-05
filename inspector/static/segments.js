@@ -6145,22 +6145,15 @@ function _renderBatchItem(batch) {
 
     _appendValDeltas(header, batch.validation_summary_before, batch.validation_summary_after);
 
-    if (!batch.is_revert) {
-        const hasPartialUndos = (batch.reverted_op_ids || []).length > 0;
+    if (!batch.is_revert && !batch.batch_id) {
+        // Discard button for unsaved pending batches only
         const undoBtn = document.createElement('button');
         undoBtn.className = 'btn btn-sm seg-history-undo-btn';
-        undoBtn.textContent = hasPartialUndos ? 'Undo remaining' : 'Undo';
-        if (batch.batch_id) {
-            undoBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                onBatchUndoClick(batch.batch_id, batch.chapter, undoBtn);
-            });
-        } else {
-            undoBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                onPendingBatchDiscard(batch.chapter, undoBtn);
-            });
-        }
+        undoBtn.textContent = 'Discard';
+        undoBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onPendingBatchDiscard(batch.chapter, undoBtn);
+        });
         header.appendChild(undoBtn);
     }
 

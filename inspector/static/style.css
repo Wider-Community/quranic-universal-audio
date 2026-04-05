@@ -1616,14 +1616,14 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     opacity: 0.5;
     cursor: default;
 }
-/* Per-operation undo button (smaller, in op label row) */
+/* Per-operation undo button (in op label row) */
 .seg-history-op-undo-btn {
     margin-left: auto;
     font-size: 0.68rem;
     padding: 1px 8px;
     background: transparent;
-    border: 1px solid #f4433688;
-    color: #f4433688;
+    border: 1px solid #f44336;
+    color: #f44336;
     border-radius: 3px;
     cursor: pointer;
     white-space: nowrap;
@@ -1631,7 +1631,6 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 .seg-history-op-undo-btn:hover:not(:disabled) {
     background: #f44336;
     color: #fff;
-    border-color: #f44336;
 }
 .seg-history-op-undo-btn:disabled {
     opacity: 0.5;
