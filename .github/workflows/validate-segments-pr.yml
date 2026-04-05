@@ -54,7 +54,7 @@ jobs:
       - name: Validate edit history
         if: steps.detect.outputs.reciters != '' && github.event_name == 'pull_request'
         run: |
-          python scripts/validate_edit_history.py \
+          python validators/validate_edit_history.py \
             --base-sha ${{ github.event.pull_request.base.sha }} \
             --reciters ${{ steps.detect.outputs.reciters }}
 

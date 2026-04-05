@@ -10,7 +10,7 @@ Runs 6 checks per reciter:
   6. History-only change detection (history changed but data didn't)
 
 Usage:
-    python scripts/validate_edit_history.py --base-sha <SHA> --reciters slug1 [slug2 ...]
+    python validators/validate_edit_history.py --base-sha <SHA> --reciters slug1 [slug2 ...]
 """
 
 import argparse

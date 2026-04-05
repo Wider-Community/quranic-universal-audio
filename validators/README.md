@@ -1,6 +1,6 @@
 # Validators
 
-Three standalone CLI scripts that bookend the extraction and timestamp pipelines. Each can run against a single reciter directory (detailed report) or a parent directory containing multiple reciters (summary comparison table). All validators use `data/surah_info.json` as ground truth and write a `validation.log` file alongside their output.
+Standalone CLI scripts that bookend the extraction and timestamp pipelines. Each can run against a single reciter directory (detailed report) or a parent directory containing multiple reciters (summary comparison table). All validators use `data/surah_info.json` as ground truth and write a `validation.log` file alongside their output.
 
 ## Overview
 
@@ -9,6 +9,7 @@ Three standalone CLI scripts that bookend the extraction and timestamp pipelines
 | `validate_audio.py` | Pre-extraction | Audio JSON/directory | Checks `_meta` presence, coverage against 114 surahs / 6236 verses, validates URL reachability or local file integrity, flags duplicates |
 | `validate_segments.py` | Post-extraction | `segments.json` + `detailed.json` | Checks time ordering, word coverage completeness, segment duration stats, alignment confidence |
 | `validate_timestamps.py` | Post-timestamping | `timestamps.json` + `timestamps_full.json` | Validates structural correctness (meta fields, verse key format), word coverage (missing/extra indices), temporal plausibility (negative timestamps, zero-duration words), letter-level integrity, and cross-file consistency with `segments.json` |
+| `validate_edit_history.py` | PR gate | `edit_history.jsonl` + `detailed.json` | Validates Inspector edit audit trail integrity before merging segment PRs |
 
 ## validate_audio.py
 
@@ -277,3 +278,43 @@ When `segments.json` is found in the upstream reciter directory:
 4. **Consistency** — presence of full/segments files, letter errors, phone issues, boundary mismatches
 
 Reports are saved to `validation.log` in each reciter directory (single mode) or in the parent directory (multi mode).
+
+## validate_edit_history.py
+
+PR gate validator that checks the integrity of `edit_history.jsonl` audit trails before merging any PR that touches `data/recitation_segments/**`. Run automatically by the `validate-segments-pr.yml` CI workflow on every PR.
+
+### Usage
+
+```bash
+python validators/validate_edit_history.py --base-sha <SHA> --reciters slug1 [slug2 ...]
+```
+
+### Validations Performed (6 checks per reciter)
+
+#### 1. Genesis Record
+
+Checks that `edit_history.jsonl` exists, is non-empty, and that the first record has `record_type: genesis` with all required fields: `schema_version`, `batch_id`, `reciter`, `created_at_utc`, `file_hash_after`.
+
+#### 2. History Chain Integrity
+
+Verifies every record has a `batch_id` and `file_hash_after`. Detects missing or duplicate `batch_id` values across the chain.
+
+#### 3. File Hash Verification
+
+Computes the SHA-256 of the current `detailed.json` on disk and compares it against `file_hash_after` from the last history record. A mismatch means the file was modified outside of the Inspector.
+
+#### 4. _meta Tampering Detection
+
+Compares the `_meta` block in `detailed.json` and `segments.json` between base SHA and HEAD. Any change to `_meta` is flagged as an error — these fields are set once during extraction and must not be modified.
+
+#### 5. Diff vs History Cross-reference
+
+Diffs `detailed.json` between base and HEAD to find all changed segments. Cross-references each change against the `targets_before`/`targets_after` in new history records (matched by `segment_uid` or `(time_start, time_end)` pair). Any segment change not covered by a history operation is an unexplained modification.
+
+#### 6. History-only Change Detection
+
+Flags the suspicious case where `edit_history.jsonl` changed but `detailed.json` did not — indicating the history was manually edited without a corresponding data change.
+
+### Output
+
+Prints a per-reciter table of `[PASS]` / `[FAIL]` lines for each check. Exits with code 1 if any check fails, which blocks the PR from merging.
