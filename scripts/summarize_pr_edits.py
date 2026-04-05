@@ -28,38 +28,57 @@ OP_LABELS = load_config("labels")["op_labels"]
 _EDIT_SUMMARY_TPL = load_template("reports/edit-summary").strip()
 
 
+def _parse_records(history_path: Path) -> list[dict]:
+    """Parse edit_history.jsonl into a list of records."""
+    if not history_path.exists():
+        return []
+    records = []
+    with open(history_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    return records
+
+
+def _active_records(records: list[dict]) -> list[dict]:
+    """Filter to active batch records, excluding genesis, reverts, and undone batches."""
+    reverted_ids = {r["reverts_batch_id"] for r in records if r.get("reverts_batch_id")}
+    return [
+        r for r in records
+        if r.get("record_type") != "genesis"
+        and not r.get("reverts_batch_id")
+        and r.get("batch_id") not in reverted_ids
+        and r.get("operations")
+    ]
+
+
 def _summarize_edit_history(reciter_dir: Path) -> dict:
     """Parse edit_history.jsonl and return summary stats."""
     history_path = reciter_dir / "edit_history.jsonl"
-    if not history_path.exists():
+    records = _parse_records(history_path)
+    if not records:
         return {}
+
+    active = _active_records(records)
 
     op_counts = Counter()
     chapters_edited = set()
     total_batches = 0
     fix_kind_counts = Counter()
 
-    with open(history_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            record = json.loads(line)
-            if record.get("record_type") == "genesis":
-                continue
-            # Count batch saves (excluding genesis/revert metadata-only)
-            ops = record.get("operations", [])
-            if not ops:
-                continue
-            total_batches += 1
-            chapter = record.get("chapter")
-            if chapter:
-                chapters_edited.add(chapter)
-            for op in ops:
-                op_type = op.get("op_type", "unknown")
-                op_counts[op_type] += 1
-                fix_kind = op.get("fix_kind", "unknown")
-                fix_kind_counts[fix_kind] += 1
+    for record in active:
+        total_batches += 1
+        chapter = record.get("chapter")
+        if chapter:
+            chapters_edited.add(chapter)
+        for mch in record.get("chapters") or []:
+            chapters_edited.add(mch)
+        for op in record.get("operations", []):
+            op_type = op.get("op_type", "unknown")
+            op_counts[op_type] += 1
+            fix_kind = op.get("fix_kind", "unknown")
+            fix_kind_counts[fix_kind] += 1
 
     return {
         "total_operations": sum(op_counts.values()),
@@ -70,35 +89,31 @@ def _summarize_edit_history(reciter_dir: Path) -> dict:
     }
 
 
-ISSUE_LABELS = load_config("labels")["issue_labels"]
+_ISSUE_LABELS = load_config("labels")["issue_labels"]
 
 
 def _compute_issues_delta(reciter_dir: Path) -> dict | None:
     """Compute before→after delta from first-touch validation_summary per chapter."""
     history_path = reciter_dir / "edit_history.jsonl"
-    if not history_path.exists():
+    records = _parse_records(history_path)
+    if not records:
         return None
+
+    active = _active_records(records)
 
     chapter_initial = {}
     chapter_final = {}
 
-    with open(history_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            record = json.loads(line)
-            if record.get("record_type") == "genesis":
-                continue
-            ch = record.get("chapter")
-            if not ch:
-                continue
-            before = record.get("validation_summary_before")
-            after = record.get("validation_summary_after")
-            if before and ch not in chapter_initial:
-                chapter_initial[ch] = before
-            if after:
-                chapter_final[ch] = after
+    for record in active:
+        ch = record.get("chapter")
+        if not ch:
+            continue
+        before = record.get("validation_summary_before")
+        after = record.get("validation_summary_after")
+        if before and ch not in chapter_initial:
+            chapter_initial[ch] = before
+        if after:
+            chapter_final[ch] = after
 
     if not chapter_initial:
         return None
@@ -135,7 +150,7 @@ def _format_issues_delta(delta: dict | None) -> str:
     lines = ["| Issue type | Before | After | Delta |",
              "|------------|--------|-------|-------|"]
     for key, vals in sorted(rows_with_issues.items(), key=lambda x: -x[1]["before"]):
-        label = ISSUE_LABELS.get(key, key)
+        label = _ISSUE_LABELS.get(key, key)
         d = vals["delta"]
         delta_str = str(d) if d >= 0 else str(d)
         lines.append(f"| {label} | {vals['before']} | {vals['after']} | {delta_str} |")
