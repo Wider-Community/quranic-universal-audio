@@ -1674,14 +1674,27 @@ def undo_seg_batch(reciter):
     if target_batch.get("reverts_batch_id"):
         return jsonify({"error": "Cannot undo a revert record"}), 400
 
-    # Reject if already undone
-    already_reverted = {r.get("reverts_batch_id") for r in all_records if r.get("reverts_batch_id")}
+    # Reject if already fully undone (only full-batch reverts, not per-op reverts)
+    already_reverted = {
+        r.get("reverts_batch_id") for r in all_records
+        if r.get("reverts_batch_id") and not r.get("reverts_op_ids")
+    }
     if target_batch_id in already_reverted:
         return jsonify({"error": "This batch has already been undone"}), 400
 
     operations = target_batch.get("operations", [])
     if not operations:
         return jsonify({"error": "Batch has no operations to undo"}), 400
+
+    # Skip ops already individually undone via per-op undo
+    per_op_reverted = set()
+    for r in all_records:
+        if r.get("reverts_batch_id") == target_batch_id and r.get("reverts_op_ids"):
+            per_op_reverted.update(r["reverts_op_ids"])
+    if per_op_reverted:
+        operations = [op for op in operations if op.get("op_id") not in per_op_reverted]
+        if not operations:
+            return jsonify({"error": "All operations in this batch have already been individually undone"}), 400
 
     # Load entries
     entries = _load_detailed(reciter)
@@ -1769,6 +1782,155 @@ def undo_seg_batch(reciter):
     _SEG_RECITERS_CACHE = None
 
     return jsonify({"ok": True, "operations_reversed": len(operations)})
+
+
+@app.route("/api/seg/undo-ops/<reciter>", methods=["POST"])
+def undo_seg_ops(reciter):
+    """Undo specific operations within a saved batch."""
+    body = request.get_json()
+    if not body or not body.get("batch_id") or not body.get("op_ids"):
+        return jsonify({"error": "Missing batch_id or op_ids"}), 400
+
+    target_batch_id = body["batch_id"]
+    requested_op_ids = set(body["op_ids"])
+
+    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    if not history_path.exists():
+        return jsonify({"error": "No edit history found"}), 404
+
+    all_records = []
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            all_records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    # Find the target batch
+    target_batch = None
+    for rec in all_records:
+        if rec.get("batch_id") == target_batch_id:
+            target_batch = rec
+            break
+    if not target_batch:
+        return jsonify({"error": "Batch not found"}), 404
+
+    if target_batch.get("reverts_batch_id"):
+        return jsonify({"error": "Cannot undo operations in a revert record"}), 400
+
+    # Check full-batch revert (only reverts WITHOUT reverts_op_ids)
+    fully_reverted = {
+        r.get("reverts_batch_id") for r in all_records
+        if r.get("reverts_batch_id") and not r.get("reverts_op_ids")
+    }
+    if target_batch_id in fully_reverted:
+        return jsonify({"error": "This batch has already been fully undone"}), 400
+
+    # Check per-op reverts for this batch
+    already_reverted_ops = set()
+    for r in all_records:
+        if r.get("reverts_batch_id") == target_batch_id and r.get("reverts_op_ids"):
+            already_reverted_ops.update(r["reverts_op_ids"])
+
+    already_undone = requested_op_ids & already_reverted_ops
+    if already_undone:
+        return jsonify({"error": f"Operation(s) already undone: {', '.join(already_undone)}"}), 400
+
+    # Validate requested op_ids exist in the batch
+    all_op_ids = {op.get("op_id") for op in target_batch.get("operations", [])}
+    missing = requested_op_ids - all_op_ids
+    if missing:
+        return jsonify({"error": f"Operation(s) not found in batch: {', '.join(missing)}"}), 404
+
+    # Filter to requested ops (preserve original order for correct reversal)
+    ops_to_undo = [op for op in target_batch.get("operations", []) if op.get("op_id") in requested_op_ids]
+
+    # Load entries
+    entries = _load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter data not found"}), 404
+
+    meta = _SEG_META_CACHE.get(reciter, {})
+    chapter = target_batch.get("chapter")
+    chapters = target_batch.get("chapters")
+
+    affected_chapters = set()
+    if chapter is not None:
+        affected_chapters.add(chapter)
+    if chapters:
+        affected_chapters.update(chapters)
+
+    # Snapshot validation before undo
+    val_before_all = {}
+    for ch in affected_chapters:
+        val_before_all[ch] = _chapter_validation_counts(entries, ch, meta)
+
+    # Apply reverse operations (in reverse order)
+    try:
+        for op in reversed(ops_to_undo):
+            _apply_reverse_op(entries, op, affected_chapters)
+    except ValueError as e:
+        _SEG_CACHE.pop(reciter, None)
+        _SEG_META_CACHE.pop(reciter, None)
+        return jsonify({"error": str(e)}), 409
+
+    # Write modified detailed.json
+    detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
+    segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
+
+    if detailed_path.exists():
+        shutil.copy2(detailed_path, detailed_path.with_suffix(".json.bak"))
+    if segments_path.exists():
+        shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
+
+    tmp_path = detailed_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
+    os.replace(tmp_path, detailed_path)
+
+    file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
+    _rebuild_segments_json(reciter, entries)
+
+    # Snapshot validation after undo
+    val_after_all = {}
+    for ch in affected_chapters:
+        val_after_all[ch] = _chapter_validation_counts(entries, ch, meta)
+
+    val_before = {}
+    val_after = {}
+    for cat in VALIDATION_CATEGORIES:
+        val_before[cat] = sum(v.get(cat, 0) for v in val_before_all.values())
+        val_after[cat] = sum(v.get(cat, 0) for v in val_after_all.values())
+
+    # Append per-op revert record
+    revert = {
+        "schema_version": 1,
+        "batch_id": _uuid7(),
+        "reverts_batch_id": target_batch_id,
+        "reverts_op_ids": list(requested_op_ids),
+        "reciter": reciter,
+        "chapter": chapter,
+        "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "file_hash_after": file_hash,
+        "validation_summary_before": val_before,
+        "validation_summary_after": val_after,
+        "operations": [],
+    }
+    if chapters:
+        revert["chapters"] = chapters
+    with open(history_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(revert, ensure_ascii=False) + "\n")
+
+    # Invalidate caches
+    global _SEG_RECITERS_CACHE
+    _SEG_CACHE.pop(reciter, None)
+    _SEG_META_CACHE.pop(reciter, None)
+    _SEG_VERSES_CACHE.pop(reciter, None)
+    _SEG_RECITERS_CACHE = None
+
+    return jsonify({"ok": True, "operations_reversed": len(ops_to_undo)})
 
 
 def _find_segment_by_uid(entries: list[dict], uid: str, chapter_set: set[int]) -> tuple | None:
@@ -2891,9 +3053,10 @@ def get_seg_edit_history(reciter):
     if not history_path.exists():
         return jsonify({"batches": [], "summary": None})
 
-    # First pass: parse all records and collect reverted batch IDs
+    # First pass: parse all records, collect full-batch and per-op reverts
     all_records = []
-    reverted_ids: set[str] = set()
+    fully_reverted_ids: set[str] = set()       # batch_ids fully undone
+    per_op_reverted: dict[str, set[str]] = {}   # batch_id -> set of reverted op_ids
     for line in history_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -2907,7 +3070,15 @@ def get_seg_edit_history(reciter):
         all_records.append(record)
         rbid = record.get("reverts_batch_id")
         if rbid:
-            reverted_ids.add(rbid)
+            rop_ids = record.get("reverts_op_ids")
+            if rop_ids:
+                # Per-op revert
+                if rbid not in per_op_reverted:
+                    per_op_reverted[rbid] = set()
+                per_op_reverted[rbid].update(rop_ids)
+            else:
+                # Full-batch revert
+                fully_reverted_ids.add(rbid)
 
     # Second pass: build active batches (skip reverts and undone batches)
     batches = []
@@ -2920,13 +3091,22 @@ def get_seg_edit_history(reciter):
         # Skip revert records
         if record.get("reverts_batch_id"):
             continue
-        # Skip batches that have been undone
-        if record.get("batch_id") in reverted_ids:
+        batch_id = record.get("batch_id")
+        # Skip batches that have been fully undone
+        if batch_id in fully_reverted_ids:
             continue
 
         ops = record.get("operations", [])
+        # Filter out individually-undone ops
+        reverted_ops_for_batch = per_op_reverted.get(batch_id, set())
+        if reverted_ops_for_batch:
+            ops = [op for op in ops if op.get("op_id") not in reverted_ops_for_batch]
+        # Skip batch if all ops have been individually undone
+        if not ops and reverted_ops_for_batch:
+            continue
+
         batch = {
-            "batch_id": record.get("batch_id"),
+            "batch_id": batch_id,
             "batch_type": record.get("batch_type"),
             "saved_at_utc": record.get("saved_at_utc"),
             "chapter": record.get("chapter"),
@@ -2937,6 +3117,8 @@ def get_seg_edit_history(reciter):
             "validation_summary_after": record.get("validation_summary_after"),
             "operations": ops,
         }
+        if reverted_ops_for_batch:
+            batch["reverted_op_ids"] = list(reverted_ops_for_batch)
         batches.append(batch)
 
         if ops:

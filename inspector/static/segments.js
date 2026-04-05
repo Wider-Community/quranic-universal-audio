@@ -183,6 +183,8 @@ const ERROR_CAT_LABELS = {
     cross_verse: 'Cross-verse', missing_words: 'Missing words',
     audio_bleeding: 'Audio bleeding',
     repetitions: 'Repetitions',
+    muqattaat: 'Muqattaat letters',
+    qalqala: 'Qalqala',
 };
 // Server-provided canonical category list (populated from /api/seg/config)
 let _validationCategories = null;
@@ -2524,6 +2526,24 @@ async function executeSave() {
 }
 
 
+async function _afterUndoSuccess(reciter, opsReversed) {
+    try {
+        const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
+        if (histResp.ok) {
+            segHistoryData = await histResp.json();
+            renderEditHistoryPanel(segHistoryData);
+            const observer = _ensureWaveformObserver();
+            segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+            requestAnimationFrame(() => {
+                segHistoryView.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
+            });
+        }
+    } catch (_) { /* non-critical */ }
+    _segDataStale = true;
+    fetch(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
+    segPlayStatus.textContent = `Undo successful — ${opsReversed} op${opsReversed !== 1 ? 's' : ''} reversed`;
+}
+
 async function onBatchUndoClick(batchId, chapter, btn) {
     const reciter = segReciterSelect.value;
     if (!reciter) return;
@@ -2541,24 +2561,7 @@ async function onBatchUndoClick(batchId, chapter, btn) {
         });
         const result = await resp.json();
         if (result.ok) {
-            // Re-fetch history and re-render (undone batch disappears)
-            try {
-                const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
-                if (histResp.ok) {
-                    segHistoryData = await histResp.json();
-                    renderEditHistoryPanel(segHistoryData);
-                    // Re-trigger waveform observer + arrows for updated history
-                    const observer = _ensureWaveformObserver();
-                    segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-                    requestAnimationFrame(() => {
-                        segHistoryView.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
-                    });
-                }
-            } catch (_) { /* non-critical */ }
-            // Flag segment data as stale (refresh when leaving History)
-            _segDataStale = true;
-            fetch(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
-            segPlayStatus.textContent = `Undo successful — ${result.operations_reversed} op${result.operations_reversed !== 1 ? 's' : ''} reversed`;
+            await _afterUndoSuccess(reciter, result.operations_reversed);
         } else {
             alert(`Undo failed: ${result.error}`);
             btn.disabled = false;
@@ -2566,6 +2569,36 @@ async function onBatchUndoClick(batchId, chapter, btn) {
         }
     } catch (e) {
         console.error('Undo batch failed:', e);
+        alert('Undo failed — see console for details');
+        btn.disabled = false;
+        btn.textContent = 'Undo';
+    }
+}
+
+async function onOpUndoClick(batchId, opIds, btn) {
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+    if (!confirm('Undo this operation?')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Undoing...';
+
+    try {
+        const resp = await fetch(`/api/seg/undo-ops/${reciter}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batch_id: batchId, op_ids: opIds }),
+        });
+        const result = await resp.json();
+        if (result.ok) {
+            await _afterUndoSuccess(reciter, result.operations_reversed);
+        } else {
+            alert(`Undo failed: ${result.error}`);
+            btn.disabled = false;
+            btn.textContent = 'Undo';
+        }
+    } catch (e) {
+        console.error('Undo op failed:', e);
         alert('Undo failed — see console for details');
         btn.disabled = false;
         btn.textContent = 'Undo';
@@ -2629,20 +2662,7 @@ async function onChainUndoClick(batchIds, chapter, btn) {
     }
 
     // Refresh history regardless (partial undo still changed data)
-    try {
-        const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
-        if (histResp.ok) {
-            segHistoryData = await histResp.json();
-            renderEditHistoryPanel(segHistoryData);
-            const observer = _ensureWaveformObserver();
-            segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-            requestAnimationFrame(() => {
-                segHistoryView.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows);
-            });
-        }
-    } catch (_) { /* non-critical */ }
-
-    _segDataStale = true;
+    await _afterUndoSuccess(reciter, totalReversed);
     if (!failed) {
         segPlayStatus.textContent = `Undo successful — ${totalReversed} op${totalReversed !== 1 ? 's' : ''} reversed across ${batchIds.length} save(s)`;
     } else {
@@ -6126,9 +6146,10 @@ function _renderBatchItem(batch) {
     _appendValDeltas(header, batch.validation_summary_before, batch.validation_summary_after);
 
     if (!batch.is_revert) {
+        const hasPartialUndos = (batch.reverted_op_ids || []).length > 0;
         const undoBtn = document.createElement('button');
         undoBtn.className = 'btn btn-sm seg-history-undo-btn';
-        undoBtn.textContent = 'Undo';
+        undoBtn.textContent = hasPartialUndos ? 'Undo remaining' : 'Undo';
         if (batch.batch_id) {
             undoBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -6166,9 +6187,9 @@ function _renderBatchItem(batch) {
         } else {
             for (const group of groups) {
                 if (group.length === 1) {
-                    body.appendChild(renderHistoryOp(group[0], batch.chapter));
+                    body.appendChild(renderHistoryOp(group[0], batch.chapter, batch.batch_id));
                 } else {
-                    body.appendChild(renderHistoryGroupedOp(group, batch.chapter));
+                    body.appendChild(renderHistoryGroupedOp(group, batch.chapter, batch.batch_id));
                 }
             }
         }
@@ -6267,7 +6288,7 @@ function _groupRelatedOps(operations) {
  * Render a group of related ops as a single combined card.
  * Shows the original before (from first op) → final after (latest snapshot per UID).
  */
-function renderHistoryGroupedOp(group, chapter) {
+function renderHistoryGroupedOp(group, chapter, batchId) {
     const primary = group[0];
 
     // Collect final snapshot for each output UID (last write wins)
@@ -6316,6 +6337,17 @@ function renderHistoryGroupedOp(group, chapter) {
         fkBadge.className = 'seg-history-op-fix-kind';
         fkBadge.textContent = fk;
         label.appendChild(fkBadge);
+    }
+    if (batchId) {
+        const groupOpIds = group.map(op => op.op_id);
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'btn btn-sm seg-history-op-undo-btn';
+        undoBtn.textContent = 'Undo';
+        undoBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onOpUndoClick(batchId, groupOpIds, undoBtn);
+        });
+        label.appendChild(undoBtn);
     }
     wrap.appendChild(label);
 
@@ -6374,7 +6406,7 @@ function renderHistoryGroupedOp(group, chapter) {
     return wrap;
 }
 
-function renderHistoryOp(op, chapter) {
+function renderHistoryOp(op, chapter, batchId) {
     const wrap = document.createElement('div');
     wrap.className = 'seg-history-op';
 
@@ -6390,6 +6422,16 @@ function renderHistoryOp(op, chapter) {
         fk.className = 'seg-history-op-fix-kind';
         fk.textContent = op.fix_kind;
         label.appendChild(fk);
+    }
+    if (batchId) {
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'btn btn-sm seg-history-op-undo-btn';
+        undoBtn.textContent = 'Undo';
+        undoBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onOpUndoClick(batchId, [op.op_id], undoBtn);
+        });
+        label.appendChild(undoBtn);
     }
     wrap.appendChild(label);
 
