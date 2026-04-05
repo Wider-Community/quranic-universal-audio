@@ -129,8 +129,8 @@ dataset_info:
 
 Each row is one verse (ayah) of the Qur'an, with:
 - **Audio clip** of the verse recitation, trimmed to speech boundaries
-- **Word-level timestamps** in milliseconds, relative to the audio clip
-- **Letter-level timestamps** (when available) for individual Arabic characters, derived from phoneme-level alignment
+- **Word-level timestamps** in milliseconds, relative to the audio clip. The `word_idx` refers to the canonical word position in the verse, not the position in the `text` field. When the reciter repeats a word, the same `word_idx` may appear multiple times and indices may go backward.
+- **Letter-level timestamps** for individual Arabic characters, tokenized [as follows]().
 - **Pause-based segments** showing how the recitation was naturally divided by silences
 - **Arabic text** from alignment matching (reflects what was actually recited, including any repetitions)
 
