@@ -108,14 +108,20 @@ function _deriveOpIssueDelta(group) {
 
     // Final state: last write per UID (mirrors renderHistoryGroupedOp logic)
     const finalSnaps = new Map();
+    let hasAnyAfterUid = false;
     for (const op of group) {
-        for (const snap of (op.targets_after || []))
-            if (snap.segment_uid) finalSnaps.set(snap.segment_uid, snap);
+        for (const snap of (op.targets_after || [])) {
+            if (snap.segment_uid) { finalSnaps.set(snap.segment_uid, snap); hasAnyAfterUid = true; }
+        }
     }
-    // For single ops with no UIDs in after (e.g. delete), finalSnaps stays empty
+
+    // Fallback for old records without segment_uid: use last op's targets_after directly
+    const afterSnaps = hasAnyAfterUid
+        ? [...finalSnaps.values()]
+        : (group[group.length - 1].targets_after || []);
 
     const afterIssues = new Set();
-    for (const snap of finalSnaps.values())
+    for (const snap of afterSnaps)
         _classifySnapIssues(snap).forEach(i => afterIssues.add(i));
 
     return {
@@ -204,9 +210,10 @@ const segHistoryBackBtn = document.getElementById('seg-history-back-btn');
 const segHistoryStats   = document.getElementById('seg-history-stats');
 const segHistoryBatches = document.getElementById('seg-history-batches');
 
-// History filter state
+// History filter & sort state
 let _histFilterOpTypes = new Set();
 let _histFilterErrCats = new Set();
+let _histSortMode = 'time'; // 'time' | 'quran'
 
 // Split chain state — rebuilt on each history load
 let _splitChains    = null;   // Map<rootOpId, chainData>
@@ -216,6 +223,8 @@ const segHistoryFilters      = document.getElementById('seg-history-filters');
 const segHistoryFilterOps    = document.getElementById('seg-history-filter-ops');
 const segHistoryFilterCats   = document.getElementById('seg-history-filter-cats');
 const segHistoryFilterClear  = document.getElementById('seg-history-filter-clear');
+const segHistorySortTime     = document.getElementById('seg-history-sort-time');
+const segHistorySortQuran    = document.getElementById('seg-history-sort-quran');
 
 // Save confirmation preview
 const segSavePreview        = document.getElementById('seg-save-preview');
@@ -287,6 +296,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     segHistoryBtn.addEventListener('click', showHistoryView);
     segHistoryBackBtn.addEventListener('click', hideHistoryView);
     segHistoryFilterClear.addEventListener('click', clearHistoryFilters);
+    segHistorySortTime.addEventListener('click', () => setHistorySort('time'));
+    segHistorySortQuran.addEventListener('click', () => setHistorySort('quran'));
     segSavePreviewCancel.addEventListener('click', hideSavePreview);
     segSavePreviewConfirm.addEventListener('click', confirmSaveFromPreview);
 
@@ -5573,11 +5584,13 @@ function showHistoryView() {
     if (shortcuts) { shortcuts.dataset.hiddenByHistory = shortcuts.hidden ? '1' : ''; shortcuts.hidden = true; }
 
     segHistoryView.hidden = false;
-    // Reset filters on view enter
+    // Reset filters and sort on view enter
     _histFilterOpTypes.clear();
     _histFilterErrCats.clear();
+    _histSortMode = 'time';
     segHistoryFilters.querySelectorAll('.seg-history-filter-pill.active')
         .forEach(p => p.classList.remove('active'));
+    segHistorySortTime.classList.add('active');
     segHistoryFilterClear.hidden = true;
     // Observe all waveform canvases + draw arrows
     const observer = _ensureWaveformObserver();
@@ -5958,6 +5971,23 @@ function _countVersesFromBatches(batches) {
 // History Filters
 // ---------------------------------------------------------------------------
 
+/** Does this flattened item match any of the active op-type filters? */
+function _itemMatchesOpFilter(item, opTypes) {
+    return item.group.some(op => opTypes.has(op.op_type));
+}
+
+/** Does this flattened item match any of the active error-category filters? */
+function _itemMatchesCatFilter(item, cats) {
+    for (const op of item.group) {
+        if (op.op_context_category && cats.has(op.op_context_category)) return true;
+    }
+    const delta = _deriveOpIssueDelta(item.group);
+    for (const cat of cats) {
+        if (delta.resolved.includes(cat) || delta.introduced.includes(cat)) return true;
+    }
+    return false;
+}
+
 function renderHistoryFilterBar(data) {
     segHistoryFilterOps.innerHTML = '';
     segHistoryFilterCats.innerHTML = '';
@@ -5968,8 +5998,17 @@ function renderHistoryFilterBar(data) {
         return;
     }
 
-    // Op type pills from summary
-    const opCounts = data.summary?.op_counts || {};
+    // Flatten batches into items for accurate card-level counts
+    const chainedOpIds = _chainedOpIds || new Set();
+    const allItems = _flattenBatchesToItems(data.batches, chainedOpIds);
+
+    // Op type pills: count items by primary op type
+    const opCounts = {};
+    for (const item of allItems) {
+        if (item.group.length === 0) continue;
+        const primary = item.group[0].op_type;
+        opCounts[primary] = (opCounts[primary] || 0) + 1;
+    }
     const sortedOps = Object.entries(opCounts).sort((a, b) => b[1] - a[1]);
     for (const [opType, count] of sortedOps) {
         const pill = document.createElement('button');
@@ -5981,19 +6020,18 @@ function renderHistoryFilterBar(data) {
         segHistoryFilterOps.appendChild(pill);
     }
 
-    // Error category pills from aggregated validation deltas + op_context_category
+    // Error category pills: count items that touch each category
     const catCounts = {};
-    for (const batch of data.batches) {
-        const before = batch.validation_summary_before || {};
-        const after = batch.validation_summary_after || {};
-        const opCats = new Set(
-            (batch.operations || []).map(op => op.op_context_category).filter(Boolean)
-        );
-        for (const cat of (_validationCategories || Object.keys(ERROR_CAT_LABELS))) {
-            const delta = (after[cat] || 0) - (before[cat] || 0);
-            if (delta !== 0 || opCats.has(cat)) {
-                catCounts[cat] = (catCounts[cat] || 0) + 1;
-            }
+    for (const item of allItems) {
+        if (item.group.length === 0) continue;
+        const delta = _deriveOpIssueDelta(item.group);
+        const touchedCats = new Set([
+            ...delta.resolved,
+            ...delta.introduced,
+            ...item.group.map(op => op.op_context_category).filter(Boolean),
+        ]);
+        for (const cat of touchedCats) {
+            catCounts[cat] = (catCounts[cat] || 0) + 1;
         }
     }
     const sortedCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]);
@@ -6007,8 +6045,10 @@ function renderHistoryFilterBar(data) {
         segHistoryFilterCats.appendChild(pill);
     }
 
-    // Only show filter bar if there are meaningful options
-    segHistoryFilters.hidden = (sortedOps.length < 2 && sortedCats.length < 2);
+    // Always show filter bar (sort is always relevant); hide empty filter rows
+    segHistoryFilterOps.parentElement.hidden = (sortedOps.length < 2);
+    segHistoryFilterCats.parentElement.hidden = (sortedCats.length < 2);
+    segHistoryFilters.hidden = false;
 }
 
 function toggleHistoryFilter(type, value, pill) {
@@ -6030,47 +6070,36 @@ function applyHistoryFilters() {
 
     segHistoryFilterClear.hidden = !hasFilters;
 
+    // Flatten all batches into items, then filter at item level
     const chainedIds = _chainedOpIds || new Set();
-    const filtered = hasFilters ? allBatches.filter(batch => {
-        // Only consider non-chained ops for filter matching (chained ops render in chain rows)
-        const visibleOps = (batch.operations || []).filter(op => !chainedIds.has(op.op_id));
-        if (visibleOps.length === 0 && !batch.is_revert) return false;
-        // Op type filter (OR within)
-        if (_histFilterOpTypes.size > 0) {
-            const batchOpTypes = new Set(visibleOps.map(op => op.op_type));
-            if (![..._histFilterOpTypes].some(t => batchOpTypes.has(t))) return false;
-        }
-        // Error category filter (OR within)
-        if (_histFilterErrCats.size > 0) {
-            const before = batch.validation_summary_before || {};
-            const after = batch.validation_summary_after || {};
-            const opCats = new Set(visibleOps.map(op => op.op_context_category).filter(Boolean));
-            if (![..._histFilterErrCats].some(cat => {
-                const delta = (after[cat] || 0) - (before[cat] || 0);
-                return delta !== 0 || opCats.has(cat);
-            })) return false;
-        }
-        return true;
-    }) : allBatches;
+    const allItems = _flattenBatchesToItems(allBatches, chainedIds);
+
+    const filtered = hasFilters
+        ? allItems.filter(item => {
+            if (_histFilterOpTypes.size > 0 && !_itemMatchesOpFilter(item, _histFilterOpTypes)) return false;
+            if (_histFilterErrCats.size > 0 && !_itemMatchesCatFilter(item, _histFilterErrCats)) return false;
+            return true;
+        })
+        : allItems;
 
     // Recompute and render summary stats
     if (hasFilters) {
-        renderHistorySummaryStats(_computeFilteredSummary(filtered));
+        renderHistorySummaryStats(_computeFilteredItemSummary(filtered));
     } else {
         renderHistorySummaryStats(segHistoryData.summary);
     }
 
-    // Render filtered batches (or empty placeholder)
+    // Render filtered items (or empty placeholder)
     if (filtered.length === 0 && hasFilters) {
         segHistoryBatches.innerHTML = '';
         const empty = document.createElement('div');
         empty.className = 'seg-history-empty';
-        empty.textContent = 'No batches match the active filters.';
+        empty.textContent = 'No edits match the active filters.';
         segHistoryBatches.appendChild(empty);
         return;
     }
 
-    renderHistoryBatches(filtered);
+    _renderHistoryDisplayItems(filtered, allBatches, segHistoryBatches);
 
     // Redraw waveforms + arrows if history view is visible
     if (!segHistoryView.hidden) {
@@ -6082,14 +6111,14 @@ function applyHistoryFilters() {
     }
 }
 
-function _computeFilteredSummary(filteredBatches) {
+function _computeFilteredItemSummary(items) {
     const opCounts = {};
     const fixKindCounts = {};
     const chaptersEdited = new Set();
-    for (const batch of filteredBatches) {
-        if (batch.chapter != null) chaptersEdited.add(batch.chapter);
-        if (Array.isArray(batch.chapters)) batch.chapters.forEach(ch => chaptersEdited.add(ch));
-        for (const op of (batch.operations || [])) {
+    for (const item of items) {
+        if (item.chapter != null) chaptersEdited.add(item.chapter);
+        if (Array.isArray(item.chapters)) item.chapters.forEach(ch => chaptersEdited.add(ch));
+        for (const op of item.group) {
             opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
             const fk = op.fix_kind || 'unknown';
             fixKindCounts[fk] = (fixKindCounts[fk] || 0) + 1;
@@ -6097,34 +6126,60 @@ function _computeFilteredSummary(filteredBatches) {
     }
     return {
         total_operations: Object.values(opCounts).reduce((s, v) => s + v, 0),
-        total_batches: filteredBatches.filter(b => (b.operations || []).length > 0).length,
         chapters_edited: chaptersEdited.size,
-        verses_edited: _countVersesFromBatches(filteredBatches),
+        verses_edited: _countVersesFromItems(items),
         op_counts: opCounts,
         fix_kind_counts: fixKindCounts,
     };
 }
 
+/** Count unique verses touched across all flattened items. */
+function _countVersesFromItems(items) {
+    const verses = new Set();
+    for (const item of items) {
+        for (const op of item.group) {
+            for (const snap of [...(op.targets_before || []), ...(op.targets_after || [])]) {
+                for (const v of _versesFromRef(snap.matched_ref)) verses.add(v);
+            }
+        }
+    }
+    return verses.size;
+}
+
 function clearHistoryFilters() {
     _histFilterOpTypes.clear();
     _histFilterErrCats.clear();
-    segHistoryFilters.querySelectorAll('.seg-history-filter-pill.active')
+    segHistoryFilterOps.querySelectorAll('.seg-history-filter-pill.active')
+        .forEach(p => p.classList.remove('active'));
+    segHistoryFilterCats.querySelectorAll('.seg-history-filter-pill.active')
         .forEach(p => p.classList.remove('active'));
     applyHistoryFilters();
 }
 
+function setHistorySort(mode) {
+    _histSortMode = mode;
+    segHistorySortTime.classList.toggle('active', mode === 'time');
+    segHistorySortQuran.classList.toggle('active', mode === 'quran');
+    applyHistoryFilters();
+}
+
 function renderHistoryBatches(batches, container = segHistoryBatches) {
-    container.innerHTML = '';
-
     const chainedOpIds = _chainedOpIds || new Set();
+    const items = _flattenBatchesToItems(batches, chainedOpIds);
+    _renderHistoryDisplayItems(items, batches, container);
+}
 
-    // Build sorted display items: chain rows + flattened op cards
+/**
+ * Render pre-flattened items + split chain rows into a container.
+ * Shared by renderHistoryBatches (full render) and applyHistoryFilters (filtered render).
+ */
+function _renderHistoryDisplayItems(opItems, batches, container) {
+    container.innerHTML = '';
     const displayItems = [];
 
     // Add split chain rows — only show chains that have at least one op from the
     // batches being rendered (so main history shows all chains, save preview shows
     // only chains touched by pending ops, and filtered views respect the filter).
-    // Also respect active op-type / error-category filters.
     if (_splitChains && _histFilterErrCats.size === 0) {
         const showSplitChains = _histFilterOpTypes.size === 0 || _histFilterOpTypes.has('split_segment');
         if (showSplitChains) {
@@ -6139,25 +6194,34 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
         }
     }
 
-    // Flatten batches into per-op-group items (replaces old batch-item loop)
-    const opItems = _flattenBatchesToItems(batches, chainedOpIds);
     for (const item of opItems) {
         displayItems.push({ type: 'op-item', item, date: item.date });
     }
 
-    // Sort most-recent first; chains before op-items at same date; then batchIdx desc, groupIdx asc
-    displayItems.sort((a, b) => {
-        const cmp = b.date.localeCompare(a.date);
-        if (cmp !== 0) return cmp;
-        // Chains first at same date (matches old behavior where chains were pushed before batches)
-        if (a.type === 'chain' && b.type !== 'chain') return -1;
-        if (b.type === 'chain' && a.type !== 'chain') return 1;
-        // For op-items: higher batchIdx = more recent batch
-        const aBIdx = a.item?.batchIdx ?? 0;
-        const bBIdx = b.item?.batchIdx ?? 0;
-        if (aBIdx !== bBIdx) return bBIdx - aBIdx;
-        return (a.item?.groupIdx ?? 0) - (b.item?.groupIdx ?? 0);
-    });
+    if (_histSortMode === 'quran') {
+        // Sort by chapter ascending, then segment position, then date descending
+        displayItems.sort((a, b) => {
+            const aChap = _histItemChapter(a);
+            const bChap = _histItemChapter(b);
+            if (aChap !== bChap) return aChap - bChap;
+            const aPos = _histItemTimeStart(a);
+            const bPos = _histItemTimeStart(b);
+            if (aPos !== bPos) return aPos - bPos;
+            return b.date.localeCompare(a.date);
+        });
+    } else {
+        // Sort most-recent first; chains before op-items at same date; then batchIdx desc, groupIdx asc
+        displayItems.sort((a, b) => {
+            const cmp = b.date.localeCompare(a.date);
+            if (cmp !== 0) return cmp;
+            if (a.type === 'chain' && b.type !== 'chain') return -1;
+            if (b.type === 'chain' && a.type !== 'chain') return 1;
+            const aBIdx = a.item?.batchIdx ?? 0;
+            const bBIdx = b.item?.batchIdx ?? 0;
+            if (aBIdx !== bBIdx) return bBIdx - aBIdx;
+            return (a.item?.groupIdx ?? 0) - (b.item?.groupIdx ?? 0);
+        });
+    }
 
     for (const di of displayItems) {
         if (di.type === 'chain') {
@@ -6166,6 +6230,22 @@ function renderHistoryBatches(batches, container = segHistoryBatches) {
             container.appendChild(_renderOpCard(di.item));
         }
     }
+}
+
+/** Extract effective chapter number from a display item (for Quran-order sort). */
+function _histItemChapter(di) {
+    if (di.type === 'chain') return di.chain.rootBatch?.chapter ?? Infinity;
+    const item = di.item;
+    if (item.chapter != null) return item.chapter;
+    if (Array.isArray(item.chapters) && item.chapters.length) return Math.min(...item.chapters);
+    return Infinity;
+}
+
+/** Extract segment time_start from a display item (for within-chapter ordering). */
+function _histItemTimeStart(di) {
+    if (di.type === 'chain') return di.chain.rootSnap?.time_start ?? Infinity;
+    const firstOp = di.item?.group?.[0];
+    return firstOp?.targets_before?.[0]?.time_start ?? Infinity;
 }
 
 /**
