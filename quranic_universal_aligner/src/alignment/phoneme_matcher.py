@@ -408,12 +408,18 @@ def align_wraparound(
     parent = [[[None] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
     start_arr = [[[-1] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
     max_j_arr = [[[-1] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
+    # Track minimum word index reached along each path so wrap paths
+    # can't game the position prior by starting near the expected word
+    # then jumping backward.
+    BIG_W = 999999
+    min_w_arr = [[[BIG_W] * (n + 1) for _ in range(K + 1)] for _ in range(m + 1)]
 
     # Initialize: k=0, free starts at word boundaries
     for j in word_starts:
         dp[0][0][j] = 0.0
         start_arr[0][0][j] = j
         max_j_arr[0][0][j] = j
+        min_w_arr[0][0][j] = R_phone_to_word[j] if j < n else BIG_W
 
     # Fill DP
     for i in range(1, m + 1):
@@ -423,6 +429,7 @@ def align_wraparound(
                 parent[i][k][0] = (i - 1, k, 0, 'D')
                 start_arr[i][k][0] = 0
                 max_j_arr[i][k][0] = 0
+                min_w_arr[i][k][0] = min_w_arr[i-1][k][0]
 
             for j in range(1, n + 1):
                 del_opt = dp[i-1][k][j] + cost_del if dp[i-1][k][j] < INF else INF
@@ -433,18 +440,22 @@ def align_wraparound(
                 best = min(del_opt, ins_opt, sub_opt)
                 if best < INF:
                     dp[i][k][j] = best
+                    w_j = R_phone_to_word[j - 1] if j > 0 else BIG_W
                     if best == sub_opt:
                         parent[i][k][j] = (i - 1, k, j - 1, 'S')
                         start_arr[i][k][j] = start_arr[i-1][k][j-1]
                         max_j_arr[i][k][j] = max(max_j_arr[i-1][k][j-1], j)
+                        min_w_arr[i][k][j] = min(min_w_arr[i-1][k][j-1], w_j)
                     elif best == del_opt:
                         parent[i][k][j] = (i - 1, k, j, 'D')
                         start_arr[i][k][j] = start_arr[i-1][k][j]
                         max_j_arr[i][k][j] = max_j_arr[i-1][k][j]
+                        min_w_arr[i][k][j] = min_w_arr[i-1][k][j]
                     else:
                         parent[i][k][j] = (i, k, j - 1, 'I')
                         start_arr[i][k][j] = start_arr[i][k][j-1]
                         max_j_arr[i][k][j] = max(max_j_arr[i][k][j-1], j)
+                        min_w_arr[i][k][j] = min(min_w_arr[i][k][j-1], w_j)
 
         # Wrap transitions
         for k in range(K):
@@ -462,6 +473,7 @@ def align_wraparound(
                         parent[i][k+1][j_s] = (i, k, j_end, 'W')
                         start_arr[i][k+1][j_s] = start_arr[i][k][j_end]
                         max_j_arr[i][k+1][j_s] = max(max_j_arr[i][k][j_end], j_end)
+                        min_w_arr[i][k+1][j_s] = min(min_w_arr[i][k][j_end], R_phone_to_word[j_s])
 
             # Re-propagate insertions from wrap positions
             for j in range(1, n + 1):
@@ -471,6 +483,8 @@ def align_wraparound(
                     parent[i][k+1][j] = (i, k+1, j-1, 'I')
                     start_arr[i][k+1][j] = start_arr[i][k+1][j-1]
                     max_j_arr[i][k+1][j] = max(max_j_arr[i][k+1][j-1], j)
+                    w_j = R_phone_to_word[j - 1] if j > 0 else BIG_W
+                    min_w_arr[i][k+1][j] = min(min_w_arr[i][k+1][j-1], w_j)
 
     # Best-match selection
     best_score = INF
@@ -504,7 +518,10 @@ def align_wraparound(
             nd = pc / denom
 
             sw = R_phone_to_word[j_s] if j_s < n else R_phone_to_word[j - 1]
-            prior = prior_weight * abs(sw - expected_word)
+            # Use the earliest word the path actually touches for a fair prior
+            mw = min_w_arr[m][k][j]
+            eff_sw = min(sw, mw) if mw < BIG_W else sw
+            prior = prior_weight * abs(eff_sw - expected_word)
             score = nd + prior
             if scoring_mode == "additive":
                 score += k * wrap_score_cost
