@@ -94,11 +94,12 @@ def email_timestamps_done(reciter_name, requester_name, issue_url,
     """Email sent when timestamps are fully extracted."""
     subject = f"{reciter_name} is now fully processed"
 
-    links_html = ""
+    links_html = "<ul>\n"
     if dataset_url:
-        links_html += f'<p><strong>Dataset:</strong> <a href="{dataset_url}">View on HuggingFace</a></p>\n'
+        links_html += f'<li><a href="{dataset_url}">Browse on HuggingFace</a> — stream audio, view timestamps, and explore the data</li>\n'
     if release_url:
-        links_html += f'<p><strong>Release:</strong> <a href="{release_url}">Download release assets</a></p>\n'
+        links_html += f'<li><a href="{release_url}">GitHub Release</a> — download segments, timestamps, and audio index files</li>\n'
+    links_html += "</ul>\n"
 
     body = load_template("emails/timestamps-done", ext="html").format(
         requester_name=requester_name,

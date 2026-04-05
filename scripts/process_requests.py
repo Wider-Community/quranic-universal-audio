@@ -1110,44 +1110,10 @@ def cmd_complete_timestamps(args):
     _run_git(["checkout", "main"])
     _run_git(["pull", "origin", "main"])
 
-    # --- Phase 5: Wait for CI cascade ---
-    release_tag = None
-    if args.skip_ci:
-        print("\n--skip-ci: skipping CI wait.")
-        release_tag = _get_latest_release_tag()
-    else:
-        print("\nWaiting for CI cascade...")
-        sync_conclusion = _wait_for_workflow(
-            "sync-dataset.yml", after_run_id=pre_merge_run_id, timeout=900,
-        )
-        if sync_conclusion == "success":
-            release_conclusion = _wait_for_workflow(
-                "release.yml", timeout=600,
-            )
-            if release_conclusion == "success":
-                release_tag = _get_latest_release_tag()
-            else:
-                print("  Release workflow did not succeed; skipping release URL.")
-        else:
-            print("  sync-dataset did not succeed; skipping release wait.")
-
-    # --- Phase 6: Set status + notify ---
-    release_url = (
-        f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{release_tag}"
-        if release_tag else ""
-    )
-
-    print("\nSetting status and sending notifications...")
+    # --- Phase 5: Set status (before CI, so issue is closed promptly) ---
+    print("\nSetting status...")
     for pr in merged:
         rec = pr["reciter"]
-        slug = rec["slug"]
-        riwayah = rec.get("riwayah", "hafs_an_asim")
-
-        # HF viewer URL (timestamps.json is always sufficient for HF sync)
-        dataset_url = (
-            f"https://huggingface.co/datasets/{HF_DATASET_ID}"
-            f"/viewer/{riwayah}/{slug}"
-        )
 
         # GitHub label: status:awaiting-timestamps -> status:completed, close issue
         if rec.get("issue_number"):
@@ -1176,7 +1142,44 @@ def cmd_complete_timestamps(args):
             except Exception as e:
                 print(f"  Notion update failed for {rec['name']}: {e}")
 
-        # Email
+    # --- Phase 6: Wait for CI cascade ---
+    release_tag = None
+    if args.skip_ci:
+        print("\n--skip-ci: skipping CI wait.")
+        release_tag = _get_latest_release_tag()
+    else:
+        print("\nWaiting for CI cascade...")
+        sync_conclusion = _wait_for_workflow(
+            "sync-dataset.yml", after_run_id=pre_merge_run_id, timeout=900,
+        )
+        if sync_conclusion == "success":
+            release_conclusion = _wait_for_workflow(
+                "release.yml", timeout=600,
+            )
+            if release_conclusion == "success":
+                release_tag = _get_latest_release_tag()
+            else:
+                print("  Release workflow did not succeed; skipping release URL.")
+        else:
+            print("  sync-dataset did not succeed; skipping release wait.")
+
+    # --- Phase 7: Send notifications (after CI, so links are valid) ---
+    release_url = (
+        f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{release_tag}"
+        if release_tag else ""
+    )
+
+    print("\nSending notifications...")
+    for pr in merged:
+        rec = pr["reciter"]
+        slug = rec["slug"]
+        riwayah = rec.get("riwayah", "hafs_an_asim")
+
+        dataset_url = (
+            f"https://huggingface.co/datasets/{HF_DATASET_ID}"
+            f"/viewer/{riwayah}/{slug}"
+        )
+
         if rec.get("requester_email"):
             subj, html = email_timestamps_done(
                 rec["name"], rec.get("requester_name", ""),
