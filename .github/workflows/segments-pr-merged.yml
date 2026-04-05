@@ -102,6 +102,18 @@ jobs:
             --repo "${{ github.repository }}" \
             --body-file /tmp/pr_comment.md
 
+      - name: Update issue status to awaiting-timestamps
+        if: steps.issue.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue=${{ steps.issue.outputs.number }}
+          repo=${{ github.repository }}
+          # Remove review label, add timestamps label
+          gh issue edit "$issue" --repo "$repo" \
+            --remove-label "status:awaiting-review" \
+            --add-label "status:awaiting-timestamps" 2>/dev/null || true
+
       - name: Comment on issue
         if: steps.issue.outputs.number != '' && steps.summary.outputs.generated == 'true'
         env:

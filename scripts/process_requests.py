@@ -654,6 +654,23 @@ def cmd_prepare_pr(args):
             pr_url = gh_create_draft_pr(branch, pr_title, pr_body)
             print(f"    PR created: {pr_url}")
             req["pr_url"] = pr_url
+            pr_number = int(pr_url.rstrip("/").split("/")[-1])
+
+            # Link PR to issue via Development sidebar + update status
+            if req.get("issue_number"):
+                try:
+                    subprocess.run(
+                        ["gh", "issue", "develop", str(req["issue_number"]),
+                         "--branch", branch, "--base", "main"],
+                        cwd=str(REPO_ROOT), capture_output=True, text=True,
+                    )
+                    print(f"    Linked PR to issue #{req['issue_number']}")
+                except Exception as e:
+                    print(f"    Warning: failed to link issue: {e}")
+                try:
+                    gh_swap_label(req["issue_number"], "status:processing", "status:awaiting-review")
+                except Exception:
+                    pass
 
             # Comment on the issue linking to the PR
             try:
@@ -906,7 +923,7 @@ def _create_timestamps_pr(rec):
         # Create PR
         issue_ref = ""
         if rec.get("issue_number"):
-            issue_ref = f"\n\nCloses #{rec['issue_number']}"
+            issue_ref = f"\n\nRef #{rec['issue_number']}"
         pr_body = (
             f"Add word-level timestamps for **{rec['name']}** (`{slug}`)."
             f"{issue_ref}"
@@ -1132,16 +1149,25 @@ def cmd_complete_timestamps(args):
             f"/viewer/{riwayah}/{slug}"
         )
 
-        # GitHub label: status:awaiting-review -> status:completed
+        # GitHub label: status:awaiting-timestamps -> status:completed, close issue
         if rec.get("issue_number"):
             try:
                 gh_swap_label(
                     rec["issue_number"],
-                    "status:awaiting-review", "status:completed",
+                    "status:awaiting-timestamps", "status:completed",
                 )
                 print(f"  #{rec['issue_number']} label -> status:completed")
             except Exception as e:
                 print(f"  #{rec['issue_number']} label failed: {e}")
+            try:
+                subprocess.run(
+                    ["gh", "issue", "close", str(rec["issue_number"]),
+                     "--reason", "completed"],
+                    cwd=str(REPO_ROOT), capture_output=True, text=True,
+                )
+                print(f"  #{rec['issue_number']} closed")
+            except Exception as e:
+                print(f"  #{rec['issue_number']} close failed: {e}")
 
         # Notion status
         if rec.get("page_id"):
