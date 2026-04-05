@@ -344,54 +344,59 @@ def download_all_audio(rows, is_surah=False):
     failed = []
 
     if is_surah:
-        # For by_surah: process one surah at a time to limit memory.
-        # Decoded PCM for a full recitation can exceed 10 GB (44.1kHz stereo),
-        # which OOM-kills GitHub Actions runners (7 GB RAM).  Instead, download
-        # each surah, slice all its verses, export to MP3 bytes, then free the
-        # decoded audio before moving to the next surah.
+        # For by_surah: download a few surahs in parallel, slice, then free.
+        # Decoded PCM for all 114 surahs can exceed 17 GB (44.1kHz stereo),
+        # which OOM-kills GitHub Actions runners (7 GB RAM).  We limit to 4
+        # concurrent downloads — peak memory ~2-3 GB, well within limits.
         AS = _lazy_import_pydub()
 
-        # Group row indices by audio URL so we process one surah at a time
+        # Group row indices by audio URL
         url_to_indices = defaultdict(list)
         for i, row in enumerate(rows):
             url_to_indices[row["audio_url"]].append(i)
 
         unique_urls = list(url_to_indices.keys())
-        log.info("Downloading and slicing %d surah audio files (one at a time)...", len(unique_urls))
+        log.info("Downloading and slicing %d surah audio files (4 parallel)...", len(unique_urls))
         completed_surahs = 0
 
-        for url in unique_urls:
+        def _process_surah(url):
+            """Download one surah, slice all its verses, return (url, results, errors)."""
+            results = {}  # idx -> mp3 bytes
+            errors = []
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
                 with urllib.request.urlopen(req, timeout=120) as resp:
                     raw_data = resp.read()
                 audio = AS.from_file(io.BytesIO(raw_data))
-                del raw_data  # free compressed bytes immediately
+                del raw_data
             except Exception as e:
                 for idx in url_to_indices[url]:
                     ref = f"{rows[idx]['surah']}:{rows[idx]['ayah']}"
-                    log.error("Failed to download %s (%s): %s", ref, url, e)
-                    failed.append(ref)
-                completed_surahs += 1
-                continue
+                    errors.append(ref)
+                return url, results, errors
 
-            # Slice all verses for this surah
             for idx in url_to_indices[url]:
                 row = rows[idx]
                 try:
                     clip = audio[row["clip_start"]:row["clip_end"]]
                     buf = io.BytesIO()
                     clip.export(buf, format="mp3", bitrate="128k")
-                    audio_bytes_list[idx] = buf.getvalue()
+                    results[idx] = buf.getvalue()
                 except Exception as e:
                     ref = f"{row['surah']}:{row['ayah']}"
-                    log.error("Failed to slice %s: %s", ref, e)
-                    failed.append(ref)
+                    errors.append(ref)
 
-            del audio  # free decoded PCM before next surah
-            completed_surahs += 1
-            if completed_surahs % 10 == 0:
-                log.info("Progress: %d/%d surahs processed", completed_surahs, len(unique_urls))
+            del audio
+            return url, results, errors
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for url, results, errors in pool.map(_process_surah, unique_urls):
+                for idx, mp3 in results.items():
+                    audio_bytes_list[idx] = mp3
+                failed.extend(errors)
+                completed_surahs += 1
+                if completed_surahs % 10 == 0:
+                    log.info("Progress: %d/%d surahs processed", completed_surahs, len(unique_urls))
     else:
         # For by_ayah: parallel individual downloads
         def process(idx):
