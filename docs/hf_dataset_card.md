@@ -9,6 +9,7 @@ tags:
 - recitation
 - forced-alignment
 - word-timestamps
+- letter-timestamps
 - audio-segmentation
 - speech-recognition
 - asr
@@ -46,6 +47,18 @@ dataset_info:
   - name: word_timestamps
     sequence:
       sequence: int32
+  - name: letter_timestamps
+    sequence:
+    - name: word_idx
+      dtype: int32
+    - name: letters
+      sequence:
+      - name: char
+        dtype: string
+      - name: start_ms
+        dtype: int32
+      - name: end_ms
+        dtype: int32
   - name: source_url
     dtype: string
   - name: source_offset_ms
@@ -107,7 +120,7 @@ dataset_info:
 <h1 align="center">Qur'anic Universal Ayahs</h1>
 
 <p align="center">
-  Word-level aligned Qur'an recitation audio with precise timestamps derived from phoneme-level forced alignment.<br>
+  Word-level and letter-level aligned Qur'an recitation audio with precise timestamps derived from phoneme-level forced alignment.<br>
   A community-verified dataset of 300+ reciters across 14 riwayat.
 </p>
 
@@ -117,6 +130,7 @@ dataset_info:
 Each row is one verse (ayah) of the Qur'an, with:
 - **Audio clip** of the verse recitation, trimmed to speech boundaries
 - **Word-level timestamps** in milliseconds, relative to the audio clip
+- **Letter-level timestamps** (when available) for individual Arabic characters, derived from phoneme-level alignment
 - **Pause-based segments** showing how the recitation was naturally divided by silences
 - **Arabic text** from alignment matching (reflects what was actually recited, including any repetitions)
 
@@ -134,6 +148,14 @@ print(verse["surah"], verse["ayah"])  # 1 1
 print(verse["text"])                   # Arabic text
 print(verse["word_timestamps"])         # [[1, 0, 400], [2, 400, 800], ...]
 
+# Letter-level timestamps (if available)
+lt = verse["letter_timestamps"]
+if lt:
+    for entry in lt:
+        word_idx = entry["word_idx"]
+        for letter in entry["letters"]:
+            print(f"  Word {word_idx}: {letter['char']} [{letter['start_ms']}-{letter['end_ms']}]ms")
+
 # Play audio (in a notebook)
 from IPython.display import Audio
 Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
@@ -148,6 +170,7 @@ Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 | `text` | `string` | Arabic text of the verse from alignment |
 | `segments` | `[[int, int, int, int]]` | Pause-based segments (ms, relative to clip) |
 | `word_timestamps` | `[[int, int, int]]` | Word-level timestamps (ms, relative to clip) |
+| `letter_timestamps` | `[{word_idx, [{char, start_ms, end_ms}]}]` | Letter-level timestamps per word (ms, relative to clip). Empty if not available. |
 | `source_url` | `string` | Original audio file URL (chapter or verse) |
 | `source_offset_ms` | `int32` | Offset in source audio where this verse starts (ms) |
 
@@ -161,6 +184,8 @@ Segments capture the natural pausing points in a recitation. A gap between conse
 - **Overlapping** word ranges (next `word_from` ≤ previous `word_to`) — the reciter paused and **repeated** those words before continuing. The `text` field includes the repeated words.
 
 **`word_timestamps`** — Each entry is `[word_index, start_ms, end_ms]`. When a verse contains repeated segments, the same word index appears multiple times.
+
+**`letter_timestamps`** — Per-word letter (character) timestamps from phoneme-level forced alignment. Each entry has `word_idx` (matching the word_timestamps word index) and `letters` — a list of `{char, start_ms, end_ms}` for each Arabic character. Empty for reciters without letter-level alignment data.
 
 **`source_url`** — URL of the original audio file. For by-surah reciters, all verses in a surah share one URL; for by-ayah reciters, each verse has its own.
 
