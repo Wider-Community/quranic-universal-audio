@@ -20,6 +20,7 @@ from config import (
     COST_INSERTION,
     WRAP_PENALTY,
     WRAP_SCORE_COST,
+    WRAP_SCORING_MODE,
     WRAP_SPAN_WEIGHT,
     MAX_WRAPS,
     PHONEME_ALIGNMENT_DEBUG,
@@ -661,7 +662,7 @@ def align_segment(
         prior_weight=START_PRIOR_WEIGHT,
         wrap_penalty=WRAP_PENALTY,
         max_wraps=MAX_WRAPS,
-        scoring_mode="no_subtract",
+        scoring_mode=WRAP_SCORING_MODE,
         wrap_span_weight=WRAP_SPAN_WEIGHT,
     )
 

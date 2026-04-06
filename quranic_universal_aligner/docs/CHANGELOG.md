@@ -1,3 +1,7 @@
+## 06/04/2026
+
+- Decreased the frequency of missing word errors between two segments
+
 ## 03/04/2026
 
 - **Inline reference editing** — click any segment's reference to edit it directly
