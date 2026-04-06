@@ -16,6 +16,14 @@ function surahOptionText(num) {
     return `${num} ${info.name_en} ${ar}`;
 }
 
+function normalizeArabic(str) {
+    return str
+        .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '')
+        .replace(/[أإآٱ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي');
+}
+
 /**
  * SearchableSelect — lightweight filterable wrapper around a native <select>.
  * Hides the <select>, shows a text input + dropdown overlay.
@@ -90,11 +98,11 @@ class SearchableSelect {
     }
 
     _filter() {
-        const q = this.input.value.toLowerCase();
+        const q = normalizeArabic(this.input.value.toLowerCase());
         this.filtered = q
             ? this.options.filter(o =>
-                o.text.toLowerCase().includes(q) ||
-                o.group.toLowerCase().includes(q)
+                normalizeArabic(o.text.toLowerCase()).includes(q) ||
+                normalizeArabic(o.group.toLowerCase()).includes(q)
             )
             : [...this.options];
         this.highlightIdx = -1;
