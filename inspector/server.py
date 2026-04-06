@@ -984,7 +984,7 @@ def get_seg_data(reciter, chapter):
             t_start = seg.get("time_start", 0)
             t_end = seg.get("time_end", 0)
             mref = seg.get("matched_ref", "")
-            segments.append({
+            seg_dict = {
                 "index": idx,
                 "entry_idx": entry_idx,
                 "time_start": t_start,
@@ -994,7 +994,10 @@ def get_seg_data(reciter, chapter):
                 "display_text": _dk_text_for_ref(mref),
                 "confidence": round(seg.get("confidence", 0.0), 4),
                 "audio_url": entry_audio,
-            })
+            }
+            if seg.get("ignored"):
+                seg_dict["ignored"] = True
+            segments.append(seg_dict)
             idx += 1
 
     # Optional verse filter
@@ -1121,6 +1124,8 @@ def get_seg_all(reciter):
             }
             if seg.get("wrap_word_ranges"):
                 seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            if seg.get("ignored"):
+                seg_dict["ignored"] = True
             segments.append(seg_dict)
 
     verse_word_counts = {}
@@ -1496,6 +1501,8 @@ def save_seg_data(reciter, chapter):
             result["wrap_word_ranges"] = wrap
         if s.get("has_repeated_words") or existing.get("has_repeated_words"):
             result["has_repeated_words"] = True
+        if s.get("ignored") or existing.get("ignored"):
+            result["ignored"] = True
         return result
 
     # Edit history: snapshot validation counts before mutation
@@ -1558,6 +1565,8 @@ def save_seg_data(reciter, chapter):
                 flat_segments[idx]["matched_text"] = upd.get("matched_text", "")
                 if "confidence" in upd:
                     flat_segments[idx]["confidence"] = upd["confidence"]
+                if upd.get("ignored"):
+                    flat_segments[idx]["ignored"] = True
 
     # Backup before writing (single-level undo)
     detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
@@ -2354,7 +2363,8 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 continue
 
             if s_ayah != e_ayah:
-                counts["cross_verse"] += 1
+                if not seg.get("ignored"):
+                    counts["cross_verse"] += 1
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
                         wc = word_counts.get((surah, ayah), s_word)
@@ -2546,15 +2556,15 @@ def validate_reciter_segments(reciter):
             except (ValueError, IndexError):
                 continue
 
-            # Cross-verse detection
+            # Cross-verse detection (skip explicitly ignored segments)
             if s_ayah != e_ayah:
-                cross_verse.append({
-                    "chapter": chapter,
-                    "seg_index": i,
-                    "ref": matched_ref,
-                })
-                # Coverage for cross-verse: start verse from s_word to end, end verse from 1 to e_word
-                # Always register coverage regardless of confidence
+                if not seg.get("ignored"):
+                    cross_verse.append({
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "ref": matched_ref,
+                    })
+                # Coverage for cross-verse: always register regardless of ignored/confidence
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
                         wc = word_counts.get((surah, ayah), s_word)

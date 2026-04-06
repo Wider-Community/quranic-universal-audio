@@ -2519,6 +2519,7 @@ async function executeSave() {
                         };
                         if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
                         if (s.has_repeated_words) o.has_repeated_words = true;
+                        if (s.ignored) o.ignored = true;
                         return o;
                     }),
                     operations: chOps,
@@ -2530,13 +2531,15 @@ async function executeSave() {
                 for (const idx of entry.indices) {
                     const seg = chSegs.find(s => s.index === idx);
                     if (seg) {
-                        updates.push({
+                        const upd = {
                             index: seg.index,
                             segment_uid: seg.segment_uid || '',
                             matched_ref: seg.matched_ref,
                             matched_text: seg.matched_text,
                             confidence: seg.confidence,
-                        });
+                        };
+                        if (seg.ignored) upd.ignored = true;
+                        updates.push(upd);
                     }
                 }
                 if (updates.length === 0) continue;
@@ -5197,6 +5200,7 @@ function renderCategoryCards(type, items, container) {
                     }
 
                     seg.confidence = 1.0;
+                    seg.ignored = true;
                     delete seg._derived;
                     markDirty(segChapter, seg.index);
                     syncAllCardsForSegment(seg);
