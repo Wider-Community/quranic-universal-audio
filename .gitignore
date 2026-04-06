@@ -23,7 +23,6 @@ CLAUDE.md
 # Local
 jobs/
 extract_segments.py
-extract_timestamps.py
 
 # Summary-level validation logs (reciter-specific ones are kept)
 data/recitation_segments/validation.log
