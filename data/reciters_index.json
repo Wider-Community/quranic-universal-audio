@@ -2,6 +2,7 @@
   {
     "slug": "abdelaziz_sheim_warsh",
     "name_en": "Abdelaziz sheim",
+    "name_ar": "عبدالعزيز سحيم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -13,6 +14,7 @@
   {
     "slug": "abdelbari_al_toubayti",
     "name_en": "Abdelbari Al-Toubayti",
+    "name_ar": "عبدالبارئ الثبيتي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -24,6 +26,7 @@
   {
     "slug": "abdul_aziz_al_ahmad",
     "name_en": "Abdul Aziz Al-Ahmad",
+    "name_ar": "عبدالعزيز الأحمد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -35,6 +38,7 @@
   {
     "slug": "abdul_rahman_bin_abdul_razzaq_al_badr",
     "name_en": "Abdul Rahman bin Abdul Razzaq Al Badr",
+    "name_ar": "عبدالرحمن بن عبدالرزاق البدر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -46,6 +50,7 @@
   {
     "slug": "abdulaziz_alasiri",
     "name_en": "Abdulaziz Alasiri",
+    "name_ar": "عبدالعزيز العسيري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -57,6 +62,7 @@
   {
     "slug": "abdulaziz_alturki",
     "name_en": "Abdulaziz Alturki",
+    "name_ar": "عبدالعزيز التركي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -68,6 +74,7 @@
   {
     "slug": "abdulaziz_az_zahrani",
     "name_en": "Abdulaziz Az-Zahrani",
+    "name_ar": "عبدالعزيز الزهراني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -79,6 +86,7 @@
   {
     "slug": "abdulbadi_ghailan",
     "name_en": "Abdulbadi Ghailan",
+    "name_ar": "عبدالبديع غيلان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -90,6 +98,7 @@
   {
     "slug": "abdulbari_mohammad",
     "name_en": "Abdulbari Mohammad",
+    "name_ar": "عبدالبارئ محمد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -101,6 +110,7 @@
   {
     "slug": "abdulbari_mohammad_muallim",
     "name_en": "Abdulbari Mohammad",
+    "name_ar": "عبدالبارئ محمد",
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
@@ -112,6 +122,7 @@
   {
     "slug": "abdulbasit_abdulsamad",
     "name_en": "Abdulbasit Abdulsamad",
+    "name_ar": "عبدالباسط عبدالصمد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -123,6 +134,7 @@
   {
     "slug": "abdulbasit_abdulsamad_mujawwad",
     "name_en": "Abdulbasit Abdulsamad",
+    "name_ar": "عبدالباسط عبدالصمد",
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -134,6 +146,7 @@
   {
     "slug": "abdulbasit_abdulsamad_warsh",
     "name_en": "Abdulbasit Abdulsamad",
+    "name_ar": "عبدالباسط عبدالصمد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -145,6 +158,7 @@
   {
     "slug": "abdulelah_bin_aoun",
     "name_en": "Abdulelah bin Aoun",
+    "name_ar": "عبدالإله بن عون",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -156,6 +170,7 @@
   {
     "slug": "abdulghani_abdullah",
     "name_en": "Abdulghani Abdullah",
+    "name_ar": "عبدالغني عبدالله",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -167,6 +182,7 @@
   {
     "slug": "abdulhadi_kanakeri",
     "name_en": "Abdulhadi Kanakeri",
+    "name_ar": "عبدالهادي أحمد كناكري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -178,6 +194,7 @@
   {
     "slug": "abdulkareem_alhazmi",
     "name_en": "Abdulkareem Alhazmi",
+    "name_ar": "عبدالكريم الحازمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -189,6 +206,7 @@
   {
     "slug": "abdullah_abdal",
     "name_en": "Abdullah Abdal",
+    "name_ar": "عبدالله عبدل",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -200,6 +218,7 @@
   {
     "slug": "abdullah_al_burimi",
     "name_en": "Abdullah Al-Burimi",
+    "name_ar": "عبدالله البريمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -211,6 +230,7 @@
   {
     "slug": "abdullah_al_johany",
     "name_en": "Abdullah Al-Johany",
+    "name_ar": "عبدالله عواد الجهني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -222,6 +242,7 @@
   {
     "slug": "abdullah_al_kandari",
     "name_en": "Abdullah Al-Kandari",
+    "name_ar": "عبدالله الكندري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -233,6 +254,7 @@
   {
     "slug": "abdullah_al_khalaf",
     "name_en": "Abdullah Al-Khalaf",
+    "name_ar": "عبدالله الخلف",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -244,6 +266,7 @@
   {
     "slug": "abdullah_al_mattrod",
     "name_en": "Abdullah Al-Mattrod",
+    "name_ar": "عبدالله المطرود",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -255,6 +278,7 @@
   {
     "slug": "abdullah_al_mishal",
     "name_en": "Abdullah Al-Mishal",
+    "name_ar": "عبدالله المشعل",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -266,6 +290,7 @@
   {
     "slug": "abdullah_al_mousa",
     "name_en": "Abdullah Al-Mousa",
+    "name_ar": "عبدالله الموسى",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -277,6 +302,7 @@
   {
     "slug": "abdullah_al_mousa_muallim",
     "name_en": "Abdullah Al-Mousa",
+    "name_ar": "عبدالله الموسى",
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
@@ -288,6 +314,7 @@
   {
     "slug": "abdullah_al_qarafi",
     "name_en": "Abdullah Al-Qarafi",
+    "name_ar": "عبدالله القرافي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -299,6 +326,7 @@
   {
     "slug": "abdullah_albuajan",
     "name_en": "Abdullah Albuajan",
+    "name_ar": "عبدالله البعيجان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -310,6 +338,7 @@
   {
     "slug": "abdullah_basfer",
     "name_en": "Abdullah Basfer",
+    "name_ar": "عبدالله بصفر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -321,6 +350,7 @@
   {
     "slug": "abdullah_bukhari",
     "name_en": "Abdullah Bukhari",
+    "name_ar": "عبدالله بخاري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -332,6 +362,7 @@
   {
     "slug": "abdullah_fahmi",
     "name_en": "Abdullah Fahmi",
+    "name_ar": "عبدالله فهمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -343,6 +374,7 @@
   {
     "slug": "abdullah_kamel",
     "name_en": "Abdullah Kamel",
+    "name_ar": "عبدالله كامل",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -354,6 +386,7 @@
   {
     "slug": "abdullah_khayyat",
     "name_en": "Abdullah Khayyat",
+    "name_ar": "عبدالله خياط",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -365,6 +398,7 @@
   {
     "slug": "abdullah_qaulan",
     "name_en": "Abdullah Qaulan",
+    "name_ar": "عبدالله غيلان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -376,6 +410,7 @@
   {
     "slug": "abdulmajeed_al_arkani",
     "name_en": "Abdulmajeed Al-Arkani",
+    "name_ar": "عبدالمجيد الأركاني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -387,6 +422,7 @@
   {
     "slug": "abdulmalik_alaskar",
     "name_en": "Abdulmalik Alaskar",
+    "name_ar": "عبدالملك العسكر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -398,6 +434,7 @@
   {
     "slug": "abdulmohsen_al_qasim",
     "name_en": "Abdulmohsen Al-Qasim",
+    "name_ar": "عبدالمحسن القاسم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -409,6 +446,7 @@
   {
     "slug": "abdulmohsin_al_askar",
     "name_en": "Abdulmohsin Al-Askar",
+    "name_ar": "عبدالمحسن العسكر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -420,6 +458,7 @@
   {
     "slug": "abdulmohsin_al_harthy",
     "name_en": "Abdulmohsin Al-Harthy",
+    "name_ar": "عبدالمحسن الحارثي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -431,6 +470,7 @@
   {
     "slug": "abdulmohsin_al_obaikan",
     "name_en": "Abdulmohsin Al-Obaikan",
+    "name_ar": "عبدالمحسن العبيكان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -442,6 +482,7 @@
   {
     "slug": "abdulrahman_al_majed",
     "name_en": "Abdulrahman Al-Majed",
+    "name_ar": "عبدالرحمن الماجد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -453,6 +494,7 @@
   {
     "slug": "abdulrahman_aloosi",
     "name_en": "Abdulrahman Aloosi",
+    "name_ar": "عبدالرحمن العوسي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -464,6 +506,7 @@
   {
     "slug": "abdulrahman_alshahhat",
     "name_en": "Abdulrahman Alshahhat",
+    "name_ar": "عبدالرحمن الشحات",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -475,6 +518,7 @@
   {
     "slug": "abdulrahman_alsudaes",
     "name_en": "Abdulrahman Alsudaes",
+    "name_ar": "عبدالرحمن السديس",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -486,6 +530,7 @@
   {
     "slug": "abdulrahman_alsuwayid",
     "name_en": "Abdulrahman Alsuwayid",
+    "name_ar": "عبدالرحمن السويّد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -497,6 +542,7 @@
   {
     "slug": "abdulrasheed_soufi",
     "name_en": "Abdulrasheed Soufi",
+    "name_ar": "عبدالرشيد صوفي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -508,6 +554,7 @@
   {
     "slug": "abdulrasheed_soufi_khalaf",
     "name_en": "Abdulrasheed Soufi",
+    "name_ar": "عبدالرشيد صوفي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "khalaf_an_hamzah",
@@ -519,6 +566,7 @@
   {
     "slug": "abdulrasheed_soufi_susi",
     "name_en": "Abdulrasheed Soufi",
+    "name_ar": "عبدالرشيد صوفي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "susi_abu_amr",
@@ -530,6 +578,7 @@
   {
     "slug": "abdulwadood_haneef",
     "name_en": "Abdulwadood Haneef",
+    "name_ar": "عبدالودود حنيف",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -541,6 +590,7 @@
   {
     "slug": "abdulwali_al_arkani",
     "name_en": "Abdulwali Al-Arkani",
+    "name_ar": "عبدالولي الأركاني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -552,6 +602,7 @@
   {
     "slug": "addokali_mohammad_alalim_qalon",
     "name_en": "Addokali Mohammad Alalim",
+    "name_ar": "الدوكالي محمد العالم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -563,6 +614,7 @@
   {
     "slug": "adel_al_khalbany",
     "name_en": "Adel Al-Khalbany",
+    "name_ar": "عادل الكلباني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -574,6 +626,7 @@
   {
     "slug": "adel_ryyan",
     "name_en": "Adel Ryyan",
+    "name_ar": "عادل ريان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -585,6 +638,7 @@
   {
     "slug": "ahmad_al_ajmy",
     "name_en": "Ahmad Al-Ajmy",
+    "name_ar": "أحمد بن علي العجمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -596,6 +650,7 @@
   {
     "slug": "ahmad_al_hawashi",
     "name_en": "Ahmad Al-Hawashi",
+    "name_ar": "أحمد الحواشي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -607,6 +662,7 @@
   {
     "slug": "ahmad_al_nufais",
     "name_en": "Ahmad Al Nufais",
+    "name_ar": "أحمد النفيس",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -618,6 +674,7 @@
   {
     "slug": "ahmad_alhuthaifi",
     "name_en": "Ahmad Alhuthaifi",
+    "name_ar": "أحمد الحذيفي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -629,6 +686,7 @@
   {
     "slug": "ahmad_deban",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -640,6 +698,7 @@
   {
     "slug": "ahmad_deban_bazzi",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "bazzi_ibn_kathir",
@@ -651,6 +710,7 @@
   {
     "slug": "ahmad_deban_duri",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
@@ -662,6 +722,7 @@
   {
     "slug": "ahmad_deban_duri_abu_amr",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
@@ -673,6 +734,7 @@
   {
     "slug": "ahmad_deban_hisham",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hisham_ibn_amir",
@@ -684,6 +746,7 @@
   {
     "slug": "ahmad_deban_ibn",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "ibn_jummaz_abu_jafar",
@@ -695,6 +758,7 @@
   {
     "slug": "ahmad_deban_ibn_dhakwan",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "ibn_dhakwan_ibn_amir",
@@ -706,6 +770,7 @@
   {
     "slug": "ahmad_deban_khalaf",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "khalaf_an_hamzah",
@@ -717,6 +782,7 @@
   {
     "slug": "ahmad_deban_qalon",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -728,6 +794,7 @@
   {
     "slug": "ahmad_deban_qunbul",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qunbul_ibn_kathir",
@@ -739,6 +806,7 @@
   {
     "slug": "ahmad_deban_shubah",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "shubah_an_asim",
@@ -750,6 +818,7 @@
   {
     "slug": "ahmad_deban_susi",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "susi_abu_amr",
@@ -761,6 +830,7 @@
   {
     "slug": "ahmad_deban_warsh",
     "name_en": "Ahmad Deban",
+    "name_ar": "أحمد ديبان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -772,6 +842,7 @@
   {
     "slug": "ahmad_issa_al_maasaraawi",
     "name_en": "Ahmad Issa Al Maasaraawi",
+    "name_ar": "أحمد عيسى المعصراوي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -783,6 +854,7 @@
   {
     "slug": "ahmad_issa_al_maasaraawi_rawh",
     "name_en": "Ahmad Issa Al Maasaraawi",
+    "name_ar": "أحمد عيسى المعصراوي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "rawh_an_yaqub",
@@ -794,6 +866,7 @@
   {
     "slug": "ahmad_nauina",
     "name_en": "Ahmad Nauina",
+    "name_ar": "أحمد نعينع",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -805,6 +878,7 @@
   {
     "slug": "ahmad_saber",
     "name_en": "Ahmad Saber",
+    "name_ar": "أحمد صابر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -816,6 +890,7 @@
   {
     "slug": "ahmad_saud",
     "name_en": "Ahmad Saud",
+    "name_ar": "أحمد سعود",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -827,6 +902,7 @@
   {
     "slug": "ahmad_shaheen",
     "name_en": "Ahmad Shaheen",
+    "name_ar": "أحمد خليل شاهين",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -838,6 +914,7 @@
   {
     "slug": "ahmad_talib_bin_humaid",
     "name_en": "Ahmad Talib bin Humaid",
+    "name_ar": "أحمد طالب بن حميد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -849,6 +926,7 @@
   {
     "slug": "ahmed_al_swailem",
     "name_en": "Ahmed Al-Swailem",
+    "name_ar": "أحمد السويلم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -860,6 +938,7 @@
   {
     "slug": "ahmed_al_trabulsi",
     "name_en": "Ahmed Al-trabulsi",
+    "name_ar": "أحمد الطرابلسي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -871,6 +950,7 @@
   {
     "slug": "ahmed_al_trabulsi_qalon",
     "name_en": "Ahmed Al-trabulsi",
+    "name_ar": "أحمد الطرابلسي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -882,6 +962,7 @@
   {
     "slug": "ahmed_amer",
     "name_en": "Ahmed Amer",
+    "name_ar": "أحمد عامر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -893,6 +974,7 @@
   {
     "slug": "akhil_abdulhayy_rawa",
     "name_en": "Akhil Abdulhayy Rawa",
+    "name_ar": "أخيل عبدالحي روا",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -904,6 +986,7 @@
   {
     "slug": "akram_alalaqmi",
     "name_en": "Akram Alalaqmi",
+    "name_ar": "أكرم العلاقمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -915,6 +998,7 @@
   {
     "slug": "al_qaria_yassen_warsh",
     "name_en": "Al-Qaria Yassen",
+    "name_ar": "القارئ ياسين",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -926,6 +1010,7 @@
   {
     "slug": "alashri_omran",
     "name_en": "Alashri Omran",
+    "name_ar": "العشري عمران",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -937,6 +1022,7 @@
   {
     "slug": "alfateh_alzubair_duri",
     "name_en": "Alfateh Alzubair",
+    "name_ar": "الفاتح محمد الزبير",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
@@ -948,6 +1034,7 @@
   {
     "slug": "alhusayni_al_azazi_muallim",
     "name_en": "Alhusayni Al-Azazi",
+    "name_ar": "الحسيني العزازي",
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
@@ -959,6 +1046,7 @@
   {
     "slug": "ali_abo_hashim",
     "name_en": "Ali Abo-Hashim",
+    "name_ar": "علي أبو هاشم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -970,6 +1058,7 @@
   {
     "slug": "ali_alhuthaifi",
     "name_en": "Ali Alhuthaifi",
+    "name_ar": "علي بن عبدالرحمن الحذيفي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -981,6 +1070,7 @@
   {
     "slug": "ali_alhuthaifi_qalon",
     "name_en": "Ali Alhuthaifi",
+    "name_ar": "علي بن عبدالرحمن الحذيفي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -992,6 +1082,7 @@
   {
     "slug": "ali_alhuthaifi_shubah",
     "name_en": "Ali Alhuthaifi",
+    "name_ar": "علي بن عبدالرحمن الحذيفي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "shubah_an_asim",
@@ -1003,6 +1094,7 @@
   {
     "slug": "ali_hajjaj_alsouasi",
     "name_en": "Ali Hajjaj Alsouasi",
+    "name_ar": "علي حجاج السويسي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1014,6 +1106,7 @@
   {
     "slug": "ali_jaber",
     "name_en": "Ali Jaber",
+    "name_ar": "علي جابر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1025,6 +1118,7 @@
   {
     "slug": "alijon_qori",
     "name_en": "Alijon Qori",
+    "name_ar": "عليجان قوري حمدان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1036,6 +1130,7 @@
   {
     "slug": "aloyoon_al_koshi_warsh",
     "name_en": "Aloyoon Al-Koshi",
+    "name_ar": "العيون الكوشي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -1047,6 +1142,7 @@
   {
     "slug": "alwaleed_alshamsan",
     "name_en": "Alwaleed Alshamsan",
+    "name_ar": "الوليد الشمسان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1058,6 +1154,7 @@
   {
     "slug": "alzain_mohammad_ahmad",
     "name_en": "Alzain Mohammad Ahmad",
+    "name_ar": "الزين محمد أحمد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1069,6 +1166,7 @@
   {
     "slug": "anas_alemadi",
     "name_en": "Anas Alemadi",
+    "name_ar": "أنس العمادي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1080,6 +1178,7 @@
   {
     "slug": "bader_alturki",
     "name_en": "Bader Alturki",
+    "name_ar": "بدر التركي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1091,6 +1190,7 @@
   {
     "slug": "bandar_balilah",
     "name_en": "Bandar Balilah",
+    "name_ar": "بندر بليله",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1102,6 +1202,7 @@
   {
     "slug": "dawood_hamza",
     "name_en": "Dawood Hamza",
+    "name_ar": "داود حمزة",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1113,6 +1214,7 @@
   {
     "slug": "emad_hafez",
     "name_en": "Emad Hafez",
+    "name_ar": "عماد زهير حافظ",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1124,6 +1226,7 @@
   {
     "slug": "fahad_al_kandari",
     "name_en": "Fahad Al-Kandari",
+    "name_ar": "فهد الكندري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1135,6 +1238,7 @@
   {
     "slug": "fahad_al_otaibi",
     "name_en": "Fahad Al-Otaibi",
+    "name_ar": "فهد العتيبي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1146,6 +1250,7 @@
   {
     "slug": "faisal_al_hajry",
     "name_en": "Faisal Al-Hajry",
+    "name_ar": "فيصل الهاجري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1157,6 +1262,7 @@
   {
     "slug": "fares_abbad",
     "name_en": "Fares Abbad",
+    "name_ar": "فارس عباد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1168,6 +1274,7 @@
   {
     "slug": "fawaz_alkabi",
     "name_en": "Fawaz Alkabi",
+    "name_ar": "فواز الكعبي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1179,6 +1286,7 @@
   {
     "slug": "fouad_alkhamery",
     "name_en": "Fouad Alkhamery",
+    "name_ar": "فؤاد الخامري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1190,6 +1298,7 @@
   {
     "slug": "haitham_aldukhain",
     "name_en": "Haitham Aldukhain",
+    "name_ar": "هيثم الدخين",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1201,6 +1310,7 @@
   {
     "slug": "hamad_al_daghriri",
     "name_en": "Hamad Al Daghriri",
+    "name_ar": "حمد الدغريري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1212,6 +1322,7 @@
   {
     "slug": "hani_arrifai",
     "name_en": "Hani Arrifai",
+    "name_ar": "هاني الرفاعي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1223,6 +1334,7 @@
   {
     "slug": "haroon_baqai",
     "name_en": "Haroon Baqai",
+    "name_ar": "هارون بقائي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1234,6 +1346,7 @@
   {
     "slug": "hasan_saleh",
     "name_en": "Hasan Saleh",
+    "name_ar": "حسن صالح",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1245,6 +1358,7 @@
   {
     "slug": "hashim_abu_dalal",
     "name_en": "Hashim Abu Dalal",
+    "name_ar": "هاشم أبو دلال",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1256,6 +1370,7 @@
   {
     "slug": "hassan_aldaghriri",
     "name_en": "Hassan Aldaghriri",
+    "name_ar": "حسن الدغريري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1267,6 +1382,7 @@
   {
     "slug": "hatem_fareed_alwaer",
     "name_en": "Hatem Fareed Alwaer",
+    "name_ar": "حاتم فريد الواعر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1278,6 +1394,7 @@
   {
     "slug": "hazza_al_balushi",
     "name_en": "Hazza Al-Balushi",
+    "name_ar": "هزاع البلوشي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1289,6 +1406,7 @@
   {
     "slug": "hicham_lharraz_warsh",
     "name_en": "Hicham Lharraz",
+    "name_ar": "هشام الهراز",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -1300,6 +1418,7 @@
   {
     "slug": "hitham_aljadani",
     "name_en": "Hitham Aljadani",
+    "name_ar": "هيثم الجدعاني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1311,6 +1430,7 @@
   {
     "slug": "hussain_alshaik",
     "name_en": "Hussain Alshaik",
+    "name_ar": "حسين آل الشيخ",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1322,6 +1442,7 @@
   {
     "slug": "ibrahem_assadan",
     "name_en": "Ibrahem Assadan",
+    "name_ar": "إبراهيم السعدان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1333,6 +1454,7 @@
   {
     "slug": "ibrahim_al_akdar",
     "name_en": "Ibrahim Al-Akdar",
+    "name_ar": "إبراهيم الأخضر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1344,6 +1466,7 @@
   {
     "slug": "ibrahim_al_asiri",
     "name_en": "Ibrahim Al-Asiri",
+    "name_ar": "إبراهيم العسيري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1355,6 +1478,7 @@
   {
     "slug": "ibrahim_al_jebreen",
     "name_en": "Ibrahim Al-Jebreen",
+    "name_ar": "إبراهيم الجبرين",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1366,6 +1490,7 @@
   {
     "slug": "ibrahim_al_shahri",
     "name_en": "Ibrahim Al-Shahri",
+    "name_ar": "إبراهيم الشهري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1377,6 +1502,7 @@
   {
     "slug": "ibrahim_aldosari",
     "name_en": "Ibrahim Aldosari",
+    "name_ar": "إبراهيم الدوسري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1388,6 +1514,7 @@
   {
     "slug": "ibrahim_aldosari_warsh",
     "name_en": "Ibrahim Aldosari",
+    "name_ar": "إبراهيم الدوسري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -1399,6 +1526,7 @@
   {
     "slug": "ibrahim_aljormy",
     "name_en": "Ibrahim Aljormy",
+    "name_ar": "إبراهيم الجرمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1410,6 +1538,7 @@
   {
     "slug": "ibrahim_kshidan_qalon",
     "name_en": "Ibrahim Kshidan",
+    "name_ar": "إبراهيم كشيدان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -1421,6 +1550,7 @@
   {
     "slug": "idrees_abkr",
     "name_en": "Idrees Abkr",
+    "name_ar": "إدريس أبكر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1432,6 +1562,7 @@
   {
     "slug": "islam_sobhi",
     "name_en": "Islam Sobhi",
+    "name_ar": "إسلام صبحي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1443,6 +1574,7 @@
   {
     "slug": "issa_omar_sanankoua",
     "name_en": "Issa Omar Sanankoua",
+    "name_ar": "عيسى عمر سناكو",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1454,6 +1586,7 @@
   {
     "slug": "jamaan_alosaimi",
     "name_en": "Jamaan Alosaimi",
+    "name_ar": "جمعان العصيمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1465,6 +1598,7 @@
   {
     "slug": "jamal_addeen_alzailaie",
     "name_en": "Jamal Addeen Alzailaie",
+    "name_ar": "جمال الدين الزيلعي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1476,6 +1610,7 @@
   {
     "slug": "jamal_shaker_abdullah",
     "name_en": "Jamal Shaker Abdullah",
+    "name_ar": "جمال شاكر عبدالله",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1487,6 +1622,7 @@
   {
     "slug": "junaid_adam_abdullah",
     "name_en": "Junaid Adam Abdullah",
+    "name_ar": "جنيد آدم عبدالله",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1498,6 +1634,7 @@
   {
     "slug": "khaled_al_qahtani",
     "name_en": "Khaled Al-Qahtani",
+    "name_ar": "خالد القحطاني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1509,6 +1646,7 @@
   {
     "slug": "khalid_abdulkafi",
     "name_en": "Khalid Abdulkafi",
+    "name_ar": "خالد عبدالكافي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1520,6 +1658,7 @@
   {
     "slug": "khalid_al_jileel",
     "name_en": "Khalid Al-Jileel",
+    "name_ar": "خالد الجليل",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1531,6 +1670,7 @@
   {
     "slug": "khalid_al_shoraimy",
     "name_en": "Khalid Al-Shoraimy",
+    "name_ar": "خالد الشريمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1542,6 +1682,7 @@
   {
     "slug": "khalid_al_wehabi",
     "name_en": "Khalid Al-Wehabi",
+    "name_ar": "خالد الوهيبي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1553,6 +1694,7 @@
   {
     "slug": "khalid_algamdi",
     "name_en": "Khalid Algamdi",
+    "name_ar": "خالد الغامدي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1564,6 +1706,7 @@
   {
     "slug": "khalid_almohana",
     "name_en": "Khalid Almohana",
+    "name_ar": "خالد المهنا",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1575,6 +1718,7 @@
   {
     "slug": "khalid_alsharekh",
     "name_en": "Khalid Alsharekh",
+    "name_ar": "خالد الشارخ",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1586,6 +1730,7 @@
   {
     "slug": "khalid_mohammadi",
     "name_en": "Khalid Mohammadi",
+    "name_ar": "خالد كريم محمدي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1597,6 +1742,7 @@
   {
     "slug": "khalifa_altunaiji",
     "name_en": "Khalifa Altunaiji",
+    "name_ar": "خليفة الطنيجي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1608,6 +1754,7 @@
   {
     "slug": "lafi_al_oni",
     "name_en": "Lafi Al-Oni",
+    "name_ar": "لافي العوني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1619,6 +1766,7 @@
   {
     "slug": "maher_al_meaqli",
     "name_en": "Maher Al Meaqli",
+    "name_ar": "ماهر المعيقلي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1630,6 +1778,7 @@
   {
     "slug": "maher_al_meaqli_muallim",
     "name_en": "Maher Al Meaqli",
+    "name_ar": "ماهر المعيقلي",
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
@@ -1641,6 +1790,7 @@
   {
     "slug": "maher_al_meaqli_mujawwad",
     "name_en": "Maher Al Meaqli",
+    "name_ar": "ماهر المعيقلي",
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -1652,6 +1802,7 @@
   {
     "slug": "maher_shakhashero",
     "name_en": "Maher Shakhashero",
+    "name_ar": "ماهر شخاشيرو",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1663,6 +1814,7 @@
   {
     "slug": "mahmood_al_rifai",
     "name_en": "Mahmood Al rifai",
+    "name_ar": "محمود الرفاعي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1674,6 +1826,7 @@
   {
     "slug": "mahmood_alsheimy_duri",
     "name_en": "Mahmood AlSheimy",
+    "name_ar": "محمود الشيمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
@@ -1685,6 +1838,7 @@
   {
     "slug": "mahmoud_abdul_hakam",
     "name_en": "Mahmoud Abdul Hakam",
+    "name_ar": "محمود عبدالحكم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1696,6 +1850,7 @@
   {
     "slug": "mahmoud_ali_albanna",
     "name_en": "Mahmoud Ali  Albanna",
+    "name_ar": "محمود علي البنا",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1707,6 +1862,7 @@
   {
     "slug": "mahmoud_ali_albanna_mujawwad",
     "name_en": "Mahmoud Ali  Albanna",
+    "name_ar": "محمود علي البنا",
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -1718,6 +1874,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1729,6 +1886,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary_duri",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
@@ -1740,6 +1898,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary_mujawwad",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -1751,6 +1910,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary_qalon",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -1762,6 +1922,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary_warsh",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -1773,6 +1934,7 @@
   {
     "slug": "majed_al_enezi",
     "name_en": "Majed Al-Enezi",
+    "name_ar": "ماجد العنزي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1784,6 +1946,7 @@
   {
     "slug": "majed_al_zamil",
     "name_en": "Majed Al-Zamil",
+    "name_ar": "ماجد الزامل",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1795,6 +1958,7 @@
   {
     "slug": "mal_allah_abdulrhman_aljaber",
     "name_en": "Mal-Allah Abdulrhman Aljaber",
+    "name_ar": "مال الله عبدالرحمن الجابر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1806,6 +1970,7 @@
   {
     "slug": "mansour_al_salemi",
     "name_en": "Mansour Al-Salemi",
+    "name_ar": "منصور السالمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1817,6 +1982,7 @@
   {
     "slug": "marwan_alakri_qalon",
     "name_en": "Marwan Alakri",
+    "name_ar": "مروان العكري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -1828,6 +1994,7 @@
   {
     "slug": "mishary_alafasi",
     "name_en": "Mishary Alafasi",
+    "name_ar": "مشاري العفاسي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1839,6 +2006,7 @@
   {
     "slug": "mishary_alafasi_duri",
     "name_en": "Mishary Alafasi",
+    "name_ar": "مشاري العفاسي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
@@ -1850,6 +2018,7 @@
   {
     "slug": "moeedh_alharthi",
     "name_en": "Moeedh Alharthi",
+    "name_ar": "معيض الحارثي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1861,6 +2030,7 @@
   {
     "slug": "mohammad_abdullkarem",
     "name_en": "Mohammad Abdullkarem",
+    "name_ar": "محمد عبدالكريم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1872,6 +2042,7 @@
   {
     "slug": "mohammad_abdullkarem_warsh",
     "name_en": "Mohammad Abdullkarem",
+    "name_ar": "محمد عبدالكريم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -1883,6 +2054,7 @@
   {
     "slug": "mohammad_al_abdullah_duri",
     "name_en": "Mohammad Al-Abdullah",
+    "name_ar": "محمد عبدالحكيم سعيد العبدالله",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
@@ -1894,6 +2066,7 @@
   {
     "slug": "mohammad_al_abdullah_qunbul",
     "name_en": "Mohammad Al-Abdullah",
+    "name_ar": "محمد عبدالحكيم سعيد العبدالله",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qunbul_ibn_kathir",
@@ -1905,6 +2078,7 @@
   {
     "slug": "mohammad_al_airawy_warsh",
     "name_en": "Mohammad Al-Airawy",
+    "name_ar": "محمد الأيراوي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -1916,6 +2090,7 @@
   {
     "slug": "mohammad_al_tablaway",
     "name_en": "Mohammad Al-Tablaway",
+    "name_ar": "محمد الطبلاوي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1927,6 +2102,7 @@
   {
     "slug": "mohammad_al_tablaway_mujawwad",
     "name_en": "Mohammad Al-Tablaway",
+    "name_ar": "محمد الطبلاوي",
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -1938,6 +2114,7 @@
   {
     "slug": "mohammad_albukheet",
     "name_en": "Mohammad Albukheet",
+    "name_ar": "محمد البخيت",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1949,6 +2126,7 @@
   {
     "slug": "mohammad_almonshed",
     "name_en": "Mohammad AlMonshed",
+    "name_ar": "محمد المنشد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1960,6 +2138,7 @@
   {
     "slug": "mohammad_khalil_al_qari",
     "name_en": "Mohammad Khalil Al-Qari",
+    "name_ar": "محمد خليل القارئ",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1971,6 +2150,7 @@
   {
     "slug": "mohammad_rashad_alshareef",
     "name_en": "Mohammad Rashad Alshareef",
+    "name_ar": "محمد رشاد الشريف",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1982,6 +2162,7 @@
   {
     "slug": "mohammad_refat",
     "name_en": "Mohammad Refat",
+    "name_ar": "محمد رفعت",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -1993,6 +2174,7 @@
   {
     "slug": "mohammad_saayed_warsh",
     "name_en": "Mohammad Saayed",
+    "name_ar": "محمد سايد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -2004,6 +2186,7 @@
   {
     "slug": "mohammad_saleh_alim_shah",
     "name_en": "Mohammad Saleh Alim Shah",
+    "name_ar": "محمد صالح عالم شاه",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2015,6 +2198,7 @@
   {
     "slug": "mohammed_al_amin_qeniwa_qalon",
     "name_en": "Mohammed Al-Amin Qeniwa",
+    "name_ar": "محمد الأمين قنيوة",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -2026,6 +2210,7 @@
   {
     "slug": "mohammed_al_barrak",
     "name_en": "Mohammed Al-Barrak",
+    "name_ar": "محمد البراك",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2037,6 +2222,7 @@
   {
     "slug": "mohammed_al_lohaidan",
     "name_en": "Mohammed Al-Lohaidan",
+    "name_ar": "محمد اللحيدان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2048,6 +2234,7 @@
   {
     "slug": "mohammed_al_muhasny",
     "name_en": "Mohammed Al-Muhasny",
+    "name_ar": "محمد المحيسني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2059,6 +2246,7 @@
   {
     "slug": "mohammed_al_zubaidi",
     "name_en": "Mohammed Al-Zubaidi",
+    "name_ar": "محمد الزبيدي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2070,6 +2258,7 @@
   {
     "slug": "mohammed_ayyub",
     "name_en": "Mohammed Ayyub",
+    "name_ar": "محمد أيوب",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2081,6 +2270,7 @@
   {
     "slug": "mohammed_hafas_ali",
     "name_en": "Mohammed Hafas Ali",
+    "name_ar": "محمد حفص علي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2092,6 +2282,7 @@
   {
     "slug": "mohammed_jibreel",
     "name_en": "Mohammed Jibreel",
+    "name_ar": "محمد جبريل",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2103,6 +2294,7 @@
   {
     "slug": "mohammed_osman_khan",
     "name_en": "Mohammed Osman Khan",
+    "name_ar": "محمد عثمان خان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2114,6 +2306,7 @@
   {
     "slug": "mohammed_siddiq_al_minshawi",
     "name_en": "Mohammed Siddiq Al-Minshawi",
+    "name_ar": "محمد صديق المنشاوي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2125,6 +2318,7 @@
   {
     "slug": "mohammed_siddiq_al_minshawi_muallim",
     "name_en": "Mohammed Siddiq Al-Minshawi",
+    "name_ar": "محمد صديق المنشاوي",
     "source": "mp3quran",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
@@ -2136,6 +2330,7 @@
   {
     "slug": "mohammed_siddiq_al_minshawi_mujawwad",
     "name_en": "Mohammed Siddiq Al-Minshawi",
+    "name_ar": "محمد صديق المنشاوي",
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -2147,6 +2342,7 @@
   {
     "slug": "mousa_bilal",
     "name_en": "Mousa Bilal",
+    "name_ar": "موسى بلال",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2158,6 +2354,7 @@
   {
     "slug": "muamar_from_indonesia",
     "name_en": "Muamar (From Indonesia)",
+    "name_ar": "معمر الأندونيسي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2169,6 +2366,7 @@
   {
     "slug": "muftah_alsaltany",
     "name_en": "Muftah Alsaltany",
+    "name_ar": "مفتاح السلطني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2180,6 +2378,7 @@
   {
     "slug": "muftah_alsaltany_duri",
     "name_en": "Muftah Alsaltany",
+    "name_ar": "مفتاح السلطني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
@@ -2191,6 +2390,7 @@
   {
     "slug": "muftah_alsaltany_duri_abu_amr",
     "name_en": "Muftah Alsaltany",
+    "name_ar": "مفتاح السلطني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
@@ -2202,6 +2402,7 @@
   {
     "slug": "muftah_alsaltany_ibn",
     "name_en": "Muftah Alsaltany",
+    "name_ar": "مفتاح السلطني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "ibn_dhakwan_ibn_amir",
@@ -2213,6 +2414,7 @@
   {
     "slug": "muftah_alsaltany_shubah",
     "name_en": "Muftah Alsaltany",
+    "name_ar": "مفتاح السلطني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "shubah_an_asim",
@@ -2224,6 +2426,7 @@
   {
     "slug": "muhammad_abu_sneina_qalon",
     "name_en": "Muhammad Abu Sneina",
+    "name_ar": "محمد أبو سنينة",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -2235,6 +2438,7 @@
   {
     "slug": "muhammad_al_faqih",
     "name_en": "Muhammad Al Faqih",
+    "name_ar": "محمد الفقيه",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2246,6 +2450,7 @@
   {
     "slug": "muhammad_al_hafiz",
     "name_en": "Muhammad Al-Hafiz",
+    "name_ar": "محمد الحافظ",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2257,6 +2462,7 @@
   {
     "slug": "muhammad_burhaji",
     "name_en": "Muhammad Burhaji",
+    "name_ar": "محمد برهجي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2268,6 +2474,7 @@
   {
     "slug": "muhammed_khairul_anuar",
     "name_en": "Muhammed Khairul Anuar",
+    "name_ar": "محمد خير النور",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2279,6 +2486,7 @@
   {
     "slug": "mukhtar_al_haj",
     "name_en": "Mukhtar Al-Haj",
+    "name_ar": "مختار الحاج",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2290,6 +2498,7 @@
   {
     "slug": "mustafa_al_lahoni",
     "name_en": "Mustafa Al-Lahoni",
+    "name_ar": "مصطفى اللاهوني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2301,6 +2510,7 @@
   {
     "slug": "mustafa_ismail",
     "name_en": "Mustafa Ismail",
+    "name_ar": "مصطفى إسماعيل",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2312,6 +2522,7 @@
   {
     "slug": "mustafa_ismail_mujawwad",
     "name_en": "Mustafa Ismail",
+    "name_ar": "مصطفى إسماعيل",
     "source": "mp3quran",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -2323,6 +2534,7 @@
   {
     "slug": "mustafa_raad_alazawy",
     "name_en": "Mustafa raad Alazawy",
+    "name_ar": "مصطفى رعد العزاوي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2334,6 +2546,7 @@
   {
     "slug": "nabil_al_rifay",
     "name_en": "Nabil Al Rifay",
+    "name_ar": "نبيل الرفاعي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2345,6 +2558,7 @@
   {
     "slug": "nasser_al_obaid",
     "name_en": "Nasser Al obaid",
+    "name_ar": "ناصر العبيد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2356,6 +2570,7 @@
   {
     "slug": "nasser_almajed",
     "name_en": "Nasser Almajed",
+    "name_ar": "ناصر الماجد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2367,6 +2582,7 @@
   {
     "slug": "nasser_alosfor",
     "name_en": "Nasser Alosfor",
+    "name_ar": "ناصر العصفور",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2378,6 +2594,7 @@
   {
     "slug": "nasser_alqatami",
     "name_en": "Nasser Alqatami",
+    "name_ar": "ناصر القطامي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2389,6 +2606,7 @@
   {
     "slug": "nathier_almalki",
     "name_en": "Nathier Almalki",
+    "name_ar": "نذير المالكي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2400,6 +2618,7 @@
   {
     "slug": "neamah_al_hassan",
     "name_en": "Neamah Al-Hassan",
+    "name_ar": "نعمة الحسان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2411,6 +2630,7 @@
   {
     "slug": "noreen_mohammad_siddiq_duri",
     "name_en": "Noreen Mohammad Siddiq",
+    "name_ar": "نورين محمد صديق",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_abu_amr",
@@ -2422,6 +2642,7 @@
   {
     "slug": "okasha_kameny_bazzi",
     "name_en": "Okasha Kameny",
+    "name_ar": "عكاشة كميني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "bazzi_ibn_kathir",
@@ -2433,6 +2654,7 @@
   {
     "slug": "okasha_kameny_duri",
     "name_en": "Okasha Kameny",
+    "name_ar": "عكاشة كميني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "duri_al_kisai",
@@ -2444,6 +2666,7 @@
   {
     "slug": "omar_al_darweez",
     "name_en": "Omar Al Darweez",
+    "name_ar": "عمر الدريويز",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2455,6 +2678,7 @@
   {
     "slug": "omar_al_qazabri_warsh",
     "name_en": "Omar Al-Qazabri",
+    "name_ar": "عمر القزابري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -2466,6 +2690,7 @@
   {
     "slug": "othman_al_ansary",
     "name_en": "Othman Al-Ansary",
+    "name_ar": "عثمان الأنصاري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2477,6 +2702,7 @@
   {
     "slug": "peshawa_qadr_al_kurdi",
     "name_en": "Peshawa Qadr Al-Kurdi",
+    "name_ar": "بيشه وا قادر الكردي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2488,6 +2714,7 @@
   {
     "slug": "raad_al_kurdi",
     "name_en": "Raad Al Kurdi",
+    "name_ar": "رعد محمد الكردي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2499,6 +2726,7 @@
   {
     "slug": "rachid_belalya",
     "name_en": "Rachid Belalya",
+    "name_ar": "رشيد بلعالية",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2510,6 +2738,7 @@
   {
     "slug": "rachid_belalya_warsh",
     "name_en": "Rachid Belalya",
+    "name_ar": "رشيد بلعالية",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -2521,6 +2750,7 @@
   {
     "slug": "ramadan_shakoor",
     "name_en": "Ramadan Shakoor",
+    "name_ar": "رمضان شكور",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2532,6 +2762,7 @@
   {
     "slug": "rami_aldeais",
     "name_en": "Rami Aldeais",
+    "name_ar": "رامي الدعيس",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2543,6 +2774,7 @@
   {
     "slug": "rasheed_ifrad_warsh",
     "name_en": "Rasheed Ifrad",
+    "name_ar": "رشيد إفراد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -2554,6 +2786,7 @@
   {
     "slug": "rodziah_abdulrahman",
     "name_en": "Rodziah Abdulrahman",
+    "name_ar": "رضية عبدالرحمن",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2565,6 +2798,7 @@
   {
     "slug": "rogayah_sulong",
     "name_en": "Rogayah Sulong",
+    "name_ar": "رقية سولونق",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2576,6 +2810,7 @@
   {
     "slug": "saad_al_ghamdi",
     "name_en": "Saad Al-Ghamdi",
+    "name_ar": "سعد الغامدي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2587,6 +2822,7 @@
   {
     "slug": "saad_almqren",
     "name_en": "Saad Almqren",
+    "name_ar": "سعد المقرن",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2598,6 +2834,7 @@
   {
     "slug": "saber_abdulhakm",
     "name_en": "Saber Abdulhakm",
+    "name_ar": "صابر عبدالحكم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2609,6 +2846,7 @@
   {
     "slug": "sahl_yassin",
     "name_en": "Sahl Yassin",
+    "name_ar": "سهل ياسين",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2620,6 +2858,7 @@
   {
     "slug": "saidin_abdulrahman",
     "name_en": "Saidin Abdulrahman",
+    "name_ar": "سيدين عبدالرحمن",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2631,6 +2870,7 @@
   {
     "slug": "salah_albudair",
     "name_en": "Salah Albudair",
+    "name_ar": "صلاح البدير",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2642,6 +2882,7 @@
   {
     "slug": "salah_alhashim",
     "name_en": "Salah Alhashim",
+    "name_ar": "صلاح الهاشم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2653,6 +2894,7 @@
   {
     "slug": "salah_alhashim_qalon",
     "name_en": "Salah Alhashim",
+    "name_ar": "صلاح الهاشم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -2664,6 +2906,7 @@
   {
     "slug": "salah_musali",
     "name_en": "Salah Musali",
+    "name_ar": "صلاح مصلي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2675,6 +2918,7 @@
   {
     "slug": "saleh_al_habdan",
     "name_en": "Saleh Al-Habdan",
+    "name_ar": "صالح الهبدان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2686,6 +2930,7 @@
   {
     "slug": "saleh_al_talib",
     "name_en": "Saleh Al-Talib",
+    "name_ar": "صالح آل طالب",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2697,6 +2942,7 @@
   {
     "slug": "saleh_alquraishi",
     "name_en": "Saleh Alquraishi",
+    "name_ar": "صالح القريشي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2708,6 +2954,7 @@
   {
     "slug": "saleh_alsahood",
     "name_en": "Saleh Alsahood",
+    "name_ar": "صالح الصاهود",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2719,6 +2966,7 @@
   {
     "slug": "saleh_alshamrani",
     "name_en": "Saleh Alshamrani",
+    "name_ar": "صالح الشمراني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2730,6 +2978,7 @@
   {
     "slug": "salman_alotaibi",
     "name_en": "Salman Alotaibi",
+    "name_ar": "سلمان العتيبي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2741,6 +2990,7 @@
   {
     "slug": "salman_alsadeiq",
     "name_en": "Salman Alsadeiq",
+    "name_ar": "سلمان الصديق",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2752,6 +3002,7 @@
   {
     "slug": "sami_al_dosari",
     "name_en": "Sami Al-Dosari",
+    "name_ar": "سامي الدوسري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2763,6 +3014,7 @@
   {
     "slug": "sami_al_hasn",
     "name_en": "Sami Al-Hasn",
+    "name_ar": "سامي الحسن",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2774,6 +3026,7 @@
   {
     "slug": "sapinah_mamat",
     "name_en": "Sapinah Mamat",
+    "name_ar": "سابينة مامات",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2785,6 +3038,7 @@
   {
     "slug": "saud_al_shuraim",
     "name_en": "Saud Al-Shuraim",
+    "name_ar": "سعود الشريم",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2796,6 +3050,7 @@
   {
     "slug": "sayed_ahmad_hashemi",
     "name_en": "Sayed Ahmad Hashemi",
+    "name_ar": "سيد أحمد هاشمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2807,6 +3062,7 @@
   {
     "slug": "sayeed_ramadan",
     "name_en": "Sayeed Ramadan",
+    "name_ar": "سيد رمضان",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2818,6 +3074,7 @@
   {
     "slug": "shaban_al_sayiaad",
     "name_en": "Shaban Al-Sayiaad",
+    "name_ar": "شعبان الصياد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2829,6 +3086,7 @@
   {
     "slug": "shaik_abu_bakr_al_shatri",
     "name_en": "Shaik Abu Bakr Al Shatri",
+    "name_ar": "شيخ أبو بكر الشاطري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2840,6 +3098,7 @@
   {
     "slug": "shirazad_taher",
     "name_en": "Shirazad Taher",
+    "name_ar": "شيرزاد عبدالرحمن طاهر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2851,6 +3110,7 @@
   {
     "slug": "slaah_bukhatir",
     "name_en": "Slaah Bukhatir",
+    "name_ar": "صلاح بو خاطر",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2862,6 +3122,7 @@
   {
     "slug": "tareq_abdulgani_daawob_qalon",
     "name_en": "Tareq Abdulgani daawob",
+    "name_ar": "طارق عبدالغني دعوب",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -2873,6 +3134,7 @@
   {
     "slug": "tawfeeq_as_sayegh",
     "name_en": "Tawfeeq As-Sayegh",
+    "name_ar": "توفيق الصايغ",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2884,6 +3146,7 @@
   {
     "slug": "ustaz_zamri",
     "name_en": "Ustaz Zamri",
+    "name_ar": "أستاذ زامري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2895,6 +3158,7 @@
   {
     "slug": "wadeea_al_yamani",
     "name_en": "Wadeea Al-Yamani",
+    "name_ar": "وديع اليمني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2906,6 +3170,7 @@
   {
     "slug": "waleed_alnaehi_qalon",
     "name_en": "Waleed Alnaehi",
+    "name_ar": "وليد النائحي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "qalon_an_nafi",
@@ -2917,6 +3182,7 @@
   {
     "slug": "walid_al_dulaimi",
     "name_en": "Walid Al-Dulaimi",
+    "name_ar": "وليد الدليمي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2928,6 +3194,7 @@
   {
     "slug": "wasel_almethen",
     "name_en": "Wasel Almethen",
+    "name_ar": "واصل المذن",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2939,6 +3206,7 @@
   {
     "slug": "wishear_hayder_arbili",
     "name_en": "Wishear Hayder Arbili",
+    "name_ar": "وشيار حيدر اربيلي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2950,6 +3218,7 @@
   {
     "slug": "yahya_hawwa",
     "name_en": "Yahya Hawwa",
+    "name_ar": "يحيى حوا",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2961,6 +3230,7 @@
   {
     "slug": "yasser_al_dosari",
     "name_en": "Yasser Al-Dosari",
+    "name_ar": "ياسر الدوسري",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2972,6 +3242,7 @@
   {
     "slug": "yasser_al_faylakawi",
     "name_en": "Yasser Al-Faylakawi",
+    "name_ar": "ياسر الفيلكاوي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -2983,6 +3254,7 @@
   {
     "slug": "yasser_al_mazroyee_rawh",
     "name_en": "Yasser Al-Mazroyee",
+    "name_ar": "ياسر المزروعي ",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "rawh_an_yaqub",
@@ -2994,6 +3266,7 @@
   {
     "slug": "yasser_al_qurashi",
     "name_en": "Yasser Al-Qurashi",
+    "name_ar": "ياسر القرشي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3005,6 +3278,7 @@
   {
     "slug": "yasser_salamah",
     "name_en": "Yasser Salamah",
+    "name_ar": "ياسر سلامة",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3016,6 +3290,7 @@
   {
     "slug": "younes_souilass_warsh",
     "name_en": "Younes Souilass",
+    "name_ar": "يونس اسويلص",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "warsh_an_nafi",
@@ -3027,6 +3302,7 @@
   {
     "slug": "yousef_alshoaey",
     "name_en": "Yousef Alshoaey",
+    "name_ar": "يوسف الشويعي",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3038,6 +3314,7 @@
   {
     "slug": "yousef_bin_noah_ahmad",
     "name_en": "Yousef Bin Noah Ahmad",
+    "name_ar": "يوسف بن نوح أحمد",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3049,6 +3326,7 @@
   {
     "slug": "youssef_edghouch",
     "name_en": "Youssef Edghouch",
+    "name_ar": "يوسف الدغوش",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3060,6 +3338,7 @@
   {
     "slug": "yusuf_alaidroos",
     "name_en": "Yusuf ALaidroos",
+    "name_ar": "يوسف العيدروس",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3071,6 +3350,7 @@
   {
     "slug": "zakaria_hamamah",
     "name_en": "Zakaria Hamamah",
+    "name_ar": "زكريا حمامة",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3082,6 +3362,7 @@
   {
     "slug": "zaki_daghistani",
     "name_en": "Zaki Daghistani",
+    "name_ar": "زكي داغستاني",
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3093,6 +3374,7 @@
   {
     "slug": "abdul_munim_abdul_mubdi",
     "name_en": "Abdul-Munim Abdul-Mubdi",
+    "name_ar": "عبدالمنعم عبدالمبدئ",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3104,6 +3386,7 @@
   {
     "slug": "abdullah_ali_jabir",
     "name_en": "Abdullah Ali Jabir",
+    "name_ar": "عبدالله علي جابر",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3115,6 +3398,7 @@
   {
     "slug": "abdur_razaq_bin_abtan_al_dulaimi",
     "name_en": "Abdur-Razaq bin Abtan al-Dulaimi",
+    "name_ar": "عبد الرزاق بن عبطان الدليمي",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3126,6 +3410,7 @@
   {
     "slug": "asim_abdul_aleem",
     "name_en": "Asim Abdul-Aleem",
+    "name_ar": "عاصم عبدالعليم",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3137,6 +3422,7 @@
   {
     "slug": "aziz_alili",
     "name_en": "Aziz Alili",
+    "name_ar": "عزيز عليلي",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3148,6 +3434,7 @@
   {
     "slug": "fatih_seferagic",
     "name_en": "Fatih Seferagic",
+    "name_ar": "فاتح سفراجيك",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3159,6 +3446,7 @@
   {
     "slug": "hady_toure",
     "name_en": "Hady Toure",
+    "name_ar": "هادي توري",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3170,6 +3458,7 @@
   {
     "slug": "hamad_sinan",
     "name_en": "Hamad Sinan",
+    "name_ar": "حمد سنان",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3181,6 +3470,7 @@
   {
     "slug": "mohammad_ismaeel_al_muqaddim",
     "name_en": "Mohammad Ismaeel Al-Muqaddim",
+    "name_ar": "محمد إسماعيل المقدم",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3192,6 +3482,7 @@
   {
     "slug": "muhammad_hassan",
     "name_en": "Muhammad Hassan",
+    "name_ar": "محمد حسان",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3203,6 +3494,7 @@
   {
     "slug": "muhammad_sulaiman_patel",
     "name_en": "Muhammad Sulaiman Patel",
+    "name_ar": "محمد سليمان باتل",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3214,6 +3506,7 @@
   {
     "slug": "sadaqat_ali",
     "name_en": "Sadaqat Ali",
+    "name_ar": "صدقات علي",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3225,6 +3518,7 @@
   {
     "slug": "abdel_rahman_benmoussa",
     "name_en": "Abdel Rahman Benmoussa",
+    "name_ar": "عبد الرحمن بن موسى",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3236,6 +3530,7 @@
   {
     "slug": "abdelhamid_ehsain",
     "name_en": "Abdelhamid Ehsain",
+    "name_ar": "عبد الحميد إحساين",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3247,6 +3542,7 @@
   {
     "slug": "abdelmoujib_benkirane",
     "name_en": "Abdelmoujib Benkirane",
+    "name_ar": "عبد المجيب بنكيران",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3258,6 +3554,7 @@
   {
     "slug": "abdualhaleem_hussain",
     "name_en": "Abdulhaleem Hussain",
+    "name_ar": "عبد الحليم حسين",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3269,6 +3566,7 @@
   {
     "slug": "abdul_rahman_aljuraidhi",
     "name_en": "Abdul Rahman Al-Juraidhi",
+    "name_ar": "عبد الرحمن الجريذي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3280,6 +3578,7 @@
   {
     "slug": "abdulkabeer_alhadidi",
     "name_en": "Abdulkabeer Al-Hadidi",
+    "name_ar": "عبد الكبير الحديدي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3291,6 +3590,7 @@
   {
     "slug": "ahmed_allahdan",
     "name_en": "Ahmed Allahdan",
+    "name_ar": "أحمد اللحدان",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3302,6 +3602,7 @@
   {
     "slug": "ahmed_mohammed_taher",
     "name_en": "Ahmed Mohammed Taher",
+    "name_ar": "أحمد محمد طاهر",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3313,6 +3614,7 @@
   {
     "slug": "ahmed_nasr",
     "name_en": "Ahmed Nasr",
+    "name_ar": "أحمد نصر",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3324,6 +3626,7 @@
   {
     "slug": "ahmet_khader_trabelsi",
     "name_en": "Ahmet Khader Trabelsi",
+    "name_ar": "أحمد خضر الطرابلسي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3335,6 +3638,7 @@
   {
     "slug": "alshahat_anwar",
     "name_en": "Al-Shahat Anwar",
+    "name_ar": "الشحات أنور",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3346,6 +3650,7 @@
   {
     "slug": "amer_alkazemi",
     "name_en": "Amer Al-Kazemi",
+    "name_ar": "عامر الكاظمي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3357,6 +3662,7 @@
   {
     "slug": "ammar_louay_almulla_ali",
     "name_en": "Ammar Louay Al-Mulla Ali",
+    "name_ar": "عمار لؤي الملا علي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3368,6 +3674,7 @@
   {
     "slug": "anas_almiman",
     "name_en": "Anas Al-Miman",
+    "name_ar": "أنس الميمان",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3379,6 +3686,7 @@
   {
     "slug": "anas_jalhoum",
     "name_en": "Anas Jalhoum",
+    "name_ar": "أنس جلهوم",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3390,6 +3698,7 @@
   {
     "slug": "fahad_almutairi",
     "name_en": "Fahad Al-Mutairi",
+    "name_ar": "فهد المطيري",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3401,6 +3710,7 @@
   {
     "slug": "fatih_cholak",
     "name_en": "Fatih Cholak",
+    "name_ar": "فاتح تشولاك",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3412,6 +3722,7 @@
   {
     "slug": "ghassan_alshorbagy",
     "name_en": "Ghassan Al-Shorbagy",
+    "name_ar": "غسان الشوربجي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3423,6 +3734,7 @@
   {
     "slug": "hajjaj_al_hindawi",
     "name_en": "Hajjaj Al-Hindawi",
+    "name_ar": "حجاج الهنداوي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3434,6 +3746,7 @@
   {
     "slug": "hamza_algerian",
     "name_en": "Hamza Al-Jazairi",
+    "name_ar": "حمزة الجزائري",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3445,6 +3758,7 @@
   {
     "slug": "hamza_el_far",
     "name_en": "Hamza El Far",
+    "name_ar": "حمزة الفار",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3456,6 +3770,7 @@
   {
     "slug": "hassan_alwajdi",
     "name_en": "Hassan Al-Wajdi",
+    "name_ar": "حسن الوجدي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3467,6 +3782,7 @@
   {
     "slug": "imad_almansri",
     "name_en": "Imad Al-Mansri",
+    "name_ar": "عماد المنصري",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3478,6 +3794,7 @@
   {
     "slug": "ishak_danish",
     "name_en": "Ishak Danish",
+    "name_ar": "إسحاق دانش",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3489,6 +3806,7 @@
   {
     "slug": "jazza_alswaileh",
     "name_en": "Jazza Al-Swaileh",
+    "name_ar": "جزاع السويلح",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3500,6 +3818,7 @@
   {
     "slug": "karim_mansouri",
     "name_en": "Karim Mansouri",
+    "name_ar": "كريم منصوري",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3511,6 +3830,7 @@
   {
     "slug": "khalil_alsaghir",
     "name_en": "Khalil Al-Saghir",
+    "name_ar": "خليل الصغير",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3522,6 +3842,7 @@
   {
     "slug": "maher_alwan",
     "name_en": "Maher Alwan",
+    "name_ar": "ماهر علوان",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3533,6 +3854,7 @@
   {
     "slug": "maytham_altammar",
     "name_en": "Maytham Al-Tammar",
+    "name_ar": "ميثم التمار",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3544,6 +3866,7 @@
   {
     "slug": "mohammed_alghazali",
     "name_en": "Mohammed Al-Ghazali",
+    "name_ar": "محمد الغزالي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3555,6 +3878,7 @@
   {
     "slug": "muhammad_alkantawi",
     "name_en": "Muhammad Al-Kantawi",
+    "name_ar": "محمد الكنتاوي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3566,6 +3890,7 @@
   {
     "slug": "muhammad_alsabil",
     "name_en": "Muhammad Al-Sabil",
+    "name_ar": "محمد السبيل",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3577,6 +3902,7 @@
   {
     "slug": "muhammed_husayn_amer",
     "name_en": "Muhammed Husayn Amer",
+    "name_ar": "محمد حسين عامر",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3588,6 +3914,7 @@
   {
     "slug": "mustafa_gharbi",
     "name_en": "Mustafa Gharbi",
+    "name_ar": "مصطفى غربي",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3599,6 +3926,7 @@
   {
     "slug": "obaida_muafaq",
     "name_en": "Obaida Muafaq",
+    "name_ar": "عبيدة موفق",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3610,6 +3938,7 @@
   {
     "slug": "rachid_belachia",
     "name_en": "Rachid Belachia",
+    "name_ar": "رشيد بلعشية",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3621,6 +3950,7 @@
   {
     "slug": "rayan_almuhaisni",
     "name_en": "Rayan Al-Muhaisni",
+    "name_ar": "ريان المحيسني",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3632,6 +3962,7 @@
   {
     "slug": "saeed_alkhatib",
     "name_en": "Saeed Al-Khatib",
+    "name_ar": "سعيد الخطيب",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3643,6 +3974,7 @@
   {
     "slug": "salah_aljamal",
     "name_en": "Salah Al-Jamal",
+    "name_ar": "صلاح الجمل",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3654,6 +3986,7 @@
   {
     "slug": "salah_baothman",
     "name_en": "Salah Ba Othman",
+    "name_ar": "صلاح باعثمان",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3665,6 +3998,7 @@
   {
     "slug": "salih_ahmed_salih",
     "name_en": "Salih Ahmed Salih",
+    "name_ar": "صالح أحمد صالح",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3676,6 +4010,7 @@
   {
     "slug": "yusuf_nooh",
     "name_en": "Yusuf Nooh",
+    "name_ar": "يوسف نوح",
     "source": "surah-quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3687,6 +4022,7 @@
   {
     "slug": "abdulbasit_abdulsamad",
     "name_en": "Abdulbasit Abdulsamad",
+    "name_ar": "عبدالباسط عبدالصمد",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3698,6 +4034,7 @@
   {
     "slug": "abdulbasit_abdulsamad_mujawwad",
     "name_en": "Abdulbasit Abdulsamad",
+    "name_ar": "عبدالباسط عبدالصمد",
     "source": "everyayah",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -3709,6 +4046,7 @@
   {
     "slug": "abdullah_al_johany",
     "name_en": "Abdullah Al-Johany",
+    "name_ar": "عبدالله عواد الجهني",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3720,6 +4058,7 @@
   {
     "slug": "abdullah_al_mattrod",
     "name_en": "Abdullah Al-Mattrod",
+    "name_ar": "عبدالله المطرود",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3731,6 +4070,7 @@
   {
     "slug": "abdullah_basfer",
     "name_en": "Abdullah Basfer",
+    "name_ar": "عبدالله بصفر",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3742,6 +4082,7 @@
   {
     "slug": "abdulmohsen_al_qasim",
     "name_en": "Abdulmohsen Al-Qasim",
+    "name_ar": "عبدالمحسن القاسم",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3753,6 +4094,7 @@
   {
     "slug": "abdulrahman_alsudaes",
     "name_en": "Abdulrahman Alsudaes",
+    "name_ar": "عبدالرحمن السديس",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3764,6 +4106,7 @@
   {
     "slug": "ahmad_al_ajmy",
     "name_en": "Ahmad Al-Ajmy",
+    "name_ar": "أحمد بن علي العجمي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3775,6 +4118,7 @@
   {
     "slug": "ahmad_nauina",
     "name_en": "Ahmad Nauina",
+    "name_ar": "أحمد نعينع",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3786,6 +4130,7 @@
   {
     "slug": "akram_alalaqmi",
     "name_en": "Akram Alalaqmi",
+    "name_ar": "أكرم العلاقمي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3797,6 +4142,7 @@
   {
     "slug": "ali_alhuthaifi",
     "name_en": "Ali Alhuthaifi",
+    "name_ar": "علي بن عبدالرحمن الحذيفي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3808,6 +4154,7 @@
   {
     "slug": "ali_hajjaj_alsouasi",
     "name_en": "Ali Hajjaj Alsouasi",
+    "name_ar": "علي حجاج السويسي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3819,6 +4166,7 @@
   {
     "slug": "ali_jaber",
     "name_en": "Ali Jaber",
+    "name_ar": "علي جابر",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3830,6 +4178,7 @@
   {
     "slug": "ayman_sowaid",
     "name_en": "Ayman Sowaid",
+    "name_ar": "أيمن سويد",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3841,6 +4190,7 @@
   {
     "slug": "aziz_alili",
     "name_en": "Aziz Alili",
+    "name_ar": "عزيز عليلي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3852,6 +4202,7 @@
   {
     "slug": "fares_abbad",
     "name_en": "Fares Abbad",
+    "name_ar": "فارس عباد",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3863,6 +4214,7 @@
   {
     "slug": "hani_arrifai",
     "name_en": "Hani Arrifai",
+    "name_ar": "هاني الرفاعي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3874,6 +4226,7 @@
   {
     "slug": "ibrahim_al_akdar",
     "name_en": "Ibrahim Al-Akdar",
+    "name_ar": "إبراهيم الأخضر",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3885,6 +4238,7 @@
   {
     "slug": "karim_mansouri",
     "name_en": "Karim Mansouri",
+    "name_ar": "كريم منصوري",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3896,6 +4250,7 @@
   {
     "slug": "khaled_al_qahtani",
     "name_en": "Khaled Al-Qahtani",
+    "name_ar": "خالد القحطاني",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3907,6 +4262,7 @@
   {
     "slug": "khalifa_altunaiji",
     "name_en": "Khalifa Altunaiji",
+    "name_ar": "خليفة الطنيجي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3918,6 +4274,7 @@
   {
     "slug": "maher_al_meaqli",
     "name_en": "Maher Al Meaqli",
+    "name_ar": "ماهر المعيقلي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3929,6 +4286,7 @@
   {
     "slug": "mahmoud_ali_albanna",
     "name_en": "Mahmoud Ali  Albanna",
+    "name_ar": "محمود علي البنا",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3940,6 +4298,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3951,6 +4310,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary_muallim",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "everyayah",
     "style": "muallim",
     "riwayah": "hafs_an_asim",
@@ -3962,6 +4322,7 @@
   {
     "slug": "mahmoud_khalil_al_hussary_mujawwad",
     "name_en": "Mahmoud Khalil Al-Hussary",
+    "name_ar": "محمود خليل الحصري",
     "source": "everyayah",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -3973,6 +4334,7 @@
   {
     "slug": "mishary_alafasi",
     "name_en": "Mishary Alafasi",
+    "name_ar": "مشاري العفاسي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3984,6 +4346,7 @@
   {
     "slug": "mohammad_abdullkarem",
     "name_en": "Mohammad Abdullkarem",
+    "name_ar": "محمد عبدالكريم",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -3995,6 +4358,7 @@
   {
     "slug": "mohammad_al_tablaway",
     "name_en": "Mohammad Al-Tablaway",
+    "name_ar": "محمد الطبلاوي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4006,6 +4370,7 @@
   {
     "slug": "mohammed_ayyub",
     "name_en": "Mohammed Ayyub",
+    "name_ar": "محمد أيوب",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4017,6 +4382,7 @@
   {
     "slug": "mohammed_jibreel",
     "name_en": "Mohammed Jibreel",
+    "name_ar": "محمد جبريل",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4028,6 +4394,7 @@
   {
     "slug": "mohammed_siddiq_al_minshawi",
     "name_en": "Mohammed Siddiq Al-Minshawi",
+    "name_ar": "محمد صديق المنشاوي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4039,6 +4406,7 @@
   {
     "slug": "mohammed_siddiq_al_minshawi_mujawwad",
     "name_en": "Mohammed Siddiq Al-Minshawi",
+    "name_ar": "محمد صديق المنشاوي",
     "source": "everyayah",
     "style": "mujawwad",
     "riwayah": "hafs_an_asim",
@@ -4050,6 +4418,7 @@
   {
     "slug": "mustafa_ismail",
     "name_en": "Mustafa Ismail",
+    "name_ar": "مصطفى إسماعيل",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4061,6 +4430,7 @@
   {
     "slug": "nabil_al_rifay",
     "name_en": "Nabil Al Rifay",
+    "name_ar": "نبيل الرفاعي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4072,6 +4442,7 @@
   {
     "slug": "nasser_alqatami",
     "name_en": "Nasser Alqatami",
+    "name_ar": "ناصر القطامي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4083,6 +4454,7 @@
   {
     "slug": "parhizgar",
     "name_en": "Shahriar Parhizgar",
+    "name_ar": "شهريار پرهيزكار",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4094,6 +4466,7 @@
   {
     "slug": "saad_al_ghamdi",
     "name_en": "Saad Al-Ghamdi",
+    "name_ar": "سعد الغامدي",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4105,6 +4478,7 @@
   {
     "slug": "sahl_yassin",
     "name_en": "Sahl Yassin",
+    "name_ar": "سهل ياسين",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4116,6 +4490,7 @@
   {
     "slug": "salah_albudair",
     "name_en": "Salah Albudair",
+    "name_ar": "صلاح البدير",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4127,6 +4502,7 @@
   {
     "slug": "saud_al_shuraim",
     "name_en": "Saud Al-Shuraim",
+    "name_ar": "سعود الشريم",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4138,6 +4514,7 @@
   {
     "slug": "shaik_abu_bakr_al_shatri",
     "name_en": "Shaik Abu Bakr Al Shatri",
+    "name_ar": "شيخ أبو بكر الشاطري",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4149,6 +4526,7 @@
   {
     "slug": "slaah_bukhatir",
     "name_en": "Slaah Bukhatir",
+    "name_ar": "صلاح بو خاطر",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4160,6 +4538,7 @@
   {
     "slug": "yasser_al_dosari",
     "name_en": "Yasser Al-Dosari",
+    "name_ar": "ياسر الدوسري",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4171,6 +4550,7 @@
   {
     "slug": "yasser_salamah",
     "name_en": "Yasser Salamah",
+    "name_ar": "ياسر سلامة",
     "source": "everyayah",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
@@ -4182,6 +4562,7 @@
   {
     "slug": "ahmad_al_nufais",
     "name_en": "Ahmad Al Nufais",
+    "name_ar": "أحمد النفيس",
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
