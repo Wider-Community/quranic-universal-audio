@@ -186,13 +186,17 @@ The segment validations surface as collapsible accordion panels in the inspector
 
 | Accordion | Source Validation |
 |-----------|-------------------|
-| Errors | Meta (#1), empty keys (#2), time ordering (#3), word index validity (#4) |
-| Missing Verses | Verse coverage (#5) |
-| Missing Words | Word coverage (#6), with auto-fix for single-word gaps |
 | Failed Alignments | Confidence (#9) — segments with no matched reference |
+| Missing Verses | Verse coverage (#5) — within covered surahs only |
+| Missing Words | Word coverage (#6), with auto-fix for single-word gaps |
+| Structural Errors | Meta (#1), empty keys (#2), time ordering (#3), word index validity (#4) |
 | Low Confidence | Confidence (#9) — segments below 80% |
-| Cross-verse | Segments spanning multiple ayahs — for by_ayah, identifies audio bleeding; for by_surah, highlights potential under-segmentation |
+| Detected Repetitions | `wrap_word_ranges` set by alignment pipeline |
+| May Require Boundary Adjustment | 1-word segments (excluding muqatta'at, single-word verses, standalone words/refs) |
+| Cross-verse | `matched_ref` spans multiple ayahs, confidence < 1.0 |
 | Audio Bleeding | Audio bleeding (#11) — by_ayah verse mismatch |
+| Muqatta'at | Word 1 of a huruf muqatta'at verse, confidence < 1.0 |
+| Qalqala | Last letter of matched_text is a qalqala letter, confidence < 1.0 |
 
 ## validate_timestamps.py
 
