@@ -142,8 +142,9 @@ def _format_issues_delta(delta: dict | None) -> str:
     if not delta:
         return ""
 
-    # Only show rows where there was at least one issue initially
-    rows_with_issues = {k: v for k, v in delta.items() if v["before"] > 0}
+    # Only show rows where there was at least one issue initially; exclude view-only categories
+    _NON_ISSUE_CATS = {"muqattaat"}
+    rows_with_issues = {k: v for k, v in delta.items() if v["before"] > 0 and k not in _NON_ISSUE_CATS}
     if not rows_with_issues:
         return ""
 

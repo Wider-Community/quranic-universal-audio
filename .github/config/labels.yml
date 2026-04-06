@@ -17,7 +17,6 @@ issue_labels:
   missing_words: "Missing words"
   audio_bleeding: "Audio bleeding"
   repetitions: "Repetitions"
-  muqattaat: "Muqattaat letters"
   qalqala: "Qalqala"
 
 source_labels:
