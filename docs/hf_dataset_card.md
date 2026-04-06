@@ -39,7 +39,9 @@ dataset_info:
     dtype: int32
   - name: ayah
     dtype: int32
-  - name: text
+  - name: duration_ms
+    dtype: int32
+  - name: text_uthmani
     dtype: string
   - name: segments
     sequence:
@@ -51,14 +53,12 @@ dataset_info:
     sequence:
     - name: word_idx
       dtype: int32
-    - name: letters
-      sequence:
-      - name: char
-        dtype: string
-      - name: start_ms
-        dtype: int32
-      - name: end_ms
-        dtype: int32
+    - name: char
+      dtype: string
+    - name: start_ms
+      dtype: int32
+    - name: end_ms
+      dtype: int32
   - name: source_url
     dtype: string
   - name: source_offset_ms
@@ -129,10 +129,10 @@ dataset_info:
 
 Each row is one verse (ayah) of the Qur'an, with:
 - **Audio clip** of the verse recitation, trimmed to speech boundaries
-- **Word-level timestamps** in milliseconds, relative to the audio clip. The `word_idx` refers to the canonical word position in the verse, not the position in the `text` field. When the reciter repeats a word, the same `word_idx` may appear multiple times and indices may go backward.
+- **Word-level timestamps** in milliseconds, relative to the audio clip. The `word_idx` refers to the canonical word position in the verse, not the position in the `text_uthmani` field. When the reciter repeats a word, the same `word_idx` may appear multiple times and indices may go backward.
 - **Letter-level timestamps** for individual Arabic characters, tokenized [as follows]().
 - **Pause-based segments** showing how the recitation was naturally divided by silences
-- **Arabic text** from alignment matching (reflects what was actually recited, including any repetitions)
+- **Uthmani text** from alignment matching (reflects what was actually recited, including any repetitions). Non-recited markers (waqf signs, hizb, sajdah) are stripped.
 
 ## Usage
 
@@ -144,17 +144,16 @@ ds = load_dataset("hetchyy/quranic-universal-ayahs", "hafs_an_asim", split="mins
 
 # Access a verse
 verse = ds[0]
-print(verse["surah"], verse["ayah"])  # 1 1
-print(verse["text"])                   # Arabic text
-print(verse["word_timestamps"])         # [[1, 0, 400], [2, 400, 800], ...]
+print(verse["surah"], verse["ayah"])       # 1 1
+print(verse["duration_ms"])                 # Duration in ms
+print(verse["text_uthmani"])                # Uthmani Arabic text
+print(verse["word_timestamps"])             # [[1, 0, 400], [2, 400, 800], ...]
 
 # Letter-level timestamps (if available)
 lt = verse["letter_timestamps"]
-if lt:
-    for entry in lt:
-        word_idx = entry["word_idx"]
-        for letter in entry["letters"]:
-            print(f"  Word {word_idx}: {letter['char']} [{letter['start_ms']}-{letter['end_ms']}]ms")
+if lt["word_idx"]:
+    for w, ch, s, e in zip(lt["word_idx"], lt["char"], lt["start_ms"], lt["end_ms"]):
+        print(f"  Word {w}: {ch} [{s}-{e}]ms")
 
 # Play audio (in a notebook)
 from IPython.display import Audio
@@ -167,10 +166,11 @@ Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 | `audio` | `Audio` | Verse audio (MP3), trimmed to speech boundaries |
 | `surah` | `int32` | Surah number (1-114) |
 | `ayah` | `int32` | Verse number within surah |
-| `text` | `string` | Arabic text of the verse from alignment |
+| `duration_ms` | `int32` | Audio clip duration in milliseconds |
+| `text_uthmani` | `string` | Uthmani Arabic text of the verse from alignment |
 | `segments` | `[[int, int, int, int]]` | Pause-based segments (ms, relative to clip) |
 | `word_timestamps` | `[[int, int, int]]` | Word-level timestamps (ms, relative to clip) |
-| `letter_timestamps` | `[{word_idx, [{char, start_ms, end_ms}]}]` | Letter-level timestamps per word (ms, relative to clip). Empty if not available. |
+| `letter_timestamps` | `[[int, str, int, int]]` | Per-letter timestamps: `[word_idx, char, start_ms, end_ms]`. Empty if not available. |
 | `source_url` | `string` | Original audio file URL (chapter or verse) |
 | `source_offset_ms` | `int32` | Offset in source audio where this verse starts (ms) |
 
@@ -181,11 +181,15 @@ Audio(verse["audio"]["array"], rate=verse["audio"]["sampling_rate"])
 Segments capture the natural pausing points in a recitation. A gap between consecutive segments is a pause. The word ranges tell you whether the reciter continued from where they left off or went back and repeated:
 
 - **Sequential** word ranges (next `word_from` = previous `word_to` + 1) — the reciter paused and continued.
-- **Overlapping** word ranges (next `word_from` ≤ previous `word_to`) — the reciter paused and **repeated** those words before continuing. The `text` field includes the repeated words.
+- **Overlapping** word ranges (next `word_from` ≤ previous `word_to`) — the reciter paused and **repeated** those words before continuing. The `text_uthmani` field includes the repeated words.
 
 **`word_timestamps`** — Each entry is `[word_index, start_ms, end_ms]`. When a verse contains repeated segments, the same word index appears multiple times.
 
-**`letter_timestamps`** — Per-word letter (character) timestamps from phoneme-level forced alignment. Each entry has `word_idx` (matching the word_timestamps word index) and `letters` — a list of `{char, start_ms, end_ms}` for each Arabic character. Empty for reciters without letter-level alignment data.
+**`letter_timestamps`** — Per-letter character timestamps from phoneme-level forced alignment. Each entry is `[word_idx, char, start_ms, end_ms]` where `word_idx` matches the word_timestamps word index and `char` is the Arabic character. Multiple entries share the same `word_idx` for multi-letter words. Empty for reciters without letter-level alignment data.
+
+**`duration_ms`** — Duration of the audio clip in milliseconds. Equal to the span from first word start to last word end.
+
+**`text_uthmani`** — Uthmani script Arabic text from alignment. Non-recited markers (waqf stop signs, hizb markers, sajdah marks) are stripped. Preserves diacritics, silent markers, and tajweed annotations. Reflects what was actually recited, including any repetitions.
 
 **`source_url`** — URL of the original audio file. For by-surah reciters, all verses in a surah share one URL; for by-ayah reciters, each verse has its own.
 

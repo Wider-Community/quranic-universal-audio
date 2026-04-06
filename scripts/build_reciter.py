@@ -31,6 +31,14 @@ from huggingface_hub import HfApi
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
 
+# Non-recited Quranic markers to strip from text (stop signs, hizb, sajdah)
+_QURAN_MARKERS = set("\u06D6\u06D7\u06D8\u06D9\u06DA\u06DB\u06DE\u06E9")
+
+
+def _strip_quran_markers(text: str) -> str:
+    """Strip non-recited markers (waqf signs, hizb, sajdah) from Uthmani text."""
+    return "".join(ch for ch in text if ch not in _QURAN_MARKERS)
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
@@ -272,6 +280,7 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
             else:
                 text = " ".join(
                     seg.get("matched_text", "") for seg in entry["segments"])
+            text = _strip_quran_markers(text)
 
             verse_words = []
             if ref in timestamps and ref != "_meta":
@@ -282,21 +291,23 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                         word[2] - clip_start,
                     ])
 
+            # Flat letter timestamps: one entry per letter (not per word)
             verse_letters = []
             if letter_data and ref in letter_data:
                 for word_idx, letters in letter_data[ref]:
-                    verse_letters.append({
-                        "word_idx": word_idx,
-                        "letters": [
-                            {"char": ch, "start_ms": s - clip_start, "end_ms": e - clip_start}
-                            for ch, s, e in letters
-                        ],
-                    })
+                    for ch, s, e in letters:
+                        verse_letters.append({
+                            "word_idx": word_idx,
+                            "char": ch,
+                            "start_ms": s - clip_start,
+                            "end_ms": e - clip_start,
+                        })
 
             rows.append({
                 "surah": int(surah_num),
                 "ayah": ayah,
-                "text": text,
+                "duration_ms": clip_end - clip_start,
+                "text_uthmani": text,
                 "segments": verse_segments,
                 "word_timestamps": verse_words,
                 "letter_timestamps": verse_letters,
@@ -449,7 +460,8 @@ def push_reciter(slug, audio_type):
         "audio": [],
         "surah": [],
         "ayah": [],
-        "text": [],
+        "duration_ms": [],
+        "text_uthmani": [],
         "segments": [],
         "word_timestamps": [],
         "letter_timestamps": [],
@@ -468,7 +480,8 @@ def push_reciter(slug, audio_type):
         })
         data["surah"].append(row["surah"])
         data["ayah"].append(row["ayah"])
-        data["text"].append(row["text"])
+        data["duration_ms"].append(row["duration_ms"])
+        data["text_uthmani"].append(row["text_uthmani"])
         data["segments"].append(row["segments"])
         data["word_timestamps"].append(row["word_timestamps"])
         data["letter_timestamps"].append(row["letter_timestamps"])
@@ -489,16 +502,15 @@ def push_reciter(slug, audio_type):
         "audio": Audio(),
         "surah": Value("int32"),
         "ayah": Value("int32"),
-        "text": Value("string"),
+        "duration_ms": Value("int32"),
+        "text_uthmani": Value("string"),
         "segments": Sequence(Sequence(Value("int32"))),
         "word_timestamps": Sequence(Sequence(Value("int32"))),
         "letter_timestamps": Sequence({
             "word_idx": Value("int32"),
-            "letters": Sequence({
-                "char": Value("string"),
-                "start_ms": Value("int32"),
-                "end_ms": Value("int32"),
-            }),
+            "char": Value("string"),
+            "start_ms": Value("int32"),
+            "end_ms": Value("int32"),
         }),
         "source_url": Value("string"),
         "source_offset_ms": Value("int32"),
