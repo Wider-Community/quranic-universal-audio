@@ -51,6 +51,7 @@ from config import (
     SEG_FONT_SIZE, SEG_WORD_SPACING,
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
     BOUNDARY_TAIL_K, SHOW_BOUNDARY_PHONEMES,
+    LOW_CONF_DEFAULT_THRESHOLD,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -63,6 +64,14 @@ _DK: dict[str, dict] | None = None
 
 
 _STOP_SIGNS = set('\u06D6\u06D7\u06D8\u06DA')  # sili, qili, small meem, jeem
+
+# Canonical validation categories — single source of truth.
+# Every counting, summary, and delta function derives from this tuple.
+VALIDATION_CATEGORIES = (
+    "failed", "low_confidence", "boundary_adj", "cross_verse",
+    "missing_words", "audio_bleeding", "repetitions",
+    "muqattaat", "qalqala",
+)
 
 # ── Validation helper (for auto-revalidation on save) ────────────────────
 
@@ -394,6 +403,12 @@ def seg_config():
         "trim_pad_right": TRIM_PAD_RIGHT,
         "trim_dim_alpha": TRIM_DIM_ALPHA,
         "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
+        "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
+        "validation_categories": list(VALIDATION_CATEGORIES),
+        "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
+        "qalqala_letters": sorted(_QALQALA_LETTERS),
+        "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
+        "standalone_words": sorted(_STANDALONE_WORDS),
     })
 
 
@@ -631,19 +646,30 @@ def get_ts_random_reciter(reciter):
 
 @app.route("/api/ts/validate/<reciter>")
 def validate_ts_reciter(reciter):
-    """Validate timestamp data and return categorised issues."""
-    data = _load_timestamps(reciter)
-    if not data:
+    """Validate timestamp data via the timestamps validator and return categorised issues."""
+    from validators.validate_timestamps import validate_reciter as _validate_ts
+    from validators.validate_timestamps import load_word_counts as _load_ts_wc
+
+    # Find timestamps dir for this reciter
+    ts_dir = None
+    for audio_type in ("by_surah_audio", "by_ayah_audio"):
+        candidate = TIMESTAMPS_PATH / audio_type / reciter
+        if (candidate / "timestamps.json").exists():
+            ts_dir = candidate
+            break
+    if ts_dir is None:
         return jsonify({"error": "Reciter not found"}), 404
 
-    meta = data["meta"]
-    verses = data["verses"]
+    surah_info_path = Path(__file__).resolve().parent.parent / "data" / "surah_info.json"
+    wc = _load_ts_wc(surah_info_path)
+    result = _validate_ts(ts_dir, wc)
 
-    word_counts = _get_word_counts()
+    if result.get("skipped"):
+        return jsonify({"error": "timestamps.json not found"}), 404
 
-    # ── 1. MFA failures (from meta) ──
+    # Reshape validator detail lists into frontend format
     mfa_failures = []
-    for fail in meta.get("mfa_failures", []):
+    for fail in result.get("_mfa_failures", []):
         vk = fail.get("verse", "")
         chapter = int(vk.split(":")[0]) if vk and ":" in vk else 0
         ref = fail.get("ref", "?")
@@ -655,93 +681,37 @@ def validate_ts_reciter(reciter):
             "label": f"{vk} [{ref}]",
         })
 
-    # ── 2. Missing word indices ──
-    # Accumulate coverage across regular + compound keys, then check
-    covered_per_verse: dict[tuple[int, int], set[int]] = {}
-    for verse_key, verse_data in verses.items():
-        words_list = verse_data.get("words", [])
-        if "-" in verse_key:
-            # Compound key: walk words detecting verse boundary crossings
-            try:
-                start_part, end_part = verse_key.split("-", 1)
-                sp = start_part.split(":")
-                ep = end_part.split(":")
-                surah, start_ayah = int(sp[0]), int(sp[1])
-                end_ayah = int(ep[1])
-            except (ValueError, IndexError):
-                continue
-            cur_ayah = start_ayah
-            prev_idx = -1
-            for w in words_list:
-                idx = w[0]
-                if prev_idx >= 0 and idx <= prev_idx and cur_ayah < end_ayah:
-                    cur_ayah += 1
-                sa = (surah, cur_ayah)
-                if sa not in covered_per_verse:
-                    covered_per_verse[sa] = set()
-                covered_per_verse[sa].add(idx)
-                prev_idx = idx
-        else:
-            parts = verse_key.split(":")
-            if len(parts) != 2:
-                continue
-            try:
-                surah, ayah = int(parts[0]), int(parts[1])
-            except ValueError:
-                continue
-            sa = (surah, ayah)
-            if sa not in covered_per_verse:
-                covered_per_verse[sa] = set()
-            covered_per_verse[sa].update(w[0] for w in words_list)
-
     missing_words = []
-    for (surah, ayah), covered in covered_per_verse.items():
-        expected = word_counts.get((surah, ayah))
-        if expected is None:
-            continue
-        missing = sorted(set(range(1, expected + 1)) - covered)
-        if missing:
-            verse_key_label = f"{surah}:{ayah}"
-            missing_words.append({
-                "verse_key": verse_key_label, "chapter": surah,
-                "missing": missing, "count": len(missing),
-                "diff_ms": len(missing) * 1000,
-                "label": f"{verse_key_label} [-{len(missing)}w]",
-            })
+    for mw in result.get("_missing_words", []):
+        vk = f"{mw['surah']}:{mw['ayah']}"
+        count = len(mw["missing"])
+        missing_words.append({
+            "verse_key": vk, "chapter": mw["surah"],
+            "missing": mw["missing"], "count": count,
+            "diff_ms": count * 1000,
+            "label": f"{vk} [-{count}w]",
+        })
     missing_words.sort(key=lambda x: x["diff_ms"], reverse=True)
 
-    # ── 3. Boundary mismatches ──
-    seg_verses, seg_pad_ms = _load_seg_verses(reciter)
-    tolerance = 2 * seg_pad_ms if seg_pad_ms > 0 else 500
     boundary_mismatches = []
-    for verse_key, verse_data in verses.items():
-        if verse_key not in seg_verses:
-            continue
-        words_raw = verse_data.get("words", [])
-        segs = seg_verses[verse_key]
-        if not words_raw or not segs:
-            continue
-        parts = verse_key.split(":")
-        chapter = int(parts[0]) if len(parts) >= 1 else 0
-        ts_first, ts_last = words_raw[0][1], words_raw[-1][2]
-        seg_first, seg_last = segs[0][2], segs[-1][3]
-
-        for side, ts_ms, seg_ms in [("start", ts_first, seg_first), ("end", ts_last, seg_last)]:
-            diff = abs(ts_ms - seg_ms)
-            if diff > tolerance:
-                boundary_mismatches.append({
-                    "verse_key": verse_key, "chapter": chapter,
-                    "side": side, "diff_ms": round(diff),
-                    "ts_ms": round(ts_ms), "seg_ms": round(seg_ms),
-                    "label": f"{verse_key} [{round(diff)}ms {side}]",
-                })
+    for bm in result.get("_boundary_mismatches", []):
+        parts = bm["verse_key"].split(":")
+        chapter = int(parts[0]) if parts else 0
+        boundary_mismatches.append({
+            "verse_key": bm["verse_key"], "chapter": chapter,
+            "side": bm["side"], "diff_ms": bm["diff_ms"],
+            "label": f"{bm['verse_key']} [{bm['diff_ms']}ms {bm['side']}]",
+        })
     boundary_mismatches.sort(key=lambda x: x["diff_ms"], reverse=True)
 
     return jsonify({
         "mfa_failures": mfa_failures,
         "missing_words": missing_words,
         "boundary_mismatches": boundary_mismatches,
-        "meta": {"has_segments": bool(seg_verses), "tolerance_ms": tolerance},
+        "meta": {
+            "has_segments": result.get("has_segments", False),
+            "tolerance_ms": result.get("seg_tolerance_ms", 500),
+        },
     })
 
 
@@ -1018,7 +988,7 @@ def get_seg_data(reciter, chapter):
             t_start = seg.get("time_start", 0)
             t_end = seg.get("time_end", 0)
             mref = seg.get("matched_ref", "")
-            segments.append({
+            seg_dict = {
                 "index": idx,
                 "entry_idx": entry_idx,
                 "time_start": t_start,
@@ -1028,7 +998,10 @@ def get_seg_data(reciter, chapter):
                 "display_text": _dk_text_for_ref(mref),
                 "confidence": round(seg.get("confidence", 0.0), 4),
                 "audio_url": entry_audio,
-            })
+            }
+            if seg.get("ignored"):
+                seg_dict["ignored"] = True
+            segments.append(seg_dict)
             idx += 1
 
     # Optional verse filter
@@ -1140,7 +1113,7 @@ def get_seg_all(reciter):
             if not seg_uid:
                 seg_uid = _uuid7()
                 seg["segment_uid"] = seg_uid
-            segments.append({
+            seg_dict = {
                 "chapter":      chapter,
                 "entry_idx":    entry_idx,
                 "index":        idx,
@@ -1152,7 +1125,13 @@ def get_seg_all(reciter):
                 "display_text": _dk_text_for_ref(mref),
                 "confidence":   round(seg.get("confidence", 0.0), 4),
                 "audio_url":    entry_audio,
-            })
+                "entry_ref":    entry.get("ref", ""),
+            }
+            if seg.get("wrap_word_ranges"):
+                seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            if seg.get("ignored"):
+                seg_dict["ignored"] = True
+            segments.append(seg_dict)
 
     verse_word_counts = {}
     for (surah, ayah), n in _get_word_counts().items():
@@ -1493,18 +1472,27 @@ def save_seg_data(reciter, chapter):
     if not matching:
         return jsonify({"error": "Chapter not found"}), 404
 
-    # Build lookup of existing segments by (time_start, time_end) for phonemes_asr preservation
+    # Build lookups of existing segments by time and by uid for field preservation
     existing_by_time = {}
+    existing_by_uid = {}
     for e in matching:
         for seg in e.get("segments", []):
             key = (seg.get("time_start", 0), seg.get("time_end", 0))
             existing_by_time[key] = seg
+            uid = seg.get("segment_uid", "")
+            if uid:
+                existing_by_uid[uid] = seg
 
     def _make_seg(s):
         existing = existing_by_time.get((s.get("time_start", 0), s.get("time_end", 0)), {})
+        if not existing:
+            # Trimmed segments change times, so fall back to uid lookup to preserve fields
+            uid = s.get("segment_uid", "")
+            if uid:
+                existing = existing_by_uid.get(uid, {})
         phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
         seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
-        return {
+        result = {
             "segment_uid": seg_uid,
             "time_start": s.get("time_start", 0),
             "time_end": s.get("time_end", 0),
@@ -1513,6 +1501,14 @@ def save_seg_data(reciter, chapter):
             "confidence": s.get("confidence", 0.0),
             "phonemes_asr": phonemes,
         }
+        wrap = s.get("wrap_word_ranges") or existing.get("wrap_word_ranges")
+        if wrap:
+            result["wrap_word_ranges"] = wrap
+        if s.get("has_repeated_words") or existing.get("has_repeated_words"):
+            result["has_repeated_words"] = True
+        if s.get("ignored") or existing.get("ignored"):
+            result["ignored"] = True
+        return result
 
     # Edit history: snapshot validation counts before mutation
     meta = _SEG_META_CACHE.get(reciter, {})
@@ -1574,6 +1570,8 @@ def save_seg_data(reciter, chapter):
                 flat_segments[idx]["matched_text"] = upd.get("matched_text", "")
                 if "confidence" in upd:
                     flat_segments[idx]["confidence"] = upd["confidence"]
+                if upd.get("ignored"):
+                    flat_segments[idx]["ignored"] = True
 
     # Backup before writing (single-level undo)
     detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
@@ -1583,9 +1581,11 @@ def save_seg_data(reciter, chapter):
     if segments_path.exists():
         shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
 
-    # Write detailed.json
-    with open(detailed_path, "w", encoding="utf-8") as f:
+    # Write detailed.json atomically (temp file + rename to avoid partial reads)
+    tmp_path = detailed_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
+    os.replace(tmp_path, detailed_path)
 
     # Compute file hash for tamper detection
     file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
@@ -1618,12 +1618,6 @@ def save_seg_data(reciter, chapter):
     _SEG_META_CACHE.pop(reciter, None)
     _SEG_VERSES_CACHE.pop(reciter, None)
     _SEG_RECITERS_CACHE = None
-
-    # Auto-revalidate in background thread so save returns immediately
-    threading.Thread(
-        target=lambda: _run_validation_log(RECITATION_SEGMENTS_PATH / reciter),
-        daemon=True,
-    ).start()
 
     return jsonify({"ok": True})
 
@@ -1664,14 +1658,27 @@ def undo_seg_batch(reciter):
     if target_batch.get("reverts_batch_id"):
         return jsonify({"error": "Cannot undo a revert record"}), 400
 
-    # Reject if already undone
-    already_reverted = {r.get("reverts_batch_id") for r in all_records if r.get("reverts_batch_id")}
+    # Reject if already fully undone (only full-batch reverts, not per-op reverts)
+    already_reverted = {
+        r.get("reverts_batch_id") for r in all_records
+        if r.get("reverts_batch_id") and not r.get("reverts_op_ids")
+    }
     if target_batch_id in already_reverted:
         return jsonify({"error": "This batch has already been undone"}), 400
 
     operations = target_batch.get("operations", [])
     if not operations:
         return jsonify({"error": "Batch has no operations to undo"}), 400
+
+    # Skip ops already individually undone via per-op undo
+    per_op_reverted = set()
+    for r in all_records:
+        if r.get("reverts_batch_id") == target_batch_id and r.get("reverts_op_ids"):
+            per_op_reverted.update(r["reverts_op_ids"])
+    if per_op_reverted:
+        operations = [op for op in operations if op.get("op_id") not in per_op_reverted]
+        if not operations:
+            return jsonify({"error": "All operations in this batch have already been individually undone"}), 400
 
     # Load entries
     entries = _load_detailed(reciter)
@@ -1713,8 +1720,10 @@ def undo_seg_batch(reciter):
     if segments_path.exists():
         shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
 
-    with open(detailed_path, "w", encoding="utf-8") as f:
+    tmp_path = detailed_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
+    os.replace(tmp_path, detailed_path)
 
     file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
     _rebuild_segments_json(reciter, entries)
@@ -1727,7 +1736,7 @@ def undo_seg_batch(reciter):
     # Merge validation summaries across affected chapters
     val_before = {}
     val_after = {}
-    for cat in ("failed", "low_confidence", "boundary_adj", "cross_verse", "missing_words", "audio_bleeding"):
+    for cat in VALIDATION_CATEGORIES:
         val_before[cat] = sum(v.get(cat, 0) for v in val_before_all.values())
         val_after[cat] = sum(v.get(cat, 0) for v in val_after_all.values())
 
@@ -1756,13 +1765,156 @@ def undo_seg_batch(reciter):
     _SEG_VERSES_CACHE.pop(reciter, None)
     _SEG_RECITERS_CACHE = None
 
-    # Re-validate in background
-    threading.Thread(
-        target=lambda: _run_validation_log(RECITATION_SEGMENTS_PATH / reciter),
-        daemon=True,
-    ).start()
-
     return jsonify({"ok": True, "operations_reversed": len(operations)})
+
+
+@app.route("/api/seg/undo-ops/<reciter>", methods=["POST"])
+def undo_seg_ops(reciter):
+    """Undo specific operations within a saved batch."""
+    body = request.get_json()
+    if not body or not body.get("batch_id") or not body.get("op_ids"):
+        return jsonify({"error": "Missing batch_id or op_ids"}), 400
+
+    target_batch_id = body["batch_id"]
+    requested_op_ids = set(body["op_ids"])
+
+    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    if not history_path.exists():
+        return jsonify({"error": "No edit history found"}), 404
+
+    all_records = []
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            all_records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    # Find the target batch
+    target_batch = None
+    for rec in all_records:
+        if rec.get("batch_id") == target_batch_id:
+            target_batch = rec
+            break
+    if not target_batch:
+        return jsonify({"error": "Batch not found"}), 404
+
+    if target_batch.get("reverts_batch_id"):
+        return jsonify({"error": "Cannot undo operations in a revert record"}), 400
+
+    # Check full-batch revert (only reverts WITHOUT reverts_op_ids)
+    fully_reverted = {
+        r.get("reverts_batch_id") for r in all_records
+        if r.get("reverts_batch_id") and not r.get("reverts_op_ids")
+    }
+    if target_batch_id in fully_reverted:
+        return jsonify({"error": "This batch has already been fully undone"}), 400
+
+    # Check per-op reverts for this batch
+    already_reverted_ops = set()
+    for r in all_records:
+        if r.get("reverts_batch_id") == target_batch_id and r.get("reverts_op_ids"):
+            already_reverted_ops.update(r["reverts_op_ids"])
+
+    already_undone = requested_op_ids & already_reverted_ops
+    if already_undone:
+        return jsonify({"error": f"Operation(s) already undone: {', '.join(already_undone)}"}), 400
+
+    # Validate requested op_ids exist in the batch
+    all_op_ids = {op.get("op_id") for op in target_batch.get("operations", [])}
+    missing = requested_op_ids - all_op_ids
+    if missing:
+        return jsonify({"error": f"Operation(s) not found in batch: {', '.join(missing)}"}), 404
+
+    # Filter to requested ops (preserve original order for correct reversal)
+    ops_to_undo = [op for op in target_batch.get("operations", []) if op.get("op_id") in requested_op_ids]
+
+    # Load entries
+    entries = _load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter data not found"}), 404
+
+    meta = _SEG_META_CACHE.get(reciter, {})
+    chapter = target_batch.get("chapter")
+    chapters = target_batch.get("chapters")
+
+    affected_chapters = set()
+    if chapter is not None:
+        affected_chapters.add(chapter)
+    if chapters:
+        affected_chapters.update(chapters)
+
+    # Snapshot validation before undo
+    val_before_all = {}
+    for ch in affected_chapters:
+        val_before_all[ch] = _chapter_validation_counts(entries, ch, meta)
+
+    # Apply reverse operations (in reverse order)
+    try:
+        for op in reversed(ops_to_undo):
+            _apply_reverse_op(entries, op, affected_chapters)
+    except ValueError as e:
+        _SEG_CACHE.pop(reciter, None)
+        _SEG_META_CACHE.pop(reciter, None)
+        return jsonify({"error": str(e)}), 409
+
+    # Write modified detailed.json
+    detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
+    segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
+
+    if detailed_path.exists():
+        shutil.copy2(detailed_path, detailed_path.with_suffix(".json.bak"))
+    if segments_path.exists():
+        shutil.copy2(segments_path, segments_path.with_suffix(".json.bak"))
+
+    tmp_path = detailed_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump({"_meta": meta, "entries": entries}, f, ensure_ascii=False)
+    os.replace(tmp_path, detailed_path)
+
+    file_hash = "sha256:" + hashlib.sha256(detailed_path.read_bytes()).hexdigest()
+    _rebuild_segments_json(reciter, entries)
+
+    # Snapshot validation after undo
+    val_after_all = {}
+    for ch in affected_chapters:
+        val_after_all[ch] = _chapter_validation_counts(entries, ch, meta)
+
+    val_before = {}
+    val_after = {}
+    for cat in VALIDATION_CATEGORIES:
+        val_before[cat] = sum(v.get(cat, 0) for v in val_before_all.values())
+        val_after[cat] = sum(v.get(cat, 0) for v in val_after_all.values())
+
+    # Append per-op revert record
+    revert = {
+        "schema_version": 1,
+        "batch_id": _uuid7(),
+        "reverts_batch_id": target_batch_id,
+        "reverts_op_ids": list(requested_op_ids),
+        "reciter": reciter,
+        "chapter": chapter,
+        "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "file_hash_after": file_hash,
+        "validation_summary_before": val_before,
+        "validation_summary_after": val_after,
+        "operations": [],
+    }
+    if chapters:
+        revert["chapters"] = chapters
+    with open(history_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(revert, ensure_ascii=False) + "\n")
+
+    # Invalidate caches
+    global _SEG_RECITERS_CACHE
+    _SEG_CACHE.pop(reciter, None)
+    _SEG_META_CACHE.pop(reciter, None)
+    _SEG_VERSES_CACHE.pop(reciter, None)
+    _SEG_RECITERS_CACHE = None
+
+    return jsonify({"ok": True, "operations_reversed": len(ops_to_undo)})
 
 
 def _find_segment_by_uid(entries: list[dict], uid: str, chapter_set: set[int]) -> tuple | None:
@@ -1805,7 +1957,7 @@ def _find_entry_for_insert(entries: list[dict], snap: dict, chapter_set: set[int
 
 def _snap_to_segment(snap: dict) -> dict:
     """Convert a snapshot to a segment dict for insertion."""
-    return {
+    seg = {
         "segment_uid": snap.get("segment_uid", _uuid7()),
         "time_start": snap["time_start"],
         "time_end": snap["time_end"],
@@ -1813,6 +1965,13 @@ def _snap_to_segment(snap: dict) -> dict:
         "matched_text": snap.get("matched_text", ""),
         "confidence": snap.get("confidence", 0),
     }
+    if snap.get("has_repeated_words"):
+        seg["has_repeated_words"] = True
+    if snap.get("wrap_word_ranges"):
+        seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
+    if snap.get("phonemes_asr"):
+        seg["phonemes_asr"] = snap["phonemes_asr"]
+    return seg
 
 
 def _verify_segment_matches_snapshot(seg: dict, snap: dict) -> str | None:
@@ -2015,6 +2174,21 @@ _MUQATTAAT_VERSES = {
     (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
     (46,1),(50,1),(68,1),
 }
+_QALQALA_LETTERS = {'ق', 'ط', 'ب', 'ج', 'د'}
+
+def _last_arabic_letter(text: str) -> str | None:
+    """Return the last Arabic letter in text, ignoring diacritics and all non-letter markers.
+
+    Scans backward after stripping diacritics/decoration so that waqf markers,
+    sajdah signs, hizb markers, end-of-ayah (U+06DD), spaces, and any other
+    non-letter symbols are never mistakenly returned as the last letter.
+    """
+    stripped = _strip_quran_deco(text)
+    for ch in reversed(stripped):
+        if _ud.category(ch).startswith('L'):
+            return ch
+    return None
+
 _STANDALONE_REFS = {
     (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
     (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
@@ -2155,10 +2329,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
     is_by_ayah = "by_ayah" in meta.get("audio_source", "")
 
-    counts = {
-        "failed": 0, "low_confidence": 0, "boundary_adj": 0,
-        "cross_verse": 0, "missing_words": 0, "audio_bleeding": 0,
-    }
+    counts = {cat: 0 for cat in VALIDATION_CATEGORIES}
     verse_segments: dict[tuple, list] = defaultdict(list)
 
     for entry in entries:
@@ -2177,6 +2348,9 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
             if is_by_ayah and ":" in entry_ref and not _seg_belongs_to_entry(matched_ref, entry_ref):
                 counts["audio_bleeding"] += 1
 
+            if seg.get("wrap_word_ranges"):
+                counts["repetitions"] += 1
+
             if confidence < 0.80:
                 counts["low_confidence"] += 1
 
@@ -2194,7 +2368,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 continue
 
             if s_ayah != e_ayah:
-                if confidence < 1.0:
+                if not seg.get("ignored"):
                     counts["cross_verse"] += 1
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
@@ -2209,7 +2383,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 verse_segments[(surah, s_ayah)].append((s_word, e_word))
                 is_boundary_adj = False
                 if (s_word == e_word
-                    and confidence < 1.0
+                    and not seg.get("ignored")
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -2217,7 +2391,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                     is_boundary_adj = True
 
                 # Phoneme tail mismatch (only if not already flagged)
-                if (not is_boundary_adj and canonical and confidence < 1.0
+                if (not is_boundary_adj and canonical and not seg.get("ignored")
                     and seg.get("phonemes_asr")):
                     if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
                                               canonical, BOUNDARY_TAIL_K):
@@ -2225,6 +2399,13 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
 
                 if is_boundary_adj:
                     counts["boundary_adj"] += 1
+
+            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
+                counts["muqattaat"] += 1
+
+            last_letter = _last_arabic_letter(seg.get("matched_text", ""))
+            if last_letter in _QALQALA_LETTERS and not seg.get("ignored"):
+                counts["qalqala"] += 1
 
     # Missing words
     for (surah, ayah), seg_list in verse_segments.items():
@@ -2239,6 +2420,16 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
             counts["missing_words"] += len(missing)
 
     return counts
+
+
+@app.route("/api/seg/trigger-validation/<reciter>", methods=["POST"])
+def trigger_validation_log(reciter):
+    """Kick off validation.log generation in background. Called once after all saves complete."""
+    threading.Thread(
+        target=lambda: _run_validation_log(RECITATION_SEGMENTS_PATH / reciter),
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/seg/validate/<reciter>")
@@ -2259,6 +2450,9 @@ def validate_reciter_segments(reciter):
     boundary_adj = []
     cross_verse = []
     audio_bleeding = []
+    repetitions = []
+    muqattaat = []
+    qalqala = []
     chapter_seg_idx = {}  # chapter -> next index (running counter)
 
     _single_word_verses = {k for k, v in word_counts.items() if v == 1}
@@ -2312,8 +2506,27 @@ def validate_reciter_segments(reciter):
                     "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
                 })
 
-            # Low confidence
-            if confidence < 0.80:
+            # Detected repetitions
+            if seg.get("wrap_word_ranges"):
+                parts = matched_ref.split("-")
+                display_ref = matched_ref
+                if len(parts) == 2:
+                    s_parts = parts[0].split(":")
+                    e_parts = parts[1].split(":")
+                    if len(s_parts) >= 2 and len(e_parts) >= 2 and s_parts[1] == e_parts[1]:
+                        display_ref = f"{s_parts[0]}:{s_parts[1]}"
+                repetitions.append({
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "ref": matched_ref,
+                    "display_ref": display_ref,
+                    "confidence": round(confidence, 4),
+                    "time": f"{_format_ms(t_start)}-{_format_ms(t_end)}",
+                    "text": seg.get("matched_text", ""),
+                })
+
+            # Low confidence (send all non-100% for client-side slider filtering)
+            if confidence < 1.0:
                 parts = matched_ref.split("-")
                 display_ref = matched_ref
                 if len(parts) == 2:
@@ -2348,16 +2561,15 @@ def validate_reciter_segments(reciter):
             except (ValueError, IndexError):
                 continue
 
-            # Cross-verse detection (skip if already ignored / confidence=1.0)
+            # Cross-verse detection (skip explicitly ignored segments)
             if s_ayah != e_ayah:
-                if confidence < 1.0:
+                if not seg.get("ignored"):
                     cross_verse.append({
                         "chapter": chapter,
                         "seg_index": i,
                         "ref": matched_ref,
                     })
-                # Coverage for cross-verse: start verse from s_word to end, end verse from 1 to e_word
-                # Always register coverage regardless of confidence
+                # Coverage for cross-verse: always register regardless of ignored/confidence
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
                         wc = word_counts.get((surah, ayah), s_word)
@@ -2372,10 +2584,10 @@ def validate_reciter_segments(reciter):
 
                 # May require boundary adjustment: 1-word segment, not muqattaat, not single-word verse,
                 # not a known standalone word (by ref or matched_text).
-                # Skip if already ignored (confidence=1.0).
+                # Skip if explicitly ignored.
                 is_boundary_adj = False
                 if (s_word == e_word
-                    and confidence < 1.0
+                    and not seg.get("ignored")
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in _single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -2383,7 +2595,7 @@ def validate_reciter_segments(reciter):
                     is_boundary_adj = True
 
                 # Phoneme tail mismatch (only if not already flagged)
-                if (not is_boundary_adj and canonical and confidence < 1.0
+                if (not is_boundary_adj and canonical and not seg.get("ignored")
                     and seg.get("phonemes_asr")):
                     if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
                                               canonical, BOUNDARY_TAIL_K):
@@ -2404,6 +2616,24 @@ def validate_reciter_segments(reciter):
                             item["gt_tail"] = " ".join(tails[0])
                             item["asr_tail"] = " ".join(tails[1])
                     boundary_adj.append(item)
+
+            # Muqatta'at: segment IS the muqatta'at word (starts at word 1 of a muqatta'at verse)
+            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
+                muqattaat.append({
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "ref": matched_ref,
+                })
+
+            # Qalqala: segment ends with one of the 5 qalqala letters
+            _last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
+            if _last_ltr and _last_ltr in _QALQALA_LETTERS and not seg.get("ignored"):
+                qalqala.append({
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "ref": matched_ref,
+                    "qalqala_letter": _last_ltr,
+                })
 
     # Detect missing word pairs from detailed.json segments (global across all entries)
     for (surah, ayah), seg_list in verse_segments.items():
@@ -2614,6 +2844,9 @@ def validate_reciter_segments(reciter):
         "boundary_adj": boundary_adj,
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
+        "repetitions": repetitions,
+        "muqattaat": muqattaat,
+        "qalqala": qalqala,
         "stats": stats,
     })
 
@@ -2805,9 +3038,10 @@ def get_seg_edit_history(reciter):
     if not history_path.exists():
         return jsonify({"batches": [], "summary": None})
 
-    # First pass: parse all records and collect reverted batch IDs
+    # First pass: parse all records, collect full-batch and per-op reverts
     all_records = []
-    reverted_ids: set[str] = set()
+    fully_reverted_ids: set[str] = set()       # batch_ids fully undone
+    per_op_reverted: dict[str, set[str]] = {}   # batch_id -> set of reverted op_ids
     for line in history_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -2821,7 +3055,15 @@ def get_seg_edit_history(reciter):
         all_records.append(record)
         rbid = record.get("reverts_batch_id")
         if rbid:
-            reverted_ids.add(rbid)
+            rop_ids = record.get("reverts_op_ids")
+            if rop_ids:
+                # Per-op revert
+                if rbid not in per_op_reverted:
+                    per_op_reverted[rbid] = set()
+                per_op_reverted[rbid].update(rop_ids)
+            else:
+                # Full-batch revert
+                fully_reverted_ids.add(rbid)
 
     # Second pass: build active batches (skip reverts and undone batches)
     batches = []
@@ -2834,13 +3076,23 @@ def get_seg_edit_history(reciter):
         # Skip revert records
         if record.get("reverts_batch_id"):
             continue
-        # Skip batches that have been undone
-        if record.get("batch_id") in reverted_ids:
+        batch_id = record.get("batch_id")
+        # Skip batches that have been fully undone
+        if batch_id in fully_reverted_ids:
             continue
 
         ops = record.get("operations", [])
+        # Filter out individually-undone ops
+        reverted_ops_for_batch = per_op_reverted.get(batch_id, set())
+        if reverted_ops_for_batch:
+            ops = [op for op in ops if op.get("op_id") not in reverted_ops_for_batch]
+        # Skip batch if all ops have been individually undone
+        if not ops and reverted_ops_for_batch:
+            continue
+
         batch = {
-            "batch_id": record.get("batch_id"),
+            "batch_id": batch_id,
+            "batch_type": record.get("batch_type"),
             "saved_at_utc": record.get("saved_at_utc"),
             "chapter": record.get("chapter"),
             "chapters": record.get("chapters"),
@@ -2850,6 +3102,8 @@ def get_seg_edit_history(reciter):
             "validation_summary_after": record.get("validation_summary_after"),
             "operations": ops,
         }
+        if reverted_ops_for_batch:
+            batch["reverted_op_ids"] = list(reverted_ops_for_batch)
         batches.append(batch)
 
         if ops:

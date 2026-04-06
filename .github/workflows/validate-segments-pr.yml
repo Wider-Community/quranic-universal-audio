@@ -4,13 +4,18 @@ on:
   pull_request:
     paths:
       - 'data/recitation_segments/**'
+  workflow_dispatch:
+    inputs:
+      reciters:
+        description: 'Space-separated reciter slugs (blank = all tracked)'
+        required: false
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   validate:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,19 +26,94 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Detect changed reciters
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      - name: Detect reciters
         id: detect
         run: |
-          reciters=$(git diff ${{ github.event.pull_request.base.sha }}...HEAD \
-            --name-only -- data/recitation_segments/ | \
-            sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
-            sort -u | tr '\n' ' ')
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            input="${{ github.event.inputs.reciters }}"
+            if [ -n "$input" ]; then
+              reciters="$input"
+            else
+              # All tracked reciters
+              reciters=$(ls -d data/recitation_segments/*/segments.json 2>/dev/null | \
+                sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
+                sort -u | tr '\n' ' ')
+            fi
+          else
+            reciters=$(git diff ${{ github.event.pull_request.base.sha }}...HEAD \
+              --name-only -- data/recitation_segments/ | \
+              sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
+              sort -u | tr '\n' ' ')
+          fi
           echo "reciters=$(echo $reciters | xargs)" >> $GITHUB_OUTPUT
-          echo "Changed reciters: $reciters"
+          echo "Reciters: $reciters"
 
       - name: Validate edit history
-        if: steps.detect.outputs.reciters != ''
+        if: steps.detect.outputs.reciters != '' && github.event_name == 'pull_request'
         run: |
-          python scripts/validate_edit_history.py \
+          python validators/validate_edit_history.py \
             --base-sha ${{ github.event.pull_request.base.sha }} \
             --reciters ${{ steps.detect.outputs.reciters }}
+
+      - name: Validate segments
+        if: steps.detect.outputs.reciters != ''
+        run: |
+          failed=0
+          for reciter in ${{ steps.detect.outputs.reciters }}; do
+            echo "Validating $reciter..."
+            output=$(python validators/validate_segments.py "data/recitation_segments/$reciter/" 2>&1)
+            echo "$output"
+            # Fail on structural errors or consistency mismatches
+            if echo "$output" | grep -qE "Errors:\s+[1-9]|Mismatches:\s+[1-9]"; then
+              echo "::error::$reciter has validation errors"
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Generate edit summary
+        id: summary
+        if: steps.detect.outputs.reciters != ''
+        run: |
+          reciters="${{ steps.detect.outputs.reciters }}"
+          summary=$(python scripts/summarize_pr_edits.py $reciters)
+
+          # Build header from template
+          # For multi-reciter PRs, use generic name; for single, use slug
+          reciter_count=$(echo $reciters | wc -w)
+          if [ "$reciter_count" -eq 1 ]; then
+            reciter_name=$(echo $reciters | sed 's/_/ /g' | sed 's/\b\w/\U&/g')
+          else
+            reciter_name="$reciter_count reciters"
+          fi
+
+          RECITER_NAME="$reciter_name" python3 -c "
+          import os, sys
+          tpl = open('.github/templates/workflows/pr-edit-summary.md').read()
+          sys.stdout.write(tpl.format(reciter_name=os.environ['RECITER_NAME']))
+          " > /tmp/pr_comment.md
+          echo "$summary" >> /tmp/pr_comment.md
+
+          echo "generated=true" >> $GITHUB_OUTPUT
+
+      - name: Post or update PR comment
+        if: steps.summary.outputs.generated == 'true' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr_number=${{ github.event.pull_request.number }}
+          marker="<!-- edit-summary -->"
+
+          # Find existing comment with marker
+          existing=$(gh api "repos/${{ github.repository }}/issues/${pr_number}/comments" \
+            --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+
+          if [ -n "$existing" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${existing}" \
+              -X PATCH -F body=@/tmp/pr_comment.md
+          else
+            gh pr comment "$pr_number" --body-file /tmp/pr_comment.md
+          fi

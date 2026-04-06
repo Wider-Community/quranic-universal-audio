@@ -53,14 +53,15 @@ jobs:
           merger="${{ github.event.pull_request.merged_by.login }}"
 
           # Fetch all commits on the PR, extract unique authors (exclude bots and merger)
+          # || true prevents grep exit code 1 (no matches) from failing the step
           authors=$(gh api "repos/$repo/pulls/$pr_number/commits" --paginate \
             --jq '.[].author.login // empty' | \
             grep -v '\[bot\]$' | \
             grep -v '^github-actions$' | \
-            sort -u)
+            sort -u || true)
 
           if [ -n "$merger" ]; then
-            authors=$(echo "$authors" | grep -v "^${merger}$")
+            authors=$(echo "$authors" | grep -v "^${merger}$" || true)
           fi
 
           authors=$(echo "$authors" | xargs)
@@ -101,6 +102,18 @@ jobs:
           gh pr comment "$pr_number" \
             --repo "${{ github.repository }}" \
             --body-file /tmp/pr_comment.md
+
+      - name: Update issue status to awaiting-timestamps
+        if: steps.issue.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue=${{ steps.issue.outputs.number }}
+          repo=${{ github.repository }}
+          # Remove review label, add timestamps label
+          gh issue edit "$issue" --repo "$repo" \
+            --remove-label "status:awaiting-review" \
+            --add-label "status:awaiting-timestamps" 2>/dev/null || true
 
       - name: Comment on issue
         if: steps.issue.outputs.number != '' && steps.summary.outputs.generated == 'true'

@@ -154,7 +154,7 @@ Frontend changes (destructuring `undersegmented`, accordion category, chapter fi
 
 1. Add a synthetic test: manually construct P with repeated phonemes, run through `check_repetition()`, verify detection
 2. Run extraction on a test chapter with known textual repetitions (e.g., Surah 55) and verify those are NOT flagged
-3. Start inspector, confirm "Potentially Undersegmented" accordion works with the new detection
+3. Start inspector, confirm "Detected Repetitions" accordion works with the new detection
 4. Measure extraction time before/after on a full reciter — should be <1% overhead
 
 ---

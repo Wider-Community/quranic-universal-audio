@@ -1,12 +1,25 @@
 """Validate per-reciter segment output from extract_segments.py.
 
-Reads ``segments.json`` (time/word validity, coverage) and optionally
-``detailed.json`` (confidence stats, failed alignments).
+Checks segments.json (structural, coverage) and optionally detailed.json
+(confidence, alignment quality). Categories mirror the inspector's accordion
+panels in the same order:
+
+  1.  Failed Alignments
+  2.  Missing Verses
+  3.  Missing Words
+  4.  Structural Errors
+  5.  Low Confidence
+  6.  Detected Repetitions
+  7.  May Require Boundary Adjustment
+  8.  Cross-verse
+  9.  Audio Bleeding
+  10. Muqatta'at
+  11. Qalqala
 
 Usage:
-    python validate_segments.py <reciter_dir>        # single reciter → detailed report
-    python validate_segments.py <parent_dir>         # all reciter subdirs → summary table
-    python validate_segments.py <dir> --top 50       # show top 50 failures/low-conf
+    python validators/validate_segments.py <reciter_dir>        # single reciter → detailed report
+    python validators/validate_segments.py <parent_dir>         # all reciter subdirs → summary table
+    python validators/validate_segments.py <dir> --top 50       # show top 50 per category
 """
 
 import argparse
@@ -14,6 +27,7 @@ import io
 import json
 import statistics
 import sys
+import unicodedata as _ud
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
@@ -21,20 +35,36 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# ---------------------------------------------------------------------------
+# Inspector accordion constants — keep in sync with inspector/server.py
+# ---------------------------------------------------------------------------
+
+_MUQATTAAT_VERSES = {
+    (2,1),(3,1),(7,1),(10,1),(11,1),(12,1),(13,1),(14,1),(15,1),
+    (19,1),(20,1),(26,1),(27,1),(28,1),(29,1),(30,1),(31,1),(32,1),
+    (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
+    (46,1),(50,1),(68,1),
+}
+_QALQALA_LETTERS = {"ق", "ط", "ب", "ج", "د"}
+_STANDALONE_WORDS = {"كلا", "ذلك", "كذلك", "سبحنهۥ"}
+_STANDALONE_REFS = {
+    (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
+    (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
+}
+_STRIP_CHARS = {"\u0640", "\u06de", "\u06e6", "\u06e9", "\u200f"}
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
 
 def _rel_path(p: Path) -> str:
-    """Return path relative to project root, or just the name as fallback."""
     try:
         return str(p.relative_to(_PROJECT_ROOT))
     except ValueError:
         return p.name
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────
-
-
 def _ms_to_hms(ms: float) -> str:
-    """Convert milliseconds to h:mm:ss.s format."""
     total_s = ms / 1000.0
     h = int(total_s // 3600)
     m = int((total_s % 3600) // 60)
@@ -45,15 +75,48 @@ def _ms_to_hms(ms: float) -> str:
 
 
 def _ms_to_s(ms: float) -> str:
-    """Convert ms to seconds string with 2 decimal places."""
     return f"{ms / 1000:.2f}s"
+
+
+def _strip_diacritics(text: str) -> str:
+    text = _ud.normalize("NFD", text)
+    out = []
+    for ch in text:
+        if ch in _STRIP_CHARS:
+            continue
+        if _ud.category(ch) == "Mn":
+            continue
+        out.append(ch)
+    return "".join(out).strip()
+
+
+def _last_arabic_letter(text: str) -> str | None:
+    """Return the last Arabic letter, ignoring diacritics and non-letter marks."""
+    for ch in reversed(_strip_diacritics(text)):
+        if _ud.category(ch).startswith("L"):
+            return ch
+    return None
+
+
+def _parse_matched_ref(ref: str) -> tuple[int, int, int, int, int] | None:
+    """Parse 'surah:s_ayah:s_word-surah:e_ayah:e_word' → 5-tuple or None."""
+    parts = ref.split("-")
+    if len(parts) != 2:
+        return None
+    sp = parts[0].split(":")
+    ep = parts[1].split(":")
+    if len(sp) != 3 or len(ep) != 3:
+        return None
+    try:
+        return int(sp[0]), int(sp[1]), int(sp[2]), int(ep[1]), int(ep[2])
+    except ValueError:
+        return None
 
 
 # ── Parsers ──────────────────────────────────────────────────────────────
 
 
 def load_word_counts(surah_info_path: Path) -> dict[tuple[int, int], int]:
-    """Build (surah, ayah) → num_words lookup from surah_info.json."""
     with open(surah_info_path, encoding="utf-8") as f:
         info = json.load(f)
     wc = {}
@@ -65,11 +128,6 @@ def load_word_counts(surah_info_path: Path) -> dict[tuple[int, int], int]:
 
 
 def parse_segments(path: Path) -> tuple[dict[str, list[list]], dict]:
-    """Parse segments.json → (verses, meta).
-
-    verses: {verse_key: [[w_from, w_to, t_from_ms, t_to_ms], ...]}
-    meta: dict from _meta line (e.g. pad_ms, min_silence_ms)
-    """
     with open(path, encoding="utf-8") as f:
         doc = json.load(f)
     meta = doc.pop("_meta", {})
@@ -77,15 +135,14 @@ def parse_segments(path: Path) -> tuple[dict[str, list[list]], dict]:
 
 
 def parse_detailed(path: Path) -> list[dict]:
-    """Parse detailed.json → flat list of segment dicts with audio context."""
     segments = []
     with open(path, encoding="utf-8") as f:
         doc = json.load(f)
     for entry in doc.get("entries", []):
         audio = entry.get("audio", "")
-        ref = entry.get("ref", "")
+        ref = entry.get("ref", "")  # entry-level ref ("1:1" for by_ayah, "1" for by_surah)
         for seg in entry.get("segments", []):
-            segments.append({
+            d = {
                 "audio": audio,
                 "ref": ref,
                 "time_start": seg.get("time_start", 0),
@@ -94,12 +151,14 @@ def parse_detailed(path: Path) -> list[dict]:
                 "matched_text": seg.get("matched_text", ""),
                 "phonemes_asr": seg.get("phonemes_asr", ""),
                 "confidence": seg.get("confidence", 0.0),
-            })
+            }
+            if seg.get("wrap_word_ranges"):
+                d["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            segments.append(d)
     return segments
 
 
 def parse_detailed_raw(path: Path) -> tuple[list[dict], dict]:
-    """Parse detailed.json → (entries, meta) preserving entry structure."""
     with open(path, encoding="utf-8") as f:
         doc = json.load(f)
     meta = doc.get("_meta", {})
@@ -107,7 +166,6 @@ def parse_detailed_raw(path: Path) -> tuple[list[dict], dict]:
 
 
 def _build_verse_audio_map(detailed_segs: list[dict]) -> dict[str, str]:
-    """Build verse_key → audio path lookup from detailed segments."""
     mapping = {}
     for s in detailed_segs:
         ref = s.get("matched_ref", "")
@@ -124,13 +182,11 @@ def _build_verse_audio_map(detailed_segs: list[dict]) -> dict[str, str]:
 
 
 def _confidence_stats(detailed_segs: list[dict]) -> dict:
-    """Compute confidence summary from detailed segments."""
     matched = [s for s in detailed_segs if s["matched_ref"]]
     failed = [s for s in detailed_segs if not s["matched_ref"]]
     empty_phonemes = [s for s in matched if not s.get("phonemes_asr", "").strip()]
     confidences = [s["confidence"] for s in matched]
     return {
-        "confidences": confidences,
         "matched": matched,
         "failed": failed,
         "empty_phonemes": empty_phonemes,
@@ -142,6 +198,84 @@ def _confidence_stats(detailed_segs: list[dict]) -> dict:
         "conf_below_80": sum(1 for c in confidences if c < 0.80),
         "failed_segments": len(failed),
         "empty_phonemes_count": len(empty_phonemes),
+    }
+
+
+def _classify_detailed_segs(
+    detailed_segs: list[dict],
+    word_counts: dict[tuple[int, int], int],
+    is_by_ayah: bool,
+) -> dict[str, list[dict]]:
+    """Classify segments into inspector accordion categories from detailed.json."""
+    single_word_verses = {k for k, v in word_counts.items() if v == 1}
+
+    repetitions = []
+    boundary_adj = []
+    cross_verse_det = []
+    audio_bleeding = []
+    muqattaat = []
+    qalqala = []
+
+    for seg in detailed_segs:
+        conf = seg["confidence"]
+        matched_ref = seg.get("matched_ref", "")
+
+        if not matched_ref:
+            continue  # failed alignments tracked via _confidence_stats
+
+        # Detected Repetitions — wrap_word_ranges set by the alignment pipeline
+        if seg.get("wrap_word_ranges"):
+            repetitions.append(seg)
+
+        parsed = _parse_matched_ref(matched_ref)
+        if parsed is None:
+            continue
+        surah, s_ayah, s_word, e_ayah, e_word = parsed
+
+        # Audio Bleeding — by_ayah only, no confidence filter
+        if is_by_ayah:
+            entry_ref = seg.get("ref", "")
+            if ":" in entry_ref:
+                try:
+                    ep = entry_ref.split(":")
+                    entry_surah, entry_ayah_n = int(ep[0]), int(ep[1])
+                    if entry_surah != surah or entry_ayah_n != s_ayah:
+                        audio_bleeding.append({**seg, "matched_verse": f"{surah}:{s_ayah}"})
+                except (ValueError, IndexError):
+                    pass
+
+        if conf >= 1.0:
+            continue  # confidence=1.0 means already confirmed; skip quality checks
+
+        # Cross-verse (matched_ref spans multiple ayahs)
+        if s_ayah != e_ayah:
+            cross_verse_det.append(seg)
+            continue  # cross-verse segs don't fit single-ayah categories below
+
+        # May Require Boundary Adjustment — 1-word, not muqatta'at/single-word/standalone
+        if (s_word == e_word
+                and (surah, s_ayah) not in _MUQATTAAT_VERSES
+                and (surah, s_ayah) not in single_word_verses
+                and (surah, s_ayah, s_word) not in _STANDALONE_REFS
+                and _strip_diacritics(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
+            boundary_adj.append(seg)
+
+        # Muqatta'at — word 1 of a muqatta'at verse
+        if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
+            muqattaat.append(seg)
+
+        # Qalqala — last Arabic letter of matched_text is a qalqala letter
+        last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
+        if last_ltr and last_ltr in _QALQALA_LETTERS:
+            qalqala.append(seg)
+
+    return {
+        "repetitions": repetitions,
+        "boundary_adj": boundary_adj,
+        "cross_verse_det": cross_verse_det,
+        "audio_bleeding": audio_bleeding,
+        "muqattaat": muqattaat,
+        "qalqala": qalqala,
     }
 
 
@@ -161,10 +295,10 @@ def validate_reciter(
 
     verses, meta = parse_segments(segments_path)
     pad_ms = meta.get("pad_ms", 0)
+    is_by_ayah = "by_ayah" in meta.get("audio_source", "")
 
-    # Structured errors/warnings with time and verse context
-    errors = []      # list of {msg, verse_key, t_from, t_to}
-    warnings = []    # list of {msg, verse_key, t_from, t_to}
+    errors = []
+    warnings = []
     seg_durations = []
     pause_durations = []
     single_seg = 0
@@ -175,7 +309,7 @@ def validate_reciter(
     cross_verse_keys = 0
     empty_verse_keys = 0
 
-    # ── 0. Meta validation ──
+    # ── Meta validation ──
     meta_fields = {"created_at", "asr_model", "vad_model", "pad_ms", "min_silence_ms", "min_speech_ms", "audio_source"}
     if not meta:
         errors.append({"msg": "_meta missing or empty", "verse_key": "", "t_from": 0, "t_to": 0})
@@ -185,7 +319,6 @@ def validate_reciter(
             warnings.append({"msg": f"_meta missing fields: {sorted(missing_meta)}",
                              "verse_key": "", "t_from": 0, "t_to": 0})
 
-    # Per-verse word coverage (cross-verse keys expand across multiple verses)
     covered_per_verse: dict[tuple[int, int], set[int]] = defaultdict(set)
 
     for verse_key, segs in verses.items():
@@ -196,7 +329,6 @@ def validate_reciter(
         total_segments += n_segs
         max_segs = max(max_segs, n_segs)
 
-        # Empty verse key check
         if n_segs == 0:
             empty_verse_keys += 1
             errors.append({"msg": "verse key with zero segments",
@@ -212,11 +344,9 @@ def validate_reciter(
         verse_t_from = segs[0][2]
         verse_t_to = segs[-1][3]
 
-        # Duration, pause, and time/word validity checks (same for both key types)
         for i, seg in enumerate(segs):
-            w_from, w_to, t_from, t_to = seg
-            dur = t_to - t_from
-            seg_durations.append(dur)
+            w_from, w_to, t_from, t_to = seg[0], seg[1], seg[2], seg[3]
+            seg_durations.append(t_to - t_from)
 
             if t_from >= t_to:
                 errors.append({"msg": f"seg[{i}] time_from ({_ms_to_hms(t_from)}) >= time_to ({_ms_to_hms(t_to)})",
@@ -240,9 +370,7 @@ def validate_reciter(
                     true_pause = (next_t_from - t_to) + 2 * pad_ms
                     pause_durations.append(true_pause)
 
-        # Word coverage
         if is_cross_verse:
-            # Cross-verse key: "37:151:3-37:152:2"
             kparts = verse_key.split("-")
             start_kparts = kparts[0].split(":")
             end_kparts = kparts[1].split(":")
@@ -254,7 +382,6 @@ def validate_reciter(
                 end_word = int(end_kparts[2])
             except (ValueError, IndexError):
                 continue
-
             for ayah in range(start_ayah, end_ayah + 1):
                 wc = word_counts.get((start_sura, ayah))
                 if wc is None:
@@ -269,13 +396,12 @@ def validate_reciter(
                 else:
                     covered_per_verse[(start_sura, ayah)].update(range(1, wc + 1))
         else:
-            # Regular key: "37:151"
             parts = verse_key.split(":")
             surah, ayah = int(parts[0]), int(parts[1])
             for seg in segs:
                 covered_per_verse[(surah, ayah)].update(range(seg[0], seg[1] + 1))
 
-    # Word coverage validation across all verses
+    # Build full verse set from all keys
     all_verses_in_file: set[tuple[int, int]] = set()
     for verse_key in verses:
         if "-" in verse_key:
@@ -292,38 +418,40 @@ def validate_reciter(
             parts = verse_key.split(":")
             all_verses_in_file.add((int(parts[0]), int(parts[1])))
 
+    # Word coverage warnings
     for (surah, ayah) in sorted(all_verses_in_file):
         expected_words = word_counts.get((surah, ayah))
-        if expected_words is not None:
-            covered_words = covered_per_verse.get((surah, ayah), set())
-            expected_set = set(range(1, expected_words + 1))
-            missing = expected_set - covered_words
-            extra = covered_words - expected_set
-            vk = f"{surah}:{ayah}"
-            # Find time range for context (from any key covering this verse)
-            vk_t_from = 0
-            vk_t_to = 0
-            for k, s in verses.items():
-                if vk == k or (("-" in k) and any(
-                    f"{surah}:{ayah}" in p for p in k.split("-")
-                )):
-                    if s:
-                        vk_t_from = s[0][2]
-                        vk_t_to = s[-1][3]
-                    break
-            if missing:
-                warnings.append({"msg": f"missing words: {sorted(missing)}",
-                                 "verse_key": vk, "t_from": vk_t_from, "t_to": vk_t_to})
-            if extra:
-                warnings.append({"msg": f"extra words beyond {expected_words}: {sorted(extra)}",
-                                 "verse_key": vk, "t_from": vk_t_from, "t_to": vk_t_to})
+        if expected_words is None:
+            continue
+        covered_words = covered_per_verse.get((surah, ayah), set())
+        expected_set = set(range(1, expected_words + 1))
+        missing = expected_set - covered_words
+        extra = covered_words - expected_set
+        vk = f"{surah}:{ayah}"
+        vk_t_from = vk_t_to = 0
+        for k, s in verses.items():
+            if vk == k or (("-" in k) and any(f"{surah}:{ayah}" in p for p in k.split("-"))):
+                if s:
+                    vk_t_from = s[0][2]
+                    vk_t_to = s[-1][3]
+                break
+        if missing:
+            warnings.append({"msg": f"missing words: {sorted(missing)}",
+                             "verse_key": vk, "t_from": vk_t_from, "t_to": vk_t_to})
+        if extra:
+            warnings.append({"msg": f"extra words beyond {expected_words}: {sorted(extra)}",
+                             "verse_key": vk, "t_from": vk_t_from, "t_to": vk_t_to})
 
+    # Missing verses — only within surahs that have at least one verse present
+    covered_surahs = {surah for (surah, _) in all_verses_in_file}
     missing_verses = []
     for (surah, ayah) in sorted(word_counts):
+        if surah not in covered_surahs:
+            continue
         if (surah, ayah) not in all_verses_in_file:
             missing_verses.append(f"{surah}:{ayah}")
 
-    word_gap_count = sum(1 for w in warnings if "missing words" in w["msg"])
+    word_gap_warnings = [w for w in warnings if "missing words" in w["msg"]]
 
     stats = {
         "reciter": reciter,
@@ -345,14 +473,15 @@ def validate_reciter(
         "pause_dur_mean": statistics.mean(pause_durations) if pause_durations else 0,
         "pause_dur_max": max(pause_durations) if pause_durations else 0,
         "missing": len(missing_verses),
-        "word_gaps": word_gap_count,
+        "word_gaps": len(word_gap_warnings),
         "errors": len(errors),
         "warnings": len(warnings),
     }
 
-    # Confidence stats from detailed.json
+    # ── detailed.json: confidence stats + accordion categories ──
     has_detailed = detailed_path.exists()
     detailed_segs = []
+    categories: dict[str, list] = {}
     if has_detailed:
         detailed_segs = parse_detailed(detailed_path)
         cstats = _confidence_stats(detailed_segs)
@@ -360,18 +489,25 @@ def validate_reciter(
                    "conf_below_60", "conf_below_80", "failed_segments",
                    "empty_phonemes_count"]:
             stats[k] = cstats[k]
+        categories = _classify_detailed_segs(detailed_segs, word_counts, is_by_ayah)
+        stats["repetitions"] = len(categories["repetitions"])
+        stats["boundary_adj"] = len(categories["boundary_adj"])
+        stats["cross_verse_det"] = len(categories["cross_verse_det"])
+        stats["audio_bleeding"] = len(categories["audio_bleeding"])
+        stats["muqattaat"] = len(categories["muqattaat"])
+        stats["qalqala"] = len(categories["qalqala"])
     else:
-        stats["conf_min"] = stats["conf_med"] = stats["conf_mean"] = stats["conf_max"] = 0
-        stats["conf_below_60"] = stats["conf_below_80"] = stats["failed_segments"] = 0
-        stats["empty_phonemes_count"] = 0
+        for k in ["conf_min", "conf_med", "conf_mean", "conf_max",
+                   "conf_below_60", "conf_below_80", "failed_segments",
+                   "empty_phonemes_count", "repetitions", "boundary_adj",
+                   "cross_verse_det", "audio_bleeding", "muqattaat", "qalqala"]:
+            stats[k] = 0
 
     # ── Cross-file consistency: detailed.json ↔ segments.json ──
     consistency_mismatches = 0
     if has_detailed:
         raw_entries, _ = parse_detailed_raw(detailed_path)
-        # Rebuild expected segments.json from detailed.json (same logic as
-        # extract_segments / server rebuild): group matched segments by verse key
-        rebuilt: dict[str, list[tuple[int, int, int, int]]] = defaultdict(list)
+        rebuilt: dict[str, list] = defaultdict(list)
         for entry in raw_entries:
             for seg in entry.get("segments", []):
                 matched_ref = seg.get("matched_ref", "")
@@ -386,47 +522,24 @@ def validate_reciter(
                     continue
                 try:
                     s_ayah, e_ayah = int(sp[1]), int(ep[1])
-                    w_from, w_to = int(sp[2]), int(ep[2])
                 except ValueError:
                     continue
-                if s_ayah == e_ayah:
-                    vk = f"{sp[0]}:{sp[1]}"
-                else:
-                    vk = matched_ref  # compound key
-                t_from = round(seg.get("time_start", 0))
-                t_to = round(seg.get("time_end", 0))
-                rebuilt[vk].append((w_from, w_to, t_from, t_to))
+                vk = f"{sp[0]}:{sp[1]}" if s_ayah == e_ayah else matched_ref
+                rebuilt[vk].append(seg)
 
-        # Compare verse counts
         seg_only = set(verses.keys()) - set(rebuilt.keys())
         det_only = set(rebuilt.keys()) - set(verses.keys())
-        if seg_only:
-            consistency_mismatches += len(seg_only)
-            for vk in sorted(seg_only):
-                warnings.append({"msg": f"in segments.json but not in detailed.json",
-                                 "verse_key": vk, "t_from": 0, "t_to": 0})
-        if det_only:
-            consistency_mismatches += len(det_only)
-            for vk in sorted(det_only):
-                warnings.append({"msg": f"in detailed.json but not in segments.json",
-                                 "verse_key": vk, "t_from": 0, "t_to": 0})
-
-        # Compare segment counts per shared verse key
+        consistency_mismatches += len(seg_only) + len(det_only)
         for vk in sorted(set(verses.keys()) & set(rebuilt.keys())):
-            n_seg = len(verses[vk])
-            n_det = len(rebuilt[vk])
-            if n_seg != n_det:
+            if len(verses[vk]) != len(rebuilt[vk]):
                 consistency_mismatches += 1
-                warnings.append({
-                    "msg": f"segment count mismatch: segments.json has {n_seg}, detailed.json has {n_det}",
-                    "verse_key": vk, "t_from": 0, "t_to": 0})
 
     stats["consistency_mismatches"] = consistency_mismatches
 
     if verbose:
         _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
-                       missing_verses, word_counts, pause_durations,
-                       has_detailed, detailed_segs, top_n)
+                       missing_verses, word_gap_warnings, word_counts,
+                       pause_durations, has_detailed, detailed_segs, categories, top_n)
 
     return stats
 
@@ -435,8 +548,8 @@ def validate_reciter(
 
 
 def _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
-                   missing_verses, word_counts, pause_durations,
-                   has_detailed, detailed_segs, top_n):
+                   missing_verses, word_gap_warnings, word_counts,
+                   pause_durations, has_detailed, detailed_segs, categories, top_n):
     """Pretty-print a detailed single-reciter report."""
     W = 72
     print("=" * W)
@@ -453,134 +566,215 @@ def _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
 
     # ── Coverage ──
     print(f"\n--- Coverage ---")
-    print(f"  Verses found:       {stats['verses']} / {stats['total_verses']}")
-    print(f"  Missing verses:     {stats['missing']}")
-    print(f"  Partial words:      {stats['word_gaps']} verses with word gaps")
+    print(f"  Verses found:   {stats['verses']} / {stats['total_verses']}")
+    print(f"  Missing verses: {stats['missing']}")
+    print(f"  Word gaps:      {stats['word_gaps']} verses")
 
     # ── Segments ──
     print(f"\n--- Segments ---")
-    print(f"  Total segments:     {stats['segments']}")
-    print(f"  Single-seg verses:  {stats['single']}")
-    print(f"  Multi-seg verses:   {stats['multi_verses']} ({stats['multi_segs']} segments)")
-    print(f"  Cross-verse segs:   {stats['cross_verse']}")
-    print(f"  Empty verse keys:   {stats['empty_verse_keys']}")
-    print(f"  Max segs/verse:     {stats['max_segs']}")
+    print(f"  Total:            {stats['segments']}")
+    print(f"  Single-seg:       {stats['single']}")
+    print(f"  Multi-seg verses: {stats['multi_verses']} ({stats['multi_segs']} segs)")
+    print(f"  Cross-verse keys: {stats['cross_verse']}")
+    print(f"  Max segs/verse:   {stats['max_segs']}")
 
     # ── Durations ──
     print(f"\n--- Segment Duration ---")
-    print(f"  Min:      {_ms_to_s(stats['seg_dur_min'])}")
-    print(f"  Median:   {_ms_to_s(stats['seg_dur_med'])}")
-    print(f"  Mean:     {_ms_to_s(stats['seg_dur_mean'])}")
-    print(f"  Max:      {_ms_to_s(stats['seg_dur_max'])}")
+    print(f"  Min:    {_ms_to_s(stats['seg_dur_min'])}")
+    print(f"  Median: {_ms_to_s(stats['seg_dur_med'])}")
+    print(f"  Mean:   {_ms_to_s(stats['seg_dur_mean'])}")
+    print(f"  Max:    {_ms_to_s(stats['seg_dur_max'])}")
 
     print(f"\n--- True Silence Duration (padding reversed) ---")
     if pause_durations:
-        print(f"  Min:      {_ms_to_s(stats['pause_dur_min'])}")
-        print(f"  Median:   {_ms_to_s(stats['pause_dur_med'])}")
-        print(f"  Mean:     {_ms_to_s(stats['pause_dur_mean'])}")
-        print(f"  Max:      {_ms_to_s(stats['pause_dur_max'])}")
+        print(f"  Min:    {_ms_to_s(stats['pause_dur_min'])}")
+        print(f"  Median: {_ms_to_s(stats['pause_dur_med'])}")
+        print(f"  Mean:   {_ms_to_s(stats['pause_dur_mean'])}")
+        print(f"  Max:    {_ms_to_s(stats['pause_dur_max'])}")
     else:
         print(f"  (no multi-segment verses)")
 
-    # ── Confidence ──
+    # ── Confidence summary ──
     if has_detailed:
-        cstats = _confidence_stats(detailed_segs)
-        verse_audio = _build_verse_audio_map(detailed_segs)
-
         print(f"\n--- Alignment Confidence ---")
-        print(f"  Min:        {stats['conf_min']:.4f}")
-        print(f"  Median:     {stats['conf_med']:.4f}")
-        print(f"  Mean:       {stats['conf_mean']:.4f}")
-        print(f"  Max:        {stats['conf_max']:.4f}")
-        print(f"  Below 60%:  {stats['conf_below_60']}")
-        print(f"  Below 80%:  {stats['conf_below_80']}")
-        print(f"  Failed:     {stats['failed_segments']} (no alignment)")
-        print(f"  Empty ASR:  {stats['empty_phonemes_count']} (matched but no phonemes)")
-
-        # ── Empty phonemes detail ──
-        empty_ph = cstats["empty_phonemes"]
-        if empty_ph:
-            n_show = min(top_n, len(empty_ph))
-            print(f"\n--- First {n_show} of {len(empty_ph)} Segments with Empty Phonemes ---")
-            for i, s in enumerate(empty_ph[:n_show], 1):
-                print(f"  {i:>2}. [{s['confidence']:.4f}]  {s['matched_ref']}  @ {_ms_to_hms(s['time_start'])} - {_ms_to_hms(s['time_end'])}")
-                print(f"      audio: {s['audio']}")
-                print(f"      text:  {s['matched_text']}")
-                print()
-
-        # ── Failed alignments (before low-confidence) ──
-        failed = cstats["failed"]
-        if failed:
-            n_show = min(top_n, len(failed))
-            print(f"\n--- First {n_show} of {len(failed)} Alignment Failures ---")
-            for i, s in enumerate(failed[:n_show], 1):
-                print(f"  {i:>2}. {_ms_to_hms(s['time_start'])} - {_ms_to_hms(s['time_end'])}  ({_ms_to_s(s['time_end'] - s['time_start'])})")
-                print(f"      audio: {s['audio']}")
-                print(f"      asr:   {s['phonemes_asr']}")
-                print()
-
-        # ── Lowest confidence (below 0.8 only) ──
-        matched = cstats["matched"]
-        below_80 = [s for s in matched if s["confidence"] < 0.80]
-        if below_80:
-            by_conf = sorted(below_80, key=lambda s: s["confidence"])
-            n_show = min(top_n, len(by_conf))
-            print(f"\n--- Lowest {n_show} of {len(below_80)} Segments Below 80% Confidence ---")
-            for i, s in enumerate(by_conf[:n_show], 1):
-                print(f"  {i:>2}. [{s['confidence']:.4f}]  {s['matched_ref']}  @ {_ms_to_hms(s['time_start'])} - {_ms_to_hms(s['time_end'])}")
-                print(f"      audio: {s['audio']}")
-                print(f"      text:  {s['matched_text']}")
-                print(f"      asr:   {s['phonemes_asr']}")
-                print()
+        print(f"  Min:       {stats['conf_min']:.4f}")
+        print(f"  Median:    {stats['conf_med']:.4f}")
+        print(f"  Mean:      {stats['conf_mean']:.4f}")
+        print(f"  Max:       {stats['conf_max']:.4f}")
+        print(f"  Below 60%: {stats['conf_below_60']}")
+        print(f"  Below 80%: {stats['conf_below_80']}")
+        print(f"  Failed:    {stats['failed_segments']} (no alignment)")
+        print(f"  Empty ASR: {stats['empty_phonemes_count']} (matched but no phonemes)")
     else:
         print(f"\n--- Alignment Confidence ---")
         print(f"  (no detailed.json)")
+
+    # ── Inspector Accordion Sections ─────────────────────────────────────
+
+    verse_audio: dict[str, str] = _build_verse_audio_map(detailed_segs) if has_detailed else {}
+
+    def _seg_line(s: dict, label: str | None = None) -> None:
+        ref = label or s.get("matched_ref", s.get("ref", ""))
+        conf = s.get("confidence", 0.0)
+        print(f"  [{conf:.4f}]  {ref}  @ {_ms_to_hms(s['time_start'])} - {_ms_to_hms(s['time_end'])}")
+        if s.get("audio"):
+            print(f"           audio: {s['audio']}")
+        if s.get("matched_text"):
+            print(f"           text:  {s['matched_text']}")
+
+    # 1. Failed Alignments
+    if has_detailed:
+        cstats = _confidence_stats(detailed_segs)
+        failed = cstats["failed"]
+        n = len(failed)
+        print(f"\n--- Failed Alignments ({n}) ---")
+        for s in failed[:top_n]:
+            print(f"  {_ms_to_hms(s['time_start'])} - {_ms_to_hms(s['time_end'])}  ({_ms_to_s(s['time_end'] - s['time_start'])})")
+            if s.get("audio"):
+                print(f"    audio: {s['audio']}")
+            if s.get("phonemes_asr"):
+                print(f"    asr:   {s['phonemes_asr']}")
+        if n > top_n:
+            print(f"  ... and {n - top_n} more")
+
+    # 2. Missing Verses
+    n = len(missing_verses)
+    if n:
+        print(f"\n--- Missing Verses ({n}) ---")
+        for v in missing_verses[:top_n]:
+            nw = word_counts.get(tuple(int(x) for x in v.split(":")), "?")
+            print(f"  MISS  {v}  ({nw} words)")
+        if n > top_n:
+            print(f"  ... and {n - top_n} more")
+
+    # 3. Missing Words
+    n = len(word_gap_warnings)
+    if n:
+        print(f"\n--- Missing Words ({n}) ---")
+        for w in word_gap_warnings[:top_n]:
+            audio = verse_audio.get(w["verse_key"], "")
+            print(f"  {w['verse_key']}  @ {_ms_to_hms(w['t_from'])} - {_ms_to_hms(w['t_to'])}")
+            print(f"    {w['msg']}")
+            if audio:
+                print(f"    audio: {audio}")
+        if n > top_n:
+            print(f"  ... and {n - top_n} more")
+
+    # 4. Structural Errors
+    n = len(errors)
+    if n:
+        print(f"\n--- Structural Errors ({n}) ---")
+        for e in errors[:top_n]:
+            audio = verse_audio.get(e["verse_key"], "")
+            print(f"  ERROR  {e['verse_key']}  @ {_ms_to_hms(e['t_from'])} - {_ms_to_hms(e['t_to'])}")
+            print(f"    {e['msg']}")
+            if audio:
+                print(f"    audio: {audio}")
+        if n > top_n:
+            print(f"  ... and {n - top_n} more")
+
+    if has_detailed:
+        cstats = _confidence_stats(detailed_segs)
+
+        # 5. Low Confidence (<80%)
+        below_80 = sorted(
+            [s for s in cstats["matched"] if s["confidence"] < 0.80],
+            key=lambda s: s["confidence"],
+        )
+        n = len(below_80)
+        if n:
+            print(f"\n--- Low Confidence <80% ({n}) ---")
+            for s in below_80[:top_n]:
+                _seg_line(s)
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
+
+        # 6. Detected Repetitions
+        rep = categories.get("repetitions", [])
+        n = len(rep)
+        if n:
+            print(f"\n--- Detected Repetitions ({n}) ---")
+            for s in rep[:top_n]:
+                _seg_line(s)
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
+
+        # 7. May Require Boundary Adjustment
+        ba = categories.get("boundary_adj", [])
+        n = len(ba)
+        if n:
+            print(f"\n--- May Require Boundary Adjustment ({n}) ---")
+            for s in ba[:top_n]:
+                _seg_line(s)
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
+
+        # 8. Cross-verse
+        cv = categories.get("cross_verse_det", [])
+        n = len(cv)
+        if n:
+            print(f"\n--- Cross-verse ({n}) ---")
+            for s in cv[:top_n]:
+                _seg_line(s)
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
+
+        # 9. Audio Bleeding
+        ab = categories.get("audio_bleeding", [])
+        n = len(ab)
+        if n:
+            print(f"\n--- Audio Bleeding ({n}) ---")
+            for s in ab[:top_n]:
+                entry_ref = s.get("ref", "?")
+                matched_v = s.get("matched_verse", "?")
+                _seg_line(s, label=f"{entry_ref} → {matched_v}  ({s.get('matched_ref', '')})")
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
+
+        # 10. Muqatta'at
+        mq = categories.get("muqattaat", [])
+        n = len(mq)
+        if n:
+            print(f"\n--- Muqatta'at ({n}) ---")
+            for s in mq[:top_n]:
+                _seg_line(s)
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
+
+        # 11. Qalqala
+        ql = categories.get("qalqala", [])
+        n = len(ql)
+        if n:
+            print(f"\n--- Qalqala ({n}) ---")
+            for s in ql[:top_n]:
+                last_ltr = _last_arabic_letter(s.get("matched_text", "")) or "?"
+                _seg_line(s, label=f"{s.get('matched_ref', '')}  [{last_ltr}]")
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
+
+        # Empty ASR (not an accordion, but useful diagnostic)
+        empty_ph = cstats["empty_phonemes"]
+        if empty_ph:
+            n = len(empty_ph)
+            print(f"\n--- Empty ASR Phonemes ({n}) ---")
+            for s in empty_ph[:top_n]:
+                _seg_line(s)
+            if n > top_n:
+                print(f"  ... and {n - top_n} more")
 
     # ── Cross-file Consistency ──
     if has_detailed:
         print(f"\n--- Cross-file Consistency (detailed.json ↔ segments.json) ---")
-        print(f"  Mismatches:     {stats.get('consistency_mismatches', 0)}")
-    else:
-        print(f"\n--- Cross-file Consistency ---")
-        print(f"  (no detailed.json)")
+        print(f"  Mismatches: {stats.get('consistency_mismatches', 0)}")
 
-    # ── Errors & Warnings ──
-    # Build audio lookup for error/warning context
-    if has_detailed:
-        verse_audio = _build_verse_audio_map(detailed_segs)
-    else:
-        verse_audio = {}
-
-    print(f"\n--- Validation Issues ---")
-    print(f"  Errors:     {stats['errors']}")
-    print(f"  Warnings:   {stats['warnings']}")
-
-    if missing_verses:
-        n_show = min(top_n, len(missing_verses))
-        print(f"\n  Missing verses (first {n_show} of {len(missing_verses)}):")
-        for v in missing_verses[:n_show]:
-            nw = word_counts.get(tuple(int(x) for x in v.split(":")), "?")
-            print(f"    MISS   {v}  ({nw} words)")
-        if len(missing_verses) > n_show:
-            print(f"    ... and {len(missing_verses) - n_show} more")
-    if warnings:
-        print(f"\n  Warnings:")
-        for w in warnings:
-            audio = verse_audio.get(w["verse_key"], "")
-            print(f"    WARN   {w['verse_key']}  @ {_ms_to_hms(w['t_from'])} - {_ms_to_hms(w['t_to'])}")
-            print(f"           {w['msg']}")
-            if audio:
-                print(f"           audio: {audio}")
-            print()
-    if errors:
-        print(f"\n  Errors:")
-        for e in errors:
-            audio = verse_audio.get(e["verse_key"], "")
-            print(f"    ERROR  {e['verse_key']}  @ {_ms_to_hms(e['t_from'])} - {_ms_to_hms(e['t_to'])}")
-            print(f"           {e['msg']}")
-            if audio:
-                print(f"           audio: {audio}")
-            print()
+    # ── Other Warnings (extra words, meta, etc.) ──
+    other_warnings = [w for w in warnings if "missing words" not in w["msg"]]
+    if other_warnings:
+        print(f"\n--- Other Warnings ({len(other_warnings)}) ---")
+        for w in other_warnings[:top_n]:
+            print(f"  WARN  {w['verse_key']}  {w['msg']}")
+        if len(other_warnings) > top_n:
+            print(f"  ... and {len(other_warnings) - top_n} more")
 
     print()
 
@@ -596,18 +790,19 @@ def _print_row(reciter: str, cols: list[str], widths: list[int]):
 
 
 def print_table(all_stats: list[dict]):
-    """Print summary tables: segments, segment durations, pause durations, confidence."""
+    """Print summary tables across all reciters."""
     sorted_stats = sorted(all_stats, key=lambda x: x["reciter"])
     total_label = f"TOTAL ({len(all_stats)} reciters)"
 
     # --- Table 1: Segments ---
     print("=== Segments ===\n")
-    seg_hdrs = ["Verses", "Total Segs", "Single", "Multi (segs)", "Cross-V", "Max/Verse", "No Verse", "Word Gaps", "Errors"]
-    seg_ws = [6, 10, 6, 16, 7, 9, 8, 9, 6]
+    seg_hdrs = ["Verses", "Total Segs", "Single", "Multi (segs)", "Cross-V", "Max/V", "Missing", "Wrd Gaps", "Errors"]
+    seg_ws = [6, 10, 6, 12, 7, 5, 7, 8, 6]
     _print_row("Reciter", seg_hdrs, seg_ws)
     print("-" * (35 + sum(w + 1 for w in seg_ws)))
 
-    totals = {k: 0 for k in ["verses", "segments", "single", "multi_verses", "multi_segs", "cross_verse", "missing", "word_gaps", "errors"]}
+    totals = {k: 0 for k in ["verses", "segments", "single", "multi_verses", "multi_segs",
+                               "cross_verse", "missing", "word_gaps", "errors"]}
     for s in sorted_stats:
         multi_str = f"{s['multi_verses']} ({s['multi_segs']})"
         _print_row(s["reciter"], [
@@ -619,10 +814,9 @@ def print_table(all_stats: list[dict]):
             totals[k] += s[k]
 
     print("-" * (35 + sum(w + 1 for w in seg_ws)))
-    multi_total = f"{totals['multi_verses']} ({totals['multi_segs']})"
     _print_row(total_label, [
         str(totals["verses"]), str(totals["segments"]), str(totals["single"]),
-        multi_total, str(totals["cross_verse"]), "",
+        f"{totals['multi_verses']} ({totals['multi_segs']})", str(totals["cross_verse"]), "",
         str(totals["missing"]), str(totals["word_gaps"]), str(totals["errors"]),
     ], seg_ws)
 
@@ -632,7 +826,6 @@ def print_table(all_stats: list[dict]):
     dur_ws = [8, 8, 8, 8]
     _print_row("Reciter", dur_hdrs, dur_ws)
     print("-" * (35 + sum(w + 1 for w in dur_ws)))
-
     all_med = []
     for s in sorted_stats:
         _print_row(s["reciter"], [
@@ -640,16 +833,13 @@ def print_table(all_stats: list[dict]):
             f"{s['seg_dur_mean']:.1f}", f"{s['seg_dur_max']:.1f}",
         ], dur_ws)
         all_med.append(s["seg_dur_med"])
-
     print("-" * (35 + sum(w + 1 for w in dur_ws)))
-    med_of_med = statistics.median(all_med) if all_med else 0
-    _print_row(total_label, ["", f"{med_of_med:.1f}", "", ""], dur_ws)
+    _print_row(total_label, ["", f"{statistics.median(all_med) if all_med else 0:.1f}", "", ""], dur_ws)
 
-    # --- Table 3: True Silence Duration (ms) ---
+    # --- Table 3: True Silence Duration ---
     print("\n\n=== True Silence Duration (ms, padding reversed) ===\n")
     _print_row("Reciter", dur_hdrs, dur_ws)
     print("-" * (35 + sum(w + 1 for w in dur_ws)))
-
     all_pause_med = []
     for s in sorted_stats:
         if s["pause_dur_med"] > 0:
@@ -660,10 +850,8 @@ def print_table(all_stats: list[dict]):
             all_pause_med.append(s["pause_dur_med"])
         else:
             _print_row(s["reciter"], ["n/a", "n/a", "n/a", "n/a"], dur_ws)
-
     print("-" * (35 + sum(w + 1 for w in dur_ws)))
-    med_of_pause = statistics.median(all_pause_med) if all_pause_med else 0
-    _print_row(total_label, ["", f"{med_of_pause:.1f}", "", ""], dur_ws)
+    _print_row(total_label, ["", f"{statistics.median(all_pause_med) if all_pause_med else 0:.1f}", "", ""], dur_ws)
 
     # --- Table 4: Confidence ---
     has_any_detailed = any(s["conf_mean"] > 0 for s in sorted_stats)
@@ -673,12 +861,8 @@ def print_table(all_stats: list[dict]):
         conf_ws = [6, 6, 6, 6, 9, 9, 6, 9]
         _print_row("Reciter", conf_hdrs, conf_ws)
         print("-" * (35 + sum(w + 1 for w in conf_ws)))
-
         all_conf_med = []
-        total_below_60 = 0
-        total_below_80 = 0
-        total_failed = 0
-        total_empty_ph = 0
+        tot = {k: 0 for k in ["conf_below_60", "conf_below_80", "failed_segments", "empty_phonemes_count"]}
         for s in sorted_stats:
             if s["conf_mean"] > 0:
                 _print_row(s["reciter"], [
@@ -689,31 +873,53 @@ def print_table(all_stats: list[dict]):
                 ], conf_ws)
                 all_conf_med.append(s["conf_med"])
             else:
-                _print_row(s["reciter"], ["n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a"], conf_ws)
-            total_below_60 += s["conf_below_60"]
-            total_below_80 += s["conf_below_80"]
-            total_failed += s["failed_segments"]
-            total_empty_ph += s["empty_phonemes_count"]
-
+                _print_row(s["reciter"], ["n/a"] * 8, conf_ws)
+            for k in tot:
+                tot[k] += s[k]
         print("-" * (35 + sum(w + 1 for w in conf_ws)))
-        med_conf = statistics.median(all_conf_med) if all_conf_med else 0
         _print_row(total_label, [
-            "", f"{med_conf:.2f}", "", "",
-            str(total_below_60), str(total_below_80), str(total_failed),
-            str(total_empty_ph),
+            "", f"{statistics.median(all_conf_med) if all_conf_med else 0:.2f}", "", "",
+            str(tot["conf_below_60"]), str(tot["conf_below_80"]),
+            str(tot["failed_segments"]), str(tot["empty_phonemes_count"]),
         ], conf_ws)
 
-    # --- Table 5: Consistency ---
-    has_any_consistency = any(s.get("consistency_mismatches", 0) > 0 or s.get("empty_verse_keys", 0) > 0 for s in sorted_stats)
+    # --- Table 5: Validation Categories (from detailed.json) ---
+    if has_any_detailed:
+        print("\n\n=== Validation Categories ===\n")
+        cat_hdrs = ["Failed", "Rep", "BndAdj", "CrossV", "Bleed", "Muqt", "Qalq"]
+        cat_ws = [6, 5, 6, 6, 5, 5, 5]
+        _print_row("Reciter", cat_hdrs, cat_ws)
+        print("-" * (35 + sum(w + 1 for w in cat_ws)))
+        cat_totals = {k: 0 for k in ["failed_segments", "repetitions", "boundary_adj",
+                                       "cross_verse_det", "audio_bleeding", "muqattaat", "qalqala"]}
+        for s in sorted_stats:
+            _print_row(s["reciter"], [
+                str(s["failed_segments"]), str(s["repetitions"]),
+                str(s["boundary_adj"]), str(s["cross_verse_det"]),
+                str(s["audio_bleeding"]), str(s["muqattaat"]), str(s["qalqala"]),
+            ], cat_ws)
+            for k in cat_totals:
+                cat_totals[k] += s[k]
+        print("-" * (35 + sum(w + 1 for w in cat_ws)))
+        _print_row(total_label, [
+            str(cat_totals["failed_segments"]), str(cat_totals["repetitions"]),
+            str(cat_totals["boundary_adj"]), str(cat_totals["cross_verse_det"]),
+            str(cat_totals["audio_bleeding"]), str(cat_totals["muqattaat"]),
+            str(cat_totals["qalqala"]),
+        ], cat_ws)
+
+    # --- Table 6: Cross-file Consistency ---
+    has_any_consistency = any(
+        s.get("consistency_mismatches", 0) > 0 or s.get("empty_verse_keys", 0) > 0
+        for s in sorted_stats
+    )
     if has_any_consistency:
         print("\n\n=== Cross-file Consistency ===\n")
         con_hdrs = ["Empty Keys", "Det↔Seg MM"]
         con_ws = [10, 10]
         _print_row("Reciter", con_hdrs, con_ws)
         print("-" * (35 + sum(w + 1 for w in con_ws)))
-
-        total_empty = 0
-        total_mm = 0
+        total_empty = total_mm = 0
         for s in sorted_stats:
             _print_row(s["reciter"], [
                 str(s.get("empty_verse_keys", 0)),
@@ -721,7 +927,6 @@ def print_table(all_stats: list[dict]):
             ], con_ws)
             total_empty += s.get("empty_verse_keys", 0)
             total_mm += s.get("consistency_mismatches", 0)
-
         print("-" * (35 + sum(w + 1 for w in con_ws)))
         _print_row(total_label, [str(total_empty), str(total_mm)], con_ws)
 
@@ -731,7 +936,6 @@ def print_table(all_stats: list[dict]):
 
 @contextmanager
 def _tee_to_file(path: Path):
-    """Copy stdout to *path* (overwritten) while still printing to console."""
     buf = io.StringIO()
     orig = sys.stdout
 
@@ -739,7 +943,6 @@ def _tee_to_file(path: Path):
         def write(self, s):
             orig.write(s)
             buf.write(s)
-
         def flush(self):
             orig.flush()
 
@@ -762,14 +965,9 @@ def main():
         "--surah-info",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "data" / "surah_info.json",
-        help="Path to surah_info.json",
     )
-    parser.add_argument(
-        "--top", "-n",
-        type=int,
-        default=30,
-        help="Number of failures / lowest-confidence segments to show (default: 30)",
-    )
+    parser.add_argument("--top", "-n", type=int, default=30,
+                        help="Items to show per category (default: 30)")
     args = parser.parse_args()
 
     word_counts = load_word_counts(args.surah_info)
@@ -779,7 +977,6 @@ def main():
         print(f"Path not found or not a directory: {_rel_path(target)}")
         return
 
-    # Single reciter dir: contains segments.json directly
     if (target / "segments.json").exists():
         report_path = target / "validation.log"
         with _tee_to_file(report_path):
@@ -788,13 +985,11 @@ def main():
         print(f"Run  python inspector/server.py  to visually inspect and edit segments in the browser.")
         return
 
-    # Parent dir: find subdirectories with segments.json
     subdirs = sorted(d for d in target.iterdir() if d.is_dir() and (d / "segments.json").exists())
     if not subdirs:
         print(f"No reciter subdirectories with segments.json found in {_rel_path(target)}")
         return
 
-    # Per-reciter detailed reports (saved to each reciter's folder)
     all_stats = []
     for d in subdirs:
         per_report = d / "validation.log"
@@ -803,7 +998,6 @@ def main():
         all_stats.append(stats)
         print(f"  {d.name}: saved to {_rel_path(per_report)}")
 
-    # Summary table across all reciters
     report_path = target / "validation.log"
     with _tee_to_file(report_path):
         print_table(all_stats)

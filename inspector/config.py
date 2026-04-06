@@ -3,7 +3,7 @@ from pathlib import Path
 # Repo root (inspector/ is one level below)
 _REPO = Path(__file__).resolve().parent.parent
 
-# Audio files location
+# Audio files locationnf
 AUDIO_PATH = _REPO / "data"
 
 # Cache directory
@@ -48,6 +48,7 @@ ANALYSIS_LETTER_FONT_SIZE = "1.75rem"      # letter sub-row text size in analysi
 
 # Segments tab settings
 SEG_FONT_SIZE = "1.8rem"                  # Arabic text size in segment cards
+LOW_CONF_DEFAULT_THRESHOLD = 80           # default % for low-confidence slider (50–99)
 SEG_WORD_SPACING = "0.2em"                # gap between words in segment cards
 
 # Adjust (trim) mode settings
@@ -57,4 +58,4 @@ TRIM_DIM_ALPHA = 0.3                      # dimming opacity for padded regions
 
 # Boundary adjustment: phoneme tail mismatch detection
 BOUNDARY_TAIL_K = 3                       # number of trailing phonemes to compare
-SHOW_BOUNDARY_PHONEMES = True             # show GT/ASR tail phonemes on boundary_adj cards
+SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards

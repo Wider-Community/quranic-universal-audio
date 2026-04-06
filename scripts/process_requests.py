@@ -423,20 +423,8 @@ def cmd_generate_pbs(args):
     print("  bash scripts/sync_mfa.sh")
     print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub jobs/extract_segments.pbs"')
 
-    # Auto-send receipt emails for accepted requests
-    print("\nSending receipt emails...")
-    for req in accepted:
-        if not req.get("requester_email"):
-            print(f"  {req['name']}: No email, skipping")
-            continue
-        try:
-            subj, html = email_receipt(
-                req["name"], req["requester_name"], req["issue_url"],
-            )
-            send_email(req["requester_email"], subj, html)
-            print(f"  {req['name']}: sent to {req['requester_email']}")
-        except Exception as e:
-            print(f"  {req['name']}: failed — {e}")
+    # Receipt emails are now sent at form submission (HF Space),
+    # not here.  Use `notify receipt` to manually re-send if needed.
 
 
 # ---------------------------------------------------------------------------
@@ -666,6 +654,23 @@ def cmd_prepare_pr(args):
             pr_url = gh_create_draft_pr(branch, pr_title, pr_body)
             print(f"    PR created: {pr_url}")
             req["pr_url"] = pr_url
+            pr_number = int(pr_url.rstrip("/").split("/")[-1])
+
+            # Link PR to issue via Development sidebar + update status
+            if req.get("issue_number"):
+                try:
+                    subprocess.run(
+                        ["gh", "issue", "develop", str(req["issue_number"]),
+                         "--branch", branch, "--base", "main"],
+                        cwd=str(REPO_ROOT), capture_output=True, text=True,
+                    )
+                    print(f"    Linked PR to issue #{req['issue_number']}")
+                except Exception as e:
+                    print(f"    Warning: failed to link issue: {e}")
+                try:
+                    gh_swap_label(req["issue_number"], "status:processing", "status:awaiting-review")
+                except Exception:
+                    pass
 
             # Comment on the issue linking to the PR
             try:
@@ -898,8 +903,11 @@ def _create_timestamps_pr(rec):
 
         _run_git(["checkout", "-b", branch])
 
-        # Stage timestamp files (timestamps.json is sufficient for HF dataset)
+        # Stage timestamp files (force-add timestamps_full.json past gitignore)
         _run_git(["add", f"{ts_dir}/timestamps.json"])
+        ts_full = Path(ts_dir) / "timestamps_full.json"
+        if ts_full.exists():
+            _run_git(["add", "-f", str(ts_full)])
 
         # Check something was actually staged
         staged = _run_git(["diff", "--cached", "--name-only"])
@@ -918,7 +926,7 @@ def _create_timestamps_pr(rec):
         # Create PR
         issue_ref = ""
         if rec.get("issue_number"):
-            issue_ref = f"\n\nCloses #{rec['issue_number']}"
+            issue_ref = f"\n\nRef #{rec['issue_number']}"
         pr_body = (
             f"Add word-level timestamps for **{rec['name']}** (`{slug}`)."
             f"{issue_ref}"
@@ -1105,7 +1113,39 @@ def cmd_complete_timestamps(args):
     _run_git(["checkout", "main"])
     _run_git(["pull", "origin", "main"])
 
-    # --- Phase 5: Wait for CI cascade ---
+    # --- Phase 5: Set status (before CI, so issue is closed promptly) ---
+    print("\nSetting status...")
+    for pr in merged:
+        rec = pr["reciter"]
+
+        # GitHub label: status:awaiting-timestamps -> status:completed, close issue
+        if rec.get("issue_number"):
+            try:
+                gh_swap_label(
+                    rec["issue_number"],
+                    "status:awaiting-timestamps", "status:completed",
+                )
+                print(f"  #{rec['issue_number']} label -> status:completed")
+            except Exception as e:
+                print(f"  #{rec['issue_number']} label failed: {e}")
+            try:
+                subprocess.run(
+                    ["gh", "issue", "close", str(rec["issue_number"]),
+                     "--reason", "completed"],
+                    cwd=str(REPO_ROOT), capture_output=True, text=True,
+                )
+                print(f"  #{rec['issue_number']} closed")
+            except Exception as e:
+                print(f"  #{rec['issue_number']} close failed: {e}")
+
+        # Notion status
+        if rec.get("page_id"):
+            try:
+                notion_update_status(rec["page_id"], "Completed")
+            except Exception as e:
+                print(f"  Notion update failed for {rec['name']}: {e}")
+
+    # --- Phase 6: Wait for CI cascade ---
     release_tag = None
     if args.skip_ci:
         print("\n--skip-ci: skipping CI wait.")
@@ -1126,43 +1166,23 @@ def cmd_complete_timestamps(args):
         else:
             print("  sync-dataset did not succeed; skipping release wait.")
 
-    # --- Phase 6: Set status + notify ---
+    # --- Phase 7: Send notifications (after CI, so links are valid) ---
     release_url = (
         f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{release_tag}"
         if release_tag else ""
     )
 
-    print("\nSetting status and sending notifications...")
+    print("\nSending notifications...")
     for pr in merged:
         rec = pr["reciter"]
         slug = rec["slug"]
         riwayah = rec.get("riwayah", "hafs_an_asim")
 
-        # HF viewer URL (timestamps.json is always sufficient for HF sync)
         dataset_url = (
             f"https://huggingface.co/datasets/{HF_DATASET_ID}"
             f"/viewer/{riwayah}/{slug}"
         )
 
-        # GitHub label: status:awaiting-review -> status:completed
-        if rec.get("issue_number"):
-            try:
-                gh_swap_label(
-                    rec["issue_number"],
-                    "status:awaiting-review", "status:completed",
-                )
-                print(f"  #{rec['issue_number']} label -> status:completed")
-            except Exception as e:
-                print(f"  #{rec['issue_number']} label failed: {e}")
-
-        # Notion status
-        if rec.get("page_id"):
-            try:
-                notion_update_status(rec["page_id"], "Completed")
-            except Exception as e:
-                print(f"  Notion update failed for {rec['name']}: {e}")
-
-        # Email
         if rec.get("requester_email"):
             subj, html = email_timestamps_done(
                 rec["name"], rec.get("requester_name", ""),

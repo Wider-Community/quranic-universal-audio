@@ -46,7 +46,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add data/RECITERS.md README.md data/.audio_durations.json
+          git add data/RECITERS.md README.md data/.audio_durations.json data/reciters_index.json
           git commit -m "docs: update reciter counts"
           git push -f origin "$branch"
 
@@ -60,5 +60,13 @@ jobs:
               --base main
           fi
 
-          gh pr merge "$branch" --auto --squash --delete-branch || \
-            gh pr merge "$branch" --squash --delete-branch
+      - name: Auto-merge PR
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          branch="auto/update-reciter-counts"
+          existing=$(gh pr list --head "$branch" --json number -q '.[0].number' 2>/dev/null || true)
+          if [ -n "$existing" ]; then
+            gh pr merge "$branch" --auto --squash --delete-branch || \
+              gh pr merge "$branch" --squash --delete-branch
+          fi

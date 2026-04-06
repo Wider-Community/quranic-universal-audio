@@ -16,6 +16,14 @@ function surahOptionText(num) {
     return `${num} ${info.name_en} ${ar}`;
 }
 
+function normalizeArabic(str) {
+    return str
+        .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '')
+        .replace(/[أإآٱ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي');
+}
+
 /**
  * SearchableSelect — lightweight filterable wrapper around a native <select>.
  * Hides the <select>, shows a text input + dropdown overlay.
@@ -90,11 +98,11 @@ class SearchableSelect {
     }
 
     _filter() {
-        const q = this.input.value.toLowerCase();
+        const q = normalizeArabic(this.input.value.toLowerCase());
         this.filtered = q
             ? this.options.filter(o =>
-                o.text.toLowerCase().includes(q) ||
-                o.group.toLowerCase().includes(q)
+                normalizeArabic(o.text.toLowerCase()).includes(q) ||
+                normalizeArabic(o.group.toLowerCase()).includes(q)
             )
             : [...this.options];
         this.highlightIdx = -1;
@@ -237,6 +245,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupCanvas();
     setupEventListeners();
     setupTabSwitching();
+
+    // Restore ts speed before first audio load
+    const _savedTsSpeed = localStorage.getItem('insp_ts_speed');
+    if (_savedTsSpeed) tsSpeedSelect.value = _savedTsSpeed;
+
+    // Restore view mode + sub-settings immediately (no dependency on reciters)
+    const _savedTsView = localStorage.getItem('insp_ts_view_mode');
+    if (_savedTsView) {
+        switchView(_savedTsView);
+        if (_savedTsView === 'analysis') {
+            const _savedLetters = localStorage.getItem('insp_ts_show_letters');
+            const _savedPhonemes = localStorage.getItem('insp_ts_show_phonemes');
+            if (_savedLetters !== null) {
+                tsShowLetters = _savedLetters === 'true';
+                modeBtnA.classList.toggle('active', tsShowLetters);
+            }
+            if (_savedPhonemes !== null) {
+                tsShowPhonemes = _savedPhonemes === 'true';
+                modeBtnB.classList.toggle('active', tsShowPhonemes);
+            }
+        } else {
+            const _savedGran = localStorage.getItem('insp_ts_granularity');
+            if (_savedGran) switchGranularity(_savedGran);
+        }
+    }
+
     await surahInfoReady;
     tsChapterSS = new SearchableSelect(tsChapterSelect);
     loadTsReciters();
@@ -255,6 +289,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         root.setProperty('--analysis-word-font-size', cfg.analysis_word_font_size);
         root.setProperty('--analysis-letter-font-size', cfg.analysis_letter_font_size);
     });
+
+    // Restore active tab last — no guard so all tabs are handled uniformly
+    const _savedTab = localStorage.getItem('insp_active_tab');
+    if (_savedTab) {
+        const _tabBtn = document.querySelector(`.tab-btn[data-tab="${_savedTab}"]`);
+        if (_tabBtn) _tabBtn.click();
+    }
 });
 
 function setupCanvas() {
@@ -270,6 +311,7 @@ function setupTabSwitching() {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             activeTab = btn.dataset.tab;
+            localStorage.setItem('insp_active_tab', activeTab);
             panels.forEach(p => {
                 document.getElementById(p + '-panel').hidden = (activeTab !== p);
             });
@@ -299,6 +341,7 @@ function setupEventListeners() {
     canvas.addEventListener('click', handleCanvasClick);
     tsSpeedSelect.addEventListener('change', () => {
         audio.playbackRate = parseFloat(tsSpeedSelect.value);
+        localStorage.setItem('insp_ts_speed', tsSpeedSelect.value);
     });
 
     audio.addEventListener('loadedmetadata', () => {
@@ -362,6 +405,7 @@ function setupEventListeners() {
         if (tsViewMode === 'analysis') {
             tsShowLetters = !tsShowLetters;
             modeBtnA.classList.toggle('active', tsShowLetters);
+            localStorage.setItem('insp_ts_show_letters', tsShowLetters);
             unifiedDisplay.querySelectorAll('.mega-letters').forEach(el => {
                 el.classList.toggle('hidden', !tsShowLetters);
             });
@@ -375,6 +419,7 @@ function setupEventListeners() {
         if (tsViewMode === 'analysis') {
             tsShowPhonemes = !tsShowPhonemes;
             modeBtnB.classList.toggle('active', tsShowPhonemes);
+            localStorage.setItem('insp_ts_show_phonemes', tsShowPhonemes);
             unifiedDisplay.querySelectorAll('.mega-phonemes').forEach(el => {
                 el.classList.toggle('hidden', !tsShowPhonemes);
             });
@@ -419,6 +464,15 @@ async function loadTsReciters() {
         const resp = await fetch('/api/ts/reciters');
         tsAllReciters = await resp.json();
         renderTsReciters();
+
+        // Restore saved reciter
+        const _savedTsReciter = localStorage.getItem('insp_ts_reciter');
+        if (_savedTsReciter) {
+            tsReciterSelect.value = _savedTsReciter;
+            if (tsReciterSelect.value === _savedTsReciter) {
+                await onTsReciterChange();
+            }
+        }
     } catch (e) {
         console.error('Error loading ts reciters:', e);
     }
@@ -468,6 +522,7 @@ function renderTsReciters() {
 
 async function onTsReciterChange() {
     const reciter = tsReciterSelect.value;
+    if (reciter) localStorage.setItem('insp_ts_reciter', reciter);
     tsChapterSelect.innerHTML = '<option value="">-- select --</option>';
     if (tsChapterSS) tsChapterSS.refresh();
     tsSegmentSelect.innerHTML = '<option value="">--</option>';
@@ -1587,6 +1642,7 @@ function handleKeydown(e) {
                 : Math.max(idx - 1, 0);
             tsSpeedSelect.value = opts[newIdx];
             audio.playbackRate = opts[newIdx];
+            localStorage.setItem('insp_ts_speed', tsSpeedSelect.value);
             break;
         }
 
@@ -1989,6 +2045,7 @@ function updateAnimationDisplay(time) {
 /** Switch between analysis and animation views. */
 function switchView(mode) {
     tsViewMode = mode;
+    localStorage.setItem('insp_ts_view_mode', mode);
     unifiedDisplay.style.display = (mode === 'animation') ? 'none' : '';
     animDisplay.hidden = (mode === 'analysis');
 
@@ -2030,6 +2087,7 @@ function rebuildAnimationView() {
 /** Switch between word and character granularity. */
 function switchGranularity(gran) {
     tsGranularity = gran;
+    if (tsViewMode === 'animation') localStorage.setItem('insp_ts_granularity', gran);
     // Clear all highlights
     animDisplay.querySelectorAll('.anim-word, .anim-char').forEach(el => {
         el.classList.remove('active', 'reached');

@@ -181,11 +181,37 @@ def collect_processed_reciters() -> list[dict]:
             with open(seg_file, encoding="utf-8") as f:
                 doc = json.load(f)
             audio_source = doc.get("_meta", {}).get("audio_source", "")
+            seen_ayahs = set()
             for key in doc:
                 if key == "_meta":
                     continue
-                ayah_count += 1
-                surahs.add(key.split(":")[0])
+                if "-" in key:
+                    # Compound cross-verse key e.g. "37:151:3-37:152:2"
+                    # Extract start and end verse, expand range
+                    parts = key.split("-")
+                    if len(parts) == 2:
+                        sp = parts[0].split(":")
+                        ep = parts[1].split(":")
+                        if len(sp) >= 2 and len(ep) >= 2:
+                            s_surah, s_ayah = int(sp[0]), int(sp[1])
+                            e_surah, e_ayah = int(ep[0]), int(ep[1])
+                            if s_surah == e_surah:
+                                for a in range(s_ayah, e_ayah + 1):
+                                    seen_ayahs.add((s_surah, a))
+                            else:
+                                # Cross-surah (rare): just count endpoints
+                                seen_ayahs.add((s_surah, s_ayah))
+                                seen_ayahs.add((e_surah, e_ayah))
+                            continue
+                # Simple key e.g. "37:151"
+                sp = key.split(":")
+                if len(sp) >= 2:
+                    try:
+                        seen_ayahs.add((int(sp[0]), int(sp[1])))
+                    except ValueError:
+                        pass
+            ayah_count = len(seen_ayahs)
+            surahs = {str(s) for s, _ in seen_ayahs}
         except (json.JSONDecodeError, OSError):
             pass
 

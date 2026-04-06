@@ -983,6 +983,23 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
 .seg-validation summary .val-count.has-errors { color: #f44336; }
 .seg-validation summary .val-count.has-warnings { color: #ff9800; }
 
+.lc-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 4px;
+    font-size: 0.78rem;
+    color: #aaa;
+}
+.lc-slider-label { white-space: nowrap; }
+.lc-slider-val { color: #f0a500; font-weight: 600; }
+.lc-slider {
+    flex: 1;
+    accent-color: #f0a500;
+    cursor: pointer;
+    max-width: 180px;
+}
+
 .seg-validation .val-items {
     display: flex;
     flex-wrap: wrap;
@@ -1059,6 +1076,15 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     color: #4cc9f0;
 }
 
+.qalqala-filter-row { gap: 6px; }
+.val-btn.qalqala-letter-btn { font-size: 1.1em; min-width: 2.2em; }
+.val-btn.qalqala-letter-btn.active {
+    background: rgba(76, 201, 240, 0.3);
+    border-color: #4cc9f0;
+    color: #fff;
+}
+.val-ctx-all-row { padding: 4px 10px 2px; }
+
 .val-btn.val-bleed {
     border-color: #e07c3a;
     color: #e07c3a;
@@ -1068,6 +1094,19 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     background: rgba(224, 124, 58, 0.15);
 }
 
+.val-rep-count {
+    background: rgba(168, 130, 255, 0.2);
+    color: #a882ff;
+}
+
+.val-btn.val-rep {
+    border-color: #a882ff;
+    color: #a882ff;
+}
+
+.val-btn.val-rep:hover {
+    background: rgba(168, 130, 255, 0.15);
+}
 
 .val-section-label {
     font-size: 0.7rem;
@@ -1574,6 +1613,26 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     color: #fff;
 }
 .seg-history-undo-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+/* Per-operation undo button (in op label row) */
+.seg-history-op-undo-btn {
+    margin-left: auto;
+    font-size: 0.68rem;
+    padding: 1px 8px;
+    background: transparent;
+    border: 1px solid #f44336;
+    color: #f44336;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.seg-history-op-undo-btn:hover:not(:disabled) {
+    background: #f44336;
+    color: #fff;
+}
+.seg-history-op-undo-btn:disabled {
     opacity: 0.5;
     cursor: default;
 }

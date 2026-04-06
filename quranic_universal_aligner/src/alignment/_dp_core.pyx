@@ -411,24 +411,28 @@ cdef tuple _align_full_3d(
     cdef double *cost_3d = NULL
     cdef int *start_3d = NULL
     cdef int *max_j_3d = NULL
+    cdef int *min_w_3d = NULL  # minimum word index reached along path
     cdef int *par_i = NULL
     cdef int *par_k = NULL
     cdef int *par_j = NULL
     cdef char *par_t = NULL  # 0=sub, 1=del, 2=ins, 3=wrap
+    cdef int BIG_W = 999999
 
     cost_3d = <double *>malloc(total_3d * sizeof(double))
     start_3d = <int *>malloc(total_3d * sizeof(int))
     max_j_3d = <int *>malloc(total_3d * sizeof(int))
+    min_w_3d = <int *>malloc(total_3d * sizeof(int))
     par_i = <int *>malloc(total_3d * sizeof(int))
     par_k = <int *>malloc(total_3d * sizeof(int))
     par_j = <int *>malloc(total_3d * sizeof(int))
     par_t = <char *>malloc(total_3d * sizeof(char))
 
-    if (cost_3d == NULL or start_3d == NULL or max_j_3d == NULL or
+    if (cost_3d == NULL or start_3d == NULL or max_j_3d == NULL or min_w_3d == NULL or
             par_i == NULL or par_k == NULL or par_j == NULL or par_t == NULL):
         if cost_3d != NULL: free(cost_3d)
         if start_3d != NULL: free(start_3d)
         if max_j_3d != NULL: free(max_j_3d)
+        if min_w_3d != NULL: free(min_w_3d)
         if par_i != NULL: free(par_i)
         if par_k != NULL: free(par_k)
         if par_j != NULL: free(par_j)
@@ -439,12 +443,14 @@ cdef tuple _align_full_3d(
     cdef int i, j, k
     cdef int koff, koff_src, koff_dst
     cdef long base_i, base_prev
+    cdef int w_j, mw_val
 
     # Initialize all to INF / -1
     for idx in range(total_3d):
         cost_3d[idx] = INF_VAL
         start_3d[idx] = -1
         max_j_3d[idx] = -1
+        min_w_3d[idx] = BIG_W
         par_i[idx] = -1
         par_k[idx] = -1
         par_j[idx] = -1
@@ -456,6 +462,7 @@ cdef tuple _align_full_3d(
             cost_3d[j] = 0.0    # i=0, k=0, j
             start_3d[j] = j
             max_j_3d[j] = j
+            min_w_3d[j] = enc.R_w[j] if j < n else BIG_W
 
     # Variables for DP transitions
     cdef double del_opt, ins_opt, sub_opt, sc, new_cost, cost_at_end, best_val
@@ -477,6 +484,7 @@ cdef tuple _align_full_3d(
                 cost_3d[idx] = i * cost_del
                 start_3d[idx] = 0
                 max_j_3d[idx] = 0
+                min_w_3d[idx] = min_w_3d[base_prev + koff]
                 par_i[idx] = i - 1
                 par_k[idx] = 0
                 par_j[idx] = 0
@@ -506,17 +514,24 @@ cdef tuple _align_full_3d(
                     start_3d[idx] = start_3d[base_prev + koff + j - 1]
                     mj_val = max_j_3d[base_prev + koff + j - 1]
                     max_j_3d[idx] = j if j > mj_val else mj_val
+                    w_j = enc.R_w[j - 1]
+                    mw_val = min_w_3d[base_prev + koff + j - 1]
+                    min_w_3d[idx] = w_j if w_j < mw_val else mw_val
                     par_i[idx] = i - 1; par_k[idx] = k; par_j[idx] = j - 1; par_t[idx] = 0
                 elif del_opt <= ins_opt:
                     cost_3d[idx] = del_opt
                     start_3d[idx] = start_3d[base_prev + koff + j]
                     max_j_3d[idx] = max_j_3d[base_prev + koff + j]
+                    min_w_3d[idx] = min_w_3d[base_prev + koff + j]
                     par_i[idx] = i - 1; par_k[idx] = k; par_j[idx] = j; par_t[idx] = 1
                 elif ins_opt < INF_VAL:
                     cost_3d[idx] = ins_opt
                     start_3d[idx] = start_3d[base_i + koff + j - 1]
                     mj_val = max_j_3d[base_i + koff + j - 1]
                     max_j_3d[idx] = j if j > mj_val else mj_val
+                    w_j = enc.R_w[j - 1]
+                    mw_val = min_w_3d[base_i + koff + j - 1]
+                    min_w_3d[idx] = w_j if w_j < mw_val else mw_val
                     par_i[idx] = i; par_k[idx] = k; par_j[idx] = j - 1; par_t[idx] = 2
 
         # Wrap transitions (within same row i)
@@ -544,6 +559,9 @@ cdef tuple _align_full_3d(
                         start_3d[idx] = start_3d[base_i + koff_src + j_end]
                         mj_val = max_j_3d[base_i + koff_src + j_end]
                         max_j_3d[idx] = j_end if j_end > mj_val else mj_val
+                        mw_val = min_w_3d[base_i + koff_src + j_end]
+                        w_j = enc.R_w[j_sw]
+                        min_w_3d[idx] = w_j if w_j < mw_val else mw_val
                         par_i[idx] = i; par_k[idx] = k; par_j[idx] = j_end; par_t[idx] = 3
 
             # Insertion re-sweep from wrap positions
@@ -556,6 +574,9 @@ cdef tuple _align_full_3d(
                     start_3d[idx] = start_3d[base_i + koff_dst + j - 1]
                     mj_val = max_j_3d[base_i + koff_dst + j - 1]
                     max_j_3d[idx] = j if j > mj_val else mj_val
+                    w_j = enc.R_w[j - 1]
+                    mw_val = min_w_3d[base_i + koff_dst + j - 1]
+                    min_w_3d[idx] = w_j if w_j < mw_val else mw_val
                     par_i[idx] = i; par_k[idx] = k + 1; par_j[idx] = j - 1; par_t[idx] = 2
 
     # ------------------------------------------------------------------
@@ -567,7 +588,7 @@ cdef tuple _align_full_3d(
     cdef int best_k_val = 0, best_max_j = -1
 
     cdef double dist, norm_dist, prior, score, phoneme_cost
-    cdef int j_start_val, ref_len, denom, start_word, max_j_val
+    cdef int j_start_val, ref_len, denom, start_word, max_j_val, min_word_val, eff_start
 
     base_i = <long>m * layer_stride
     for k in range(K + 1):
@@ -603,7 +624,10 @@ cdef tuple _align_full_3d(
             else:
                 start_word = enc.R_w[j - 1]
 
-            prior = prior_weight * fabs(<double>(start_word - expected_word))
+            # Use earliest word the path actually touches for fair prior
+            min_word_val = min_w_3d[idx]
+            eff_start = min_word_val if min_word_val < start_word and min_word_val < BIG_W else start_word
+            prior = prior_weight * fabs(<double>(eff_start - expected_word))
             score = norm_dist + prior
             if sc_mode == 2:   # additive
                 score = score + k * wrap_score_cost
@@ -618,7 +642,7 @@ cdef tuple _align_full_3d(
                 best_max_j = max_j_val
 
     if best_j < 0:
-        free(cost_3d); free(start_3d); free(max_j_3d)
+        free(cost_3d); free(start_3d); free(max_j_3d); free(min_w_3d)
         free(par_i); free(par_k); free(par_j); free(par_t)
         return (None, None, float('inf'), float('inf'), 0, 0, [])
 

@@ -128,13 +128,23 @@ ANCHOR_TOP_CANDIDATES = 20          # Evaluate top N surahs by total weight for 
 # Edit operation costs (Levenshtein hyperparameters)
 COST_SUBSTITUTION = 1.0             # Default phoneme substitution cost
 COST_INSERTION = 1.0                # Insert phoneme from reference (R)
-COST_DELETION = 0.8                 # Delete phoneme from ASR (P)
+COST_DELETION = 1.0                 # Delete phoneme from ASR (P)
 
 # Repetition detection (wraparound DP)
 WRAP_PENALTY = 3.5                  # Cost per wrap transition in DP
-WRAP_SCORE_COST = 0.005             # Per-wrap additive penalty in scoring
 WRAP_SPAN_WEIGHT = 0.1              # Per-word cost for wrap span width (penalizes wide jumps)
-MAX_WRAPS = 8                       # Max wraps for all segments
+MAX_WRAPS = 6                       # Max wraps for all segments
+# Scoring mode for wraparound candidate selection:
+#   "no_subtract" — WRAP_PENALTY stays in the raw cost before normalizing, so wraps
+#                    are penalized proportionally to segment length. WRAP_SCORE_COST ignored.
+#   "additive"    — WRAP_PENALTY is subtracted from cost before normalizing (so it doesn't
+#                    inflate the edit distance), then WRAP_SCORE_COST * k is added to the
+#                    final score as a flat per-wrap penalty.
+#   "subtract"    — WRAP_PENALTY subtracted from cost before normalizing, but nothing
+#                    replaces it. Wraps are essentially free after subtraction — useful
+#                    as a debug/baseline mode only.
+WRAP_SCORING_MODE = "no_subtract"
+WRAP_SCORE_COST = 0.005             # Per-wrap additive penalty in scoring (only used with "additive" mode)
 
 # Alignment thresholds (normalized edit distance: 0 = identical, 1 = completely different)
 LOOKBACK_WORDS = 30                 # Window words to look back from pointer for starting positions

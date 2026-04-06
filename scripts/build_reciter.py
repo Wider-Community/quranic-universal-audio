@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import urllib.request
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -29,6 +30,44 @@ from huggingface_hub import HfApi
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
+
+# Non-recited Quranic markers to strip from text (stop signs, hizb, sajdah)
+_QURAN_MARKERS = set("\u06D6\u06D7\u06D8\u06D9\u06DA\u06DB\u06DE\u06E9")
+
+
+def _strip_quran_markers(text: str) -> str:
+    """Strip non-recited markers (waqf signs, hizb, sajdah) from Uthmani text."""
+    return "".join(ch for ch in text if ch not in _QURAN_MARKERS)
+
+
+def _cross_verse_text(matched_ref: str, matched_text: str,
+                      target_ayah: int, surah_info: dict, surah_num: str) -> str:
+    """Extract only the target verse's words from a cross-verse segment's text.
+
+    For ref '37:151:3-37:152:2' with 5 words of text, target_ayah=152
+    returns the last 2 words (37:152's portion).
+    """
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return matched_text
+    try:
+        sp = parts[0].split(":")
+        ep = parts[1].split(":")
+        s_ayah, s_word = int(sp[1]), int(sp[2])
+        e_ayah, e_word = int(ep[1]), int(ep[2])
+    except (ValueError, IndexError):
+        return matched_text
+
+    words = matched_text.split()
+    if target_ayah == s_ayah:
+        # Target is the starting verse — take first N words
+        total = surah_info[surah_num]["verses"][s_ayah - 1]["num_words"]
+        n = total - s_word + 1
+        return " ".join(words[:n])
+    elif target_ayah == e_ayah:
+        # Target is the ending verse — take last N words
+        return " ".join(words[-e_word:]) if e_word > 0 else ""
+    return matched_text
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
@@ -120,10 +159,10 @@ def load_data(slug, audio_type):
 
     Loads timestamps.json (word-level) and derives verse boundaries from the
     word array (verse_start_ms = first word start, verse_end_ms = last word
-    end). This avoids requiring timestamps_full.json which contains large
-    letter/phoneme data not used by the HF dataset.
+    end). Optionally loads timestamps_full.json for letter-level data.
     """
     ts_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps.json"
+    ts_full_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
     detailed_path = ROOT / "data" / "recitation_segments" / slug / "detailed.json"
     segments_path = ROOT / "data" / "recitation_segments" / slug / "segments.json"
     surah_info_path = ROOT / "data" / "surah_info.json"
@@ -154,17 +193,64 @@ def load_data(slug, audio_type):
             "verse_end_ms": words[-1][2],
         }
 
+    # Optionally load letter data from timestamps_full.json
+    # Each word in full format: [word_idx, start, end, [[char,s,e],...], [[phone,s,e],...]]
+    letter_data = {}
+    if ts_full_path.exists():
+        log.info("Loading letter timestamps from %s...", ts_full_path.name)
+        with open(ts_full_path) as f:
+            ts_full_raw = json.load(f)
+        for ref, verse in ts_full_raw.items():
+            if ref == "_meta":
+                continue
+            words = verse.get("words") if isinstance(verse, dict) else verse
+            if not words:
+                letter_data[ref] = []
+                continue
+            word_letters = []
+            for word in words:
+                word_idx = word[0]
+                letters = word[3] if len(word) > 3 else []
+                word_letters.append((word_idx, letters))
+            letter_data[ref] = word_letters
+        del ts_full_raw
+
+    # Build verse-level lookup: by_ayah entries have ref="surah:ayah",
+    # by_surah entries have ref="chapter_num" (one entry per whole surah).
+    # Normalize both to "surah:ayah" keys for uniform lookup in build_rows.
     detailed_by_ref = {}
     for entry in detailed["entries"]:
-        detailed_by_ref[entry["ref"]] = entry
+        ref = entry["ref"]
+        if ":" in str(ref):
+            # by_ayah: ref is already "surah:ayah"
+            detailed_by_ref[ref] = entry
+        else:
+            # by_surah: ref is chapter number — map each verse to this entry
+            for seg in entry.get("segments", []):
+                mref = seg.get("matched_ref", "")
+                if not mref:
+                    continue
+                # Extract all verses covered by this segment's ref range
+                parts = mref.split("-")
+                start = parts[0].split(":")
+                s_surah, s_ayah = int(start[0]), int(start[1])
+                if len(parts) > 1:
+                    end = parts[1].split(":")
+                    e_ayah = int(end[1])
+                else:
+                    e_ayah = s_ayah
+                for a in range(s_ayah, e_ayah + 1):
+                    vref = f"{s_surah}:{a}"
+                    if vref not in detailed_by_ref:
+                        detailed_by_ref[vref] = entry
 
-    return timestamps, detailed_by_ref, segments, surah_info
+    return timestamps, detailed_by_ref, segments, surah_info, letter_data
 
 
 # ---------------------------------------------------------------------------
 # Row building
 # ---------------------------------------------------------------------------
-def build_rows(timestamps, detailed_by_ref, segments, surah_info):
+def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=None):
     """Build row metadata (without audio bytes) in canonical verse order.
 
     Clip boundaries are defined by word timestamps (deduplicated, canonical).
@@ -207,23 +293,37 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info):
                     verse_segments.append([
                         seg[0], seg[1],
                         max(0, seg[2] - clip_start),
-                        seg[3] - clip_start,
+                        min(seg[3], clip_end) - clip_start,
                     ])
 
-            # Text from detailed.json segments that overlap the clip range
-            if ref in segments and ref != "_meta":
-                seg_list = segments[ref]
-                filtered_text_parts = []
-                for i, det_seg in enumerate(entry["segments"]):
-                    t_start = det_seg.get("time_start", 0)
-                    t_end = det_seg.get("time_end", 0)
-                    if t_end <= clip_start or t_start >= clip_end:
-                        continue  # outside clip
-                    filtered_text_parts.append(det_seg.get("matched_text", ""))
-                text = " ".join(filtered_text_parts)
-            else:
-                text = " ".join(
-                    seg.get("matched_text", "") for seg in entry["segments"])
+            # Text from detailed.json segments that overlap the clip range.
+            # For cross-verse segments, extract only this verse's words.
+            filtered_text_parts = []
+            for det_seg in entry["segments"]:
+                t_start = det_seg.get("time_start", 0)
+                t_end = det_seg.get("time_end", 0)
+                if t_end <= clip_start or t_start >= clip_end:
+                    continue  # outside clip
+                mref = det_seg.get("matched_ref", "")
+                seg_text = det_seg.get("matched_text", "")
+                if "-" in mref:
+                    rp = mref.split("-")
+                    if len(rp) == 2:
+                        sa = rp[0].split(":")
+                        ea = rp[1].split(":")
+                        if len(sa) >= 2 and len(ea) >= 2:
+                            s_ayah = int(sa[1])
+                            e_ayah = int(ea[1])
+                            if ayah < s_ayah or ayah > e_ayah:
+                                continue  # segment doesn't cover this ayah
+                            if s_ayah != e_ayah:
+                                # Cross-verse: extract only this ayah's words
+                                seg_text = _cross_verse_text(
+                                    mref, seg_text, ayah, surah_info,
+                                    surah_num)
+                filtered_text_parts.append(seg_text)
+            text = " ".join(filtered_text_parts)
+            text = _strip_quran_markers(text)
 
             verse_words = []
             if ref in timestamps and ref != "_meta":
@@ -234,12 +334,51 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info):
                         word[2] - clip_start,
                     ])
 
+            # Synthesize segments for cross-verse words not covered by
+            # segments.json (they precede or follow the home segments,
+            # or segments.json has no entry for this verse at all).
+            if verse_words and not verse_segments:
+                # No segments.json entry — synthesize one from all words
+                verse_segments.append([
+                    verse_words[0][0], verse_words[-1][0],
+                    verse_words[0][1], verse_words[-1][2],
+                ])
+            elif verse_words and verse_segments:
+                first_seg_start = verse_segments[0][2]  # clip-relative ms
+                xv_words = [w for w in verse_words if w[2] <= first_seg_start]
+                if xv_words:
+                    verse_segments.insert(0, [
+                        xv_words[0][0], xv_words[-1][0],
+                        xv_words[0][1], xv_words[-1][2],
+                    ])
+                last_seg_end = verse_segments[-1][3]
+                xv_after = [w for w in verse_words if w[1] >= last_seg_end]
+                if xv_after:
+                    verse_segments.append([
+                        xv_after[0][0], xv_after[-1][0],
+                        xv_after[0][1], xv_after[-1][2],
+                    ])
+
+            # Flat letter timestamps: one entry per letter (not per word)
+            verse_letters = []
+            if letter_data and ref in letter_data:
+                for word_idx, letters in letter_data[ref]:
+                    for ch, s, e in letters:
+                        verse_letters.append({
+                            "word_idx": word_idx,
+                            "char": ch,
+                            "start_ms": s - clip_start,
+                            "end_ms": e - clip_start,
+                        })
+
             rows.append({
                 "surah": int(surah_num),
                 "ayah": ayah,
-                "text": text,
+                "duration_ms": clip_end - clip_start,
+                "text_uthmani": text,
                 "segments": verse_segments,
                 "word_timestamps": verse_words,
+                "letter_timestamps": verse_letters,
                 "audio_url": entry["audio"],
                 "clip_start": clip_start,
                 "clip_end": clip_end,
@@ -251,33 +390,22 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info):
 # ---------------------------------------------------------------------------
 # Audio download
 # ---------------------------------------------------------------------------
-_surah_cache = {}  # url -> AudioSegment (for by_surah sources)
-
-
 def _lazy_import_pydub():
     from pydub import AudioSegment as AS
     return AS
 
 
-def download_and_slice(url, clip_start_ms, clip_end_ms, is_surah=False, retries=3):
+def download_and_slice(url, clip_start_ms, clip_end_ms, retries=3):
     """Download audio and slice at clip boundaries, return MP3 bytes."""
     AS = _lazy_import_pydub()
 
     for attempt in range(retries):
         try:
-            if is_surah:
-                if url not in _surah_cache:
-                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req, timeout=60) as resp:
-                        audio_data = resp.read()
-                    _surah_cache[url] = AS.from_file(io.BytesIO(audio_data))
-                clip = _surah_cache[url][clip_start_ms:clip_end_ms]
-            else:
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    audio_data = resp.read()
-                audio = AS.from_file(io.BytesIO(audio_data))
-                clip = audio[clip_start_ms:clip_end_ms]
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                audio_data = resp.read()
+            audio = AS.from_file(io.BytesIO(audio_data))
+            clip = audio[clip_start_ms:clip_end_ms]
 
             buf = io.BytesIO()
             clip.export(buf, format="mp3", bitrate="128k")
@@ -295,35 +423,59 @@ def download_all_audio(rows, is_surah=False):
     failed = []
 
     if is_surah:
-        # For by_surah: download surahs first (limited parallel), then slice
-        unique_urls = list({row["audio_url"] for row in rows})
-        log.info("Pre-downloading %d surah audio files...", len(unique_urls))
+        # For by_surah: download a few surahs in parallel, slice, then free.
+        # Decoded PCM for all 114 surahs can exceed 17 GB (44.1kHz stereo),
+        # which OOM-kills GitHub Actions runners (7 GB RAM).  We limit to 4
+        # concurrent downloads — peak memory ~2-3 GB, well within limits.
         AS = _lazy_import_pydub()
 
-        def dl_surah(url):
-            if url in _surah_cache:
-                return
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = resp.read()
-            _surah_cache[url] = AS.from_file(io.BytesIO(data))
-
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            list(pool.map(dl_surah, unique_urls))
-
-        # Slice verses from cached surahs (fast, no network)
+        # Group row indices by audio URL
+        url_to_indices = defaultdict(list)
         for i, row in enumerate(rows):
+            url_to_indices[row["audio_url"]].append(i)
+
+        unique_urls = list(url_to_indices.keys())
+        log.info("Downloading and slicing %d surah audio files (4 parallel)...", len(unique_urls))
+        completed_surahs = 0
+
+        def _process_surah(url):
+            """Download one surah, slice all its verses, return (url, results, errors)."""
+            results = {}  # idx -> mp3 bytes
+            errors = []
             try:
-                clip = _surah_cache[row["audio_url"]][row["clip_start"]:row["clip_end"]]
-                buf = io.BytesIO()
-                clip.export(buf, format="mp3", bitrate="128k")
-                audio_bytes_list[i] = buf.getvalue()
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    raw_data = resp.read()
+                audio = AS.from_file(io.BytesIO(raw_data))
+                del raw_data
             except Exception as e:
-                ref = f"{row['surah']}:{row['ayah']}"
-                log.error("Failed to slice %s: %s", ref, e)
-                failed.append(ref)
-            if (i + 1) % 500 == 0:
-                log.info("Progress: %d/%d sliced", i + 1, len(rows))
+                for idx in url_to_indices[url]:
+                    ref = f"{rows[idx]['surah']}:{rows[idx]['ayah']}"
+                    errors.append(ref)
+                return url, results, errors
+
+            for idx in url_to_indices[url]:
+                row = rows[idx]
+                try:
+                    clip = audio[row["clip_start"]:row["clip_end"]]
+                    buf = io.BytesIO()
+                    clip.export(buf, format="mp3", bitrate="128k")
+                    results[idx] = buf.getvalue()
+                except Exception as e:
+                    ref = f"{row['surah']}:{row['ayah']}"
+                    errors.append(ref)
+
+            del audio
+            return url, results, errors
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for url, results, errors in pool.map(_process_surah, unique_urls):
+                for idx, mp3 in results.items():
+                    audio_bytes_list[idx] = mp3
+                failed.extend(errors)
+                completed_surahs += 1
+                if completed_surahs % 10 == 0:
+                    log.info("Progress: %d/%d surahs processed", completed_surahs, len(unique_urls))
     else:
         # For by_ayah: parallel individual downloads
         def process(idx):
@@ -355,14 +507,152 @@ def download_all_audio(rows, is_surah=False):
 
 
 # ---------------------------------------------------------------------------
+# Smart audio reuse
+# ---------------------------------------------------------------------------
+def _try_load_existing(slug):
+    """Load existing parquet from HF via pyarrow (raw bytes, no audio decode).
+
+    Returns a pyarrow Table or None if the split doesn't exist yet.
+    """
+    import pyarrow.parquet as pq
+    from huggingface_hub import hf_hub_download
+
+    riwayah = get_riwayah(slug)
+    api = HfApi(token=HF_TOKEN)
+    try:
+        tree = list(api.list_repo_tree(
+            REPO_ID, repo_type="dataset", path_in_repo=riwayah))
+        files = [f.rfilename for f in tree
+                 if f.rfilename.endswith(".parquet") and slug in f.rfilename]
+    except Exception:
+        files = []
+
+    if not files:
+        log.info("No existing parquet on HF for %s/%s", riwayah, slug)
+        return None
+
+    tables = []
+    for fname in files:
+        local = hf_hub_download(REPO_ID, fname, repo_type="dataset", token=HF_TOKEN)
+        tables.append(pq.read_table(local))
+
+    table = tables[0] if len(tables) == 1 else pq.concat_tables(tables)
+    log.info("Loaded existing parquet: %d rows from %d shard(s)", len(table), len(files))
+
+    # Require duration_ms for clip boundary comparison
+    if "duration_ms" not in table.column_names:
+        log.info("Existing parquet missing duration_ms column — full rebuild required")
+        return None
+
+    return table
+
+
+def _reuse_audio(existing_table, rows, is_surah):
+    """Reuse audio bytes from existing HF parquet where clip boundaries match.
+
+    Compares (surah, ayah, clip_start, clip_end) between old and new rows.
+    Returns (audio_bytes_list, changed_count).  Falls back to full download
+    if >10% of clips changed.
+    """
+    # Build lookup: (surah, ayah) → row index in existing table
+    old_surah = existing_table.column("surah").to_pylist()
+    old_ayah = existing_table.column("ayah").to_pylist()
+    old_offset = existing_table.column("source_offset_ms").to_pylist()
+    old_duration = existing_table.column("duration_ms").to_pylist()
+    old_audio = existing_table.column("audio")
+
+    existing_by_key: dict[tuple[int, int], int] = {}
+    for i in range(len(existing_table)):
+        existing_by_key[(old_surah[i], old_ayah[i])] = i
+
+    audio_bytes_list = [None] * len(rows)
+    need_download: list[int] = []
+    reused = 0
+
+    for i, row in enumerate(rows):
+        key = (row["surah"], row["ayah"])
+        old_idx = existing_by_key.get(key)
+
+        if old_idx is None:
+            need_download.append(i)
+            continue
+
+        old_start = old_offset[old_idx]
+        old_end = old_start + old_duration[old_idx]
+
+        if row["clip_start"] == old_start and row["clip_end"] == old_end:
+            # Clip unchanged — extract raw MP3 bytes (no decode/re-encode)
+            audio_struct = old_audio[old_idx].as_py()
+            audio_bytes_list[i] = audio_struct["bytes"]
+            reused += 1
+        else:
+            need_download.append(i)
+
+    log.info("Audio reuse: %d/%d reused, %d need re-slice",
+             reused, len(rows), len(need_download))
+
+    if not need_download:
+        return audio_bytes_list, 0
+
+    # >10% changed — full download is more efficient than partial
+    if len(need_download) > len(rows) * 0.1:
+        log.info("Too many clips changed (%d/%d), full rebuild",
+                 len(need_download), len(rows))
+        full_bytes, failed = download_all_audio(rows, is_surah=is_surah)
+        return full_bytes, len(need_download)
+
+    # Partial: download only the surahs/ayahs that changed
+    if is_surah:
+        AS = _lazy_import_pydub()
+        url_to_indices = defaultdict(list)
+        for idx in need_download:
+            url_to_indices[rows[idx]["audio_url"]].append(idx)
+
+        log.info("Partial download: %d surahs for %d changed verses",
+                 len(url_to_indices), len(need_download))
+        for url, indices in url_to_indices.items():
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    raw_data = resp.read()
+                audio = AS.from_file(io.BytesIO(raw_data))
+                del raw_data
+                for idx in indices:
+                    row = rows[idx]
+                    clip = audio[row["clip_start"]:row["clip_end"]]
+                    buf = io.BytesIO()
+                    clip.export(buf, format="mp3", bitrate="128k")
+                    audio_bytes_list[idx] = buf.getvalue()
+                del audio
+            except Exception as e:
+                log.warning("Partial download failed for %s: %s", url, e)
+    else:
+        def _dl(idx):
+            row = rows[idx]
+            return idx, download_and_slice(row["audio_url"], row["clip_start"], row["clip_end"])
+
+        with ThreadPoolExecutor(max_workers=64) as pool:
+            for future in as_completed(
+                    {pool.submit(_dl, i): i for i in need_download}):
+                try:
+                    idx, mp3 = future.result()
+                    audio_bytes_list[idx] = mp3
+                except Exception as e:
+                    log.warning("Partial download failed for index %d: %s",
+                                future, e)
+
+    return audio_bytes_list, len(need_download)
+
+
+# ---------------------------------------------------------------------------
 # Dataset push
 # ---------------------------------------------------------------------------
-def push_reciter(slug, audio_type):
+def push_reciter(slug, audio_type, full_rebuild=False):
     """Build and push a reciter to the HF dataset."""
     is_surah = "by_surah" in audio_type
 
-    timestamps, detailed_by_ref, segments, surah_info = load_data(slug, audio_type)
-    rows = build_rows(timestamps, detailed_by_ref, segments, surah_info)
+    timestamps, detailed_by_ref, segments, surah_info, letter_data = load_data(slug, audio_type)
+    rows = build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data)
     log.info("Built %d rows for %s", len(rows), slug)
 
     if SAMPLE_PCT > 0:
@@ -370,15 +660,32 @@ def push_reciter(slug, audio_type):
         rows = rows[::step]
         log.info("Sampling %d%% → %d rows", SAMPLE_PCT, len(rows))
 
-    audio_bytes_list, failed = download_all_audio(rows, is_surah=is_surah)
+    # Smart audio reuse: load existing parquet from HF when possible
+    existing_table = None
+    if not full_rebuild and SAMPLE_PCT == 0:
+        existing_table = _try_load_existing(slug)
+
+    if existing_table is not None and len(existing_table) == len(rows):
+        audio_bytes_list, changed = _reuse_audio(existing_table, rows, is_surah)
+        del existing_table
+        failed = [f"{rows[i]['surah']}:{rows[i]['ayah']}"
+                  for i, b in enumerate(audio_bytes_list) if b is None]
+    else:
+        if existing_table is not None:
+            log.info("Row count changed (%d → %d), full rebuild",
+                     len(existing_table), len(rows))
+            del existing_table
+        audio_bytes_list, failed = download_all_audio(rows, is_surah=is_surah)
 
     data = {
         "audio": [],
         "surah": [],
         "ayah": [],
-        "text": [],
+        "duration_ms": [],
+        "text_uthmani": [],
         "segments": [],
         "word_timestamps": [],
+        "letter_timestamps": [],
         "source_url": [],
         "source_offset_ms": [],
     }
@@ -394,10 +701,18 @@ def push_reciter(slug, audio_type):
         })
         data["surah"].append(row["surah"])
         data["ayah"].append(row["ayah"])
-        data["text"].append(row["text"])
+        data["duration_ms"].append(row["duration_ms"])
+        data["text_uthmani"].append(row["text_uthmani"])
         data["segments"].append(row["segments"])
         data["word_timestamps"].append(row["word_timestamps"])
-        data["source_url"].append(row["audio_url"])
+        data["letter_timestamps"].append(row["letter_timestamps"])
+        # Strip protocol so HF viewer doesn't render as audio widget
+        src_url = row["audio_url"]
+        for prefix in ("https://", "http://"):
+            if src_url.startswith(prefix):
+                src_url = src_url[len(prefix):]
+                break
+        data["source_url"].append(src_url)
         data["source_offset_ms"].append(row["clip_start"])
 
     if skipped:
@@ -408,9 +723,16 @@ def push_reciter(slug, audio_type):
         "audio": Audio(),
         "surah": Value("int32"),
         "ayah": Value("int32"),
-        "text": Value("string"),
+        "duration_ms": Value("int32"),
+        "text_uthmani": Value("string"),
         "segments": Sequence(Sequence(Value("int32"))),
         "word_timestamps": Sequence(Sequence(Value("int32"))),
+        "letter_timestamps": Sequence({
+            "word_idx": Value("int32"),
+            "char": Value("string"),
+            "start_ms": Value("int32"),
+            "end_ms": Value("int32"),
+        }),
         "source_url": Value("string"),
         "source_offset_ms": Value("int32"),
     })
@@ -442,9 +764,6 @@ def push_reciter(slug, audio_type):
         ds.push_to_hub(REPO_ID, **push_kwargs)
 
     log.info("Done: %s uploaded to %s", slug, REPO_ID)
-
-    # Clear surah cache to free memory before next reciter
-    _surah_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -980,6 +1299,8 @@ def main():
     parser.add_argument("--update-readme", action="store_true", help="Update dataset card only")
     parser.add_argument("--reciters-config", action="store_true",
                         help="Build and push reciters catalog config")
+    parser.add_argument("--full-rebuild", action="store_true",
+                        help="Force full audio re-download (skip smart reuse)")
     args = parser.parse_args()
 
     if not HF_TOKEN:
@@ -1010,7 +1331,7 @@ def main():
             if not audio_type:
                 log.warning("Could not detect audio source for %s, skipping", slug)
                 continue
-            push_reciter(slug, audio_type)
+            push_reciter(slug, audio_type, full_rebuild=args.full_rebuild)
         build_reciters_config()
         update_dataset_readme()
         return
@@ -1023,7 +1344,7 @@ def main():
     if not audio_type:
         sys.exit(f"Could not detect audio source for {args.slug}")
 
-    push_reciter(args.slug, audio_type)
+    push_reciter(args.slug, audio_type, full_rebuild=args.full_rebuild)
     update_dataset_readme()
 
 
