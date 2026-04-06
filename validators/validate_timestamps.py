@@ -413,8 +413,9 @@ def validate_reciter(
     if seg_path.exists():
         seg_verses, seg_meta = parse_segments(seg_path)
         seg_pad_ms = seg_meta.get("pad_ms", 0)
-        # Tolerance = 2x pad duration (words can start/end anywhere within the pad)
-        tolerance = 2 * seg_pad_ms if seg_pad_ms > 0 else 500
+        # Tolerance = 3x pad duration (MFA last word can end up to ~pad
+        # before the acoustic speech edge, plus the segment pad itself)
+        tolerance = 3 * seg_pad_ms if seg_pad_ms > 0 else 500
         for verse_key in verses:
             if verse_key not in seg_verses:
                 continue
@@ -424,23 +425,33 @@ def validate_reciter(
                 continue
             ts_first_start = ts_words[0][1]
             ts_last_end = ts_words[-1][2]
-            seg_first_start = segs[0][2]
-            seg_last_end = segs[-1][3]
 
-            start_diff = abs(ts_first_start - seg_first_start)
+            # Find the segment whose boundary best matches the timestamp
+            # range.  For repeated verses (multiple segments with the same
+            # word range), blindly using segs[0]/segs[-1] would compare
+            # against the repetition instead of the matching occurrence.
+            best_start_seg = min(segs, key=lambda s: abs(s[2] - ts_first_start))
+            best_end_seg = min(segs, key=lambda s: abs(s[3] - ts_last_end))
+
+            # Directional: only flag when timestamps are NARROWER than
+            # segments (missing coverage).  Timestamps extending beyond
+            # segments is expected (cross-verse words bleed in).
+            # start: flag if ts starts AFTER segment start (late)
+            start_diff = ts_first_start - best_start_seg[2]
             if start_diff > tolerance:
                 seg_boundary_mismatches += 1
                 msg = (f"start mismatch: timestamps {_ms_to_hms(ts_first_start)} "
-                       f"vs segments {_ms_to_hms(seg_first_start)} "
+                       f"vs segments {_ms_to_hms(best_start_seg[2])} "
                        f"(diff {start_diff}ms)")
                 warnings.append({"msg": msg, "verse_key": verse_key})
                 seg_boundary_details.append((verse_key, "start", start_diff, msg))
 
-            end_diff = abs(ts_last_end - seg_last_end)
+            # end: flag if ts ends BEFORE segment end (short)
+            end_diff = best_end_seg[3] - ts_last_end
             if end_diff > tolerance:
                 seg_boundary_mismatches += 1
                 msg = (f"end mismatch: timestamps {_ms_to_hms(ts_last_end)} "
-                       f"vs segments {_ms_to_hms(seg_last_end)} "
+                       f"vs segments {_ms_to_hms(best_end_seg[3])} "
                        f"(diff {end_diff}ms)")
                 warnings.append({"msg": msg, "verse_key": verse_key})
                 seg_boundary_details.append((verse_key, "end", end_diff, msg))
@@ -556,10 +567,22 @@ def validate_reciter(
         "letter_negative": letter_negative,
         "phone_issues": phone_issues,
         "has_segments": seg_path.exists(),
-        "seg_tolerance_ms": 2 * seg_pad_ms if seg_pad_ms > 0 else 500,
+        "seg_tolerance_ms": tolerance if seg_pad_ms > 0 else 500,
         "seg_boundary_mismatches": seg_boundary_mismatches,
         "errors": len(errors),
         "warnings": len(warnings),
+        # Structured detail lists for programmatic consumers (inspector)
+        "_mfa_failures": mfa_failures,
+        "_missing_words": [
+            {"surah": sa[0], "ayah": sa[1],
+             "missing": sorted(set(range(1, word_counts[sa] + 1)) - covered_per_verse.get(sa, set()))}
+            for sa in sorted(word_counts)
+            if covered_per_verse.get(sa) and (set(range(1, word_counts[sa] + 1)) - covered_per_verse.get(sa, set()))
+        ],
+        "_boundary_mismatches": [
+            {"verse_key": vk, "side": side, "diff_ms": round(diff)}
+            for vk, side, diff, _msg in seg_boundary_details
+        ],
     }
 
     if verbose:
