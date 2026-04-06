@@ -7,7 +7,7 @@
   <br>
   <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Audio%20Only-295%20Full%20%C2%B7%2085%20Partial%20%C2%B7%207,853h-d4842a" alt="Audio Only"></a>
   <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-14%20%2F%2020-f0ad4e" alt="Riwayat"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Timestamped-1%20Full%20%C2%B7%200%20Partial%20%C2%B7%2025h-d4842a" alt="Timestamped"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Timestamped-1%20Full%20%C2%B7%200%20Partial%20%C2%B7%2029h-d4842a" alt="Timestamped"></a>
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
