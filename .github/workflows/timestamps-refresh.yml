@@ -6,8 +6,8 @@ on:
       reciter:
         description: 'Reciter slug to refresh (blank = auto-detect from recent changes)'
         required: false
-      surahs:
-        description: 'Comma-separated surah numbers (blank = auto-detect from segment diff)'
+      verses:
+        description: 'Comma-separated verse keys e.g. 1:1,37:151 (blank = auto-detect from segment diff)'
         required: false
   push:
     branches: [main]
@@ -41,17 +41,17 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
           pip install numpy requests
 
-      - name: Detect changed reciters and surahs
+      - name: Detect changed reciters and verses
         id: detect
         run: |
-          # Manual trigger with explicit reciter/surahs
+          # Manual trigger with explicit reciter/verses
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             reciter="${{ github.event.inputs.reciter }}"
-            surahs="${{ github.event.inputs.surahs }}"
-            if [ -n "$reciter" ] && [ -n "$surahs" ]; then
-              echo "entries=$reciter=$surahs" >> $GITHUB_OUTPUT
+            verses="${{ github.event.inputs.verses }}"
+            if [ -n "$reciter" ] && [ -n "$verses" ]; then
+              echo "entries=$reciter=$verses" >> $GITHUB_OUTPUT
               echo "has_changes=true" >> $GITHUB_OUTPUT
-              echo "Manual: $reciter surahs=$surahs"
+              echo "Manual: $reciter verses=$verses"
               exit 0
             fi
           fi
@@ -98,14 +98,13 @@ jobs:
               continue
             fi
 
-            # Detect changed surahs
+            # Detect changed verses
             output=$(python3 scripts/detect_stale_timestamps.py "$before" "$f" 2>/dev/null) || continue
-            surahs=$(echo "$output" | grep '^surahs=' | cut -d= -f2)
+            changed_verses=$(echo "$output" | grep '^changed=' | cut -d= -f2)
 
-            if [ -n "$surahs" ]; then
-              changed_line=$(echo "$output" | grep '^changed=' | cut -d= -f2)
-              echo "$reciter: surahs=$surahs (changed: $changed_line)"
-              entries="$entries $reciter=$surahs"
+            if [ -n "$changed_verses" ]; then
+              echo "$reciter: changed=$changed_verses"
+              entries="$entries $reciter=$changed_verses"
             fi
           done
 
@@ -125,11 +124,11 @@ jobs:
         run: |
           for entry in ${{ steps.detect.outputs.entries }}; do
             reciter=$(echo "$entry" | cut -d= -f1)
-            surahs=$(echo "$entry" | cut -d= -f2)
-            echo "::group::Refreshing $reciter (surahs: $surahs)"
+            verses=$(echo "$entry" | cut -d= -f2)
+            echo "::group::Refreshing $reciter (verses: $verses)"
             python3 extract_timestamps.py \
               --input "data/recitation_segments/$reciter/" \
-              --refresh-surahs "$surahs"
+              --refresh-verses "$verses"
             echo "::endgroup::"
           done
 
@@ -148,17 +147,17 @@ jobs:
           changed_reciters=""
           for entry in ${{ steps.detect.outputs.entries }}; do
             reciter=$(echo "$entry" | cut -d= -f1)
-            surahs=$(echo "$entry" | cut -d= -f2)
-            changed_reciters="$changed_reciters\n- $reciter (surahs: $surahs)"
+            verses=$(echo "$entry" | cut -d= -f2)
+            changed_reciters="$changed_reciters\n- $reciter ($verses)"
           done
 
           git add data/timestamps/
           git commit -m "$(cat <<EOF
-          chore(timestamps): refresh MFA for edited segments
+chore(timestamps): refresh MFA for edited segments
 
-          Auto-triggered by segment changes.
-          $(echo -e "$changed_reciters")
-          EOF
+Auto-triggered by segment changes.
+$(echo -e "$changed_reciters")
+EOF
           )"
           git push
 

@@ -172,6 +172,33 @@ def _matched_ref_to_output_key(matched_ref: str) -> str | None:
         return matched_ref  # compound key for cross-verse
 
 
+def _seg_covered_ayahs(matched_ref: str) -> set[tuple[int, int]]:
+    """Extract the set of (surah, ayah) pairs a segment's matched_ref covers.
+
+    '1:1:1-1:1:4' → {(1,1)}
+    '37:151:3-37:152:2' → {(37,151), (37,152)}
+    """
+    for prefix in ("Basmala+", "Isti'adha+"):
+        if matched_ref.startswith(prefix):
+            matched_ref = matched_ref[len(prefix):]
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return set()
+    sp = parts[0].split(":")
+    ep = parts[1].split(":")
+    if len(sp) < 2 or len(ep) < 2:
+        return set()
+    try:
+        s_surah, s_ayah = int(sp[0]), int(sp[1])
+        e_surah, e_ayah = int(ep[0]), int(ep[1])
+    except ValueError:
+        return set()
+    if s_surah == e_surah:
+        return {(s_surah, a) for a in range(s_ayah, e_ayah + 1)}
+    # Cross-surah (rare): just include the endpoints
+    return {(s_surah, s_ayah), (e_surah, e_ayah)}
+
+
 def _seg_is_home_for_key(matched_ref: str, output_key: str) -> bool:
     """Check if a segment's matched_ref is 'home' for an output verse key.
 
@@ -353,7 +380,7 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
             retry_beam: int, shared_cmvn: bool, resume: bool,
             batch_size: int = DEFAULT_BATCH_SIZE,
             output_dir: Path | None = None, padding: str = "forward",
-            refresh_surahs: set[str] | None = None):
+            refresh_verses: set[str] | None = None):
     """Process all chapters from detailed.json through MFA alignment."""
 
     detailed_path = input_dir / "detailed.json"
@@ -397,7 +424,7 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
     # Resume / refresh: load already-completed chapters from the full file
     completed_refs = set()
     existing_data = {}
-    load_existing = resume or refresh_surahs
+    load_existing = resume or refresh_verses
     if load_existing and resume_path.exists():
         with open(resume_path, "r", encoding="utf-8") as f:
             resume_doc = json.load(f)
@@ -409,18 +436,34 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
         if completed_refs:
             log.info("Loaded existing timestamps: %d verses", len(completed_refs))
 
-    # Refresh mode: clear target surahs from existing data (will be rebuilt)
-    if refresh_surahs and existing_data:
+    # Refresh mode: parse target verses into (surah, ayah) tuples for
+    # segment matching, and derive the set of affected surahs for chapter
+    # filtering.  Clear existing data for affected verses (will be rebuilt).
+    refresh_ayahs: set[tuple[int, int]] | None = None
+    refresh_surahs: set[str] | None = None
+    if refresh_verses and existing_data:
+        refresh_ayahs = set()
+        for v in refresh_verses:
+            parts = v.split(":")
+            if len(parts) >= 2:
+                try:
+                    refresh_ayahs.add((int(parts[0]), int(parts[1])))
+                except ValueError:
+                    pass
+        refresh_surahs = {str(s) for s, _ in refresh_ayahs}
         cleared = 0
         for ref in list(existing_data.keys()):
-            surah_num = ref.split(":")[0].split("-")[0]
-            if surah_num in refresh_surahs:
-                del existing_data[ref]
-                completed_refs.discard(ref)
-                cleared += 1
-        log.info("Refresh: cleared %d verses from surah(s) %s, keeping %d",
-                 cleared, ",".join(sorted(refresh_surahs, key=int)),
-                 len(existing_data))
+            parts = ref.split(":")
+            if len(parts) >= 2:
+                try:
+                    if (int(parts[0]), int(parts[1])) in refresh_ayahs:
+                        del existing_data[ref]
+                        completed_refs.discard(ref)
+                        cleared += 1
+                except ValueError:
+                    pass
+        log.info("Refresh: cleared %d verses, keeping %d",
+                 cleared, len(existing_data))
 
     # For by-surah resume: derive completed surah numbers from verse keys
     completed_surahs = set()
@@ -435,8 +478,8 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
     skipped_chapters = []
 
     # Build list of chapters to process
-    if refresh_surahs:
-        # Refresh: process only target surahs
+    if refresh_verses:
+        # Refresh: process only surahs containing target verses
         chapters_to_process = [
             (ch_idx, chapter) for ch_idx, chapter in enumerate(chapters)
             if str(chapter.get("ref", "")).split(":")[0] in refresh_surahs
@@ -510,6 +553,11 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
             mfa_ref = build_mfa_ref(seg)
             if mfa_ref is None:
                 continue
+            # Refresh mode: skip segments not covering any target verse
+            if refresh_ayahs is not None:
+                covered = _seg_covered_ayahs(seg.get("matched_ref", ""))
+                if not (covered & refresh_ayahs):
+                    continue
 
             wav_path = tmp_dir / f"ch{ch_ref}_seg{seg_idx:04d}.wav"
             try:
@@ -657,7 +705,7 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
     for ch_idx, chapter in enumerate(chapters):
         ch_ref = str(chapter.get("ref", ""))
         if audio_category == "by_surah_audio":
-            if ch_ref in completed_surahs:
+            if ch_ref in completed_surahs and ch_ref not in (refresh_surahs or set()):
                 continue
         else:
             if ch_ref in completed_refs:
@@ -757,6 +805,11 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
 
             if all_words:
                 full_data[ch_ref] = {"words": all_words}
+
+    # Drop non-verse keys (e.g. "0:0" from Basmala/Isti'adha prefixes)
+    for ref in list(full_data.keys()):
+        if ref.startswith("0:"):
+            del full_data[ref]
 
     # Post-process: sort words, compute verse boundaries, clean up tracking
     for ref, val in full_data.items():
@@ -879,8 +932,8 @@ def main():
                         help="Phoneme gap-padding strategy (default: forward)")
     parser.add_argument("--resume", action="store_true",
                         help="Skip already-completed chapters")
-    parser.add_argument("--refresh-surahs",
-                        help="Comma-separated surah numbers to re-extract (clears + rebuilds those surahs only)")
+    parser.add_argument("--refresh-verses",
+                        help="Comma-separated verse keys to re-extract (e.g. 1:1,37:151,37:152)")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE,
                         help=f"Segments per MFA upload batch (default: {DEFAULT_BATCH_SIZE})")
     parser.add_argument("-o", "--output", default=None,
@@ -889,7 +942,7 @@ def main():
     args = parser.parse_args()
     input_dir = Path(args.input).resolve()
     output_dir = Path(args.output).resolve() if args.output else None
-    refresh = set(args.refresh_surahs.split(",")) if args.refresh_surahs else None
+    refresh = set(args.refresh_verses.split(",")) if args.refresh_verses else None
 
     process(
         input_dir=input_dir,
@@ -902,7 +955,7 @@ def main():
         batch_size=args.batch_size,
         output_dir=output_dir,
         padding=args.padding,
-        refresh_surahs=refresh,
+        refresh_verses=refresh,
     )
 
 
