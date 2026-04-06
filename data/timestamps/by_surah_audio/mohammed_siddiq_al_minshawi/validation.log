@@ -1,0 +1,71 @@
+Generated: 2026-04-06 10:50:12
+
+========================================================================
+  Timestamps: mohammed_siddiq_al_minshawi
+  data/timestamps/by_surah_audio/mohammed_siddiq_al_minshawi
+========================================================================
+
+--- MFA Settings ---
+  Audio source:  by_surah/mp3quran
+  Method:        kalpy
+  Beam:          20
+  Retry beam:    50
+  Shared CMVN:   False
+
+--- Coverage ---
+  Verses found:       6236 / 6236
+  Missing verses:     0
+  Total words:        77433
+  Coverage issues:    0
+  Forward gap verses: 0
+
+--- Word Duration ---
+  Min:      0.04s
+  Median:   1.07s
+  Mean:     1.16s
+  Max:      10.37s
+
+--- Temporal Issues ---
+  Negative timestamps:  0
+  Zero-duration words:  0
+
+--- Verse Timestamps ---
+  Duration min:     0.79s
+  Duration median:  12.10s
+  Duration mean:    15.60s
+  Duration max:     176.50s
+  Short (<500ms):   0
+  Verse overlaps:   0
+  Large gaps (>10s):2
+
+--- Full Format (letters/phones) ---
+  Negative/inverted letters:  0
+  Phone issues:              0
+
+--- Cross-file Consistency (segments.json) ---
+  Boundary mismatches (>480ms):  7
+
+  Top 7 boundary violations (by diff):
+    22:9         end mismatch: timestamps 3:54.6 vs segments 3:55.2 (diff 645ms)
+    40:4         end mismatch: timestamps 0:42.3 vs segments 0:42.9 (diff 645ms)
+    40:21        end mismatch: timestamps 5:33.5 vs segments 5:34.1 (diff 585ms)
+    13:37        end mismatch: timestamps 17:19.0 vs segments 17:19.5 (diff 565ms)
+    89:29        end mismatch: timestamps 3:39.6 vs segments 3:40.1 (diff 535ms)
+    22:5         end mismatch: timestamps 2:55.5 vs segments 2:55.9 (diff 495ms)
+    84:17        end mismatch: timestamps 2:02.0 vs segments 2:02.5 (diff 495ms)
+
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   9
+
+  Warnings (first 9 of 9):
+    WARN   13:37  end mismatch: timestamps 17:19.0 vs segments 17:19.5 (diff 565ms)
+    WARN   22:5  end mismatch: timestamps 2:55.5 vs segments 2:55.9 (diff 495ms)
+    WARN   22:9  end mismatch: timestamps 3:54.6 vs segments 3:55.2 (diff 645ms)
+    WARN   40:4  end mismatch: timestamps 0:42.3 vs segments 0:42.9 (diff 645ms)
+    WARN   40:21  end mismatch: timestamps 5:33.5 vs segments 5:34.1 (diff 585ms)
+    WARN   84:17  end mismatch: timestamps 2:02.0 vs segments 2:02.5 (diff 495ms)
+    WARN   89:29  end mismatch: timestamps 3:39.6 vs segments 3:40.1 (diff 535ms)
+    WARN   6:70  large gap after 6:69: 24:14.8 to 24:31.8 (gap 16.98s)
+    WARN   9:76  large gap after 9:75: 30:43.1 to 31:01.3 (gap 18.20s)
+
