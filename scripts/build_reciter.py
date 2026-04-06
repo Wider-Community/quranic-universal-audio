@@ -439,9 +439,147 @@ def download_all_audio(rows, is_surah=False):
 
 
 # ---------------------------------------------------------------------------
+# Smart audio reuse
+# ---------------------------------------------------------------------------
+def _try_load_existing(slug):
+    """Load existing parquet from HF via pyarrow (raw bytes, no audio decode).
+
+    Returns a pyarrow Table or None if the split doesn't exist yet.
+    """
+    import pyarrow.parquet as pq
+    from huggingface_hub import hf_hub_download
+
+    riwayah = get_riwayah(slug)
+    api = HfApi(token=HF_TOKEN)
+    try:
+        tree = list(api.list_repo_tree(
+            REPO_ID, repo_type="dataset", path_in_repo=riwayah))
+        files = [f.rfilename for f in tree
+                 if f.rfilename.endswith(".parquet") and slug in f.rfilename]
+    except Exception:
+        files = []
+
+    if not files:
+        log.info("No existing parquet on HF for %s/%s", riwayah, slug)
+        return None
+
+    tables = []
+    for fname in files:
+        local = hf_hub_download(REPO_ID, fname, repo_type="dataset", token=HF_TOKEN)
+        tables.append(pq.read_table(local))
+
+    table = tables[0] if len(tables) == 1 else pq.concat_tables(tables)
+    log.info("Loaded existing parquet: %d rows from %d shard(s)", len(table), len(files))
+
+    # Require duration_ms for clip boundary comparison
+    if "duration_ms" not in table.column_names:
+        log.info("Existing parquet missing duration_ms column — full rebuild required")
+        return None
+
+    return table
+
+
+def _reuse_audio(existing_table, rows, is_surah):
+    """Reuse audio bytes from existing HF parquet where clip boundaries match.
+
+    Compares (surah, ayah, clip_start, clip_end) between old and new rows.
+    Returns (audio_bytes_list, changed_count).  Falls back to full download
+    if >10% of clips changed.
+    """
+    # Build lookup: (surah, ayah) → row index in existing table
+    old_surah = existing_table.column("surah").to_pylist()
+    old_ayah = existing_table.column("ayah").to_pylist()
+    old_offset = existing_table.column("source_offset_ms").to_pylist()
+    old_duration = existing_table.column("duration_ms").to_pylist()
+    old_audio = existing_table.column("audio")
+
+    existing_by_key: dict[tuple[int, int], int] = {}
+    for i in range(len(existing_table)):
+        existing_by_key[(old_surah[i], old_ayah[i])] = i
+
+    audio_bytes_list = [None] * len(rows)
+    need_download: list[int] = []
+    reused = 0
+
+    for i, row in enumerate(rows):
+        key = (row["surah"], row["ayah"])
+        old_idx = existing_by_key.get(key)
+
+        if old_idx is None:
+            need_download.append(i)
+            continue
+
+        old_start = old_offset[old_idx]
+        old_end = old_start + old_duration[old_idx]
+
+        if row["clip_start"] == old_start and row["clip_end"] == old_end:
+            # Clip unchanged — extract raw MP3 bytes (no decode/re-encode)
+            audio_struct = old_audio[old_idx].as_py()
+            audio_bytes_list[i] = audio_struct["bytes"]
+            reused += 1
+        else:
+            need_download.append(i)
+
+    log.info("Audio reuse: %d/%d reused, %d need re-slice",
+             reused, len(rows), len(need_download))
+
+    if not need_download:
+        return audio_bytes_list, 0
+
+    # >10% changed — full download is more efficient than partial
+    if len(need_download) > len(rows) * 0.1:
+        log.info("Too many clips changed (%d/%d), full rebuild",
+                 len(need_download), len(rows))
+        full_bytes, failed = download_all_audio(rows, is_surah=is_surah)
+        return full_bytes, len(need_download)
+
+    # Partial: download only the surahs/ayahs that changed
+    if is_surah:
+        AS = _lazy_import_pydub()
+        url_to_indices = defaultdict(list)
+        for idx in need_download:
+            url_to_indices[rows[idx]["audio_url"]].append(idx)
+
+        log.info("Partial download: %d surahs for %d changed verses",
+                 len(url_to_indices), len(need_download))
+        for url, indices in url_to_indices.items():
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    raw_data = resp.read()
+                audio = AS.from_file(io.BytesIO(raw_data))
+                del raw_data
+                for idx in indices:
+                    row = rows[idx]
+                    clip = audio[row["clip_start"]:row["clip_end"]]
+                    buf = io.BytesIO()
+                    clip.export(buf, format="mp3", bitrate="128k")
+                    audio_bytes_list[idx] = buf.getvalue()
+                del audio
+            except Exception as e:
+                log.warning("Partial download failed for %s: %s", url, e)
+    else:
+        def _dl(idx):
+            row = rows[idx]
+            return idx, download_and_slice(row["audio_url"], row["clip_start"], row["clip_end"])
+
+        with ThreadPoolExecutor(max_workers=64) as pool:
+            for future in as_completed(
+                    {pool.submit(_dl, i): i for i in need_download}):
+                try:
+                    idx, mp3 = future.result()
+                    audio_bytes_list[idx] = mp3
+                except Exception as e:
+                    log.warning("Partial download failed for index %d: %s",
+                                future, e)
+
+    return audio_bytes_list, len(need_download)
+
+
+# ---------------------------------------------------------------------------
 # Dataset push
 # ---------------------------------------------------------------------------
-def push_reciter(slug, audio_type):
+def push_reciter(slug, audio_type, full_rebuild=False):
     """Build and push a reciter to the HF dataset."""
     is_surah = "by_surah" in audio_type
 
@@ -454,7 +592,22 @@ def push_reciter(slug, audio_type):
         rows = rows[::step]
         log.info("Sampling %d%% → %d rows", SAMPLE_PCT, len(rows))
 
-    audio_bytes_list, failed = download_all_audio(rows, is_surah=is_surah)
+    # Smart audio reuse: load existing parquet from HF when possible
+    existing_table = None
+    if not full_rebuild and SAMPLE_PCT == 0:
+        existing_table = _try_load_existing(slug)
+
+    if existing_table is not None and len(existing_table) == len(rows):
+        audio_bytes_list, changed = _reuse_audio(existing_table, rows, is_surah)
+        del existing_table
+        failed = [f"{rows[i]['surah']}:{rows[i]['ayah']}"
+                  for i, b in enumerate(audio_bytes_list) if b is None]
+    else:
+        if existing_table is not None:
+            log.info("Row count changed (%d → %d), full rebuild",
+                     len(existing_table), len(rows))
+            del existing_table
+        audio_bytes_list, failed = download_all_audio(rows, is_surah=is_surah)
 
     data = {
         "audio": [],
@@ -1078,6 +1231,8 @@ def main():
     parser.add_argument("--update-readme", action="store_true", help="Update dataset card only")
     parser.add_argument("--reciters-config", action="store_true",
                         help="Build and push reciters catalog config")
+    parser.add_argument("--full-rebuild", action="store_true",
+                        help="Force full audio re-download (skip smart reuse)")
     args = parser.parse_args()
 
     if not HF_TOKEN:
@@ -1108,7 +1263,7 @@ def main():
             if not audio_type:
                 log.warning("Could not detect audio source for %s, skipping", slug)
                 continue
-            push_reciter(slug, audio_type)
+            push_reciter(slug, audio_type, full_rebuild=args.full_rebuild)
         build_reciters_config()
         update_dataset_readme()
         return
@@ -1121,7 +1276,7 @@ def main():
     if not audio_type:
         sys.exit(f"Could not detect audio source for {args.slug}")
 
-    push_reciter(args.slug, audio_type)
+    push_reciter(args.slug, audio_type, full_rebuild=args.full_rebuild)
     update_dataset_readme()
 
 
