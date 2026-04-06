@@ -39,6 +39,36 @@ def _strip_quran_markers(text: str) -> str:
     """Strip non-recited markers (waqf signs, hizb, sajdah) from Uthmani text."""
     return "".join(ch for ch in text if ch not in _QURAN_MARKERS)
 
+
+def _cross_verse_text(matched_ref: str, matched_text: str,
+                      target_ayah: int, surah_info: dict, surah_num: str) -> str:
+    """Extract only the target verse's words from a cross-verse segment's text.
+
+    For ref '37:151:3-37:152:2' with 5 words of text, target_ayah=152
+    returns the last 2 words (37:152's portion).
+    """
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return matched_text
+    try:
+        sp = parts[0].split(":")
+        ep = parts[1].split(":")
+        s_ayah, s_word = int(sp[1]), int(sp[2])
+        e_ayah, e_word = int(ep[1]), int(ep[2])
+    except (ValueError, IndexError):
+        return matched_text
+
+    words = matched_text.split()
+    if target_ayah == s_ayah:
+        # Target is the starting verse — take first N words
+        total = surah_info[surah_num]["verses"][s_ayah - 1]["num_words"]
+        n = total - s_word + 1
+        return " ".join(words[:n])
+    elif target_ayah == e_ayah:
+        # Target is the ending verse — take last N words
+        return " ".join(words[-e_word:]) if e_word > 0 else ""
+    return matched_text
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
@@ -266,20 +296,33 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                         seg[3] - clip_start,
                     ])
 
-            # Text from detailed.json segments that overlap the clip range
-            if ref in segments and ref != "_meta":
-                seg_list = segments[ref]
-                filtered_text_parts = []
-                for i, det_seg in enumerate(entry["segments"]):
-                    t_start = det_seg.get("time_start", 0)
-                    t_end = det_seg.get("time_end", 0)
-                    if t_end <= clip_start or t_start >= clip_end:
-                        continue  # outside clip
-                    filtered_text_parts.append(det_seg.get("matched_text", ""))
-                text = " ".join(filtered_text_parts)
-            else:
-                text = " ".join(
-                    seg.get("matched_text", "") for seg in entry["segments"])
+            # Text from detailed.json segments that overlap the clip range.
+            # For cross-verse segments, extract only this verse's words.
+            filtered_text_parts = []
+            for det_seg in entry["segments"]:
+                t_start = det_seg.get("time_start", 0)
+                t_end = det_seg.get("time_end", 0)
+                if t_end <= clip_start or t_start >= clip_end:
+                    continue  # outside clip
+                mref = det_seg.get("matched_ref", "")
+                seg_text = det_seg.get("matched_text", "")
+                if "-" in mref:
+                    rp = mref.split("-")
+                    if len(rp) == 2:
+                        sa = rp[0].split(":")
+                        ea = rp[1].split(":")
+                        if len(sa) >= 2 and len(ea) >= 2:
+                            s_ayah = int(sa[1])
+                            e_ayah = int(ea[1])
+                            if ayah < s_ayah or ayah > e_ayah:
+                                continue  # segment doesn't cover this ayah
+                            if s_ayah != e_ayah:
+                                # Cross-verse: extract only this ayah's words
+                                seg_text = _cross_verse_text(
+                                    mref, seg_text, ayah, surah_info,
+                                    surah_num)
+                filtered_text_parts.append(seg_text)
+            text = " ".join(filtered_text_parts)
             text = _strip_quran_markers(text)
 
             verse_words = []
@@ -289,6 +332,31 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                         word[0],
                         word[1] - clip_start,
                         word[2] - clip_start,
+                    ])
+
+            # Synthesize segments for cross-verse words not covered by
+            # segments.json (they precede or follow the home segments,
+            # or segments.json has no entry for this verse at all).
+            if verse_words and not verse_segments:
+                # No segments.json entry — synthesize one from all words
+                verse_segments.append([
+                    verse_words[0][0], verse_words[-1][0],
+                    verse_words[0][1], verse_words[-1][2],
+                ])
+            elif verse_words and verse_segments:
+                first_seg_start = verse_segments[0][2]  # clip-relative ms
+                xv_words = [w for w in verse_words if w[2] <= first_seg_start]
+                if xv_words:
+                    verse_segments.insert(0, [
+                        xv_words[0][0], xv_words[-1][0],
+                        xv_words[0][1], xv_words[-1][2],
+                    ])
+                last_seg_end = verse_segments[-1][3]
+                xv_after = [w for w in verse_words if w[1] >= last_seg_end]
+                if xv_after:
+                    verse_segments.append([
+                        xv_after[0][0], xv_after[-1][0],
+                        xv_after[0][1], xv_after[-1][2],
                     ])
 
             # Flat letter timestamps: one entry per letter (not per word)
