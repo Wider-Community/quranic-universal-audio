@@ -2,6 +2,18 @@ name: Sync HF Dataset
 
 on:
   workflow_dispatch:
+    inputs:
+      reciter:
+        description: 'Reciter slug (blank = all eligible reciters)'
+        required: false
+      full_rebuild:
+        description: 'Force full audio re-download (skip smart reuse)'
+        type: boolean
+        default: false
+      readme_only:
+        description: 'Only update dataset README (no reciter data)'
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -37,12 +49,16 @@ jobs:
         id: detect
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual trigger: sync all eligible reciters
-            eligible=$(python -c "
+            reciter="${{ github.event.inputs.reciter }}"
+            if [ -n "$reciter" ]; then
+              eligible="$reciter"
+            else
+              eligible=$(python -c "
           import sys; sys.path.insert(0, 'scripts')
           from build_reciter import find_eligible_reciters
           print(' '.join(find_eligible_reciters()))
           ")
+            fi
             deleted=""
           else
             # Push trigger: detect from git diff
@@ -74,17 +90,21 @@ jobs:
           echo "Deleted reciters: $deleted"
 
       - name: Build and upload changed reciters
-        if: steps.detect.outputs.slugs != ''
+        if: steps.detect.outputs.slugs != '' && github.event.inputs.readme_only != 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          flags=""
+          if [ "${{ github.event.inputs.full_rebuild }}" = "true" ]; then
+            flags="--full-rebuild"
+          fi
           for slug in ${{ steps.detect.outputs.slugs }}; do
             echo "Building $slug..."
-            python scripts/build_reciter.py "$slug"
+            python scripts/build_reciter.py $flags "$slug"
           done
 
       - name: Delete removed reciters
-        if: steps.detect.outputs.deleted != ''
+        if: steps.detect.outputs.deleted != '' && github.event.inputs.readme_only != 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
