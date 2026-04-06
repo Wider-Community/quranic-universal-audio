@@ -71,7 +71,7 @@ function snapshotSeg(seg) {
     if (seg.phonemes_asr) snap.phonemes_asr = seg.phonemes_asr;
     if (seg.entry_ref) snap.entry_ref = seg.entry_ref;
     if (seg.chapter != null) snap.chapter = seg.chapter;
-    if (seg.ignored) snap.ignored = true;
+    if (seg.ignored_categories?.length) snap.ignored_categories = [...seg.ignored_categories];
     snap.categories = _classifySegCategories(seg);
     return snap;
 }
@@ -108,6 +108,13 @@ function _isStandaloneWord(text) {
     return _standaloneWords.has(_stripQuranDeco(text));
 }
 
+/** Check if a segment is ignored for a specific validation category. */
+function _isIgnoredFor(seg, category) {
+    const ic = seg.ignored_categories;
+    if (ic) return ic.includes('_all') || ic.includes(category);
+    return !!seg.ignored;  // back-compat for old boolean
+}
+
 /**
  * Classify a segment into ALL applicable validation categories.
  * Returns an array of category strings. Works on live segments and snapshots.
@@ -131,13 +138,13 @@ function _classifySegCategories(seg) {
     const eAyah = +ep[1], eWord = +ep[2];
 
     // Cross-verse
-    if (sAyah !== eAyah && !seg.ignored) {
+    if (sAyah !== eAyah && !_isIgnoredFor(seg, 'cross_verse')) {
         cats.push('cross_verse');
     }
 
     // Boundary adjustment: 1-word, not muqattaat, not single-word verse, not standalone
     const vwc = segAllData?.verse_word_counts;
-    if (sWord === eWord && sAyah === eAyah && !seg.ignored
+    if (sWord === eWord && sAyah === eAyah && !_isIgnoredFor(seg, 'boundary_adj')
         && !_muqattaatVerses?.has(`${surah}:${sAyah}`)
         && !(vwc && vwc[`${surah}:${sAyah}`] === 1)
         && !_standaloneRefs?.has(`${surah}:${sAyah}:${sWord}`)
@@ -146,12 +153,12 @@ function _classifySegCategories(seg) {
     }
 
     // Muqattaat
-    if (sWord === 1 && _muqattaatVerses?.has(`${surah}:${sAyah}`) && !seg.ignored) {
+    if (sWord === 1 && _muqattaatVerses?.has(`${surah}:${sAyah}`) && !_isIgnoredFor(seg, 'muqattaat')) {
         cats.push('muqattaat');
     }
 
     // Qalqala
-    if (!seg.ignored) {
+    if (!_isIgnoredFor(seg, 'qalqala')) {
         const last = _lastArabicLetter(seg.matched_text || '');
         if (last && _qalqalaLetters?.has(last)) cats.push('qalqala');
     }
@@ -2355,7 +2362,11 @@ async function commitRefEdit(seg, newRef, row) {
                 _pendingOp.fix_kind = 'audit';
             }
             seg.confidence = 1.0;
-            if (_pendingOp?.op_context_category) seg.ignored = true;
+            if (_pendingOp?.op_context_category) {
+                if (!seg.ignored_categories) seg.ignored_categories = [];
+                if (!seg.ignored_categories.includes(_pendingOp.op_context_category))
+                    seg.ignored_categories.push(_pendingOp.op_context_category);
+            }
             delete seg._derived;
             markDirty(chapter, seg.index);
             syncAllCardsForSegment(seg);
@@ -2377,7 +2388,11 @@ async function commitRefEdit(seg, newRef, row) {
     // Update in-memory data
     seg.matched_ref = newRef;
     seg.confidence = 1.0;
-    if (_pendingOp?.op_context_category) seg.ignored = true;
+    if (_pendingOp?.op_context_category) {
+        if (!seg.ignored_categories) seg.ignored_categories = [];
+        if (!seg.ignored_categories.includes(_pendingOp.op_context_category))
+            seg.ignored_categories.push(_pendingOp.op_context_category);
+    }
 
     if (newRef) {
         // Resolve text from backend
@@ -2652,7 +2667,7 @@ async function executeSave() {
                         };
                         if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
                         if (s.has_repeated_words) o.has_repeated_words = true;
-                        if (s.ignored) o.ignored = true;
+                        if (s.ignored_categories?.length) o.ignored_categories = s.ignored_categories;
                         return o;
                     }),
                     operations: chOps,
@@ -2671,7 +2686,7 @@ async function executeSave() {
                             matched_text: seg.matched_text,
                             confidence: seg.confidence,
                         };
-                        if (seg.ignored) upd.ignored = true;
+                        if (seg.ignored_categories?.length) upd.ignored_categories = seg.ignored_categories;
                         updates.push(upd);
                     }
                 }
@@ -3405,7 +3420,11 @@ function confirmTrim(seg) {
     seg.time_start = newStart;
     seg.time_end = newEnd;
     seg.confidence = 1.0;
-    if (_pendingOp?.op_context_category) seg.ignored = true;
+    if (_pendingOp?.op_context_category) {
+        if (!seg.ignored_categories) seg.ignored_categories = [];
+        if (!seg.ignored_categories.includes(_pendingOp.op_context_category))
+            seg.ignored_categories.push(_pendingOp.op_context_category);
+    }
     markDirty(chapter, undefined, true);
 
     // Edit history: record applied state
@@ -3972,8 +3991,14 @@ async function mergeAdjacent(seg, direction, contextCategory = null) {
         matched_text: mergedText,
         display_text: mergedDisplay,
         confidence: 1.0,
-        ignored: contextCategory ? true : first.ignored,
     };
+    // Merge ignored_categories from both segments + add the context category
+    const mergedIc = new Set([
+        ...(first.ignored_categories || []),
+        ...(second.ignored_categories || []),
+    ]);
+    if (contextCategory) mergedIc.add(contextCategory);
+    if (mergedIc.size) merged.ignored_categories = [...mergedIc];
 
     // Edit history: record applied state
     mergeOp.applied_at_utc = new Date().toISOString();
@@ -5174,7 +5199,7 @@ function renderCategoryCards(type, items, container) {
                     const oldText = seg.matched_text || '';
                     const oldDisplay = seg.display_text || '';
                     const oldConf = seg.confidence;
-                    const oldIgnored = seg.ignored;
+                    const oldIgnoredCats = seg.ignored_categories ? [...seg.ignored_categories] : null;
                     const segChapter = seg.chapter || issue.chapter;
                     const wasDirty = isIndexDirty(segChapter, seg.index);
 
@@ -5203,7 +5228,7 @@ function renderCategoryCards(type, items, container) {
                         seg.matched_text = oldText;
                         seg.display_text = oldDisplay;
                         seg.confidence = oldConf;
-                        if (oldIgnored) seg.ignored = true; else delete seg.ignored;
+                        if (oldIgnoredCats) seg.ignored_categories = oldIgnoredCats; else delete seg.ignored_categories;
                         if (!wasDirty) unmarkDirty(segChapter, seg.index);
                         fixBtn.disabled = false;
                         fixBtn.textContent = 'Auto Fix';
@@ -5309,7 +5334,7 @@ function renderCategoryCards(type, items, container) {
                 ignoreBtn.className = 'val-action-btn ignore-btn';
                 const segChapterForBtn = seg.chapter || parseInt(segChapterSelect.value);
                 const isDirtySegment = segDirtyMap.get(segChapterForBtn)?.indices?.has(seg.index);
-                if (seg.ignored) {
+                if (_isIgnoredFor(seg, type)) {
                     ignoreBtn.disabled = true;
                     ignoreBtn.textContent = 'Ignored';
                     wrapper.style.opacity = '0.5';
@@ -5319,11 +5344,11 @@ function renderCategoryCards(type, items, container) {
                     ignoreBtn.title = 'Cannot ignore — this segment already has unsaved edits';
                 } else {
                     ignoreBtn.textContent = 'Ignore';
-                    ignoreBtn.title = 'Set confidence to 100% (dismiss this issue)';
+                    ignoreBtn.title = 'Dismiss this issue for this category';
                 }
                 ignoreBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (seg.ignored) return;
+                    if (_isIgnoredFor(seg, type)) return;
                     const segChapter = seg.chapter || parseInt(segChapterSelect.value);
 
                     // Edit history: snapshot before modification
@@ -5338,8 +5363,8 @@ function renderCategoryCards(type, items, container) {
                         console.warn('Ignore: edit history snapshot failed:', err);
                     }
 
-                    seg.confidence = 1.0;
-                    seg.ignored = true;
+                    if (!seg.ignored_categories) seg.ignored_categories = [];
+                    seg.ignored_categories.push(type);
                     delete seg._derived;
                     markDirty(segChapter, seg.index);
                     syncAllCardsForSegment(seg);

@@ -999,8 +999,10 @@ def get_seg_data(reciter, chapter):
                 "confidence": round(seg.get("confidence", 0.0), 4),
                 "audio_url": entry_audio,
             }
-            if seg.get("ignored"):
-                seg_dict["ignored"] = True
+            if seg.get("ignored_categories"):
+                seg_dict["ignored_categories"] = seg["ignored_categories"]
+            elif seg.get("ignored"):
+                seg_dict["ignored_categories"] = ["_all"]
             segments.append(seg_dict)
             idx += 1
 
@@ -1129,8 +1131,10 @@ def get_seg_all(reciter):
             }
             if seg.get("wrap_word_ranges"):
                 seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
-            if seg.get("ignored"):
-                seg_dict["ignored"] = True
+            if seg.get("ignored_categories"):
+                seg_dict["ignored_categories"] = seg["ignored_categories"]
+            elif seg.get("ignored"):
+                seg_dict["ignored_categories"] = ["_all"]
             segments.append(seg_dict)
 
     verse_word_counts = {}
@@ -1506,8 +1510,12 @@ def save_seg_data(reciter, chapter):
             result["wrap_word_ranges"] = wrap
         if s.get("has_repeated_words") or existing.get("has_repeated_words"):
             result["has_repeated_words"] = True
-        if s.get("ignored") or existing.get("ignored"):
-            result["ignored"] = True
+        ic = s.get("ignored_categories") or existing.get("ignored_categories")
+        if ic:
+            result["ignored_categories"] = list(ic)
+        elif s.get("ignored") or existing.get("ignored"):
+            # Back-compat: old boolean → treat as all-categories
+            result["ignored_categories"] = ["_all"]
         return result
 
     # Edit history: snapshot validation counts before mutation
@@ -1570,8 +1578,8 @@ def save_seg_data(reciter, chapter):
                 flat_segments[idx]["matched_text"] = upd.get("matched_text", "")
                 if "confidence" in upd:
                     flat_segments[idx]["confidence"] = upd["confidence"]
-                if upd.get("ignored"):
-                    flat_segments[idx]["ignored"] = True
+                if upd.get("ignored_categories"):
+                    flat_segments[idx]["ignored_categories"] = upd["ignored_categories"]
 
     # Backup before writing (single-level undo)
     detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
@@ -2322,6 +2330,14 @@ def _tail_phoneme_mismatch(phonemes_asr: str, matched_ref: str,
     return False
 
 
+def _is_ignored_for(seg: dict, category: str) -> bool:
+    """Check if a segment is ignored for a specific validation category."""
+    ic = seg.get("ignored_categories")
+    if ic:
+        return "_all" in ic or category in ic
+    return bool(seg.get("ignored"))
+
+
 def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                                canonical: dict | None = None) -> dict:
     """Count validation issues for a single chapter. Returns {category: count}."""
@@ -2368,7 +2384,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 continue
 
             if s_ayah != e_ayah:
-                if not seg.get("ignored"):
+                if not _is_ignored_for(seg, "cross_verse"):
                     counts["cross_verse"] += 1
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
@@ -2383,7 +2399,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 verse_segments[(surah, s_ayah)].append((s_word, e_word))
                 is_boundary_adj = False
                 if (s_word == e_word
-                    and not seg.get("ignored")
+                    and not _is_ignored_for(seg, "boundary_adj")
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -2391,7 +2407,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                     is_boundary_adj = True
 
                 # Phoneme tail mismatch (only if not already flagged)
-                if (not is_boundary_adj and canonical and not seg.get("ignored")
+                if (not is_boundary_adj and canonical and not _is_ignored_for(seg, "boundary_adj")
                     and seg.get("phonemes_asr")):
                     if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
                                               canonical, BOUNDARY_TAIL_K):
@@ -2401,10 +2417,11 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                     counts["boundary_adj"] += 1
 
             if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
-                counts["muqattaat"] += 1
+                if not _is_ignored_for(seg, "muqattaat"):
+                    counts["muqattaat"] += 1
 
             last_letter = _last_arabic_letter(seg.get("matched_text", ""))
-            if last_letter in _QALQALA_LETTERS and not seg.get("ignored"):
+            if last_letter in _QALQALA_LETTERS and not _is_ignored_for(seg, "qalqala"):
                 counts["qalqala"] += 1
 
     # Missing words
@@ -2561,9 +2578,9 @@ def validate_reciter_segments(reciter):
             except (ValueError, IndexError):
                 continue
 
-            # Cross-verse detection (skip explicitly ignored segments)
+            # Cross-verse detection (skip if ignored for this category)
             if s_ayah != e_ayah:
-                if not seg.get("ignored"):
+                if not _is_ignored_for(seg, "cross_verse"):
                     cross_verse.append({
                         "chapter": chapter,
                         "seg_index": i,
@@ -2584,10 +2601,10 @@ def validate_reciter_segments(reciter):
 
                 # May require boundary adjustment: 1-word segment, not muqattaat, not single-word verse,
                 # not a known standalone word (by ref or matched_text).
-                # Skip if explicitly ignored.
+                # Skip if ignored for this category.
                 is_boundary_adj = False
                 if (s_word == e_word
-                    and not seg.get("ignored")
+                    and not _is_ignored_for(seg, "boundary_adj")
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in _single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -2595,7 +2612,7 @@ def validate_reciter_segments(reciter):
                     is_boundary_adj = True
 
                 # Phoneme tail mismatch (only if not already flagged)
-                if (not is_boundary_adj and canonical and not seg.get("ignored")
+                if (not is_boundary_adj and canonical and not _is_ignored_for(seg, "boundary_adj")
                     and seg.get("phonemes_asr")):
                     if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
                                               canonical, BOUNDARY_TAIL_K):
@@ -2619,15 +2636,16 @@ def validate_reciter_segments(reciter):
 
             # Muqatta'at: segment IS the muqatta'at word (starts at word 1 of a muqatta'at verse)
             if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
-                muqattaat.append({
-                    "chapter": chapter,
-                    "seg_index": i,
-                    "ref": matched_ref,
-                })
+                if not _is_ignored_for(seg, "muqattaat"):
+                    muqattaat.append({
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "ref": matched_ref,
+                    })
 
             # Qalqala: segment ends with one of the 5 qalqala letters
             _last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
-            if _last_ltr and _last_ltr in _QALQALA_LETTERS and not seg.get("ignored"):
+            if _last_ltr and _last_ltr in _QALQALA_LETTERS and not _is_ignored_for(seg, "qalqala"):
                 qalqala.append({
                     "chapter": chapter,
                     "seg_index": i,
