@@ -3296,11 +3296,23 @@ function confirmTrim(seg) {
 }
 
 let _previewStopHandler = null;
+let _trimLooping = false;
+let _trimJustSeeked = false;
 
 function previewTrimAudio() {
     const canvas = _getEditCanvas();
     const tw = canvas?._trimWindow;
     if (!tw) return;
+    // Toggle: if already playing in trim preview, stop
+    if (_trimLooping && !segAudioEl.paused) {
+        _trimLooping = false;
+        _trimJustSeeked = false;
+        segAudioEl.pause();
+        if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
+        if (canvas._trimWindow) drawTrimWaveform(canvas);
+        return;
+    }
+    _trimLooping = true;
     _playRange(tw.currentStart, tw.currentEnd);
 }
 
@@ -3339,13 +3351,28 @@ function _playRange(startMs, endMs) {
     function animatePlayhead() {
         if (!canvas || segAudioEl.paused) return;
         const curMs = segAudioEl.currentTime * 1000;
+        // Clear the seek guard once the browser has actually seeked back
+        if (_trimJustSeeked && canvas?._trimWindow && curMs < canvas._trimWindow.currentEnd) {
+            _trimJustSeeked = false;
+        }
         // For split left-half playback: stop at the *current* split point so
         // dragging the handle to an earlier position stops the audio there.
-        // Right-half and trim playback use the fixed endMs.
-        const effectiveEnd = (canvas?._splitData && endMs !== canvas._splitData.seg.time_end)
-            ? canvas._splitData.currentSplit
-            : endMs;
-        if (curMs >= effectiveEnd) {
+        // Trim looping: read live cursor positions each frame.
+        // Right-half and other playback use the fixed endMs.
+        const effectiveEnd = (_trimLooping && canvas?._trimWindow)
+            ? canvas._trimWindow.currentEnd
+            : (canvas?._splitData && endMs !== canvas._splitData.seg.time_end)
+                ? canvas._splitData.currentSplit
+                : endMs;
+        if (curMs >= effectiveEnd && !_trimJustSeeked) {
+            // Trim mode: loop with fresh cursor positions
+            if (_trimLooping && canvas?._trimWindow) {
+                const tw = canvas._trimWindow;
+                segAudioEl.currentTime = tw.currentStart / 1000;
+                _trimJustSeeked = true;
+                _playRangeRAF = requestAnimationFrame(animatePlayhead);
+                return;
+            }
             segAudioEl.pause();
             cleanup();
             return;
@@ -3938,6 +3965,8 @@ function exitEditMode() {
     segEditMode = null;
     segEditIndex = -1;
     // Stop any preview playback and animation
+    _trimLooping = false;
+    _trimJustSeeked = false;
     if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
     if (_previewStopHandler) {
         segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
