@@ -3296,23 +3296,23 @@ function confirmTrim(seg) {
 }
 
 let _previewStopHandler = null;
-let _trimLooping = false;
-let _trimJustSeeked = false;
+let _previewLooping = false;   // 'trim' | 'split-left' | 'split-right' | false
+let _previewJustSeeked = false;
 
 function previewTrimAudio() {
     const canvas = _getEditCanvas();
     const tw = canvas?._trimWindow;
     if (!tw) return;
     // Toggle: if already playing in trim preview, stop
-    if (_trimLooping && !segAudioEl.paused) {
-        _trimLooping = false;
-        _trimJustSeeked = false;
+    if (_previewLooping && !segAudioEl.paused) {
+        _previewLooping = false;
+        _previewJustSeeked = false;
         segAudioEl.pause();
         if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
         if (canvas._trimWindow) drawTrimWaveform(canvas);
         return;
     }
-    _trimLooping = true;
+    _previewLooping = 'trim';
     _playRange(tw.currentStart, tw.currentEnd);
 }
 
@@ -3351,25 +3351,31 @@ function _playRange(startMs, endMs) {
     function animatePlayhead() {
         if (!canvas || segAudioEl.paused) return;
         const curMs = segAudioEl.currentTime * 1000;
-        // Clear the seek guard once the browser has actually seeked back
-        if (_trimJustSeeked && canvas?._trimWindow && curMs < canvas._trimWindow.currentEnd) {
-            _trimJustSeeked = false;
+        // Compute live effective end and loop-start for all preview modes
+        let effectiveEnd = endMs;
+        let loopStart = null;
+        if (_previewLooping === 'trim' && canvas?._trimWindow) {
+            effectiveEnd = canvas._trimWindow.currentEnd;
+            loopStart = canvas._trimWindow.currentStart;
+        } else if (_previewLooping === 'split-left' && canvas?._splitData) {
+            effectiveEnd = canvas._splitData.currentSplit;
+            loopStart = canvas._splitData.seg.time_start;
+        } else if (_previewLooping === 'split-right' && canvas?._splitData) {
+            effectiveEnd = canvas._splitData.seg.time_end;
+            loopStart = canvas._splitData.currentSplit;
+        } else if (canvas?._splitData && endMs !== canvas._splitData.seg.time_end) {
+            // Non-looping split left: stop at current split point
+            effectiveEnd = canvas._splitData.currentSplit;
         }
-        // For split left-half playback: stop at the *current* split point so
-        // dragging the handle to an earlier position stops the audio there.
-        // Trim looping: read live cursor positions each frame.
-        // Right-half and other playback use the fixed endMs.
-        const effectiveEnd = (_trimLooping && canvas?._trimWindow)
-            ? canvas._trimWindow.currentEnd
-            : (canvas?._splitData && endMs !== canvas._splitData.seg.time_end)
-                ? canvas._splitData.currentSplit
-                : endMs;
-        if (curMs >= effectiveEnd && !_trimJustSeeked) {
-            // Trim mode: loop with fresh cursor positions
-            if (_trimLooping && canvas?._trimWindow) {
-                const tw = canvas._trimWindow;
-                segAudioEl.currentTime = tw.currentStart / 1000;
-                _trimJustSeeked = true;
+        // Clear the seek guard once the browser has actually seeked back
+        if (_previewJustSeeked && curMs < effectiveEnd) {
+            _previewJustSeeked = false;
+        }
+        if (curMs >= effectiveEnd && !_previewJustSeeked) {
+            // Looping: seek to fresh start position
+            if (_previewLooping && loopStart !== null) {
+                segAudioEl.currentTime = loopStart / 1000;
+                _previewJustSeeked = true;
                 _playRangeRAF = requestAnimationFrame(animatePlayhead);
                 return;
             }
@@ -3426,6 +3432,17 @@ function previewSplitAudio(side) {
     const canvas = _getEditCanvas();
     const sd = canvas?._splitData;
     if (!sd) return;
+    const loopKey = `split-${side}`;
+    // Toggle: if already looping this side, stop
+    if (_previewLooping === loopKey && !segAudioEl.paused) {
+        _previewLooping = false;
+        _previewJustSeeked = false;
+        segAudioEl.pause();
+        if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
+        if (canvas._splitData) drawSplitWaveform(canvas);
+        return;
+    }
+    _previewLooping = loopKey;
     const splitTime = sd.currentSplit;
     _playRange(
         side === 'left' ? sd.seg.time_start : splitTime,
@@ -3965,8 +3982,8 @@ function exitEditMode() {
     segEditMode = null;
     segEditIndex = -1;
     // Stop any preview playback and animation
-    _trimLooping = false;
-    _trimJustSeeked = false;
+    _previewLooping = false;
+    _previewJustSeeked = false;
     if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
     if (_previewStopHandler) {
         segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
