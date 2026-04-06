@@ -642,19 +642,30 @@ def get_ts_random_reciter(reciter):
 
 @app.route("/api/ts/validate/<reciter>")
 def validate_ts_reciter(reciter):
-    """Validate timestamp data and return categorised issues."""
-    data = _load_timestamps(reciter)
-    if not data:
+    """Validate timestamp data via the timestamps validator and return categorised issues."""
+    from validators.validate_timestamps import validate_reciter as _validate_ts
+    from validators.validate_timestamps import load_word_counts as _load_ts_wc
+
+    # Find timestamps dir for this reciter
+    ts_dir = None
+    for audio_type in ("by_surah_audio", "by_ayah_audio"):
+        candidate = TIMESTAMPS_PATH / audio_type / reciter
+        if (candidate / "timestamps.json").exists():
+            ts_dir = candidate
+            break
+    if ts_dir is None:
         return jsonify({"error": "Reciter not found"}), 404
 
-    meta = data["meta"]
-    verses = data["verses"]
+    surah_info_path = Path(__file__).resolve().parent.parent / "data" / "surah_info.json"
+    wc = _load_ts_wc(surah_info_path)
+    result = _validate_ts(ts_dir, wc)
 
-    word_counts = _get_word_counts()
+    if result.get("skipped"):
+        return jsonify({"error": "timestamps.json not found"}), 404
 
-    # ── 1. MFA failures (from meta) ──
+    # Reshape validator detail lists into frontend format
     mfa_failures = []
-    for fail in meta.get("mfa_failures", []):
+    for fail in result.get("_mfa_failures", []):
         vk = fail.get("verse", "")
         chapter = int(vk.split(":")[0]) if vk and ":" in vk else 0
         ref = fail.get("ref", "?")
@@ -666,93 +677,37 @@ def validate_ts_reciter(reciter):
             "label": f"{vk} [{ref}]",
         })
 
-    # ── 2. Missing word indices ──
-    # Accumulate coverage across regular + compound keys, then check
-    covered_per_verse: dict[tuple[int, int], set[int]] = {}
-    for verse_key, verse_data in verses.items():
-        words_list = verse_data.get("words", [])
-        if "-" in verse_key:
-            # Compound key: walk words detecting verse boundary crossings
-            try:
-                start_part, end_part = verse_key.split("-", 1)
-                sp = start_part.split(":")
-                ep = end_part.split(":")
-                surah, start_ayah = int(sp[0]), int(sp[1])
-                end_ayah = int(ep[1])
-            except (ValueError, IndexError):
-                continue
-            cur_ayah = start_ayah
-            prev_idx = -1
-            for w in words_list:
-                idx = w[0]
-                if prev_idx >= 0 and idx <= prev_idx and cur_ayah < end_ayah:
-                    cur_ayah += 1
-                sa = (surah, cur_ayah)
-                if sa not in covered_per_verse:
-                    covered_per_verse[sa] = set()
-                covered_per_verse[sa].add(idx)
-                prev_idx = idx
-        else:
-            parts = verse_key.split(":")
-            if len(parts) != 2:
-                continue
-            try:
-                surah, ayah = int(parts[0]), int(parts[1])
-            except ValueError:
-                continue
-            sa = (surah, ayah)
-            if sa not in covered_per_verse:
-                covered_per_verse[sa] = set()
-            covered_per_verse[sa].update(w[0] for w in words_list)
-
     missing_words = []
-    for (surah, ayah), covered in covered_per_verse.items():
-        expected = word_counts.get((surah, ayah))
-        if expected is None:
-            continue
-        missing = sorted(set(range(1, expected + 1)) - covered)
-        if missing:
-            verse_key_label = f"{surah}:{ayah}"
-            missing_words.append({
-                "verse_key": verse_key_label, "chapter": surah,
-                "missing": missing, "count": len(missing),
-                "diff_ms": len(missing) * 1000,
-                "label": f"{verse_key_label} [-{len(missing)}w]",
-            })
+    for mw in result.get("_missing_words", []):
+        vk = f"{mw['surah']}:{mw['ayah']}"
+        count = len(mw["missing"])
+        missing_words.append({
+            "verse_key": vk, "chapter": mw["surah"],
+            "missing": mw["missing"], "count": count,
+            "diff_ms": count * 1000,
+            "label": f"{vk} [-{count}w]",
+        })
     missing_words.sort(key=lambda x: x["diff_ms"], reverse=True)
 
-    # ── 3. Boundary mismatches ──
-    seg_verses, seg_pad_ms = _load_seg_verses(reciter)
-    tolerance = 2 * seg_pad_ms if seg_pad_ms > 0 else 500
     boundary_mismatches = []
-    for verse_key, verse_data in verses.items():
-        if verse_key not in seg_verses:
-            continue
-        words_raw = verse_data.get("words", [])
-        segs = seg_verses[verse_key]
-        if not words_raw or not segs:
-            continue
-        parts = verse_key.split(":")
-        chapter = int(parts[0]) if len(parts) >= 1 else 0
-        ts_first, ts_last = words_raw[0][1], words_raw[-1][2]
-        seg_first, seg_last = segs[0][2], segs[-1][3]
-
-        for side, ts_ms, seg_ms in [("start", ts_first, seg_first), ("end", ts_last, seg_last)]:
-            diff = abs(ts_ms - seg_ms)
-            if diff > tolerance:
-                boundary_mismatches.append({
-                    "verse_key": verse_key, "chapter": chapter,
-                    "side": side, "diff_ms": round(diff),
-                    "ts_ms": round(ts_ms), "seg_ms": round(seg_ms),
-                    "label": f"{verse_key} [{round(diff)}ms {side}]",
-                })
+    for bm in result.get("_boundary_mismatches", []):
+        parts = bm["verse_key"].split(":")
+        chapter = int(parts[0]) if parts else 0
+        boundary_mismatches.append({
+            "verse_key": bm["verse_key"], "chapter": chapter,
+            "side": bm["side"], "diff_ms": bm["diff_ms"],
+            "label": f"{bm['verse_key']} [{bm['diff_ms']}ms {bm['side']}]",
+        })
     boundary_mismatches.sort(key=lambda x: x["diff_ms"], reverse=True)
 
     return jsonify({
         "mfa_failures": mfa_failures,
         "missing_words": missing_words,
         "boundary_mismatches": boundary_mismatches,
-        "meta": {"has_segments": bool(seg_verses), "tolerance_ms": tolerance},
+        "meta": {
+            "has_segments": result.get("has_segments", False),
+            "tolerance_ms": result.get("seg_tolerance_ms", 500),
+        },
     })
 
 
@@ -2399,8 +2354,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 continue
 
             if s_ayah != e_ayah:
-                if confidence < 1.0:
-                    counts["cross_verse"] += 1
+                counts["cross_verse"] += 1
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
                         wc = word_counts.get((surah, ayah), s_word)
@@ -2431,7 +2385,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 if is_boundary_adj:
                     counts["boundary_adj"] += 1
 
-            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES and confidence < 1.0:
+            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
                 counts["muqattaat"] += 1
 
             last_letter = _last_arabic_letter(seg.get("matched_text", ""))
@@ -2592,14 +2546,13 @@ def validate_reciter_segments(reciter):
             except (ValueError, IndexError):
                 continue
 
-            # Cross-verse detection (skip if already ignored / confidence=1.0)
+            # Cross-verse detection
             if s_ayah != e_ayah:
-                if confidence < 1.0:
-                    cross_verse.append({
-                        "chapter": chapter,
-                        "seg_index": i,
-                        "ref": matched_ref,
-                    })
+                cross_verse.append({
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "ref": matched_ref,
+                })
                 # Coverage for cross-verse: start verse from s_word to end, end verse from 1 to e_word
                 # Always register coverage regardless of confidence
                 for ayah in range(s_ayah, e_ayah + 1):
@@ -2650,7 +2603,7 @@ def validate_reciter_segments(reciter):
                     boundary_adj.append(item)
 
             # Muqatta'at: segment IS the muqatta'at word (starts at word 1 of a muqatta'at verse)
-            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES and confidence < 1.0:
+            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
                 muqattaat.append({
                     "chapter": chapter,
                     "seg_index": i,
