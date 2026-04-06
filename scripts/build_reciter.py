@@ -34,6 +34,8 @@ log = logging.getLogger(__name__)
 # Non-recited Quranic markers to strip from text (stop signs, hizb, sajdah)
 _QURAN_MARKERS = set("\u06D6\u06D7\u06D8\u06D9\u06DA\u06DB\u06DE\u06E9")
 
+SURAH_DOWNLOAD_WORKERS = 16
+AYAH_DOWNLOAD_WORKERS = 64
 
 def _strip_quran_markers(text: str) -> str:
     """Strip non-recited markers (waqf signs, hizb, sajdah) from Uthmani text."""
@@ -435,7 +437,7 @@ def download_all_audio(rows, is_surah=False):
             url_to_indices[row["audio_url"]].append(i)
 
         unique_urls = list(url_to_indices.keys())
-        log.info("Downloading and slicing %d surah audio files (4 parallel)...", len(unique_urls))
+        log.info("Downloading and slicing %d surah audio files (%d parallel)...", len(unique_urls), SURAH_DOWNLOAD_WORKERS)
         completed_surahs = 0
 
         def _process_surah(url):
@@ -468,7 +470,7 @@ def download_all_audio(rows, is_surah=False):
             del audio
             return url, results, errors
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        with ThreadPoolExecutor(max_workers=SURAH_DOWNLOAD_WORKERS) as pool:
             for url, results, errors in pool.map(_process_surah, unique_urls):
                 for idx, mp3 in results.items():
                     audio_bytes_list[idx] = mp3
@@ -484,7 +486,7 @@ def download_all_audio(rows, is_surah=False):
 
         log.info("Downloading and slicing %d audio files (64 workers)...", len(rows))
         completed = 0
-        with ThreadPoolExecutor(max_workers=64) as pool:
+        with ThreadPoolExecutor(max_workers=AYAH_DOWNLOAD_WORKERS) as pool:
             futures = {pool.submit(process, i): i for i in range(len(rows))}
             for future in as_completed(futures):
                 idx = futures[future]
@@ -496,7 +498,7 @@ def download_all_audio(rows, is_surah=False):
                     log.error("Failed to download %s: %s", ref, e)
                     failed.append(ref)
                 completed += 1
-                if completed % 500 == 0:
+                if completed % 500 == 0:    
                     log.info("Progress: %d/%d downloaded", completed, len(rows))
 
     log.info("Downloads complete. %d succeeded, %d failed.", len(rows) - len(failed), len(failed))
