@@ -86,7 +86,7 @@ function _classifySnapIssues(snap) {
         const sp = parts[0].split(':'), ep = parts[1].split(':');
         if (sp.length >= 2 && ep.length >= 2) {
             const sAyah = parseInt(sp[1]), eAyah = parseInt(ep[1]);
-            if (sAyah !== eAyah && snap.confidence < 1.0) issues.push('cross_verse');
+            if (sAyah !== eAyah) issues.push('cross_verse');
         }
     }
     return issues;
@@ -4279,7 +4279,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         cardsDiv.hidden = true;
 
         // "Show/Hide All Context" bulk toggle — label reflects whether context is default-shown
-        const _ctxDefaultShown = cat.type === 'failed' || cat.type === 'boundary_adj' || cat.type === 'audio_bleeding' || cat.type === 'repetitions' || cat.type === 'muqattaat' || cat.type === 'qalqala';
+        const _ctxDefaultShown = cat.type === 'failed' || cat.type === 'boundary_adj' || cat.type === 'audio_bleeding' || cat.type === 'repetitions' || cat.type === 'qalqala';
         const ctxAllRow = document.createElement('div');
         ctxAllRow.className = 'val-ctx-all-row';
         ctxAllRow.hidden = true;
@@ -5115,7 +5115,7 @@ function renderCategoryCards(type, items, container) {
             const actionsRow = document.createElement('div');
             actionsRow.className = 'val-card-actions';
 
-            if ((type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions' || type === 'muqattaat' || type === 'qalqala') ||
+            if ((type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions' || type === 'qalqala') ||
                 (type === 'low_confidence' && seg.confidence < 1.0)) {
                 const ignoreBtn = document.createElement('button');
                 ignoreBtn.className = 'val-action-btn ignore-btn';
@@ -5173,7 +5173,7 @@ function renderCategoryCards(type, items, container) {
             }
 
             wrapper.appendChild(actionsRow);
-            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding' || type === 'repetitions' || type === 'muqattaat' || type === 'qalqala';
+            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding' || type === 'repetitions' || type === 'qalqala';
             const nextOnly = type === 'muqattaat' || type === 'qalqala';
             addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: contextDefault, nextOnly });
             container.appendChild(wrapper);
