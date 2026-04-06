@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # Need HEAD~1 for diff
+          fetch-depth: 0  # Full history for before..after diff
 
       - uses: actions/setup-python@v5
         with:
@@ -46,7 +46,7 @@ jobs:
             deleted=""
           else
             # Push trigger: detect from git diff
-            changed=$(git diff HEAD~1 --name-only | \
+            changed=$(git diff ${{ github.event.before }}..${{ github.sha }} --name-only | \
               grep -E "data/(timestamps|recitation_segments|audio)/" | \
               sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|; s|data/recitation_segments/([^/]+)/.*|\1|; s|data/audio/[^/]+/[^/]+/([^/]+)\.json|\1|' | \
               sort -u | tr '\n' ' ')
@@ -62,7 +62,7 @@ jobs:
             eligible=$(echo "$eligible" | xargs)
 
             # Detect deleted timestamp dirs
-            deleted=$(git diff HEAD~1 --diff-filter=D --name-only | \
+            deleted=$(git diff ${{ github.event.before }}..${{ github.sha }} --diff-filter=D --name-only | \
               grep "data/timestamps/" | \
               sed -E 's|data/timestamps/[^/]+/([^/]+)/.*|\1|' | \
               sort -u | tr '\n' ' ')
