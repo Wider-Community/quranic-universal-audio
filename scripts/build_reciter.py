@@ -293,7 +293,7 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                     verse_segments.append([
                         seg[0], seg[1],
                         max(0, seg[2] - clip_start),
-                        seg[3] - clip_start,
+                        min(seg[3], clip_end) - clip_start,
                     ])
 
             # Text from detailed.json segments that overlap the clip range.
