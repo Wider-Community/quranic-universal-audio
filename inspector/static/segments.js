@@ -37,7 +37,8 @@ let _splitChainWrapper = null;  // accordion wrapper to use for second-half ref-
 // ---------------------------------------------------------------------------
 let segOpLog = new Map();   // Map<chapter, Array<operation>>
 let _pendingOp = null;      // stashed op for multi-step edits (trim, split, ref edit)
-let _splitChainUid = null;  // after split ref-edit on first half, chain to second half's UID
+let _splitChainUid = null;      // after split ref-edit on first half, chain to second half's UID
+let _splitChainCategory = null; // inherit parent split's op_context_category for chained ref-edits
 
 function createOp(opType, { contextCategory = null, fixKind = 'manual' } = {}) {
     return {
@@ -68,25 +69,126 @@ function snapshotSeg(seg) {
     if (seg.has_repeated_words) snap.has_repeated_words = true;
     if (seg.wrap_word_ranges) snap.wrap_word_ranges = seg.wrap_word_ranges;
     if (seg.phonemes_asr) snap.phonemes_asr = seg.phonemes_asr;
+    if (seg.entry_ref) snap.entry_ref = seg.entry_ref;
+    if (seg.chapter != null) snap.chapter = seg.chapter;
+    if (seg.ignored) snap.ignored = true;
+    snap.categories = _classifySegCategories(seg);
     return snap;
+}
+
+// ---------------------------------------------------------------------------
+// Per-segment category classification (mirrors server-side validation logic)
+// ---------------------------------------------------------------------------
+
+const _MN_RE = /[\u0300-\u036F\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7-\u06E8\u06EA-\u06ED\u08D3-\u08FF\uFE20-\uFE2F]/;
+const _STRIP_CHARS = new Set(['\u0640', '\u06DE', '\u06E6', '\u06E9', '\u200F']);
+const _LETTER_RE = /\p{L}/u;
+
+function _stripQuranDeco(text) {
+    const nfd = text.normalize('NFD');
+    let out = '';
+    for (const ch of nfd) {
+        if (_STRIP_CHARS.has(ch)) continue;
+        if (_MN_RE.test(ch)) continue;
+        out += ch;
+    }
+    return out.trim();
+}
+
+function _lastArabicLetter(text) {
+    const stripped = _stripQuranDeco(text);
+    for (let i = stripped.length - 1; i >= 0; i--) {
+        if (_LETTER_RE.test(stripped[i])) return stripped[i];
+    }
+    return null;
+}
+
+function _isStandaloneWord(text) {
+    if (!_standaloneWords) return false;
+    return _standaloneWords.has(_stripQuranDeco(text));
+}
+
+/**
+ * Classify a segment into ALL applicable validation categories.
+ * Returns an array of category strings. Works on live segments and snapshots.
+ */
+function _classifySegCategories(seg) {
+    const cats = [];
+    const ref = seg.matched_ref || '';
+    const confidence = seg.confidence ?? 0;
+
+    if (!ref) { cats.push('failed'); return cats; }
+
+    if (confidence < 0.80) cats.push('low_confidence');
+    if (seg.wrap_word_ranges || seg.has_repeated_words) cats.push('repetitions');
+
+    // Parse canonical ref: "surah:ayah:word-surah:ayah:word"
+    const parts = ref.split('-');
+    if (parts.length !== 2) return cats;
+    const sp = parts[0].split(':'), ep = parts[1].split(':');
+    if (sp.length !== 3 || ep.length !== 3) return cats;
+    const surah = +sp[0], sAyah = +sp[1], sWord = +sp[2];
+    const eAyah = +ep[1], eWord = +ep[2];
+
+    // Cross-verse
+    if (sAyah !== eAyah && !seg.ignored && confidence < 1.0) {
+        cats.push('cross_verse');
+    }
+
+    // Boundary adjustment: 1-word, not muqattaat, not single-word verse, not standalone
+    const vwc = segAllData?.verse_word_counts;
+    if (sWord === eWord && sAyah === eAyah && confidence < 1.0
+        && !_muqattaatVerses?.has(`${surah}:${sAyah}`)
+        && !(vwc && vwc[`${surah}:${sAyah}`] === 1)
+        && !_standaloneRefs?.has(`${surah}:${sAyah}:${sWord}`)
+        && !_isStandaloneWord(seg.matched_text || '')) {
+        cats.push('boundary_adj');
+    }
+
+    // Muqattaat
+    if (sWord === 1 && _muqattaatVerses?.has(`${surah}:${sAyah}`) && confidence < 1.0) {
+        cats.push('muqattaat');
+    }
+
+    // Qalqala
+    if (confidence < 1.0) {
+        const last = _lastArabicLetter(seg.matched_text || '');
+        if (last && _qalqalaLetters?.has(last)) cats.push('qalqala');
+    }
+
+    // Audio bleeding (by_ayah only)
+    if (seg.entry_ref && seg.audio_url && segAllData?.audio_by_chapter) {
+        const chapterAudio = segAllData.audio_by_chapter[String(seg.chapter)];
+        if (chapterAudio && seg.audio_url !== chapterAudio) {
+            const entryParts = seg.entry_ref.split(':');
+            if (entryParts.length >= 2) {
+                const segVerse = `${sp[0]}:${sp[1]}`;
+                const entryVerse = `${entryParts[0]}:${entryParts[1]}`;
+                if (segVerse !== entryVerse) cats.push('audio_bleeding');
+            }
+        }
+    }
+
+    return cats;
 }
 
 /**
  * Classify a segment snapshot into validation issue categories.
- * Returns an array of category strings (e.g. ['low_confidence', 'cross_verse']).
+ * Uses pre-computed categories when available, falls back to basic detection
+ * for old history records.
  */
 function _classifySnapIssues(snap) {
+    if (snap?.categories) return [...snap.categories];
+    // Fallback for old history records without categories
     const issues = [];
     if (!snap || !snap.matched_ref) { if (snap) issues.push('failed'); return issues; }
     if (snap.confidence < 0.80) issues.push('low_confidence');
     if (snap.wrap_word_ranges || snap.has_repeated_words) issues.push('repetitions');
-    // Cross-verse: start ayah != end ayah in canonical ref (surah:ayah:word-surah:ayah:word)
     const parts = snap.matched_ref.split('-');
     if (parts.length === 2) {
         const sp = parts[0].split(':'), ep = parts[1].split(':');
         if (sp.length >= 2 && ep.length >= 2) {
-            const sAyah = parseInt(sp[1]), eAyah = parseInt(ep[1]);
-            if (sAyah !== eAyah) issues.push('cross_verse');
+            if (parseInt(sp[1]) !== parseInt(ep[1])) issues.push('cross_verse');
         }
     }
     return issues;
@@ -214,6 +316,7 @@ const segHistoryBatches = document.getElementById('seg-history-batches');
 let _histFilterOpTypes = new Set();
 let _histFilterErrCats = new Set();
 let _histSortMode = 'time'; // 'time' | 'quran'
+let _allHistoryItems = null; // cached flattened items for faceted pill counts
 
 // Split chain state — rebuilt on each history load
 let _splitChains    = null;   // Map<rootOpId, chainData>
@@ -251,6 +354,11 @@ const ERROR_CAT_LABELS = {
 };
 // Server-provided canonical category list (populated from /api/seg/config)
 let _validationCategories = null;
+// Classification data for per-segment category detection (populated from /api/seg/config)
+let _muqattaatVerses = null;  // Set of "surah:ayah" strings
+let _standaloneRefs  = null;  // Set of "surah:ayah:word" strings
+let _standaloneWords = null;  // Set of stripped Arabic words
+let _qalqalaLetters  = null;  // Set of Arabic letters
 // Default threshold % for low-confidence slider (overridden from config)
 let _lcDefaultThreshold = 80;
 
@@ -321,6 +429,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cfg.show_boundary_phonemes != null) SHOW_BOUNDARY_PHONEMES = cfg.show_boundary_phonemes;
             if (cfg.validation_categories) _validationCategories = cfg.validation_categories;
             if (cfg.low_conf_default_threshold != null) _lcDefaultThreshold = cfg.low_conf_default_threshold;
+            if (cfg.muqattaat_verses) _muqattaatVerses = new Set(cfg.muqattaat_verses.map(([s,a]) => `${s}:${a}`));
+            if (cfg.qalqala_letters) _qalqalaLetters = new Set(cfg.qalqala_letters);
+            if (cfg.standalone_refs) _standaloneRefs = new Set(cfg.standalone_refs.map(([s,a,w]) => `${s}:${a}:${w}`));
+            if (cfg.standalone_words) _standaloneWords = new Set(cfg.standalone_words);
         }
     } catch (_) { /* use CSS defaults */ }
 
@@ -418,6 +530,7 @@ async function onSegReciterChange() {
     segHistoryStats.innerHTML = '';
     segHistoryBatches.innerHTML = '';
     segHistoryData = null;
+    _allHistoryItems = null;
     _splitChains = null;
     _chainedOpIds = null;
     _segSavedChains = null;
@@ -1136,6 +1249,7 @@ function clearSegDisplay() {
     segStatsData = null;
     if (segStatsPanel) { segStatsPanel.hidden = true; segStatsCharts.innerHTML = ''; }
     segHistoryData = null;
+    _allHistoryItems = null;
     _splitChains = null;
     _chainedOpIds = null;
     _segSavedChains = null;
@@ -1265,7 +1379,10 @@ function handleSegRowClick(e) {
         const row = refSpan.closest('.seg-row');
         if (row && row.dataset.histTimeStart !== undefined) return; // read-only history card
         const seg = resolveSegFromRow(row);
-        if (seg && row) startRefEdit(refSpan, seg, row);
+        if (seg && row) {
+            const refCat = row.closest('details[data-category]')?.dataset?.category || null;
+            startRefEdit(refSpan, seg, row, refCat);
+        }
         return;
     }
     // Play button
@@ -1313,7 +1430,10 @@ function handleSegRowClick(e) {
         e.stopPropagation();
         const row = adjustBtn.closest('.seg-row');
         const seg = resolveSegFromRow(row);
-        if (seg && row) enterEditWithBuffer(seg, row, 'trim');
+        if (seg && row) {
+            const cat = row.closest('details[data-category]')?.dataset?.category || null;
+            enterEditWithBuffer(seg, row, 'trim', cat);
+        }
         return;
     }
     // Split button
@@ -1323,20 +1443,21 @@ function handleSegRowClick(e) {
         const row = splitBtn.closest('.seg-row');
         const seg = resolveSegFromRow(row);
         if (!seg || !row) return;
+        const splitCat = row.closest('details[data-category]')?.dataset?.category || null;
         if (!segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
             _accordionOpCtx = { wrapper };
             if (_isWrapperContextShown(wrapper) || !wrapper.querySelector('.val-card-actions')) {
                 // Context already shown, or rebuilt accordion (no toggle btn) — enter immediately
-                enterEditWithBuffer(seg, row, 'split');
+                enterEditWithBuffer(seg, row, 'split', splitCat);
             } else {
                 // Context toggle exists but not shown yet — show first, then enter
                 ensureContextShown(row);
-                setTimeout(() => enterEditWithBuffer(seg, row, 'split'), 1000);
+                setTimeout(() => enterEditWithBuffer(seg, row, 'split', splitCat), 1000);
             }
             return;
         }
-        enterEditWithBuffer(seg, row, 'split');
+        enterEditWithBuffer(seg, row, 'split', splitCat);
         return;
     }
     // Merge prev/next buttons
@@ -1346,21 +1467,22 @@ function handleSegRowClick(e) {
         const row = mergePrev.closest('.seg-row');
         const seg = resolveSegFromRow(row);
         if (!seg) return;
+        const mergePrevCat = row.closest('details[data-category]')?.dataset?.category || null;
         if (!segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
             if (_isWrapperContextShown(wrapper) || !wrapper.querySelector('.val-card-actions')) {
                 _accordionOpCtx = { wrapper, direction: 'prev' };
-                mergeAdjacent(seg, 'prev');
+                mergeAdjacent(seg, 'prev', mergePrevCat);
             } else {
                 ensureContextShown(row);
                 setTimeout(() => {
                     _accordionOpCtx = { wrapper, direction: 'prev' };
-                    mergeAdjacent(seg, 'prev');
+                    mergeAdjacent(seg, 'prev', mergePrevCat);
                 }, 1000);
             }
             return;
         }
-        mergeAdjacent(seg, 'prev');
+        mergeAdjacent(seg, 'prev', mergePrevCat);
         return;
     }
     const mergeNext = e.target.closest('.btn-merge-next');
@@ -1369,21 +1491,22 @@ function handleSegRowClick(e) {
         const row = mergeNext.closest('.seg-row');
         const seg = resolveSegFromRow(row);
         if (!seg) return;
+        const mergeNextCat = row.closest('details[data-category]')?.dataset?.category || null;
         if (!segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
             if (_isWrapperContextShown(wrapper) || !wrapper.querySelector('.val-card-actions')) {
                 _accordionOpCtx = { wrapper, direction: 'next' };
-                mergeAdjacent(seg, 'next');
+                mergeAdjacent(seg, 'next', mergeNextCat);
             } else {
                 ensureContextShown(row);
                 setTimeout(() => {
                     _accordionOpCtx = { wrapper, direction: 'next' };
-                    mergeAdjacent(seg, 'next');
+                    mergeAdjacent(seg, 'next', mergeNextCat);
                 }, 1000);
             }
             return;
         }
-        mergeAdjacent(seg, 'next');
+        mergeAdjacent(seg, 'next', mergeNextCat);
         return;
     }
     // Delete button
@@ -1392,7 +1515,10 @@ function handleSegRowClick(e) {
         e.stopPropagation();
         const row = deleteBtn.closest('.seg-row');
         const seg = resolveSegFromRow(row);
-        if (seg) deleteSegment(seg, row);
+        if (seg) {
+            const delCat = row.closest('details[data-category]')?.dataset?.category || null;
+            deleteSegment(seg, row, delCat);
+        }
         return;
     }
     // Edit Ref button
@@ -1403,7 +1529,10 @@ function handleSegRowClick(e) {
         const seg = resolveSegFromRow(row);
         if (seg && row) {
             const refSpan = row.querySelector('.seg-text-ref');
-            if (refSpan) startRefEdit(refSpan, seg, row);
+            if (refSpan) {
+                const editRefCat = row.closest('details[data-category]')?.dataset?.category || null;
+                startRefEdit(refSpan, seg, row, editRefCat);
+            }
         }
         return;
     }
@@ -2135,7 +2264,7 @@ function updateSegPlayStatus() {
 // Inline ref editing
 // ---------------------------------------------------------------------------
 
-function startRefEdit(refSpan, seg, row) {
+function startRefEdit(refSpan, seg, row, contextCategory = null) {
     // Already editing
     if (refSpan.querySelector('input')) return;
 
@@ -2144,7 +2273,7 @@ function startRefEdit(refSpan, seg, row) {
     _segContinuousPlay = false;
 
     // Edit history: snapshot before ref edit
-    _pendingOp = createOp('edit_reference');
+    _pendingOp = createOp('edit_reference', contextCategory ? { contextCategory } : undefined);
     _pendingOp.targets_before = [snapshotSeg(seg)];
 
     const originalRef = seg.matched_ref || '';
@@ -2176,7 +2305,7 @@ function startRefEdit(refSpan, seg, row) {
             e.preventDefault();
             committed = true;
             _pendingOp = null;  // discard edit history op on cancel
-            _splitChainUid = null; _splitChainWrapper = null;  // cancel split chain on Escape
+            _splitChainUid = null; _splitChainWrapper = null; _splitChainCategory = null;  // cancel split chain on Escape
             refSpan.textContent = formatRef(originalRef);
         }
     });
@@ -2190,8 +2319,10 @@ function _chainSplitRefEdit(chapter) {
     if (!_splitChainUid) return;
     const chainUid = _splitChainUid;
     const chainWrapper = _splitChainWrapper;
+    const chainCat = _splitChainCategory;
     _splitChainUid = null;
     _splitChainWrapper = null;
+    _splitChainCategory = null;
     // Search segAllData first (always complete), fall back to segData for current chapter
     const allSegs = segAllData?.segments || segData?.segments || [];
     const secondSeg = allSegs.find(s => s.segment_uid === chainUid);
@@ -2206,7 +2337,7 @@ function _chainSplitRefEdit(chapter) {
     const refSpan = secondRow.querySelector('.seg-text-ref');
     if (refSpan) {
         segPlayStatus.textContent = 'Now edit second half reference';
-        setTimeout(() => startRefEdit(refSpan, secondSeg, secondRow), 100);
+        setTimeout(() => startRefEdit(refSpan, secondSeg, secondRow, chainCat), 100);
     }
 }
 
@@ -2933,7 +3064,7 @@ let SHOW_BOUNDARY_PHONEMES = true; // show GT/ASR tail phonemes on boundary_adj 
 /**
  * Enter trim or split mode. Waveforms are drawn from peaks (no audio buffer needed).
  */
-function enterEditWithBuffer(seg, row, mode) {
+function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
     if (segEditMode) return;
 
     // Capture playback position before pausing (used by enterSplitMode to seed the cursor)
@@ -2952,7 +3083,8 @@ function enterEditWithBuffer(seg, row, mode) {
     if (playCol) playCol.hidden = true;
 
     // Edit history: snapshot before entering edit mode
-    _pendingOp = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment');
+    _pendingOp = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment',
+        contextCategory ? { contextCategory } : undefined);
     _pendingOp.targets_before = [snapshotSeg(seg)];
 
     try {
@@ -3749,6 +3881,7 @@ function confirmSplit(seg) {
 
     // Chain ref editing: first half → second half
     _splitChainUid = secondHalf.segment_uid;
+    _splitChainCategory = splitOp?.op_context_category || null;
     _splitChainWrapper = accCtx ? accCtx.wrapper : null;
     const searchRoot = accCtx ? accCtx.wrapper : segListEl;
     const firstRow = searchRoot.querySelector(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
@@ -3756,7 +3889,7 @@ function confirmSplit(seg) {
         firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
         const refSpan = firstRow.querySelector('.seg-text-ref');
         if (refSpan) {
-            startRefEdit(refSpan, firstHalf, firstRow);
+            startRefEdit(refSpan, firstHalf, firstRow, _splitChainCategory);
         }
     }
 }
@@ -3767,7 +3900,7 @@ function confirmSplit(seg) {
 // ---------------------------------------------------------------------------
 
 /** Merge a segment with its previous or next neighbour in the same chapter. */
-async function mergeAdjacent(seg, direction) {
+async function mergeAdjacent(seg, direction, contextCategory = null) {
     const chapter = seg.chapter || parseInt(segChapterSelect.value);
     const currentChapter = parseInt(segChapterSelect.value);
 
@@ -3790,7 +3923,7 @@ async function mergeAdjacent(seg, direction) {
     const second = direction === 'prev' ? seg : other;
 
     // Edit history: snapshot before merge
-    const mergeOp = createOp('merge_segments');
+    const mergeOp = createOp('merge_segments', contextCategory ? { contextCategory } : undefined);
     mergeOp.merge_direction = direction;
     mergeOp.targets_before = [snapshotSeg(first), snapshotSeg(second)];
 
@@ -3897,13 +4030,13 @@ async function mergeAdjacent(seg, direction) {
 // ---------------------------------------------------------------------------
 
 /** Unified delete: works for both main section and error card segments. */
-function deleteSegment(seg, row) {
+function deleteSegment(seg, row, contextCategory = null) {
     const chapter = seg.chapter || parseInt(segChapterSelect.value);
     const currentChapter = parseInt(segChapterSelect.value);
     const label = seg.chapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
     // Edit history: snapshot before confirm dialog
-    const deleteOp = createOp('delete_segment');
+    const deleteOp = createOp('delete_segment', contextCategory ? { contextCategory } : undefined);
     deleteOp.targets_before = [snapshotSeg(seg)];
 
     if (!confirm(`Delete segment ${label} (${formatRef(seg.matched_ref) || 'no match'})?`)) return;
@@ -5637,6 +5770,7 @@ function showHistoryView() {
     // Reset filters and sort on view enter
     _histFilterOpTypes.clear();
     _histFilterErrCats.clear();
+    _allHistoryItems = null;
     _histSortMode = 'time';
     segHistoryFilters.querySelectorAll('.seg-history-filter-pill.active')
         .forEach(p => p.classList.remove('active'));
@@ -5654,6 +5788,7 @@ function hideHistoryView() {
     stopErrorCardAudio();
     _histFilterOpTypes.clear();
     _histFilterErrCats.clear();
+    _allHistoryItems = null;
     segHistoryView.hidden = true;
     // Restore normal view elements
     for (const id of _SEG_NORMAL_IDS) {
@@ -5825,7 +5960,9 @@ function renderSplitChainRow(chain) {
         const afterIssues = new Set();
         for (const ls of leafSnaps) _classifySnapIssues(ls).forEach(i => afterIssues.add(i));
         const shortLabels = {
-            failed: 'fail', low_confidence: 'low conf', cross_verse: 'cross', repetitions: 'reps',
+            failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
+            cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
+            repetitions: 'reps', muqattaat: 'muqattaat', qalqala: 'qalqala',
         };
         for (const cat of [...beforeIssues].filter(i => !afterIssues.has(i))) {
             const b = document.createElement('span');
@@ -5937,6 +6074,7 @@ function renderEditHistoryPanel(data) {
     // Clear any active filters from previous data
     _histFilterOpTypes.clear();
     _histFilterErrCats.clear();
+    _allHistoryItems = null;
 
     // Build split chain index (used by renderHistoryBatches)
     const splitLineage = _buildSplitLineage(data.batches);
@@ -6051,6 +6189,7 @@ function renderHistoryFilterBar(data) {
     // Flatten batches into items for accurate card-level counts
     const chainedOpIds = _chainedOpIds || new Set();
     const allItems = _flattenBatchesToItems(data.batches, chainedOpIds);
+    _allHistoryItems = allItems;
 
     // Op type pills: count items by primary op type
     const opCounts = {};
@@ -6122,7 +6261,8 @@ function applyHistoryFilters() {
 
     // Flatten all batches into items, then filter at item level
     const chainedIds = _chainedOpIds || new Set();
-    const allItems = _flattenBatchesToItems(allBatches, chainedIds);
+    const allItems = _allHistoryItems
+        || (_allHistoryItems = _flattenBatchesToItems(allBatches, chainedIds));
 
     const filtered = hasFilters
         ? allItems.filter(item => {
@@ -6131,6 +6271,9 @@ function applyHistoryFilters() {
             return true;
         })
         : allItems;
+
+    // Update cross-filter pill counts (faceted)
+    _updateFilterPillCounts(allItems);
 
     // Recompute and render summary stats
     if (hasFilters) {
@@ -6194,6 +6337,47 @@ function _countVersesFromItems(items) {
         }
     }
     return verses.size;
+}
+
+/** Update pill counts faceted-style: each row's counts reflect the OTHER row's active filters. */
+function _updateFilterPillCounts(allItems) {
+    // Op-type pills: filter items by cat selections only
+    const catActive = _histFilterErrCats.size > 0;
+    const itemsForOpCounts = catActive
+        ? allItems.filter(item => _itemMatchesCatFilter(item, _histFilterErrCats))
+        : allItems;
+    const opCounts = {};
+    for (const item of itemsForOpCounts) {
+        if (item.group.length === 0) continue;
+        opCounts[item.group[0].op_type] = (opCounts[item.group[0].op_type] || 0) + 1;
+    }
+    for (const pill of segHistoryFilterOps.querySelectorAll('.seg-history-filter-pill')) {
+        const span = pill.querySelector('.pill-count');
+        if (span) span.textContent = opCounts[pill.dataset.filterValue] || 0;
+    }
+
+    // Cat pills: filter items by op selections only
+    const opActive = _histFilterOpTypes.size > 0;
+    const itemsForCatCounts = opActive
+        ? allItems.filter(item => _itemMatchesOpFilter(item, _histFilterOpTypes))
+        : allItems;
+    const catCounts = {};
+    for (const item of itemsForCatCounts) {
+        if (item.group.length === 0) continue;
+        const delta = _deriveOpIssueDelta(item.group);
+        const touchedCats = new Set([
+            ...delta.resolved,
+            ...delta.introduced,
+            ...item.group.map(op => op.op_context_category).filter(Boolean),
+        ]);
+        for (const cat of touchedCats) {
+            catCounts[cat] = (catCounts[cat] || 0) + 1;
+        }
+    }
+    for (const pill of segHistoryFilterCats.querySelectorAll('.seg-history-filter-pill')) {
+        const span = pill.querySelector('.pill-count');
+        if (span) span.textContent = catCounts[pill.dataset.filterValue] || 0;
+    }
 }
 
 function clearHistoryFilters() {
@@ -6386,7 +6570,7 @@ function _appendIssueDeltaBadges(container, group) {
     const shortLabels = {
         failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
         cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
-        repetitions: 'reps',
+        repetitions: 'reps', muqattaat: 'muqattaat', qalqala: 'qalqala',
     };
     for (const cat of delta.resolved) {
         const badge = document.createElement('span');

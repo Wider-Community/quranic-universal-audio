@@ -405,6 +405,10 @@ def seg_config():
         "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
         "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
         "validation_categories": list(VALIDATION_CATEGORIES),
+        "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
+        "qalqala_letters": sorted(_QALQALA_LETTERS),
+        "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
+        "standalone_words": sorted(_STANDALONE_WORDS),
     })
 
 
@@ -1121,6 +1125,7 @@ def get_seg_all(reciter):
                 "display_text": _dk_text_for_ref(mref),
                 "confidence":   round(seg.get("confidence", 0.0), 4),
                 "audio_url":    entry_audio,
+                "entry_ref":    entry.get("ref", ""),
             }
             if seg.get("wrap_word_ranges"):
                 seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
