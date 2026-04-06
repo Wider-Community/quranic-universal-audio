@@ -2355,6 +2355,7 @@ async function commitRefEdit(seg, newRef, row) {
                 _pendingOp.fix_kind = 'audit';
             }
             seg.confidence = 1.0;
+            if (_pendingOp?.op_context_category) seg.ignored = true;
             delete seg._derived;
             markDirty(chapter, seg.index);
             syncAllCardsForSegment(seg);
@@ -2376,6 +2377,7 @@ async function commitRefEdit(seg, newRef, row) {
     // Update in-memory data
     seg.matched_ref = newRef;
     seg.confidence = 1.0;
+    if (_pendingOp?.op_context_category) seg.ignored = true;
 
     if (newRef) {
         // Resolve text from backend
@@ -3403,6 +3405,7 @@ function confirmTrim(seg) {
     seg.time_start = newStart;
     seg.time_end = newEnd;
     seg.confidence = 1.0;
+    if (_pendingOp?.op_context_category) seg.ignored = true;
     markDirty(chapter, undefined, true);
 
     // Edit history: record applied state
@@ -3969,6 +3972,7 @@ async function mergeAdjacent(seg, direction, contextCategory = null) {
         matched_text: mergedText,
         display_text: mergedDisplay,
         confidence: 1.0,
+        ignored: contextCategory ? true : first.ignored,
     };
 
     // Edit history: record applied state
@@ -5170,6 +5174,7 @@ function renderCategoryCards(type, items, container) {
                     const oldText = seg.matched_text || '';
                     const oldDisplay = seg.display_text || '';
                     const oldConf = seg.confidence;
+                    const oldIgnored = seg.ignored;
                     const segChapter = seg.chapter || issue.chapter;
                     const wasDirty = isIndexDirty(segChapter, seg.index);
 
@@ -5198,6 +5203,7 @@ function renderCategoryCards(type, items, container) {
                         seg.matched_text = oldText;
                         seg.display_text = oldDisplay;
                         seg.confidence = oldConf;
+                        if (oldIgnored) seg.ignored = true; else delete seg.ignored;
                         if (!wasDirty) unmarkDirty(segChapter, seg.index);
                         fixBtn.disabled = false;
                         fixBtn.textContent = 'Auto Fix';
