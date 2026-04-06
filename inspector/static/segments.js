@@ -131,13 +131,13 @@ function _classifySegCategories(seg) {
     const eAyah = +ep[1], eWord = +ep[2];
 
     // Cross-verse
-    if (sAyah !== eAyah && !seg.ignored && confidence < 1.0) {
+    if (sAyah !== eAyah && !seg.ignored) {
         cats.push('cross_verse');
     }
 
     // Boundary adjustment: 1-word, not muqattaat, not single-word verse, not standalone
     const vwc = segAllData?.verse_word_counts;
-    if (sWord === eWord && sAyah === eAyah && confidence < 1.0
+    if (sWord === eWord && sAyah === eAyah && !seg.ignored
         && !_muqattaatVerses?.has(`${surah}:${sAyah}`)
         && !(vwc && vwc[`${surah}:${sAyah}`] === 1)
         && !_standaloneRefs?.has(`${surah}:${sAyah}:${sWord}`)
@@ -146,12 +146,12 @@ function _classifySegCategories(seg) {
     }
 
     // Muqattaat
-    if (sWord === 1 && _muqattaatVerses?.has(`${surah}:${sAyah}`) && confidence < 1.0) {
+    if (sWord === 1 && _muqattaatVerses?.has(`${surah}:${sAyah}`) && !seg.ignored) {
         cats.push('muqattaat');
     }
 
     // Qalqala
-    if (confidence < 1.0) {
+    if (!seg.ignored) {
         const last = _lastArabicLetter(seg.matched_text || '');
         if (last && _qalqalaLetters?.has(last)) cats.push('qalqala');
     }
@@ -5303,7 +5303,7 @@ function renderCategoryCards(type, items, container) {
                 ignoreBtn.className = 'val-action-btn ignore-btn';
                 const segChapterForBtn = seg.chapter || parseInt(segChapterSelect.value);
                 const isDirtySegment = segDirtyMap.get(segChapterForBtn)?.indices?.has(seg.index);
-                if (seg.confidence >= 1.0) {
+                if (seg.ignored) {
                     ignoreBtn.disabled = true;
                     ignoreBtn.textContent = 'Ignored';
                     wrapper.style.opacity = '0.5';
@@ -5317,7 +5317,7 @@ function renderCategoryCards(type, items, container) {
                 }
                 ignoreBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (seg.confidence >= 1.0) return;
+                    if (seg.ignored) return;
                     const segChapter = seg.chapter || parseInt(segChapterSelect.value);
 
                     // Edit history: snapshot before modification

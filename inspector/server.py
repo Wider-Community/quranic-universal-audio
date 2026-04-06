@@ -2383,7 +2383,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 verse_segments[(surah, s_ayah)].append((s_word, e_word))
                 is_boundary_adj = False
                 if (s_word == e_word
-                    and confidence < 1.0
+                    and not seg.get("ignored")
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -2391,7 +2391,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                     is_boundary_adj = True
 
                 # Phoneme tail mismatch (only if not already flagged)
-                if (not is_boundary_adj and canonical and confidence < 1.0
+                if (not is_boundary_adj and canonical and not seg.get("ignored")
                     and seg.get("phonemes_asr")):
                     if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
                                               canonical, BOUNDARY_TAIL_K):
@@ -2404,7 +2404,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 counts["muqattaat"] += 1
 
             last_letter = _last_arabic_letter(seg.get("matched_text", ""))
-            if last_letter in _QALQALA_LETTERS and confidence < 1.0:
+            if last_letter in _QALQALA_LETTERS and not seg.get("ignored"):
                 counts["qalqala"] += 1
 
     # Missing words
@@ -2584,10 +2584,10 @@ def validate_reciter_segments(reciter):
 
                 # May require boundary adjustment: 1-word segment, not muqattaat, not single-word verse,
                 # not a known standalone word (by ref or matched_text).
-                # Skip if already ignored (confidence=1.0).
+                # Skip if explicitly ignored.
                 is_boundary_adj = False
                 if (s_word == e_word
-                    and confidence < 1.0
+                    and not seg.get("ignored")
                     and (surah, s_ayah) not in _MUQATTAAT_VERSES
                     and (surah, s_ayah) not in _single_word_verses
                     and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -2595,7 +2595,7 @@ def validate_reciter_segments(reciter):
                     is_boundary_adj = True
 
                 # Phoneme tail mismatch (only if not already flagged)
-                if (not is_boundary_adj and canonical and confidence < 1.0
+                if (not is_boundary_adj and canonical and not seg.get("ignored")
                     and seg.get("phonemes_asr")):
                     if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
                                               canonical, BOUNDARY_TAIL_K):
@@ -2627,7 +2627,7 @@ def validate_reciter_segments(reciter):
 
             # Qalqala: segment ends with one of the 5 qalqala letters
             _last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
-            if _last_ltr and _last_ltr in _QALQALA_LETTERS and confidence < 1.0:
+            if _last_ltr and _last_ltr in _QALQALA_LETTERS and not seg.get("ignored"):
                 qalqala.append({
                     "chapter": chapter,
                     "seg_index": i,
