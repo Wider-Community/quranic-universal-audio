@@ -144,21 +144,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # Build commit message with details
-          changed_reciters=""
+          msg="chore(timestamps): refresh MFA for edited segments"
+          body="Auto-triggered by segment changes."
           for entry in ${{ steps.detect.outputs.entries }}; do
             reciter=$(echo "$entry" | cut -d= -f1)
             verses=$(echo "$entry" | cut -d= -f2)
-            changed_reciters="$changed_reciters\n- $reciter ($verses)"
+            body="$body
+          - $reciter ($verses)"
           done
 
           git add data/timestamps/
-          git commit -m "$(cat <<EOF
-chore(timestamps): refresh MFA for edited segments
-
-Auto-triggered by segment changes.
-$(echo -e "$changed_reciters")
-EOF
-          )"
+          git commit -m "$msg" -m "$body"
           git push
 
       - name: Update issue labels
