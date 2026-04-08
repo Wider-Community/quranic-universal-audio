@@ -1,0 +1,100 @@
+Generated: 2026-03-31 17:55:52
+
+========================================================================
+  Timestamps: test_reciter
+  data\test_reciter
+========================================================================
+
+--- MFA Settings ---
+  Audio source:  dummy
+  Method:        mfa
+  Beam:          1
+  Retry beam:    1
+  Shared CMVN:   True
+
+--- Coverage ---
+  Verses found:       1 / 6236
+  Missing verses:     6235
+  Total words:        2
+  Coverage issues:    1
+  Forward gap verses: 0
+
+--- Word Duration ---
+  Min:      0.50s
+  Median:   0.50s
+  Mean:     0.50s
+  Max:      0.50s
+
+--- Temporal Issues ---
+  Negative timestamps:  0
+  Zero-duration words:  0
+
+--- Verse Timestamps ---
+  (no verse durations computed)
+
+--- Full Format (letters/phones) ---
+  (no timestamps_full.json)
+
+--- Cross-file Consistency (segments.json) ---
+  (segments.json not found)
+
+--- Validation Issues ---
+  Errors:     0
+  Warnings:   1
+
+  Missing verses (first 50 of 6235):
+    MISS   1:2  (4 words)
+    MISS   1:3  (2 words)
+    MISS   1:4  (3 words)
+    MISS   1:5  (4 words)
+    MISS   1:6  (3 words)
+    MISS   1:7  (9 words)
+    MISS   2:1  (1 words)
+    MISS   2:2  (7 words)
+    MISS   2:3  (8 words)
+    MISS   2:4  (12 words)
+    MISS   2:5  (8 words)
+    MISS   2:6  (11 words)
+    MISS   2:7  (12 words)
+    MISS   2:8  (11 words)
+    MISS   2:9  (10 words)
+    MISS   2:10  (12 words)
+    MISS   2:11  (11 words)
+    MISS   2:12  (7 words)
+    MISS   2:13  (19 words)
+    MISS   2:14  (16 words)
+    MISS   2:15  (7 words)
+    MISS   2:16  (11 words)
+    MISS   2:17  (17 words)
+    MISS   2:18  (6 words)
+    MISS   2:19  (19 words)
+    MISS   2:20  (25 words)
+    MISS   2:21  (11 words)
+    MISS   2:22  (23 words)
+    MISS   2:23  (20 words)
+    MISS   2:24  (13 words)
+    MISS   2:25  (34 words)
+    MISS   2:26  (39 words)
+    MISS   2:27  (20 words)
+    MISS   2:28  (13 words)
+    MISS   2:29  (19 words)
+    MISS   2:30  (28 words)
+    MISS   2:31  (15 words)
+    MISS   2:32  (12 words)
+    MISS   2:33  (22 words)
+    MISS   2:34  (13 words)
+    MISS   2:35  (18 words)
+    MISS   2:36  (19 words)
+    MISS   2:37  (11 words)
+    MISS   2:38  (17 words)
+    MISS   2:39  (10 words)
+    MISS   2:40  (13 words)
+    MISS   2:41  (18 words)
+    MISS   2:42  (8 words)
+    MISS   2:43  (7 words)
+    MISS   2:44  (10 words)
+    ... and 6185 more
+
+  Warnings (first 1 of 1):
+    WARN   1:1  missing word indices: [3, 4]
+
