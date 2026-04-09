@@ -78,7 +78,7 @@ pip install -r inspector/requirements.txt
 
 There are two ways to get started:
 
-**If you submitted a reciter request** and chose to review the segments yourself on the form, you'll be automatically assigned to the reciter. You'll receive an email when the segments are ready.
+**If you submitted a reciter request** and chose to review the segments yourself on the form, you'll be automatically assigned to the reciter. You'll receive an email when the segments are ready for review.
 
 **If you'd like to review an existing reciter**, browse [issues needing a reviewer](https://github.com/Wider-Community/quranic-universal-audio/issues?q=is%3Aopen+label%3Areviewer-needed) and comment `/claim` on the one you'd like to work on. If you're already a repository collaborator, you'll be assigned immediately. If not, you'll receive a collaborator invite — accept it on GitHub, then comment `/confirm` to get assigned.
 
@@ -99,7 +99,7 @@ git checkout feat/add-segments-mishary-alafasi  # switch to the PR branch
 python inspector/server.py # or python3 inspector/server.py
 ```
 
-Open http://localhost:5000, to start editing. See the [Inspector README](inspector/README.md) for detailed documentation, visual guides, and the full review workflow.
+Open http://localhost:5000 to start editing. See the [Inspector README](inspector/README.md) for detailed documentation, visual guides, and the full review workflow.
 
 **3. Push your fixes**
 
