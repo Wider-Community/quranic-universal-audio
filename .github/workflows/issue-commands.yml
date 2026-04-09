@@ -7,54 +7,86 @@ on:
     types: [assigned, unassigned]
 
 jobs:
-  # ── Swap reviewer label on manual assign/unassign ────────────────────
-  label-on-assign:
+  # ── Sync assignees + labels on issue assign/unassign ─────────────────
+  issue-assigned:
     if: >-
       github.event_name == 'issues' &&
-      github.event.action == 'assigned' &&
-      contains(github.event.issue.labels.*.name, 'reviewer-needed')
+      github.event.action == 'assigned'
     runs-on: ubuntu-latest
     permissions:
       issues: write
-    steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const issueNumber = context.payload.issue.number;
-            try {
-              await github.rest.issues.removeLabel({
-                owner, repo, issue_number: issueNumber, name: 'reviewer-needed',
-              });
-            } catch (e) { /* label may already be gone */ }
-            await github.rest.issues.addLabels({
-              owner, repo, issue_number: issueNumber, labels: ['reviewer-assigned'],
-            });
-
-  label-on-unassign:
-    if: >-
-      github.event_name == 'issues' &&
-      github.event.action == 'unassigned' &&
-      contains(github.event.issue.labels.*.name, 'reviewer-assigned')
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
+      pull-requests: write
     steps:
       - uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo } = context.repo;
             const issue = context.payload.issue;
-            // Only swap back if no assignees remain
-            if (issue.assignees.length === 0) {
+            const assignee = context.payload.assignee.login;
+
+            // Swap reviewer label
+            const labels = issue.labels.map(l => l.name);
+            if (labels.includes('reviewer-needed')) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: issue.number, name: 'reviewer-needed',
+                });
+              } catch (e) { /* may already be gone */ }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issue.number, labels: ['reviewer-assigned'],
+              });
+            }
+
+            // Sync to linked PR
+            const prs = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 50 });
+            const linkedPR = prs.data.find(pr => pr.body && pr.body.includes(`Ref #${issue.number}`));
+            if (linkedPR) {
+              const prAssignees = linkedPR.assignees.map(a => a.login);
+              if (!prAssignees.includes(assignee)) {
+                await github.rest.issues.addAssignees({
+                  owner, repo, issue_number: linkedPR.number, assignees: [assignee],
+                });
+                core.info(`Synced @${assignee} to PR #${linkedPR.number}`);
+              }
+            }
+
+  issue-unassigned:
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.action == 'unassigned'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            const assignee = context.payload.assignee.login;
+
+            // Swap label back if no assignees remain
+            const labels = issue.labels.map(l => l.name);
+            if (issue.assignees.length === 0 && labels.includes('reviewer-assigned')) {
               try {
                 await github.rest.issues.removeLabel({
                   owner, repo, issue_number: issue.number, name: 'reviewer-assigned',
                 });
-              } catch (e) { /* label may already be gone */ }
+              } catch (e) { /* may already be gone */ }
               await github.rest.issues.addLabels({
                 owner, repo, issue_number: issue.number, labels: ['reviewer-needed'],
               });
+            }
+
+            // Sync to linked PR
+            const prs = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 50 });
+            const linkedPR = prs.data.find(pr => pr.body && pr.body.includes(`Ref #${issue.number}`));
+            if (linkedPR) {
+              await github.rest.issues.removeAssignees({
+                owner, repo, issue_number: linkedPR.number, assignees: [assignee],
+              });
+              core.info(`Removed @${assignee} from PR #${linkedPR.number}`);
             }
 
   # ── Handle /claim and /confirm commands ───────────────────────────────
