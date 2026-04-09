@@ -662,32 +662,11 @@ def cmd_prepare_pr(args):
                 except Exception:
                     pass
 
-            # Comment on the issue linking to the PR
-            has_reviewer = req.get("review_opt_in") and req.get("github_username")
-            try:
-                if has_reviewer:
-                    comment_body = (
-                        f"Draft PR created: {pr_url}\n\n"
-                        f"@{req['github_username']}, checkout the branch and "
-                        f"run the Inspector to review segments."
-                    )
-                else:
-                    comment_body = (
-                        f"Draft PR created: {pr_url}\n\n"
-                        f"This request needs a reviewer. If you'd like to help, "
-                        f"comment `/claim` on this issue to get assigned."
-                    )
-                gh_comment_on_issue(req["issue_number"], comment_body)
-            except Exception as e:
-                print(f"    Warning: failed to comment on issue: {e}")
-
             # Invite collaborator and assign to issue + PR if requester opted to review
+            has_reviewer = req.get("review_opt_in") and req.get("github_username")
             collab_status = "passive"
             if has_reviewer:
                 collab_status = gh_invite_collaborator(req["github_username"])
-                # Assign reviewer to issue + PR (may silently fail for
-                # newly-invited users — collaborator-accepted.yml handles
-                # assignment once they accept the invite)
                 for target, cmd in [
                     (f"issue #{req['issue_number']}",
                      ["gh", "issue", "edit", str(req["issue_number"]),
@@ -702,6 +681,31 @@ def cmd_prepare_pr(args):
                         print(f"    Assigned @{req['github_username']} to {target}")
                     except Exception as e:
                         print(f"    Warning: failed to assign to {target}: {e}")
+
+            # Comment on the issue linking to the PR
+            try:
+                if has_reviewer and collab_status == "existing":
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"@{req['github_username']}, checkout the branch and "
+                        f"run the Inspector to review segments."
+                    )
+                elif has_reviewer and collab_status == "invited":
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"@{req['github_username']}, a collaborator invite has been sent. "
+                        f"Please [accept the invite](https://github.com/Wider-Community/quranic-universal-audio/invitations), "
+                        f"then comment `/confirm` to get assigned."
+                    )
+                else:
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"This request needs a reviewer. If you'd like to help, "
+                        f"comment `/claim` on this issue to get assigned."
+                    )
+                gh_comment_on_issue(req["issue_number"], comment_body)
+            except Exception as e:
+                print(f"    Warning: failed to comment on issue: {e}")
 
             # Send segments-ready email (template varies by contributor status)
             if req.get("requester_email"):
