@@ -12,6 +12,7 @@ import json
 import os
 import re
 import smtplib
+import subprocess
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -213,20 +214,30 @@ def gh_swap_label(issue_number, old_label, new_label):
 
 
 def gh_invite_collaborator(username):
-    """Invite a GitHub user as repo collaborator with write access."""
+    """Invite a GitHub user as repo collaborator with write access.
+
+    Returns:
+        "existing"  – already a collaborator (204)
+        "invited"   – new invite sent (201)
+        "failed"    – API error or no username
+    """
     if not username:
-        return
+        return "failed"
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/collaborators/{username}"
     try:
         r = httpx.put(url, headers=_gh_headers(), json={"permission": "write"}, timeout=15)
-        if r.status_code in (201, 204):
-            print(f"  Invited @{username} as collaborator")
-        elif r.status_code == 422:
+        if r.status_code == 204:
             print(f"  @{username} is already a collaborator")
+            return "existing"
+        elif r.status_code == 201:
+            print(f"  Invited @{username} as collaborator")
+            return "invited"
         else:
             print(f"  Failed to invite @{username}: {r.status_code} {r.text[:100]}")
+            return "failed"
     except Exception as e:
         print(f"  Failed to invite @{username}: {e}")
+        return "failed"
 
 
 def gh_ensure_labels(labels):
@@ -266,15 +277,17 @@ def gh_create_draft_pr(branch, title, body):
 
 
 def gh_comment_on_issue(issue_number, body):
-    """Post a comment on a GitHub issue."""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{issue_number}/comments"
-    r = httpx.post(
-        url,
-        headers=_gh_headers(),
-        json={"body": body},
-        timeout=15,
+    """Post a comment on a GitHub issue via bot-comment.yml workflow."""
+    subprocess.run(
+        [
+            "gh", "workflow", "run", "bot-comment.yml",
+            "-f", f"issue={issue_number}",
+            "-f", f"body={body}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
-    r.raise_for_status()
 
 
 # ---------------------------------------------------------------------------
