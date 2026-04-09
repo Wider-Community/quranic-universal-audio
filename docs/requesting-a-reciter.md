@@ -50,7 +50,6 @@ Once you've found a good min silence value, submit your request using either met
 
 ### Form fields
 
-- **Request Type** — select "New reciter" for first-time processing, or "Re-align" to re-run with different parameters (see below)
 - **Reciter** — pick from the dropdown of available reciters. If your reciter is not listed, you'll need to add the audio manifest first (see note below) and wait for the PR to be merged before it appears
 - **Riwayah** — the Quranic reading tradition. Most existing reciters default to Hafs an Asim in their metadata, and this is true for the vast majority. However, it should be verified when submitting a request — listen to the recitation and allocate the correct riwayah
 - **Min Silence** — your suggested value from Step 1
@@ -111,12 +110,6 @@ git push
 ```
 
 You can push multiple rounds of fixes. The PR stays open until you're satisfied with the quality.
-
-### Optional: Re-align with different parameters
-
-After reviewing the segments, you may find that the number of issues is very high — for example, widespread over-segmentation or under-segmentation across many chapters. In this case, it may be more efficient to re-run the pipeline with a different min silence value rather than manually fixing hundreds of segments.
-
-To do this, submit a new request for the same reciter using **"Re-align"** as the request type, with an adjusted min silence value. The previous segments will be replaced with the new run.
 
 ## Step 4: Mark ready and merge
 

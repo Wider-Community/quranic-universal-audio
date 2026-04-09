@@ -142,7 +142,6 @@ def cmd_triage(args):
         print(f"\n  [{i+1}] {status_icon} {t['req']['reciter_name']}")
         print(f"      Slug: {t['req']['slug']}")
         print(f"      Source: {t['req']['audio_source']}")
-        print(f"      Type: {t['req']['request_type']}")
         print(f"      Riwayah: {t['req']['riwayah']}")
         print(f"      Min Silence: {t['req'].get('min_silence', 'N/A')}ms")
         print(f"      Issue: #{t['req']['issue_number']}")
@@ -172,7 +171,6 @@ def cmd_triage(args):
             "slug": req["slug"],
             "name": req["reciter_name"],
             "source": req["audio_source"],
-            "request_type": req["request_type"],
             "riwayah": req["riwayah"],
             "style": req.get("style", "Unknown"),
             "country": req.get("country", "unknown"),
@@ -267,7 +265,7 @@ def _triage_one(req, processed_slugs, open_by_slug, processed):
         if iss["number"] != req["issue_number"]
         and iss["status"] not in ("rejected",)
     ]
-    if other_issues and req["request_type"] == "New reciter":
+    if other_issues:
         iss = other_issues[0]
         return {
             "req": req,
@@ -276,26 +274,7 @@ def _triage_one(req, processed_slugs, open_by_slug, processed):
             "context": f"Existing issue #{iss['number']} (status: {iss['status']})",
         }
 
-    # Check 4: Re-align of never-processed → treat as new
-    if req["request_type"] == "Re-align" and slug not in processed_slugs:
-        return {
-            "req": req,
-            "action": "accept",
-            "reason": None,
-            "context": "Re-align of unprocessed reciter — treating as new alignment",
-        }
-
-    # Check 5: Re-align of processed reciter → needs operator confirmation
-    if req["request_type"] == "Re-align" and slug in processed_slugs:
-        proc = next((p for p in processed if p["slug"] == slug), None)
-        return {
-            "req": req,
-            "action": "confirm",
-            "reason": "re-align",
-            "context": f"Existing: {proc['name']} (validated={proc.get('validated', False)}). Operator must confirm.",
-        }
-
-    # Check 6: Audio manifest exists
+    # Check 4: Audio manifest exists
     if not audio_manifest_exists(slug, req["audio_source"]):
         return {
             "req": req,
@@ -349,7 +328,6 @@ def _fallback_pending_from_github():
             "reciter_name": extract("Reciter"),
             "slug": extract("Slug"),
             "audio_source": extract("Audio Source"),
-            "request_type": extract("Request Type"),
             "riwayah": extract("Riwayah") or "Hafs A'n Assem",
             "style": extract("Style") or "Unknown",
             "country": extract("Country") or "unknown",

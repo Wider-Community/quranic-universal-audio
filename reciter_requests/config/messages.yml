@@ -2,7 +2,6 @@ errors:
   no_reciter: "Error: Please select a reciter."
   no_name: "Error: Please enter your name."
   invalid_email: "Error: Please enter a valid email address."
-  no_request_type: "Error: Please select a request type."
   no_riwayah: "Error: Please select a riwayah."
   unknown_riwayah: "Error: Unknown riwayah '{riwayah}'. Please select from the dropdown."
   no_min_silence: "Error: Please enter a min silence value (100\u20132000ms). Check the parameter reference for guidance."
@@ -12,9 +11,7 @@ errors:
   no_github_for_review: "Error: Please enter your GitHub username to review segments."
   invalid_reciter_selection: "Error: Invalid reciter selection."
 
-title_prefixes:
-  new_reciter: "[request]"
-  re_align: "[re-align]"
+title_prefix: "[request]"
 
 issue_labels:
   new_reciter:
@@ -25,4 +22,3 @@ ui:
   guide_fallback: "*Guide not available \u2014 check back after the next deployment.*"
   no_requests: "*No requests yet.*"
   no_data: "*No data available.*"
-  no_realign_reciters: "All processed reciters are validated \u2014 no re-alignment needed"

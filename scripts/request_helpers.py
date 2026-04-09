@@ -78,7 +78,6 @@ def notion_query_pending():
             "reciter_name": _notion_rich_text(props.get("Reciter", {})),
             "slug": _notion_rich_text(props.get("Slug", {})),
             "audio_source": _notion_rich_text(props.get("Audio Source", {})),
-            "request_type": _notion_select(props.get("Request Type", {})),
             "riwayah": _notion_rich_text(props.get("Riwayah", {})),
             "style": _notion_rich_text(props.get("Style", {})),
             "country": _notion_rich_text(props.get("Country", {})),

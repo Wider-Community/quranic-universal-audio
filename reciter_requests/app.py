@@ -5,7 +5,6 @@ reciter segmentation requests and viewing pipeline status.
 Deployed as HF Space: hetchyy/Quran-reciter-requests
 """
 
-import hashlib
 import json
 import logging
 import os
@@ -725,7 +724,6 @@ def _riwayah_slug_to_name(slug: str) -> str:
 _form_data = _load_app_config("form_data")
 _msgs = _load_app_config("messages")
 
-REQUEST_TYPES = _form_data["request_types"]
 STYLE_CHOICES = _form_data["style_choices"]
 _STYLE_DISPLAY_TO_SLUG = _form_data["style_slug_map"]
 _STYLE_SLUG_TO_DISPLAY = {v: k for k, v in _STYLE_DISPLAY_TO_SLUG.items()}
@@ -744,7 +742,7 @@ COUNTRIES = ["unknown"] + sorted(
 
 def submit_request(
     reciter_slug, reciter_name, audio_source,
-    request_type, riwayah, style, country,
+    riwayah, style, country,
     min_silence_ms,
     requester_name, requester_email, notes,
     github_username="",
@@ -758,8 +756,6 @@ def submit_request(
         return _msgs["errors"]["no_name"]
     if not requester_email or not re.match(r"[^@\s]+@[^@\s]+\.[^@\s]+", requester_email.strip()):
         return _msgs["errors"]["invalid_email"]
-    if not request_type:
-        return _msgs["errors"]["no_request_type"]
     if not riwayah:
         return _msgs["errors"]["no_riwayah"]
     _load_riwayat()
@@ -773,7 +769,6 @@ def submit_request(
         return _msgs["errors"]["invalid_min_silence_type"]
     if not (100 <= min_silence_ms <= 2000):
         return _msgs["errors"]["min_silence_range"]
-    request_type = request_type or "New reciter"
     style = style or "Unknown"
     if style not in STYLE_CHOICES:
         style = "Unknown"
@@ -795,46 +790,33 @@ def submit_request(
             return _msgs["errors"]["github_user_not_found"].format(github_username=github_username)
 
     # Check for duplicate requests
-    if request_type == "New reciter":
-        try:
-            issues = _gh_get("issues", params={
-                "labels": "request",
-                "state": "all",
-                "per_page": 100,
-            })
-            for iss in issues:
-                body = iss.get("body", "")
-                if f"**Slug:** {reciter_slug}" in body:
-                    url = iss["html_url"]
-                    state = iss.get("state", "open")
-                    if state == "open":
-                        return _load_app_template("duplicate-open").format(url=url)
-                    # Closed issue — check if data was cleaned up
-                    has_segments = _repo_segments_exist(reciter_slug)
-                    has_notion = _notion_slug_exists(reciter_slug)
-                    if has_segments or has_notion:
-                        return _load_app_template("duplicate-closed").format(url=url)
-                    # Data cleaned up — allow fresh request
-                    logger.info(
-                        f"Closed issue found for {reciter_slug} but data removed "
-                        f"(segments={has_segments}, notion={has_notion}) — "
-                        f"allowing new request"
-                    )
-                    break
-        except Exception as e:
-            logger.warning(f"Duplicate check failed: {e}")
-
-    # Generate requester_id (no PII in public issue)
-    requester_id = hashlib.sha256(
-        requester_email.strip().lower().encode()
-    ).hexdigest()[:8]
-
-    # Build title prefix
-    title_prefix = (
-        _msgs["title_prefixes"]["new_reciter"]
-        if request_type == "New reciter"
-        else _msgs["title_prefixes"]["re_align"]
-    )
+    try:
+        issues = _gh_get("issues", params={
+            "labels": "request",
+            "state": "all",
+            "per_page": 100,
+        })
+        for iss in issues:
+            body = iss.get("body", "")
+            if f"**Slug:** {reciter_slug}" in body:
+                url = iss["html_url"]
+                state = iss.get("state", "open")
+                if state == "open":
+                    return _load_app_template("duplicate-open").format(url=url)
+                # Closed issue — check if data was cleaned up
+                has_segments = _repo_segments_exist(reciter_slug)
+                has_notion = _notion_slug_exists(reciter_slug)
+                if has_segments or has_notion:
+                    return _load_app_template("duplicate-closed").format(url=url)
+                # Data cleaned up — allow fresh request
+                logger.info(
+                    f"Closed issue found for {reciter_slug} but data removed "
+                    f"(segments={has_segments}, notion={has_notion}) — "
+                    f"allowing new request"
+                )
+                break
+    except Exception as e:
+        logger.warning(f"Duplicate check failed: {e}")
 
     # Create GitHub Issue
     github_line = f"**GitHub:** @{github_username}\n" if github_username else ""
@@ -844,7 +826,6 @@ def submit_request(
         reviewer_line = "**Reviewer:** Needs volunteer \u2014 comment `/claim` to help\n"
     notes_line = f"**Notes:** {notes.strip()}\n" if notes and notes.strip() else ""
     issue_body = _load_app_template("issue-body").format(
-        request_type=request_type,
         reciter_name=reciter_name,
         slug=reciter_slug,
         audio_source=audio_source,
@@ -852,14 +833,13 @@ def submit_request(
         style=style,
         country=country,
         min_silence_ms=min_silence_ms,
-        requester_id=requester_id,
         github_line=github_line,
         reviewer_line=reviewer_line,
         notes_line=notes_line,
     )
 
     try:
-        title = f"{title_prefix} {reciter_name}"
+        title = f"{_msgs['title_prefix']} {reciter_name}"
         labels = list(_msgs["issue_labels"]["new_reciter"])
         labels.append("reviewer-assigned" if review_opt_in else "needs-reviewer")
         assignees = []
@@ -896,7 +876,6 @@ def submit_request(
             "Reciter": {"rich_text": [{"text": {"content": reciter_name}}]},
             "Slug": {"rich_text": [{"text": {"content": reciter_slug}}]},
             "Audio Source": {"rich_text": [{"text": {"content": audio_source}}]},
-            "Request Type": {"select": {"name": request_type}},
             "Riwayah": {"rich_text": [{"text": {"content": riwayah}}]},
             "Style": {"rich_text": [{"text": {"content": style}}]},
             "Country": {"rich_text": [{"text": {"content": country}}]},
@@ -954,64 +933,32 @@ def _reciter_label(name, riwayah="hafs_an_asim", style="murattal"):
     return name
 
 
-def get_reciter_choices(request_type="New reciter", audio_cat="By Surah"):
+def get_reciter_choices(audio_cat="By Surah"):
     """Return (display_label, value_json) tuples for the dropdown."""
-    if request_type == "Re-align":
-        processed = fetch_processed_reciters()
-        choices = []
-        for r in sorted(processed, key=lambda x: x["name"]):
-            if r.get("validated"):
-                continue  # Already manually validated — no need to re-align
-            label = r["name"]
-            choices.append((label, json.dumps({
-                "slug": r["slug"],
-                "name": r["name"],
-                "source": r.get("audio_source", ""),
-                "riwayah": "",
-                "style": r.get("style", ""),
-                "country": "",
-            })))
-        if not choices:
-            choices = [(_msgs["ui"]["no_realign_reciters"], "")]
-        return choices
-    else:
-        cat_slug = _AUDIO_CAT_TO_SLUG.get(audio_cat, "by_surah")
-        reciters = fetch_available_reciters()
-        choices = []
-        for r in sorted(reciters, key=lambda x: x["name"]):
-            if r["has_pending_request"]:
-                continue
-            # Filter by audio category (source path starts with by_surah/ or by_ayah/)
-            if not r["source"].startswith(cat_slug):
-                continue
-            label = _reciter_label(r["name"], r.get("riwayah", ""), r.get("style", ""))
-            choices.append((label, json.dumps({
-                "slug": r["slug"],
-                "name": r["name"],
-                "source": r["source"],
-                "riwayah": r.get("riwayah", ""),
-                "style": r.get("style", ""),
-                "country": r.get("country", ""),
-            })))
-        return choices
+    cat_slug = _AUDIO_CAT_TO_SLUG.get(audio_cat, "by_surah")
+    reciters = fetch_available_reciters()
+    choices = []
+    for r in sorted(reciters, key=lambda x: x["name"]):
+        if r["has_pending_request"]:
+            continue
+        # Filter by audio category (source path starts with by_surah/ or by_ayah/)
+        if not r["source"].startswith(cat_slug):
+            continue
+        label = _reciter_label(r["name"], r.get("riwayah", ""), r.get("style", ""))
+        choices.append((label, json.dumps({
+            "slug": r["slug"],
+            "name": r["name"],
+            "source": r["source"],
+            "riwayah": r.get("riwayah", ""),
+            "style": r.get("style", ""),
+            "country": r.get("country", ""),
+        })))
+    return choices
 
 
-def update_on_request_type(request_type):
-    """Called when request type changes — swap reciter choices, toggle audio cat."""
-    if request_type == "Re-align":
-        choices = get_reciter_choices("Re-align")
-        return gr.Dropdown(choices=choices, value=None), gr.Dropdown(visible=False)
-    else:
-        choices = get_reciter_choices("New reciter", "By Surah")
-        return (
-            gr.Dropdown(choices=choices, value=None),
-            gr.Dropdown(value="By Surah", visible=True),
-        )
-
-
-def update_on_audio_cat(audio_cat, request_type):
+def update_on_audio_cat(audio_cat):
     """Called when audio category changes — filter reciter choices."""
-    choices = get_reciter_choices(request_type, audio_cat)
+    choices = get_reciter_choices(audio_cat)
     return gr.Dropdown(choices=choices, value=None)
 
 
@@ -1051,7 +998,7 @@ def get_requests_markdown():
     lines = ["| Reciter | Status | Submitted | Updated | Issue | PR |",
              "|---------|--------|-----------|---------|-------|------|"]
     for r in requests:
-        name = r["title"].replace("[request] ", "").replace("[re-align] ", "")
+        name = r["title"].replace("[request] ", "")
         issue_link = f"[#{r['issue_number']}]({r['url']})"
         pr_link = f"[View]({r['pr_url']})" if r.get("pr_url") else ""
         lines.append(
@@ -1076,7 +1023,7 @@ def get_processed_markdown():
     return "\n".join(lines)
 
 
-def handle_submit(reciter_json, request_type, riwayah, style, country,
+def handle_submit(reciter_json, riwayah, style, country,
                    min_silence, name, email,
                    review_opt_in, github_username, notes):
     """Handle form submission from Gradio UI."""
@@ -1092,7 +1039,6 @@ def handle_submit(reciter_json, request_type, riwayah, style, country,
         reciter_slug=info["slug"],
         reciter_name=info["name"],
         audio_source=info["source"],
-        request_type=request_type,
         riwayah=riwayah,
         style=style,
         country=country,
@@ -1445,13 +1391,6 @@ with gr.Blocks(title="Reciter Requests") as demo:
 
             with gr.Row():
                 with gr.Column(scale=2):
-                    request_type_dd = gr.Dropdown(
-                        choices=REQUEST_TYPES,
-                        value="New reciter",
-                        label="Request Type",
-                        info="New reciter = first-time processing. "
-                             "Re-align = re-run with different parameters.",
-                    )
                     audio_cat_dd = gr.Dropdown(
                         choices=AUDIO_CATEGORIES,
                         value="By Surah",
@@ -1520,15 +1459,9 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         value="*Loading...*",
                     )
 
-            request_type_dd.change(
-                fn=update_on_request_type,
-                inputs=[request_type_dd],
-                outputs=[reciter_dd, audio_cat_dd],
-            )
-
             audio_cat_dd.change(
                 fn=update_on_audio_cat,
-                inputs=[audio_cat_dd, request_type_dd],
+                inputs=[audio_cat_dd],
                 outputs=[reciter_dd],
             )
 
@@ -1546,7 +1479,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
 
             submit_btn.click(
                 fn=handle_submit,
-                inputs=[reciter_dd, request_type_dd, riwayah_dd, style_dd,
+                inputs=[reciter_dd, riwayah_dd, style_dd,
                         country_dd, min_silence, profile_name, profile_email,
                         review_checkbox, req_github, req_notes],
                 outputs=result_box,
@@ -1635,7 +1568,6 @@ async def api_request(request: Request):
         reciter_slug=req.get("reciter_slug", ""),
         reciter_name=req.get("reciter_name", ""),
         audio_source=req.get("audio_source", ""),
-        request_type=req.get("request_type", "New reciter"),
         riwayah=req.get("riwayah", ""),
         style=req.get("style", "Unknown"),
         country=req.get("country", "unknown"),
