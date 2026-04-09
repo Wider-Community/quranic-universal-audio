@@ -227,8 +227,7 @@ for verse in fatiha:
 - All timestamps are in **milliseconds**, relative to the start of the audio clip
 - Word indices are **1-based**
 - Word timestamps are padded forward within each segment so there are no gaps between consecutive words. Gaps only occur across segment boundaries (pauses in recitation).
-- Audio clips are trimmed to the first/last canonical word boundaries. Segments and text are filtered to match the clip range — repetitions and cross-verse content outside the clip are not included in the dataset row (they remain in the raw pipeline files).
-- For **gapless chapter playback**, use `source_url` directly (don't concatenate clips). Compute source-relative timestamps with `source_ms = clip_ms + source_offset_ms`. Content not covered by timestamps (basmalas, repetitions, cross-verse transitions) plays naturally in the original audio without word highlighting.
+- For **gapless chapter playback**, use `source_url` directly (don't concatenate clips). Compute source-relative timestamps with `source_ms = clip_ms + source_offset_ms`. Content not covered by timestamps (e.g. basmalas, cross-verse transitions) plays naturally in the original audio without word highlighting.
 
 ## Reciters Catalog
 
@@ -257,7 +256,7 @@ url = "https://" + r["url_template"].format(surah=2)  # Al-Baqarah chapter audio
 | `country` | `string` | Country of origin |
 | `source` | `string` | Audio source (e.g. `mp3quran`, `everyayah`) |
 | `audio_category` | `string` | `by_surah` or `by_ayah` |
-| `url_template` | `string` | URL pattern (without `https://`). Use `.format(surah=N)` or `.format(surah=N, ayah=M)` |
+| `url_template` | `string` | URL pattern (without `https://`) |
 | `coverage_surahs` | `int32` | Number of surahs with audio (max 114) |
 | `coverage_ayahs` | `int32` | Number of ayahs with audio (max 6,236) |
 | `is_timestamped` | `bool` | Whether word-level timestamps are available in the dataset |
