@@ -515,9 +515,12 @@ def cmd_notify(args):
         for req in targets:
             if not req.get("requester_email"):
                 continue
+            has_reviewer = req.get("review_opt_in") and req.get("github_username")
             subj, html = email_segments_ready(
                 req["name"], req["requester_name"],
                 req["issue_url"], req.get("pr_url", ""),
+                collab_status="invited" if has_reviewer else "passive",
+                github_username=req.get("github_username", ""),
             )
             send_email(req["requester_email"], subj, html)
 
@@ -678,38 +681,38 @@ def cmd_prepare_pr(args):
                 print(f"    Warning: failed to comment on issue: {e}")
 
             # Invite collaborator and assign to issue + PR if requester opted to review
+            collab_status = "passive"
             if has_reviewer:
-                gh_invite_collaborator(req["github_username"])
-                # Assign reviewer to the issue
-                try:
-                    subprocess.run(
-                        ["gh", "issue", "edit", str(req["issue_number"]),
-                         "--add-assignee", req["github_username"]],
-                        cwd=str(REPO_ROOT), capture_output=True, text=True,
-                    )
-                    print(f"    Assigned @{req['github_username']} to issue #{req['issue_number']}")
-                except Exception as e:
-                    print(f"    Warning: failed to assign to issue: {e}")
-                # Assign reviewer to the PR
-                try:
-                    subprocess.run(
-                        ["gh", "pr", "edit", str(pr_number),
-                         "--add-assignee", req["github_username"]],
-                        cwd=str(REPO_ROOT), capture_output=True, text=True,
-                    )
-                    print(f"    Assigned @{req['github_username']} to PR #{pr_number}")
-                except Exception as e:
-                    print(f"    Warning: failed to assign to PR: {e}")
+                collab_status = gh_invite_collaborator(req["github_username"])
+                # Assign reviewer to issue + PR (may silently fail for
+                # newly-invited users — collaborator-accepted.yml handles
+                # assignment once they accept the invite)
+                for target, cmd in [
+                    (f"issue #{req['issue_number']}",
+                     ["gh", "issue", "edit", str(req["issue_number"]),
+                      "--add-assignee", req["github_username"]]),
+                    (f"PR #{pr_number}",
+                     ["gh", "pr", "edit", str(pr_number),
+                      "--add-assignee", req["github_username"]]),
+                ]:
+                    try:
+                        subprocess.run(cmd, cwd=str(REPO_ROOT),
+                                       capture_output=True, text=True)
+                        print(f"    Assigned @{req['github_username']} to {target}")
+                    except Exception as e:
+                        print(f"    Warning: failed to assign to {target}: {e}")
 
-            # Send segments-ready email
+            # Send segments-ready email (template varies by contributor status)
             if req.get("requester_email"):
                 try:
                     subj, html = email_segments_ready(
                         req["name"], req["requester_name"],
                         req["issue_url"], pr_url,
+                        collab_status=collab_status,
+                        github_username=req.get("github_username", ""),
                     )
                     send_email(req["requester_email"], subj, html)
-                    print(f"    Email sent to {req['requester_email']}")
+                    print(f"    Email sent to {req['requester_email']} ({collab_status})")
                 except Exception as e:
                     print(f"    Warning: failed to send email: {e}")
 
