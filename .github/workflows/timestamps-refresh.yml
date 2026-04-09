@@ -167,5 +167,5 @@ jobs:
           for issue in $issues; do
             gh issue edit "$issue" \
               --remove-label "status:awaiting-timestamps" \
-              --add-label "status:timestamped" 2>/dev/null || true
+              --add-label "status:completed" 2>/dev/null || true
           done

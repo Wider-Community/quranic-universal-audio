@@ -15,8 +15,8 @@ title_prefix: "[request]"
 
 issue_labels:
   new_reciter:
-    - "request"
-    - "status:pending"
+    - "request-alignment"
+    - "status:pending-alignment"
 
 ui:
   guide_fallback: "*Guide not available \u2014 check back after the next deployment.*"

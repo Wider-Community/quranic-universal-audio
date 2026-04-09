@@ -153,7 +153,7 @@ def gh_list_request_issues(state="open"):
     r = httpx.get(
         url,
         headers=_gh_headers(),
-        params={"labels": "request", "state": state, "per_page": 100},
+        params={"labels": "request-alignment", "state": state, "per_page": 100},
         timeout=30,
     )
     r.raise_for_status()

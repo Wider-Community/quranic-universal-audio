@@ -555,7 +555,7 @@ def fetch_available_reciters():
         pending = {}
         try:
             issues = _gh_get("issues", params={
-                "labels": "request",
+                "labels": "request-alignment",
                 "state": "open",
                 "per_page": 100,
             })
@@ -635,7 +635,7 @@ def fetch_request_issues():
         all_issues = []
         for state in ["open", "closed"]:
             issues = _gh_get("issues", params={
-                "labels": "request",
+                "labels": "request-alignment",
                 "state": state,
                 "per_page": 100,
             })
@@ -792,7 +792,7 @@ def submit_request(
     # Check for duplicate requests
     try:
         issues = _gh_get("issues", params={
-            "labels": "request",
+            "labels": "request-alignment",
             "state": "all",
             "per_page": 100,
         })
@@ -841,7 +841,7 @@ def submit_request(
     try:
         title = f"{_msgs['title_prefix']} {reciter_name}"
         labels = list(_msgs["issue_labels"]["new_reciter"])
-        labels.append("reviewer-assigned" if review_opt_in else "needs-reviewer")
+        labels.append("reviewer-assigned" if review_opt_in else "reviewer-needed")
         assignees = []
 
         # Try bot creation first (appears as github-actions[bot])
