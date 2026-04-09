@@ -721,6 +721,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
     gr.Markdown(
         "Submit a request to have a new reciter processed through the "
         "alignment pipeline and generate word/letter timestamps."
+    )
 
     with gr.Tabs():
         # ── Tab 1: Submit Request ─────────────────────────────────────
