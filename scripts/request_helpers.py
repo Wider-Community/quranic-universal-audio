@@ -257,23 +257,36 @@ def gh_ensure_labels(labels):
             print(f"  Created label: {name}")
 
 
-def gh_create_draft_pr(branch, title, body):
-    """Create a draft pull request. Returns PR html_url."""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls"
-    r = httpx.post(
-        url,
-        headers=_gh_headers(),
-        json={
-            "title": title,
-            "body": body,
-            "head": branch,
-            "base": "main",
-            "draft": True,
-        },
-        timeout=30,
+def gh_create_bot_pr(branch, title, body, draft=True):
+    """Create a pull request via bot-create-pr.yml workflow.
+
+    Returns PR html_url. The PR appears as github-actions[bot].
+    """
+    import time
+    subprocess.run(
+        [
+            "gh", "workflow", "run", "bot-create-pr.yml",
+            "-f", f"branch={branch}",
+            "-f", f"title={title}",
+            "-f", f"body={body}",
+            "-f", f"draft={'true' if draft else 'false'}",
+        ],
+        check=True, capture_output=True, text=True,
     )
-    r.raise_for_status()
-    return r.json()["html_url"]
+    # Poll for the PR to appear (workflow takes a few seconds)
+    for _ in range(30):  # up to ~60s
+        time.sleep(2)
+        result = subprocess.run(
+            ["gh", "pr", "list", "--head", branch, "--json", "url", "-q", ".[0].url"],
+            capture_output=True, text=True,
+        )
+        if result.stdout.strip():
+            return result.stdout.strip()
+    raise RuntimeError(f"Timed out waiting for bot PR on branch {branch}")
+
+
+# Keep old name as alias for backwards compatibility
+gh_create_draft_pr = gh_create_bot_pr
 
 
 def gh_comment_on_issue(issue_number, body):

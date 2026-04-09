@@ -1,0 +1,40 @@
+name: Bot Create PR
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Head branch name
+        required: true
+      title:
+        description: PR title
+        required: true
+      body:
+        description: PR body (markdown)
+        required: true
+      draft:
+        description: Create as draft PR
+        required: false
+        default: 'true'
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: ${{ toJSON(inputs.branch) }},
+              base: 'main',
+              title: ${{ toJSON(inputs.title) }},
+              body: ${{ toJSON(inputs.body) }},
+              draft: '${{ inputs.draft }}' === 'true',
+            });
+            core.info(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
+            core.setOutput('pr_number', pr.data.number);
+            core.setOutput('pr_url', pr.data.html_url);

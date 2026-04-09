@@ -49,6 +49,7 @@ from request_helpers import (
     gh_ensure_labels,
     gh_invite_collaborator,
     gh_create_draft_pr,
+    gh_create_bot_pr,
     gh_comment_on_issue,
     send_email,
     slug_from_name,
@@ -929,14 +930,12 @@ def _create_timestamps_pr(rec):
             f"Add word-level timestamps for **{rec['name']}** (`{slug}`)."
             f"{issue_ref}"
         )
-        pr_result = _run_gh([
-            "pr", "create",
-            "--base", "main", "--head", branch,
-            "--title", f"feat: add timestamps for {rec['name']}",
-            "--body", pr_body,
-        ])
-
-        pr_url = pr_result.stdout.strip()
+        pr_url = gh_create_bot_pr(
+            branch,
+            f"feat: add timestamps for {rec['name']}",
+            pr_body,
+            draft=False,
+        )
         pr_number = int(pr_url.rstrip("/").split("/")[-1])
         result.update(success=True, pr_number=pr_number, pr_url=pr_url)
 
