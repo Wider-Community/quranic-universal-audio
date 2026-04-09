@@ -201,6 +201,14 @@ def _confidence_stats(detailed_segs: list[dict]) -> dict:
     }
 
 
+def _is_ignored_for(seg: dict, category: str) -> bool:
+    """Check if a segment is ignored for a specific validation category."""
+    ic = seg.get("ignored_categories")
+    if ic:
+        return "_all" in ic or category in ic
+    return bool(seg.get("ignored"))
+
+
 def _classify_detailed_segs(
     detailed_segs: list[dict],
     word_counts: dict[tuple[int, int], int],
@@ -217,7 +225,6 @@ def _classify_detailed_segs(
     qalqala = []
 
     for seg in detailed_segs:
-        conf = seg["confidence"]
         matched_ref = seg.get("matched_ref", "")
 
         if not matched_ref:
@@ -232,7 +239,7 @@ def _classify_detailed_segs(
             continue
         surah, s_ayah, s_word, e_ayah, e_word = parsed
 
-        # Audio Bleeding — by_ayah only, no confidence filter
+        # Audio Bleeding — by_ayah only
         if is_by_ayah:
             entry_ref = seg.get("ref", "")
             if ":" in entry_ref:
@@ -244,16 +251,15 @@ def _classify_detailed_segs(
                 except (ValueError, IndexError):
                     pass
 
-        if conf >= 1.0:
-            continue  # confidence=1.0 means already confirmed; skip quality checks
-
         # Cross-verse (matched_ref spans multiple ayahs)
         if s_ayah != e_ayah:
-            cross_verse_det.append(seg)
+            if not _is_ignored_for(seg, "cross_verse"):
+                cross_verse_det.append(seg)
             continue  # cross-verse segs don't fit single-ayah categories below
 
         # May Require Boundary Adjustment — 1-word, not muqatta'at/single-word/standalone
         if (s_word == e_word
+                and not _is_ignored_for(seg, "boundary_adj")
                 and (surah, s_ayah) not in _MUQATTAAT_VERSES
                 and (surah, s_ayah) not in single_word_verses
                 and (surah, s_ayah, s_word) not in _STANDALONE_REFS
@@ -262,12 +268,14 @@ def _classify_detailed_segs(
 
         # Muqatta'at — word 1 of a muqatta'at verse
         if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
-            muqattaat.append(seg)
+            if not _is_ignored_for(seg, "muqattaat"):
+                muqattaat.append(seg)
 
         # Qalqala — last Arabic letter of matched_text is a qalqala letter
         last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
         if last_ltr and last_ltr in _QALQALA_LETTERS:
-            qalqala.append(seg)
+            if not _is_ignored_for(seg, "qalqala"):
+                qalqala.append(seg)
 
     return {
         "repetitions": repetitions,
