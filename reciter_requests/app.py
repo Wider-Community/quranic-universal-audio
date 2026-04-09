@@ -158,7 +158,11 @@ def _verify_github_user(username):
             f"https://api.github.com/users/{username}",
             headers=_gh_headers(), timeout=10,
         )
-        return r.status_code == 200
+        if r.status_code == 200:
+            return True
+        if r.status_code == 404:
+            return False
+        return None  # Auth/rate-limit/other errors — don't block submission
     except Exception:
         return None  # Don't block on API errors
 
@@ -845,7 +849,11 @@ def submit_request(
     try:
         title = f"{title_prefix} {reciter_name}"
         labels = _msgs["issue_labels"]["new_reciter"]
-        assignees = [github_username] if github_username else []
+
+        # Don't assign non-collaborators — GitHub rejects the whole issue.
+        # The username is already @-mentioned in the body; actual assignment
+        # happens later via process_requests.py after collaborator invite.
+        assignees = []
 
         # Try bot creation first (appears as github-actions[bot])
         issue_data = _trigger_bot_issue(title, issue_body, labels, assignees)
