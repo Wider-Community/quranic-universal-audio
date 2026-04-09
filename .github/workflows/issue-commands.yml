@@ -2,17 +2,16 @@ name: Issue Commands
 on:
   issue_comment:
     types: [created]
-  # NOTE: Manual assignment via GitHub UI does NOT swap reviewer-needed →
-  # reviewer-assigned. To handle that, an `issues: assigned` trigger would be
-  # needed (see the label-on-assign job below).
+  # Swap reviewer labels on manual assign/unassign via GitHub UI
   issues:
-    types: [assigned]
+    types: [assigned, unassigned]
 
 jobs:
-  # ── Swap label when someone is manually assigned ──────────────────────
+  # ── Swap reviewer label on manual assign/unassign ────────────────────
   label-on-assign:
     if: >-
       github.event_name == 'issues' &&
+      github.event.action == 'assigned' &&
       contains(github.event.issue.labels.*.name, 'reviewer-needed')
     runs-on: ubuntu-latest
     permissions:
@@ -31,6 +30,32 @@ jobs:
             await github.rest.issues.addLabels({
               owner, repo, issue_number: issueNumber, labels: ['reviewer-assigned'],
             });
+
+  label-on-unassign:
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.action == 'unassigned' &&
+      contains(github.event.issue.labels.*.name, 'reviewer-assigned')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            // Only swap back if no assignees remain
+            if (issue.assignees.length === 0) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: issue.number, name: 'reviewer-assigned',
+                });
+              } catch (e) { /* label may already be gone */ }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issue.number, labels: ['reviewer-needed'],
+              });
+            }
 
   # ── Handle /claim and /confirm commands ───────────────────────────────
   handle-command:
