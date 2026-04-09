@@ -9,6 +9,7 @@ errors:
   invalid_min_silence_type: "Error: Min silence must be a number."
   min_silence_range: "Error: Min silence must be between 100 and 2000ms."
   github_user_not_found: "Error: GitHub username '@{github_username}' not found. Please check the spelling."
+  no_github_for_review: "Error: Please enter your GitHub username to review segments."
   invalid_reciter_selection: "Error: Invalid reciter selection."
 
 title_prefixes:

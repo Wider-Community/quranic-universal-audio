@@ -1,0 +1,138 @@
+name: Issue Commands
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  handle-command:
+    if: >-
+      !github.event.issue.pull_request &&
+      (startsWith(github.event.comment.body, '/claim') ||
+       startsWith(github.event.comment.body, '/confirm'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        with:
+          script: |
+            const comment = context.payload.comment.body.trim();
+            const commenter = context.payload.comment.user.login;
+            const issue = context.payload.issue;
+            const issueNumber = issue.number;
+            const labels = issue.labels.map(l => l.name);
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            async function reply(body) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issueNumber, body,
+              });
+            }
+
+            async function isCollaborator(username) {
+              try {
+                await github.rest.repos.checkCollaborator({ owner, repo, username });
+                return true;
+              } catch (e) {
+                if (e.status === 404) return false;
+                throw e;
+              }
+            }
+
+            async function inviteCollaborator(username) {
+              const resp = await fetch(
+                `https://api.github.com/repos/${owner}/${repo}/collaborators/${username}`,
+                {
+                  method: 'PUT',
+                  headers: {
+                    'Authorization': `token ${process.env.PAT_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                  },
+                  body: JSON.stringify({ permission: 'write' }),
+                },
+              );
+              if (!resp.ok) {
+                const text = await resp.text();
+                throw new Error(`${resp.status}: ${text}`);
+              }
+            }
+
+            async function swapLabel(remove, add) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: issueNumber, name: remove,
+                });
+              } catch (e) { /* label may not exist */ }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issueNumber, labels: [add],
+              });
+            }
+
+            // ── /claim ──────────────────────────────────────────────────
+            if (comment.startsWith('/claim')) {
+              if (!labels.includes('needs-reviewer')) {
+                await reply(
+                  `@${commenter} This issue doesn't need a reviewer (missing \`needs-reviewer\` label).`
+                );
+                return;
+              }
+
+              if (issue.assignees.length > 0) {
+                await reply(`@${commenter} Someone is already assigned to this issue.`);
+                return;
+              }
+
+              const collab = await isCollaborator(commenter);
+              if (collab) {
+                await github.rest.issues.addAssignees({
+                  owner, repo, issue_number: issueNumber, assignees: [commenter],
+                });
+                await swapLabel('needs-reviewer', 'reviewer-assigned');
+                await reply(
+                  `@${commenter} You've been assigned as the reviewer! ` +
+                  `You'll get write access to the PR branch when segments are ready.`
+                );
+              } else {
+                try {
+                  await inviteCollaborator(commenter);
+                  await reply(
+                    `@${commenter} A collaborator invite has been sent! ` +
+                    `Please [accept the invite](https://github.com/${owner}/${repo}/invitations), ` +
+                    `then comment \`/confirm\` to get assigned.`
+                  );
+                } catch (e) {
+                  await reply(
+                    `@${commenter} Failed to send collaborator invite. ` +
+                    `Please contact a maintainer.\n\n` +
+                    `<details><summary>Error</summary>\n\n\`\`\`\n${e.message}\n\`\`\`\n</details>`
+                  );
+                }
+              }
+              return;
+            }
+
+            // ── /confirm ────────────────────────────────────────────────
+            if (comment.startsWith('/confirm')) {
+              const collab = await isCollaborator(commenter);
+              if (collab) {
+                await github.rest.issues.addAssignees({
+                  owner, repo, issue_number: issueNumber, assignees: [commenter],
+                });
+                if (labels.includes('needs-reviewer')) {
+                  await swapLabel('needs-reviewer', 'reviewer-assigned');
+                }
+                await reply(
+                  `@${commenter} Confirmed! You've been assigned as the reviewer. ` +
+                  `You'll get write access to the PR branch when segments are ready.`
+                );
+              } else {
+                await reply(
+                  `@${commenter} It looks like you haven't accepted the collaborator invite yet. ` +
+                  `Please [accept it here](https://github.com/${owner}/${repo}/invitations), ` +
+                  `then comment \`/confirm\` again.`
+                );
+              }
+            }

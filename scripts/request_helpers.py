@@ -86,6 +86,7 @@ def notion_query_pending():
             "issue_url": _notion_url(props.get("GitHub Issue", {})),
             "min_silence": _notion_number(props.get("Min Silence", {})),
             "github_username": _notion_rich_text(props.get("GitHub Username", {})),
+            "review_opt_in": props.get("Reviewer Opt-in", {}).get("checkbox", False),
             "notes": _notion_rich_text(props.get("Notes", {})),
         })
     return results

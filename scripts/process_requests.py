@@ -97,6 +97,8 @@ def cmd_triage(args):
         "status:rejected": ("d73a4a", "Request rejected"),
         "status:awaiting-review": ("f9d71c", "Segments ready, awaiting community review"),
         "status:completed": ("0e8a16", "Fully processed with timestamps"),
+        "reviewer-assigned": ("0075ca", "Reviewer assigned to this request"),
+        "needs-reviewer": ("d876e3", "Looking for a volunteer reviewer"),
     })
 
     # 1. Fetch pending from Notion
@@ -673,12 +675,21 @@ def cmd_prepare_pr(args):
                     pass
 
             # Comment on the issue linking to the PR
+            has_reviewer = req.get("review_opt_in") and req.get("github_username")
             try:
-                gh_comment_on_issue(
-                    req["issue_number"],
-                    f"Draft PR created: {pr_url}\n\n"
-                    f"Checkout the branch and run the Inspector to review segments.",
-                )
+                if has_reviewer:
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"@{req['github_username']}, checkout the branch and "
+                        f"run the Inspector to review segments."
+                    )
+                else:
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"This request needs a reviewer. If you'd like to help, "
+                        f"comment `/claim` on this issue to get assigned."
+                    )
+                gh_comment_on_issue(req["issue_number"], comment_body)
             except Exception as e:
                 print(f"    Warning: failed to comment on issue: {e}")
 
@@ -689,8 +700,8 @@ def cmd_prepare_pr(args):
                 except Exception as e:
                     print(f"    Warning: failed to update Notion PR URL: {e}")
 
-            # Invite collaborator if GitHub username provided
-            if req.get("github_username"):
+            # Invite collaborator if requester opted to review
+            if has_reviewer:
                 gh_invite_collaborator(req["github_username"])
 
             # Send segments-ready email

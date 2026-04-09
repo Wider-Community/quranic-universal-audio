@@ -7,4 +7,4 @@
 **Country:** {country}
 **Suggested Min Silence:** {min_silence_ms}ms
 **Requester:** {requester_id}
-{github_line}{notes_line}
+{github_line}{reviewer_line}{notes_line}

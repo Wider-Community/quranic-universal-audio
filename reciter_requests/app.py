@@ -748,6 +748,7 @@ def submit_request(
     min_silence_ms,
     requester_name, requester_email, notes,
     github_username="",
+    review_opt_in=False,
 ):
     """Create GitHub Issue + Notion row for a new reciter request."""
     # Validate
@@ -782,7 +783,13 @@ def submit_request(
 
     # Verify GitHub username if provided
     github_username = (github_username or "").strip().lstrip("@")
-    if github_username:
+    if review_opt_in:
+        if not github_username:
+            return _msgs["errors"]["no_github_for_review"]
+        user_exists = _verify_github_user(github_username)
+        if user_exists is False:
+            return _msgs["errors"]["github_user_not_found"].format(github_username=github_username)
+    elif github_username:
         user_exists = _verify_github_user(github_username)
         if user_exists is False:
             return _msgs["errors"]["github_user_not_found"].format(github_username=github_username)
@@ -831,6 +838,10 @@ def submit_request(
 
     # Create GitHub Issue
     github_line = f"**GitHub:** @{github_username}\n" if github_username else ""
+    if review_opt_in and github_username:
+        reviewer_line = f"**Reviewer:** @{github_username} (requester)\n"
+    else:
+        reviewer_line = "**Reviewer:** Needs volunteer \u2014 comment `/claim` to help\n"
     notes_line = f"**Notes:** {notes.strip()}\n" if notes and notes.strip() else ""
     issue_body = _load_app_template("issue-body").format(
         request_type=request_type,
@@ -843,16 +854,14 @@ def submit_request(
         min_silence_ms=min_silence_ms,
         requester_id=requester_id,
         github_line=github_line,
+        reviewer_line=reviewer_line,
         notes_line=notes_line,
     )
 
     try:
         title = f"{title_prefix} {reciter_name}"
-        labels = _msgs["issue_labels"]["new_reciter"]
-
-        # Don't assign non-collaborators — GitHub rejects the whole issue.
-        # The username is already @-mentioned in the body; actual assignment
-        # happens later via process_requests.py after collaborator invite.
+        labels = list(_msgs["issue_labels"]["new_reciter"])
+        labels.append("reviewer-assigned" if review_opt_in else "needs-reviewer")
         assignees = []
 
         # Try bot creation first (appears as github-actions[bot])
@@ -893,6 +902,7 @@ def submit_request(
             "Country": {"rich_text": [{"text": {"content": country}}]},
             "Min Silence": {"number": min_silence_ms},
             "GitHub Username": {"rich_text": [{"text": {"content": github_username[:100]}}]},
+            "Reviewer Opt-in": {"checkbox": review_opt_in},
             "Status": {"select": {"name": "Pending"}},
             "GitHub Issue": {"url": issue_url},
             "Issue Number": {"number": issue_number},
@@ -1067,7 +1077,8 @@ def get_processed_markdown():
 
 
 def handle_submit(reciter_json, request_type, riwayah, style, country,
-                   min_silence, name, email, github_username, notes):
+                   min_silence, name, email,
+                   review_opt_in, github_username, notes):
     """Handle form submission from Gradio UI."""
     if not reciter_json:
         return _msgs["errors"]["no_reciter"]
@@ -1090,6 +1101,7 @@ def handle_submit(reciter_json, request_type, riwayah, style, country,
         requester_email=email,
         notes=notes,
         github_username=github_username,
+        review_opt_in=review_opt_in,
     )
 
 
@@ -1477,9 +1489,14 @@ with gr.Blocks(title="Reciter Requests") as demo:
                              "Murattal: 300–600ms, Mujawwad: 600–1200ms.",
                         minimum=100, maximum=2000, step=50,
                     )
+                    review_checkbox = gr.Checkbox(
+                        label="I'd like to review the segments myself",
+                        value=False,
+                    )
                     req_github = gr.Textbox(
-                        label="GitHub Username (optional)",
+                        label="GitHub Username",
                         placeholder="For write access to the review PR",
+                        visible=False,
                     )
                     req_notes = gr.Textbox(
                         label="Notes (optional)",
@@ -1521,11 +1538,17 @@ with gr.Blocks(title="Reciter Requests") as demo:
                 outputs=[riwayah_dd, style_dd, country_dd],
             )
 
+            review_checkbox.change(
+                fn=lambda checked: gr.update(visible=checked),
+                inputs=[review_checkbox],
+                outputs=[req_github],
+            )
+
             submit_btn.click(
                 fn=handle_submit,
                 inputs=[reciter_dd, request_type_dd, riwayah_dd, style_dd,
                         country_dd, min_silence, profile_name, profile_email,
-                        req_github, req_notes],
+                        review_checkbox, req_github, req_notes],
                 outputs=result_box,
             )
 
@@ -1621,6 +1644,7 @@ async def api_request(request: Request):
         requester_email=req.get("requester_email", ""),
         notes=req.get("notes", ""),
         github_username=req.get("github_username", ""),
+        review_opt_in=req.get("review_opt_in", False),
     )
 
     if result.startswith("Error:"):
