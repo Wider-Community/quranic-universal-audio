@@ -94,11 +94,14 @@ def cmd_triage(args):
 
     # Ensure required labels exist
     gh_ensure_labels({
+        "request-alignment": ("fbca04", "Reciter alignment request"),
+        "status:pending-alignment": ("c5def5", "Request submitted, awaiting alignment"),
         "status:rejected": ("d73a4a", "Request rejected"),
         "status:awaiting-review": ("f9d71c", "Segments ready, awaiting community review"),
+        "status:awaiting-timestamps": ("bfd4f2", "Segments reviewed, awaiting MFA timestamps"),
         "status:completed": ("0e8a16", "Fully processed with timestamps"),
         "reviewer-assigned": ("0075ca", "Reviewer assigned to this request"),
-        "needs-reviewer": ("d876e3", "Looking for a volunteer reviewer"),
+        "reviewer-needed": ("d876e3", "Looking for a volunteer reviewer"),
     })
 
     # 1. Fetch pending from Notion
@@ -107,7 +110,7 @@ def cmd_triage(args):
         pending = notion_query_pending()
     except Exception as e:
         print(f"ERROR: Failed to query Notion: {e}")
-        print("Falling back to GitHub issues with status:pending...")
+        print("Falling back to GitHub issues with status:pending-alignment...")
         pending = _fallback_pending_from_github()
 
     if not pending:
@@ -180,6 +183,7 @@ def cmd_triage(args):
             "requester_email": req.get("email", ""),
             "requester_name": req.get("requester_name", ""),
             "github_username": req.get("github_username", ""),
+            "review_opt_in": req.get("review_opt_in", False),
             "action": t["action"],
             "reject_reason": t.get("reason", ""),
             "status": "pending",
@@ -309,7 +313,7 @@ def _fallback_pending_from_github():
     issues = gh_list_request_issues(state="open")
     pending = []
     for iss in issues:
-        if iss["status"] != "pending":
+        if iss["status"] != "pending-alignment":
             continue
         body = iss.get("body", "")
 
@@ -333,6 +337,7 @@ def _fallback_pending_from_github():
             "country": extract("Country") or "unknown",
             "min_silence": extract("Suggested Min Silence").replace("ms", ""),
             "github_username": gh_user,
+            "review_opt_in": "Needs volunteer" not in extract("Reviewer"),
             "issue_number": iss["number"],
             "issue_url": iss["url"],
             "notes": extract("Notes"),
@@ -639,16 +644,19 @@ def cmd_prepare_pr(args):
             # Link PR to issue via Development sidebar + update status
             if req.get("issue_number"):
                 try:
-                    subprocess.run(
+                    result = subprocess.run(
                         ["gh", "issue", "develop", str(req["issue_number"]),
                          "--branch", branch, "--base", "main"],
                         cwd=str(REPO_ROOT), capture_output=True, text=True,
                     )
-                    print(f"    Linked PR to issue #{req['issue_number']}")
+                    if result.returncode == 0:
+                        print(f"    Linked PR to issue #{req['issue_number']}")
+                    else:
+                        print(f"    Warning: gh issue develop failed (rc={result.returncode}): {result.stderr.strip()}")
                 except Exception as e:
                     print(f"    Warning: failed to link issue: {e}")
                 try:
-                    gh_swap_label(req["issue_number"], "status:processing", "status:awaiting-review")
+                    gh_swap_label(req["issue_number"], "status:pending-alignment", "status:awaiting-review")
                 except Exception:
                     pass
 
@@ -678,9 +686,29 @@ def cmd_prepare_pr(args):
                 except Exception as e:
                     print(f"    Warning: failed to update Notion PR URL: {e}")
 
-            # Invite collaborator if requester opted to review
+            # Invite collaborator and assign to issue + PR if requester opted to review
             if has_reviewer:
                 gh_invite_collaborator(req["github_username"])
+                # Assign reviewer to the issue
+                try:
+                    subprocess.run(
+                        ["gh", "issue", "edit", str(req["issue_number"]),
+                         "--add-assignee", req["github_username"]],
+                        cwd=str(REPO_ROOT), capture_output=True, text=True,
+                    )
+                    print(f"    Assigned @{req['github_username']} to issue #{req['issue_number']}")
+                except Exception as e:
+                    print(f"    Warning: failed to assign to issue: {e}")
+                # Assign reviewer to the PR
+                try:
+                    subprocess.run(
+                        ["gh", "pr", "edit", str(pr_number),
+                         "--add-assignee", req["github_username"]],
+                        cwd=str(REPO_ROOT), capture_output=True, text=True,
+                    )
+                    print(f"    Assigned @{req['github_username']} to PR #{pr_number}")
+                except Exception as e:
+                    print(f"    Warning: failed to assign to PR: {e}")
 
             # Send segments-ready email
             if req.get("requester_email"):
