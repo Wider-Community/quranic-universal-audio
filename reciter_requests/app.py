@@ -64,20 +64,12 @@ def _send_confirmation_email(to: str, requester_name: str, reciter_name: str,
         logger.info(f"No Gmail credentials — skipping confirmation to {to}")
         return False
     subject = f"Your request for {reciter_name} has been received"
-    body = f"""\
-<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-<h2>Request Received</h2>
-<p>Hi {requester_name},</p>
-<p>Your request to align <strong>{reciter_name}</strong> has been received
-and will be queued for processing soon.</p>
-<p>You'll receive another email when the segments are ready for review.</p>
-<p>Track this request: <a href="{issue_url}">{issue_url}</a></p>
-<hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0">
-<p style="font-size:12px;color:#888">
-  Qur'anic Universal Audio &mdash;
-  <a href="https://github.com/Wider-Community/quranic-universal-audio">GitHub</a>
-</p>
-</div>"""
+    tpl_path = Path(__file__).parent / "templates" / "receipt-email.html"
+    body = tpl_path.read_text().format(
+        requester_name=requester_name,
+        reciter_name=reciter_name,
+        issue_url=issue_url,
+    )
     msg = MIMEMultipart("alternative")
     msg["From"] = GMAIL_ADDRESS
     msg["To"] = to
@@ -728,10 +720,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
     gr.Markdown("# Quran Reciter Segmentation Requests")
     gr.Markdown(
         "Submit a request to have a new reciter processed through the "
-        "alignment pipeline. Track the status of all requests below.\n\n"
-        "Don't see your reciter in the dropdown? "
-        "[Add one](https://github.com/Wider-Community/quranic-universal-audio/blob/main/docs/adding-a-reciter.md)."
-    )
+        "alignment pipeline and generate word/letter timestamps."
 
     with gr.Tabs():
         # ── Tab 1: Submit Request ─────────────────────────────────────
@@ -740,7 +729,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
                 with gr.Column(scale=2):
                     req_name = gr.Textbox(
                         label="Your Name",
-                        placeholder="Your name (for the request record)",
+                        placeholder="Your name",
                     )
                     req_email = gr.Textbox(
                         label="Your Email",
@@ -766,7 +755,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         choices=[],
                         label="Riwayah",
                         info="Auto-filled from the reciter's manifest. "
-                             "Change only if you know the reciter uses a different reading.",
+                             "Change only if you think the classification is wrong and know the reciter uses a different riwayah after verifying from the audio.",
                     )
                     style_dd = gr.Dropdown(
                         choices=STYLE_CHOICES,
@@ -777,12 +766,11 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         choices=COUNTRIES,
                         label="Country",
                         filterable=True,
-                        info="Reciter's country of origin. Auto-filled from manifest.",
+                        info="Reciter's country of origin. Auto-filled from manifest. Fill if unknown.",
                     )
                     min_silence = gr.Number(
                         value=None, label="Min Silence (ms)",
-                        info="Required. Check the parameter reference table for guidance. "
-                             "Murattal: 300–600ms, Mujawwad: 600–1200ms.",
+                        info="Required. Check the parameter reference table for guidance.",
                         minimum=100, maximum=2000, step=50,
                     )
                     review_checkbox = gr.Checkbox(
