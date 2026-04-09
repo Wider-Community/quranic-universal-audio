@@ -2,7 +2,7 @@
 API helpers for the reciter request automation pipeline.
 
 Provides functions for:
-- Notion database querying and status updates
+- Notion database querying (email/name lookup only)
 - GitHub issue label management
 - Gmail SMTP email sending
 - RECITERS.md parsing and editing
@@ -32,7 +32,6 @@ if _dotenv.exists():
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
-NOTION_WATCHERS_DB_ID = os.environ.get("NOTION_WATCHERS_DB_ID", "")
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 REPO_OWNER = "Wider-Community"
@@ -91,16 +90,33 @@ def notion_query_pending():
     return results
 
 
-def notion_update_status(page_id, status):
-    """Update the Status select property of a Notion page."""
-    url = f"https://api.notion.com/v1/pages/{page_id}"
-    body = {
-        "properties": {
-            "Status": {"select": {"name": status}},
-        }
-    }
-    r = httpx.patch(url, headers=_notion_headers(), json=body, timeout=30)
-    r.raise_for_status()
+def notion_query_emails():
+    """Query the entire Notion database and return a slug->{email, name} mapping.
+
+    Used to enrich GitHub-sourced requests with requester contact info.
+    Returns an empty dict on failure so callers can proceed without email.
+    """
+    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
+        return {}
+    url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
+    try:
+        r = httpx.post(url, headers=_notion_headers(), json={}, timeout=30)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"  Warning: Notion email lookup failed: {e}")
+        return {}
+
+    result = {}
+    for page in r.json().get("results", []):
+        props = page["properties"]
+        slug = _notion_rich_text(props.get("Slug", {}))
+        if not slug:
+            continue
+        email = _notion_email(props.get("Email", {}))
+        name = _notion_title(props.get("Requester Name", {}))
+        if email or name:
+            result[slug] = {"email": email, "name": name}
+    return result
 
 
 # Notion property extractors
@@ -120,13 +136,6 @@ def _notion_rich_text(prop):
 
 def _notion_email(prop):
     return prop.get("email", "") or ""
-
-
-def _notion_select(prop):
-    try:
-        return prop["select"]["name"]
-    except (KeyError, TypeError):
-        return ""
 
 
 def _notion_number(prop):
@@ -266,63 +275,6 @@ def gh_comment_on_issue(issue_number, body):
         timeout=15,
     )
     r.raise_for_status()
-
-
-def notion_update_pr_url(page_id, pr_url):
-    """Update the Pull Request URL property of a Notion page."""
-    url = f"https://api.notion.com/v1/pages/{page_id}"
-    body = {
-        "properties": {
-            "Pull Request": {"url": pr_url},
-        }
-    }
-    r = httpx.patch(url, headers=_notion_headers(), json=body, timeout=30)
-    r.raise_for_status()
-
-
-# ---------------------------------------------------------------------------
-# Notion Watchers helpers
-# ---------------------------------------------------------------------------
-def notion_get_watchers_for_targets(targets, target_type="reciter"):
-    """Return {target: [{email, name}]} for watchers matching the given targets.
-
-    Queries the NOTION_WATCHERS_DB_ID database for all entries of the given
-    target_type and filters to the requested target set.
-    """
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        return {}
-    url = f"https://api.notion.com/v1/databases/{NOTION_WATCHERS_DB_ID}/query"
-    body = {
-        "filter": {
-            "property": "Watch Target Type",
-            "select": {"equals": target_type},
-        },
-        "page_size": 100,
-    }
-    result = {}
-    try:
-        r = httpx.post(url, headers=_notion_headers(), json=body, timeout=30)
-        r.raise_for_status()
-        pages = r.json().get("results", [])
-        target_set = set(targets)
-        for p in pages:
-            props = p["properties"]
-            target_rt = props.get("Watch Target", {}).get("rich_text", [])
-            target_val = target_rt[0]["plain_text"] if target_rt else ""
-            if target_val not in target_set:
-                continue
-            email_val = props.get("Email", {}).get("email", "")
-            if not email_val:
-                continue
-            name_rt = props.get("Watcher Name", {}).get("rich_text", [])
-            name_val = name_rt[0]["plain_text"] if name_rt else ""
-            result.setdefault(target_val, []).append({
-                "email": email_val,
-                "name": name_val,
-            })
-    except Exception as e:
-        print(f"  Warning: Failed to query watchers: {e}")
-    return result
 
 
 # ---------------------------------------------------------------------------

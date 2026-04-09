@@ -45,7 +45,6 @@ def _load_app_template(name: str) -> str:
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
-NOTION_WATCHERS_DB_ID = os.environ.get("NOTION_WATCHERS_DB_ID", "")
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 REPO_OWNER = "Wider-Community"
@@ -218,7 +217,7 @@ def _trigger_bot_issue(title, body, labels, assignees):
 
 
 # ---------------------------------------------------------------------------
-# Notion API helpers
+# Notion API helpers (email-only store)
 # ---------------------------------------------------------------------------
 def _notion_headers():
     return {
@@ -248,283 +247,9 @@ def _repo_segments_exist(slug):
         return False
 
 
-def _notion_slug_exists(slug):
-    """Check if a Notion page with this slug exists in the database."""
-    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
-        return None  # Can't check — treat as unknown
-    try:
-        url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
-        body = {
-            "filter": {
-                "property": "Slug",
-                "rich_text": {"equals": slug},
-            },
-            "page_size": 1,
-        }
-        r = httpx.post(url, headers=_notion_headers(), json=body, timeout=15)
-        r.raise_for_status()
-        return len(r.json().get("results", [])) > 0
-    except Exception as e:
-        logger.warning(f"Notion slug check failed: {e}")
-        return None  # Unknown — don't block on Notion failure
-
-
-# ---------------------------------------------------------------------------
-# Notion Watchers helpers
-# ---------------------------------------------------------------------------
-def _notion_watcher_query(filters, page_size=100):
-    """Query the Watchers database with given filters."""
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        return []
-    url = f"https://api.notion.com/v1/databases/{NOTION_WATCHERS_DB_ID}/query"
-    body = {"filter": filters, "page_size": page_size}
-    r = httpx.post(url, headers=_notion_headers(), json=body, timeout=15)
-    r.raise_for_status()
-    return r.json().get("results", [])
-
-
-def _notion_add_watcher(
-    email, target, target_type="reciter",
-    display_name="", watch_type="manual", watcher_name="",
-):
-    """Add a watcher entry. Skips if duplicate exists. Best-effort."""
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        logger.warning("Notion watchers not configured — skipping add")
-        return False
-    try:
-        # Dedup check
-        existing = _notion_watcher_query({
-            "and": [
-                {"property": "Email", "email": {"equals": email.strip().lower()}},
-                {"property": "Watch Target", "rich_text": {"equals": target}},
-                {"property": "Watch Target Type", "select": {"equals": target_type}},
-            ]
-        }, page_size=1)
-        if existing:
-            return False  # Already watching
-
-        from datetime import date
-        url = "https://api.notion.com/v1/pages"
-        body = {
-            "parent": {"database_id": NOTION_WATCHERS_DB_ID},
-            "properties": {
-                "Display Name": {"title": [{"text": {"content": display_name or target}}]},
-                "Email": {"email": email.strip().lower()},
-                "Watch Target": {"rich_text": [{"text": {"content": target}}]},
-                "Watch Target Type": {"select": {"name": target_type}},
-                "Watch Type": {"select": {"name": watch_type}},
-                "Watcher Name": {"rich_text": [{"text": {"content": watcher_name[:100]}}]},
-                "Created At": {"date": {"start": date.today().isoformat()}},
-            },
-        }
-        r = httpx.post(url, headers=_notion_headers(), json=body, timeout=30)
-        r.raise_for_status()
-        return True
-    except Exception as e:
-        logger.warning(f"Failed to add watcher: {e}")
-        return False
-
-
-def _notion_remove_watcher(email, target, target_type="reciter"):
-    """Archive the watcher page matching email + target + target_type. Best-effort."""
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        return False
-    try:
-        pages = _notion_watcher_query({
-            "and": [
-                {"property": "Email", "email": {"equals": email.strip().lower()}},
-                {"property": "Watch Target", "rich_text": {"equals": target}},
-                {"property": "Watch Target Type", "select": {"equals": target_type}},
-            ]
-        }, page_size=1)
-        if not pages:
-            return False
-        page_id = pages[0]["id"]
-        r = httpx.patch(
-            f"https://api.notion.com/v1/pages/{page_id}",
-            headers=_notion_headers(),
-            json={"archived": True},
-            timeout=15,
-        )
-        r.raise_for_status()
-        return True
-    except Exception as e:
-        logger.warning(f"Failed to remove watcher: {e}")
-        return False
-
-
-def _notion_get_watchers_for_email(email):
-    """Return list of {target, target_type, display_name} watched by this email."""
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        return []
-    try:
-        pages = _notion_watcher_query({
-            "property": "Email",
-            "email": {"equals": email.strip().lower()},
-        })
-        results = []
-        for p in pages:
-            props = p["properties"]
-            target_rt = props.get("Watch Target", {}).get("rich_text", [])
-            target_type_sel = props.get("Watch Target Type", {}).get("select")
-            display_title = props.get("Display Name", {}).get("title", [])
-            results.append({
-                "target": target_rt[0]["plain_text"] if target_rt else "",
-                "target_type": target_type_sel["name"] if target_type_sel else "reciter",
-                "display_name": display_title[0]["plain_text"] if display_title else "",
-            })
-        return results
-    except Exception as e:
-        logger.warning(f"Failed to get watchers for email: {e}")
-        return []
-
-
-def _notion_get_watchers_for_targets(targets, target_type="reciter"):
-    """Return {target: [{email, name}]} for notification batching."""
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        return {}
-    result = {}
-    try:
-        # Query all watchers of the given target type
-        pages = _notion_watcher_query({
-            "property": "Watch Target Type",
-            "select": {"equals": target_type},
-        })
-        for p in pages:
-            props = p["properties"]
-            target_rt = props.get("Watch Target", {}).get("rich_text", [])
-            target_val = target_rt[0]["plain_text"] if target_rt else ""
-            if target_val not in targets:
-                continue
-            email_val = props.get("Email", {}).get("email", "")
-            name_rt = props.get("Watcher Name", {}).get("rich_text", [])
-            name_val = name_rt[0]["plain_text"] if name_rt else ""
-            result.setdefault(target_val, []).append({
-                "email": email_val,
-                "name": name_val,
-            })
-    except Exception as e:
-        logger.warning(f"Failed to get watchers for targets: {e}")
-    return result
-
-
-def _notion_migrate_email(old_email, new_email, new_name=""):
-    """Migrate all watcher entries from old_email to new_email."""
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        return 0
-    try:
-        pages = _notion_watcher_query({
-            "property": "Email",
-            "email": {"equals": old_email.strip().lower()},
-        })
-        migrated = 0
-        for p in pages:
-            props_update = {"Email": {"email": new_email.strip().lower()}}
-            if new_name:
-                props_update["Watcher Name"] = {
-                    "rich_text": [{"text": {"content": new_name[:100]}}]
-                }
-            r = httpx.patch(
-                f"https://api.notion.com/v1/pages/{p['id']}",
-                headers=_notion_headers(),
-                json={"properties": props_update},
-                timeout=15,
-            )
-            r.raise_for_status()
-            migrated += 1
-        return migrated
-    except Exception as e:
-        logger.warning(f"Failed to migrate email: {e}")
-        return 0
-
-
 # ---------------------------------------------------------------------------
 # Data fetching
 # ---------------------------------------------------------------------------
-def _is_check(val):
-    """Check if a table cell value is a positive marker (✓, ✓✓, Y)."""
-    v = val.strip()
-    return v in ("Y", "✓", "✓✓")
-
-
-def _parse_processed_reciters(md_text):
-    """Parse the Aligned Reciters table from RECITERS.md.
-
-    Table columns: Reciter | Style | Source | Granularity | Coverage |
-                   Segmented | Manually Validated | Timestamped
-    """
-    processed = []
-    in_table = False
-    for line in md_text.split("\n"):
-        if "| Reciter" in line and "Coverage" in line:
-            in_table = True
-            continue
-        if in_table and line.startswith("|---"):
-            continue
-        if in_table and line.startswith("|"):
-            cols = [c.strip() for c in line.split("|")[1:-1]]
-            if len(cols) >= 8:
-                processed.append({
-                    "name": cols[0],
-                    "style": cols[1].lower().replace(" ", "_") if cols[1] else "unknown",
-                    "coverage": cols[4],
-                    "segmented": _is_check(cols[5]),
-                    "validated": _is_check(cols[6]),
-                    "timestamped": _is_check(cols[7]),
-                    "timestamped_raw": cols[7].strip(),
-                })
-        elif in_table and not line.strip().startswith("|"):
-            break
-    return processed
-
-
-def _slug_from_name(name):
-    """Convert display name to snake_case slug."""
-    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
-
-
-def fetch_processed_reciters():
-    """Fetch processed reciters with their VAD parameters."""
-    cached = _get_cached("processed")
-    if cached is not None:
-        return cached
-
-    try:
-        md = _gh_get_raw("data/RECITERS.md")
-        processed = _parse_processed_reciters(md)
-
-        # Fetch VAD params from segments.json _meta for each
-        for rec in processed:
-            slug = _slug_from_name(rec["name"])
-            rec["slug"] = slug
-            try:
-                # Get first 500 bytes of segments.json via API (base64)
-                content_data = _gh_get(
-                    f"contents/data/recitation_segments/{slug}/segments.json"
-                )
-                raw = b64decode(content_data["content"]).decode("utf-8", errors="replace")
-                # Parse just the _meta from the first line
-                first_line_end = raw.find("\n")
-                if first_line_end == -1:
-                    first_line_end = len(raw)
-                meta_obj = json.loads(raw[:first_line_end])
-                if "_meta" in meta_obj:
-                    meta = meta_obj["_meta"]
-                else:
-                    meta = meta_obj
-                rec["min_silence_ms"] = meta.get("min_silence_ms", "?")
-                rec["audio_source"] = meta.get("audio_source", "?")
-            except Exception:
-                rec["min_silence_ms"] = "?"
-                rec["audio_source"] = "?"
-
-        _set_cached("processed", processed)
-        return processed
-    except Exception as e:
-        logger.error(f"Failed to fetch processed reciters: {e}")
-        return []
-
-
 def _fetch_reciters_index():
     """Fetch the pre-computed reciters index from GitHub (single API call)."""
     cached = _get_cached("reciters_index")
@@ -537,6 +262,56 @@ def _fetch_reciters_index():
         return data
     except Exception as e:
         logger.error(f"Failed to fetch reciters index: {e}")
+        return []
+
+
+def fetch_processed_reciters():
+    """Fetch processed reciters from completed GitHub issues + segments.json metadata."""
+    cached = _get_cached("processed")
+    if cached is not None:
+        return cached
+
+    try:
+        issues = _gh_get("issues", params={
+            "labels": "request-alignment,status:completed",
+            "state": "closed",
+            "per_page": 100,
+        })
+
+        processed = []
+        for iss in issues:
+            body = iss.get("body", "")
+            slug_match = re.search(r"\*\*Slug:\*\*\s*(\S+)", body)
+            if not slug_match:
+                continue
+            slug = slug_match.group(1)
+            name_match = re.search(r"\*\*Reciter:\*\*\s*(.+)", body)
+            name = name_match.group(1).strip() if name_match else slug.replace("_", " ").title()
+
+            rec = {"slug": slug, "name": name, "min_silence_ms": "?", "audio_source": "?"}
+
+            # Fetch min_silence_ms from segments.json _meta
+            try:
+                content_data = _gh_get(
+                    f"contents/data/recitation_segments/{slug}/segments.json"
+                )
+                raw = b64decode(content_data["content"]).decode("utf-8", errors="replace")
+                first_line_end = raw.find("\n")
+                if first_line_end == -1:
+                    first_line_end = len(raw)
+                meta_obj = json.loads(raw[:first_line_end])
+                meta = meta_obj.get("_meta", meta_obj)
+                rec["min_silence_ms"] = meta.get("min_silence_ms", "?")
+                rec["audio_source"] = meta.get("audio_source", "?")
+            except Exception:
+                pass
+
+            processed.append(rec)
+
+        _set_cached("processed", processed)
+        return processed
+    except Exception as e:
+        logger.error(f"Failed to fetch processed reciters: {e}")
         return []
 
 
@@ -593,101 +368,6 @@ def fetch_available_reciters():
         return []
 
 
-def _build_issue_pr_lookup(prs, issues):
-    """Build {issue_number: pr_html_url} from PR list.
-
-    Strategy 1: Parse 'Closes #N' / 'Fixes #N' / 'Resolves #N' from PR body.
-    Strategy 2: Match branch name feat/add-segments-{slug} to issue slug.
-    """
-    lookup = {}
-    for pr in prs:
-        body = pr.get("body", "") or ""
-        for m in re.finditer(
-            r"(?:Closes|Fixes|Resolves)\s+#(\d+)", body, re.IGNORECASE
-        ):
-            lookup[int(m.group(1))] = pr["html_url"]
-
-    # Strategy 2: branch name matching
-    slug_to_issue = {}
-    for iss in issues:
-        if iss.get("reciter_slug"):
-            slug_to_issue[iss["reciter_slug"]] = iss["issue_number"]
-    for pr in prs:
-        branch = pr.get("head", {}).get("ref", "")
-        m = re.match(r"feat/add-segments-(.+)", branch)
-        if m:
-            branch_slug = m.group(1).replace("-", "_")
-            issue_num = slug_to_issue.get(branch_slug)
-            if issue_num and issue_num not in lookup:
-                lookup[issue_num] = pr["html_url"]
-
-    return lookup
-
-
-def fetch_request_issues():
-    """Fetch all request issues from GitHub, with linked PR URLs."""
-    cached = _get_cached("requests")
-    if cached is not None:
-        return cached
-
-    try:
-        # Fetch both open and closed issues
-        all_issues = []
-        for state in ["open", "closed"]:
-            issues = _gh_get("issues", params={
-                "labels": "request-alignment",
-                "state": state,
-                "per_page": 100,
-            })
-            all_issues.extend(issues)
-
-        # Build initial result list (without pr_url yet)
-        result = []
-        for iss in all_issues:
-            labels = [l["name"] for l in iss.get("labels", [])]
-            status = "pending"
-            for l in labels:
-                if l.startswith("status:"):
-                    status = l.split(":", 1)[1]
-
-            # Extract slug from body
-            body = iss.get("body", "")
-            slug_match = re.search(r"\*\*Slug:\*\*\s*(\S+)", body)
-            slug = slug_match.group(1) if slug_match else ""
-
-            result.append({
-                "issue_number": iss["number"],
-                "title": iss["title"],
-                "reciter_slug": slug,
-                "status": status,
-                "created_at": iss["created_at"][:10],
-                "updated_at": iss["updated_at"][:10],
-                "url": iss["html_url"],
-                "pr_url": "",
-            })
-
-        # Fetch PRs to build issue→PR lookup
-        try:
-            all_prs = []
-            for pr_state in ["open", "closed"]:
-                prs = _gh_get("pulls", params={
-                    "state": pr_state,
-                    "per_page": 100,
-                })
-                all_prs.extend(prs)
-            pr_lookup = _build_issue_pr_lookup(all_prs, result)
-            for r in result:
-                r["pr_url"] = pr_lookup.get(r["issue_number"], "")
-        except Exception as e:
-            logger.warning(f"Failed to fetch PRs for lookup: {e}")
-
-        _set_cached("requests", result)
-        return result
-    except Exception as e:
-        logger.error(f"Failed to fetch request issues: {e}")
-        return []
-
-
 # ---------------------------------------------------------------------------
 # Submit request
 # ---------------------------------------------------------------------------
@@ -698,7 +378,7 @@ RIWAYAT: list[str] = []
 
 
 def _load_riwayat():
-    """Fetch riwayat.json from GitHub and build slug↔name mappings."""
+    """Fetch riwayat.json from GitHub and build slug<->name mappings."""
     global _RIWAYAH_SLUG_TO_NAME, _RIWAYAH_NAME_TO_SLUG, RIWAYAT
     if RIWAYAT:
         return
@@ -789,7 +469,7 @@ def submit_request(
         if user_exists is False:
             return _msgs["errors"]["github_user_not_found"].format(github_username=github_username)
 
-    # Check for duplicate requests
+    # Check for duplicate requests via GitHub issue search
     try:
         issues = _gh_get("issues", params={
             "labels": "request-alignment",
@@ -805,14 +485,12 @@ def submit_request(
                     return _load_app_template("duplicate-open").format(url=url)
                 # Closed issue — check if data was cleaned up
                 has_segments = _repo_segments_exist(reciter_slug)
-                has_notion = _notion_slug_exists(reciter_slug)
-                if has_segments or has_notion:
+                if has_segments:
                     return _load_app_template("duplicate-closed").format(url=url)
                 # Data cleaned up — allow fresh request
                 logger.info(
                     f"Closed issue found for {reciter_slug} but data removed "
-                    f"(segments={has_segments}, notion={has_notion}) — "
-                    f"allowing new request"
+                    f"(segments={has_segments}) — allowing new request"
                 )
                 break
     except Exception as e:
@@ -868,40 +546,16 @@ def submit_request(
         logger.error(f"GitHub issue creation failed: {e}")
         return f"Error: Failed to create request. Please try again later.\n\n{e}"
 
-    # Create Notion page (best-effort)
+    # Create Notion page (best-effort, email-only store)
     try:
         _notion_create_page({
             "Requester Name": {"title": [{"text": {"content": requester_name.strip()}}]},
             "Email": {"email": requester_email.strip().lower()},
-            "Reciter": {"rich_text": [{"text": {"content": reciter_name}}]},
             "Slug": {"rich_text": [{"text": {"content": reciter_slug}}]},
-            "Audio Source": {"rich_text": [{"text": {"content": audio_source}}]},
-            "Riwayah": {"rich_text": [{"text": {"content": riwayah}}]},
-            "Style": {"rich_text": [{"text": {"content": style}}]},
-            "Country": {"rich_text": [{"text": {"content": country}}]},
-            "Min Silence": {"number": min_silence_ms},
-            "GitHub Username": {"rich_text": [{"text": {"content": github_username[:100]}}]},
-            "Reviewer Opt-in": {"checkbox": review_opt_in},
-            "Status": {"select": {"name": "Pending"}},
-            "GitHub Issue": {"url": issue_url},
             "Issue Number": {"number": issue_number},
-            "Notes": {"rich_text": [{"text": {"content": (notes or "").strip()[:2000]}}]},
         })
     except Exception as e:
         logger.warning(f"Notion page creation failed (issue was created): {e}")
-
-    # Auto-watch: contributor automatically watches the reciter they requested
-    try:
-        _notion_add_watcher(
-            email=requester_email,
-            target=reciter_slug,
-            target_type="reciter",
-            display_name=reciter_name,
-            watch_type="contributor",
-            watcher_name=requester_name.strip(),
-        )
-    except Exception as e:
-        logger.warning(f"Auto-watch failed (non-blocking): {e}")
 
     # Invalidate caches
     _set_cached("requests", None)
@@ -990,26 +644,8 @@ def on_reciter_selected(reciter_json):
         return empty
 
 
-def get_requests_markdown():
-    """Return markdown table of request issues."""
-    requests = fetch_request_issues()
-    if not requests:
-        return _msgs["ui"]["no_requests"]
-    lines = ["| Reciter | Status | Submitted | Updated | Issue | PR |",
-             "|---------|--------|-----------|---------|-------|------|"]
-    for r in requests:
-        name = r["title"].replace("[request] ", "")
-        issue_link = f"[#{r['issue_number']}]({r['url']})"
-        pr_link = f"[View]({r['pr_url']})" if r.get("pr_url") else ""
-        lines.append(
-            f"| {name} | {r['status']} | {r['created_at']} "
-            f"| {r['updated_at']} | {issue_link} | {pr_link} |"
-        )
-    return "\n".join(lines)
-
-
 def get_processed_markdown():
-    """Return markdown table of processed reciters."""
+    """Return markdown table of processed reciters (parameter reference)."""
     processed = fetch_processed_reciters()
     if not processed:
         return _msgs["ui"]["no_data"]
@@ -1072,293 +708,9 @@ def fetch_guide():
         return _msgs["ui"]["guide_fallback"]
 
 
-def _fetch_release_history():
-    """Fetch data/.release_history.json from GitHub (cached 30min)."""
-    cached = _get_cached("release_history")
-    if cached is not None:
-        return cached
-    try:
-        raw = _gh_get_raw("data/.release_history.json")
-        data = json.loads(raw)
-        _set_cached("release_history", data)
-        return data
-    except Exception:
-        # File doesn't exist yet — no releases tracked
-        _set_cached("release_history", {})
-        return {}
-
-
-def _fetch_github_releases():
-    """Fetch release list from GitHub API (cached 30min)."""
-    cached = _get_cached("gh_releases")
-    if cached is not None:
-        return cached
-    try:
-        releases = _gh_get("releases", params={"per_page": 30})
-        result = []
-        for rel in releases:
-            result.append({
-                "tag": rel["tag_name"],
-                "name": rel.get("name", rel["tag_name"]),
-                "published_at": rel["published_at"][:10],
-                "body": rel.get("body", ""),
-                "url": rel["html_url"],
-                "assets": [
-                    {"name": a["name"], "url": a["browser_download_url"], "size": a["size"]}
-                    for a in rel.get("assets", [])
-                ],
-            })
-        _set_cached("gh_releases", result)
-        return result
-    except Exception as e:
-        logger.warning(f"Failed to fetch GitHub releases: {e}")
-        _set_cached("gh_releases", [])
-        return []
-
-
-def _build_dashboard_data(email=None):
-    """Build unified reciter list merging all data sources."""
-    index = _fetch_reciters_index()
-    processed = fetch_processed_reciters()
-    requests = fetch_request_issues()
-    release_hist = _fetch_release_history()
-
-    # Build lookup maps
-    processed_by_slug = {}
-    for r in processed:
-        slug = r.get("slug", _slug_from_name(r["name"]))
-        processed_by_slug[slug] = r
-
-    request_by_slug = {}
-    for r in requests:
-        if r.get("reciter_slug"):
-            request_by_slug[r["reciter_slug"]] = r
-
-    # Get watch state if email provided
-    watched_targets = set()
-    if email:
-        try:
-            watches = _notion_get_watchers_for_email(email)
-            watched_targets = {
-                w["target"] for w in watches if w["target_type"] == "reciter"
-            }
-        except Exception:
-            pass
-
-    # Load riwayah display names
-    _load_riwayat()
-
-    # Build unified list
-    cards = []
-    seen = set()
-
-    # First pass: all reciters from index
-    for entry in index:
-        slug = entry["slug"]
-        if slug in seen:
-            continue
-        seen.add(slug)
-
-        card = {
-            "slug": slug,
-            "name_en": entry.get("name_en", slug.replace("_", " ").title()),
-            "name_ar": entry.get("name_ar"),
-            "riwayah": entry.get("riwayah", "unknown"),
-            "riwayah_display": _riwayah_slug_to_name(entry.get("riwayah", "")),
-            "style": entry.get("style", "unknown"),
-            "source": entry.get("source", "unknown"),
-            "country": entry.get("country", "unknown"),
-            "audio_cat": entry.get("audio_cat", "by_surah"),
-            "coverage": entry.get("coverage", 0),
-            "has_timing": entry.get("has_timing", False),
-            "status": "available",
-            "timestamp_level": None,
-            "issue_url": None,
-            "issue_number": None,
-            "pr_url": None,
-            "created_at": None,
-            "updated_at": None,
-            "release_version": None,
-            "release_count": 0,
-            "download_url": None,
-            "first_release_date": None,
-            "latest_release_date": None,
-            "watching": slug in watched_targets,
-        }
-
-        # Overlay processed data
-        if slug in processed_by_slug:
-            p = processed_by_slug[slug]
-            card["status"] = "completed"
-            card["timestamp_level"] = (
-                "words_and_letters" if p.get("timestamped_raw", p.get("timestamped")) == "✓✓"
-                else "words_only" if p.get("timestamped")
-                else None
-            )
-
-        # Overlay request issue data
-        if slug in request_by_slug:
-            req = request_by_slug[slug]
-            if card["status"] != "completed":
-                card["status"] = req["status"]
-            card["issue_url"] = req["url"]
-            card["issue_number"] = req["issue_number"]
-            card["pr_url"] = req.get("pr_url")
-            card["created_at"] = req["created_at"]
-            card["updated_at"] = req["updated_at"]
-
-        # Overlay release history
-        if slug in release_hist:
-            rh = release_hist[slug]
-            card["release_version"] = rh.get("latest_release")
-            card["release_count"] = rh.get("release_count", 0)
-            card["download_url"] = rh.get("latest_download_url")
-            card["first_release_date"] = rh.get("first_release_date")
-            card["latest_release_date"] = rh.get("latest_release_date")
-
-        cards.append(card)
-
-    # Second pass: processed reciters not in index (shouldn't happen but safety)
-    for slug, p in processed_by_slug.items():
-        if slug not in seen:
-            seen.add(slug)
-            card = {
-                "slug": slug,
-                "name_en": p["name"],
-                "name_ar": None,
-                "riwayah": "unknown",
-                "riwayah_display": "Unknown",
-                "style": p.get("style", "unknown"),
-                "source": "unknown",
-                "country": "unknown",
-                "audio_cat": "unknown",
-                "coverage": 0,
-                "has_timing": False,
-                "status": "completed",
-                "timestamp_level": (
-                    "words_and_letters" if p.get("timestamped_raw", p.get("timestamped")) == "✓✓"
-                    else "words_only" if p.get("timestamped")
-                    else None
-                ),
-                "issue_url": None,
-                "issue_number": None,
-                "pr_url": None,
-                "created_at": None,
-                "updated_at": None,
-                "release_version": None,
-                "release_count": 0,
-                "download_url": None,
-                "first_release_date": None,
-                "latest_release_date": None,
-                "watching": slug in watched_targets,
-            }
-            if slug in request_by_slug:
-                req = request_by_slug[slug]
-                card["issue_url"] = req["url"]
-                card["issue_number"] = req["issue_number"]
-                card["pr_url"] = req.get("pr_url")
-                card["created_at"] = req["created_at"]
-                card["updated_at"] = req["updated_at"]
-            if slug in release_hist:
-                rh = release_hist[slug]
-                card["release_version"] = rh.get("latest_release")
-                card["release_count"] = rh.get("release_count", 0)
-                card["download_url"] = rh.get("latest_download_url")
-                card["first_release_date"] = rh.get("first_release_date")
-                card["latest_release_date"] = rh.get("latest_release_date")
-            cards.append(card)
-
-    return cards
-
-
-def refresh_dashboard():
-    """Clear caches and refresh dashboard data."""
-    _set_cached("requests", None)
-    _set_cached("processed", None)
-    _set_cached("release_history", None)
-    return get_requests_markdown(), get_processed_markdown()
-
-
 # ---------------------------------------------------------------------------
 # Gradio App
 # ---------------------------------------------------------------------------
-
-def _build_dashboard_html():
-    """Return the card-based dashboard HTML loaded from template."""
-    try:
-        return (_APP_DIR / "templates" / "dashboard.html").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return "<p><em>Dashboard template not found.</em></p>"
-
-
-def _build_releases_html():
-    """Return the releases tab HTML loaded from template."""
-    try:
-        return (_APP_DIR / "templates" / "releases.html").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return "<p><em>Releases template not found.</em></p>"
-
-
-# localStorage persistence JS — injected at the top of the page.
-# Restores email/name from browser storage on load, saves on blur.
-_PROFILE_JS = """
-<script>
-(function() {
-    const PROFILE_KEY = 'qua_reciter_profile';
-
-    function loadProfile() {
-        try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}'); }
-        catch(e) { return {}; }
-    }
-    function saveProfile(updates) {
-        try {
-            const p = loadProfile();
-            Object.assign(p, updates);
-            localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-        } catch(e) {}
-    }
-
-    // Wait for Gradio to render
-    const poll = setInterval(() => {
-        const nameEl = document.querySelector('#profile-name input, #profile-name textarea');
-        const emailEl = document.querySelector('#profile-email input, #profile-email textarea');
-        if (!nameEl || !emailEl) return;
-        clearInterval(poll);
-
-        const saved = loadProfile();
-        if (saved.name && !nameEl.value) {
-            nameEl.value = saved.name;
-            nameEl.dispatchEvent(new Event('input', {bubbles: true}));
-        }
-        if (saved.email && !emailEl.value) {
-            emailEl.value = saved.email;
-            emailEl.dispatchEvent(new Event('input', {bubbles: true}));
-        }
-
-        // Save on blur
-        nameEl.addEventListener('blur', () => saveProfile({name: nameEl.value}));
-        emailEl.addEventListener('blur', () => {
-            const oldEmail = loadProfile().email || '';
-            const newEmail = emailEl.value.trim().toLowerCase();
-            if (oldEmail && newEmail && oldEmail !== newEmail) {
-                // Migrate watchers
-                fetch('/api/update-email', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({old_email: oldEmail, new_email: newEmail, name: nameEl.value}),
-                }).catch(() => {});
-            }
-            saveProfile({email: newEmail});
-        });
-
-        // Expose for dashboard JS
-        window.quaGetProfile = loadProfile;
-        window.quaSaveProfile = saveProfile;
-    }, 200);
-})();
-</script>
-"""
-
 
 with gr.Blocks(title="Reciter Requests") as demo:
     gr.Markdown("# Quran Reciter Segmentation Requests")
@@ -1369,28 +721,20 @@ with gr.Blocks(title="Reciter Requests") as demo:
         "[Add one](https://github.com/Wider-Community/quranic-universal-audio/blob/main/docs/adding-a-reciter.md)."
     )
 
-    # localStorage injection
-    gr.HTML(_PROFILE_JS)
-
-    # ── Top-level profile bar ─────────────────────────────────────
-    with gr.Row():
-        profile_name = gr.Textbox(
-            label="Your Name", scale=2, elem_id="profile-name",
-            placeholder="Stored locally for form auto-fill",
-        )
-        profile_email = gr.Textbox(
-            label="Your Email", type="email", scale=2, elem_id="profile-email",
-            placeholder="Used for notifications and watching reciters",
-        )
-
     with gr.Tabs():
         # ── Tab 1: Submit Request ─────────────────────────────────────
         with gr.Tab("Submit Request"):
-            # Hidden textbox for card-to-submit prefill flow
-            prefill_slug = gr.Textbox(visible=False, elem_id="prefill-slug")
-
             with gr.Row():
                 with gr.Column(scale=2):
+                    req_name = gr.Textbox(
+                        label="Your Name",
+                        placeholder="Your name (for the request record)",
+                    )
+                    req_email = gr.Textbox(
+                        label="Your Email",
+                        type="email",
+                        placeholder="Used for confirmation and notifications",
+                    )
                     audio_cat_dd = gr.Dropdown(
                         choices=AUDIO_CATEGORIES,
                         value="By Surah",
@@ -1480,44 +824,12 @@ with gr.Blocks(title="Reciter Requests") as demo:
             submit_btn.click(
                 fn=handle_submit,
                 inputs=[reciter_dd, riwayah_dd, style_dd,
-                        country_dd, min_silence, profile_name, profile_email,
+                        country_dd, min_silence, req_name, req_email,
                         review_checkbox, req_github, req_notes],
                 outputs=result_box,
             )
 
-            # Card-to-submit prefill: when JS writes to prefill-slug,
-            # look up the reciter and select it in the dropdown.
-            def _prefill_reciter(slug_val):
-                if not slug_val:
-                    return gr.Dropdown()
-                reciters = fetch_available_reciters()
-                for r in reciters:
-                    if r["slug"] == slug_val:
-                        return gr.Dropdown(value=json.dumps({
-                            "slug": r["slug"],
-                            "name": r["name"],
-                            "source": r["source"],
-                            "riwayah": r.get("riwayah", ""),
-                            "style": r.get("style", ""),
-                            "country": r.get("country", ""),
-                        }))
-                return gr.Dropdown()
-
-            prefill_slug.change(
-                fn=_prefill_reciter,
-                inputs=[prefill_slug],
-                outputs=[reciter_dd],
-            )
-
-        # ── Tab 2: Dashboard ──────────────────────────────────────────
-        with gr.Tab("Dashboard"):
-            dashboard_html = gr.HTML(value=_build_dashboard_html())
-
-        # ── Tab 3: Releases ───────────────────────────────────────────
-        with gr.Tab("Releases"):
-            releases_html = gr.HTML(value=_build_releases_html())
-
-        # ── Tab 4: Guide ──────────────────────────────────────────────
+        # ── Tab 2: Guide ──────────────────────────────────────────────
         with gr.Tab("Guide") as guide_tab:
             guide_md = gr.Markdown(value="*Loading guide...*")
 
@@ -1609,124 +921,10 @@ async def api_processed():
     return {"reciters": fetch_processed_reciters()}
 
 
-@_api_routes.get("/requests")
-async def api_requests():
-    """List all request issues."""
-    return {"requests": fetch_request_issues()}
-
-
 @_api_routes.get("/guide")
 async def api_guide():
     """Fetch the requesting-a-reciter guide markdown."""
     return {"markdown": fetch_guide()}
-
-
-@_api_routes.get("/dashboard-data")
-async def api_dashboard_data(email: str = ""):
-    """Unified reciter data for the card dashboard."""
-    data = _build_dashboard_data(email=email or None)
-    return {"reciters": data}
-
-
-@_api_routes.post("/watch")
-async def api_watch(request: Request):
-    """Add a watcher entry."""
-    body = await request.json()
-    email = body.get("email", "").strip().lower()
-    target = body.get("target", "")
-    target_type = body.get("target_type", "reciter")
-    display_name = body.get("display_name", "")
-    watcher_name = body.get("watcher_name", "")
-    if not email or not target:
-        return JSONResponse({"error": "email and target required"}, status_code=400)
-    ok = _notion_add_watcher(
-        email, target, target_type, display_name, "manual", watcher_name,
-    )
-    return JSONResponse(
-        {"status": "created" if ok else "exists"},
-        status_code=201 if ok else 200,
-    )
-
-
-@_api_routes.post("/unwatch")
-async def api_unwatch(request: Request):
-    """Remove a watcher entry."""
-    body = await request.json()
-    email = body.get("email", "").strip().lower()
-    target = body.get("target", "")
-    target_type = body.get("target_type", "reciter")
-    if not email or not target:
-        return JSONResponse({"error": "email and target required"}, status_code=400)
-    ok = _notion_remove_watcher(email, target, target_type)
-    return {"status": "removed" if ok else "not_found"}
-
-
-@_api_routes.get("/watching")
-async def api_watching(email: str = ""):
-    """List all watches for an email."""
-    if not email:
-        return {"watching": []}
-    watches = _notion_get_watchers_for_email(email)
-    return {"watching": watches}
-
-
-@_api_routes.post("/save-profile")
-async def api_save_profile(request: Request):
-    """Save user profile to Notion (idempotent)."""
-    body = await request.json()
-    email = body.get("email", "").strip().lower()
-    name = body.get("name", "").strip()
-    if not email:
-        return JSONResponse({"error": "email required"}, status_code=400)
-    # Profile is implicitly stored when first watcher entry is created.
-    # For now just acknowledge — actual storage happens on watch/submit.
-    return {"status": "ok"}
-
-
-@_api_routes.post("/update-email")
-async def api_update_email(request: Request):
-    """Migrate all watcher entries from old email to new email."""
-    body = await request.json()
-    old_email = body.get("old_email", "").strip().lower()
-    new_email = body.get("new_email", "").strip().lower()
-    new_name = body.get("name", "")
-    if not old_email or not new_email:
-        return JSONResponse({"error": "old_email and new_email required"}, status_code=400)
-    if old_email == new_email:
-        return {"status": "no_change", "migrated": 0}
-    count = _notion_migrate_email(old_email, new_email, new_name)
-    return {"status": "migrated", "migrated": count}
-
-
-@_api_routes.get("/unsubscribe")
-async def api_unsubscribe(email: str = "", target: str = ""):
-    """Unsubscribe from notifications. Returns an HTML confirmation page."""
-    from fastapi.responses import HTMLResponse
-    if not email:
-        return HTMLResponse("<h2>Invalid unsubscribe link</h2>", status_code=400)
-    if target:
-        _notion_remove_watcher(email, target, "reciter")
-        msg = f"You have been unsubscribed from updates for <strong>{target}</strong>."
-    else:
-        # Remove all watches for this email
-        watches = _notion_get_watchers_for_email(email)
-        for w in watches:
-            _notion_remove_watcher(email, w["target"], w["target_type"])
-        msg = f"You have been unsubscribed from all notifications ({len(watches)} removed)."
-    return HTMLResponse(f"""
-    <div style="font-family:system-ui,sans-serif;max-width:500px;margin:80px auto;text-align:center">
-        <h2>Unsubscribed</h2>
-        <p>{msg}</p>
-        <p style="color:#888;font-size:13px">Quranic Universal Audio</p>
-    </div>
-    """)
-
-
-@_api_routes.get("/releases")
-async def api_releases():
-    """Release history for the Releases tab."""
-    releases = _fetch_github_releases()
-    return {"releases": releases}
 
 
 # ---------------------------------------------------------------------------
