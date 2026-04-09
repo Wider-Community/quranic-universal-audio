@@ -643,6 +643,18 @@ def cmd_prepare_pr(args):
             req["pr_url"] = pr_url
             pr_number = int(pr_url.rstrip("/").split("/")[-1])
 
+            # Trigger validation workflow (bot PRs don't fire pull_request events)
+            try:
+                subprocess.run(
+                    ["gh", "workflow", "run", "validate-segments-pr.yml",
+                     "-f", f"reciters={req['slug']}",
+                     "-f", f"pr_number={pr_number}"],
+                    cwd=str(REPO_ROOT), capture_output=True, text=True, check=True,
+                )
+                print(f"    Triggered validation for PR #{pr_number}")
+            except Exception as e:
+                print(f"    Warning: failed to trigger validation: {e}")
+
             # Link PR to issue via Development sidebar + update status
             if req.get("issue_number"):
                 try:
