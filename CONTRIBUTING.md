@@ -23,16 +23,15 @@ Reciters in the project fall into one of three states. Browse the full list in [
 
 ## Ways to contribute
 
-1. **Add a new reciter** — Find a reciter whose audio is available online and add them to the repository. See the [adding a reciter](docs/adding-a-reciter.md) guide
-2. **Request processing** — For reciters already in the system, determine a suitable silence threshold and submit a request. You can optionally volunteer to review the segments yourself — if not, one of our active contributors will handle the review. See the [requesting a reciter](docs/requesting-a-reciter.md) guide
-3. **Review segments** — Listen to audio in the Inspector UI and fix AI errors so that timestamps can be generated. No Qur'an expertise required — just adequate proficiency in reading and hearing the Qur'an
+1. **Request processing** — For reciters already in the system, determine a suitable silence threshold and submit a request [via the form](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) (see the [requesting a reciter](docs/requesting-a-reciter.md) guide). You can optionally volunteer to review the segments yourself — if not, one of our active contributors will handle the review. 
+3. **Review segments** — Listen to audio in the [Inspector UI](inspector/README.md) and fix AI errors so that timestamps can be generated. No Qur'an expertise required — just adequate proficiency in reading and hearing the Qur'an
    - **a) Review new segments** — Pick up a reciter that hasn't been reviewed yet and fix all errors.
    - **b) Refine timestamped reciters** — For reciters that already have timestamps, do additional quality checks and fix any remaining issues. Updates flow automatically to the dataset
 4. **Report issues and suggest improvements** — Bug reports, feature ideas, and general feedback via [GitHub Issues](https://github.com/Wider-Community/quranic-universal-audio/issues)
 
 ## Setup
 
-Requesting processing and reporting issues only need a browser. For reviewing segments or adding a reciter, you'll need Git and Python.
+Requesting processing and reporting issues only need a browser. For reviewing segments, you'll need Git and Python.
 
 ### Prerequisites
 
