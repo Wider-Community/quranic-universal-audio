@@ -1,10 +1,5 @@
-# Research
+# Docs
 docs/reciters-research/
-
-# Temp data files
-data/qul_reciters.txt
-data/all_reciter_combos.txt
-data/qul_explore_prompt.md
 
 # Cache
 __pycache__/
@@ -23,15 +18,6 @@ CLAUDE.md
 # Local
 jobs/
 extract_segments.py
-
-# Summary-level validation logs (reciter-specific ones are kept)
-data/recitation_segments/validation.log
-data/timestamps/by_ayah_audio/validation.log
-data/timestamps/by_surah_audio/validation.log
-
-# Letter timestamps (keep minshawy_murattal, ignore future reciters)
-data/timestamps/**/timestamps_full.json
-!data/timestamps/by_ayah_audio/minshawy_murattal/timestamps_full.json
 
 # Release packaging output
 dist/
