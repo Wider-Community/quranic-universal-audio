@@ -326,8 +326,9 @@ def fetch_available_reciters():
         processed = fetch_processed_reciters()
         processed_slugs = {r["slug"] for r in processed}
 
-        # Fetch open request issues to mark pending
+        # Fetch open request issues to mark pending (skip rejected/discarded)
         pending = {}
+        skip_statuses = {"status:rejected", "status:discarded"}
         try:
             issues = _gh_get("issues", params={
                 "labels": "request-alignment",
@@ -335,6 +336,9 @@ def fetch_available_reciters():
                 "per_page": 100,
             })
             for iss in issues:
+                issue_labels = {l["name"] for l in iss.get("labels", [])}
+                if issue_labels & skip_statuses:
+                    continue
                 body = iss.get("body", "")
                 slug_match = re.search(r"\*\*Slug:\*\*\s*(\S+)", body)
                 if slug_match:
@@ -357,6 +361,7 @@ def fetch_available_reciters():
                 "riwayah": r["riwayah"],
                 "style": r["style"],
                 "country": r.get("country", "unknown"),
+                "coverage": r.get("coverage", 0),
                 "has_pending_request": slug in pending,
                 "pending_issue_url": pending.get(slug, ""),
             })
@@ -606,6 +611,7 @@ def get_reciter_choices(audio_cat="By Surah"):
             "riwayah": r.get("riwayah", ""),
             "style": r.get("style", ""),
             "country": r.get("country", ""),
+            "coverage": r.get("coverage", 0),
         })))
     return choices
 
@@ -617,8 +623,8 @@ def update_on_audio_cat(audio_cat):
 
 
 def on_reciter_selected(reciter_json):
-    """Auto-fill riwayah, style, and country when a reciter is selected."""
-    empty = gr.Dropdown(), gr.Dropdown(), gr.Dropdown()
+    """Auto-fill riwayah, style, country, and coverage info when a reciter is selected."""
+    empty = "", gr.Dropdown(), gr.Dropdown(), gr.Dropdown()
     if not reciter_json:
         return empty
     try:
@@ -626,6 +632,12 @@ def on_reciter_selected(reciter_json):
         riwayah_slug = info.get("riwayah", "")
         style_slug = info.get("style", "")
         country = info.get("country", "")
+        coverage = info.get("coverage", 0)
+        source = info.get("source", "")
+
+        # Coverage info text
+        source_display = source.split("/", 1)[1] if "/" in source else source
+        coverage_text = f"**{coverage}**/114 surahs — source: **{source_display}**"
 
         riwayah_update = (
             gr.Dropdown(value=_riwayah_slug_to_name(riwayah_slug))
@@ -639,7 +651,7 @@ def on_reciter_selected(reciter_json):
             gr.Dropdown(value=country)
             if country and country != "unknown" else gr.Dropdown()
         )
-        return riwayah_update, style_update, country_update
+        return coverage_text, riwayah_update, style_update, country_update
     except (json.JSONDecodeError, TypeError):
         return empty
 
@@ -749,6 +761,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
                              "Already-processed and pending reciters are excluded.",
                         filterable=True,
                     )
+                    reciter_info = gr.Markdown(value="")
                     riwayah_dd = gr.Dropdown(
                         choices=[],
                         label="Riwayah",
@@ -773,12 +786,12 @@ with gr.Blocks(title="Reciter Requests") as demo:
                         minimum=100, maximum=2000, step=50,
                     )
                     review_checkbox = gr.Checkbox(
-                        label="I'd like to review the segments myself",
+                        label="I'd like to review the segments myself (if not, one of our contributors will handle the reviewing)",
                         value=False,
                     )
                     req_github = gr.Textbox(
                         label="GitHub Username",
-                        placeholder="For write access to the review PR",
+                        placeholder="To be invited as a collaborator and assigned as a reviewer",
                         visible=False,
                     )
                     req_notes = gr.Textbox(
@@ -812,7 +825,7 @@ with gr.Blocks(title="Reciter Requests") as demo:
             reciter_dd.change(
                 fn=on_reciter_selected,
                 inputs=[reciter_dd],
-                outputs=[riwayah_dd, style_dd, country_dd],
+                outputs=[reciter_info, riwayah_dd, style_dd, country_dd],
             )
 
             review_checkbox.change(
