@@ -1622,14 +1622,7 @@ function handleSegRowClick(e) {
         if (!segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
             _accordionOpCtx = { wrapper };
-            if (_isWrapperContextShown(wrapper) || !wrapper.querySelector('.val-card-actions')) {
-                // Context already shown, or rebuilt accordion (no toggle btn) — enter immediately
-                enterEditWithBuffer(seg, row, 'split', splitCat);
-            } else {
-                // Context toggle exists but not shown yet — show first, then enter
-                ensureContextShown(row);
-                setTimeout(() => enterEditWithBuffer(seg, row, 'split', splitCat), 1000);
-            }
+            enterEditWithBuffer(seg, row, 'split', splitCat);
             return;
         }
         enterEditWithBuffer(seg, row, 'split', splitCat);
@@ -1935,7 +1928,7 @@ function renderSegCard(seg, options = {}) {
 function renderSegList(segments) {
     // Invalidate cached row references (DOM nodes are about to be replaced)
     _prevHighlightedRow = null; _prevHighlightedIdx = -1;
-    _prevPlayheadRow = null; _currentPlayheadRow = null; _prevPlayheadIdx = -1;
+    _currentPlayheadRow = null; _prevPlayheadIdx = -1;
     segListEl.innerHTML = '';
     if (!segments || segments.length === 0) {
         segListEl.innerHTML = '<div class="seg-loading">No segments to display</div>';
@@ -2403,7 +2396,6 @@ function updateSegHighlight() {
 }
 
 let _prevPlayheadIdx = -1;
-let _prevPlayheadRow = null;
 let _currentPlayheadRow = null;
 
 function drawActivePlayhead() {
@@ -2417,7 +2409,7 @@ function drawActivePlayhead() {
 
     // Clear playhead from previously active canvas (if it changed)
     if (_prevPlayheadIdx >= 0 && indexChanged) {
-        const prevRow = _prevPlayheadRow || segListEl.querySelector(`.seg-row[data-seg-index="${_prevPlayheadIdx}"]`);
+        const prevRow = _currentPlayheadRow || segListEl.querySelector(`.seg-row[data-seg-index="${_prevPlayheadIdx}"]`);
         if (prevRow) {
             const canvas = prevRow.querySelector('canvas');
             const seg = getSegByChapterIndex(chapter, _prevPlayheadIdx);
@@ -2428,7 +2420,6 @@ function drawActivePlayhead() {
     }
 
     if (indexChanged) {
-        _prevPlayheadRow = _currentPlayheadRow;
         _currentPlayheadRow = segCurrentIdx >= 0
             ? segListEl.querySelector(`.seg-row[data-seg-index="${segCurrentIdx}"]`)
             : null;
@@ -3274,6 +3265,18 @@ let TRIM_DIM_ALPHA = 0.45;        // dimming opacity for padded regions (overrid
 let SHOW_BOUNDARY_PHONEMES = true; // show GT/ASR tail phonemes on boundary_adj cards (overridden by config)
 let PEAKS_NEIGHBOR_COUNT = 5;     // segments before/after to prefetch peaks on click (overridden by config)
 
+/** Add/remove the single dim overlay (replaces per-row opacity for performance). */
+let _editOverlay = null;
+function _addEditOverlay() {
+    if (_editOverlay) return;
+    _editOverlay = document.createElement('div');
+    _editOverlay.className = 'seg-edit-overlay';
+    document.body.appendChild(_editOverlay);
+}
+function _removeEditOverlay() {
+    if (_editOverlay) { _editOverlay.remove(); _editOverlay = null; }
+}
+
 /**
  * Enter trim or split mode. Waveforms are drawn from peaks (no audio buffer needed).
  */
@@ -3308,6 +3311,7 @@ function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
         _pendingOp = null;
         segEditMode = null;
         segEditIndex = -1;
+        _removeEditOverlay();
         document.body.classList.remove('seg-edit-active');
         const targetRow = document.querySelector('.seg-row.seg-edit-target');
         if (targetRow) {
@@ -3327,9 +3331,11 @@ function enterTrimMode(seg, row) {
     segEditMode = 'trim';
     segEditIndex = seg.index;
 
-    // Dim other rows via CSS
+    // Dim other rows: pointer-events disabled at container level (2-3 elements)
+    // instead of per-row (300+ rows).  Edit-target re-enables pointer-events via CSS.
     row.classList.add('seg-edit-target');
     document.body.classList.add('seg-edit-active');
+    _addEditOverlay();
 
     // Hide normal action buttons, create inline controls
     const actions = row.querySelector('.seg-actions');
@@ -3837,9 +3843,10 @@ function enterSplitMode(seg, row, prePausePlayMs = null) {
     segEditMode = 'split';
     segEditIndex = seg.index;
 
-    // Dim other rows via CSS
+    // Dim other rows: container-level pointer-events, edit-target re-enables via CSS
     row.classList.add('seg-edit-target');
     document.body.classList.add('seg-edit-active');
+    _addEditOverlay();
 
     // Hide normal action buttons, create inline controls
     const actions = row.querySelector('.seg-actions');
@@ -4398,7 +4405,8 @@ function exitEditMode() {
     // calls segAudioEl.pause() when preview reaches its end, so without this
     // the audio element keeps playing after Apply/Cancel.
     if (!segAudioEl.paused) { segAudioEl.pause(); stopSegAnimation(); }
-    // Un-dim rows (O(1) — remove container class + target marker)
+    // Un-dim rows (O(1) — remove overlay + container class + target marker)
+    _removeEditOverlay();
     document.body.classList.remove('seg-edit-active');
     editRow?.classList.remove('seg-edit-target');
 }
