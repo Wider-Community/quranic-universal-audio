@@ -10,7 +10,7 @@ import { LS_KEYS } from './shared/constants.js';
 
 // Static imports — module-level code in each tab runs immediately,
 // registering DOMContentLoaded handlers before the event fires.
-import './timestamps.js';
+import './timestamps/index.js';
 import './segments.js';
 import './audio/index.js';
 
