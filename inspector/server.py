@@ -18,26 +18,30 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time as _time
-import uuid
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
-
-def _uuid7() -> str:
-    """Generate a UUIDv7 (time-ordered, RFC 9562) as a hyphenated string."""
-    ts_ms = int(_time.time() * 1000)
-    rand_bytes = uuid.uuid4().bytes
-    uuid_int = (ts_ms & 0xFFFFFFFFFFFF) << 80
-    uuid_int |= 0x7000 << 64  # version 7
-    uuid_int |= (int.from_bytes(rand_bytes[:2], "big") & 0x0FFF) << 64
-    uuid_int |= 0x8000000000000000  # variant 10
-    uuid_int |= int.from_bytes(rand_bytes[2:10], "big") & 0x3FFFFFFFFFFFFFFF
-    return str(uuid.UUID(int=uuid_int))
-
+from constants import (
+    VALIDATION_CATEGORIES,
+    STOP_SIGNS as _STOP_SIGNS,
+    MUQATTAAT_VERSES as _MUQATTAAT_VERSES,
+    QALQALA_LETTERS as _QALQALA_LETTERS,
+    STANDALONE_REFS as _STANDALONE_REFS,
+    STANDALONE_WORDS as _STANDALONE_WORDS,
+    BOUNDARY_VOWELS as _BOUNDARY_VOWELS,
+)
+from utils.uuid7 import uuid7 as _uuid7
+from utils.formatting import format_ms as _format_ms
+from utils.arabic_text import strip_quran_deco as _strip_quran_deco, last_arabic_letter as _last_arabic_letter
+from utils.references import (
+    chapter_from_ref as _chapter_from_ref,
+    seg_belongs_to_entry as _seg_belongs_to_entry,
+    normalize_ref as _normalize_ref_pure,
+    seg_sort_key as _seg_sort_key,
+)
 
 from config import (
     AUDIO_METADATA_PATH, AUDIO_PATH, CACHE_DIR,
@@ -52,6 +56,12 @@ from config import (
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
     BOUNDARY_TAIL_K, SHOW_BOUNDARY_PHONEMES,
     LOW_CONF_DEFAULT_THRESHOLD,
+    FFMPEG_FULL_TIMEOUT, MIN_FULL_PEAK_BUCKETS,
+    LOW_CONFIDENCE_THRESHOLD, MAX_AYAH_BOUNDARY_CHECK,
+    METADATA_PEEK_BYTES,
+    PAUSE_HIST_BIN_MS, PAUSE_HIST_MAX_MS,
+    SEG_DUR_HIST_BIN_MS, SEG_DUR_HIST_MAX_MS,
+    AUDIO_CACHE_MAX_AGE,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -61,17 +71,6 @@ _QPC: dict[str, dict] | None = None
 # Digital Khatt display text lookup (digital_khatt_v2_script.json)
 _DK_PATH = Path(__file__).resolve().parent.parent / "quranic_universal_aligner" / "data" / "digital_khatt_v2_script.json"
 _DK: dict[str, dict] | None = None
-
-
-_STOP_SIGNS = set('\u06D6\u06D7\u06D8\u06DA')  # sili, qili, small meem, jeem
-
-# Canonical validation categories — single source of truth.
-# Every counting, summary, and delta function derives from this tuple.
-VALIDATION_CATEGORIES = (
-    "failed", "low_confidence", "boundary_adj", "cross_verse",
-    "missing_words", "audio_bleeding", "repetitions",
-    "muqattaat", "qalqala",
-)
 
 # ── Validation helper (for auto-revalidation on save) ────────────────────
 
@@ -164,7 +163,7 @@ def _dk_text_for_ref(ref: str) -> str:
             w = 1
             ay += 1
             # Handle surah boundary (shouldn't normally happen in a single ref)
-            if ay > 300:
+            if ay > MAX_AYAH_BOUNDARY_CHECK:
                 break
     return " ".join(words)
 
@@ -295,14 +294,14 @@ def _discover_ts_reciters() -> list[dict]:
             slug = reciter_dir.name
             name = slug.replace("_", " ").title()
             # Read _meta for audio_source — use _TS_CACHE if already loaded,
-            # otherwise read only the first 512 bytes to avoid parsing multi-MB files
+            # otherwise read only the first METADATA_PEEK_BYTES bytes to avoid parsing multi-MB files
             audio_source = ""
             if slug in _TS_CACHE:
                 audio_source = _TS_CACHE[slug].get("meta", {}).get("audio_source", "")
             else:
                 try:
                     with open(ts_file, encoding="utf-8") as f:
-                        head = f.read(512)
+                        head = f.read(METADATA_PEEK_BYTES)
                     m = re.search(r'"audio_source"\s*:\s*"([^"]*)"', head)
                     if m:
                         audio_source = m.group(1)
@@ -777,7 +776,7 @@ def _compute_audio_peaks(audio_source: str, cache_key: str | None = None,
         result = subprocess.run(
             ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1", "-ar", "8000",
              "-v", "quiet", "-"],
-            capture_output=True, timeout=300,
+            capture_output=True, timeout=FFMPEG_FULL_TIMEOUT,
         )
         if result.returncode != 0 or len(result.stdout) < 4:
             return None
@@ -792,7 +791,7 @@ def _compute_audio_peaks(audio_source: str, cache_key: str | None = None,
 
     duration_ms = int(num_samples / 8000 * 1000)
     duration_sec = num_samples / 8000
-    num_buckets = max(100, int(duration_sec * 10))
+    num_buckets = max(MIN_FULL_PEAK_BUCKETS, int(duration_sec * 10))
 
     block_size = max(1, num_samples // num_buckets)
     peaks = []
@@ -870,33 +869,6 @@ def _get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None)
         all_cached = _PEAKS_CACHE[reciter]
 
     return {u: all_cached[u] for u in urls if u in all_cached}
-
-
-def _chapter_from_ref(ref: str) -> int:
-    """Extract chapter (surah) number from a ref string.
-
-    Handles both surah-level refs (e.g. ``"1"``) and verse-level refs
-    (e.g. ``"1:1"``).
-    """
-    return int(ref.split(":")[0])
-
-
-def _seg_belongs_to_entry(seg_ref: str, entry_ref: str) -> bool:
-    """Check if a segment's matched_ref falls within the verse of an entry's ref.
-
-    For by_ayah, entry_ref is like ``"1:1"`` (surah:verse).
-    seg_ref may be ``"1:1:1-1:1:4"`` (cross-word) or ``"1:1"`` etc.
-    A segment belongs to an entry if the surah:verse prefix matches.
-    """
-    if not seg_ref or not entry_ref:
-        return False
-    # Extract surah:verse from the start of seg_ref
-    seg_parts = seg_ref.split("-")[0].split(":")
-    entry_parts = entry_ref.split(":")
-    if len(entry_parts) >= 2 and len(seg_parts) >= 2:
-        return seg_parts[0] == entry_parts[0] and seg_parts[1] == entry_parts[1]
-    # Surah-level entry: match by chapter only
-    return seg_parts[0] == entry_parts[0]
 
 
 def _load_detailed(reciter: str) -> list[dict]:
@@ -1067,7 +1039,7 @@ def get_seg_data(reciter, chapter):
         "conf_mean": round(statistics.mean(confidences), 4) if confidences else 0,
         "conf_max": round(max(confidences), 4) if confidences else 0,
         "below_60": sum(1 for c in confidences if c < 0.60),
-        "below_80": sum(1 for c in confidences if c < 0.80),
+        "below_80": sum(1 for c in confidences if c < LOW_CONFIDENCE_THRESHOLD),
         "total_speech_ms": round(total_speech),
         "avg_segment_ms": round(total_speech / len(segments)) if segments else 0,
         "total_silence_ms": round(total_silence),
@@ -1295,7 +1267,7 @@ def audio_proxy(reciter):
     }
     mime = mime_types.get(cache_path.suffix.lower(), "audio/mpeg")
     resp = send_file(cache_path, mimetype=mime)
-    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    resp.headers["Cache-Control"] = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
     return resp
 
 
@@ -1400,43 +1372,8 @@ def resolve_ref():
 
 
 def _normalize_ref(ref: str) -> str:
-    """Normalize a short ref to canonical surah:ayah:word-surah:ayah:word format.
-
-    Handles: "1:7" -> "1:7:1-1:7:N", "1:7:3" -> "1:7:3-1:7:3",
-             "1:7-1:8" -> "1:7:1-1:8:N"
-    """
-    if not ref:
-        return ref
-    # Load word counts lazily
-    wc = _get_word_counts()
-    parts = ref.split("-")
-    if len(parts) == 2:
-        start = parts[0].split(":")
-        end = parts[1].split(":")
-        if len(start) == 3 and len(end) == 3:
-            return ref  # Already canonical
-        if len(start) == 2 and len(end) == 2:
-            # "1:7-1:8" -> "1:7:1-1:8:N"
-            try:
-                e_surah, e_ayah = int(end[0]), int(end[1])
-                e_wc = wc.get((e_surah, e_ayah), 1)
-                return f"{start[0]}:{start[1]}:1-{end[0]}:{end[1]}:{e_wc}"
-            except ValueError:
-                return ref
-    elif len(parts) == 1:
-        colons = ref.split(":")
-        if len(colons) == 2:
-            # "1:7" -> "1:7:1-1:7:N"
-            try:
-                surah, ayah = int(colons[0]), int(colons[1])
-                n = wc.get((surah, ayah), 1)
-                return f"{surah}:{ayah}:1-{surah}:{ayah}:{n}"
-            except ValueError:
-                return ref
-        elif len(colons) == 3:
-            # "1:7:3" -> "1:7:3-1:7:3"
-            return f"{ref}-{ref}"
-    return ref
+    """Normalize a short ref to canonical form (thin wrapper passing word counts)."""
+    return _normalize_ref_pure(ref, _get_word_counts())
 
 
 _WORD_COUNTS_CACHE: dict[tuple[int, int], int] | None = None
@@ -2110,13 +2047,6 @@ def _apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]):
         seg["confidence"] = before[0].get("confidence", 0)
 
 
-def _seg_sort_key(k):
-    """Sort key for segments.json: regular 'sura:ayah' and cross-verse 'sura:ayah:word-sura:ayah:word'."""
-    parts = k.split("-")
-    start = parts[0].split(":")
-    return tuple(int(x) for x in start)
-
-
 def _rebuild_segments_json(reciter: str, entries: list[dict]):
     """Regenerate segments.json from detailed entries (verse-aggregated format)."""
     verse_data: dict[str, list] = defaultdict(list)
@@ -2174,47 +2104,6 @@ def _rebuild_segments_json(reciter: str, entries: list[dict]):
 # ---------------------------------------------------------------------------
 # Validation constants and helpers (shared by validate endpoint and edit history)
 # ---------------------------------------------------------------------------
-import unicodedata as _ud
-
-_MUQATTAAT_VERSES = {
-    (2,1),(3,1),(7,1),(10,1),(11,1),(12,1),(13,1),(14,1),(15,1),
-    (19,1),(20,1),(26,1),(27,1),(28,1),(29,1),(30,1),(31,1),(32,1),
-    (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
-    (46,1),(50,1),(68,1),
-}
-_QALQALA_LETTERS = {'ق', 'ط', 'ب', 'ج', 'د'}
-
-def _last_arabic_letter(text: str) -> str | None:
-    """Return the last Arabic letter in text, ignoring diacritics and all non-letter markers.
-
-    Scans backward after stripping diacritics/decoration so that waqf markers,
-    sajdah signs, hizb markers, end-of-ayah (U+06DD), spaces, and any other
-    non-letter symbols are never mistakenly returned as the last letter.
-    """
-    stripped = _strip_quran_deco(text)
-    for ch in reversed(stripped):
-        if _ud.category(ch).startswith('L'):
-            return ch
-    return None
-
-_STANDALONE_REFS = {
-    (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
-    (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
-}
-_STANDALONE_WORDS = {"كلا", "ذلك", "كذلك", "سبحنهۥ"}
-_STRIP_CHARS = set("\u0640\u06de\u06e6\u06e9\u200f")
-def _strip_quran_deco(text):
-    """Strip Quranic decoration and diacritics for bare-skeleton comparison."""
-    text = _ud.normalize("NFD", text)
-    out = []
-    for ch in text:
-        if ch in _STRIP_CHARS:
-            continue
-        if _ud.category(ch) == "Mn":
-            continue
-        out.append(ch)
-    return "".join(out).strip()
-
 
 def _get_phoneme_sub_pairs() -> set[frozenset]:
     """Load phoneme substitution equivalence pairs (lazy, cached)."""
@@ -2301,9 +2190,6 @@ def _get_phoneme_tails(phonemes_asr: str, matched_ref: str,
     return canonical_tail[-n:], asr_tokens[-n:]
 
 
-_BOUNDARY_VOWELS = {'a:', 'aˤ:', 'u:', 'i:'}
-
-
 def _tail_phoneme_mismatch(phonemes_asr: str, matched_ref: str,
                            canonical: dict[str, list[str]], k: int) -> bool:
     """Detect segment cutting off early: canonical 2nd-to-last phoneme is a long vowel
@@ -2367,7 +2253,7 @@ def _chapter_validation_counts(entries: list, chapter: int, meta: dict,
             if seg.get("wrap_word_ranges"):
                 counts["repetitions"] += 1
 
-            if confidence < 0.80:
+            if confidence < LOW_CONFIDENCE_THRESHOLD:
                 counts["low_confidence"] += 1
 
             parts = matched_ref.split("-")
@@ -2869,13 +2755,6 @@ def validate_reciter_segments(reciter):
     })
 
 
-def _format_ms(ms):
-    """Format milliseconds as m:ss."""
-    total_sec = ms / 1000
-    mins = int(total_sec // 60)
-    secs = int(total_sec % 60)
-    return f"{mins}:{secs:02d}"
-
 
 def _histogram(values: list, bin_size: float, lo: float, hi: float, *, cap: bool = True) -> dict:
     """Build a histogram with fixed bin edges.
@@ -2984,8 +2863,8 @@ def get_seg_stats(reciter):
 
     # Distributions
     distributions = {
-        "pause_duration_ms": _histogram(pause_durations, 50, 0, 3000),
-        "seg_duration_ms": _histogram(seg_durations, 500, 0, 15000, cap=False),
+        "pause_duration_ms": _histogram(pause_durations, PAUSE_HIST_BIN_MS, 0, PAUSE_HIST_MAX_MS),
+        "seg_duration_ms": _histogram(seg_durations, SEG_DUR_HIST_BIN_MS, 0, SEG_DUR_HIST_MAX_MS, cap=False),
         "words_per_seg": _histogram(words_per_seg, 1, 1, 15, cap=False),
         "segs_per_verse": _histogram(spv_values, 1, 1, 8),
         "confidence": _histogram(confidences, 5, 0, 100),

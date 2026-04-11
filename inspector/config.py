@@ -59,3 +59,30 @@ TRIM_DIM_ALPHA = 0.3                      # dimming opacity for padded regions
 # Boundary adjustment: phoneme tail mismatch detection
 BOUNDARY_TAIL_K = 3                       # number of trailing phonemes to compare
 SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards
+
+# HTTP / subprocess timeouts (seconds)
+FFPROBE_TIMEOUT = 5
+FFMPEG_TIMEOUT = 10
+FFMPEG_FULL_TIMEOUT = 300
+ID3_PROBE_TIMEOUT = 5
+
+# Audio processing
+DEFAULT_BYTES_PER_SEC = 16_000
+RANGE_DECODE_PAD_SEC = 5
+ID3_PROBE_BYTES = 50_000
+MIN_SEG_PEAK_BUCKETS = 10
+MIN_FULL_PEAK_BUCKETS = 100
+
+# Validation thresholds
+LOW_CONFIDENCE_THRESHOLD = 0.80
+MAX_AYAH_BOUNDARY_CHECK = 300
+METADATA_PEEK_BYTES = 512
+
+# Statistics histogram defaults
+PAUSE_HIST_BIN_MS = 50
+PAUSE_HIST_MAX_MS = 3000
+SEG_DUR_HIST_BIN_MS = 500
+SEG_DUR_HIST_MAX_MS = 15000
+
+# Cache headers
+AUDIO_CACHE_MAX_AGE = 31_536_000
