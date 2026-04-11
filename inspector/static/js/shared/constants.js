@@ -19,3 +19,6 @@ export const LS_KEYS = {
 export const PLACEHOLDER_SELECT = '-- select --';
 export const PLACEHOLDER_DASH   = '--';
 export const PLACEHOLDER_RECITER = '-- Select reciter --';
+
+// Audio buffer cache eviction limit
+export const AUDIO_BUFFER_CACHE_SIZE = 5;

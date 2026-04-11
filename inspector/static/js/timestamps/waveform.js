@@ -3,6 +3,7 @@
  */
 
 import { state, dom } from './state.js';
+import { AUDIO_BUFFER_CACHE_SIZE } from '../shared/constants.js';
 import { getSegRelTime, getSegDuration } from './index.js';
 import { updateDisplay } from './playback.js';
 
@@ -36,7 +37,7 @@ export async function decodeWaveform(url) {
             const arrayBuffer = await response.arrayBuffer();
             audioBuffer = await state.audioContext.decodeAudioData(arrayBuffer);
             // Evict oldest if cache exceeds 5 entries
-            if (state.audioBufferCache.size >= 5) {
+            if (state.audioBufferCache.size >= AUDIO_BUFFER_CACHE_SIZE) {
                 const oldest = state.audioBufferCache.keys().next().value;
                 state.audioBufferCache.delete(oldest);
             }
