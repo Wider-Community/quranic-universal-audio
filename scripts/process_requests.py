@@ -648,7 +648,8 @@ def cmd_prepare_pr(args):
                 subprocess.run(
                     ["gh", "workflow", "run", "validate-segments-pr.yml",
                      "-f", f"reciters={req['slug']}",
-                     "-f", f"pr_number={pr_number}"],
+                     "-f", f"pr_number={pr_number}",
+                     "-f", f"ref={branch}"],
                     cwd=str(REPO_ROOT), capture_output=True, text=True, check=True,
                 )
                 print(f"    Triggered validation for PR #{pr_number}")
