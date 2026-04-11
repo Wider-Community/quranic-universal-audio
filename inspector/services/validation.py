@@ -4,6 +4,7 @@ validation log generation.
 No Flask imports -- all functions accept parameters and return plain dicts.
 """
 
+import statistics as _statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -405,7 +406,6 @@ def validate_reciter_segments(reciter: str) -> dict:
 
     # Structural errors + stats from segments.json
     stats = None
-    import statistics as _statistics
     verses, pad_ms = load_seg_verses(reciter)
     if verses:
         total_segments = 0

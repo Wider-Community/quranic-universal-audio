@@ -4,7 +4,7 @@ import threading
 
 from flask import Blueprint, jsonify, request, send_file
 
-from config import AUDIO_CACHE_MAX_AGE
+from config import AUDIO_CACHE_MAX_AGE, AUDIO_MIME_TYPES
 from services import cache
 from services.audio_proxy import delete_audio_cache, download_audio, scan_audio_cache
 from services.data_loader import load_detailed
@@ -24,11 +24,7 @@ def seg_audio_proxy(reciter):
         result = download_audio(reciter, url)
         if not result:
             return jsonify({"error": "Download failed"}), 502
-    mime_types = {
-        ".mp3": "audio/mpeg", ".wav": "audio/wav",
-        ".flac": "audio/flac", ".ogg": "audio/ogg",
-    }
-    mime = mime_types.get(cache_path.suffix.lower(), "audio/mpeg")
+    mime = AUDIO_MIME_TYPES.get(cache_path.suffix.lower(), "audio/mpeg")
     resp = send_file(cache_path, mimetype=mime)
     resp.headers["Cache-Control"] = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
     return resp

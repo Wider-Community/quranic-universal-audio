@@ -3,7 +3,7 @@ from pathlib import Path
 # Repo root (inspector/ is one level below)
 _REPO = Path(__file__).resolve().parent.parent
 
-# Audio files locationnf
+# Audio files location
 AUDIO_PATH = _REPO / "data"
 
 # Cache directory
@@ -86,3 +86,14 @@ SEG_DUR_HIST_MAX_MS = 15000
 
 # Cache headers
 AUDIO_CACHE_MAX_AGE = 31_536_000
+
+# Confidence thresholds
+LOW_CONFIDENCE_RED = 0.60           # below this = red highlight ("below_60" stat)
+
+# Audio MIME types (shared between app.py and audio_proxy)
+AUDIO_MIME_TYPES = {
+    ".flac": "audio/flac",
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+}

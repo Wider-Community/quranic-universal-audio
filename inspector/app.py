@@ -10,7 +10,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, send_file, send_from_directory
 
-from config import AUDIO_PATH, CACHE_DIR
+from config import AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR
 from routes import register_blueprints
 from services.data_loader import discover_ts_reciters, load_surah_info_lite, load_timestamps
 from services.phonemizer_service import get_phonemizer, has_phonemizer
@@ -50,13 +50,7 @@ def serve_audio(reciter, filename):
     audio_path = AUDIO_PATH / reciter / filename
     if not audio_path.exists():
         return jsonify({"error": "Audio file not found"}), 404
-    mime_types = {
-        ".flac": "audio/flac",
-        ".wav": "audio/wav",
-        ".mp3": "audio/mpeg",
-        ".ogg": "audio/ogg",
-    }
-    mime_type = mime_types.get(audio_path.suffix.lower(), "audio/mpeg")
+    mime_type = AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "audio/mpeg")
     return send_file(audio_path, mimetype=mime_type)
 
 
@@ -87,7 +81,7 @@ if __name__ == "__main__":
         def _preload(slug):
             load_timestamps(slug)
             return slug
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(reciters)) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(reciters), 8)) as pool:
             for slug in pool.map(_preload, [r["slug"] for r in reciters]):
                 print(f"  Preloaded timestamps: {slug}")
         print("All timestamp data cached.")
