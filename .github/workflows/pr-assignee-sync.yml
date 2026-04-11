@@ -1,0 +1,92 @@
+name: PR Assignee Sync
+on:
+  pull_request_target:
+    types: [assigned, unassigned]
+
+jobs:
+  pr-assigned:
+    if: github.event.action == 'assigned'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const assignee = context.payload.assignee.login;
+
+            // Find linked issue from "Ref #N" in PR body
+            const match = (pr.body || '').match(/Ref #(\d+)/);
+            if (!match) return;
+            const issueNumber = parseInt(match[1]);
+
+            // Check issue exists and is a request-alignment issue
+            const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+            const labels = issue.data.labels.map(l => l.name);
+            if (!labels.includes('request-alignment')) return;
+
+            // Add assignee to issue if not already assigned
+            const issueAssignees = issue.data.assignees.map(a => a.login);
+            if (!issueAssignees.includes(assignee)) {
+              await github.rest.issues.addAssignees({
+                owner, repo, issue_number: issueNumber, assignees: [assignee],
+              });
+              core.info(`Synced @${assignee} to issue #${issueNumber}`);
+            }
+
+            // Swap label if needed
+            if (labels.includes('reviewer-needed')) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: issueNumber, name: 'reviewer-needed',
+                });
+              } catch (e) { /* may already be gone */ }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issueNumber, labels: ['reviewer-assigned'],
+              });
+            }
+
+  pr-unassigned:
+    if: github.event.action == 'unassigned'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const assignee = context.payload.assignee.login;
+
+            // Find linked issue from "Ref #N" in PR body
+            const match = (pr.body || '').match(/Ref #(\d+)/);
+            if (!match) return;
+            const issueNumber = parseInt(match[1]);
+
+            const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+            const labels = issue.data.labels.map(l => l.name);
+            if (!labels.includes('request-alignment')) return;
+
+            // Remove assignee from issue
+            await github.rest.issues.removeAssignees({
+              owner, repo, issue_number: issueNumber, assignees: [assignee],
+            });
+            core.info(`Removed @${assignee} from issue #${issueNumber}`);
+
+            // Swap label back if no assignees remain
+            const updated = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+            if (updated.data.assignees.length === 0 && labels.includes('reviewer-assigned')) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: issueNumber, name: 'reviewer-assigned',
+                });
+              } catch (e) { /* may already be gone */ }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issueNumber, labels: ['reviewer-needed'],
+              });
+            }

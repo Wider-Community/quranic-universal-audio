@@ -2,7 +2,7 @@
 API helpers for the reciter request automation pipeline.
 
 Provides functions for:
-- Notion database querying and status updates
+- Notion database querying (email/name lookup only)
 - GitHub issue label management
 - Gmail SMTP email sending
 - RECITERS.md parsing and editing
@@ -12,6 +12,7 @@ import json
 import os
 import re
 import smtplib
+import subprocess
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -32,7 +33,6 @@ if _dotenv.exists():
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
-NOTION_WATCHERS_DB_ID = os.environ.get("NOTION_WATCHERS_DB_ID", "")
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 REPO_OWNER = "Wider-Community"
@@ -78,7 +78,6 @@ def notion_query_pending():
             "reciter_name": _notion_rich_text(props.get("Reciter", {})),
             "slug": _notion_rich_text(props.get("Slug", {})),
             "audio_source": _notion_rich_text(props.get("Audio Source", {})),
-            "request_type": _notion_select(props.get("Request Type", {})),
             "riwayah": _notion_rich_text(props.get("Riwayah", {})),
             "style": _notion_rich_text(props.get("Style", {})),
             "country": _notion_rich_text(props.get("Country", {})),
@@ -86,21 +85,39 @@ def notion_query_pending():
             "issue_url": _notion_url(props.get("GitHub Issue", {})),
             "min_silence": _notion_number(props.get("Min Silence", {})),
             "github_username": _notion_rich_text(props.get("GitHub Username", {})),
+            "review_opt_in": props.get("Reviewer Opt-in", {}).get("checkbox", False),
             "notes": _notion_rich_text(props.get("Notes", {})),
         })
     return results
 
 
-def notion_update_status(page_id, status):
-    """Update the Status select property of a Notion page."""
-    url = f"https://api.notion.com/v1/pages/{page_id}"
-    body = {
-        "properties": {
-            "Status": {"select": {"name": status}},
-        }
-    }
-    r = httpx.patch(url, headers=_notion_headers(), json=body, timeout=30)
-    r.raise_for_status()
+def notion_query_emails():
+    """Query the entire Notion database and return a slug->{email, name} mapping.
+
+    Used to enrich GitHub-sourced requests with requester contact info.
+    Returns an empty dict on failure so callers can proceed without email.
+    """
+    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
+        return {}
+    url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
+    try:
+        r = httpx.post(url, headers=_notion_headers(), json={}, timeout=30)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"  Warning: Notion email lookup failed: {e}")
+        return {}
+
+    result = {}
+    for page in r.json().get("results", []):
+        props = page["properties"]
+        slug = _notion_rich_text(props.get("Slug", {}))
+        if not slug:
+            continue
+        email = _notion_email(props.get("Email", {}))
+        name = _notion_title(props.get("Requester Name", {}))
+        if email or name:
+            result[slug] = {"email": email, "name": name}
+    return result
 
 
 # Notion property extractors
@@ -120,13 +137,6 @@ def _notion_rich_text(prop):
 
 def _notion_email(prop):
     return prop.get("email", "") or ""
-
-
-def _notion_select(prop):
-    try:
-        return prop["select"]["name"]
-    except (KeyError, TypeError):
-        return ""
 
 
 def _notion_number(prop):
@@ -153,7 +163,7 @@ def gh_list_request_issues(state="open"):
     r = httpx.get(
         url,
         headers=_gh_headers(),
-        params={"labels": "request", "state": state, "per_page": 100},
+        params={"labels": "request-alignment", "state": state, "per_page": 100},
         timeout=30,
     )
     r.raise_for_status()
@@ -204,20 +214,30 @@ def gh_swap_label(issue_number, old_label, new_label):
 
 
 def gh_invite_collaborator(username):
-    """Invite a GitHub user as repo collaborator with write access."""
+    """Invite a GitHub user as repo collaborator with write access.
+
+    Returns:
+        "existing"  – already a collaborator (204)
+        "invited"   – new invite sent (201)
+        "failed"    – API error or no username
+    """
     if not username:
-        return
+        return "failed"
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/collaborators/{username}"
     try:
         r = httpx.put(url, headers=_gh_headers(), json={"permission": "write"}, timeout=15)
-        if r.status_code in (201, 204):
-            print(f"  Invited @{username} as collaborator")
-        elif r.status_code == 422:
+        if r.status_code == 204:
             print(f"  @{username} is already a collaborator")
+            return "existing"
+        elif r.status_code == 201:
+            print(f"  Invited @{username} as collaborator")
+            return "invited"
         else:
             print(f"  Failed to invite @{username}: {r.status_code} {r.text[:100]}")
+            return "failed"
     except Exception as e:
         print(f"  Failed to invite @{username}: {e}")
+        return "failed"
 
 
 def gh_ensure_labels(labels):
@@ -237,92 +257,50 @@ def gh_ensure_labels(labels):
             print(f"  Created label: {name}")
 
 
-def gh_create_draft_pr(branch, title, body):
-    """Create a draft pull request. Returns PR html_url."""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls"
-    r = httpx.post(
-        url,
-        headers=_gh_headers(),
-        json={
-            "title": title,
-            "body": body,
-            "head": branch,
-            "base": "main",
-            "draft": True,
-        },
-        timeout=30,
+def gh_create_bot_pr(branch, title, body, draft=True):
+    """Create a pull request via bot-create-pr.yml workflow.
+
+    Returns PR html_url. The PR appears as github-actions[bot].
+    """
+    import time
+    subprocess.run(
+        [
+            "gh", "workflow", "run", "bot-create-pr.yml",
+            "-f", f"branch={branch}",
+            "-f", f"title={title}",
+            "-f", f"body={body}",
+            "-f", f"draft={'true' if draft else 'false'}",
+        ],
+        check=True, capture_output=True, text=True,
     )
-    r.raise_for_status()
-    return r.json()["html_url"]
+    # Poll for the PR to appear (workflow takes a few seconds)
+    for _ in range(30):  # up to ~60s
+        time.sleep(2)
+        result = subprocess.run(
+            ["gh", "pr", "list", "--head", branch, "--json", "url", "-q", ".[0].url"],
+            capture_output=True, text=True,
+        )
+        if result.stdout.strip():
+            return result.stdout.strip()
+    raise RuntimeError(f"Timed out waiting for bot PR on branch {branch}")
+
+
+# Keep old name as alias for backwards compatibility
+gh_create_draft_pr = gh_create_bot_pr
 
 
 def gh_comment_on_issue(issue_number, body):
-    """Post a comment on a GitHub issue."""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{issue_number}/comments"
-    r = httpx.post(
-        url,
-        headers=_gh_headers(),
-        json={"body": body},
-        timeout=15,
+    """Post a comment on a GitHub issue via bot-comment.yml workflow."""
+    subprocess.run(
+        [
+            "gh", "workflow", "run", "bot-comment.yml",
+            "-f", f"issue={issue_number}",
+            "-f", f"body={body}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
-    r.raise_for_status()
-
-
-def notion_update_pr_url(page_id, pr_url):
-    """Update the Pull Request URL property of a Notion page."""
-    url = f"https://api.notion.com/v1/pages/{page_id}"
-    body = {
-        "properties": {
-            "Pull Request": {"url": pr_url},
-        }
-    }
-    r = httpx.patch(url, headers=_notion_headers(), json=body, timeout=30)
-    r.raise_for_status()
-
-
-# ---------------------------------------------------------------------------
-# Notion Watchers helpers
-# ---------------------------------------------------------------------------
-def notion_get_watchers_for_targets(targets, target_type="reciter"):
-    """Return {target: [{email, name}]} for watchers matching the given targets.
-
-    Queries the NOTION_WATCHERS_DB_ID database for all entries of the given
-    target_type and filters to the requested target set.
-    """
-    if not NOTION_API_KEY or not NOTION_WATCHERS_DB_ID:
-        return {}
-    url = f"https://api.notion.com/v1/databases/{NOTION_WATCHERS_DB_ID}/query"
-    body = {
-        "filter": {
-            "property": "Watch Target Type",
-            "select": {"equals": target_type},
-        },
-        "page_size": 100,
-    }
-    result = {}
-    try:
-        r = httpx.post(url, headers=_notion_headers(), json=body, timeout=30)
-        r.raise_for_status()
-        pages = r.json().get("results", [])
-        target_set = set(targets)
-        for p in pages:
-            props = p["properties"]
-            target_rt = props.get("Watch Target", {}).get("rich_text", [])
-            target_val = target_rt[0]["plain_text"] if target_rt else ""
-            if target_val not in target_set:
-                continue
-            email_val = props.get("Email", {}).get("email", "")
-            if not email_val:
-                continue
-            name_rt = props.get("Watcher Name", {}).get("rich_text", [])
-            name_val = name_rt[0]["plain_text"] if name_rt else ""
-            result.setdefault(target_val, []).append({
-                "email": email_val,
-                "name": name_val,
-            })
-    except Exception as e:
-        print(f"  Warning: Failed to query watchers: {e}")
-    return result
 
 
 # ---------------------------------------------------------------------------

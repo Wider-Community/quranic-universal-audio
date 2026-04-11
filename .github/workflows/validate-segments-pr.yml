@@ -9,6 +9,9 @@ on:
       reciters:
         description: 'Space-separated reciter slugs (blank = all tracked)'
         required: false
+      pr_number:
+        description: 'PR number to post validation comment on (blank = skip comment)'
+        required: false
 
 permissions:
   contents: read
@@ -51,12 +54,26 @@ jobs:
           echo "reciters=$(echo $reciters | xargs)" >> $GITHUB_OUTPUT
           echo "Reciters: $reciters"
 
+          # Resolve PR number from event or workflow_dispatch input
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.pr_number }}" ]; then
+            echo "pr_number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Validate edit history
-        if: steps.detect.outputs.reciters != '' && github.event_name == 'pull_request'
+        if: steps.detect.outputs.reciters != '' && steps.detect.outputs.pr_number != ''
         run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          else
+            base_sha="$(gh pr view ${{ steps.detect.outputs.pr_number }} --json baseRefOid -q .baseRefOid)"
+          fi
           python validators/validate_edit_history.py \
-            --base-sha ${{ github.event.pull_request.base.sha }} \
+            --base-sha "$base_sha" \
             --reciters ${{ steps.detect.outputs.reciters }}
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Validate segments
         if: steps.detect.outputs.reciters != ''
@@ -100,11 +117,11 @@ jobs:
           echo "generated=true" >> $GITHUB_OUTPUT
 
       - name: Post or update PR comment
-        if: steps.summary.outputs.generated == 'true' && github.event_name == 'pull_request'
+        if: steps.summary.outputs.generated == 'true' && steps.detect.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pr_number=${{ github.event.pull_request.number }}
+          pr_number=${{ steps.detect.outputs.pr_number }}
           marker="<!-- edit-summary -->"
 
           # Find existing comment with marker

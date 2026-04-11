@@ -3,9 +3,9 @@
 Reciter request automation pipeline orchestrator.
 
 Subcommands (segments):
-  triage              — Fetch pending requests from Notion, cross-check, output triage table
+  triage              — Fetch pending requests from GitHub, cross-check, output triage table
   generate-pbs        — Derive VAD params and rewrite PBS job array for accepted requests
-  set-status          — Update GitHub labels + Notion status for the current batch
+  set-status          — Update GitHub labels for the current batch
   notify              — Send emails via Gmail SMTP for the current batch
   prepare-pr          — Edit RECITERS.md + README.md for segments PR
 
@@ -43,15 +43,14 @@ from request_helpers import (
     REPO_NAME,
     HF_DATASET_ID,
     TIMESTAMPS_STATE_FILE,
-    notion_query_pending,
-    notion_update_status,
+    notion_query_emails,
     gh_list_request_issues,
     gh_swap_label,
     gh_ensure_labels,
     gh_invite_collaborator,
     gh_create_draft_pr,
+    gh_create_bot_pr,
     gh_comment_on_issue,
-    notion_update_pr_url,
     send_email,
     slug_from_name,
     parse_processed_table,
@@ -94,25 +93,46 @@ def cmd_triage(args):
 
     # Ensure required labels exist
     gh_ensure_labels({
+        "request-alignment": ("fbca04", "Reciter alignment request"),
+        "status:pending-alignment": ("c5def5", "Request submitted, awaiting alignment"),
         "status:rejected": ("d73a4a", "Request rejected"),
         "status:awaiting-review": ("f9d71c", "Segments ready, awaiting community review"),
+        "status:awaiting-timestamps": ("bfd4f2", "Segments reviewed, awaiting MFA timestamps"),
         "status:completed": ("0e8a16", "Fully processed with timestamps"),
+        "reviewer-assigned": ("0075ca", "Reviewer assigned to this request"),
+        "reviewer-needed": ("d876e3", "Looking for a volunteer reviewer"),
     })
 
-    # 1. Fetch pending from Notion
-    print("\nFetching pending requests from Notion...")
-    try:
-        pending = notion_query_pending()
-    except Exception as e:
-        print(f"ERROR: Failed to query Notion: {e}")
-        print("Falling back to GitHub issues with status:pending...")
-        pending = _fallback_pending_from_github()
+    # 1. Fetch pending from GitHub (primary source)
+    print("\nFetching pending requests from GitHub issues...")
+    pending = _pending_from_github()
 
     if not pending:
         print("No pending requests found.")
         return
 
-    print(f"Found {len(pending)} pending request(s).\n")
+    print(f"Found {len(pending)} pending request(s).")
+
+    # Enrich with email/name from Notion (best-effort)
+    print("Looking up requester emails from Notion...")
+    try:
+        notion_emails = notion_query_emails()
+    except Exception as e:
+        print(f"  Warning: Notion lookup failed ({e}), proceeding without emails")
+        notion_emails = {}
+
+    enriched = 0
+    for req in pending:
+        info = notion_emails.get(req["slug"])
+        if info:
+            if not req.get("email") and info.get("email"):
+                req["email"] = info["email"]
+                enriched += 1
+            if not req.get("requester_name") and info.get("name"):
+                req["requester_name"] = info["name"]
+    if notion_emails:
+        print(f"  Enriched {enriched} request(s) with email from Notion.")
+    print()
 
     # 2. Load cross-check data
     reciters_md = (REPO_ROOT / "data" / "RECITERS.md").read_text()
@@ -140,7 +160,6 @@ def cmd_triage(args):
         print(f"\n  [{i+1}] {status_icon} {t['req']['reciter_name']}")
         print(f"      Slug: {t['req']['slug']}")
         print(f"      Source: {t['req']['audio_source']}")
-        print(f"      Type: {t['req']['request_type']}")
         print(f"      Riwayah: {t['req']['riwayah']}")
         print(f"      Min Silence: {t['req'].get('min_silence', 'N/A')}ms")
         print(f"      Issue: #{t['req']['issue_number']}")
@@ -170,7 +189,6 @@ def cmd_triage(args):
             "slug": req["slug"],
             "name": req["reciter_name"],
             "source": req["audio_source"],
-            "request_type": req["request_type"],
             "riwayah": req["riwayah"],
             "style": req.get("style", "Unknown"),
             "country": req.get("country", "unknown"),
@@ -180,6 +198,7 @@ def cmd_triage(args):
             "requester_email": req.get("email", ""),
             "requester_name": req.get("requester_name", ""),
             "github_username": req.get("github_username", ""),
+            "review_opt_in": req.get("review_opt_in", False),
             "action": t["action"],
             "reject_reason": t.get("reason", ""),
             "status": "pending",
@@ -265,7 +284,7 @@ def _triage_one(req, processed_slugs, open_by_slug, processed):
         if iss["number"] != req["issue_number"]
         and iss["status"] not in ("rejected",)
     ]
-    if other_issues and req["request_type"] == "New reciter":
+    if other_issues:
         iss = other_issues[0]
         return {
             "req": req,
@@ -274,26 +293,7 @@ def _triage_one(req, processed_slugs, open_by_slug, processed):
             "context": f"Existing issue #{iss['number']} (status: {iss['status']})",
         }
 
-    # Check 4: Re-align of never-processed → treat as new
-    if req["request_type"] == "Re-align" and slug not in processed_slugs:
-        return {
-            "req": req,
-            "action": "accept",
-            "reason": None,
-            "context": "Re-align of unprocessed reciter — treating as new alignment",
-        }
-
-    # Check 5: Re-align of processed reciter → needs operator confirmation
-    if req["request_type"] == "Re-align" and slug in processed_slugs:
-        proc = next((p for p in processed if p["slug"] == slug), None)
-        return {
-            "req": req,
-            "action": "confirm",
-            "reason": "re-align",
-            "context": f"Existing: {proc['name']} (validated={proc.get('validated', False)}). Operator must confirm.",
-        }
-
-    # Check 6: Audio manifest exists
+    # Check 4: Audio manifest exists
     if not audio_manifest_exists(slug, req["audio_source"]):
         return {
             "req": req,
@@ -323,12 +323,12 @@ def _triage_one(req, processed_slugs, open_by_slug, processed):
     return {"req": req, "action": "accept", "reason": None, "context": None, "warnings": warnings}
 
 
-def _fallback_pending_from_github():
-    """Fallback: build pending list from GitHub issues when Notion is unavailable."""
+def _pending_from_github():
+    """Build pending request list from GitHub issues (primary source)."""
     issues = gh_list_request_issues(state="open")
     pending = []
     for iss in issues:
-        if iss["status"] != "pending":
+        if iss["status"] != "pending-alignment":
             continue
         body = iss.get("body", "")
 
@@ -347,12 +347,12 @@ def _fallback_pending_from_github():
             "reciter_name": extract("Reciter"),
             "slug": extract("Slug"),
             "audio_source": extract("Audio Source"),
-            "request_type": extract("Request Type"),
             "riwayah": extract("Riwayah") or "Hafs A'n Assem",
             "style": extract("Style") or "Unknown",
             "country": extract("Country") or "unknown",
             "min_silence": extract("Suggested Min Silence").replace("ms", ""),
             "github_username": gh_user,
+            "review_opt_in": "Needs volunteer" not in extract("Reviewer"),
             "issue_number": iss["number"],
             "issue_url": iss["url"],
             "notes": extract("Notes"),
@@ -430,16 +430,8 @@ def cmd_generate_pbs(args):
 # ---------------------------------------------------------------------------
 # set-status
 # ---------------------------------------------------------------------------
-NOTION_STATUS_MAP = {
-    "pending": "Pending",
-    "rejected": "Rejected",
-    "awaiting-review": "Awaiting Review",
-    "completed": "Completed",
-}
-
-
 def cmd_set_status(args):
-    """Update GitHub labels and Notion status for the batch."""
+    """Update GitHub labels for the batch."""
     new_status = args.status
     print(f"Setting status to: {new_status}")
 
@@ -464,14 +456,6 @@ def cmd_set_status(args):
             print(f"  #{req['issue_number']} {req['name']}: {old_label} → {new_label}")
         except Exception as e:
             print(f"  #{req['issue_number']} GitHub label failed: {e}")
-
-        # Notion status
-        notion_name = NOTION_STATUS_MAP.get(new_status, new_status.title())
-        if req.get("page_id"):
-            try:
-                notion_update_status(req["page_id"], notion_name)
-            except Exception as e:
-                print(f"  #{req['issue_number']} Notion update failed: {e}")
 
         req["status"] = new_status
 
@@ -532,9 +516,12 @@ def cmd_notify(args):
         for req in targets:
             if not req.get("requester_email"):
                 continue
+            has_reviewer = req.get("review_opt_in") and req.get("github_username")
             subj, html = email_segments_ready(
                 req["name"], req["requester_name"],
                 req["issue_url"], req.get("pr_url", ""),
+                collab_status="invited" if has_reviewer else "passive",
+                github_username=req.get("github_username", ""),
             )
             send_email(req["requester_email"], subj, html)
 
@@ -656,52 +643,93 @@ def cmd_prepare_pr(args):
             req["pr_url"] = pr_url
             pr_number = int(pr_url.rstrip("/").split("/")[-1])
 
+            # Trigger validation workflow (bot PRs don't fire pull_request events)
+            try:
+                subprocess.run(
+                    ["gh", "workflow", "run", "validate-segments-pr.yml",
+                     "-f", f"reciters={req['slug']}",
+                     "-f", f"pr_number={pr_number}"],
+                    cwd=str(REPO_ROOT), capture_output=True, text=True, check=True,
+                )
+                print(f"    Triggered validation for PR #{pr_number}")
+            except Exception as e:
+                print(f"    Warning: failed to trigger validation: {e}")
+
             # Link PR to issue via Development sidebar + update status
             if req.get("issue_number"):
                 try:
-                    subprocess.run(
+                    result = subprocess.run(
                         ["gh", "issue", "develop", str(req["issue_number"]),
                          "--branch", branch, "--base", "main"],
                         cwd=str(REPO_ROOT), capture_output=True, text=True,
                     )
-                    print(f"    Linked PR to issue #{req['issue_number']}")
+                    if result.returncode == 0:
+                        print(f"    Linked PR to issue #{req['issue_number']}")
+                    else:
+                        print(f"    Warning: gh issue develop failed (rc={result.returncode}): {result.stderr.strip()}")
                 except Exception as e:
                     print(f"    Warning: failed to link issue: {e}")
                 try:
-                    gh_swap_label(req["issue_number"], "status:processing", "status:awaiting-review")
+                    gh_swap_label(req["issue_number"], "status:pending-alignment", "status:awaiting-review")
                 except Exception:
                     pass
 
+            # Invite collaborator and assign to issue + PR if requester opted to review
+            has_reviewer = req.get("review_opt_in") and req.get("github_username")
+            collab_status = "passive"
+            if has_reviewer:
+                collab_status = gh_invite_collaborator(req["github_username"])
+                for target, cmd in [
+                    (f"issue #{req['issue_number']}",
+                     ["gh", "issue", "edit", str(req["issue_number"]),
+                      "--add-assignee", req["github_username"]]),
+                    (f"PR #{pr_number}",
+                     ["gh", "pr", "edit", str(pr_number),
+                      "--add-assignee", req["github_username"]]),
+                ]:
+                    try:
+                        subprocess.run(cmd, cwd=str(REPO_ROOT),
+                                       capture_output=True, text=True)
+                        print(f"    Assigned @{req['github_username']} to {target}")
+                    except Exception as e:
+                        print(f"    Warning: failed to assign to {target}: {e}")
+
             # Comment on the issue linking to the PR
             try:
-                gh_comment_on_issue(
-                    req["issue_number"],
-                    f"Draft PR created: {pr_url}\n\n"
-                    f"Checkout the branch and run the Inspector to review segments.",
-                )
+                if has_reviewer and collab_status == "existing":
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"@{req['github_username']}, checkout the branch and "
+                        f"run the Inspector to review segments."
+                    )
+                elif has_reviewer and collab_status == "invited":
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"@{req['github_username']}, a collaborator invite has been sent. "
+                        f"Please [accept the invite](https://github.com/Wider-Community/quranic-universal-audio/invitations), "
+                        f"then comment `/confirm` to get assigned."
+                    )
+                else:
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"This request needs a reviewer. If you'd like to help, "
+                        f"comment `/claim` on this issue to get assigned."
+                    )
+                gh_comment_on_issue(req["issue_number"], comment_body)
             except Exception as e:
                 print(f"    Warning: failed to comment on issue: {e}")
 
-            # Update Notion with PR URL
-            if req.get("page_id"):
-                try:
-                    notion_update_pr_url(req["page_id"], pr_url)
-                except Exception as e:
-                    print(f"    Warning: failed to update Notion PR URL: {e}")
-
-            # Invite collaborator if GitHub username provided
-            if req.get("github_username"):
-                gh_invite_collaborator(req["github_username"])
-
-            # Send segments-ready email
+            # Send segments-ready email (template varies by contributor status)
             if req.get("requester_email"):
                 try:
                     subj, html = email_segments_ready(
                         req["name"], req["requester_name"],
                         req["issue_url"], pr_url,
+                        collab_status=collab_status,
+                        github_username=req.get("github_username", ""),
                     )
                     send_email(req["requester_email"], subj, html)
-                    print(f"    Email sent to {req['requester_email']}")
+                    print(f"    Email sent to {req['requester_email']} ({collab_status})")
                 except Exception as e:
                     print(f"    Warning: failed to send email: {e}")
 
@@ -752,19 +780,8 @@ def cmd_detect_timestamps(args):
         if iss["slug"] and iss["slug"] not in issue_by_slug:
             issue_by_slug[iss["slug"]] = iss
 
-    # Also try Notion for requester info
-    try:
-        from request_helpers import NOTION_DATABASE_ID
-        import httpx
-        from request_helpers import _notion_headers, _notion_rich_text, _notion_title, _notion_email, _notion_url
-        url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
-        r = httpx.post(url, headers=_notion_headers(), json={}, timeout=30)
-        notion_pages = {
-            _notion_rich_text(p["properties"].get("Slug", {})): p
-            for p in r.json().get("results", [])
-        }
-    except Exception:
-        notion_pages = {}
+    # Enrich with email/name from Notion (best-effort)
+    notion_emails = notion_query_emails()
 
     # Save state
     state = {
@@ -773,8 +790,7 @@ def cmd_detect_timestamps(args):
     }
     for c in candidates:
         iss = issue_by_slug.get(c["slug"], {})
-        notion_page = notion_pages.get(c["slug"], {})
-        notion_props = notion_page.get("properties", {})
+        email_info = notion_emails.get(c["slug"], {})
 
         state["reciters"].append({
             "slug": c["slug"],
@@ -783,9 +799,8 @@ def cmd_detect_timestamps(args):
             "seg_dir": c["seg_dir"],
             "issue_number": iss.get("number", 0),
             "issue_url": iss.get("url", ""),
-            "page_id": notion_page.get("id", ""),
-            "requester_email": _notion_email(notion_props.get("Email", {})) if notion_props else "",
-            "requester_name": _notion_title(notion_props.get("Requester Name", {})) if notion_props else "",
+            "requester_email": email_info.get("email", ""),
+            "requester_name": email_info.get("name", ""),
         })
 
     save_state(state, TIMESTAMPS_STATE_FILE)
@@ -931,14 +946,12 @@ def _create_timestamps_pr(rec):
             f"Add word-level timestamps for **{rec['name']}** (`{slug}`)."
             f"{issue_ref}"
         )
-        pr_result = _run_gh([
-            "pr", "create",
-            "--base", "main", "--head", branch,
-            "--title", f"feat: add timestamps for {rec['name']}",
-            "--body", pr_body,
-        ])
-
-        pr_url = pr_result.stdout.strip()
+        pr_url = gh_create_bot_pr(
+            branch,
+            f"feat: add timestamps for {rec['name']}",
+            pr_body,
+            draft=False,
+        )
         pr_number = int(pr_url.rstrip("/").split("/")[-1])
         result.update(success=True, pr_number=pr_number, pr_url=pr_url)
 
@@ -1137,13 +1150,6 @@ def cmd_complete_timestamps(args):
                 print(f"  #{rec['issue_number']} closed")
             except Exception as e:
                 print(f"  #{rec['issue_number']} close failed: {e}")
-
-        # Notion status
-        if rec.get("page_id"):
-            try:
-                notion_update_status(rec["page_id"], "Completed")
-            except Exception as e:
-                print(f"  Notion update failed for {rec['name']}: {e}")
 
     # --- Phase 6: Wait for CI cascade ---
     release_tag = None

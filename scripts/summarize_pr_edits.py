@@ -191,6 +191,15 @@ def _format_validation(stats: dict) -> str:
     if consistency:
         rows.append(f"| Consistency mismatches | {consistency} |")
 
+    # Accordion categories from detailed.json
+    _CAT_LABEL_MAP = {"cross_verse_det": "cross_verse"}
+    for key in ("repetitions", "boundary_adj", "cross_verse_det", "audio_bleeding", "qalqala"):
+        count = stats.get(key, 0)
+        if count:
+            label_key = _CAT_LABEL_MAP.get(key, key)
+            label = _ISSUE_LABELS.get(label_key, key)
+            rows.append(f"| {label} | {count} |")
+
     conf_mean = stats.get("conf_mean", 0)
     if conf_mean:
         rows.append(f"| Mean confidence | {conf_mean:.1%} |")

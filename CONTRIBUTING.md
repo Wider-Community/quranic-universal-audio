@@ -1,76 +1,120 @@
 # Contributing
 
-Thank you for your interest in contributing to Qur'anic Universal Audio. This is a community project and your help is greatly appreciated.
+Jazaka Allahu khayran for your interest in contributing to Qur'anic Universal Audio! This guide will help you get started regardless of your technical background.
 
-## Getting started
+## How the pipeline works
 
-### For segment review (most common)
+Every reciter goes through these steps:
 
-When segments are extracted for a reciter, a **draft PR** is opened automatically. To review and fix:
+1. **Request** — someone [submits a reciter](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) for processing 
+2. **Segmentation** — the AI pipeline splits audio into pause (waqf) segments and matches them to Qur'anic text
+3. **Review** — a human reviews the segments in the Inspector UI, fixing any errors the AI made *(this is the main manual step)*
+4. **Timestamps** — word/letter/phoneme timestamps are generated automatically after the reviewing is reviewed and accepted
+5. **Release** — the reciter is automatically added to the [dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs), and animated recitations can be viewed in the inspector
+6. **Ongoing refinement** *(optional)* — further review, re-processing, and timestamp updates as needed
 
-1. **Clone** the repository:
-   ```bash
-   git clone https://github.com/Wider-Community/quranic-universal-audio.git
-   cd quranic-universal-audio
-   ```
-2. **Assign yourself** to the PR so others know you're working on it:
-   ```bash
-   gh pr edit <PR_NUMBER> --add-assignee @me
-   ```
-3. **Checkout the PR branch**:
-   ```bash
-   gh pr checkout <PR_NUMBER>
-   ```
-4. **Run the Inspector** and fix segments:
-   ```bash
-   python inspector/server.py
-   ```
-5. **Commit and push** your corrections directly to the PR branch:
-   ```bash
-   git add data/recitation_segments/<reciter>/*
-   git commit -m "fix: correct segmentation errors for <reciter>"
-   git push
-   ```
+## Reciter states
 
-### For other contributions
+Reciters in the project fall into one of three states. Browse the full list in [RECITERS.md](data/RECITERS.md).
 
-1. **Fork** the repository on GitHub
-2. **Clone** your fork, make changes, and open a PR against `main` on the [upstream repository](https://github.com/Wider-Community/quranic-universal-audio/pulls)
+- **Not yet in the system** — audio exists online but hasn't been added to the repository
+- **In the system, awaiting request or review** — audio exists; may be waiting for pipeline processing or for someone to review the AI-generated segments. Browse [issues needing a reviewer](https://github.com/Wider-Community/quranic-universal-audio/issues?q=is%3Aopen+label%3Areviewer-needed) or [issues with a reviewer assigned](https://github.com/Wider-Community/quranic-universal-audio/issues?q=is%3Aopen+label%3Areviewer-assigned)
+- **Timestamped** — alignmnet results have been reviewed and timestamps generated; available in the [dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs) and [Github Releases](https://github.com/Wider-Community/quranic-universal-audio/releases). Browse [completed issues](https://github.com/Wider-Community/quranic-universal-audio/issues?q=label%3Astatus%3Acompleted) or aligned reciters in the [index](https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md#aligned-reciters)
 
 ## Ways to contribute
 
-### Add a new reciter or request alignment
+1. **Request processing** — For reciters already in the system, determine a suitable silence threshold and submit a request [via the form](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) (see the [requesting a reciter](docs/requesting-a-reciter.md) guide). You can optionally volunteer to review the segments yourself — if not, one of our active contributors will handle the review. 
+3. **Review segments** — Listen to audio in the [Inspector UI](inspector/README.md) and fix AI errors so that timestamps can be generated. No Qur'an expertise required — just adequate proficiency in reading and hearing the Qur'an
+   - **a) Review new segments** — Pick up a reciter that hasn't been reviewed yet and fix all errors.
+   - **b) Refine timestamped reciters** — For reciters that already have timestamps, do additional quality checks and fix any remaining issues. Updates flow automatically to the dataset
+4. **Report issues and suggest improvements** — Bug reports, feature ideas, and general feedback via [GitHub Issues](https://github.com/Wider-Community/quranic-universal-audio/issues)
 
-- **Add audio yourself** — Create an audio manifest and submit a PR. See [Adding a New Reciter](docs/adding-a-reciter.md) for the full guide.
-- **Request processing** — Use the [reciter request form](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) to request segmentation and timestamping for a specific reciter.
+## Setup
 
-### Review and fix segments
+Requesting processing and reporting issues only need a browser. For reviewing segments, you'll need Git and Python.
 
-The most impactful contribution is reviewing alignment results and fixing errors using the [inspector](inspector/). No expertise in tajweed or recitation rules is required — the inspector's validation panel flags issues automatically:
+### Prerequisites
 
-- **Missing verses** — verses with no segments at all
-- **Missing words** — words not covered by any segment in a verse
-- **Failed alignments** — segments where the aligner couldn't find a match
-- **Low confidence** — segments where the alignment score is below threshold
-- **Over-segmentation** — a word's recitation accidentally split across two segments
-- **Under-segmentation** — multiple pause groups merged into one segment
-- **Cross-verse segments** — segments spanning multiple verses that may need splitting
-- **Audio bleeding** — a verse's audio file containing audio from an adjacent verse
+<details>
+<summary><b>Installing Git</b></summary>
 
-**Workflow:**
+- **Windows:** Download from [git-scm.com](https://git-scm.com/download/win). The installer includes Git Bash, a terminal you can use for all commands below.
+- **Mac:** Run `xcode-select --install` in Terminal. Alternatively, if you have [Homebrew](https://brew.sh): `brew install git`.
+- **Linux:** `sudo apt install git` (Ubuntu/Debian) or `sudo dnf install git` (Fedora).
 
-1. Checkout the reciter's PR branch: `gh pr checkout <PR_NUMBER>`
-2. Run the inspector: `python inspector/server.py` — see the [inspector README](inspector/README.md) for setup instructions and video guides
-3. Select the reciter and review the validation panel for flagged issues
-4. Fix errors using the editing tools (adjust boundaries, split, merge, re-reference)
-5. Validation re-runs automatically after each save — keep going until all errors and warnings are resolved
-6. Commit and push your fixes directly to the PR branch
-7. When done, mark the PR as ready — click **"Ready for review"** on GitHub or run `gh pr ready`
+Verify: `git --version`
 
-### Report issues
+New to Git? GitHub's [Get Started guide](https://docs.github.com/en/get-started/getting-started-with-git) covers the basics.
 
-[Open an issue](https://github.com/Wider-Community/quranic-universal-audio/issues) for bugs, incorrect timestamps, feature requests or optimisations.
+</details>
+
+<details>
+<summary><b>Installing Python</b></summary>
+
+- **Windows:** Download from [python.org/downloads](https://www.python.org/downloads/). During installation, **check "Add Python to PATH"**. Avoid the Microsoft Store version.
+- **Mac:** `brew install python` (if you have [Homebrew](https://brew.sh)), or download from [python.org/downloads](https://www.python.org/downloads/).
+- **Linux:** `sudo apt install python3 python3-pip` (Ubuntu/Debian) or `sudo dnf install python3 python3-pip` (Fedora).
+
+Verify: `python3 --version` (should print 3.10 or higher)
+
+> **Windows note:** If `python3` isn't recognized, try `python --version` instead.
+
+</details>
+
+### Clone and install
+
+Run the following in a terminal:
+
+```bash
+# Clone the repository
+git clone https://github.com/Wider-Community/quranic-universal-audio.git
+cd quranic-universal-audio
+
+# Install the Inspector dependencies
+pip install -r inspector/requirements.txt
+```
+
+## How to review results
+
+There are two ways to get started:
+
+**If you submitted a reciter request** and chose to review the segments yourself on the form, you'll be automatically assigned to the reciter. You'll receive an email when the segments are ready for review.
+
+**If you'd like to review an existing reciter**, browse [issues needing a reviewer](https://github.com/Wider-Community/quranic-universal-audio/issues?q=is%3Aopen+label%3Areviewer-needed) and comment `/claim` on the one you'd like to work on. If you're already a repository collaborator, you'll be assigned immediately. If not, you'll receive a collaborator invite — accept it on GitHub, then comment `/confirm` to get assigned.
+
+Once the segments are ready, you will be automatically assigned to the [pull request](https://github.com/Wider-Community/quranic-universal-audio/pulls).
+
+**1. Check out the pull request branch**
+
+```bash
+git pull origin main                            # get latest code updates
+git fetch origin                                # fetch remote branches
+git branch -r                                   # list available branches
+git checkout feat/add-segments-mishary-alafasi  # switch to the PR branch
+```
+
+**2. Run the Inspector**
+
+```bash
+python inspector/server.py # or python3 inspector/server.py
+```
+
+Open http://localhost:5000 to start editing. See the [Inspector README](inspector/README.md) for detailed documentation, visual guides, and the full review workflow.
+
+**3. Push your fixes**
+
+As you fix errors, save your changes and push. You can push multiple rounds of fixes.
+
+```bash
+git add data/recitation_segments/<reciter>/
+git commit -m "fix: correct segmentation errors for <reciter>"
+git push
+```
+
+**4. Mark as ready**
+
+When you're satisfied, click **"Ready for review"** on the pull request page on GitHub. After we merge it, timestamps are generated automatically and the reciter is added to the dataset.
 
 ## Technical contributions
 
-The ASR and forced alignment models are not currently public, so technical contributions to the core pipeline are limited. If you have ideas for technical collaboration, feel free to reach out!
+The ASR and forced alignment models are not currently public, so technical contributions to the core pipeline are limited. If you have ideas for technical collaboration, feel free to open an issue or reach out!

@@ -1,7 +1,3 @@
-request_types:
-  - "New reciter"
-  - "Re-align"
-
 style_choices:
   - "Murattal"
   - "Mujawwad"

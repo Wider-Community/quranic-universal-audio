@@ -75,17 +75,40 @@ def email_rejected_already_processed(reciter_name, requester_name, issue_url):
     return subject, _wrap(body, issue_url)
 
 
-def email_segments_ready(reciter_name, requester_name, issue_url, pr_url=""):
-    """Email sent when segments are extracted and ready for review."""
-    subject = f"Segments ready for {reciter_name} — review needed"
+def email_segments_ready(reciter_name, requester_name, issue_url, pr_url="",
+                         collab_status="invited", github_username=""):
+    """Email sent when segments are extracted.
+
+    *collab_status* controls the template:
+        "existing"  – contributor already has repo access
+        "invited"   – contributor just received a collaborator invite
+        "passive"   – requester did not opt in to review
+    """
     pr_link = f'<p>Pull request: <a href="{pr_url}">{pr_url}</a></p>' if pr_url else ""
-    pr_number = pr_url.split("/")[-1] if pr_url else "&lt;PR_NUMBER&gt;"
-    body = load_template("emails/segments-ready", ext="html").format(
-        requester_name=requester_name,
-        reciter_name=reciter_name,
-        pr_link=pr_link,
-        pr_number=pr_number,
-    )
+    issue_link = f'<p>Track progress: <a href="{issue_url}">{issue_url}</a></p>' if issue_url else ""
+
+    if collab_status == "existing":
+        subject = f"Segments ready for {reciter_name} — review needed"
+        body = load_template("emails/segments-ready-contributor", ext="html").format(
+            requester_name=requester_name,
+            reciter_name=reciter_name,
+            pr_link=pr_link,
+        )
+    elif collab_status == "invited":
+        subject = f"Segments ready for {reciter_name} — review needed"
+        body = load_template("emails/segments-ready-invited", ext="html").format(
+            requester_name=requester_name,
+            reciter_name=reciter_name,
+            pr_link=pr_link,
+            github_username=github_username,
+        )
+    else:  # passive
+        subject = f"Segments extracted for {reciter_name}"
+        body = load_template("emails/segments-ready-passive", ext="html").format(
+            requester_name=requester_name,
+            reciter_name=reciter_name,
+            issue_link=issue_link,
+        )
     return subject, _wrap(body, issue_url)
 
 

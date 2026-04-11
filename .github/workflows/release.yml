@@ -153,16 +153,3 @@ jobs:
           git add data/.release_history.json
           git diff --cached --quiet || git commit -m "chore: update release history cache for ${{ steps.package.outputs.version }}"
           git push origin HEAD:main || echo "Warning: Could not push release history update"
-
-      - name: Notify watchers
-        if: steps.package.outputs.skip != 'true'
-        env:
-          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          NOTION_WATCHERS_DB_ID: ${{ secrets.NOTION_WATCHERS_DB_ID }}
-          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: |
-          pip install httpx
-          python scripts/notify_watchers.py \
-            --manifest dist/manifest.json \
-            --version ${{ steps.package.outputs.version }}

@@ -1,0 +1,11 @@
+recitation_segments/**/vad_cache
+
+qul_reciters.txt
+all_reciter_combos.txt
+qul_explore_prompt.md
+
+recitation_segments/validation.log
+timestamps/by_ayah_audio/validation.log
+timestamps/by_surah_audio/validation.log
+
+# timestamps/**/timestamps_full.json

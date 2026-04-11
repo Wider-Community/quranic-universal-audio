@@ -37,8 +37,6 @@ data/audio/
 └── by_ayah/<source>/<reciter>.json     # Per-verse recordings
 ```
 
-Existing sources: `mp3quran`, `everyayah`, `qul`, `surah-quran`, `youtube`, `archive`, `soundcloud`, `spreaker`. If your audio comes from a new source, create the directory and add a `SOURCE` file:
-
 ```bash
 mkdir data/audio/by_surah/my-source
 echo "https://example.com/quran-audio" > data/audio/by_surah/my-source/SOURCE
