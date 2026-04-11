@@ -1,0 +1,20 @@
+/**
+ * Shared surah info: fetched once at import time, available across all tabs.
+ *
+ * `surahInfo` is a live `let` binding — importers see the updated value
+ * after the fetch resolves because ES module live bindings work by reference
+ * to the exporting module's variable.
+ */
+
+export let surahInfo = {};
+
+export const surahInfoReady = fetch('/api/surah-info')
+    .then(r => r.json())
+    .then(data => { surahInfo = data; });
+
+export function surahOptionText(num) {
+    const info = surahInfo[String(num)];
+    if (!info) return String(num);
+    const ar = info.name_ar.replace(/^سُورَةُ\s*/, '');
+    return `${num} ${info.name_en} ${ar}`;
+}

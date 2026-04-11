@@ -89,9 +89,14 @@ if __name__ == "__main__":
     # extra_files for Flask reloader — watches static assets and route modules
     _base = Path(__file__).parent
     extra = [
-        str(_base / "static" / "segments.js"),
-        str(_base / "static" / "app.js"),
-        str(_base / "static" / "audio.js"),
+        str(_base / "static" / "js" / "main.js"),
+        str(_base / "static" / "js" / "timestamps.js"),
+        str(_base / "static" / "js" / "segments.js"),
+        str(_base / "static" / "js" / "audio" / "index.js"),
+        str(_base / "static" / "js" / "shared" / "searchable-select.js"),
+        str(_base / "static" / "js" / "shared" / "arabic-text.js"),
+        str(_base / "static" / "js" / "shared" / "surah-info.js"),
+        str(_base / "static" / "js" / "shared" / "constants.js"),
         str(_base / "static" / "style.css"),
         str(_base / "static" / "index.html"),
     ]

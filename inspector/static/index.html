@@ -158,8 +158,8 @@
             </div>
             <div class="seg-cache-panel" id="seg-cache-bar" hidden>
                 <div class="seg-cache-actions">
-                    <button id="seg-prepare-btn" class="btn seg-cache-download-btn" hidden onclick="_prepareAudio(segReciterSelect.value)">Download All Audio</button>
-                    <button id="seg-delete-cache-btn" class="btn seg-cache-delete-btn" hidden onclick="_deleteAudioCache(segReciterSelect.value)">Delete Cache</button>
+                    <button id="seg-prepare-btn" class="btn seg-cache-download-btn" hidden>Download All Audio</button>
+                    <button id="seg-delete-cache-btn" class="btn seg-cache-delete-btn" hidden>Delete Cache</button>
                 </div>
                 <div id="seg-cache-progress" class="seg-cache-progress" hidden>
                     <div class="seg-cache-progress-bar">
@@ -303,13 +303,10 @@
             </div>
         </div>
 
-        <footer></footer>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
-    <script src="/static/app.js"></script>
-    <script src="/static/segments.js"></script>
-    <script src="/static/audio.js"></script>
+    <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

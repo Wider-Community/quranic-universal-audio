@@ -2,6 +2,11 @@
  * Segments Tab — visualize VAD-aligned segment data from extract_segments.py.
  */
 
+import { SearchableSelect } from './shared/searchable-select.js';
+import { surahInfoReady, surahOptionText } from './shared/surah-info.js';
+import { LS_KEYS } from './shared/constants.js';
+import { getActiveTab } from './main.js';
+
 // State
 let segData = null;          // { audio_url, summary, verse_word_counts, segments } — chapter-specific
 let segAllData = null;       // { segments, audio_by_chapter, verse_word_counts } — reciter-level
@@ -375,9 +380,9 @@ let segChapterSS = null;
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
     // Restore persistent settings before wiring up handlers
-    _segAutoPlayEnabled = localStorage.getItem('insp_seg_autoplay') !== 'false';
+    _segAutoPlayEnabled = localStorage.getItem(LS_KEYS.SEG_AUTOPLAY) !== 'false';
     segAutoPlayBtn.className = 'btn ' + (_segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
-    const _savedSegSpeed = localStorage.getItem('insp_seg_speed');
+    const _savedSegSpeed = localStorage.getItem(LS_KEYS.SEG_SPEED);
     if (_savedSegSpeed) segSpeedSelect.value = _savedSegSpeed;
 
     segReciterSelect.addEventListener('change', onSegReciterChange);
@@ -388,14 +393,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         _segAutoPlayEnabled = !_segAutoPlayEnabled;
         _segContinuousPlay = _segAutoPlayEnabled;
         segAutoPlayBtn.className = 'btn ' + (_segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
-        localStorage.setItem('insp_seg_autoplay', _segAutoPlayEnabled);
+        localStorage.setItem(LS_KEYS.SEG_AUTOPLAY, _segAutoPlayEnabled);
     });
     segSaveBtn.addEventListener('click', onSegSaveClick);
     segSpeedSelect.addEventListener('change', () => {
         const rate = parseFloat(segSpeedSelect.value);
         segAudioEl.playbackRate = rate;
         if (valCardAudio) valCardAudio.playbackRate = rate;
-        localStorage.setItem('insp_seg_speed', segSpeedSelect.value);
+        localStorage.setItem(LS_KEYS.SEG_SPEED, segSpeedSelect.value);
     });
 
     segAudioEl.addEventListener('play', startSegAnimation);
@@ -445,6 +450,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await surahInfoReady;
     segChapterSS = new SearchableSelect(segChapterSelect);
+
+    // Wire up cache panel buttons (replaced inline onclick handlers for ES module compatibility)
+    document.getElementById('seg-prepare-btn')?.addEventListener('click', () => _prepareAudio(segReciterSelect.value));
+    document.getElementById('seg-delete-cache-btn')?.addEventListener('click', () => _deleteAudioCache(segReciterSelect.value));
+
     loadSegReciters();
 });
 
@@ -460,7 +470,7 @@ async function loadSegReciters() {
         filterAndRenderReciters();
 
         // Restore saved reciter
-        const _savedSegReciter = localStorage.getItem('insp_seg_reciter');
+        const _savedSegReciter = localStorage.getItem(LS_KEYS.SEG_RECITER);
         if (_savedSegReciter) {
             segReciterSelect.value = _savedSegReciter;
             if (segReciterSelect.value === _savedSegReciter) {
@@ -517,7 +527,7 @@ function filterAndRenderReciters() {
 
 async function onSegReciterChange() {
     const reciter = segReciterSelect.value;
-    if (reciter) localStorage.setItem('insp_seg_reciter', reciter);
+    if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
     segChapterSelect.innerHTML = '<option value="">-- select --</option>';
     if (segChapterSS) segChapterSS.refresh();
     segVerseSelect.innerHTML = '<option value="">All</option>';
@@ -2951,7 +2961,7 @@ const SEG_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
 
 function handleSegKeydown(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (typeof activeTab !== 'undefined' && activeTab !== 'segments') return;
+    if (getActiveTab() !== 'segments') return;
 
     switch (e.code) {
         case 'Space':
@@ -3001,7 +3011,7 @@ function handleSegKeydown(e) {
             segSpeedSelect.value = opts[newIdx];
             segAudioEl.playbackRate = opts[newIdx];
             if (valCardAudio) valCardAudio.playbackRate = opts[newIdx];
-            localStorage.setItem('insp_seg_speed', segSpeedSelect.value);
+            localStorage.setItem(LS_KEYS.SEG_SPEED, segSpeedSelect.value);
             break;
         }
         case 'KeyJ': {

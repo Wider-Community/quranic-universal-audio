@@ -1,173 +1,18 @@
 /**
  * Alignment Viewer - Timestamps Tab
  * Loads pre-computed word/phone timestamps from JSONL data.
- * Selection: Reciter (optgroups) → Chapter → Verse.
+ * Selection: Reciter (optgroups) -> Chapter -> Verse.
  * Audio: plays per-verse audio (by_ayah) or full surah audio seeked to offset.
  */
 
-// ── Shared globals (available to segments.js and audio.js) ──────────────
-let surahInfo = {};
-const surahInfoReady = fetch('/api/surah-info').then(r => r.json()).then(data => { surahInfo = data; });
-
-function surahOptionText(num) {
-    const info = surahInfo[String(num)];
-    if (!info) return String(num);
-    const ar = info.name_ar.replace(/^سُورَةُ\s*/, '');
-    return `${num} ${info.name_en} ${ar}`;
-}
-
-function normalizeArabic(str) {
-    return str
-        .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '')
-        .replace(/[أإآٱ]/g, 'ا')
-        .replace(/ة/g, 'ه')
-        .replace(/ى/g, 'ي');
-}
-
-/**
- * SearchableSelect — lightweight filterable wrapper around a native <select>.
- * Hides the <select>, shows a text input + dropdown overlay.
- * Fires native 'change' event on the hidden select so existing handlers work.
- */
-class SearchableSelect {
-    constructor(selectEl) {
-        this.select = selectEl;
-        this.options = [];  // [{value, text, group}, ...]
-
-        // Wrapper
-        this.wrapper = document.createElement('div');
-        this.wrapper.className = 'ss-wrapper';
-        selectEl.parentNode.insertBefore(this.wrapper, selectEl);
-        this.wrapper.appendChild(selectEl);
-        selectEl.style.display = 'none';
-
-        // Text input
-        this.input = document.createElement('input');
-        this.input.type = 'text';
-        this.input.className = 'ss-input';
-        this.input.placeholder = '--';
-        this.wrapper.appendChild(this.input);
-
-        // Dropdown
-        this.dropdown = document.createElement('div');
-        this.dropdown.className = 'ss-dropdown';
-        this.dropdown.hidden = true;
-        this.wrapper.appendChild(this.dropdown);
-
-        this.highlightIdx = -1;
-        this.filtered = [];
-
-        this.input.addEventListener('focus', () => this._open());
-        this.input.addEventListener('input', () => this._filter());
-        this.input.addEventListener('keydown', e => this._onKey(e));
-        document.addEventListener('click', e => {
-            if (!this.wrapper.contains(e.target)) this._close();
-        });
-
-        this.refresh();
-    }
-
-    refresh() {
-        this.options = [];
-        for (const opt of this.select.options) {
-            if (!opt.value) continue;  // skip placeholder
-            const parent = opt.parentElement;
-            const group = parent && parent.tagName === 'OPTGROUP' ? parent.label : '';
-            this.options.push({ value: opt.value, text: opt.textContent, group });
-        }
-        // Sync displayed text to current select value
-        const cur = this.select.value;
-        const match = this.options.find(o => o.value === cur);
-        this.input.value = match ? match.text : '';
-        this._close();
-    }
-
-    _open() {
-        this.input.value = '';
-        this._filter();
-        this.dropdown.hidden = false;
-    }
-
-    _close() {
-        this.dropdown.hidden = true;
-        this.highlightIdx = -1;
-        // Restore display text to current selection
-        const cur = this.select.value;
-        const match = this.options.find(o => o.value === cur);
-        this.input.value = match ? match.text : '';
-    }
-
-    _filter() {
-        const q = normalizeArabic(this.input.value.toLowerCase());
-        this.filtered = q
-            ? this.options.filter(o =>
-                normalizeArabic(o.text.toLowerCase()).includes(q) ||
-                normalizeArabic(o.group.toLowerCase()).includes(q)
-            )
-            : [...this.options];
-        this.highlightIdx = -1;
-        this._render();
-    }
-
-    _render() {
-        this.dropdown.innerHTML = '';
-        let currentGroup = null;
-        this.filtered.forEach((opt, i) => {
-            if (opt.group && opt.group !== currentGroup) {
-                currentGroup = opt.group;
-                const header = document.createElement('div');
-                header.className = 'ss-group-label';
-                header.textContent = currentGroup;
-                this.dropdown.appendChild(header);
-            }
-
-            const div = document.createElement('div');
-            div.className = 'ss-option'
-                + (opt.group ? ' ss-option-grouped' : '')
-                + (i === this.highlightIdx ? ' ss-highlight' : '');
-            div.textContent = opt.text;
-            div.addEventListener('mousedown', e => { e.preventDefault(); this._pick(opt); });
-            this.dropdown.appendChild(div);
-        });
-    }
-
-    _pick(opt) {
-        this.select.value = opt.value;
-        this.input.value = opt.text;
-        this._close();
-        this.select.dispatchEvent(new Event('change'));
-    }
-
-    _onKey(e) {
-        if (this.dropdown.hidden) {
-            if (e.key === 'ArrowDown' || e.key === 'Enter') { this._open(); e.preventDefault(); }
-            return;
-        }
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            this.highlightIdx = Math.min(this.highlightIdx + 1, this.filtered.length - 1);
-            this._render();
-            this._scrollToHighlight();
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            this.highlightIdx = Math.max(this.highlightIdx - 1, 0);
-            this._render();
-            this._scrollToHighlight();
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (this.highlightIdx >= 0 && this.highlightIdx < this.filtered.length) {
-                this._pick(this.filtered[this.highlightIdx]);
-            }
-        } else if (e.key === 'Escape') {
-            this._close();
-        }
-    }
-
-    _scrollToHighlight() {
-        const el = this.dropdown.querySelector('.ss-highlight');
-        if (el) el.scrollIntoView({ block: 'nearest' });
-    }
-}
+import { SearchableSelect } from './shared/searchable-select.js';
+import { surahInfoReady, surahOptionText } from './shared/surah-info.js';
+import {
+    TASHKEEL, IDGHAM_GHUNNAH_START, ZWSP, DAGGER_ALEF, CHAR_EQUIVALENTS,
+    stripTashkeel, isCombiningMark, firstBase, charsMatch, splitIntoCharGroups,
+} from './shared/arabic-text.js';
+import { LS_KEYS } from './shared/constants.js';
+import { getActiveTab } from './main.js';
 
 // State
 let currentData = null;
@@ -176,10 +21,10 @@ let words = [];
 let audioContext = null;
 let waveformData = null;
 let fullAudioBuffer = null;  // decoded full surah AudioBuffer
-const audioBufferCache = new Map();  // URL → decoded AudioBuffer (A-3 fix)
+const audioBufferCache = new Map();  // URL -> decoded AudioBuffer (A-3 fix)
 let waveformSnapshot = null;  // offscreen canvas for static waveform (A-1 fix)
 
-// Cached DOM element refs — populated by buildUnifiedDisplay/buildPhonemeLabels (A-2 fix)
+// Cached DOM element refs -- populated by buildUnifiedDisplay/buildPhonemeLabels (A-2 fix)
 let cachedBlocks = [];
 let cachedPhonemes = [];
 let cachedLetterEls = [];
@@ -218,7 +63,6 @@ const randomReciterBtn = document.getElementById('random-reciter-btn');
 const tsPrevBtn = document.getElementById('ts-prev-btn');
 const tsNextBtn = document.getElementById('ts-next-btn');
 const animDisplay = document.getElementById('animation-display');
-const modeToggle = document.getElementById('ts-mode-toggle');
 const modeBtnA = document.getElementById('ts-mode-btn-a');
 const modeBtnB = document.getElementById('ts-mode-btn-b');
 const tsValidationEl = document.getElementById('ts-validation');
@@ -234,9 +78,6 @@ let tsAutoAdvancing = false; // guard against re-entry from timeupdate
 const autoNextBtn = document.getElementById('ts-auto-next');
 const autoRandomBtn = document.getElementById('ts-auto-random');
 
-// Track active tab
-let activeTab = 'timestamps';
-
 // SearchableSelect instance for timestamps chapter dropdown
 let tsChapterSS = null;
 
@@ -244,19 +85,18 @@ let tsChapterSS = null;
 document.addEventListener('DOMContentLoaded', async () => {
     setupCanvas();
     setupEventListeners();
-    setupTabSwitching();
 
     // Restore ts speed before first audio load
-    const _savedTsSpeed = localStorage.getItem('insp_ts_speed');
+    const _savedTsSpeed = localStorage.getItem(LS_KEYS.TS_SPEED);
     if (_savedTsSpeed) tsSpeedSelect.value = _savedTsSpeed;
 
     // Restore view mode + sub-settings immediately (no dependency on reciters)
-    const _savedTsView = localStorage.getItem('insp_ts_view_mode');
+    const _savedTsView = localStorage.getItem(LS_KEYS.TS_VIEW_MODE);
     if (_savedTsView) {
         switchView(_savedTsView);
         if (_savedTsView === 'analysis') {
-            const _savedLetters = localStorage.getItem('insp_ts_show_letters');
-            const _savedPhonemes = localStorage.getItem('insp_ts_show_phonemes');
+            const _savedLetters = localStorage.getItem(LS_KEYS.TS_SHOW_LETTERS);
+            const _savedPhonemes = localStorage.getItem(LS_KEYS.TS_SHOW_PHONEMES);
             if (_savedLetters !== null) {
                 tsShowLetters = _savedLetters === 'true';
                 modeBtnA.classList.toggle('active', tsShowLetters);
@@ -266,7 +106,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 modeBtnB.classList.toggle('active', tsShowPhonemes);
             }
         } else {
-            const _savedGran = localStorage.getItem('insp_ts_granularity');
+            const _savedGran = localStorage.getItem(LS_KEYS.TS_GRANULARITY);
             if (_savedGran) switchGranularity(_savedGran);
         }
     }
@@ -289,45 +129,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         root.setProperty('--analysis-word-font-size', cfg.analysis_word_font_size);
         root.setProperty('--analysis-letter-font-size', cfg.analysis_letter_font_size);
     });
-
-    // Restore active tab last — no guard so all tabs are handled uniformly
-    const _savedTab = localStorage.getItem('insp_active_tab');
-    if (_savedTab) {
-        const _tabBtn = document.querySelector(`.tab-btn[data-tab="${_savedTab}"]`);
-        if (_tabBtn) _tabBtn.click();
-    }
 });
 
 function setupCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = 200;
-}
-
-function setupTabSwitching() {
-    const panels = ['timestamps', 'segments', 'audio'];
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            activeTab = btn.dataset.tab;
-            localStorage.setItem('insp_active_tab', activeTab);
-            panels.forEach(p => {
-                document.getElementById(p + '-panel').hidden = (activeTab !== p);
-            });
-            // Pause audio from other tabs
-            if (activeTab !== 'timestamps') audio.pause();
-            if (activeTab !== 'segments') {
-                const segAudio = document.getElementById('seg-audio-player');
-                if (segAudio) segAudio.pause();
-                if (typeof valCardAudio !== 'undefined' && valCardAudio) valCardAudio.pause();
-            }
-            if (activeTab !== 'audio') {
-                const audPlayer = document.getElementById('aud-player');
-                if (audPlayer) audPlayer.pause();
-            }
-        });
-    });
 }
 
 function setupEventListeners() {
@@ -341,7 +148,7 @@ function setupEventListeners() {
     canvas.addEventListener('click', handleCanvasClick);
     tsSpeedSelect.addEventListener('change', () => {
         audio.playbackRate = parseFloat(tsSpeedSelect.value);
-        localStorage.setItem('insp_ts_speed', tsSpeedSelect.value);
+        localStorage.setItem(LS_KEYS.TS_SPEED, tsSpeedSelect.value);
     });
 
     audio.addEventListener('loadedmetadata', () => {
@@ -405,7 +212,7 @@ function setupEventListeners() {
         if (tsViewMode === 'analysis') {
             tsShowLetters = !tsShowLetters;
             modeBtnA.classList.toggle('active', tsShowLetters);
-            localStorage.setItem('insp_ts_show_letters', tsShowLetters);
+            localStorage.setItem(LS_KEYS.TS_SHOW_LETTERS, tsShowLetters);
             unifiedDisplay.querySelectorAll('.mega-letters').forEach(el => {
                 el.classList.toggle('hidden', !tsShowLetters);
             });
@@ -419,7 +226,7 @@ function setupEventListeners() {
         if (tsViewMode === 'analysis') {
             tsShowPhonemes = !tsShowPhonemes;
             modeBtnB.classList.toggle('active', tsShowPhonemes);
-            localStorage.setItem('insp_ts_show_phonemes', tsShowPhonemes);
+            localStorage.setItem(LS_KEYS.TS_SHOW_PHONEMES, tsShowPhonemes);
             unifiedDisplay.querySelectorAll('.mega-phonemes').forEach(el => {
                 el.classList.toggle('hidden', !tsShowPhonemes);
             });
@@ -456,7 +263,7 @@ function getSegDuration() {
 }
 
 // ---------------------------------------------------------------------------
-// Selection flow: Reciter → Chapter → Segment
+// Selection flow: Reciter -> Chapter -> Segment
 // ---------------------------------------------------------------------------
 
 async function loadTsReciters() {
@@ -466,7 +273,7 @@ async function loadTsReciters() {
         renderTsReciters();
 
         // Restore saved reciter
-        const _savedTsReciter = localStorage.getItem('insp_ts_reciter');
+        const _savedTsReciter = localStorage.getItem(LS_KEYS.TS_RECITER);
         if (_savedTsReciter) {
             tsReciterSelect.value = _savedTsReciter;
             if (tsReciterSelect.value === _savedTsReciter) {
@@ -522,7 +329,7 @@ function renderTsReciters() {
 
 async function onTsReciterChange() {
     const reciter = tsReciterSelect.value;
-    if (reciter) localStorage.setItem('insp_ts_reciter', reciter);
+    if (reciter) localStorage.setItem(LS_KEYS.TS_RECITER, reciter);
     tsChapterSelect.innerHTML = '<option value="">-- select --</option>';
     if (tsChapterSS) tsChapterSS.refresh();
     tsSegmentSelect.innerHTML = '<option value="">--</option>';
@@ -754,7 +561,7 @@ async function loadTimestampVerse(reciter, verseRef) {
         words = data.words || [];
         waveformData = null;
 
-        // Set segment offset (0 for by_ayah — whole file is one verse)
+        // Set segment offset (0 for by_ayah -- whole file is one verse)
         tsSegOffset = data.time_start_ms / 1000;
         tsSegEnd = data.time_end_ms / 1000;
 
@@ -819,7 +626,7 @@ async function loadRandomTimestamp(reciter = null) {
         tsSegEnd = data.time_end_ms / 1000;
 
         // Sync category toggle if random landed on a different category
-        // Sync dropdowns directly — skip heavy validation calls
+        // Sync dropdowns directly -- skip heavy validation calls
         const reciterChanged = tsReciterSelect.value !== data.reciter;
         const chapterChanged = tsChapterSelect.value !== String(data.chapter);
 
@@ -909,16 +716,6 @@ function clearDisplay() {
 // ---------------------------------------------------------------------------
 // Cross-word ghunna detection: letter + phoneme contextual validation
 // ---------------------------------------------------------------------------
-// Instead of pure phoneme-symbol matching, we validate each ghunna phoneme
-// against the Arabic letters at both sides of a word boundary. This prevents
-// false positives (in-word shaddah ghunna) and enables idgham shafawi detection
-// (m̃ at END of previous word).
-
-const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u08F0-\u08F2]/g;
-
-function stripTashkeel(text) {
-    return text.replace(TASHKEEL, '');
-}
 
 function getLastBaseLetter(word) {
     const bare = stripTashkeel(word.text || '');
@@ -928,7 +725,7 @@ function getLastBaseLetter(word) {
 function getFirstBaseLetter(word) {
     const bare = stripTashkeel(word.text || '');
     for (const ch of bare) {
-        if (ch !== '\u0671' && ch !== '\u0627') return ch;  // skip ٱ and ا
+        if (ch !== '\u0671' && ch !== '\u0627') return ch;  // skip alef wasla and alef
     }
     return bare.length ? bare[0] : '';
 }
@@ -944,14 +741,6 @@ function hasTanween(word) {
     const tail = text.slice(-3);
     return /[\u064C\u064D\u08F1\u08F2]/.test(tail);  // tanween damma/kasra (standard + open) on last letter
 }
-
-// Idgham ghunnah phonemes at START of current word → required Arabic start letter
-const IDGHAM_GHUNNAH_START = {
-    'ñ': '\u0646',  // ن
-    'j̃': '\u064A',  // ي
-    'w̃': '\u0648',  // و
-    'm̃': '\u0645',  // م
-};
 
 function computeBridgeAtBoundary(prevWord, currWord) {
     const fromPrev = [];
@@ -975,7 +764,7 @@ function computeBridgeAtBoundary(prevWord, currWord) {
         }
     }
 
-    // 2. Suffix of prev word: idgham shafawi (m̃ when مْ before م)
+    // 2. Suffix of prev word: idgham shafawi (m-tilde when meem sukun before meem)
     const prevIndices = prevWord.phoneme_indices || [];
     if (getLastBaseLetter(prevWord) === '\u0645' &&
         getFirstBaseLetter(currWord) === '\u0645') {
@@ -1126,7 +915,7 @@ function buildUnifiedDisplay() {
         const letterRow = createLetterRow(word);
         if (letterRow) block.appendChild(letterRow);
 
-        // Phoneme row — exclude phonemes moved to bridges
+        // Phoneme row -- exclude phonemes moved to bridges
         const phoneRow = document.createElement('div');
         phoneRow.className = 'mega-phonemes' + (tsShowPhonemes ? '' : ' hidden');
 
@@ -1452,7 +1241,7 @@ function updateDisplay() {
         }
     }
 
-    // Update unified display highlighting — use cached refs, diff-only updates
+    // Update unified display highlighting -- use cached refs, diff-only updates
     if (currentWordIndex !== prevActiveWordIdx) {
         for (const block of cachedBlocks) {
             const wi = parseInt(block.dataset.wordIndex);
@@ -1467,7 +1256,7 @@ function updateDisplay() {
         prevActiveWordIdx = currentWordIndex;
     }
 
-    // Update individual phoneme highlighting — only on change
+    // Update individual phoneme highlighting -- only on change
     if (currentIndex !== prevActivePhonemeIdx) {
         for (const ph of cachedPhonemes) {
             ph.classList.toggle('active', parseInt(ph.dataset.index) === currentIndex);
@@ -1564,7 +1353,7 @@ function handleCanvasClick(e) {
 
 function handleKeydown(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (activeTab !== 'timestamps') return;
+    if (getActiveTab() !== 'timestamps') return;
 
     switch (e.code) {
         case 'Space':
@@ -1642,7 +1431,7 @@ function handleKeydown(e) {
                 : Math.max(idx - 1, 0);
             tsSpeedSelect.value = opts[newIdx];
             audio.playbackRate = opts[newIdx];
-            localStorage.setItem('insp_ts_speed', tsSpeedSelect.value);
+            localStorage.setItem(LS_KEYS.TS_SPEED, tsSpeedSelect.value);
             break;
         }
 
@@ -1703,82 +1492,6 @@ function handleKeydown(e) {
 // ---------------------------------------------------------------------------
 // Animation view: Reveal-mode engine
 // ---------------------------------------------------------------------------
-
-const ZWSP = '\u2060';        // Word Joiner
-const DAGGER_ALEF = '\u0670'; // Superscript Alef
-const CHAR_EQUIVALENTS = new Map([
-    ['\u0649', '\u064A'],  // Alef Maksura → Yaa
-    ['\u064A', '\u0649'],  // Yaa → Alef Maksura
-]);
-
-/** Extract first non-combining base character after NFD normalization. */
-function firstBase(s) {
-    const nfd = s.normalize('NFD');
-    for (const ch of nfd) {
-        if (!isCombiningMark(ch.codePointAt(0))) return ch;
-    }
-    return s[0] || '';
-}
-
-/** Fuzzy match between an MFA letter char and a display char group. */
-function charsMatch(mfaChar, displayChar) {
-    const stripped = displayChar.replace(/\u0640/g, '');
-    if (mfaChar === stripped || stripped.includes(mfaChar) || mfaChar.includes(stripped))
-        return true;
-    if (CHAR_EQUIVALENTS.get(mfaChar) === stripped)
-        return true;
-    const mb = firstBase(mfaChar), db = firstBase(stripped);
-    if (mb && db && (mb === db || CHAR_EQUIVALENTS.get(mb) === db))
-        return true;
-    return false;
-}
-
-/**
- * Split text into character groups (base char + combining marks).
- * Port of quranic_universal_aligner/src/ui/segments.py:split_into_char_groups()
- */
-function splitIntoCharGroups(text) {
-    const groups = [];
-    let current = '';
-    for (const ch of text) {
-        const cp = ch.codePointAt(0);
-        if (cp === 0x0640 || cp === 0x2060) {
-            // Tatweel / Word Joiner: fold into current group
-            current += ch;
-        } else if (cp === 0x0654 || cp === 0x0655) {
-            // Hamza above/below: start own group
-            if (current) groups.push(current);
-            current = ch;
-        } else if (isCombiningMark(cp) && cp !== 0x0670) {
-            // Combining mark (not dagger alef): fold into current group
-            current += ch;
-        } else {
-            if (current) groups.push(current);
-            current = ch;
-        }
-    }
-    if (current) groups.push(current);
-    return groups;
-}
-
-/** Check if codepoint is a Unicode combining mark (category M). */
-function isCombiningMark(cp) {
-    // Arabic combining marks: U+0610-U+061A, U+064B-U+065F, U+0670,
-    // U+06D6-U+06DC, U+06DF-U+06E4, U+06E7-U+06E8, U+06EA-U+06ED
-    // General combining: U+0300-U+036F (combining diacriticals)
-    // Also U+FE20-U+FE2F (combining half marks)
-    if (cp >= 0x0300 && cp <= 0x036F) return true;
-    if (cp >= 0x0610 && cp <= 0x061A) return true;
-    if (cp >= 0x064B && cp <= 0x065F) return true;
-    if (cp === 0x0670) return true;
-    if (cp >= 0x06D6 && cp <= 0x06DC) return true;
-    if (cp >= 0x06DF && cp <= 0x06E4) return true;
-    if (cp >= 0x06E7 && cp <= 0x06E8) return true;
-    if (cp >= 0x06EA && cp <= 0x06ED) return true;
-    if (cp >= 0x08D3 && cp <= 0x08FF) return true;  // Arabic extended-A marks
-    if (cp >= 0xFE20 && cp <= 0xFE2F) return true;
-    return false;
-}
 
 /** Build animation display DOM from words array. */
 function buildAnimationDisplay() {
@@ -1844,12 +1557,12 @@ function buildAnimationDisplay() {
                     }
                     mfaIdx++;
                 } else {
-                    // No match — use word timing as fallback
+                    // No match -- use word timing as fallback
                     charSpans[di].el.dataset.start = word.start;
                     charSpans[di].el.dataset.end = word.end;
                 }
             } else {
-                // Exhausted MFA letters — use word timing
+                // Exhausted MFA letters -- use word timing
                 charSpans[di].el.dataset.start = word.start;
                 charSpans[di].el.dataset.end = word.end;
             }
@@ -2045,7 +1758,7 @@ function updateAnimationDisplay(time) {
 /** Switch between analysis and animation views. */
 function switchView(mode) {
     tsViewMode = mode;
-    localStorage.setItem('insp_ts_view_mode', mode);
+    localStorage.setItem(LS_KEYS.TS_VIEW_MODE, mode);
     unifiedDisplay.style.display = (mode === 'animation') ? 'none' : '';
     animDisplay.hidden = (mode === 'analysis');
 
@@ -2087,7 +1800,7 @@ function rebuildAnimationView() {
 /** Switch between word and character granularity. */
 function switchGranularity(gran) {
     tsGranularity = gran;
-    if (tsViewMode === 'animation') localStorage.setItem('insp_ts_granularity', gran);
+    if (tsViewMode === 'animation') localStorage.setItem(LS_KEYS.TS_GRANULARITY, gran);
     // Clear all highlights
     animDisplay.querySelectorAll('.anim-word, .anim-char').forEach(el => {
         el.classList.remove('active', 'reached');
@@ -2098,14 +1811,4 @@ function switchGranularity(gran) {
     lastAnimIdx = -1;
     // Reapply at current position
     updateAnimationDisplay(getSegRelTime());
-}
-
-// ---------------------------------------------------------------------------
-
-function formatTime(seconds) {
-    if (!isFinite(seconds)) return '0:00';
-
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
