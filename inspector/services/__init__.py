@@ -1,1 +1,1 @@
-"""Inspector service modules: business logic extracted from server.py."""
+"""Inspector service modules: business logic used by route blueprints."""
