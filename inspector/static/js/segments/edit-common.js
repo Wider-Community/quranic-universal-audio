@@ -8,6 +8,7 @@ import { resolveSegFromRow, _getEditCanvas } from './rendering.js';
 import { drawWaveformFromPeaksForSeg } from './waveform-draw.js';
 import { stopSegAnimation } from './playback.js';
 import { getSegByChapterIndex } from './data.js';
+import { stopErrorCardAudio } from './error-card-audio.js';
 
 // ---------------------------------------------------------------------------
 // Registration pattern: trim/split modules register their entry functions
@@ -17,7 +18,6 @@ let _enterTrimMode = null;
 let _enterSplitMode = null;
 let _drawSplitWaveformFn = null;
 let _drawTrimWaveformFn = null;
-let _stopErrorCardAudioFn = null;
 
 export function registerEditModes(trim, split) {
     _enterTrimMode = trim;
@@ -27,10 +27,6 @@ export function registerEditModes(trim, split) {
 export function registerEditDrawFns(trimDraw, splitDraw) {
     _drawTrimWaveformFn = trimDraw;
     _drawSplitWaveformFn = splitDraw;
-}
-
-export function registerStopErrorCardAudio(fn) {
-    _stopErrorCardAudioFn = fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +41,7 @@ export function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
         ? state.valCardAudio.currentTime * 1000
         : (dom.segAudioEl.paused ? null : dom.segAudioEl.currentTime * 1000);
 
-    if (isErrorPlaying) _stopErrorCardAudioFn?.();
+    if (isErrorPlaying) stopErrorCardAudio();
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
     state._segContinuousPlay = false;
 

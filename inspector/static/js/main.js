@@ -12,7 +12,6 @@ import { LS_KEYS } from './shared/constants.js';
 // registering DOMContentLoaded handlers before the event fires.
 import './timestamps/index.js';
 import './segments/index.js';
-import './segments.js';
 import './audio/index.js';
 
 let activeTab = 'timestamps';
@@ -40,7 +39,7 @@ function setupTabSwitching() {
             if (activeTab !== 'segments') {
                 const segAudio = document.getElementById('seg-audio-player');
                 if (segAudio) segAudio.pause();
-                // valCardAudio is a module-scoped variable in segments.js;
+                // valCardAudio is created dynamically by error-card-audio.js;
                 // we find it via the DOM by checking all <audio> elements in the segments panel
                 const segPanel = document.getElementById('segments-panel');
                 if (segPanel) {

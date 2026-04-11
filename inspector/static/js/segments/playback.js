@@ -6,12 +6,7 @@ import { state, dom } from './state.js';
 import { getSegByChapterIndex } from './data.js';
 import { formatTimeMs } from './references.js';
 import { drawWaveformFromPeaksForSeg, drawSegPlayhead } from './waveform-draw.js';
-
-// Forward reference for stopErrorCardAudio (Phase 8)
-let _stopErrorCardAudioFn = null;
-export function registerPlaybackHandlers(handlers) {
-    if (handlers.stopErrorCardAudio) _stopErrorCardAudioFn = handlers.stopErrorCardAudio;
-}
+import { stopErrorCardAudio } from './error-card-audio.js';
 
 /** Compare a segment's audio_url against segAudioEl.src. */
 function _audioSrcMatch(segUrl, elSrc) {
@@ -22,7 +17,7 @@ function _audioSrcMatch(segUrl, elSrc) {
 
 export function playFromSegment(segIndex, chapterOverride, seekToMs) {
     if (!state.segAllData) return;
-    _stopErrorCardAudioFn?.();
+    stopErrorCardAudio();
     state._activeAudioSource = 'main';
     const chapter = chapterOverride ?? (dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : null);
     const seg = chapter != null
@@ -69,7 +64,7 @@ function _prefetchNextSegAudio(currentIndex) {
 
 export function onSegPlayClick() {
     if (state.valCardAudio && !state.valCardAudio.paused) {
-        _stopErrorCardAudioFn?.();
+        stopErrorCardAudio();
         return;
     }
     if (dom.segAudioEl.paused) {

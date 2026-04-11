@@ -5,33 +5,10 @@
 import { state, dom, isDirty, _SEG_NORMAL_IDS } from './state.js';
 import { surahOptionText } from '../shared/surah-info.js';
 import { _ensureWaveformObserver } from './waveform.js';
-
-// Forward references for Phase 8 functions
-let _renderEditHistoryPanel = null;
-let _drawHistoryArrows = null;
-let _renderHistorySummaryStats = null;
-let _renderHistoryBatches = null;
-let _buildSplitLineage = null;
-let _buildSplitChains = null;
-let _stopErrorCardAudio = null;
-let _countVersesFromBatches = null;
-
-// Forward reference to save module (avoid circular)
-let _hideSavePreview = null;
-let _buildSavePreviewData = null;
-
-export function registerUndoHandlers(handlers) {
-    if (handlers.renderEditHistoryPanel) _renderEditHistoryPanel = handlers.renderEditHistoryPanel;
-    if (handlers.drawHistoryArrows) _drawHistoryArrows = handlers.drawHistoryArrows;
-    if (handlers.renderHistorySummaryStats) _renderHistorySummaryStats = handlers.renderHistorySummaryStats;
-    if (handlers.renderHistoryBatches) _renderHistoryBatches = handlers.renderHistoryBatches;
-    if (handlers.buildSplitLineage) _buildSplitLineage = handlers.buildSplitLineage;
-    if (handlers.buildSplitChains) _buildSplitChains = handlers.buildSplitChains;
-    if (handlers.stopErrorCardAudio) _stopErrorCardAudio = handlers.stopErrorCardAudio;
-    if (handlers.hideSavePreview) _hideSavePreview = handlers.hideSavePreview;
-    if (handlers.buildSavePreviewData) _buildSavePreviewData = handlers.buildSavePreviewData;
-    if (handlers.countVersesFromBatches) _countVersesFromBatches = handlers.countVersesFromBatches;
-}
+import { renderEditHistoryPanel, _buildSplitLineage, _buildSplitChains } from './history.js';
+import { renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows, _countVersesFromBatches } from './history-rendering.js';
+import { stopErrorCardAudio } from './error-card-audio.js';
+import { hideSavePreview, buildSavePreviewData } from './save.js';
 
 // ---------------------------------------------------------------------------
 // _afterUndoSuccess -- shared post-undo refresh
@@ -42,11 +19,11 @@ export async function _afterUndoSuccess(reciter, opsReversed) {
         const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
         if (histResp.ok) {
             state.segHistoryData = await histResp.json();
-            _renderEditHistoryPanel?.(state.segHistoryData);
+            renderEditHistoryPanel(state.segHistoryData);
             const observer = _ensureWaveformObserver();
             dom.segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
             requestAnimationFrame(() => {
-                dom.segHistoryView.querySelectorAll('.seg-history-diff').forEach(d => _drawHistoryArrows?.(d));
+                dom.segHistoryView.querySelectorAll('.seg-history-diff').forEach(d => drawHistoryArrows(d));
             });
         }
     } catch (_) { /* non-critical */ }
@@ -205,16 +182,16 @@ export function onPendingBatchDiscard(chapter, btn) {
     dom.segSaveBtn.disabled = !isDirty();
 
     if (!isDirty()) {
-        _hideSavePreview?.();
+        hideSavePreview();
         return;
     }
-    const data = _buildSavePreviewData?.() || { batches: [], summary: {}, warningChapters: [] };
+    const data = buildSavePreviewData();
     const allBatches = [...(state.segHistoryData?.batches || []), ...data.batches];
-    const splitLineage = _buildSplitLineage?.(allBatches) || new Map();
-    const built = _buildSplitChains?.(allBatches, splitLineage) || { chains: new Map(), chainedOpIds: new Set() };
+    const splitLineage = _buildSplitLineage(allBatches);
+    const built = _buildSplitChains(allBatches, splitLineage);
     state._splitChains = built.chains;
     state._chainedOpIds = built.chainedOpIds;
-    _renderHistorySummaryStats?.(data.summary, dom.segSavePreviewStats);
+    renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
     if (data.warningChapters.length > 0) {
         const warn = document.createElement('div');
         warn.className = 'seg-save-preview-warning';
@@ -223,13 +200,13 @@ export function onPendingBatchDiscard(chapter, btn) {
             + data.warningChapters.map(c => surahOptionText(c)).join(', ');
         dom.segSavePreviewStats.prepend(warn);
     }
-    _renderHistoryBatches?.(data.batches, dom.segSavePreviewBatches);
+    renderHistoryBatches(data.batches, dom.segSavePreviewBatches);
     dom.segSavePreviewBatches.querySelectorAll('.seg-history-batch-time').forEach(el => {
         if (el.textContent === 'Pending') el.style.color = '#f0a500';
     });
     const observer = _ensureWaveformObserver();
     dom.segSavePreview.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
     requestAnimationFrame(() => {
-        dom.segSavePreview.querySelectorAll('.seg-history-diff').forEach(d => _drawHistoryArrows?.(d));
+        dom.segSavePreview.querySelectorAll('.seg-history-diff').forEach(d => drawHistoryArrows(d));
     });
 }

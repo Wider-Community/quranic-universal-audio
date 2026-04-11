@@ -12,24 +12,9 @@ import { applyFiltersAndRender } from './filters.js';
 import { _fetchPeaks, _fetchChapterPeaksIfNeeded } from './waveform.js';
 import { _isCurrentReciterBySurah, _fetchCacheStatus, _rewriteAudioUrls } from './audio-cache.js';
 import { stopSegAnimation } from './playback.js';
-
-// Forward declarations -- these are Phase 7/8 functions that still live in segments.js.
-// They will be imported via the registerHandler pattern or direct imports once those
-// phases are extracted. For now, we import them from the remaining segments.js.
-// We use dynamic import indirection to break circular deps.
-let _renderValidationPanel = null;
-let _renderStatsPanel = null;
-let _renderEditHistoryPanel = null;
-let _captureValPanelState = null;
-let _restoreValPanelState = null;
-
-export function registerDataHandlers(handlers) {
-    if (handlers.renderValidationPanel) _renderValidationPanel = handlers.renderValidationPanel;
-    if (handlers.renderStatsPanel) _renderStatsPanel = handlers.renderStatsPanel;
-    if (handlers.renderEditHistoryPanel) _renderEditHistoryPanel = handlers.renderEditHistoryPanel;
-    if (handlers.captureValPanelState) _captureValPanelState = handlers.captureValPanelState;
-    if (handlers.restoreValPanelState) _restoreValPanelState = handlers.restoreValPanelState;
-}
+import { renderValidationPanel, captureValPanelState, restoreValPanelState } from './validation.js';
+import { renderStatsPanel } from './stats.js';
+import { renderEditHistoryPanel } from './history.js';
 
 // ---------------------------------------------------------------------------
 // Reciter loading
@@ -155,14 +140,14 @@ export async function onSegReciterChange() {
 
     if (valResult.status === 'fulfilled') {
         state.segValidation = valResult.value;
-        _renderValidationPanel?.(state.segValidation);
+        renderValidationPanel(state.segValidation);
     } else {
         console.error('Error loading validation:', valResult.reason);
     }
 
     if (statsResult.status === 'fulfilled') {
         state.segStatsData = statsResult.value;
-        if (!state.segStatsData.error) _renderStatsPanel?.(state.segStatsData);
+        if (!state.segStatsData.error) renderStatsPanel(state.segStatsData);
     } else {
         console.error('Error loading stats:', statsResult.reason);
     }
@@ -182,7 +167,7 @@ export async function onSegReciterChange() {
 
     if (histResult.status === 'fulfilled' && histResult.value) {
         state.segHistoryData = histResult.value;
-        _renderEditHistoryPanel?.(state.segHistoryData);
+        renderEditHistoryPanel(state.segHistoryData);
     }
 }
 
@@ -198,19 +183,19 @@ export async function onSegChapterChange() {
 
     if (state.segValidation) {
         requestAnimationFrame(() => {
-            const globalState = _captureValPanelState?.(dom.segValidationGlobalEl) || {};
-            const chState = _captureValPanelState?.(dom.segValidationEl) || {};
+            const globalState = captureValPanelState(dom.segValidationGlobalEl);
+            const chState = captureValPanelState(dom.segValidationEl);
             const ch = chapter ? parseInt(chapter) : null;
             if (ch !== null) {
-                _renderValidationPanel?.(state.segValidation, null, dom.segValidationGlobalEl, 'All Chapters');
-                _renderValidationPanel?.(state.segValidation, ch, dom.segValidationEl, `Chapter ${ch}`);
-                _restoreValPanelState?.(dom.segValidationGlobalEl, globalState);
-                _restoreValPanelState?.(dom.segValidationEl, chState);
+                renderValidationPanel(state.segValidation, null, dom.segValidationGlobalEl, 'All Chapters');
+                renderValidationPanel(state.segValidation, ch, dom.segValidationEl, `Chapter ${ch}`);
+                restoreValPanelState(dom.segValidationGlobalEl, globalState);
+                restoreValPanelState(dom.segValidationEl, chState);
             } else {
                 dom.segValidationGlobalEl.hidden = true;
                 dom.segValidationGlobalEl.innerHTML = '';
-                _renderValidationPanel?.(state.segValidation, null, dom.segValidationEl);
-                _restoreValPanelState?.(dom.segValidationEl, chState);
+                renderValidationPanel(state.segValidation, null, dom.segValidationEl);
+                restoreValPanelState(dom.segValidationEl, chState);
             }
         });
     }

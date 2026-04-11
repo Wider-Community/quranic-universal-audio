@@ -1,7 +1,7 @@
 /**
  * Segments tab entry point -- DOMContentLoaded, event wiring, config loading.
- * Wires the extracted foundation modules together, and registers handler stubs
- * for Phase 7/8 functions that still live in segments.js.
+ * Wires the extracted foundation modules together and registers handlers
+ * for event delegation and keyboard shortcuts.
  */
 
 import { state, dom, setClassifyFn } from './state.js';
@@ -9,19 +9,47 @@ import { LS_KEYS } from '../shared/constants.js';
 import { surahInfoReady } from '../shared/surah-info.js';
 import { SearchableSelect } from '../shared/searchable-select.js';
 import { _classifySegCategories } from './categories.js';
-import { loadSegReciters, onSegReciterChange, onSegChapterChange, registerDataHandlers } from './data.js';
+import { loadSegReciters, onSegReciterChange, onSegChapterChange } from './data.js';
 import { applyFiltersAndRender, addSegFilterCondition, clearAllSegFilters } from './filters.js';
 import { startSegAnimation, stopSegAnimation, onSegPlayClick, onSegTimeUpdate, onSegAudioEnded } from './playback.js';
-import { registerPlaybackHandlers } from './playback.js';
 import { handleSegRowClick, _handleSegCanvasMousedown, registerHandler } from './event-delegation.js';
 import { handleSegKeydown, registerKeyboardHandler } from './keyboard.js';
 import { _prepareAudio, _deleteAudioCache } from './audio-cache.js';
 import { registerWaveformHandlers } from './waveform.js';
 
+// Phase 7 edit modules
+import { enterEditWithBuffer, exitEditMode, registerEditModes, registerEditDrawFns } from './edit-common.js';
+import { startRefEdit } from './edit-reference.js';
+import { enterTrimMode, confirmTrim, drawTrimWaveform } from './edit-trim.js';
+import { enterSplitMode, confirmSplit, drawSplitWaveform } from './edit-split.js';
+import { mergeAdjacent } from './edit-merge.js';
+import { deleteSegment } from './edit-delete.js';
+import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview } from './save.js';
+
+// Phase 8 modules
+import { renderValidationPanel, captureValPanelState, restoreValPanelState } from './validation.js';
+import { renderStatsPanel } from './stats.js';
+import { renderEditHistoryPanel, showHistoryView, hideHistoryView } from './history.js';
+import { clearHistoryFilters, setHistorySort } from './history-filters.js';
+import { playErrorCardAudio, stopErrorCardAudio } from './error-card-audio.js';
+import { ensureContextShown, _isWrapperContextShown } from './error-cards.js';
+
 // ---------------------------------------------------------------------------
 // Inject the classify function to break the state <-> categories cycle
 // ---------------------------------------------------------------------------
 setClassifyFn(_classifySegCategories);
+
+// ---------------------------------------------------------------------------
+// Wire up edit mode registrations (breaks edit-common -> edit-trim/split cycle)
+// ---------------------------------------------------------------------------
+registerEditModes(enterTrimMode, enterSplitMode);
+registerEditDrawFns(drawTrimWaveform, drawSplitWaveform);
+
+// Wire edit-mode draw functions into waveform observer
+registerWaveformHandlers({
+    drawSplitWaveform,
+    drawTrimWaveform,
+});
 
 // ---------------------------------------------------------------------------
 // DOMContentLoaded
@@ -83,7 +111,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         dom.segAutoPlayBtn.className = 'btn ' + (state._segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
         localStorage.setItem(LS_KEYS.SEG_AUTOPLAY, state._segAutoPlayEnabled);
     });
-    // Save button wired via keyboard handler registration from segments.js
     dom.segSpeedSelect.addEventListener('change', () => {
         const rate = parseFloat(dom.segSpeedSelect.value);
         dom.segAudioEl.playbackRate = rate;
@@ -106,6 +133,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         el.addEventListener('click', handleSegRowClick);
         el.addEventListener('mousedown', _handleSegCanvasMousedown);
     });
+
+    // Register event delegation handlers (edit operations)
+    registerHandler('startRefEdit', startRefEdit);
+    registerHandler('enterEditWithBuffer', enterEditWithBuffer);
+    registerHandler('mergeAdjacent', mergeAdjacent);
+    registerHandler('deleteSegment', deleteSegment);
+    registerHandler('playErrorCardAudio', playErrorCardAudio);
+    registerHandler('ensureContextShown', ensureContextShown);
+    registerHandler('_isWrapperContextShown', _isWrapperContextShown);
+
+    // Register keyboard handlers
+    registerKeyboardHandler('onSegSaveClick', onSegSaveClick);
+    registerKeyboardHandler('hideSavePreview', hideSavePreview);
+    registerKeyboardHandler('confirmSaveFromPreview', confirmSaveFromPreview);
+    registerKeyboardHandler('exitEditMode', exitEditMode);
+    registerKeyboardHandler('confirmTrim', confirmTrim);
+    registerKeyboardHandler('confirmSplit', confirmSplit);
+    registerKeyboardHandler('startRefEdit', startRefEdit);
+
+    // Save button
+    dom.segSaveBtn.addEventListener('click', onSegSaveClick);
+
+    // History view handlers
+    dom.segHistoryBtn?.addEventListener('click', showHistoryView);
+    dom.segHistoryBackBtn?.addEventListener('click', hideHistoryView);
+    dom.segHistoryFilterClear?.addEventListener('click', clearHistoryFilters);
+    dom.segHistorySortTime?.addEventListener('click', () => setHistorySort('time'));
+    dom.segHistorySortQuran?.addEventListener('click', () => setHistorySort('quran'));
+
+    // Save preview handlers
+    dom.segSavePreviewCancel?.addEventListener('click', hideSavePreview);
+    dom.segSavePreviewConfirm?.addEventListener('click', confirmSaveFromPreview);
 
     // Load display config
     try {
@@ -137,67 +196,3 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     loadSegReciters();
 });
-
-// ---------------------------------------------------------------------------
-// Registration API for Phase 7/8 modules (segments.js calls these)
-// ---------------------------------------------------------------------------
-
-/**
- * Register handlers from the remaining segments.js code.
- * Called from segments.js after all functions are defined.
- */
-export function registerSegHandlers(handlers) {
-    // Event delegation handlers (edit operations)
-    if (handlers.startRefEdit) registerHandler('startRefEdit', handlers.startRefEdit);
-    if (handlers.enterEditWithBuffer) registerHandler('enterEditWithBuffer', handlers.enterEditWithBuffer);
-    if (handlers.mergeAdjacent) registerHandler('mergeAdjacent', handlers.mergeAdjacent);
-    if (handlers.deleteSegment) registerHandler('deleteSegment', handlers.deleteSegment);
-    if (handlers.playErrorCardAudio) registerHandler('playErrorCardAudio', handlers.playErrorCardAudio);
-    if (handlers.ensureContextShown) registerHandler('ensureContextShown', handlers.ensureContextShown);
-    if (handlers._isWrapperContextShown) registerHandler('_isWrapperContextShown', handlers._isWrapperContextShown);
-
-    // Keyboard handlers (save, undo, edit)
-    if (handlers.onSegSaveClick) registerKeyboardHandler('onSegSaveClick', handlers.onSegSaveClick);
-    if (handlers.hideSavePreview) registerKeyboardHandler('hideSavePreview', handlers.hideSavePreview);
-    if (handlers.confirmSaveFromPreview) registerKeyboardHandler('confirmSaveFromPreview', handlers.confirmSaveFromPreview);
-    if (handlers.exitEditMode) registerKeyboardHandler('exitEditMode', handlers.exitEditMode);
-    if (handlers.confirmTrim) registerKeyboardHandler('confirmTrim', handlers.confirmTrim);
-    if (handlers.confirmSplit) registerKeyboardHandler('confirmSplit', handlers.confirmSplit);
-    if (handlers.startRefEdit) registerKeyboardHandler('startRefEdit', handlers.startRefEdit);
-
-    // Save button
-    if (handlers.onSegSaveClick) {
-        dom.segSaveBtn?.addEventListener('click', handlers.onSegSaveClick);
-    }
-
-    // History view handlers
-    if (handlers.showHistoryView) dom.segHistoryBtn?.addEventListener('click', handlers.showHistoryView);
-    if (handlers.hideHistoryView) dom.segHistoryBackBtn?.addEventListener('click', handlers.hideHistoryView);
-    if (handlers.clearHistoryFilters) dom.segHistoryFilterClear?.addEventListener('click', handlers.clearHistoryFilters);
-    if (handlers.setHistorySort) {
-        dom.segHistorySortTime?.addEventListener('click', () => handlers.setHistorySort('time'));
-        dom.segHistorySortQuran?.addEventListener('click', () => handlers.setHistorySort('quran'));
-    }
-    if (handlers.hideSavePreview) dom.segSavePreviewCancel?.addEventListener('click', handlers.hideSavePreview);
-    if (handlers.confirmSaveFromPreview) dom.segSavePreviewConfirm?.addEventListener('click', handlers.confirmSaveFromPreview);
-
-    // Data handlers (validation, stats, history rendering)
-    registerDataHandlers({
-        renderValidationPanel: handlers.renderValidationPanel,
-        renderStatsPanel: handlers.renderStatsPanel,
-        renderEditHistoryPanel: handlers.renderEditHistoryPanel,
-        captureValPanelState: handlers.captureValPanelState,
-        restoreValPanelState: handlers.restoreValPanelState,
-    });
-
-    // Playback handlers
-    registerPlaybackHandlers({
-        stopErrorCardAudio: handlers.stopErrorCardAudio,
-    });
-
-    // Waveform handlers (edit-mode draw functions)
-    registerWaveformHandlers({
-        drawSplitWaveform: handlers.drawSplitWaveform,
-        drawTrimWaveform: handlers.drawTrimWaveform,
-    });
-}

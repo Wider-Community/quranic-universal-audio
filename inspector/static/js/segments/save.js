@@ -8,35 +8,11 @@ import { getChapterSegments, onSegReciterChange } from './data.js';
 import { _ensureWaveformObserver } from './waveform.js';
 import { applyFiltersAndRender } from './filters.js';
 import { renderSegList } from './rendering.js';
-
-// Forward references for Phase 8 functions -- registered at init
-let _refreshValidation = null;
-let _renderEditHistoryPanel = null;
-let _renderHistorySummaryStats = null;
-let _renderHistoryBatches = null;
-let _drawHistoryArrows = null;
-let _buildSplitLineage = null;
-let _buildSplitChains = null;
-let _stopErrorCardAudio = null;
-let _captureValPanelState = null;
-let _restoreValPanelState = null;
-let _renderValidationPanel = null;
-let _countVersesFromBatches = null;
-
-export function registerSaveHandlers(handlers) {
-    if (handlers.refreshValidation) _refreshValidation = handlers.refreshValidation;
-    if (handlers.renderEditHistoryPanel) _renderEditHistoryPanel = handlers.renderEditHistoryPanel;
-    if (handlers.renderHistorySummaryStats) _renderHistorySummaryStats = handlers.renderHistorySummaryStats;
-    if (handlers.renderHistoryBatches) _renderHistoryBatches = handlers.renderHistoryBatches;
-    if (handlers.drawHistoryArrows) _drawHistoryArrows = handlers.drawHistoryArrows;
-    if (handlers.buildSplitLineage) _buildSplitLineage = handlers.buildSplitLineage;
-    if (handlers.buildSplitChains) _buildSplitChains = handlers.buildSplitChains;
-    if (handlers.stopErrorCardAudio) _stopErrorCardAudio = handlers.stopErrorCardAudio;
-    if (handlers.captureValPanelState) _captureValPanelState = handlers.captureValPanelState;
-    if (handlers.restoreValPanelState) _restoreValPanelState = handlers.restoreValPanelState;
-    if (handlers.renderValidationPanel) _renderValidationPanel = handlers.renderValidationPanel;
-    if (handlers.countVersesFromBatches) _countVersesFromBatches = handlers.countVersesFromBatches;
-}
+import { refreshValidation } from './validation.js';
+import { renderEditHistoryPanel } from './history.js';
+import { _buildSplitLineage, _buildSplitChains } from './history.js';
+import { renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows, _countVersesFromBatches } from './history-rendering.js';
+import { stopErrorCardAudio } from './error-card-audio.js';
 
 // ---------------------------------------------------------------------------
 // onSegSaveClick -- entry point from Save button
@@ -81,7 +57,7 @@ export function buildSavePreviewData() {
         total_operations: totalOps,
         total_batches: batches.length + warningChapters.length,
         chapters_edited: batches.length + warningChapters.length,
-        verses_edited: _countVersesFromBatches?.(batches) ?? 0,
+        verses_edited: _countVersesFromBatches(batches) ?? 0,
         op_counts: opCounts,
         fix_kind_counts: fixKindCounts,
     };
@@ -99,12 +75,12 @@ export function showSavePreview() {
 
     state._segSavedChains = { splitChains: state._splitChains, chainedOpIds: state._chainedOpIds };
     const allBatches = [...(state.segHistoryData?.batches || []), ...data.batches];
-    const splitLineage = _buildSplitLineage?.(allBatches) || new Map();
-    const built = _buildSplitChains?.(allBatches, splitLineage) || { chains: new Map(), chainedOpIds: new Set() };
+    const splitLineage = _buildSplitLineage(allBatches);
+    const built = _buildSplitChains(allBatches, splitLineage);
     state._splitChains = built.chains;
     state._chainedOpIds = built.chainedOpIds;
 
-    _renderHistorySummaryStats?.(data.summary, dom.segSavePreviewStats);
+    renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
 
     if (data.warningChapters.length > 0) {
         const warn = document.createElement('div');
@@ -115,7 +91,7 @@ export function showSavePreview() {
         dom.segSavePreviewStats.prepend(warn);
     }
 
-    _renderHistoryBatches?.(data.batches, dom.segSavePreviewBatches);
+    renderHistoryBatches(data.batches, dom.segSavePreviewBatches);
 
     dom.segSavePreviewBatches.querySelectorAll('.seg-history-batch-time').forEach(el => {
         if (el.textContent === 'Pending') el.style.color = '#f0a500';
@@ -137,7 +113,7 @@ export function showSavePreview() {
     const observer = _ensureWaveformObserver();
     dom.segSavePreview.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
     requestAnimationFrame(() => {
-        dom.segSavePreview.querySelectorAll('.seg-history-diff').forEach(d => _drawHistoryArrows?.(d));
+        dom.segSavePreview.querySelectorAll('.seg-history-diff').forEach(d => drawHistoryArrows(d));
     });
 }
 
@@ -146,7 +122,7 @@ export function showSavePreview() {
 // ---------------------------------------------------------------------------
 
 export function hideSavePreview(restoreScroll = true) {
-    _stopErrorCardAudio?.();
+    stopErrorCardAudio();
     dom.segSavePreview.hidden = true;
     dom.segSavePreviewStats.innerHTML = '';
     dom.segSavePreviewBatches.innerHTML = '';
@@ -273,13 +249,13 @@ export async function executeSave() {
             document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
             setTimeout(() => { dom.segSaveBtn.textContent = 'Save'; }, 2500);
             fetch(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
-                .then(() => _refreshValidation?.())
-                .catch(() => _refreshValidation?.());
+                .then(() => refreshValidation())
+                .catch(() => refreshValidation());
             try {
                 const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
                 if (histResp.ok) {
                     state.segHistoryData = await histResp.json();
-                    _renderEditHistoryPanel?.(state.segHistoryData);
+                    renderEditHistoryPanel(state.segHistoryData);
                 }
             } catch (_) { /* non-critical */ }
         } else {

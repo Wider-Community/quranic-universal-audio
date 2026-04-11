@@ -11,7 +11,7 @@ import { _isCurrentReciterBySurah } from './audio-cache.js';
 
 // Forward references for edit-mode draw functions (Phase 7).
 // The observer needs to call drawSplitWaveform/drawTrimWaveform when it encounters
-// a canvas in edit mode. These are registered from segments.js via registerHandler.
+// a canvas in edit mode. These are registered from index.js via registerWaveformHandlers.
 let _drawSplitWaveformFn = null;
 let _drawTrimWaveformFn = null;
 
