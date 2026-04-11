@@ -2276,6 +2276,8 @@ def save_seg_data(reciter, chapter):
         "operations": operations,
     }
     history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    if history_path.exists():
+        shutil.copy2(history_path, history_path.with_suffix(".jsonl.bak"))
     with open(history_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(batch, ensure_ascii=False) + "\n")
 
@@ -2422,6 +2424,8 @@ def undo_seg_batch(reciter):
     }
     if chapters:
         revert["chapters"] = chapters
+    if history_path.exists():
+        shutil.copy2(history_path, history_path.with_suffix(".jsonl.bak"))
     with open(history_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(revert, ensure_ascii=False) + "\n")
 
@@ -2571,6 +2575,8 @@ def undo_seg_ops(reciter):
     }
     if chapters:
         revert["chapters"] = chapters
+    if history_path.exists():
+        shutil.copy2(history_path, history_path.with_suffix(".jsonl.bak"))
     with open(history_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(revert, ensure_ascii=False) + "\n")
 
