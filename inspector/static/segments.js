@@ -26,8 +26,14 @@ let _segIndexMap = null;         // Map<index, segment> for O(1) lookups
 let _waveformObserver = null;    // IntersectionObserver for lazy waveform drawing
 let _segSavedFilterView = null;  // { filters, chapter, verse, scrollTop } — saved when "Go To" from filter results
 let _segSavedPreviewState = null; // { scrollTop } — saved when entering save preview, restored on cancel/after save
-let segPeaksByAudio = null;      // {url: {duration_ms, peaks}} from server — instant waveforms
+let segPeaksByAudio = null;      // {url: {duration_ms, peaks}} from server — full-file peaks (Cache All)
 let _peaksPollTimer = null;      // setTimeout handle for peaks polling
+let segSegPeaks = {};            // per-segment peaks: "key" → {duration_ms, peaks}
+let _segPeaksByUrl = {};         // URL → [key, ...] index into segSegPeaks (avoids O(N) full scans)
+let _segPeaksAbortCtrl = null;   // AbortController for in-flight segment peaks
+let _observerPeaksQueue = [];    // segments queued by observer for cached-only batch peaks fetch
+let _observerPeaksTimer = null;  // debounce timer for observer-triggered peaks fetch
+let _observerPeaksRequested = new Set(); // keys already sent to server (prevent re-queue loops)
 let _cardRenderRafId = null;     // rAF handle for chunked card rendering
 let _accordionOpCtx = null;      // { wrapper, direction? } — set when split/merge from accordion with context shown
 let _splitChainWrapper = null;  // accordion wrapper to use for second-half ref-edit chain after split
@@ -347,7 +353,7 @@ const EDIT_OP_LABELS = {
     trim_segment: 'Boundary adjustment', split_segment: 'Split',
     merge_segments: 'Merge', delete_segment: 'Deletion',
     edit_reference: 'Reference edit', confirm_reference: 'Reference confirmation',
-    auto_fix_missing_word: 'Auto-fix missing word', ignore_issue: 'Ignored issue',
+    auto_fix_missing_word: 'Auto-fill missing word', ignore_issue: 'Ignored issue',
     waqf_sakt: 'Waqf sakt merge', remove_sadaqa: 'Remove Sadaqa',
 };
 const ERROR_CAT_LABELS = {
@@ -368,6 +374,11 @@ let _standaloneWords = null;  // Set of stripped Arabic words
 let _qalqalaLetters  = null;  // Set of Arabic letters
 // Default threshold % for low-confidence slider (overridden from config)
 let _lcDefaultThreshold = 80;
+// Accordion context mode per category: "hidden" | "shown" | "next_only" (overridden from config)
+let _accordionContext = {
+    failed: 'shown', low_confidence: 'hidden', boundary_adj: 'hidden', cross_verse: 'hidden',
+    audio_bleeding: 'shown', repetitions: 'shown', muqattaat: 'next_only', qalqala: 'next_only',
+};
 
 // SearchableSelect instance for segments chapter dropdown
 let segChapterSS = null;
@@ -440,6 +451,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cfg.qalqala_letters) _qalqalaLetters = new Set(cfg.qalqala_letters);
             if (cfg.standalone_refs) _standaloneRefs = new Set(cfg.standalone_refs.map(([s,a,w]) => `${s}:${a}:${w}`));
             if (cfg.standalone_words) _standaloneWords = new Set(cfg.standalone_words);
+            if (cfg.peaks_neighbor_count != null) PEAKS_NEIGHBOR_COUNT = cfg.peaks_neighbor_count;
+            if (cfg.accordion_context) _accordionContext = cfg.accordion_context;
         }
     } catch (_) { /* use CSS defaults */ }
 
@@ -560,49 +573,51 @@ async function onSegReciterChange() {
 
     if (segReciterSelect.value !== reciter) return; // reciter changed while loading chapters
 
-    // Fetch validation, stats, all segments, and edit history in parallel
-    const [valResult, statsResult, allResult, histResult] = await Promise.allSettled([
-        fetch(`/api/seg/validate/${reciter}`).then(r => r.json()),
-        fetch(`/api/seg/stats/${reciter}`).then(r => r.json()),
-        fetch(`/api/seg/all/${reciter}`).then(r => r.json()),
-        fetch(`/api/seg/edit-history/${reciter}`).then(r => r.ok ? r.json() : null),
-    ]);
+    // Fire all fetches in parallel, render each panel as soon as its data arrives
+    const stale = () => segReciterSelect.value !== reciter;
 
-    if (segReciterSelect.value !== reciter) return; // reciter changed during parallel fetches
+    // Audio cache bar — only for by_surah, no dependency on /load
+    if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
 
-    if (valResult.status === 'fulfilled') {
-        segValidation = valResult.value;
+    // Combined endpoint: segments + validation in a single server pass
+    const loadPromise = fetch(`/api/seg/load/${reciter}`).then(r => r.json()).then(data => {
+        if (stale()) return;
+        // Validation
+        segValidation = data.validation;
         renderValidationPanel(segValidation);
-    } else {
-        console.error('Error loading validation:', valResult.reason);
-    }
-
-    if (statsResult.status === 'fulfilled') {
-        segStatsData = statsResult.value;
-        if (!segStatsData.error) renderStatsPanel(segStatsData);
-    } else {
-        console.error('Error loading stats:', statsResult.reason);
-    }
-
-    if (allResult.status === 'fulfilled') {
-        segAllData = allResult.value;
-        _rewriteAudioUrls();
+        // All segments
+        segAllData = data.all;
         computeSilenceAfter();
         if (segFilterBarEl) segFilterBarEl.hidden = false;
         applyFiltersAndRender();
-        // Preload peaks only for chapters with validation errors (on-demand for the rest)
+        // Peaks (needs validation to know which chapters have errors)
         const errorChapters = _collectErrorChapters(segValidation);
         if (errorChapters.length > 0) _fetchPeaks(reciter, errorChapters);
-        // Fetch cache status then show panel (fast — cached in memory on server)
-        if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
-    } else {
-        console.error('Error loading all segments:', allResult.reason);
-    }
+        // Boundary phoneme checks may still be computing in background
+        if (data.validation.boundary_phonemes_pending) {
+            fetch(`/api/seg/boundary-phonemes/${reciter}`).then(r => r.json()).then(extra => {
+                if (stale() || !extra || extra.length === 0) return;
+                segValidation.boundary_adj = (segValidation.boundary_adj || []).concat(extra);
+                _mergeBoundaryPhonemeItems(extra);
+            }).catch(() => {});
+        }
+    }).catch(e => console.error('Error loading segments:', e));
 
-    if (histResult.status === 'fulfilled' && histResult.value) {
-        segHistoryData = histResult.value;
-        renderEditHistoryPanel(segHistoryData);
-    }
+    const statsPromise = fetch(`/api/seg/stats/${reciter}`).then(r => r.json()).then(data => {
+        if (stale()) return;
+        segStatsData = data;
+        if (!segStatsData.error) renderStatsPanel(segStatsData);
+    }).catch(e => console.error('Error loading stats:', e));
+
+    const histPromise = fetch(`/api/seg/edit-history/${reciter}`).then(r => r.ok ? r.json() : null).then(data => {
+        if (stale()) return;
+        if (data) {
+            segHistoryData = data;
+            renderEditHistoryPanel(segHistoryData);
+        }
+    }).catch(e => console.error('Error loading edit history:', e));
+
+    await Promise.allSettled([loadPromise, statsPromise, histPromise]);
 }
 
 async function onSegChapterChange() {
@@ -615,6 +630,7 @@ async function onSegChapterChange() {
     segPlayBtn.disabled = true;
     stopSegAnimation();
     _segPrefetchCache = {};
+    _cancelSegmentPeaksQueue();
 
     // Stats panel: leave open/closed state as user left it
 
@@ -644,6 +660,10 @@ async function onSegChapterChange() {
     if (!reciter || !chapter) return;
     segPlayBtn.disabled = false;  // Enable early — playFromSegment loads audio on demand
 
+    // Start peaks fetch early (in parallel with chapter data fetch) so disk-cached
+    // peaks arrive before or shortly after canvases are rendered.
+    _fetchChapterPeaksIfNeeded(reciter, parseInt(chapter));
+
     // Fetch chapter-specific audio URL + summary (reuse existing endpoint)
     try {
         const resp = await fetch(`/api/seg/data/${reciter}/${chapter}`);
@@ -651,10 +671,6 @@ async function onSegChapterChange() {
         if (segReciterSelect.value !== reciter || segChapterSelect.value !== chapter) return;
         segData = await resp.json();
         if (segData.error) return;
-        // Rewrite audio URL to use proxy (by_surah only)
-        if (_isCurrentReciterBySurah() && segData.audio_url && !segData.audio_url.startsWith('/api/')) {
-            segData.audio_url = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(segData.audio_url)}`;
-        }
 
         // Populate verse filter from segAllData (not segData.segments)
         const verses = new Set();
@@ -673,9 +689,6 @@ async function onSegChapterChange() {
         // Populate segData.segments from segAllData for edit operations
         const chNum = parseInt(chapter);
         segData.segments = (segAllData?.segments || []).filter(s => s.chapter === chNum);
-
-        // Fetch peaks for this chapter if not already loaded
-        _fetchChapterPeaksIfNeeded(reciter, chNum);
 
         // Preload audio src so browser fetches metadata in the background
         // (eliminates delay on first play click)
@@ -710,6 +723,37 @@ function parseSegRef(ref) {
     const s = parts[0].split(':'), e = parts[1].split(':');
     if (s.length < 3 || e.length < 3) return null;
     return { surah: +s[0], ayah_from: +s[1], word_from: +s[2], ayah_to: +e[1], word_to: +e[2] };
+}
+
+/** For a cross-verse ref, suggest per-verse refs for split children.
+ *  First child = first verse's portion, second child = remaining verses.
+ *  Uses shortcut form (s:v) for whole-verse halves. Returns null if not cross-verse. */
+function _suggestSplitRefs(ref) {
+    const parsed = parseSegRef(_normalizeRef(ref));
+    if (!parsed || parsed.ayah_from === parsed.ayah_to) return null;
+    const vwc = (segAllData || segData || {}).verse_word_counts;
+    if (!vwc) return null;
+    const s = parsed.surah;
+    const lastWordV1 = vwc[`${s}:${parsed.ayah_from}`];
+    if (!lastWordV1) return null;
+    // First child: parent word_from → end of first verse
+    const firstRef = (parsed.word_from === 1)
+        ? `${s}:${parsed.ayah_from}`
+        : `${s}:${parsed.ayah_from}:${parsed.word_from}-${s}:${parsed.ayah_from}:${lastWordV1}`;
+    // Second child: start of next verse → parent end
+    const nextAyah = parsed.ayah_from + 1;
+    let secondRef;
+    if (nextAyah === parsed.ayah_to) {
+        // Exactly 2 verses: second child is a single verse portion
+        const lastWordV2 = vwc[`${s}:${parsed.ayah_to}`];
+        secondRef = (lastWordV2 && parsed.word_to === lastWordV2)
+            ? `${s}:${parsed.ayah_to}`
+            : `${s}:${parsed.ayah_to}:1-${s}:${parsed.ayah_to}:${parsed.word_to}`;
+    } else {
+        // 3+ verses: second child spans nextAyah:1 → original end
+        secondRef = `${s}:${nextAyah}:1-${s}:${parsed.ayah_to}:${parsed.word_to}`;
+    }
+    return { firstRef, secondRef };
 }
 
 function countSegWords(ref) {
@@ -1020,9 +1064,10 @@ function _ensureWaveformObserver() {
                 _drawMergeHighlight(canvas, seg);
                 _waveformObserver.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
+            } else {
+                // No peaks in memory — check server disk cache (no ffmpeg)
+                _queueObserverPeaksFetch(seg);
             }
-            // No peaks yet — leave canvas as-is; _fetchPeaks polling will
-            // call _redrawPeaksWaveforms when they arrive.
         });
     }, { rootMargin: '200px' });
     return _waveformObserver;
@@ -1044,37 +1089,62 @@ function drawAllSegWaveforms() {
 
 function _fetchPeaks(reciter, chapters) {
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
-    if (!chapters || chapters.length === 0) return;  // always require explicit chapters
+    if (!chapters || chapters.length === 0) return;
     let url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
     fetch(url).then(r => r.json()).then(data => {
         if (!segAllData || segReciterSelect.value !== reciter) return;
         if (!segPeaksByAudio) segPeaksByAudio = {};
         Object.assign(segPeaksByAudio, data.peaks || {});
-        // Also key by proxy URL so rewritten audio URLs can find peaks
-        if (_isCurrentReciterBySurah()) {
-            for (const [origUrl, pe] of Object.entries(data.peaks || {})) {
-                if (origUrl && !origUrl.startsWith('/api/')) {
-                    segPeaksByAudio[`/api/seg/audio-proxy/${segReciterSelect.value}?url=${encodeURIComponent(origUrl)}`] = pe;
-                }
-            }
-        }
         _redrawPeaksWaveforms();
-        if (!data.complete) {
-            _peaksPollTimer = setTimeout(() => _fetchPeaks(reciter, chapters), 3000);
-        }
+        // No polling — per-segment peaks fill gaps on-demand
     }).catch(() => {});
 }
 
-/** Fetch peaks for a single chapter if the audio URL's peaks aren't already loaded. */
+/** Fetch full-file peaks for a chapter if already cached on server (from Cache All). */
 function _fetchChapterPeaksIfNeeded(reciter, chapter) {
     if (!segAllData) return;
     const audioUrl = segAllData.audio_by_chapter?.[String(chapter)] || '';
     if (!audioUrl) return;
-    // Check both original URL and proxy URL
     if (segPeaksByAudio?.[audioUrl]) return;
-    const proxyUrl = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
-    if (segPeaksByAudio?.[proxyUrl]) return;
     _fetchPeaks(reciter, [chapter]);
+}
+
+/** Queue a segment for observer-triggered cached-only peaks fetch (debounced 150ms). */
+function _queueObserverPeaksFetch(seg) {
+    const entry = _segPeakEntry(seg);
+    if (!entry) return; // already has peaks
+    if (_observerPeaksRequested.has(entry.key)) return; // already tried
+    _observerPeaksQueue.push(entry);
+    if (_observerPeaksTimer) clearTimeout(_observerPeaksTimer);
+    _observerPeaksTimer = setTimeout(_flushObserverPeaksQueue, 150);
+}
+
+/** Flush queued observer peaks — cached_only: true so server returns disk cache only (no ffmpeg). */
+async function _flushObserverPeaksQueue() {
+    _observerPeaksTimer = null;
+    const batch = _observerPeaksQueue.splice(0);
+    if (!batch.length) return;
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+    // Deduplicate by key and mark as requested
+    const seen = new Set();
+    const unique = batch.filter(e => { if (seen.has(e.key)) return false; seen.add(e.key); return true; });
+    unique.forEach(e => _observerPeaksRequested.add(e.key));
+    try {
+        const resp = await fetch(`/api/seg/segment-peaks/${reciter}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ segments: unique, cached_only: true }),
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (segReciterSelect.value !== reciter) return;
+            { const _p = data.peaks || {}; Object.assign(segSegPeaks, _p); _indexSegPeaksBulk(_p); }
+            _redrawPeaksWaveforms();
+        }
+    } catch (e) {
+        console.error('Observer peaks fetch failed:', e);
+    }
 }
 
 /** Extract unique chapter numbers from all validation error categories. */
@@ -1089,6 +1159,205 @@ function _collectErrorChapters(validation) {
         if (items) items.forEach(i => { if (i.chapter) chapters.add(i.chapter); });
     }
     return [...chapters].sort((a, b) => a - b);
+}
+
+// ---------------------------------------------------------------------------
+// Per-segment peaks — on-demand via ffmpeg range requests (no full download)
+// ---------------------------------------------------------------------------
+
+/** Index a segSegPeaks key into _segPeaksByUrl for O(1) URL-grouped lookups. */
+function _indexSegPeak(key) {
+    const pipe = key.indexOf('|');
+    if (pipe < 0) return;
+    const url = key.substring(0, pipe);
+    if (!_segPeaksByUrl[url]) _segPeaksByUrl[url] = [];
+    if (!_segPeaksByUrl[url].includes(key)) _segPeaksByUrl[url].push(key);
+}
+
+/** Bulk-index new keys after Object.assign into segSegPeaks. */
+function _indexSegPeaksBulk(newData) {
+    for (const key in newData) _indexSegPeak(key);
+}
+
+/** Remove a key from the URL index (e.g. after merging ranges). */
+function _unindexSegPeak(key) {
+    const pipe = key.indexOf('|');
+    if (pipe < 0) return;
+    const url = key.substring(0, pipe);
+    const arr = _segPeaksByUrl[url];
+    if (arr) {
+        const idx = arr.indexOf(key);
+        if (idx >= 0) arr.splice(idx, 1);
+        if (arr.length === 0) delete _segPeaksByUrl[url];
+    }
+}
+
+/** Find a covering-range entry in segSegPeaks for (audioUrl, startMs, endMs).
+ *  Returns the entry or null. Uses _segPeaksByUrl index — O(entries_for_url). */
+function _findCoveringPeaks(audioUrl, startMs, endMs) {
+    const keys = _segPeaksByUrl[audioUrl];
+    if (!keys) return null;
+    for (const k of keys) {
+        const entry = segSegPeaks[k];
+        if (!entry?.peaks?.length) continue;
+        const rs = entry.range_start_ms || 0;
+        if (startMs >= rs && endMs <= rs + entry.duration_ms) return entry;
+    }
+    return null;
+}
+
+/** Build the segment peaks request entry for a segment, or null if peaks already exist. */
+function _segPeakEntry(seg) {
+    const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(seg.chapter)] || '';
+    if (!audioUrl) return null;
+    if (segPeaksByAudio?.[audioUrl]?.peaks?.length) return null; // full-file peaks
+    const key = `${audioUrl}|${seg.time_start}|${seg.time_end}`;
+    if (segSegPeaks[key]) return null; // already fetched
+    // Check covering range (padded peaks from a nearby segment cover this one)
+    if (_findCoveringPeaks(audioUrl, seg.time_start, seg.time_end)) return null;
+    return {
+        audio_url: audioUrl,
+        start_ms: Math.max(0, seg.time_start - TRIM_PAD_LEFT),
+        end_ms: seg.time_end + TRIM_PAD_RIGHT,
+        key
+    };
+}
+
+/**
+ * Fetch peaks for a clicked segment (immediately) then next N neighbors
+ * as one merged range (single ffmpeg call covers all neighbors — avoids CDN contention).
+ */
+async function _fetchPeaksForClick(seg, neighborSegs) {
+    const reciter = segReciterSelect.value;
+    if (!reciter) return;
+    if (!_segPeaksAbortCtrl) _segPeaksAbortCtrl = new AbortController();
+    const signal = _segPeaksAbortCtrl.signal;
+
+    // Helper: fetch one entry's peaks and redraw on arrival
+    const fetchAndStore = async (entries) => {
+        if (!entries.length) return;
+        try {
+            const resp = await fetch(`/api/seg/segment-peaks/${reciter}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ segments: entries }),
+                signal,
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (segReciterSelect.value !== reciter) return;
+                { const _p = data.peaks || {}; Object.assign(segSegPeaks, _p); _indexSegPeaksBulk(_p); }
+                _redrawPeaksWaveforms();
+            }
+        } catch (e) {
+            if (e.name !== 'AbortError') console.error('Segment peaks fetch failed:', e);
+        }
+    };
+
+    // 1. Fetch the clicked segment first (await so waveform appears immediately)
+    const clickedEntry = _segPeakEntry(seg);
+    if (clickedEntry) await fetchAndStore([clickedEntry]);
+
+    // 2. Merge neighbors into one range per audio URL (single request, one ffmpeg call)
+    const needsFetch = (neighborSegs || []).filter(s => {
+        const url = s.audio_url || segAllData?.audio_by_chapter?.[String(s.chapter)] || '';
+        if (!url || segPeaksByAudio?.[url]?.peaks?.length) return false;
+        const key = `${url}|${s.time_start}|${s.time_end}`;
+        return !segSegPeaks[key];
+    });
+    if (needsFetch.length === 0) return;
+
+    // Group by audio URL, merge each group into one range
+    const byUrl = {};
+    for (const s of needsFetch) {
+        const url = s.audio_url || segAllData?.audio_by_chapter?.[String(s.chapter)] || '';
+        if (!byUrl[url]) byUrl[url] = [];
+        byUrl[url].push(s);
+    }
+
+    for (const [url, segs] of Object.entries(byUrl)) {
+        const minStart = Math.min(...segs.map(s => s.time_start));
+        const maxEnd = Math.max(...segs.map(s => s.time_end));
+        // One merged range with padding — keyed as "merged" so server computes once
+        const mergedKey = `_merged:${url}|${minStart}|${maxEnd}`;
+        const mergedEntry = {
+            audio_url: url,
+            start_ms: Math.max(0, minStart - TRIM_PAD_LEFT),
+            end_ms: maxEnd + TRIM_PAD_RIGHT,
+            key: mergedKey,
+        };
+        // Don't await — runs in background
+        fetchAndStore([mergedEntry]).then(() => {
+            // Distribute the merged peaks to each individual segment's key
+            const merged = segSegPeaks[mergedKey];
+            if (!merged?.peaks?.length) return;
+            for (const s of segs) {
+                const key = `${url}|${s.time_start}|${s.time_end}`;
+                if (!segSegPeaks[key]) { segSegPeaks[key] = merged; _indexSegPeak(key); }
+            }
+            delete segSegPeaks[mergedKey]; _unindexSegPeak(mergedKey);
+            _redrawPeaksWaveforms();
+        });
+    }
+}
+
+/** Fetch peaks for a list of segments one at a time (avoids CDN contention for cross-chapter items). */
+async function _fetchPeaksSequential(segs) {
+    const reciter = segReciterSelect.value;
+    if (!reciter || !segs?.length) return;
+    if (!_segPeaksAbortCtrl) _segPeaksAbortCtrl = new AbortController();
+    const signal = _segPeaksAbortCtrl.signal;
+    for (const seg of segs) {
+        const entry = _segPeakEntry(seg);
+        if (!entry) continue;
+        try {
+            const resp = await fetch(`/api/seg/segment-peaks/${reciter}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ segments: [entry] }),
+                signal,
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (segReciterSelect.value !== reciter) return;
+                { const _p = data.peaks || {}; Object.assign(segSegPeaks, _p); _indexSegPeaksBulk(_p); }
+                _redrawPeaksWaveforms();
+            }
+        } catch (e) {
+            if (e.name === 'AbortError') return;
+        }
+    }
+}
+
+/** Collect next N segments after `seg` from segDisplayedSegments (forward only). */
+function _getNeighborSegs(seg, n) {
+    if (!segDisplayedSegments) return [];
+    const pos = segDisplayedSegments.findIndex(s => s.index === seg.index && s.chapter === seg.chapter);
+    if (pos < 0) return [];
+    return segDisplayedSegments.slice(pos + 1, pos + 1 + n);
+}
+
+/** Collect next N segments after `seg` from the enclosing accordion's item list. */
+function _getAccordionNeighborSegs(btn, seg, n) {
+    const details = btn?.closest('details[data-category]');
+    if (!details?._valCatItems) return [];
+    const items = details._valCatItems;
+    // Find position of this segment in the accordion items (by chapter + seg_index)
+    const pos = items.findIndex(i => i.chapter === seg.chapter && i.seg_index === seg.index);
+    if (pos < 0) return [];
+    // Resolve next N items to full segment objects
+    const neighbors = [];
+    for (let i = pos + 1; i < items.length && neighbors.length < n; i++) {
+        const item = items[i];
+        if (item.chapter == null || item.seg_index == null) continue;
+        const s = getSegByChapterIndex(item.chapter, item.seg_index);
+        if (s) neighbors.push(s);
+    }
+    return neighbors;
+}
+
+function _cancelSegmentPeaksQueue() {
+    if (_segPeaksAbortCtrl) { _segPeaksAbortCtrl.abort(); _segPeaksAbortCtrl = null; }
 }
 
 // ---------------------------------------------------------------------------
@@ -1108,21 +1377,6 @@ function _audioSrcMatch(segUrl, elSrc) {
     if (!segUrl || !elSrc) return false;
     if (segUrl === elSrc) return true;
     return elSrc.endsWith(segUrl);
-}
-
-/** Rewrite all audio URLs in segAllData to go through the server proxy (by_surah only). */
-function _rewriteAudioUrls() {
-    if (!segAllData || !_isCurrentReciterBySurah()) return;
-    const reciter = segReciterSelect.value;
-    const rewrite = url => url && !url.startsWith('/api/') ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(url)}` : url;
-    if (segAllData.audio_by_chapter) {
-        for (const ch of Object.keys(segAllData.audio_by_chapter)) {
-            segAllData.audio_by_chapter[ch] = rewrite(segAllData.audio_by_chapter[ch]);
-        }
-    }
-    if (segAllData.segments) {
-        segAllData.segments.forEach(s => { if (s.audio_url) s.audio_url = rewrite(s.audio_url); });
-    }
 }
 
 function _formatBytes(bytes) {
@@ -1163,7 +1417,7 @@ function _updateCacheStatusUI(data) {
         if (allCached) {
             statusEl.textContent = `All cached (${_formatBytes(data.cached_bytes)})`;
         } else {
-            statusEl.textContent = 'Download audio for faster playback while editing';
+            statusEl.textContent = 'Download audio for offline editing';
         }
     }
 }
@@ -1214,11 +1468,42 @@ async function _deleteAudioCache(reciter) {
 function _redrawPeaksWaveforms() {
     const observer = _ensureWaveformObserver();
     const editCanvas = _getEditCanvas();
-    [segListEl, segValidationEl, segValidationGlobalEl, segHistoryView].forEach(container => {
+    [segListEl, segValidationEl, segValidationGlobalEl, segHistoryView, segSavePreview].forEach(container => {
         if (!container) return;
         container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => {
             if (c === editCanvas) return; // handled separately below — don't re-observe
-            // Unobserve then re-observe to force a fresh intersection check
+            // Try to draw directly (synchronous, avoids async observer re-fire)
+            const row = c.closest('.seg-row');
+            if (row) {
+                const idx = parseInt(row.dataset.segIndex);
+                const chapter = parseInt(row.dataset.segChapter);
+                let seg;
+                if (row.dataset.histTimeStart) {
+                    seg = {
+                        time_start: parseInt(row.dataset.histTimeStart),
+                        time_end: parseInt(row.dataset.histTimeEnd),
+                        audio_url: row.dataset.histAudioUrl || '',
+                        chapter,
+                    };
+                } else {
+                    seg = (_segIndexMap ? _segIndexMap.get(`${chapter}:${idx}`) : null)
+                        || (chapter ? getSegByChapterIndex(chapter, idx) : null);
+                }
+                if (seg) {
+                    const wfSeg = c._splitHL
+                        ? { ...seg, time_start: c._splitHL.wfStart, time_end: c._splitHL.wfEnd }
+                        : seg;
+                    if (drawWaveformFromPeaksForSeg(c, wfSeg, chapter)) {
+                        _drawSplitHighlight(c, wfSeg);
+                        _drawTrimHighlight(c, seg);
+                        _drawMergeHighlight(c, seg);
+                        observer.unobserve(c);
+                        c.removeAttribute('data-needs-waveform');
+                        return; // drawn — skip re-observe
+                    }
+                }
+            }
+            // Peaks not available yet — re-observe for later
             observer.unobserve(c);
             observer.observe(c);
         });
@@ -1272,6 +1557,11 @@ function clearSegDisplay() {
     _segPlayEndMs = 0;
     segPeaksByAudio = null;
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
+    segSegPeaks = {}; _segPeaksByUrl = {};
+    _observerPeaksQueue = [];
+    if (_observerPeaksTimer) { clearTimeout(_observerPeaksTimer); _observerPeaksTimer = null; }
+    _observerPeaksRequested = new Set();
+    _cancelSegmentPeaksQueue();
     segListEl.innerHTML = '';
     segPlayBtn.disabled = true;
     segSaveBtn.disabled = true;
@@ -1454,14 +1744,7 @@ function handleSegRowClick(e) {
         if (!segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
             _accordionOpCtx = { wrapper };
-            if (_isWrapperContextShown(wrapper) || !wrapper.querySelector('.val-card-actions')) {
-                // Context already shown, or rebuilt accordion (no toggle btn) — enter immediately
-                enterEditWithBuffer(seg, row, 'split', splitCat);
-            } else {
-                // Context toggle exists but not shown yet — show first, then enter
-                ensureContextShown(row);
-                setTimeout(() => enterEditWithBuffer(seg, row, 'split', splitCat), 1000);
-            }
+            enterEditWithBuffer(seg, row, 'split', splitCat);
             return;
         }
         enterEditWithBuffer(seg, row, 'split', splitCat);
@@ -1767,7 +2050,7 @@ function renderSegCard(seg, options = {}) {
 function renderSegList(segments) {
     // Invalidate cached row references (DOM nodes are about to be replaced)
     _prevHighlightedRow = null; _prevHighlightedIdx = -1;
-    _prevPlayheadRow = null; _currentPlayheadRow = null; _prevPlayheadIdx = -1;
+    _currentPlayheadRow = null; _prevPlayheadIdx = -1;
     segListEl.innerHTML = '';
     if (!segments || segments.length === 0) {
         segListEl.innerHTML = '<div class="seg-loading">No segments to display</div>';
@@ -1895,12 +2178,32 @@ function drawSegmentWaveformFromPeaks(canvas, startMs, endMs, peaks, totalDurati
 
 /** Draw waveform from peaks for a segment, resolving its audio URL. Returns true if drawn. */
 function drawWaveformFromPeaksForSeg(canvas, seg, chapter) {
-    if (!segPeaksByAudio) return false;
     const audioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
-    const pe = segPeaksByAudio[audioUrl];
-    if (pe?.peaks?.length > 0) {
-        drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);
+    // 1. Full-file peaks (from Cache All)
+    if (segPeaksByAudio) {
+        const pe = segPeaksByAudio[audioUrl];
+        if (pe?.peaks?.length > 0) {
+            drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);
+            return true;
+        }
+    }
+    // 2. Per-segment peaks — exact key (on-demand via ffmpeg range requests, padded)
+    const segKey = `${audioUrl}|${seg.time_start}|${seg.time_end}`;
+    const sp = segSegPeaks[segKey];
+    if (sp?.peaks?.length > 0) {
+        const rs = sp.range_start_ms || 0;
+        drawSegmentWaveformFromPeaks(canvas, seg.time_start - rs, seg.time_end - rs, sp.peaks, sp.duration_ms);
         return true;
+    }
+    // 3. Per-segment peaks — covering range (handles edited segments whose bounds changed
+    //    after trim/split/merge; the padded peaks from the original segment cover new bounds)
+    if (audioUrl) {
+        const entry = _findCoveringPeaks(audioUrl, seg.time_start, seg.time_end);
+        if (entry) {
+            const rs = entry.range_start_ms || 0;
+            drawSegmentWaveformFromPeaks(canvas, seg.time_start - rs, seg.time_end - rs, entry.peaks, entry.duration_ms);
+            return true;
+        }
     }
     return false;
 }
@@ -1912,10 +2215,20 @@ function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs, audioUrl) {
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
     } else {
+        let drawn = false;
         if (segPeaksByAudio && audioUrl) {
             const pe = segPeaksByAudio[audioUrl];
             if (pe?.peaks?.length) {
                 drawSegmentWaveformFromPeaks(canvas, startMs, endMs, pe.peaks, pe.duration_ms);
+                drawn = true;
+            }
+        }
+        if (!drawn && audioUrl) {
+            const segKey = `${audioUrl}|${startMs}|${endMs}`;
+            const sp = segSegPeaks[segKey];
+            if (sp?.peaks?.length) {
+                const rs = sp.range_start_ms || 0;
+                drawSegmentWaveformFromPeaks(canvas, startMs - rs, endMs - rs, sp.peaks, sp.duration_ms);
             }
         }
         canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -1980,6 +2293,8 @@ function playFromSegment(segIndex, chapterOverride, seekToMs) {
     // Prefetch next segment's audio if it differs
     _prefetchNextSegAudio(segIndex);
 
+    // Fetch peaks: clicked segment first, then next N neighbors (merged into one range)
+    _fetchPeaksForClick(seg, _getNeighborSegs(seg, PEAKS_NEIGHBOR_COUNT));
 }
 
 /**
@@ -2121,8 +2436,13 @@ function onSegTimeUpdate() {
         }
         updateSegHighlight();
         updateSegPlayStatus();
-        // Prefetch next segment's audio when we enter a new segment
-        if (segCurrentIdx >= 0) _prefetchNextSegAudio(segCurrentIdx);
+        if (segCurrentIdx >= 0) {
+            // Prefetch next segment's audio when we enter a new segment
+            _prefetchNextSegAudio(segCurrentIdx);
+            // Fetch peaks for this segment + neighbors (same as click)
+            const curSeg2 = segDisplayedSegments.find(s => s.index === segCurrentIdx);
+            if (curSeg2) _fetchPeaksForClick(curSeg2, _getNeighborSegs(curSeg2, PEAKS_NEIGHBOR_COUNT));
+        }
     }
 }
 
@@ -2208,7 +2528,6 @@ function updateSegHighlight() {
 }
 
 let _prevPlayheadIdx = -1;
-let _prevPlayheadRow = null;
 let _currentPlayheadRow = null;
 
 function drawActivePlayhead() {
@@ -2222,7 +2541,7 @@ function drawActivePlayhead() {
 
     // Clear playhead from previously active canvas (if it changed)
     if (_prevPlayheadIdx >= 0 && indexChanged) {
-        const prevRow = _prevPlayheadRow || segListEl.querySelector(`.seg-row[data-seg-index="${_prevPlayheadIdx}"]`);
+        const prevRow = _currentPlayheadRow || segListEl.querySelector(`.seg-row[data-seg-index="${_prevPlayheadIdx}"]`);
         if (prevRow) {
             const canvas = prevRow.querySelector('canvas');
             const seg = getSegByChapterIndex(chapter, _prevPlayheadIdx);
@@ -2233,7 +2552,6 @@ function drawActivePlayhead() {
     }
 
     if (indexChanged) {
-        _prevPlayheadRow = _currentPlayheadRow;
         _currentPlayheadRow = segCurrentIdx >= 0
             ? segListEl.querySelector(`.seg-row[data-seg-index="${segCurrentIdx}"]`)
             : null;
@@ -3077,6 +3395,19 @@ let TRIM_PAD_LEFT = 500;          // ms padding before segment in adjust mode (o
 let TRIM_PAD_RIGHT = 500;         // ms padding after segment in adjust mode (overridden by config)
 let TRIM_DIM_ALPHA = 0.45;        // dimming opacity for padded regions (overridden by config)
 let SHOW_BOUNDARY_PHONEMES = true; // show GT/ASR tail phonemes on boundary_adj cards (overridden by config)
+let PEAKS_NEIGHBOR_COUNT = 5;     // segments before/after to prefetch peaks on click (overridden by config)
+
+/** Add/remove the single dim overlay (replaces per-row opacity for performance). */
+let _editOverlay = null;
+function _addEditOverlay() {
+    if (_editOverlay) return;
+    _editOverlay = document.createElement('div');
+    _editOverlay.className = 'seg-edit-overlay';
+    document.body.appendChild(_editOverlay);
+}
+function _removeEditOverlay() {
+    if (_editOverlay) { _editOverlay.remove(); _editOverlay = null; }
+}
 
 /**
  * Enter trim or split mode. Waveforms are drawn from peaks (no audio buffer needed).
@@ -3112,6 +3443,7 @@ function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
         _pendingOp = null;
         segEditMode = null;
         segEditIndex = -1;
+        _removeEditOverlay();
         document.body.classList.remove('seg-edit-active');
         const targetRow = document.querySelector('.seg-row.seg-edit-target');
         if (targetRow) {
@@ -3131,9 +3463,11 @@ function enterTrimMode(seg, row) {
     segEditMode = 'trim';
     segEditIndex = seg.index;
 
-    // Dim other rows via CSS
+    // Dim other rows: pointer-events disabled at container level (2-3 elements)
+    // instead of per-row (300+ rows).  Edit-target re-enables pointer-events via CSS.
     row.classList.add('seg-edit-target');
     document.body.classList.add('seg-edit-active');
+    _addEditOverlay();
 
     // Hide normal action buttons, create inline controls
     const actions = row.querySelector('.seg-actions');
@@ -3184,14 +3518,39 @@ function enterTrimMode(seg, row) {
     canvas._wfCache = null; // clear cached normal waveform
     canvas._trimBaseCache = null;
 
+    // Fetch padded peaks for this segment if not already available
+    if (!segPeaksByAudio?.[audioUrl]?.peaks?.length && audioUrl) {
+        const segKey = `${audioUrl}|${seg.time_start}|${seg.time_end}`;
+        if (!segSegPeaks[segKey]) {
+            _fetchPeaksForClick(seg, []);  // _segPeakEntry adds padding automatically
+        }
+    }
+
     drawTrimWaveform(canvas);
     setupTrimDragHandles(canvas, seg);
 }
 
-/** Slice peaks for a time range and resample to `buckets` bins. Returns {maxVals, minVals} or null. */
-function _slicePeaks(audioUrl, startMs, endMs, buckets) {
-    if (!segPeaksByAudio) return null;
-    const pe = segPeaksByAudio[audioUrl];
+/** Slice peaks for a time range and resample to `buckets` bins. Returns {maxVals, minVals} or null.
+ *  Optional `segKey` provides the per-segment peaks key when the requested range differs from the
+ *  segment bounds (e.g. trim window). Padded peaks are offset via `range_start_ms`. */
+function _slicePeaks(audioUrl, startMs, endMs, buckets, segKey) {
+    // 1. Full-file peaks (from Cache All)
+    let pe = segPeaksByAudio?.[audioUrl];
+    // 2. Per-segment peaks fallback (exact match, explicit key, then covering range)
+    if (!pe?.peaks?.length) {
+        const exactKey = `${audioUrl}|${startMs}|${endMs}`;
+        let sp = segSegPeaks[exactKey] || (segKey ? segSegPeaks[segKey] : null);
+        // 3. Covering-range search (edited segments whose bounds differ from cached key)
+        if (!sp?.peaks?.length && audioUrl) {
+            sp = _findCoveringPeaks(audioUrl, startMs, endMs);
+        }
+        if (sp?.peaks?.length) {
+            pe = { peaks: sp.peaks, duration_ms: sp.duration_ms };
+            const rs = sp.range_start_ms || 0;
+            startMs = Math.max(0, startMs - rs);
+            endMs = Math.min(sp.duration_ms, endMs - rs);
+        }
+    }
     if (!pe?.peaks?.length) return null;
     const pps = pe.peaks.length / pe.duration_ms;  // peaks per ms
     const startIdx = Math.max(0, Math.floor(startMs * pps));
@@ -3240,7 +3599,8 @@ function _ensureTrimBaseCache(canvas) {
     ctx.fillRect(0, 0, width, height);
 
     const audioUrl = tw.audioUrl || '';
-    const data = _slicePeaks(audioUrl, tw.windowStart, tw.windowEnd, width);
+    const segKey = `${audioUrl}|${tw.currentStart}|${tw.currentEnd}`;
+    const data = _slicePeaks(audioUrl, tw.windowStart, tw.windowEnd, width, segKey);
     if (!data) return false;
 
     const scale = height / 2 * 0.9;
@@ -3619,9 +3979,10 @@ function enterSplitMode(seg, row, prePausePlayMs = null) {
     segEditMode = 'split';
     segEditIndex = seg.index;
 
-    // Dim other rows via CSS
+    // Dim other rows: container-level pointer-events, edit-target re-enables via CSS
     row.classList.add('seg-edit-target');
     document.body.classList.add('seg-edit-active');
+    _addEditOverlay();
 
     // Hide normal action buttons, create inline controls
     const actions = row.querySelector('.seg-actions');
@@ -3663,6 +4024,15 @@ function enterSplitMode(seg, row, prePausePlayMs = null) {
     const splitAudioUrl = seg.audio_url || segAllData?.audio_by_chapter?.[String(chapter)] || '';
     canvas._splitData = { seg, currentSplit: defaultSplit, audioUrl: splitAudioUrl };
     canvas._splitBaseCache = null;
+
+    // Fetch padded peaks for this segment if not already available (same as enterTrimMode)
+    if (!segPeaksByAudio?.[splitAudioUrl]?.peaks?.length && splitAudioUrl) {
+        const segKey = `${splitAudioUrl}|${seg.time_start}|${seg.time_end}`;
+        if (!segSegPeaks[segKey]) {
+            _fetchPeaksForClick(seg, []);
+        }
+    }
+
     drawSplitWaveform(canvas);
     setupSplitDragHandle(canvas, seg);
 }
@@ -3680,7 +4050,8 @@ function _ensureSplitBaseCache(canvas) {
     ctx.fillRect(0, 0, width, height);
 
     const audioUrl = sd.audioUrl || '';
-    const data = _slicePeaks(audioUrl, seg.time_start, seg.time_end, width);
+    const segKey = `${audioUrl}|${seg.time_start}|${seg.time_end}`;
+    const data = _slicePeaks(audioUrl, seg.time_start, seg.time_end, width, segKey);
     if (!data) {
         ctx.fillStyle = '#888';
         ctx.font = '14px monospace';
@@ -3831,7 +4202,7 @@ function updateSplitInfo(canvas, seg, splitTime) {
     }
 }
 
-function confirmSplit(seg) {
+async function confirmSplit(seg) {
     const canvas = _getEditCanvas();
     const splitTime = canvas?._splitData?.currentSplit;
     if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
@@ -3863,6 +4234,26 @@ function confirmSplit(seg) {
         splitOp.targets_after = [snapshotSeg(firstHalf), snapshotSeg(secondHalf)];
     }
 
+    // For cross-verse segments spanning exactly 2 verses, suggest per-verse refs
+    const suggested = _suggestSplitRefs(seg.matched_ref);
+    if (suggested) {
+        firstHalf.matched_ref = suggested.firstRef;
+        secondHalf.matched_ref = suggested.secondRef;
+        // Resolve text for both halves in parallel
+        const resolve = async (ref) => {
+            try {
+                const canonical = _normalizeRef(ref);
+                const resp = await fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(canonical)}`);
+                const data = await resp.json();
+                if (data.text) return { text: data.text, display_text: data.display_text || data.text };
+            } catch (_) { /* fall through */ }
+            return null;
+        };
+        const [r1, r2] = await Promise.all([resolve(suggested.firstRef), resolve(suggested.secondRef)]);
+        if (r1) { firstHalf.matched_text = r1.text; firstHalf.display_text = r1.display_text; }
+        if (r2) { secondHalf.matched_text = r2.text; secondHalf.display_text = r2.display_text; }
+    }
+
     if (useSegData) {
         const segIdx = segData.segments.findIndex(s => s.index === seg.index);
         segData.segments.splice(segIdx, 1, firstHalf, secondHalf);
@@ -3892,6 +4283,7 @@ function confirmSplit(seg) {
 
     if (accCtx) {
         _rebuildAccordionAfterSplit(accCtx.wrapper, chapter, seg, firstHalf, secondHalf);
+        _refreshSiblingCardIndices(chapter, accCtx.wrapper);
     } else {
         refreshOpenAccordionCards();
     }
@@ -4158,7 +4550,8 @@ function exitEditMode() {
     // calls segAudioEl.pause() when preview reaches its end, so without this
     // the audio element keeps playing after Apply/Cancel.
     if (!segAudioEl.paused) { segAudioEl.pause(); stopSegAnimation(); }
-    // Un-dim rows (O(1) — remove container class + target marker)
+    // Un-dim rows (O(1) — remove overlay + container class + target marker)
+    _removeEditOverlay();
     document.body.classList.remove('seg-edit-active');
     editRow?.classList.remove('seg-edit-target');
 }
@@ -4272,6 +4665,41 @@ function _collapseAccordionExcept(exceptDetails) {
         if (d === exceptDetails) return;
         if (d.open) d.open = false;  // toggle handler hides badges + clears cards
     });
+}
+
+/** Merge late-arriving phoneme-based boundary items into live accordion(s). */
+function _mergeBoundaryPhonemeItems(extraItems) {
+    let merged = false;
+    // Update every rendered boundary_adj accordion across both panels
+    [segValidationEl, segValidationGlobalEl].forEach(panel => {
+        const details = panel.querySelector('details[data-category="boundary_adj"]');
+        if (!details) return;
+        merged = true;
+        // Update the backing items list
+        if (details._valCatItems) {
+            details._valCatItems.push(...extraItems);
+        }
+        // Update the count badge
+        const countEl = details.querySelector('[data-lc-count]');
+        if (countEl && details._valCatItems) {
+            countEl.textContent = details._valCatItems.length;
+        }
+        // If accordion is open, re-render cards
+        if (details.open) {
+            const cardsDiv = details.querySelector('.val-cards');
+            if (cardsDiv) renderCategoryCards('boundary_adj', details._valCatItems, cardsDiv);
+        }
+    });
+    // If no accordion existed (0 heuristic items), re-render the full panel
+    if (!merged) {
+        const ch = segChapterSelect.value ? parseInt(segChapterSelect.value) : null;
+        if (ch !== null) {
+            renderValidationPanel(segValidation, null, segValidationGlobalEl, 'All Chapters');
+            renderValidationPanel(segValidation, ch, segValidationEl, `Chapter ${ch}`);
+        } else {
+            renderValidationPanel(segValidation);
+        }
+    }
 }
 
 function renderValidationPanel(data, chapter = null, targetEl = segValidationEl, label = null) {
@@ -4395,12 +4823,18 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         const LC_DEFAULT = _lcDefaultThreshold;
 
         // For low_confidence, items shown depend on current slider value.
-        // For qalqala, items can be filtered by the active letter button.
+        // For qalqala, items can be filtered by the active letter button and/or end-of-verse toggle.
         let lcThreshold = LC_DEFAULT;
         let activeQalqalaLetter = null;
+        let qalqalaEndOfVerse = false;
         const getVisibleItems = () => {
             if (isLowConf) return cat.items.filter(i => (i.confidence * 100) < lcThreshold).sort((a, b) => a.confidence - b.confidence);
-            if (isQalqala && activeQalqalaLetter) return cat.items.filter(i => i.qalqala_letter === activeQalqalaLetter);
+            if (isQalqala) {
+                let items = cat.items;
+                if (activeQalqalaLetter) items = items.filter(i => i.qalqala_letter === activeQalqalaLetter);
+                if (qalqalaEndOfVerse) items = items.filter(i => i.end_of_verse);
+                return items;
+            }
             return cat.items;
         };
 
@@ -4460,6 +4894,29 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
                 });
                 qalqalaFilterRow.appendChild(btn);
             });
+            // "End of Verse" toggle — restricts to segments where last word is last word of verse
+            if (cat.items.some(i => i.end_of_verse)) {
+                const sep = document.createElement('span');
+                sep.className = 'qalqala-filter-sep';
+                sep.textContent = '|';
+                qalqalaFilterRow.appendChild(sep);
+                const eovBtn = document.createElement('button');
+                eovBtn.className = 'val-btn val-cross qalqala-eov-btn';
+                eovBtn.textContent = 'End of Verse';
+                eovBtn.title = 'Show only segments where the last word is the last word of its verse';
+                eovBtn.addEventListener('click', () => {
+                    const countEl = summary.querySelector('[data-lc-count]');
+                    qalqalaEndOfVerse = !qalqalaEndOfVerse;
+                    eovBtn.classList.toggle('active', qalqalaEndOfVerse);
+                    const visible = getVisibleItems();
+                    if (countEl) countEl.textContent = visible.length;
+                    if (_cardRenderRafId) { cancelAnimationFrame(_cardRenderRafId); _cardRenderRafId = null; }
+                    cardsDiv.innerHTML = '';
+                    renderCategoryCards(cat.type, visible, cardsDiv);
+                    requestAnimationFrame(_updateCtxAllBtn);
+                });
+                qalqalaFilterRow.appendChild(eovBtn);
+            }
             details.appendChild(qalqalaFilterRow);
         }
 
@@ -4490,7 +4947,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         cardsDiv.hidden = true;
 
         // "Show/Hide All Context" bulk toggle — label reflects whether context is default-shown
-        const _ctxDefaultShown = cat.type === 'failed' || cat.type === 'boundary_adj' || cat.type === 'audio_bleeding' || cat.type === 'repetitions' || cat.type === 'qalqala';
+        const _ctxDefaultShown = (_accordionContext[cat.type] || 'hidden') !== 'hidden';
         const ctxAllRow = document.createElement('div');
         ctxAllRow.className = 'val-ctx-all-row';
         ctxAllRow.hidden = true;
@@ -5040,6 +5497,9 @@ function playErrorCardAudio(seg, btn, seekToMs) {
     btn.textContent = '\u23F9';
     valCardPlayingBtn = btn;
     _startValCardAnimation(btn, seg);
+
+    // Fetch peaks for this segment only
+    _fetchPeaksForClick(seg, []);
 }
 
 function invalidateLoadedErrorCards() {
@@ -5180,14 +5640,14 @@ function renderCategoryCards(type, items, container) {
                 }
             });
 
-            // Action buttons row (Auto Fix + Show Context, side by side)
+            // Action buttons row (Auto Fill + Show Context, side by side)
             const actionsRow = document.createElement('div');
             actionsRow.className = 'val-card-actions';
 
             if (issue.auto_fix) {
                 const fixBtn = document.createElement('button');
                 fixBtn.className = 'val-action-btn';
-                fixBtn.textContent = 'Auto Fix';
+                fixBtn.textContent = 'Auto Fill';
                 fixBtn.title = 'Extend segment ref to cover the missing word';
                 fixBtn.addEventListener('click', async () => {
                     const af = issue.auto_fix;
@@ -5222,7 +5682,7 @@ function renderCategoryCards(type, items, container) {
                     const undoBtn = document.createElement('button');
                     undoBtn.className = 'val-action-btn val-action-btn-danger';
                     undoBtn.textContent = 'Undo';
-                    undoBtn.title = 'Revert auto-fix';
+                    undoBtn.title = 'Revert auto-fill';
                     undoBtn.addEventListener('click', () => {
                         seg.matched_ref = oldRef;
                         seg.matched_text = oldText;
@@ -5231,7 +5691,7 @@ function renderCategoryCards(type, items, container) {
                         if (oldIgnoredCats) seg.ignored_categories = oldIgnoredCats; else delete seg.ignored_categories;
                         if (!wasDirty) unmarkDirty(segChapter, seg.index);
                         fixBtn.disabled = false;
-                        fixBtn.textContent = 'Auto Fix';
+                        fixBtn.textContent = 'Auto Fill';
                         wrapper.style.opacity = '1';
                         syncAllCardsForSegment(seg);
                         undoBtn.remove();
@@ -5387,9 +5847,8 @@ function renderCategoryCards(type, items, container) {
             }
 
             wrapper.appendChild(actionsRow);
-            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding' || type === 'repetitions' || type === 'qalqala';
-            const nextOnly = type === 'muqattaat' || type === 'qalqala';
-            addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: contextDefault, nextOnly });
+            const _ctxMode = _accordionContext[type] || 'hidden';
+            addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: _ctxMode !== 'hidden', nextOnly: _ctxMode === 'next_only' });
             container.appendChild(wrapper);
         }
     }
@@ -5465,6 +5924,11 @@ function addContextToggle(actionsContainer, segsInWrapper, { defaultOpen = false
         }
         ctxBtn.textContent = 'Hide Context';
         contextShown = true;
+        // Observe new canvases so IntersectionObserver can draw from available peaks
+        const observer = _ensureWaveformObserver();
+        contextEls.forEach(el => {
+            el.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+        });
     }
 
     function hideContext() {
@@ -5500,6 +5964,18 @@ function ensureContextShown(row) {
             return;
         }
     }
+}
+
+/** Collect context card segments from the wrapper containing `btn`, if context is shown. */
+function _getWrapperContextSegs(btn) {
+    const wrapper = btn?.closest('.val-card-wrapper');
+    if (!wrapper || !_isWrapperContextShown(wrapper)) return [];
+    const segs = [];
+    wrapper.querySelectorAll('.seg-row-context').forEach(row => {
+        const seg = resolveSegFromRow(row);
+        if (seg) segs.push(seg);
+    });
+    return segs;
 }
 
 /** Check if a val-card-wrapper currently has context cards shown. */
@@ -5582,6 +6058,21 @@ function _rebuildAccordionAfterSplit(wrapper, chapter, origSeg, firstHalf, secon
             nextCard.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
         }
     }
+}
+
+/** Update data-seg-index on all accordion cards for a chapter, excluding one wrapper. */
+function _refreshSiblingCardIndices(chapter, excludeWrapper) {
+    const allSegs = segAllData?.segments || [];
+    [segValidationEl, segValidationGlobalEl].forEach(panel => {
+        if (!panel) return;
+        panel.querySelectorAll(`.seg-row[data-seg-chapter="${chapter}"]`).forEach(card => {
+            if (excludeWrapper && excludeWrapper.contains(card)) return;
+            const uid = card.dataset.segUid;
+            if (!uid) return;
+            const seg = allSegs.find(s => s.segment_uid === uid);
+            if (seg != null) card.dataset.segIndex = seg.index;
+        });
+    });
 }
 
 /** Rebuild an accordion wrapper in-place after a merge, showing merged + remaining context. */
@@ -6222,12 +6713,17 @@ function renderHistoryFilterBar(data) {
     const allItems = _flattenBatchesToItems(data.batches, chainedOpIds);
     _allHistoryItems = allItems;
 
-    // Op type pills: count items by primary op type
+    // Op type pills: count items by primary op type + split chains
     const opCounts = {};
     for (const item of allItems) {
         if (item.group.length === 0) continue;
         const primary = item.group[0].op_type;
         opCounts[primary] = (opCounts[primary] || 0) + 1;
+    }
+    if (_splitChains) {
+        for (const chain of _splitChains.values()) {
+            opCounts['split_segment'] = (opCounts['split_segment'] || 0) + 1;
+        }
     }
     const sortedOps = Object.entries(opCounts).sort((a, b) => b[1] - a[1]);
     for (const [opType, count] of sortedOps) {
@@ -6381,6 +6877,12 @@ function _updateFilterPillCounts(allItems) {
     for (const item of itemsForOpCounts) {
         if (item.group.length === 0) continue;
         opCounts[item.group[0].op_type] = (opCounts[item.group[0].op_type] || 0) + 1;
+    }
+    // Include split chains in op counts (not filtered by cat since chains lack category info)
+    if (_splitChains && !catActive) {
+        for (const chain of _splitChains.values()) {
+            opCounts['split_segment'] = (opCounts['split_segment'] || 0) + 1;
+        }
     }
     for (const pill of segHistoryFilterOps.querySelectorAll('.seg-history-filter-pill')) {
         const span = pill.querySelector('.pill-count');

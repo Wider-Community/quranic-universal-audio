@@ -790,9 +790,22 @@ footer {
 
 /* ============ Segment Edit Modes ============ */
 
-/* Dimmed rows during edit mode — single class on body, CSS does the rest */
-body.seg-edit-active .seg-row:not(.seg-edit-target) {
-    opacity: 0.3;
+/* Dimmed rows during edit mode — pointer-events disabled at the CONTAINER
+   level (2-3 elements) instead of per-row (300+ rows).  The overlay provides
+   visual dimming; the container-level pointer-events: none blocks interaction.
+   The edit-target row re-enables pointer-events so it remains clickable.
+   This avoids the expensive style recalc + hit-test-tree rebuild caused by
+   applying pointer-events: none to every .seg-row individually. */
+.seg-edit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 10;
+    pointer-events: none;
+}
+body.seg-edit-active #seg-list,
+body.seg-edit-active #seg-validation,
+body.seg-edit-active #seg-validation-global {
     pointer-events: none;
 }
 
@@ -910,10 +923,14 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     width: 100%;
 }
 
-/* Edit-target card gets an active border */
+/* Edit-target card gets an active border, elevated above the dim overlay.
+   pointer-events: auto re-enables interaction (container has pointer-events: none). */
 .seg-row.seg-edit-target {
+    position: relative;
+    z-index: 11;
     border-color: #4cc9f0;
     background: #1a2a4e;
+    pointer-events: auto;
 }
 
 .seg-row.seg-edit-target canvas {
@@ -1076,9 +1093,10 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     color: #4cc9f0;
 }
 
-.qalqala-filter-row { gap: 6px; }
+.qalqala-filter-row { gap: 6px; align-items: center; }
+.qalqala-filter-sep { color: #555; margin: 0 2px; }
 .val-btn.qalqala-letter-btn { font-size: 1.1em; min-width: 2.2em; }
-.val-btn.qalqala-letter-btn.active {
+.val-btn.qalqala-letter-btn.active, .val-btn.qalqala-eov-btn.active {
     background: rgba(76, 201, 240, 0.3);
     border-color: #4cc9f0;
     color: #fff;
@@ -1280,7 +1298,7 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     padding: 2px 0 4px;
 }
 
-/* Action buttons row (Ignore/AutoFix + Show Context side by side) */
+/* Action buttons row (Ignore/AutoFill + Show Context side by side) */
 .val-card-actions {
     display: flex;
     gap: 6px;

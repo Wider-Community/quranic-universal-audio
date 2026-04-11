@@ -12,6 +12,9 @@ on:
       pr_number:
         description: 'PR number to post validation comment on (blank = skip comment)'
         required: false
+      ref:
+        description: 'Git ref to checkout (branch name, default = default branch)'
+        required: false
 
 permissions:
   contents: read
@@ -23,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0  # Full history for git diff against base
 
       - uses: actions/setup-python@v5

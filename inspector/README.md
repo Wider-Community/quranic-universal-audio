@@ -4,18 +4,23 @@ Flask web app for reviewing and editing Quran recitation alignment results. Thre
 
 ## Setup
 
+Run in a terminal:
+
 ```bash
 pip install -r inspector/requirements.txt
 ```
 
+**Highly recommended:** Install [ffmpeg](https://ffmpeg.org/) to enable waveforms on segment cards during playback. Download from https://ffmpeg.org/download.html or install via terminal:
+
+- **Windows**: `winget install ffmpeg` 
+- **macOS**: `brew install ffmpeg`
+- **Linux**: `sudo apt install ffmpeg` (Debian/Ubuntu) or `sudo dnf install ffmpeg` (Fedora)
+
 ## Run
 
 ```bash
-python inspector/server.py
+python inspector/server.py # then open http://localhost:5000 in your browser
 ```
-
-Open http://localhost:5000.
-
 
 ## Segments Reviewing
 
@@ -25,9 +30,13 @@ The main editing interface in the **Segments** tab. Browse the AI-generated segm
 
 ### Getting started
 
-Click **Download All Audio** to cache all chapter audio locally (~1-2 GB). This makes playback instant while editing, and you can delete it once done. If you prefer not to, audio loads lazily with a few seconds delay per new chapter.
+Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache chapter audio locally (~1-2 GB) for offline editing. 
 
-While audio downloads, browse another reciter's **edit history** to see what typical fixes look like — this is a good first-time orientation. You can also open the **statistics** panel for graphs on confidence scores, segment durations, words per segment, and other distribution metrics.
+**This is also needed if you notice segments' audio consistently don't match their text and play audio from neighbouring segments instead (CDN streaming issue with a small number of reciters).**
+
+While audio downloads, browse another reciter's **edit history** to see what typical fixes look like — this is a good first-time orientation. 
+
+You can also open the **statistics** panel for graphs on confidence scores, segment durations, words per segment, and other distribution metrics.
 
 <!-- screenshot: download button + statistics panel -->
 
@@ -36,12 +45,13 @@ While audio downloads, browse another reciter's **edit history** to see what typ
 
 | Operation | Description |
 |-----------|-------------|
+| **Automatic fixes** | Pipeline automated removal of basmalas, isti'athas and other non-Quran segments, as well as merging accidental splits of كَلَّا ۖ بَلْ ۜ رَانَ and وَقِيلَ مَنْ͏ۜ رَاقࣲ — can be viewed in the edit history|
 | **Adjust** | Drag handles on the waveform to modify the segment's start and end time |
 | **Split** | Divide a segment into two at the playhead position |
 | **Merge** | Combine two adjacent segments into one |
 | **Edit Reference** | Change the Qur'anic reference (`surah:verse:word-surah:verse:word` format or shortcut `surah:verse` |
 | **Delete** | Remove a segment entirely |
-| **Auto-fix** | Extend an adjacent segment to cover a missing word (available on Missing Words cards) |
+| **Auto-fill** | Extend an adjacent segment to cover a missing word (available on Missing Words cards) |
 | **Ignore** | Dismiss the issue for this category, marking the segment as reviewed-and-correct |
 
 
@@ -78,9 +88,9 @@ A verse has zero segment coverage. Either the verse is genuinely missing from th
 
 #### Missing Words
 
-A gap in word indices between two segments within a verse. Most of the time, **auto-fix** handles this — it intelligently detects which adjacent segment the word belongs to and extends it. When using auto-fix, verify that the audio actually contains the word and it wasn't cut off at the boundary. If auto-fix is not available, **edit reference** directly on the relevant segment.
+A gap in word indices between two segments within a verse. Most of the time, **auto-fill** handles this — it intelligently detects which adjacent segment the word belongs to and extends it. When using auto-fill, verify that the audio actually contains the word and it wasn't cut off at the boundary. If auto-fill is not available, **edit reference** directly on the relevant segment.
 
-<!-- screenshot: missing words with auto-fix button -->
+<!-- screenshot: missing words with auto-fill button -->
 
 #### Detected Repetitions
 
@@ -108,10 +118,9 @@ This is especially important at verse boundaries — the HuggingFace dataset rec
 
 <!-- screenshot: qalqala segment with waveform showing the sound -->
 
-#### Muqattaat
+#### Muqatta'at
 
-Segments starting with huruf muqattaat (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if there are any issues with the reference or boundaries.
-
+Segments starting with huruf muqatta'at (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if any issues are spotted.
 <!-- screenshot: muqattaat segment -->
 
 <!-- screenshot: editing operations in action -->
@@ -128,7 +137,7 @@ The automatic error categories are best-effort and catch most issues, but some e
 
 Every save is recorded in the edit history. You can browse past edits, filter by edit type or error category, and sort. You can use the **Undo** button to reverse any edit. It is highly recommended to review the full edit history to verify all edits are sensible and changes have been saved correctly without bugs.
 
-### Continuous improvement
+### Continuous refinement
 
 The first round of review (before the pull request is merged) focuses on fixing the critical issues. But improvement is ongoing — you can come back at any point to do further checks or optional edits. New edits automatically recompute timestamps and sync to the dataset.
 
@@ -153,6 +162,6 @@ We're continuously improving the Inspector to make reviewing as smooth as possib
 - Feedback on the current error categories, their accuracy in flagging segments, and how well they help you find real issues
 - Suggestions for new error categories or detection improvements
 - Ideas for new fix types or ways to reduce common errors in the pipeline
-- Ways to improve the reviewer experience, make it more enjoyable, and reduce the time of a review session
-- General UI/UX improvements, new features, or bug reports
-- General improvements for the timestamps and audio tabs experience
+- Ways to improve the reviewer experience, make it more enjoyable, and reduce the time it takes to review a reciter
+- General UI improvements, new features, or bug reports
+- General improvements for the timestamps tab experience

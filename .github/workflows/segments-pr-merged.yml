@@ -36,8 +36,14 @@ jobs:
 
       - name: Detect changed reciters
         id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          reciters=$(git diff HEAD~1 --name-only -- data/recitation_segments/ | \
+          pr_number=${{ github.event.pull_request.number }}
+          repo=${{ github.repository }}
+          reciters=$(gh api "repos/$repo/pulls/$pr_number/files" --paginate \
+            --jq '.[].filename' | \
+            grep '^data/recitation_segments/' | \
             sed -E 's|data/recitation_segments/([^/]+)/.*|\1|' | \
             sort -u | tr '\n' ' ')
           echo "reciters=$(echo $reciters | xargs)" >> $GITHUB_OUTPUT
