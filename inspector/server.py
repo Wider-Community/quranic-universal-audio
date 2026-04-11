@@ -779,7 +779,6 @@ _SEG_RECITERS_CACHE: list[dict] | None = None
 # Waveform peaks cache — { reciter: { audio_url: { duration_ms, peaks } } }
 _PEAKS_CACHE: dict[str, dict[str, dict]] = {}
 _PEAKS_LOCK = threading.Lock()
-_PEAKS_COMPUTING: set[str] = set()  # keys currently being computed in background
 
 # Canonical phoneme cache — { reciter: { word_location_key: [phoneme, ...] } }
 _CANONICAL_PHONEMES_CACHE: dict[str, dict[str, list[str]]] = {}
@@ -799,9 +798,155 @@ def _seg_peaks_cache_path(reciter: str, key: str) -> Path:
     return CACHE_DIR / reciter / "seg_peaks" / f"{url_hash}.json"
 
 
+_URL_AUDIO_META: dict[str, tuple[int, int]] = {}  # url -> (id3_offset, bytes_per_sec)
+
+
+def _get_audio_meta(url: str) -> tuple[int, int]:
+    """Return (id3_offset, bytes_per_sec) for a remote MP3 URL.
+
+    Fetches the first 10 bytes for the ID3v2 tag size, then the first ~50 KB
+    of the file for ffprobe to determine the stream bitrate.  Handles CBR at
+    any bitrate (64/96/128/192/256 kbps).  Cached per URL.
+    """
+    if url in _URL_AUDIO_META:
+        return _URL_AUDIO_META[url]
+    import urllib.request
+    id3_offset = 0
+    bps = 16_000   # default: 128 kbps
+    try:
+        # ID3v2 tag size
+        req = urllib.request.Request(url)
+        req.add_header("Range", "bytes=0-9")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            hdr = resp.read(10)
+        if len(hdr) >= 10 and hdr[:3] == b"ID3":
+            id3_offset = (hdr[6] << 21 | hdr[7] << 14 | hdr[8] << 7 | hdr[9]) + 10
+        # Fetch first chunk (ID3 + a few KB of audio) → ffprobe for bitrate
+        probe_end = id3_offset + 50_000
+        req2 = urllib.request.Request(url)
+        req2.add_header("Range", f"bytes=0-{probe_end}")
+        with urllib.request.urlopen(req2, timeout=10) as resp2:
+            probe_data = resp2.read()
+        fd, tmp = tempfile.mkstemp(suffix=".mp3")
+        try:
+            os.write(fd, probe_data)
+            os.close(fd)
+            result = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-select_streams", "a:0",
+                 "-show_entries", "stream=bit_rate",
+                 "-of", "default=noprint_wrappers=1:nokey=1", tmp],
+                capture_output=True, timeout=5, text=True,
+            )
+            if result.returncode == 0 and result.stdout.strip().isdigit():
+                stream_bps = int(result.stdout.strip()) // 8
+                if stream_bps > 0:
+                    bps = stream_bps
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    except Exception:
+        pass
+    _URL_AUDIO_META[url] = (id3_offset, bps)
+    return id3_offset, bps
+
+
+def _get_audio_data_offset(url: str) -> int:
+    """Return the byte offset where audio frames begin (past ID3v2 tag)."""
+    return _get_audio_meta(url)[0]
+
+
+def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
+                          bytes_per_sec: float = 16_000) -> bytes | None:
+    """Download only the needed bytes via HTTP Range and decode with ffmpeg.
+
+    For remote CBR MP3s, ffmpeg's ``-ss`` on an HTTP URL downloads from the
+    start of the file to reach the seek point — very slow for long surahs.
+    Instead we compute the byte range from ``bytes_per_sec`` (read from the
+    MP3 frame header per-URL), fetch ~500 KB via a single Range request, and
+    decode the small local chunk.
+
+    Returns None on download/decode failure.
+    """
+    import urllib.request
+
+    BPS = bytes_per_sec
+    PAD_SEC = 5                     # extra seconds for MP3 frame alignment
+
+    audio_offset = _get_audio_data_offset(url)
+    byte_start_ideal = audio_offset + int((start_sec - PAD_SEC) * BPS)
+    if byte_start_ideal >= audio_offset:
+        byte_start = byte_start_ideal
+        early_seek = False
+    else:
+        byte_start = audio_offset
+        early_seek = True
+    byte_end = audio_offset + int((start_sec + duration_sec + PAD_SEC) * BPS)
+
+    t_dl = _time.monotonic()
+    try:
+        req = urllib.request.Request(url)
+        req.add_header("Range", f"bytes={byte_start}-{byte_end}")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status not in (200, 206):
+                return None
+            chunk = resp.read()
+    except Exception:
+        return None
+    dl_ms = (_time.monotonic() - t_dl) * 1000
+
+    if len(chunk) < 1000:
+        return None
+
+    fd, tmp_name = tempfile.mkstemp(suffix=".mp3")
+    try:
+        os.write(fd, chunk)
+        os.close(fd)
+        t_ff = _time.monotonic()
+        result = subprocess.run(
+            ["ffmpeg", "-i", tmp_name, "-f", "s16le", "-ac", "1",
+             "-ar", str(PEAKS_SAMPLE_RATE), "-v", "quiet", "-"],
+            capture_output=True, timeout=10,
+        )
+        ff_ms = (_time.monotonic() - t_ff) * 1000
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    finally:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+
+    if result.returncode != 0 or len(result.stdout) < 4:
+        return None
+
+    raw = result.stdout
+    total_samples = len(raw) // 2
+
+    # Trim: skip to target start, keep target duration.
+    if early_seek:
+        skip_sec = start_sec
+    else:
+        skip_sec = PAD_SEC
+    skip_samples = int(skip_sec * PEAKS_SAMPLE_RATE)
+    take_samples = int(duration_sec * PEAKS_SAMPLE_RATE)
+    if total_samples < skip_samples + take_samples:
+        skip_samples = max(0, total_samples - take_samples)
+    start_byte = skip_samples * 2
+    end_byte = start_byte + take_samples * 2
+    trimmed = raw[start_byte:end_byte]
+
+    print(f"[peak timing] range   seek={start_sec:.0f}s  dl={dl_ms:.0f}ms({len(chunk) // 1024}KB)  "
+          f"ffmpeg={ff_ms:.0f}ms  trimmed={len(trimmed)}  total_raw={len(raw)}")
+    return trimmed if len(trimmed) >= 4 else None
+
+
 def _compute_segment_peaks(url: str, start_ms: int, end_ms: int,
-                           reciter: str) -> dict | None:
-    """Compute peaks for a time slice via ffmpeg input-seeking. Uses local cache if available."""
+                           reciter: str,
+                           cached_only: bool = False) -> dict | None:
+    """Compute peaks for a time slice. Uses local cache, HTTP Range, or remote seek.
+    If cached_only=True, return disk-cached peaks only (no ffmpeg)."""
     t0 = _time.monotonic()
     cache_key = f"{url}|{start_ms}|{end_ms}"
     cache_path = _seg_peaks_cache_path(reciter, cache_key)
@@ -815,40 +960,51 @@ def _compute_segment_peaks(url: str, start_ms: int, end_ms: int,
         except (json.JSONDecodeError, OSError):
             pass
 
-    # Prefer local cached audio (instant seek) over remote URL (HTTP Range)
+    if cached_only:
+        return None
+
     local_path = _audio_cache_path(reciter, url)
-    source = str(local_path) if local_path.exists() else url
     is_local = local_path.exists()
 
     start_sec = start_ms / 1000.0
     duration_sec = (end_ms - start_ms) / 1000.0
+    raw = None
+    source_label = "local" if is_local else "remote"
 
-    t_ffmpeg = _time.monotonic()
-    try:
-        result = subprocess.run(
-            ["ffmpeg", "-ss", str(start_sec), "-t", str(duration_sec),
-             "-i", source, "-f", "s16le", "-ac", "1", "-ar", str(PEAKS_SAMPLE_RATE),
-             "-v", "quiet", "-"],
-            capture_output=True, timeout=30,
-        )
-        if result.returncode != 0 or len(result.stdout) < 4:
-            return None
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    if is_local:
+        # Fast local seek
+        t_ffmpeg = _time.monotonic()
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-ss", str(start_sec), "-t", str(duration_sec),
+                 "-i", str(local_path), "-f", "s16le", "-ac", "1", "-ar", str(PEAKS_SAMPLE_RATE),
+                 "-v", "quiet", "-"],
+                capture_output=True, timeout=30,
+            )
+            if result.returncode == 0 and len(result.stdout) >= 4:
+                raw = result.stdout
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+    else:
+        # Remote: HTTP Range download (~500KB) instead of streaming whole file
+        _, bps = _get_audio_meta(url)
+        raw = _range_decode_segment(url, start_sec, duration_sec, bps)
+        if raw is not None:
+            source_label = "range"
+
+    if raw is None or len(raw) < 4:
         return None
-    t_ffmpeg_done = _time.monotonic()
 
-    raw = result.stdout
     num_samples = len(raw) // 2
-    if num_samples == 0:
-        return None
     samples = struct.unpack(f"<{num_samples}h", raw)
 
     duration_ms_actual = int(num_samples / PEAKS_SAMPLE_RATE * 1000)
     duration_sec_actual = num_samples / PEAKS_SAMPLE_RATE
     num_buckets = max(10, int(duration_sec_actual * PEAKS_BUCKETS_PER_SEC))
-    print(f"[peak timing] {'local' if is_local else 'remote':6s}  {end_ms - start_ms}ms slice  "
-          f"ffmpeg={(_time.monotonic() - t_ffmpeg) * 1000:.0f}ms  "
-          f"bytes={len(raw)}  total={(_time.monotonic() - t0) * 1000:.0f}ms")
+    if source_label != "range":
+        print(f"[peak timing] {source_label:6s}  {end_ms - start_ms}ms slice  "
+              f"ffmpeg={(_time.monotonic() - t_ffmpeg) * 1000:.0f}ms  "
+              f"bytes={len(raw)}  total={(_time.monotonic() - t0) * 1000:.0f}ms")
 
     block_size = max(1, num_samples // num_buckets)
     peaks = []
@@ -1799,26 +1955,31 @@ def get_seg_peaks(reciter):
         if url:
             target_urls.add(url)
 
-    # Return whatever is already cached
+    # Return whatever is already cached (memory + disk)
     with _PEAKS_LOCK:
         cached = _PEAKS_CACHE.get(reciter, {})
     result = {u: cached[u] for u in target_urls if u in cached}
-    complete = len(result) >= len(target_urls)
 
-    # Start background computation for missing URLs
-    cache_key = f"{reciter}:{chapters_param}"
-    if not complete and cache_key not in _PEAKS_COMPUTING:
-        _PEAKS_COMPUTING.add(cache_key)
+    # Load disk-cached peaks synchronously for any missing URLs (fast JSON reads)
+    missing = [u for u in target_urls if u not in result]
+    if missing:
+        disk_loaded = {}
+        for u in missing:
+            cp = _peaks_cache_path(reciter, u)
+            if cp.exists():
+                try:
+                    with open(cp, encoding="utf-8") as f:
+                        disk_loaded[u] = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    pass
+        if disk_loaded:
+            with _PEAKS_LOCK:
+                if reciter not in _PEAKS_CACHE:
+                    _PEAKS_CACHE[reciter] = {}
+                _PEAKS_CACHE[reciter].update(disk_loaded)
+            result.update(disk_loaded)
 
-        def _bg():
-            try:
-                _get_peaks_for_reciter(reciter, chapter_filter)
-            finally:
-                _PEAKS_COMPUTING.discard(cache_key)
-
-        threading.Thread(target=_bg, daemon=True).start()
-
-    return jsonify({"peaks": result, "complete": complete})
+    return jsonify({"peaks": result, "complete": True})
 
 
 @app.route("/api/seg/segment-peaks/<reciter>", methods=["POST"])
@@ -1830,6 +1991,7 @@ def get_segment_peaks(reciter):
     segments = data.get("segments", [])
     if not segments or len(segments) > 200:
         return jsonify({"error": "Provide 1-200 segments"}), 400
+    cached_only = bool(data.get("cached_only", False))
 
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -1841,7 +2003,7 @@ def get_segment_peaks(reciter):
             key = seg.get("key", f"{url}|{start_ms}|{end_ms}")
             if not url or end_ms <= start_ms:
                 continue
-            futures[pool.submit(_compute_segment_peaks, url, start_ms, end_ms, reciter)] = (key, start_ms)
+            futures[pool.submit(_compute_segment_peaks, url, start_ms, end_ms, reciter, cached_only)] = (key, start_ms)
         for future in concurrent.futures.as_completed(futures):
             key, req_start_ms = futures[future]
             try:

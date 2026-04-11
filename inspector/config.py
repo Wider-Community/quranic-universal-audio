@@ -62,8 +62,8 @@ SHOW_BOUNDARY_PHONEMES = False     # show GT/ASR tail phonemes on boundary_adj c
 
 # Peaks computation
 PEAKS_SAMPLE_RATE = 2000      # Hz — sample rate for ffmpeg peak extraction (lower = faster)
-PEAKS_BUCKETS_PER_SEC = 10    # number of peak buckets per second of audio
-PEAKS_NEIGHBOR_COUNT = 1      # number of segments after to prefetch peaks on click
+PEAKS_BUCKETS_PER_SEC = 50    # number of peak buckets per second of audio
+PEAKS_NEIGHBOR_COUNT = 0      # number of segments after to prefetch peaks on click
 
 # Accordion context card defaults per category
 # Values: "hidden" (collapsed), "shown" (prev+next auto-open), "next_only" (next auto-open)
