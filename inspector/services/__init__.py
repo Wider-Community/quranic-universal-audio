@@ -1,1 +1,1 @@
-"""Inspector service modules (populated in Phase 2)."""
+"""Inspector service modules: business logic extracted from server.py."""
