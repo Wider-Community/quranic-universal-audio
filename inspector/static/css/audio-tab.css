@@ -1,0 +1,6 @@
+/* ============ Audio tab ============ */
+#aud-player {
+    width: 500px;
+    flex-shrink: 1;
+    min-width: 200px;
+}

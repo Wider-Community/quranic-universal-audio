@@ -1,0 +1,287 @@
+/* ============ Info bar ============ */
+.info-bar {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+    padding: 15px 20px;
+    background: #16213e;
+    border-radius: 8px;
+}
+
+.info-bar label {
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.info-bar label[hidden] {
+    display: none;
+}
+
+.info-bar select {
+    padding: 8px 12px;
+    background: #1a1a3e;
+    color: #4cc9f0;
+    border: 1px solid #333;
+    border-radius: 6px;
+    font-size: 14px;
+    max-width: 660px;
+}
+
+/* ============ Buttons ============ */
+.btn {
+    padding: 10px 20px;
+    background: #4361ee;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    margin-left: auto;
+    transition: background 0.2s;
+}
+
+.btn:hover {
+    background: #3a56d4;
+}
+
+.btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+}
+
+.btn-nav {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.btn-sm {
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    color: #eee;
+}
+
+.btn-save {
+    background: #2e7d32;
+    margin-left: 0;
+}
+
+.btn-save:hover:not(:disabled) {
+    background: #1b5e20;
+}
+
+.btn-history {
+    background: #1a237e;
+    margin-left: 0;
+}
+.btn-history:hover:not(:disabled) {
+    background: #283593;
+}
+
+.btn-confirm {
+    background: #2e7d32;
+}
+
+.btn-confirm:hover {
+    background: #1b5e20;
+}
+
+.btn-cancel {
+    background: #616161;
+}
+
+.btn-cancel:hover {
+    background: #424242;
+}
+
+.btn-preview {
+    background: #6a1b9a;
+}
+
+.btn-preview:hover {
+    background: #4a148c;
+}
+
+.btn-adjust,
+.btn-split,
+.btn-edit-ref {
+    background: #37474f;
+}
+
+.btn-adjust:hover,
+.btn-split:hover,
+.btn-edit-ref:hover {
+    background: #455a64;
+}
+
+.btn-delete {
+    background: #6d1a1a;
+}
+
+.btn-delete:hover {
+    background: #b71c1c;
+}
+
+.btn-merge-prev, .btn-merge-next { background: #1565c0; }
+.btn-merge-prev:hover, .btn-merge-next:hover { background: #0d47a1; }
+
+/* ============ Audio controls ============ */
+.audio-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    align-self: center;
+}
+.ts-speed-label {
+    font-size: 0.85rem;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.ts-speed-label select {
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 0.85rem;
+}
+
+.ts-random-group {
+    display: flex;
+    gap: 6px;
+}
+
+#audio-player {
+    width: 500px;
+    flex-shrink: 1;
+    min-width: 200px;
+}
+
+/* ============ Shortcuts & Guide ============ */
+
+.shortcuts-guide {
+    background: #16213e;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.shortcuts-guide[open] {
+    border-color: #3a3a5a;
+}
+
+.shortcuts-guide-summary {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #aaa;
+    user-select: none;
+    list-style: none;
+    font-weight: 600;
+}
+
+.shortcuts-guide-summary::before {
+    content: '\25B6';
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 0.65rem;
+    transition: transform 0.15s;
+}
+
+.shortcuts-guide[open] .shortcuts-guide-summary::before {
+    transform: rotate(90deg);
+}
+
+.shortcuts-guide-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px 24px;
+    padding: 4px 16px 12px;
+}
+
+.shortcuts-guide-body h4 {
+    margin: 0 0 4px;
+    font-size: 0.8rem;
+    color: #8ab4f8;
+    font-weight: 600;
+}
+
+.shortcuts-guide-body dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    font-size: 0.78rem;
+}
+
+.shortcuts-guide-body dt {
+    color: #ccc;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.shortcuts-guide-body dd {
+    margin: 0;
+    color: #888;
+}
+
+/* ============ SearchableSelect ============ */
+.ss-wrapper {
+    position: relative;
+    display: inline-block;
+}
+.ss-input {
+    background: #16213e;
+    color: #4cc9f0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.9rem;
+    width: 260px;
+}
+.ss-input:focus {
+    outline: 1px solid #4cc9f0;
+}
+.ss-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #1a1a3e;
+    border: 1px solid #333;
+    border-radius: 0 0 4px 4px;
+    z-index: 100;
+}
+.ss-group-label {
+    padding: 6px 8px 3px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #8fb8d8;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+.ss-option {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #ccc;
+    white-space: nowrap;
+}
+.ss-option-grouped {
+    padding-left: 20px;
+}
+.ss-option:hover,
+.ss-highlight {
+    background: #16213e;
+    color: #4cc9f0;
+}

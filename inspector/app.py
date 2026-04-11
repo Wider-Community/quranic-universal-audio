@@ -97,7 +97,15 @@ if __name__ == "__main__":
         str(_base / "static" / "js" / "shared" / "arabic-text.js"),
         str(_base / "static" / "js" / "shared" / "surah-info.js"),
         str(_base / "static" / "js" / "shared" / "constants.js"),
-        str(_base / "static" / "style.css"),
+        str(_base / "static" / "css" / "base.css"),
+        str(_base / "static" / "css" / "components.css"),
+        str(_base / "static" / "css" / "timestamps.css"),
+        str(_base / "static" / "css" / "segments.css"),
+        str(_base / "static" / "css" / "validation.css"),
+        str(_base / "static" / "css" / "history.css"),
+        str(_base / "static" / "css" / "stats.css"),
+        str(_base / "static" / "css" / "filters.css"),
+        str(_base / "static" / "css" / "audio-tab.css"),
         str(_base / "static" / "index.html"),
     ]
 
