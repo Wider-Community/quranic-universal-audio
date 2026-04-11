@@ -4,24 +4,23 @@ Flask web app for reviewing and editing Quran recitation alignment results. Thre
 
 ## Setup
 
+Run in a terminal:
+
 ```bash
 pip install -r inspector/requirements.txt
 ```
 
-**Highly recommended:** Install [ffmpeg](https://ffmpeg.org/) to enable waveforms on segment cards during playback.
+**Highly recommended:** Install [ffmpeg](https://ffmpeg.org/) to enable waveforms on segment cards during playback. Download from https://ffmpeg.org/download.html or install via terminal:
 
-- **Windows**: `winget install ffmpeg` or download from https://ffmpeg.org/download.html
+- **Windows**: `winget install ffmpeg` 
 - **macOS**: `brew install ffmpeg`
 - **Linux**: `sudo apt install ffmpeg` (Debian/Ubuntu) or `sudo dnf install ffmpeg` (Fedora)
 
 ## Run
 
 ```bash
-python inspector/server.py
+python inspector/server.py # then open http://localhost:5000 in your browser
 ```
-
-Open http://localhost:5000.
-
 
 ## Segments Reviewing
 
@@ -31,7 +30,7 @@ The main editing interface in the **Segments** tab. Browse the AI-generated segm
 
 ### Getting started
 
-Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache chapter audio locally (~1-2 GB) for offline editing and quicker waveform rendering. 
+Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache chapter audio locally (~1-2 GB) for offline editing. 
 
 **This is also needed if you notice segments' audio consistently don't match their text and play audio from neighbouring segments instead (CDN streaming issue with a small number of reciters).**
 
@@ -119,10 +118,9 @@ This is especially important at verse boundaries — the HuggingFace dataset rec
 
 <!-- screenshot: qalqala segment with waveform showing the sound -->
 
-#### Muqattaat
+#### Muqatta'at
 
-Segments starting with huruf muqattaat (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if there are any issues with the reference or boundaries.
-
+Segments starting with huruf muqatta'at (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if any issues are spotted.
 <!-- screenshot: muqattaat segment -->
 
 <!-- screenshot: editing operations in action -->
