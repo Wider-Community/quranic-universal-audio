@@ -1,0 +1,310 @@
+Generated: 2026-04-11 21:30:28
+
+========================================================================
+  yasser_al_dosari
+  data/recitation_segments/yasser_al_dosari
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   50 ms
+  Min speech:    50 ms
+  Padding:       20 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      9 verses
+
+--- Segments ---
+  Total:            12006
+  Single-seg:       2932
+  Multi-seg verses: 3183 (9074 segs)
+  Cross-verse keys: 199
+  Max segs/verse:   17
+
+--- Segment Duration ---
+  Min:    0.82s
+  Median: 7.16s
+  Mean:   7.43s
+  Max:    46.09s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.06s
+  Median: 0.28s
+  Mean:   0.31s
+  Max:    9.86s
+
+--- Alignment Confidence ---
+  Min:       0.6700
+  Median:    1.0000
+  Mean:      0.9828
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 14
+  Failed:    21 (no alignment)
+  Empty ASR: 1 (matched but no phonemes)
+
+--- Failed Alignments (21) ---
+  18:59.7 - 18:59.9  (0.24s)
+    audio: https://server11.mp3quran.net/yasser/002.mp3
+  38:54.0 - 38:54.1  (0.12s)
+    audio: https://server11.mp3quran.net/yasser/003.mp3
+  1:10:28.6 - 1:10:28.9  (0.30s)
+    audio: https://server11.mp3quran.net/yasser/004.mp3
+    asr:   q Q
+  22:19.7 - 22:20.1  (0.34s)
+    audio: https://server11.mp3quran.net/yasser/006.mp3
+    asr:   n
+  23:53.6 - 23:53.9  (0.34s)
+    audio: https://server11.mp3quran.net/yasser/006.mp3
+    asr:   q
+  24:00.0 - 24:00.3  (0.30s)
+    audio: https://server11.mp3quran.net/yasser/006.mp3
+    asr:   q Q
+  46:59.3 - 47:00.4  (1.12s)
+    audio: https://server11.mp3quran.net/yasser/006.mp3
+    asr:   n
+  54:45.9 - 54:46.2  (0.28s)
+    audio: https://server11.mp3quran.net/yasser/006.mp3
+    asr:   q Q
+  4:19.4 - 4:20.7  (1.33s)
+    audio: https://server11.mp3quran.net/yasser/007.mp3
+    asr:   n
+  49:57.5 - 49:57.8  (0.32s)
+    audio: https://server11.mp3quran.net/yasser/007.mp3
+  32:39.5 - 32:41.0  (1.50s)
+    audio: https://server11.mp3quran.net/yasser/009.mp3
+    asr:   n
+  37:19.4 - 37:20.1  (0.66s)
+    audio: https://server11.mp3quran.net/yasser/009.mp3
+    asr:   n
+  13:20.0 - 13:20.3  (0.30s)
+    audio: https://server11.mp3quran.net/yasser/013.mp3
+    asr:   q Q
+  19:28.4 - 19:28.7  (0.30s)
+    audio: https://server11.mp3quran.net/yasser/020.mp3
+    asr:   tˤ Q
+  20:15.9 - 20:16.2  (0.30s)
+    audio: https://server11.mp3quran.net/yasser/021.mp3
+  23:27.1 - 23:27.5  (0.34s)
+    audio: https://server11.mp3quran.net/yasser/021.mp3
+    asr:   q Q
+  15:45.4 - 15:45.7  (0.38s)
+    audio: https://server11.mp3quran.net/yasser/043.mp3
+    asr:   q Q
+  1:05.7 - 1:05.9  (0.26s)
+    audio: https://server11.mp3quran.net/yasser/045.mp3
+    asr:   q aˤ
+  11:54.4 - 11:54.6  (0.24s)
+    audio: https://server11.mp3quran.net/yasser/046.mp3
+    asr:   q Q
+  6:19.9 - 6:22.0  (2.12s)
+    audio: https://server11.mp3quran.net/yasser/057.mp3
+    asr:   n
+  4:39.9 - 4:40.8  (0.84s)
+    audio: https://server11.mp3quran.net/yasser/070.mp3
+    asr:   n
+
+--- Missing Words (9) ---
+  2:68  @ 22:25.7 - 22:44.3
+    missing words: [8]
+    audio: https://server11.mp3quran.net/yasser/002.mp3
+  2:103  @ 36:32.3 - 36:41.7
+    missing words: [10, 11, 12]
+    audio: https://server11.mp3quran.net/yasser/002.mp3
+  2:271  @ 1:50:38.1 - 1:51:01.3
+    missing words: [5]
+    audio: https://server11.mp3quran.net/yasser/002.mp3
+  5:41  @ 19:19.2 - 20:29.3
+    missing words: [50]
+    audio: https://server11.mp3quran.net/yasser/005.mp3
+  5:63  @ 30:39.1 - 30:56.4
+    missing words: [9]
+    audio: https://server11.mp3quran.net/yasser/005.mp3
+  8:75  @ 21:21.2 - 21:39.7
+    missing words: [22]
+    audio: https://server11.mp3quran.net/yasser/008.mp3
+  11:57  @ 19:30.8 - 19:52.3
+    missing words: [15]
+    audio: https://server11.mp3quran.net/yasser/011.mp3
+  31:33  @ 9:04.8 - 9:38.1
+    missing words: [18]
+    audio: https://server11.mp3quran.net/yasser/031.mp3
+  49:18  @ 5:12.4 - 5:19.9
+    missing words: [10]
+    audio: https://server11.mp3quran.net/yasser/049.mp3
+
+--- Low Confidence <80% (14) ---
+  [0.6700]  50:1:1-50:1:1  @ 0:05.1 - 0:08.1
+           audio: https://server11.mp3quran.net/yasser/050.mp3
+           text:  قٓ ۚ
+  [0.6900]  42:2:1-42:2:1  @ 0:12.3 - 0:23.3
+           audio: https://server11.mp3quran.net/yasser/042.mp3
+           text:  عٓسٓقٓ
+  [0.7000]  24:35:10-24:35:12  @ 12:10.1 - 12:13.0
+           audio: https://server11.mp3quran.net/yasser/024.mp3
+           text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
+  [0.7100]  7:1:1-7:1:1  @ 0:07.2 - 0:19.3
+           audio: https://server11.mp3quran.net/yasser/007.mp3
+           text:  الٓمٓصٓ
+  [0.7100]  7:49:8-7:49:9  @ 17:40.2 - 17:43.7
+           audio: https://server11.mp3quran.net/yasser/007.mp3
+           text:  ٱدْخُلُوا۟ ٱلْجَنَّةَ
+  [0.7100]  46:35:22-46:35:22  @ 12:24.8 - 12:28.0
+           audio: https://server11.mp3quran.net/yasser/046.mp3
+           text:  بَلَـٰغٌ ۚ
+  [0.7500]  6:19:26-6:19:28  @ 5:19.0 - 5:22.5
+           audio: https://server11.mp3quran.net/yasser/006.mp3
+           text:  قُل لَّآ أَشْهَدُ ۚ
+  [0.7500]  13:1:1-13:1:1  @ 0:03.6 - 0:15.5
+           audio: https://server11.mp3quran.net/yasser/013.mp3
+           text:  الٓمٓر ۚ
+  [0.7600]  104:9:1-104:9:3  @ 0:37.0 - 0:40.0
+           audio: https://server11.mp3quran.net/yasser/104.mp3
+           text:  فِى عَمَدٍ مُّمَدَّدَةٍ
+  [0.7700]  24:35:33-24:35:35  @ 12:45.1 - 12:49.1
+           audio: https://server11.mp3quran.net/yasser/024.mp3
+           text:  نُّورٌ عَلَىٰ نُورٍ ۗ
+  [0.7800]  33:13:19-33:13:21  @ 4:04.2 - 4:06.2
+           audio: https://server11.mp3quran.net/yasser/033.mp3
+           text:  وَمَا هِىَ بِعَوْرَةٍ ۖ
+  [0.7800]  38:49:1-38:49:2  @ 9:12.2 - 9:13.5
+           audio: https://server11.mp3quran.net/yasser/038.mp3
+           text:  هَـٰذَا ذِكْرٌ ۚ
+  [0.7900]  5:3:29-5:3:30  @ 1:58.0 - 1:59.8
+           audio: https://server11.mp3quran.net/yasser/005.mp3
+           text:  ذَٰلِكُمْ فِسْقٌ ۗ
+  [0.7900]  10:4:4-10:4:6  @ 1:19.8 - 1:22.0
+           audio: https://server11.mp3quran.net/yasser/010.mp3
+           text:  وَعْدَ ٱللَّهِ حَقًّا ۚ
+
+--- Detected Repetitions (9) ---
+  [0.9400]  2:274:1-2:274:17  @ 1:52:08.3 - 1:52:35.7
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  ٱلَّذِينَ يُنفِقُونَ أَمْوَٰلَهُم بِٱلَّيْلِ وَٱلنَّهَارِ سِرًّا وَعَلَانِيَةً فَلَهُمْ أَجْرُهُمْ عِندَ رَبِّهِمْ وَلَا خَوْفٌ عَلَيْهِمْ وَلَا هُمْ يَحْزَنُونَ
+  [0.9200]  7:50:6-7:50:10  @ 18:14.5 - 18:33.3
+           audio: https://server11.mp3quran.net/yasser/007.mp3
+           text:  أَنْ أَفِيضُوا۟ عَلَيْنَا مِنَ ٱلْمَآءِ
+  [0.8800]  7:179:23-7:179:27  @ 1:03:26.4 - 1:03:39.2
+           audio: https://server11.mp3quran.net/yasser/007.mp3
+           text:  أُو۟لَـٰٓئِكَ كَٱلْأَنْعَـٰمِ بَلْ هُمْ أَضَلُّ ۚ
+  [0.9700]  9:14:1-9:15:8  @ 4:57.4 - 5:21.0
+           audio: https://server11.mp3quran.net/yasser/009.mp3
+           text:  قَـٰتِلُوهُمْ يُعَذِّبْهُمُ ٱللَّهُ بِأَيْدِيكُمْ وَيُخْزِهِمْ وَيَنصُرْكُمْ عَلَيْهِمْ وَيَشْفِ صُدُورَ قَوْمٍ مُّؤْمِنِينَ وَيُذْهِبْ غَيْظَ قُلُوبِهِمْ ۗ وَيَتُوبُ ٱللَّهُ عَلَىٰ مَن يَشَآءُ ۗ
+  [0.9500]  10:62:1-10:62:10  @ 22:14.5 - 22:28.1
+           audio: https://server11.mp3quran.net/yasser/010.mp3
+           text:  أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ وَلَا هُمْ يَحْزَنُونَ
+  [0.9300]  11:76:10-11:77:9  @ 25:19.1 - 25:44.7
+           audio: https://server11.mp3quran.net/yasser/011.mp3
+           text:  وَإِنَّهُمْ ءَاتِيهِمْ عَذَابٌ غَيْرُ مَرْدُودٍ وَلَمَّا جَآءَتْ رُسُلُنَا لُوطًا سِىٓءَ بِهِمْ وَضَاقَ بِهِمْ ذَرْعًا
+  [0.9700]  12:25:1-12:26:16  @ 7:48.1 - 8:33.7
+           audio: https://server11.mp3quran.net/yasser/012.mp3
+           text:  وَٱسْتَبَقَا ٱلْبَابَ وَقَدَّتْ قَمِيصَهُۥ مِن دُبُرٍ وَأَلْفَيَا سَيِّدَهَا لَدَا ٱلْبَابِ ۚ قَالَتْ مَا جَزَآءُ مَنْ أَرَادَ بِأَهْلِكَ سُوٓءًا إِلَّآ أَن يُسْجَنَ أَوْ عَذَابٌ أَلِيمٌ قَالَ هِىَ رَٰوَدَتْنِى عَن نَّفْسِى ۚ وَشَهِدَ شَاهِدٌ مِّنْ أَهْلِهَآ إِن كَانَ قَمِيصُهُۥ قُدَّ مِن قُبُلٍ فَصَدَقَتْ
+  [0.8600]  14:52:1-14:52:5  @ 17:37.7 - 17:48.9
+           audio: https://server11.mp3quran.net/yasser/014.mp3
+           text:  هَـٰذَا بَلَـٰغٌ لِّلنَّاسِ وَلِيُنذَرُوا۟ بِهِۦ
+  [0.9300]  27:62:1-27:62:10  @ 15:49.4 - 16:07.0
+           audio: https://server11.mp3quran.net/yasser/027.mp3
+           text:  أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ وَيَكْشِفُ ٱلسُّوٓءَ وَيَجْعَلُكُمْ خُلَفَآءَ ٱلْأَرْضِ ۗ
+
+--- May Require Boundary Adjustment (22) ---
+  [1.0000]  2:81:1-2:81:1  @ 26:59.5 - 27:00.4
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  بَلَىٰ
+  [1.0000]  3:125:1-3:125:1  @ 44:44.8 - 44:45.8
+           audio: https://server11.mp3quran.net/yasser/003.mp3
+           text:  بَلَىٰٓ ۚ
+  [0.9200]  4:176:1-4:176:1  @ 1:12:46.8 - 1:12:48.4
+           audio: https://server11.mp3quran.net/yasser/004.mp3
+           text:  يَسْتَفْتُونَكَ
+  [1.0000]  11:65:1-11:65:1  @ 22:24.5 - 22:26.2
+           audio: https://server11.mp3quran.net/yasser/011.mp3
+           text:  فَعَقَرُوهَا
+  [1.0000]  16:38:10-16:38:10  @ 9:50.1 - 9:51.1
+           audio: https://server11.mp3quran.net/yasser/016.mp3
+           text:  بَلَىٰ
+  [1.0000]  17:60:20-17:60:20  @ 16:09.4 - 16:11.0
+           audio: https://server11.mp3quran.net/yasser/017.mp3
+           text:  وَنُخَوِّفُهُمْ
+  [1.0000]  18:71:1-18:71:1  @ 20:23.1 - 20:25.6
+           audio: https://server11.mp3quran.net/yasser/018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  18:74:1-18:74:1  @ 20:52.6 - 20:55.4
+           audio: https://server11.mp3quran.net/yasser/018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  18:77:1-18:77:1  @ 21:30.8 - 21:33.5
+           audio: https://server11.mp3quran.net/yasser/018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  25:59:14-25:59:14  @ 13:14.1 - 13:17.2
+           audio: https://server11.mp3quran.net/yasser/025.mp3
+           text:  ٱلرَّحْمَـٰنُ
+  [0.8000]  26:209:1-26:209:1  @ 23:44.9 - 23:45.9
+           audio: https://server11.mp3quran.net/yasser/026.mp3
+           text:  ذِكْرَىٰ
+  [0.8900]  33:61:1-33:61:1  @ 22:19.2 - 22:22.2
+           audio: https://server11.mp3quran.net/yasser/033.mp3
+           text:  مَّلْعُونِينَ ۖ
+  [1.0000]  35:37:21-35:37:21  @ 12:37.1 - 12:38.5
+           audio: https://server11.mp3quran.net/yasser/035.mp3
+           text:  فَذُوقُوا۟
+  [1.0000]  37:11:1-37:11:1  @ 0:57.3 - 0:58.6
+           audio: https://server11.mp3quran.net/yasser/037.mp3
+           text:  فَٱسْتَفْتِهِمْ
+  [1.0000]  37:149:1-37:149:1  @ 14:08.1 - 14:09.5
+           audio: https://server11.mp3quran.net/yasser/037.mp3
+           text:  فَٱسْتَفْتِهِمْ
+  [1.0000]  38:57:1-38:57:1  @ 10:05.7 - 10:06.8
+           audio: https://server11.mp3quran.net/yasser/038.mp3
+           text:  هَـٰذَا
+  [1.0000]  43:80:8-43:80:8  @ 14:39.5 - 14:40.3
+           audio: https://server11.mp3quran.net/yasser/043.mp3
+           text:  بَلَىٰ
+  [1.0000]  46:33:17-46:33:17  @ 11:38.4 - 11:39.4
+           audio: https://server11.mp3quran.net/yasser/046.mp3
+           text:  بَلَىٰٓ
+  [1.0000]  50:41:1-50:41:1  @ 7:08.1 - 7:09.2
+           audio: https://server11.mp3quran.net/yasser/050.mp3
+           text:  وَٱسْتَمِعْ
+  [0.8000]  75:4:1-75:4:1  @ 0:22.3 - 0:23.2
+           audio: https://server11.mp3quran.net/yasser/075.mp3
+           text:  بَلَىٰ
+  [1.0000]  84:15:1-84:15:1  @ 1:07.7 - 1:08.5
+           audio: https://server11.mp3quran.net/yasser/084.mp3
+           text:  بَلَىٰٓ
+  [1.0000]  106:2:1-106:2:1  @ 0:02.4 - 0:03.8
+           audio: https://server11.mp3quran.net/yasser/106.mp3
+           text:  إِۦلَـٰفِهِمْ
+
+--- Cross-verse (200) ---
+  [0.9800]  1:6:1-1:7:4  @ 0:29.6 - 0:35.8
+           audio: https://server11.mp3quran.net/yasser/001.mp3
+           text:  ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ
+  [0.9500]  2:29:16-2:30:9  @ 9:27.1 - 9:41.1
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  وَهُوَ بِكُلِّ شَىْءٍ عَلِيمٌ وَإِذْ قَالَ رَبُّكَ لِلْمَلَـٰٓئِكَةِ إِنِّى جَاعِلٌ فِى ٱلْأَرْضِ خَلِيفَةً ۖ
+  [0.9700]  2:118:20-2:119:5  @ 41:58.3 - 42:13.2
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  قَدْ بَيَّنَّا ٱلْـَٔايَـٰتِ لِقَوْمٍ يُوقِنُونَ إِنَّآ أَرْسَلْنَـٰكَ بِٱلْحَقِّ بَشِيرًا وَنَذِيرًا ۖ
+  [0.9800]  2:155:11-2:156:5  @ 55:36.9 - 55:47.5
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  وَبَشِّرِ ٱلصَّـٰبِرِينَ ٱلَّذِينَ إِذَآ أَصَـٰبَتْهُم مُّصِيبَةٌ قَالُوٓا۟
+  [1.0000]  2:168:13-2:169:11  @ 1:00:35.3 - 1:00:57.2
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  إِنَّهُۥ لَكُمْ عَدُوٌّ مُّبِينٌ إِنَّمَا يَأْمُرُكُم بِٱلسُّوٓءِ وَٱلْفَحْشَآءِ وَأَن تَقُولُوا۟ عَلَى ٱللَّهِ مَا لَا تَعْلَمُونَ
+  [0.9600]  2:219:20-2:220:3  @ 1:22:49.4 - 1:22:58.6
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  كَذَٰلِكَ يُبَيِّنُ ٱللَّهُ لَكُمُ ٱلْـَٔايَـٰتِ لَعَلَّكُمْ تَتَفَكَّرُونَ فِى ٱلدُّنْيَا وَٱلْـَٔاخِرَةِ ۗ
+  [0.9800]  2:283:29-2:284:7  @ 1:58:38.2 - 1:58:47.4
+           audio: https://server11.mp3quran.net/yasser/002.mp3
+           text:  وَٱللَّهُ بِمَا تَعْمَلُونَ عَلِيمٌ لِّلَّهِ مَا فِى ٱلسَّمَـٰوَٰتِ وَمَا فِى ٱلْأَرْضِ ۗ
+  [0.9300]  3:1:1-3:2:7  @ 0:03.1 - 0:17.0
+           audio: https://server11.mp3quran.net/yasser/003.mp3
+           text:  الٓمٓ ٱللَّهُ لَآ إِلَـٰهَ إِلَّا هُوَ ٱلْحَىُّ ٱلْقَيُّومُ
+  [0.9800]  3:50:17-3:51:5  @ 18:57.9 - 19:09.1
+           audio: https://server11.mp3quran.net/yasser/003.mp3
+           text:  فَٱتَّقُوا۟ ٱللَّهَ وَأَطِيعُونِ إِنَّ ٱللَّهَ رَبِّى وَرَبُّكُمْ فَٱعْبُدُوهُ ۗ
+  [0.9300]  3:133:10-3:134:4  @ 46:55.9 - 47:05.1
+           audio: https://server11.mp3quran.net/yasser/003.mp3
+           text:  أُعِدَّتْ لِلْمُتَّقِينَ ٱلَّذِينَ يُنفِقُونَ فِى ٱلسَّرَّآءِ
+  [0.9800]  4:49:12-4:50:6  @ 23:26.5 - 23:35.3
+           audio: https://server11.mp3quran.net/yasser/004.mp3
