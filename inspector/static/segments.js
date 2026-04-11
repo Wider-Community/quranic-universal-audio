@@ -370,9 +370,11 @@ let _standaloneWords = null;  // Set of stripped Arabic words
 let _qalqalaLetters  = null;  // Set of Arabic letters
 // Default threshold % for low-confidence slider (overridden from config)
 let _lcDefaultThreshold = 80;
-// Accordion context card defaults (overridden from config)
-let _contextDefaultOpen = new Set(['failed', 'boundary_adj', 'audio_bleeding', 'repetitions']);
-let _contextNextOnly    = new Set(['muqattaat', 'qalqala']);
+// Accordion context mode per category: "hidden" | "shown" | "next_only" (overridden from config)
+let _accordionContext = {
+    failed: 'shown', low_confidence: 'hidden', boundary_adj: 'hidden', cross_verse: 'hidden',
+    audio_bleeding: 'shown', repetitions: 'shown', muqattaat: 'next_only', qalqala: 'next_only',
+};
 
 // SearchableSelect instance for segments chapter dropdown
 let segChapterSS = null;
@@ -446,8 +448,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cfg.standalone_refs) _standaloneRefs = new Set(cfg.standalone_refs.map(([s,a,w]) => `${s}:${a}:${w}`));
             if (cfg.standalone_words) _standaloneWords = new Set(cfg.standalone_words);
             if (cfg.peaks_neighbor_count != null) PEAKS_NEIGHBOR_COUNT = cfg.peaks_neighbor_count;
-            if (cfg.context_default_open) _contextDefaultOpen = new Set(cfg.context_default_open);
-            if (cfg.context_next_only) _contextNextOnly = new Set(cfg.context_next_only);
+            if (cfg.accordion_context) _accordionContext = cfg.accordion_context;
         }
     } catch (_) { /* use CSS defaults */ }
 
@@ -4742,7 +4743,7 @@ function renderValidationPanel(data, chapter = null, targetEl = segValidationEl,
         cardsDiv.hidden = true;
 
         // "Show/Hide All Context" bulk toggle — label reflects whether context is default-shown
-        const _ctxDefaultShown = _contextDefaultOpen.has(cat.type);
+        const _ctxDefaultShown = (_accordionContext[cat.type] || 'hidden') !== 'hidden';
         const ctxAllRow = document.createElement('div');
         ctxAllRow.className = 'val-ctx-all-row';
         ctxAllRow.hidden = true;
@@ -5646,7 +5647,8 @@ function renderCategoryCards(type, items, container) {
             }
 
             wrapper.appendChild(actionsRow);
-            addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: _contextDefaultOpen.has(type), nextOnly: _contextNextOnly.has(type) });
+            const _ctxMode = _accordionContext[type] || 'hidden';
+            addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: _ctxMode !== 'hidden', nextOnly: _ctxMode === 'next_only' });
             container.appendChild(wrapper);
         }
     }
@@ -6494,12 +6496,17 @@ function renderHistoryFilterBar(data) {
     const allItems = _flattenBatchesToItems(data.batches, chainedOpIds);
     _allHistoryItems = allItems;
 
-    // Op type pills: count items by primary op type
+    // Op type pills: count items by primary op type + split chains
     const opCounts = {};
     for (const item of allItems) {
         if (item.group.length === 0) continue;
         const primary = item.group[0].op_type;
         opCounts[primary] = (opCounts[primary] || 0) + 1;
+    }
+    if (_splitChains) {
+        for (const chain of _splitChains.values()) {
+            opCounts['split_segment'] = (opCounts['split_segment'] || 0) + 1;
+        }
     }
     const sortedOps = Object.entries(opCounts).sort((a, b) => b[1] - a[1]);
     for (const [opType, count] of sortedOps) {
@@ -6653,6 +6660,12 @@ function _updateFilterPillCounts(allItems) {
     for (const item of itemsForOpCounts) {
         if (item.group.length === 0) continue;
         opCounts[item.group[0].op_type] = (opCounts[item.group[0].op_type] || 0) + 1;
+    }
+    // Include split chains in op counts (not filtered by cat since chains lack category info)
+    if (_splitChains && !catActive) {
+        for (const chain of _splitChains.values()) {
+            opCounts['split_segment'] = (opCounts['split_segment'] || 0) + 1;
+        }
     }
     for (const pill of segHistoryFilterOps.querySelectorAll('.seg-history-filter-pill')) {
         const span = pill.querySelector('.pill-count');

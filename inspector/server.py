@@ -53,7 +53,7 @@ from config import (
     BOUNDARY_TAIL_K, SHOW_BOUNDARY_PHONEMES,
     LOW_CONF_DEFAULT_THRESHOLD,
     PEAKS_SAMPLE_RATE, PEAKS_BUCKETS_PER_SEC, PEAKS_NEIGHBOR_COUNT,
-    CONTEXT_DEFAULT_OPEN, CONTEXT_NEXT_ONLY,
+    ACCORDION_CONTEXT,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -442,8 +442,7 @@ def seg_config():
         "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
         "standalone_words": sorted(_STANDALONE_WORDS),
         "peaks_neighbor_count": PEAKS_NEIGHBOR_COUNT,
-        "context_default_open": CONTEXT_DEFAULT_OPEN,
-        "context_next_only": CONTEXT_NEXT_ONLY,
+        "accordion_context": ACCORDION_CONTEXT,
     })
 
 

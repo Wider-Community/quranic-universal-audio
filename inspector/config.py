@@ -65,8 +65,15 @@ PEAKS_SAMPLE_RATE = 2000      # Hz — sample rate for ffmpeg peak extraction (l
 PEAKS_BUCKETS_PER_SEC = 10    # number of peak buckets per second of audio
 PEAKS_NEIGHBOR_COUNT = 1      # number of segments after to prefetch peaks on click
 
-# Accordion context card defaults
-# Categories where context (prev/next) cards are shown by default when the accordion opens
-CONTEXT_DEFAULT_OPEN = ["failed", "boundary_adj", "audio_bleeding", "repetitions"]
-# Categories where only the "next" context card is shown (no "previous")
-CONTEXT_NEXT_ONLY = ["muqattaat", "qalqala"]
+# Accordion context card defaults per category
+# Values: "hidden" (collapsed), "shown" (prev+next auto-open), "next_only" (next auto-open)
+ACCORDION_CONTEXT = {
+    "failed":         "shown",
+    "low_confidence": "hidden",
+    "boundary_adj":   "hidden",
+    "cross_verse":    "hidden",
+    "audio_bleeding": "shown",
+    "repetitions":    "hidden",
+    "muqattaat":      "hidden",
+    "qalqala":        "hidden",
+}
