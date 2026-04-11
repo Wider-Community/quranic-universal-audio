@@ -35,27 +35,38 @@ UNIFIED_DISPLAY_MAX_HEIGHT = 800  # px
 #   ease-in-out  — slow both ends
 #   none         — instant snap, no animation
 ANIM_TRANSITION_EASING = "ease"
-ANIM_HIGHLIGHT_COLOR = "#f0a500"          # gold — active word/char color (both views)
-ANIM_WORD_TRANSITION_DURATION = 0.15      # seconds — word opacity transition
-ANIM_CHAR_TRANSITION_DURATION = 0.02      # seconds — char opacity transition
-ANIM_WORD_SPACING = "0.2em"               # gap between words in animation view
-ANIM_LINE_HEIGHT = 2.0                    # line-height for animation text
-ANIM_FONT_SIZE = "44px"                   # Arabic text size in animation view
+ANIM_HIGHLIGHT_COLOR = "#f0a500"       # gold — active word/char color (both views)
+ANIM_WORD_TRANSITION_DURATION = 0.15   # seconds — word opacity transition
+ANIM_CHAR_TRANSITION_DURATION = 0.02   # seconds — char opacity transition
+ANIM_WORD_SPACING = "0.2em"            # gap between words in animation view
+ANIM_LINE_HEIGHT = 2.0                 # line-height for animation text
+ANIM_FONT_SIZE = "44px"                # Arabic text size in animation view
 
 # Analysis view settings
-ANALYSIS_WORD_FONT_SIZE = "1.5rem"         # word row text size in analysis view
-ANALYSIS_LETTER_FONT_SIZE = "1.75rem"      # letter sub-row text size in analysis view
+ANALYSIS_WORD_FONT_SIZE = "1.5rem"     # word row text size in analysis view
+ANALYSIS_LETTER_FONT_SIZE = "1.75rem"  # letter sub-row text size in analysis view
 
 # Segments tab settings
-SEG_FONT_SIZE = "1.8rem"                  # Arabic text size in segment cards
-LOW_CONF_DEFAULT_THRESHOLD = 80           # default % for low-confidence slider (50–99)
-SEG_WORD_SPACING = "0.2em"                # gap between words in segment cards
+SEG_FONT_SIZE = "1.8rem"           # Arabic text size in segment cards
+LOW_CONF_DEFAULT_THRESHOLD = 80    # default % for low-confidence slider (50–99)
+SEG_WORD_SPACING = "0.2em"         # gap between words in segment cards
 
 # Adjust (trim) mode settings
-TRIM_PAD_LEFT = 10000                     # ms padding before segment
-TRIM_PAD_RIGHT = 10000                    # ms padding after segment
-TRIM_DIM_ALPHA = 0.3                      # dimming opacity for padded regions
+TRIM_PAD_LEFT = 10000              # ms padding before segment
+TRIM_PAD_RIGHT = 10000             # ms padding after segment
+TRIM_DIM_ALPHA = 0.3               # dimming opacity for padded regions
 
 # Boundary adjustment: phoneme tail mismatch detection
-BOUNDARY_TAIL_K = 3                       # number of trailing phonemes to compare
-SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards
+BOUNDARY_TAIL_K = 3                # number of trailing phonemes to compare
+SHOW_BOUNDARY_PHONEMES = False     # show GT/ASR tail phonemes on boundary_adj cards
+
+# Peaks computation
+PEAKS_SAMPLE_RATE = 2000      # Hz — sample rate for ffmpeg peak extraction (lower = faster)
+PEAKS_BUCKETS_PER_SEC = 10    # number of peak buckets per second of audio
+PEAKS_NEIGHBOR_COUNT = 1      # number of segments after to prefetch peaks on click
+
+# Accordion context card defaults
+# Categories where context (prev/next) cards are shown by default when the accordion opens
+CONTEXT_DEFAULT_OPEN = ["failed", "boundary_adj", "audio_bleeding", "repetitions"]
+# Categories where only the "next" context card is shown (no "previous")
+CONTEXT_NEXT_ONLY = ["muqattaat", "qalqala"]

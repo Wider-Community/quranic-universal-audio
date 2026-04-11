@@ -1076,9 +1076,10 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     color: #4cc9f0;
 }
 
-.qalqala-filter-row { gap: 6px; }
+.qalqala-filter-row { gap: 6px; align-items: center; }
+.qalqala-filter-sep { color: #555; margin: 0 2px; }
 .val-btn.qalqala-letter-btn { font-size: 1.1em; min-width: 2.2em; }
-.val-btn.qalqala-letter-btn.active {
+.val-btn.qalqala-letter-btn.active, .val-btn.qalqala-eov-btn.active {
     background: rgba(76, 201, 240, 0.3);
     border-color: #4cc9f0;
     color: #fff;
@@ -1280,7 +1281,7 @@ body.seg-edit-active .seg-row:not(.seg-edit-target) {
     padding: 2px 0 4px;
 }
 
-/* Action buttons row (Ignore/AutoFix + Show Context side by side) */
+/* Action buttons row (Ignore/AutoFill + Show Context side by side) */
 .val-card-actions {
     display: flex;
     gap: 6px;

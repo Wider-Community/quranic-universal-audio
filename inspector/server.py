@@ -52,6 +52,8 @@ from config import (
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
     BOUNDARY_TAIL_K, SHOW_BOUNDARY_PHONEMES,
     LOW_CONF_DEFAULT_THRESHOLD,
+    PEAKS_SAMPLE_RATE, PEAKS_BUCKETS_PER_SEC, PEAKS_NEIGHBOR_COUNT,
+    CONTEXT_DEFAULT_OPEN, CONTEXT_NEXT_ONLY,
 )
 
 # Word text lookup (qpc_hafs.json: "1:1:1" -> {"text": "...", ...})
@@ -246,6 +248,36 @@ def _get_canonical_phonemes(reciter: str) -> dict[str, list[str]] | None:
     return data
 
 
+_CANONICAL_BUILD_EVENTS: dict[str, threading.Event] = {}
+
+
+def _get_canonical_phonemes_nonblocking(reciter: str) -> dict[str, list[str]] | None:
+    """Return canonical phonemes if cached (memory or disk), else start a
+    background build and return None immediately."""
+    if reciter in _CANONICAL_PHONEMES_CACHE:
+        return _CANONICAL_PHONEMES_CACHE[reciter]
+
+    cache_path = CACHE_DIR / reciter / "canonical_phonemes.pkl"
+    if cache_path.exists():
+        with open(cache_path, "rb") as f:
+            data = pickle.load(f)
+        _CANONICAL_PHONEMES_CACHE[reciter] = data
+        return data
+
+    if not _HAS_PHONEMIZER:
+        return None
+
+    # Cold cache — kick off background build (once per reciter)
+    if reciter not in _CANONICAL_BUILD_EVENTS:
+        event = threading.Event()
+        _CANONICAL_BUILD_EVENTS[reciter] = event
+        def _build():
+            _get_canonical_phonemes(reciter)
+            event.set()
+        threading.Thread(target=_build, daemon=True).start()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -409,6 +441,9 @@ def seg_config():
         "qalqala_letters": sorted(_QALQALA_LETTERS),
         "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
         "standalone_words": sorted(_STANDALONE_WORDS),
+        "peaks_neighbor_count": PEAKS_NEIGHBOR_COUNT,
+        "context_default_open": CONTEXT_DEFAULT_OPEN,
+        "context_next_only": CONTEXT_NEXT_ONLY,
     })
 
 
@@ -759,6 +794,87 @@ def _peaks_cache_path(reciter: str, key: str) -> Path:
     return CACHE_DIR / reciter / "peaks" / f"{url_hash}.json"
 
 
+def _seg_peaks_cache_path(reciter: str, key: str) -> Path:
+    """Return disk cache path for per-segment peaks JSON."""
+    url_hash = hashlib.sha256(key.encode()).hexdigest()[:32]
+    return CACHE_DIR / reciter / "seg_peaks" / f"{url_hash}.json"
+
+
+def _compute_segment_peaks(url: str, start_ms: int, end_ms: int,
+                           reciter: str) -> dict | None:
+    """Compute peaks for a time slice via ffmpeg input-seeking. Uses local cache if available."""
+    t0 = _time.monotonic()
+    cache_key = f"{url}|{start_ms}|{end_ms}"
+    cache_path = _seg_peaks_cache_path(reciter, cache_key)
+    if cache_path.exists():
+        try:
+            with open(cache_path, encoding="utf-8") as f:
+                data = json.load(f)
+            print(f"[peak timing] cache hit  {end_ms - start_ms}ms slice  "
+                  f"{(_time.monotonic() - t0) * 1000:.0f}ms total")
+            return data
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Prefer local cached audio (instant seek) over remote URL (HTTP Range)
+    local_path = _audio_cache_path(reciter, url)
+    source = str(local_path) if local_path.exists() else url
+    is_local = local_path.exists()
+
+    start_sec = start_ms / 1000.0
+    duration_sec = (end_ms - start_ms) / 1000.0
+
+    t_ffmpeg = _time.monotonic()
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-ss", str(start_sec), "-t", str(duration_sec),
+             "-i", source, "-f", "s16le", "-ac", "1", "-ar", str(PEAKS_SAMPLE_RATE),
+             "-v", "quiet", "-"],
+            capture_output=True, timeout=30,
+        )
+        if result.returncode != 0 or len(result.stdout) < 4:
+            return None
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    t_ffmpeg_done = _time.monotonic()
+
+    raw = result.stdout
+    num_samples = len(raw) // 2
+    if num_samples == 0:
+        return None
+    samples = struct.unpack(f"<{num_samples}h", raw)
+
+    duration_ms_actual = int(num_samples / PEAKS_SAMPLE_RATE * 1000)
+    duration_sec_actual = num_samples / PEAKS_SAMPLE_RATE
+    num_buckets = max(10, int(duration_sec_actual * PEAKS_BUCKETS_PER_SEC))
+    print(f"[peak timing] {'local' if is_local else 'remote':6s}  {end_ms - start_ms}ms slice  "
+          f"ffmpeg={(_time.monotonic() - t_ffmpeg) * 1000:.0f}ms  "
+          f"bytes={len(raw)}  total={(_time.monotonic() - t0) * 1000:.0f}ms")
+
+    block_size = max(1, num_samples // num_buckets)
+    peaks = []
+    for i in range(num_buckets):
+        start = i * block_size
+        end = min(start + block_size, num_samples)
+        if start >= num_samples:
+            break
+        block = samples[start:end]
+        mn = min(block) / 32768.0
+        mx = max(block) / 32768.0
+        peaks.append([round(mn, 4), round(mx, 4)])
+
+    data = {"duration_ms": duration_ms_actual, "peaks": peaks}
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, separators=(",", ":"))
+    except OSError:
+        pass
+
+    return data
+
+
 def _compute_audio_peaks(audio_source: str, cache_key: str | None = None,
                          reciter: str | None = None) -> dict | None:
     """Compute waveform peaks for a local file path or URL. Returns {duration_ms, peaks} or None."""
@@ -772,10 +888,10 @@ def _compute_audio_peaks(audio_source: str, cache_key: str | None = None,
         except (json.JSONDecodeError, OSError):
             pass
 
-    # Decode to raw mono 16-bit PCM at 8kHz via ffmpeg
+    # Decode to raw mono 16-bit PCM via ffmpeg
     try:
         result = subprocess.run(
-            ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1", "-ar", "8000",
+            ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1", "-ar", str(PEAKS_SAMPLE_RATE),
              "-v", "quiet", "-"],
             capture_output=True, timeout=300,
         )
@@ -790,9 +906,9 @@ def _compute_audio_peaks(audio_source: str, cache_key: str | None = None,
         return None
     samples = struct.unpack(f"<{num_samples}h", raw)
 
-    duration_ms = int(num_samples / 8000 * 1000)
-    duration_sec = num_samples / 8000
-    num_buckets = max(100, int(duration_sec * 10))
+    duration_ms = int(num_samples / PEAKS_SAMPLE_RATE * 1000)
+    duration_sec = num_samples / PEAKS_SAMPLE_RATE
+    num_buckets = max(100, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
 
     block_size = max(1, num_samples // num_buckets)
     peaks = []
@@ -1149,6 +1265,515 @@ def get_seg_all(reciter):
     })
 
 
+@app.route("/api/seg/load/<reciter>")
+def load_reciter_segments(reciter):
+    """Combined endpoint: return all segments + validation in a single pass.
+
+    Merges the work of ``get_seg_all`` and ``validate_reciter_segments`` to
+    avoid iterating entries twice and eliminate GIL contention from parallel
+    requests.
+    """
+    _t0 = _time.perf_counter()
+    entries = _load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter not found"}), 404
+
+    word_counts = _get_word_counts()
+    canonical = _get_canonical_phonemes_nonblocking(reciter)
+    meta = _SEG_META_CACHE.get(reciter, {})
+    audio_source = meta.get("audio_source", "")
+    is_by_ayah = "by_ayah" in audio_source
+    _single_word_verses = {k for k, v in word_counts.items() if v == 1}
+
+    # -- all --
+    segments = []
+    audio_by_chapter = {}
+
+    # -- validate --
+    v_errors = []
+    v_missing_verses = []
+    v_missing_words = []
+    v_failed = []
+    v_low_confidence = []
+    v_boundary_adj = []
+    v_cross_verse = []
+    v_audio_bleeding = []
+    v_repetitions = []
+    v_muqattaat = []
+    v_qalqala = []
+    verse_segments: dict[tuple[int, int], list] = defaultdict(list)
+
+    chapter_seg_idx: dict[int, int] = {}
+
+    for entry_idx, entry in enumerate(entries):
+        chapter = _chapter_from_ref(entry["ref"])
+        entry_audio = entry.get("audio", "")
+        entry_ref = entry.get("ref", "")
+        if str(chapter) not in audio_by_chapter:
+            audio_by_chapter[str(chapter)] = entry_audio
+
+        for seg in entry.get("segments", []):
+            idx = chapter_seg_idx.get(chapter, 0)
+            chapter_seg_idx[chapter] = idx + 1
+            matched_ref = seg.get("matched_ref", "")
+            confidence = seg.get("confidence", 0.0)
+            t_start = seg.get("time_start", 0)
+            t_end = seg.get("time_end", 0)
+
+            # --- all: build seg_dict ---
+            seg_uid = seg.get("segment_uid") or ""
+            if not seg_uid:
+                seg_uid = _uuid7()
+                seg["segment_uid"] = seg_uid
+            seg_dict = {
+                "chapter":      chapter,
+                "entry_idx":    entry_idx,
+                "index":        idx,
+                "segment_uid":  seg_uid,
+                "time_start":   t_start,
+                "time_end":     t_end,
+                "matched_ref":  matched_ref,
+                "matched_text": seg.get("matched_text", ""),
+                "display_text": _dk_text_for_ref(matched_ref),
+                "confidence":   round(confidence, 4),
+                "audio_url":    entry_audio,
+                "entry_ref":    entry_ref,
+            }
+            if seg.get("wrap_word_ranges"):
+                seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            if seg.get("ignored_categories"):
+                seg_dict["ignored_categories"] = seg["ignored_categories"]
+            elif seg.get("ignored"):
+                seg_dict["ignored_categories"] = ["_all"]
+            segments.append(seg_dict)
+
+            # --- validate: per-segment checks ---
+
+            # Failed alignment
+            if not matched_ref:
+                v_failed.append({
+                    "chapter": chapter, "seg_index": idx,
+                    "time": f"{_format_ms(t_start)}-{_format_ms(t_end)}",
+                })
+                continue
+
+            # Audio bleeding (by_ayah only)
+            if is_by_ayah and ":" in entry_ref and not _seg_belongs_to_entry(matched_ref, entry_ref):
+                seg_start = matched_ref.split("-")[0]
+                seg_parts = seg_start.split(":")
+                matched_verse = f"{seg_parts[0]}:{seg_parts[1]}" if len(seg_parts) >= 2 else matched_ref
+                v_audio_bleeding.append({
+                    "chapter": chapter, "seg_index": idx,
+                    "entry_ref": entry_ref, "matched_verse": matched_verse,
+                    "ref": matched_ref, "confidence": round(confidence, 4),
+                    "time": f"{_format_ms(t_start)}-{_format_ms(t_end)}",
+                    "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
+                })
+
+            # Detected repetitions
+            if seg.get("wrap_word_ranges"):
+                parts = matched_ref.split("-")
+                display_ref = matched_ref
+                if len(parts) == 2:
+                    s_parts = parts[0].split(":")
+                    e_parts = parts[1].split(":")
+                    if len(s_parts) >= 2 and len(e_parts) >= 2 and s_parts[1] == e_parts[1]:
+                        display_ref = f"{s_parts[0]}:{s_parts[1]}"
+                v_repetitions.append({
+                    "chapter": chapter, "seg_index": idx,
+                    "ref": matched_ref, "display_ref": display_ref,
+                    "confidence": round(confidence, 4),
+                    "time": f"{_format_ms(t_start)}-{_format_ms(t_end)}",
+                    "text": seg.get("matched_text", ""),
+                })
+
+            # Low confidence (all non-100% for client-side slider)
+            if confidence < 1.0:
+                parts = matched_ref.split("-")
+                display_ref = matched_ref
+                if len(parts) == 2:
+                    s = parts[0].split(":")
+                    e = parts[1].split(":")
+                    if len(s) >= 2 and len(e) >= 2:
+                        if s[1] == e[1]:
+                            display_ref = f"{s[0]}:{s[1]}"
+                        else:
+                            display_ref = f"{s[0]}:{s[1]}-{e[1]}"
+                v_low_confidence.append({
+                    "ref": display_ref, "chapter": chapter,
+                    "seg_index": idx, "confidence": round(confidence, 4),
+                })
+
+            # Parse ref for cross-verse / word coverage / boundary
+            parts = matched_ref.split("-")
+            if len(parts) != 2:
+                continue
+            start_parts = parts[0].split(":")
+            end_parts = parts[1].split(":")
+            if len(start_parts) != 3 or len(end_parts) != 3:
+                continue
+            try:
+                s_ayah = int(start_parts[1])
+                e_ayah = int(end_parts[1])
+                s_word = int(start_parts[2])
+                e_word = int(end_parts[2])
+                surah = int(start_parts[0])
+            except (ValueError, IndexError):
+                continue
+
+            # Cross-verse
+            if s_ayah != e_ayah:
+                if not _is_ignored_for(seg, "cross_verse"):
+                    v_cross_verse.append({
+                        "chapter": chapter, "seg_index": idx, "ref": matched_ref,
+                    })
+                for ayah in range(s_ayah, e_ayah + 1):
+                    if ayah == s_ayah:
+                        wc = word_counts.get((surah, ayah), s_word)
+                        verse_segments[(surah, ayah)].append((s_word, wc, idx))
+                    elif ayah == e_ayah:
+                        verse_segments[(surah, ayah)].append((1, e_word, idx))
+                    else:
+                        wc = word_counts.get((surah, ayah), 1)
+                        verse_segments[(surah, ayah)].append((1, wc, idx))
+            else:
+                verse_segments[(surah, s_ayah)].append((s_word, e_word, idx))
+                is_boundary_adj = False
+                if (s_word == e_word
+                    and not _is_ignored_for(seg, "boundary_adj")
+                    and (surah, s_ayah) not in _MUQATTAAT_VERSES
+                    and (surah, s_ayah) not in _single_word_verses
+                    and (surah, s_ayah, s_word) not in _STANDALONE_REFS
+                    and _strip_quran_deco(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
+                    is_boundary_adj = True
+
+                if (not is_boundary_adj and canonical and not _is_ignored_for(seg, "boundary_adj")
+                    and seg.get("phonemes_asr")):
+                    if _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
+                                              canonical, BOUNDARY_TAIL_K):
+                        is_boundary_adj = True
+
+                if is_boundary_adj:
+                    item = {
+                        "chapter": chapter, "seg_index": idx,
+                        "ref": matched_ref, "verse_key": f"{surah}:{s_ayah}",
+                    }
+                    if SHOW_BOUNDARY_PHONEMES and canonical and seg.get("phonemes_asr"):
+                        display_n = BOUNDARY_TAIL_K + 2
+                        tails = _get_phoneme_tails(seg["phonemes_asr"], matched_ref,
+                                                   canonical, display_n)
+                        if tails:
+                            item["gt_tail"] = " ".join(tails[0])
+                            item["asr_tail"] = " ".join(tails[1])
+                    v_boundary_adj.append(item)
+
+            # Muqatta'at
+            if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
+                if not _is_ignored_for(seg, "muqattaat"):
+                    v_muqattaat.append({
+                        "chapter": chapter, "seg_index": idx, "ref": matched_ref,
+                    })
+
+            # Qalqala
+            _last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
+            if _last_ltr and _last_ltr in _QALQALA_LETTERS and not _is_ignored_for(seg, "qalqala"):
+                v_qalqala.append({
+                    "chapter": chapter, "seg_index": idx,
+                    "ref": matched_ref, "qalqala_letter": _last_ltr,
+                    "end_of_verse": e_word == word_counts.get((surah, e_ayah), 0),
+                })
+
+    # --- validate post-loop: missing words ---
+    for (surah, ayah), seg_list in verse_segments.items():
+        expected = word_counts.get((surah, ayah))
+        if not expected:
+            continue
+        seg_list.sort(key=lambda x: x[0])
+        covered = set()
+        for wf, wt, _ in seg_list:
+            covered.update(range(wf, wt + 1))
+        missing = set(range(1, expected + 1)) - covered
+        if not missing:
+            continue
+
+        gap_indices = set()
+        for j in range(len(seg_list)):
+            wf, wt, seg_idx = seg_list[j]
+            if j + 1 < len(seg_list):
+                next_wf, _, next_idx = seg_list[j + 1]
+                if next_wf > wt + 1:
+                    gap_indices.add(seg_idx)
+                    gap_indices.add(next_idx)
+            if j == len(seg_list) - 1 and wt < expected:
+                gap_indices.add(seg_idx)
+            if j == 0 and wf > 1:
+                gap_indices.add(seg_idx)
+
+        auto_fix = None
+        if len(missing) == 1:
+            mw = next(iter(missing))
+            first_wf, first_wt, first_idx = seg_list[0]
+            last_wf, last_wt, last_idx = seg_list[-1]
+
+            if mw == 1 and first_wf > 1:
+                auto_fix = {"target_seg_index": first_idx,
+                            "new_ref_start": f"{surah}:{ayah}:1",
+                            "new_ref_end": f"{surah}:{ayah}:{first_wt}"}
+            elif mw == expected and last_wt < expected:
+                auto_fix = {"target_seg_index": last_idx,
+                            "new_ref_start": f"{surah}:{ayah}:{last_wf}",
+                            "new_ref_end": f"{surah}:{ayah}:{expected}"}
+            else:
+                for j in range(len(seg_list) - 1):
+                    wf, wt, s_idx = seg_list[j]
+                    next_wf, next_wt, next_idx = seg_list[j + 1]
+                    if wt + 1 == mw and mw + 1 == next_wf:
+                        if _word_has_stop(surah, ayah, wt):
+                            auto_fix = {"target_seg_index": next_idx,
+                                        "new_ref_start": f"{surah}:{ayah}:{mw}",
+                                        "new_ref_end": f"{surah}:{ayah}:{next_wt}"}
+                        elif _word_has_stop(surah, ayah, mw):
+                            auto_fix = {"target_seg_index": s_idx,
+                                        "new_ref_start": f"{surah}:{ayah}:{wf}",
+                                        "new_ref_end": f"{surah}:{ayah}:{mw}"}
+                        break
+
+        issue = {
+            "verse_key": f"{surah}:{ayah}", "chapter": surah,
+            "msg": f"missing words: {sorted(missing)}",
+            "seg_indices": sorted(gap_indices),
+        }
+        if auto_fix:
+            issue["auto_fix"] = auto_fix
+        v_missing_words.append(issue)
+
+    # --- validate post-loop: structural errors + missing verses + stats from segments.json ---
+    v_stats = None
+    verses, pad_ms = _load_seg_verses(reciter)
+    if verses:
+        total_segments = 0
+        single_seg = 0
+        multi_seg_verses = 0
+        multi_seg_segs = 0
+        max_segs = 0
+        cross_verse_count = 0
+        seg_durations = []
+        pause_durations = []
+
+        for verse_key, segs in verses.items():
+            is_cross_verse = "-" in verse_key
+            if is_cross_verse:
+                cross_verse_count += 1
+
+            n_segs = len(segs)
+            total_segments += n_segs
+            max_segs = max(max_segs, n_segs)
+            if n_segs == 1:
+                single_seg += 1
+            elif n_segs > 1:
+                multi_seg_verses += 1
+                multi_seg_segs += n_segs
+
+            if is_cross_verse:
+                kparts = verse_key.split("-")
+                start_kparts = kparts[0].split(":")
+                try:
+                    vk_surah = int(start_kparts[0])
+                except (ValueError, IndexError):
+                    continue
+            else:
+                vk_parts = verse_key.split(":")
+                if len(vk_parts) != 2:
+                    continue
+                vk_surah = int(vk_parts[0])
+
+            for s_idx, s in enumerate(segs):
+                if len(s) < 4:
+                    continue
+                w_from, w_to, t_from, t_to = s[0], s[1], s[2], s[3]
+                seg_durations.append(t_to - t_from)
+
+                if t_from >= t_to:
+                    v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
+                                     "msg": "time_from >= time_to"})
+                if w_from < 1:
+                    v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
+                                     "msg": "word_from < 1"})
+                if not is_cross_verse and w_to < w_from:
+                    v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
+                                     "msg": "word_to < word_from"})
+                elif is_cross_verse and w_to < 1:
+                    v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
+                                     "msg": "word_to < 1"})
+
+                if s_idx + 1 < len(segs) and len(segs[s_idx + 1]) >= 4:
+                    next_t_from = segs[s_idx + 1][2]
+                    if next_t_from < t_to:
+                        v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
+                                         "msg": "time overlap"})
+                    else:
+                        true_pause = (next_t_from - t_to) + 2 * pad_ms
+                        pause_durations.append(true_pause)
+
+        # Missing verses
+        all_verse_keys_in_file = set()
+        for verse_key in verses:
+            if "-" in verse_key:
+                kparts = verse_key.split("-")
+                start_kparts = kparts[0].split(":")
+                end_kparts = kparts[1].split(":")
+                try:
+                    s = int(start_kparts[0])
+                    for a in range(int(start_kparts[1]), int(end_kparts[1]) + 1):
+                        all_verse_keys_in_file.add((s, a))
+                except (ValueError, IndexError):
+                    pass
+            else:
+                vk_parts = verse_key.split(":")
+                if len(vk_parts) == 2:
+                    all_verse_keys_in_file.add((int(vk_parts[0]), int(vk_parts[1])))
+
+        covered_surahs = {_chapter_from_ref(entry["ref"]) for entry in entries}
+        for (surah, ayah) in sorted(word_counts):
+            if surah not in covered_surahs:
+                continue
+            if (surah, ayah) not in all_verse_keys_in_file:
+                v_missing_verses.append({
+                    "verse_key": f"{surah}:{ayah}", "chapter": surah,
+                    "msg": "missing verse",
+                })
+
+        v_stats = {
+            "segments": total_segments,
+            "single": single_seg,
+            "multi_verses": multi_seg_verses,
+            "multi_segs": multi_seg_segs,
+            "cross_verse": cross_verse_count,
+            "max_segs": max_segs,
+            "seg_dur_min": min(seg_durations) if seg_durations else 0,
+            "seg_dur_med": statistics.median(seg_durations) if seg_durations else 0,
+            "seg_dur_mean": statistics.mean(seg_durations) if seg_durations else 0,
+            "seg_dur_max": max(seg_durations) if seg_durations else 0,
+            "pause_dur_min": min(pause_durations) if pause_durations else 0,
+            "pause_dur_med": statistics.median(pause_durations) if pause_durations else 0,
+            "pause_dur_mean": statistics.mean(pause_durations) if pause_durations else 0,
+            "pause_dur_max": max(pause_durations) if pause_durations else 0,
+        }
+
+    # --- all post-loop: verse word counts ---
+    verse_word_counts = {}
+    for (surah, ayah), n in word_counts.items():
+        verse_word_counts[f"{surah}:{ayah}"] = n
+
+    print(f"[TIMING] /api/seg/load/{reciter}: {_time.perf_counter() - _t0:.3f}s")
+    return jsonify({
+        "all": {
+            "segments": segments,
+            "audio_by_chapter": audio_by_chapter,
+            "verse_word_counts": verse_word_counts,
+            "pad_ms": meta.get("pad_ms", 0),
+        },
+        "validation": {
+            "errors": v_errors,
+            "missing_verses": v_missing_verses,
+            "missing_words": v_missing_words,
+            "failed": v_failed,
+            "low_confidence": v_low_confidence,
+            "boundary_adj": v_boundary_adj,
+            "boundary_phonemes_pending": canonical is None and _HAS_PHONEMIZER,
+            "cross_verse": v_cross_verse,
+            "audio_bleeding": v_audio_bleeding,
+            "repetitions": v_repetitions,
+            "muqattaat": v_muqattaat,
+            "qalqala": v_qalqala,
+            "stats": v_stats,
+        },
+    })
+
+
+@app.route("/api/seg/boundary-phonemes/<reciter>")
+def get_boundary_phonemes(reciter):
+    """Return additional boundary-adj items detected via phoneme tail mismatch.
+
+    Blocks until canonical phonemes are available (background build may be
+    in progress).  Only returns items that require canonical phonemes — the
+    single-word heuristic items are already in the ``/load`` response.
+    """
+    # Wait for background build if in progress
+    event = _CANONICAL_BUILD_EVENTS.get(reciter)
+    if event:
+        event.wait()
+
+    canonical = _get_canonical_phonemes(reciter)
+    if not canonical:
+        return jsonify([])
+
+    entries = _load_detailed(reciter)
+    if not entries:
+        return jsonify([])
+
+    word_counts = _get_word_counts()
+    meta = _SEG_META_CACHE.get(reciter, {})
+    _single_word_verses = {k for k, v in word_counts.items() if v == 1}
+    chapter_seg_idx: dict[int, int] = {}
+    items = []
+
+    for entry in entries:
+        chapter = _chapter_from_ref(entry["ref"])
+        for seg in entry.get("segments", []):
+            idx = chapter_seg_idx.get(chapter, 0)
+            chapter_seg_idx[chapter] = idx + 1
+            matched_ref = seg.get("matched_ref", "")
+            if not matched_ref:
+                continue
+            parts = matched_ref.split("-")
+            if len(parts) != 2:
+                continue
+            start_parts = parts[0].split(":")
+            end_parts = parts[1].split(":")
+            if len(start_parts) != 3 or len(end_parts) != 3:
+                continue
+            try:
+                s_ayah = int(start_parts[1])
+                e_ayah = int(end_parts[1])
+                s_word = int(start_parts[2])
+                e_word = int(end_parts[2])
+                surah = int(start_parts[0])
+            except (ValueError, IndexError):
+                continue
+            if s_ayah != e_ayah:
+                continue  # cross-verse, skip
+
+            # Skip items already caught by single-word heuristic
+            if (s_word == e_word
+                and not _is_ignored_for(seg, "boundary_adj")
+                and (surah, s_ayah) not in _MUQATTAAT_VERSES
+                and (surah, s_ayah) not in _single_word_verses
+                and (surah, s_ayah, s_word) not in _STANDALONE_REFS
+                and _strip_quran_deco(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
+                continue  # already reported by heuristic
+
+            # Phoneme tail mismatch only
+            if (not _is_ignored_for(seg, "boundary_adj")
+                and seg.get("phonemes_asr")
+                and _tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref,
+                                           canonical, BOUNDARY_TAIL_K)):
+                item = {
+                    "chapter": chapter, "seg_index": idx,
+                    "ref": matched_ref, "verse_key": f"{surah}:{s_ayah}",
+                }
+                if SHOW_BOUNDARY_PHONEMES:
+                    display_n = BOUNDARY_TAIL_K + 2
+                    tails = _get_phoneme_tails(seg["phonemes_asr"], matched_ref,
+                                               canonical, display_n)
+                    if tails:
+                        item["gt_tail"] = " ".join(tails[0])
+                        item["asr_tail"] = " ".join(tails[1])
+                items.append(item)
+
+    return jsonify(items)
+
+
 @app.route("/api/seg/peaks/<reciter>")
 def get_seg_peaks(reciter):
     """Return pre-computed waveform peaks for a reciter's audio files."""
@@ -1195,6 +1820,40 @@ def get_seg_peaks(reciter):
         threading.Thread(target=_bg, daemon=True).start()
 
     return jsonify({"peaks": result, "complete": complete})
+
+
+@app.route("/api/seg/segment-peaks/<reciter>", methods=["POST"])
+def get_segment_peaks(reciter):
+    """Compute peaks for specific segment time ranges via ffmpeg seeking."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+    segments = data.get("segments", [])
+    if not segments or len(segments) > 200:
+        return jsonify({"error": "Provide 1-200 segments"}), 400
+
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {}
+        for seg in segments:
+            url = seg.get("audio_url", "")
+            start_ms = seg.get("start_ms", 0)
+            end_ms = seg.get("end_ms", 0)
+            key = seg.get("key", f"{url}|{start_ms}|{end_ms}")
+            if not url or end_ms <= start_ms:
+                continue
+            futures[pool.submit(_compute_segment_peaks, url, start_ms, end_ms, reciter)] = (key, start_ms)
+        for future in concurrent.futures.as_completed(futures):
+            key, req_start_ms = futures[future]
+            try:
+                peaks_data = future.result()
+                if peaks_data:
+                    peaks_data["range_start_ms"] = req_start_ms
+                    results[key] = peaks_data
+            except Exception:
+                pass
+
+    return jsonify({"peaks": results})
 
 
 # ---------------------------------------------------------------------------
@@ -2651,6 +3310,7 @@ def validate_reciter_segments(reciter):
                     "seg_index": i,
                     "ref": matched_ref,
                     "qalqala_letter": _last_ltr,
+                    "end_of_verse": e_word == word_counts.get((surah, e_ayah), 0),
                 })
 
     # Detect missing word pairs from detailed.json segments (global across all entries)
