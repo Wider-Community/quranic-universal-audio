@@ -1,0 +1,236 @@
+Generated: 2026-04-11 21:33:29
+
+========================================================================
+  abdullah_ali_jabir
+  data/recitation_segments/abdullah_ali_jabir
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   250 ms
+  Min speech:    250 ms
+  Padding:       100 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      0 verses
+
+--- Segments ---
+  Total:            8800
+  Single-seg:       3622
+  Multi-seg verses: 2012 (5178 segs)
+  Cross-verse keys: 507
+  Max segs/verse:   14
+
+--- Segment Duration ---
+  Min:    1.08s
+  Median: 8.97s
+  Mean:   9.48s
+  Max:    25.43s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.26s
+  Median: 0.88s
+  Mean:   0.91s
+  Max:    2.46s
+
+--- Alignment Confidence ---
+  Min:       0.8500
+  Median:    1.0000
+  Mean:      0.9867
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 0
+  Failed:    0 (no alignment)
+  Empty ASR: 58 (matched but no phonemes)
+
+--- Failed Alignments (0) ---
+
+--- Cross-verse (507) ---
+  [0.9900]  2:45:4-2:46:5  @ 15:09.9 - 15:22.8
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
+           text:  وَإِنَّهَا لَكَبِيرَةٌ إِلَّا عَلَى ٱلْخَـٰشِعِينَ ٱلَّذِينَ يَظُنُّونَ أَنَّهُم مُّلَـٰقُوا۟ رَبِّهِمْ
+  [0.9900]  2:155:11-2:156:10  @ 1:01:46.6 - 1:02:02.4
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
+           text:  وَبَشِّرِ ٱلصَّـٰبِرِينَ ٱلَّذِينَ إِذَآ أَصَـٰبَتْهُم مُّصِيبَةٌ قَالُوٓا۟ إِنَّا لِلَّهِ وَإِنَّآ إِلَيْهِ رَٰجِعُونَ
+  [0.9700]  2:183:1-2:184:2  @ 1:13:12.8 - 1:13:32.6
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
+           text:  يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ كُتِبَ عَلَيْكُمُ ٱلصِّيَامُ كَمَا كُتِبَ عَلَى ٱلَّذِينَ مِن قَبْلِكُمْ لَعَلَّكُمْ تَتَّقُونَ أَيَّامًا مَّعْدُودَٰتٍ ۚ
+  [0.9600]  2:219:20-2:220:3  @ 1:31:51.5 - 1:32:02.7
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
+           text:  كَذَٰلِكَ يُبَيِّنُ ٱللَّهُ لَكُمُ ٱلْـَٔايَـٰتِ لَعَلَّكُمْ تَتَفَكَّرُونَ فِى ٱلدُّنْيَا وَٱلْـَٔاخِرَةِ ۗ
+  [0.9700]  3:3:1-3:4:6  @ 0:28.8 - 0:47.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//003.mp3
+           text:  نَزَّلَ عَلَيْكَ ٱلْكِتَـٰبَ بِٱلْحَقِّ مُصَدِّقًا لِّمَا بَيْنَ يَدَيْهِ وَأَنزَلَ ٱلتَّوْرَىٰةَ وَٱلْإِنجِيلَ مِن قَبْلُ هُدًى لِّلنَّاسِ وَأَنزَلَ ٱلْفُرْقَانَ ۗ
+  [0.9900]  3:166:1-3:167:3  @ 1:01:22.9 - 1:01:36.4
+           audio: https://download.quranicaudio.com/quran/ali_jaber//003.mp3
+           text:  وَمَآ أَصَـٰبَكُمْ يَوْمَ ٱلْتَقَى ٱلْجَمْعَانِ فَبِإِذْنِ ٱللَّهِ وَلِيَعْلَمَ ٱلْمُؤْمِنِينَ وَلِيَعْلَمَ ٱلَّذِينَ نَافَقُوا۟ ۚ
+  [0.9700]  4:67:1-4:68:3  @ 33:03.5 - 33:18.6
+           audio: https://download.quranicaudio.com/quran/ali_jaber//004.mp3
+           text:  وَإِذًا لَّـَٔاتَيْنَـٰهُم مِّن لَّدُنَّآ أَجْرًا عَظِيمًا وَلَهَدَيْنَـٰهُمْ صِرَٰطًا مُّسْتَقِيمًا
+  [0.9500]  4:117:1-4:118:2  @ 55:51.4 - 56:07.8
+           audio: https://download.quranicaudio.com/quran/ali_jaber//004.mp3
+           text:  إِن يَدْعُونَ مِن دُونِهِۦٓ إِلَّآ إِنَـٰثًا وَإِن يَدْعُونَ إِلَّا شَيْطَـٰنًا مَّرِيدًا لَّعَنَهُ ٱللَّهُ ۘ
+  [0.9300]  4:157:32-4:158:4  @ 1:10:56.5 - 1:11:04.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//004.mp3
+           text:  وَمَا قَتَلُوهُ يَقِينًا بَل رَّفَعَهُ ٱللَّهُ إِلَيْهِ ۚ
+  [0.9700]  4:168:1-4:169:6  @ 1:13:58.1 - 1:14:15.3
+           audio: https://download.quranicaudio.com/quran/ali_jaber//004.mp3
+           text:  إِنَّ ٱلَّذِينَ كَفَرُوا۟ وَظَلَمُوا۟ لَمْ يَكُنِ ٱللَّهُ لِيَغْفِرَ لَهُمْ وَلَا لِيَهْدِيَهُمْ طَرِيقًا إِلَّا طَرِيقَ جَهَنَّمَ خَـٰلِدِينَ فِيهَآ أَبَدًا ۚ
+  [0.9700]  6:162:1-6:163:3  @ 58:14.7 - 58:27.4
+           audio: https://download.quranicaudio.com/quran/ali_jaber//006.mp3
+           text:  قُلْ إِنَّ صَلَاتِى وَنُسُكِى وَمَحْيَاىَ وَمَمَاتِى لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ لَا شَرِيكَ لَهُۥ ۖ
+  [0.9200]  7:29:14-7:30:6  @ 8:22.2 - 8:32.6
+           audio: https://download.quranicaudio.com/quran/ali_jaber//007.mp3
+           text:  كَمَا بَدَأَكُمْ تَعُودُونَ فَرِيقًا هَدَىٰ وَفَرِيقًا حَقَّ عَلَيْهِمُ ٱلضَّلَـٰلَةُ ۗ
+  [0.9900]  7:118:1-7:119:4  @ 35:43.8 - 35:54.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//007.mp3
+           text:  فَوَقَعَ ٱلْحَقُّ وَبَطَلَ مَا كَانُوا۟ يَعْمَلُونَ فَغُلِبُوا۟ هُنَالِكَ وَٱنقَلَبُوا۟ صَـٰغِرِينَ
+  [0.9800]  7:120:1-7:121:4  @ 35:55.3 - 36:03.8
+           audio: https://download.quranicaudio.com/quran/ali_jaber//007.mp3
+           text:  وَأُلْقِىَ ٱلسَّحَرَةُ سَـٰجِدِينَ قَالُوٓا۟ ءَامَنَّا بِرَبِّ ٱلْعَـٰلَمِينَ
+  [0.9900]  8:7:15-8:8:7  @ 2:13.4 - 2:31.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//008.mp3
+           text:  وَيُرِيدُ ٱللَّهُ أَن يُحِقَّ ٱلْحَقَّ بِكَلِمَـٰتِهِۦ وَيَقْطَعَ دَابِرَ ٱلْكَـٰفِرِينَ لِيُحِقَّ ٱلْحَقَّ وَيُبْطِلَ ٱلْبَـٰطِلَ وَلَوْ كَرِهَ ٱلْمُجْرِمُونَ
+  [0.9900]  8:62:8-8:63:3  @ 20:09.6 - 20:18.3
+           audio: https://download.quranicaudio.com/quran/ali_jaber//008.mp3
+           text:  هُوَ ٱلَّذِىٓ أَيَّدَكَ بِنَصْرِهِۦ وَبِٱلْمُؤْمِنِينَ وَأَلَّفَ بَيْنَ قُلُوبِهِمْ ۚ
+  [0.9300]  11:118:8-11:119:4  @ 35:44.8 - 35:51.7
+           audio: https://download.quranicaudio.com/quran/ali_jaber//011.mp3
+           text:  وَلَا يَزَالُونَ مُخْتَلِفِينَ إِلَّا مَن رَّحِمَ رَبُّكَ ۚ
+  [0.9800]  14:13:12-14:14:4  @ 5:32.7 - 5:43.8
+           audio: https://download.quranicaudio.com/quran/ali_jaber//014.mp3
+           text:  فَأَوْحَىٰٓ إِلَيْهِمْ رَبُّهُمْ لَنُهْلِكَنَّ ٱلظَّـٰلِمِينَ وَلَنُسْكِنَنَّكُمُ ٱلْأَرْضَ مِن بَعْدِهِمْ ۚ
+  [0.9900]  15:12:1-15:13:7  @ 1:59.3 - 2:11.7
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  كَذَٰلِكَ نَسْلُكُهُۥ فِى قُلُوبِ ٱلْمُجْرِمِينَ لَا يُؤْمِنُونَ بِهِۦ ۖ وَقَدْ خَلَتْ سُنَّةُ ٱلْأَوَّلِينَ
+  [0.9800]  15:37:1-15:38:4  @ 6:04.7 - 6:13.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  قَالَ فَإِنَّكَ مِنَ ٱلْمُنظَرِينَ إِلَىٰ يَوْمِ ٱلْوَقْتِ ٱلْمَعْلُومِ
+  [0.9800]  15:39:1-15:40:4  @ 6:14.9 - 6:30.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  قَالَ رَبِّ بِمَآ أَغْوَيْتَنِى لَأُزَيِّنَنَّ لَهُمْ فِى ٱلْأَرْضِ وَلَأُغْوِيَنَّهُمْ أَجْمَعِينَ إِلَّا عِبَادَكَ مِنْهُمُ ٱلْمُخْلَصِينَ
+  [0.9900]  15:59:1-15:60:6  @ 9:02.9 - 9:17.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  إِلَّآ ءَالَ لُوطٍ إِنَّا لَمُنَجُّوهُمْ أَجْمَعِينَ إِلَّا ٱمْرَأَتَهُۥ قَدَّرْنَآ ۙ إِنَّهَا لَمِنَ ٱلْغَـٰبِرِينَ
+  [0.9900]  15:61:1-15:62:4  @ 9:18.8 - 9:31.4
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  فَلَمَّا جَآءَ ءَالَ لُوطٍ ٱلْمُرْسَلُونَ قَالَ إِنَّكُمْ قَوْمٌ مُّنكَرُونَ
+  [0.9900]  15:67:1-15:68:6  @ 10:15.2 - 10:27.8
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  وَجَآءَ أَهْلُ ٱلْمَدِينَةِ يَسْتَبْشِرُونَ قَالَ إِنَّ هَـٰٓؤُلَآءِ ضَيْفِى فَلَا تَفْضَحُونِ
+  [0.9900]  15:78:1-15:79:5  @ 11:30.9 - 11:44.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  وَإِن كَانَ أَصْحَـٰبُ ٱلْأَيْكَةِ لَظَـٰلِمِينَ فَٱنتَقَمْنَا مِنْهُمْ وَإِنَّهُمَا لَبِإِمَامٍ مُّبِينٍ
+  [0.9900]  15:80:1-15:81:5  @ 11:45.9 - 11:58.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  وَلَقَدْ كَذَّبَ أَصْحَـٰبُ ٱلْحِجْرِ ٱلْمُرْسَلِينَ وَءَاتَيْنَـٰهُمْ ءَايَـٰتِنَا فَكَانُوا۟ عَنْهَا مُعْرِضِينَ
+  [0.9800]  15:89:1-15:91:4  @ 13:08.4 - 13:23.5
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  وَقُلْ إِنِّىٓ أَنَا ٱلنَّذِيرُ ٱلْمُبِينُ كَمَآ أَنزَلْنَا عَلَى ٱلْمُقْتَسِمِينَ ٱلَّذِينَ جَعَلُوا۟ ٱلْقُرْءَانَ عِضِينَ
+  [0.9800]  15:92:1-15:93:3  @ 13:24.6 - 13:34.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  فَوَرَبِّكَ لَنَسْـَٔلَنَّهُمْ أَجْمَعِينَ عَمَّا كَانُوا۟ يَعْمَلُونَ
+  [0.9900]  15:95:1-15:96:8  @ 13:43.2 - 13:57.0
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  إِنَّا كَفَيْنَـٰكَ ٱلْمُسْتَهْزِءِينَ ٱلَّذِينَ يَجْعَلُونَ مَعَ ٱللَّهِ إِلَـٰهًا ءَاخَرَ ۚ فَسَوْفَ يَعْلَمُونَ
+  [0.9700]  16:15:1-16:16:1  @ 3:33.0 - 3:46.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//016.mp3
+           text:  وَأَلْقَىٰ فِى ٱلْأَرْضِ رَوَٰسِىَ أَن تَمِيدَ بِكُمْ وَأَنْهَـٰرًا وَسُبُلًا لَّعَلَّكُمْ تَهْتَدُونَ وَعَلَـٰمَـٰتٍ ۚ
+  ... and 477 more
+
+--- Muqatta'at (30) ---
+  [1.0000]  2:1:1-2:1:1  @ 0:07.9 - 0:16.6
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
+           text:  الٓمٓ
+  [1.0000]  3:1:1-3:1:1  @ 0:13.0 - 0:20.4
+           audio: https://download.quranicaudio.com/quran/ali_jaber//003.mp3
+           text:  الٓمٓ
+  [1.0000]  7:1:1-7:1:1  @ 0:14.7 - 0:26.8
+           audio: https://download.quranicaudio.com/quran/ali_jaber//007.mp3
+           text:  الٓمٓصٓ
+  [1.0000]  10:1:1-10:1:1  @ 0:15.2 - 0:20.7
+           audio: https://download.quranicaudio.com/quran/ali_jaber//010.mp3
+           text:  الٓر ۚ
+  [1.0000]  11:1:1-11:1:1  @ 0:13.3 - 0:18.3
+           audio: https://download.quranicaudio.com/quran/ali_jaber//011.mp3
+           text:  الٓر ۚ
+  [1.0000]  12:1:1-12:1:1  @ 0:12.8 - 0:18.0
+           audio: https://download.quranicaudio.com/quran/ali_jaber//012.mp3
+           text:  الٓر ۚ
+  [1.0000]  13:1:1-13:1:1  @ 0:13.5 - 0:23.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//013.mp3
+           text:  الٓمٓر ۚ
+  [1.0000]  14:1:1-14:1:1  @ 0:14.4 - 0:19.4
+           audio: https://download.quranicaudio.com/quran/ali_jaber//014.mp3
+           text:  الٓر ۚ
+  [1.0000]  15:1:1-15:1:1  @ 0:13.0 - 0:17.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//015.mp3
+           text:  الٓر ۚ
+  [1.0000]  19:1:1-19:1:1  @ 0:00.1 - 0:12.0
+           audio: https://download.quranicaudio.com/quran/ali_jaber//019.mp3
+           text:  كٓهيعٓصٓ
+  [1.0000]  20:1:1-20:1:1  @ 0:12.2 - 0:13.5
+           audio: https://download.quranicaudio.com/quran/ali_jaber//020.mp3
+           text:  طه
+  [1.0000]  26:1:1-26:1:1  @ 0:00.0 - 0:07.8
+           audio: https://download.quranicaudio.com/quran/ali_jaber//026.mp3
+           text:  طسٓمٓ
+  [1.0000]  27:1:1-27:1:1  @ 0:00.0 - 0:04.3
+           audio: https://download.quranicaudio.com/quran/ali_jaber//027.mp3
+           text:  طسٓ ۚ
+  [1.0000]  28:1:1-28:1:1  @ 0:13.2 - 0:21.7
+           audio: https://download.quranicaudio.com/quran/ali_jaber//028.mp3
+           text:  طسٓمٓ
+  [1.0000]  29:1:1-29:1:1  @ 0:00.1 - 0:08.6
+           audio: https://download.quranicaudio.com/quran/ali_jaber//029.mp3
+           text:  الٓمٓ
+  [1.0000]  30:1:1-30:1:1  @ 0:00.2 - 0:08.0
+           audio: https://download.quranicaudio.com/quran/ali_jaber//030.mp3
+           text:  الٓمٓ
+  [1.0000]  31:1:1-31:1:1  @ 0:00.4 - 0:07.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//031.mp3
+           text:  الٓمٓ
+  [1.0000]  32:1:1-32:1:1  @ 0:00.4 - 0:08.1
+           audio: https://download.quranicaudio.com/quran/ali_jaber//032.mp3
+           text:  الٓمٓ
+  [1.0000]  36:1:1-36:1:1  @ 0:00.0 - 0:03.5
+           audio: https://download.quranicaudio.com/quran/ali_jaber//036.mp3
+           text:  يسٓ
+  [1.0000]  38:1:1-38:1:1  @ 0:16.0 - 0:19.3
+           audio: https://download.quranicaudio.com/quran/ali_jaber//038.mp3
+           text:  صٓ ۚ
+  [1.0000]  40:1:1-40:1:1  @ 0:19.1 - 0:22.3
+           audio: https://download.quranicaudio.com/quran/ali_jaber//040.mp3
+           text:  حمٓ
+  [1.0000]  41:1:1-41:1:1  @ 0:15.8 - 0:19.7
+           audio: https://download.quranicaudio.com/quran/ali_jaber//041.mp3
+           text:  حمٓ
+  [1.0000]  42:1:1-42:1:1  @ 0:14.3 - 0:17.9
+           audio: https://download.quranicaudio.com/quran/ali_jaber//042.mp3
+           text:  حمٓ
+  [1.0000]  42:2:1-42:2:1  @ 0:18.3 - 0:28.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//042.mp3
+           text:  عٓسٓقٓ
+  [1.0000]  43:1:1-43:1:1  @ 0:15.6 - 0:19.0
+           audio: https://download.quranicaudio.com/quran/ali_jaber//043.mp3
+           text:  حمٓ
+  [1.0000]  44:1:1-44:1:1  @ 0:13.5 - 0:16.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//044.mp3
+           text:  حمٓ
+  [1.0000]  45:1:1-45:1:1  @ 0:14.6 - 0:17.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//045.mp3
+           text:  حمٓ
+  [1.0000]  46:1:1-46:1:1  @ 0:21.9 - 0:25.2
+           audio: https://download.quranicaudio.com/quran/ali_jaber//046.mp3
+           text:  حمٓ
+  [1.0000]  50:1:1-50:1:1  @ 0:20.3 - 0:23.5
+           audio: https://download.quranicaudio.com/quran/ali_jaber//050.mp3
+           text:  قٓ ۚ
+  [1.0000]  68:1:1-68:1:1  @ 0:06.1 - 0:09.1
+           audio: https://download.quranicaudio.com/quran/ali_jaber//068.mp3
+           text:  نٓ ۚ
+
+--- Qalqala (542) ---
+  [1.0000]  2:49:1-2:49:8  [ب]  @ 16:05.8 - 16:16.7
+           audio: https://download.quranicaudio.com/quran/ali_jaber//002.mp3
