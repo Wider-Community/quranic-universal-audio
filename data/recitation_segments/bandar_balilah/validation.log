@@ -1,0 +1,313 @@
+Generated: 2026-04-11 20:52:32
+
+========================================================================
+  bandar_balilah
+  data/recitation_segments/bandar_balilah
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   200 ms
+  Min speech:    0 ms
+  Padding:       80 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      12 verses
+
+--- Segments ---
+  Total:            12499
+  Single-seg:       2827
+  Multi-seg verses: 3392 (9672 segs)
+  Cross-verse keys: 107
+  Max segs/verse:   19
+
+--- Segment Duration ---
+  Min:    0.82s
+  Median: 6.76s
+  Mean:   7.15s
+  Max:    27.85s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.20s
+  Median: 0.50s
+  Mean:   0.56s
+  Max:    18.73s
+
+--- Alignment Confidence ---
+  Min:       0.6700
+  Median:    0.9900
+  Mean:      0.9797
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 23
+  Failed:    21 (no alignment)
+  Empty ASR: 0 (matched but no phonemes)
+
+--- Failed Alignments (21) ---
+  0:36.4 - 0:38.9  (2.50s)
+    audio: https://server6.mp3quran.net/balilah/001.mp3
+    asr:   ħ a: a: m i: m
+  1:01:23.8 - 1:01:24.2  (0.38s)
+    audio: https://server6.mp3quran.net/balilah/003.mp3
+  1:06:10.3 - 1:06:10.7  (0.42s)
+    audio: https://server6.mp3quran.net/balilah/004.mp3
+    asr:   q Q
+  11:39.7 - 11:40.2  (0.46s)
+    audio: https://server6.mp3quran.net/balilah/023.mp3
+  27:27.9 - 27:28.4  (0.54s)
+    audio: https://server6.mp3quran.net/balilah/027.mp3
+  1:28.1 - 1:28.6  (0.52s)
+    audio: https://server6.mp3quran.net/balilah/039.mp3
+  6:19.8 - 6:20.1  (0.30s)
+    audio: https://server6.mp3quran.net/balilah/039.mp3
+    asr:   d Q
+  14:00.0 - 14:01.2  (1.22s)
+    audio: https://server6.mp3quran.net/balilah/043.mp3
+  11:06.0 - 11:06.4  (0.38s)
+    audio: https://server6.mp3quran.net/balilah/048.mp3
+    asr:   l a
+  0:02.2 - 0:02.4  (0.18s)
+    audio: https://server6.mp3quran.net/balilah/051.mp3
+    asr:   ħ
+  6:16.5 - 6:17.0  (0.46s)
+    audio: https://server6.mp3quran.net/balilah/057.mp3
+  0:36.3 - 0:36.8  (0.44s)
+    audio: https://server6.mp3quran.net/balilah/064.mp3
+    asr:   q Q
+  3:07.7 - 3:08.3  (0.62s)
+    audio: https://server6.mp3quran.net/balilah/085.mp3
+  0:46.4 - 0:47.0  (0.66s)
+    audio: https://server6.mp3quran.net/balilah/097.mp3
+    asr:   a ʒ Q rˤ
+  1:06.7 - 1:07.5  (0.86s)
+    audio: https://server6.mp3quran.net/balilah/100.mp3
+    asr:   rˤ
+  0:54.1 - 0:55.0  (0.90s)
+    audio: https://server6.mp3quran.net/balilah/102.mp3
+    asr:   u: n
+  0:25.6 - 0:25.8  (0.22s)
+    audio: https://server6.mp3quran.net/balilah/103.mp3
+  0:22.8 - 0:23.3  (0.50s)
+    audio: https://server6.mp3quran.net/balilah/108.mp3
+    asr:   t a rˤ dˤ
+  0:45.3 - 0:46.0  (0.76s)
+    audio: https://server6.mp3quran.net/balilah/109.mp3
+    asr:   n
+  0:30.9 - 0:31.4  (0.48s)
+    audio: https://server6.mp3quran.net/balilah/113.mp3
+    asr:   a: d Q
+  0:36.6 - 0:37.0  (0.36s)
+    audio: https://server6.mp3quran.net/balilah/114.mp3
+
+--- Missing Words (12) ---
+  2:68  @ 18:12.5 - 18:29.4
+    missing words: [8]
+    audio: https://server6.mp3quran.net/balilah/002.mp3
+  2:103  @ 30:26.8 - 30:34.5
+    missing words: [10, 11, 12]
+    audio: https://server6.mp3quran.net/balilah/002.mp3
+  2:271  @ 1:37:18.2 - 1:37:39.5
+    missing words: [5]
+    audio: https://server6.mp3quran.net/balilah/002.mp3
+  3:64  @ 18:44.6 - 19:12.0
+    missing words: [17]
+    audio: https://server6.mp3quran.net/balilah/003.mp3
+  6:80  @ 24:19.0 - 24:51.7
+    missing words: [18]
+    audio: https://server6.mp3quran.net/balilah/006.mp3
+  9:68  @ 27:36.5 - 27:55.9
+    missing words: [10]
+    audio: https://server6.mp3quran.net/balilah/009.mp3
+  11:57  @ 15:34.0 - 15:56.9
+    missing words: [15]
+    audio: https://server6.mp3quran.net/balilah/011.mp3
+  20:72  @ 12:02.8 - 12:24.9
+    missing words: [14]
+    audio: https://server6.mp3quran.net/balilah/020.mp3
+  31:33  @ 10:30.8 - 11:15.7
+    missing words: [18]
+    audio: https://server6.mp3quran.net/balilah/031.mp3
+  33:53  @ 21:42.0 - 22:58.7
+    missing words: [16]
+    audio: https://server6.mp3quran.net/balilah/033.mp3
+  70:44  @ 4:30.7 - 4:40.0
+    missing words: [9]
+    audio: https://server6.mp3quran.net/balilah/070.mp3
+  99:8  @ 0:52.6 - 1:00.1
+    missing words: [6]
+    audio: https://server6.mp3quran.net/balilah/099.mp3
+
+--- Low Confidence <80% (23) ---
+  [0.6700]  7:1:1-7:1:1  @ 0:03.0 - 0:14.5
+           audio: https://server6.mp3quran.net/balilah/007.mp3
+           text:  الٓمٓصٓ
+  [0.6700]  25:60:5-25:60:5  @ 15:07.1 - 15:09.5
+           audio: https://server6.mp3quran.net/balilah/025.mp3
+           text:  لِلرَّحْمَـٰنِ
+  [0.6700]  50:1:1-50:1:1  @ 0:04.2 - 0:07.7
+           audio: https://server6.mp3quran.net/balilah/050.mp3
+           text:  قٓ ۚ
+  [0.7000]  12:1:1-12:1:1  @ 0:03.1 - 0:08.7
+           audio: https://server6.mp3quran.net/balilah/012.mp3
+           text:  الٓر ۚ
+  [0.7000]  14:1:1-14:1:1  @ 0:03.1 - 0:10.2
+           audio: https://server6.mp3quran.net/balilah/014.mp3
+           text:  الٓر ۚ
+  [0.7000]  24:35:10-24:35:12  @ 13:43.3 - 13:46.5
+           audio: https://server6.mp3quran.net/balilah/024.mp3
+           text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
+  [0.7000]  29:1:1-29:1:1  @ 0:03.8 - 0:13.3
+           audio: https://server6.mp3quran.net/balilah/029.mp3
+           text:  الٓمٓ
+  [0.7000]  30:1:1-30:1:1  @ 0:04.2 - 0:13.6
+           audio: https://server6.mp3quran.net/balilah/030.mp3
+           text:  الٓمٓ
+  [0.7100]  46:35:22-46:35:22  @ 12:47.7 - 12:49.4
+           audio: https://server6.mp3quran.net/balilah/046.mp3
+           text:  بَلَـٰغٌ ۚ
+  [0.7500]  2:258:4-2:258:12  @ 1:31:01.1 - 1:31:10.2
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  ٱلَّذِى حَآجَّ إِبْرَٰهِـۧمَ فِى رَبِّهِۦٓ أَنْ ءَاتَىٰهُ ٱللَّهُ ٱلْمُلْكَ
+  [0.7500]  28:1:1-28:1:1  @ 0:03.0 - 0:09.2
+           audio: https://server6.mp3quran.net/balilah/028.mp3
+           text:  طسٓمٓ
+  [0.7500]  38:55:1-38:55:1  @ 10:21.1 - 10:22.4
+           audio: https://server6.mp3quran.net/balilah/038.mp3
+           text:  هَـٰذَا ۚ
+  [0.7500]  52:36:5-52:36:7  @ 4:42.2 - 4:45.3
+           audio: https://server6.mp3quran.net/balilah/052.mp3
+           text:  بَل لَّا يُوقِنُونَ
+  [0.7500]  60:7:11-60:7:12  @ 3:13.6 - 3:15.9
+           audio: https://server6.mp3quran.net/balilah/060.mp3
+           text:  وَٱللَّهُ قَدِيرٌ ۚ
+  [0.7500]  101:11:1-101:11:2  @ 0:58.9 - 1:02.8
+           audio: https://server6.mp3quran.net/balilah/101.mp3
+           text:  نَارٌ حَامِيَةٌ
+  [0.7600]  36:26:1-36:26:3  @ 5:01.8 - 5:05.6
+           audio: https://server6.mp3quran.net/balilah/036.mp3
+           text:  قِيلَ ٱدْخُلِ ٱلْجَنَّةَ ۖ
+  [0.7600]  54:5:1-54:5:2  @ 0:36.1 - 0:38.6
+           audio: https://server6.mp3quran.net/balilah/054.mp3
+           text:  حِكْمَةٌ بَـٰلِغَةٌ ۖ
+  [0.7700]  16:75:22-16:75:23  @ 24:49.3 - 24:52.0
+           audio: https://server6.mp3quran.net/balilah/016.mp3
+           text:  ٱلْحَمْدُ لِلَّهِ ۚ
+  [0.7700]  24:35:33-24:35:35  @ 14:11.5 - 14:15.0
+           audio: https://server6.mp3quran.net/balilah/024.mp3
+           text:  نُّورٌ عَلَىٰ نُورٍ ۗ
+  [0.7700]  39:29:14-39:29:15  @ 11:52.3 - 11:55.3
+           audio: https://server6.mp3quran.net/balilah/039.mp3
+           text:  ٱلْحَمْدُ لِلَّهِ ۚ
+  [0.7800]  42:1:1-42:2:1  @ 0:04.3 - 0:15.3
+           audio: https://server6.mp3quran.net/balilah/042.mp3
+           text:  حمٓ عٓسٓقٓ
+  [0.7900]  73:4:1-73:4:3  @ 0:20.7 - 0:23.4
+           audio: https://server6.mp3quran.net/balilah/073.mp3
+           text:  أَوْ زِدْ عَلَيْهِ
+  [0.7900]  77:6:1-77:6:3  @ 0:22.0 - 0:24.6
+           audio: https://server6.mp3quran.net/balilah/077.mp3
+           text:  عُذْرًا أَوْ نُذْرًا
+
+--- May Require Boundary Adjustment (16) ---
+  [1.0000]  3:76:1-3:76:1  @ 22:21.7 - 22:22.5
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  بَلَىٰ
+  [1.0000]  3:125:1-3:125:1  @ 36:47.3 - 36:48.6
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  بَلَىٰٓ ۚ
+  [0.9200]  4:176:1-4:176:1  @ 1:08:27.4 - 1:08:29.0
+           audio: https://server6.mp3quran.net/balilah/004.mp3
+           text:  يَسْتَفْتُونَكَ
+  [0.8900]  9:68:11-9:68:11  @ 27:48.3 - 27:50.0
+           audio: https://server6.mp3quran.net/balilah/009.mp3
+           text:  حَسْبُهُمْ ۚ
+  [1.0000]  16:28:13-16:28:13  @ 8:05.8 - 8:07.2
+           audio: https://server6.mp3quran.net/balilah/016.mp3
+           text:  بَلَىٰٓ
+  [0.6700]  25:60:5-25:60:5  @ 15:07.1 - 15:09.5
+           audio: https://server6.mp3quran.net/balilah/025.mp3
+           text:  لِلرَّحْمَـٰنِ
+  [1.0000]  36:81:11-36:81:11  @ 17:31.1 - 17:32.3
+           audio: https://server6.mp3quran.net/balilah/036.mp3
+           text:  بَلَىٰ
+  [1.0000]  37:11:1-37:11:1  @ 1:09.0 - 1:10.7
+           audio: https://server6.mp3quran.net/balilah/037.mp3
+           text:  فَٱسْتَفْتِهِمْ
+  [0.8900]  37:138:1-37:138:1  @ 15:26.1 - 15:28.3
+           audio: https://server6.mp3quran.net/balilah/037.mp3
+           text:  وَبِٱلَّيْلِ ۗ
+  [0.7500]  38:55:1-38:55:1  @ 10:21.1 - 10:22.4
+           audio: https://server6.mp3quran.net/balilah/038.mp3
+           text:  هَـٰذَا ۚ
+  [1.0000]  43:80:8-43:80:8  @ 12:35.5 - 12:36.4
+           audio: https://server6.mp3quran.net/balilah/043.mp3
+           text:  بَلَىٰ
+  [1.0000]  46:33:17-46:33:17  @ 11:48.4 - 11:49.4
+           audio: https://server6.mp3quran.net/balilah/046.mp3
+           text:  بَلَىٰٓ
+  [1.0000]  54:10:5-54:10:5  @ 1:25.3 - 1:26.7
+           audio: https://server6.mp3quran.net/balilah/054.mp3
+           text:  فَٱنتَصِرْ
+  [0.8600]  66:8:29-66:8:29  @ 4:13.7 - 4:15.0
+           audio: https://server6.mp3quran.net/balilah/066.mp3
+           text:  نُورُهُمْ
+  [1.0000]  75:4:1-75:4:1  @ 0:25.4 - 0:26.4
+           audio: https://server6.mp3quran.net/balilah/075.mp3
+           text:  بَلَىٰ
+  [1.0000]  84:15:1-84:15:1  @ 1:15.1 - 1:16.2
+           audio: https://server6.mp3quran.net/balilah/084.mp3
+           text:  بَلَىٰٓ
+
+--- Cross-verse (107) ---
+  [1.0000]  2:8:9-2:9:4  @ 1:20.4 - 1:28.5
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَمَا هُم بِمُؤْمِنِينَ يُخَـٰدِعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟
+  [0.9900]  2:15:4-2:16:5  @ 2:36.7 - 2:47.1
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَيَمُدُّهُمْ فِى طُغْيَـٰنِهِمْ يَعْمَهُونَ أُو۟لَـٰٓئِكَ ٱلَّذِينَ ٱشْتَرَوُا۟ ٱلضَّلَـٰلَةَ بِٱلْهُدَىٰ
+  [0.9700]  2:108:11-2:109:15  @ 31:50.8 - 32:12.8
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَمَن يَتَبَدَّلِ ٱلْكُفْرَ بِٱلْإِيمَـٰنِ فَقَدْ ضَلَّ سَوَآءَ ٱلسَّبِيلِ وَدَّ كَثِيرٌ مِّنْ أَهْلِ ٱلْكِتَـٰبِ لَوْ يَرُدُّونَكُم مِّن بَعْدِ إِيمَـٰنِكُمْ كُفَّارًا حَسَدًا مِّنْ عِندِ أَنفُسِهِم
+  [0.9900]  2:114:22-2:115:8  @ 34:04.9 - 34:20.5
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  لَهُمْ فِى ٱلدُّنْيَا خِزْىٌ وَلَهُمْ فِى ٱلْـَٔاخِرَةِ عَذَابٌ عَظِيمٌ وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ فَأَيْنَمَا تُوَلُّوا۟ فَثَمَّ وَجْهُ ٱللَّهِ ۚ
+  [0.9900]  2:170:15-2:171:9  @ 52:44.0 - 52:57.7
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  أَوَلَوْ كَانَ ءَابَآؤُهُمْ لَا يَعْقِلُونَ شَيْـًٔا وَلَا يَهْتَدُونَ وَمَثَلُ ٱلَّذِينَ كَفَرُوا۟ كَمَثَلِ ٱلَّذِى يَنْعِقُ بِمَا لَا يَسْمَعُ
+  [1.0000]  2:182:13-2:183:14  @ 57:07.7 - 57:25.4
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  إِنَّ ٱللَّهَ غَفُورٌ رَّحِيمٌ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ كُتِبَ عَلَيْكُمُ ٱلصِّيَامُ كَمَا كُتِبَ عَلَى ٱلَّذِينَ مِن قَبْلِكُمْ لَعَلَّكُمْ تَتَّقُونَ
+  [0.9600]  2:219:20-2:220:3  @ 1:12:06.7 - 1:12:15.3
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  كَذَٰلِكَ يُبَيِّنُ ٱللَّهُ لَكُمُ ٱلْـَٔايَـٰتِ لَعَلَّكُمْ تَتَفَكَّرُونَ فِى ٱلدُّنْيَا وَٱلْـَٔاخِرَةِ ۗ
+  [0.9700]  3:3:9-3:4:6  @ 0:22.8 - 0:33.8
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  وَأَنزَلَ ٱلتَّوْرَىٰةَ وَٱلْإِنجِيلَ مِن قَبْلُ هُدًى لِّلنَّاسِ وَأَنزَلَ ٱلْفُرْقَانَ ۗ
+  [0.9900]  3:151:17-3:152:7  @ 44:07.7 - 44:18.6
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  وَبِئْسَ مَثْوَى ٱلظَّـٰلِمِينَ وَلَقَدْ صَدَقَكُمُ ٱللَّهُ وَعْدَهُۥٓ إِذْ تَحُسُّونَهُم بِإِذْنِهِۦ ۖ
+  [0.9800]  3:166:8-3:167:3  @ 50:12.9 - 50:18.8
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  وَلِيَعْلَمَ ٱلْمُؤْمِنِينَ وَلِيَعْلَمَ ٱلَّذِينَ نَافَقُوا۟ ۚ
+  [0.9000]  4:117:7-4:118:2  @ 47:28.7 - 47:36.3
+           audio: https://server6.mp3quran.net/balilah/004.mp3
+           text:  وَإِن يَدْعُونَ إِلَّا شَيْطَـٰنًا مَّرِيدًا لَّعَنَهُ ٱللَّهُ ۘ
+  [0.9700]  8:62:8-8:63:3  @ 22:31.3 - 22:40.3
+           audio: https://server6.mp3quran.net/balilah/008.mp3
+           text:  هُوَ ٱلَّذِىٓ أَيَّدَكَ بِنَصْرِهِۦ وَبِٱلْمُؤْمِنِينَ وَأَلَّفَ بَيْنَ قُلُوبِهِمْ ۚ
+  [0.9600]  9:14:8-9:15:3  @ 5:12.1 - 5:20.1
+           audio: https://server6.mp3quran.net/balilah/009.mp3
+           text:  وَيَشْفِ صُدُورَ قَوْمٍ مُّؤْمِنِينَ وَيُذْهِبْ غَيْظَ قُلُوبِهِمْ ۗ
+  [0.9600]  9:86:10-9:87:5  @ 35:30.1 - 35:44.5
+           audio: https://server6.mp3quran.net/balilah/009.mp3
+           text:  ٱسْتَـْٔذَنَكَ أُو۟لُوا۟ ٱلطَّوْلِ مِنْهُمْ وَقَالُوا۟ ذَرْنَا نَكُن مَّعَ ٱلْقَـٰعِدِينَ رَضُوا۟ بِأَن يَكُونُوا۟ مَعَ ٱلْخَوَالِفِ
+  [0.9700]  9:96:5-9:97:13  @ 39:12.1 - 39:39.9
+           audio: https://server6.mp3quran.net/balilah/009.mp3
+           text:  فَإِن تَرْضَوْا۟ عَنْهُمْ فَإِنَّ ٱللَّهَ لَا يَرْضَىٰ عَنِ ٱلْقَوْمِ ٱلْفَـٰسِقِينَ ٱلْأَعْرَابُ أَشَدُّ كُفْرًا وَنِفَاقًا وَأَجْدَرُ أَلَّا يَعْلَمُوا۟ حُدُودَ مَآ أَنزَلَ ٱللَّهُ عَلَىٰ رَسُولِهِۦ ۗ
+  [0.9500]  11:54:12-11:55:2  @ 14:54.7 - 15:02.6
+           audio: https://server6.mp3quran.net/balilah/011.mp3
+           text:  وَٱشْهَدُوٓا۟ أَنِّى بَرِىٓءٌ مِّمَّا تُشْرِكُونَ مِن دُونِهِۦ ۖ
+  [0.9300]  11:118:8-11:119:4  @ 31:45.6 - 31:51.3
+           audio: https://server6.mp3quran.net/balilah/011.mp3
+           text:  وَلَا يَزَالُونَ مُخْتَلِفِينَ إِلَّا مَن رَّحِمَ رَبُّكَ ۚ
