@@ -720,6 +720,37 @@ function parseSegRef(ref) {
     return { surah: +s[0], ayah_from: +s[1], word_from: +s[2], ayah_to: +e[1], word_to: +e[2] };
 }
 
+/** For a cross-verse ref, suggest per-verse refs for split children.
+ *  First child = first verse's portion, second child = remaining verses.
+ *  Uses shortcut form (s:v) for whole-verse halves. Returns null if not cross-verse. */
+function _suggestSplitRefs(ref) {
+    const parsed = parseSegRef(_normalizeRef(ref));
+    if (!parsed || parsed.ayah_from === parsed.ayah_to) return null;
+    const vwc = (segAllData || segData || {}).verse_word_counts;
+    if (!vwc) return null;
+    const s = parsed.surah;
+    const lastWordV1 = vwc[`${s}:${parsed.ayah_from}`];
+    if (!lastWordV1) return null;
+    // First child: parent word_from → end of first verse
+    const firstRef = (parsed.word_from === 1)
+        ? `${s}:${parsed.ayah_from}`
+        : `${s}:${parsed.ayah_from}:${parsed.word_from}-${s}:${parsed.ayah_from}:${lastWordV1}`;
+    // Second child: start of next verse → parent end
+    const nextAyah = parsed.ayah_from + 1;
+    let secondRef;
+    if (nextAyah === parsed.ayah_to) {
+        // Exactly 2 verses: second child is a single verse portion
+        const lastWordV2 = vwc[`${s}:${parsed.ayah_to}`];
+        secondRef = (lastWordV2 && parsed.word_to === lastWordV2)
+            ? `${s}:${parsed.ayah_to}`
+            : `${s}:${parsed.ayah_to}:1-${s}:${parsed.ayah_to}:${parsed.word_to}`;
+    } else {
+        // 3+ verses: second child spans nextAyah:1 → original end
+        secondRef = `${s}:${nextAyah}:1-${s}:${parsed.ayah_to}:${parsed.word_to}`;
+    }
+    return { firstRef, secondRef };
+}
+
 function countSegWords(ref) {
     const p = parseSegRef(ref);
     if (!p) return 0;
@@ -4019,7 +4050,7 @@ function updateSplitInfo(canvas, seg, splitTime) {
     }
 }
 
-function confirmSplit(seg) {
+async function confirmSplit(seg) {
     const canvas = _getEditCanvas();
     const splitTime = canvas?._splitData?.currentSplit;
     if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
@@ -4049,6 +4080,26 @@ function confirmSplit(seg) {
     if (splitOp) {
         splitOp.applied_at_utc = new Date().toISOString();
         splitOp.targets_after = [snapshotSeg(firstHalf), snapshotSeg(secondHalf)];
+    }
+
+    // For cross-verse segments spanning exactly 2 verses, suggest per-verse refs
+    const suggested = _suggestSplitRefs(seg.matched_ref);
+    if (suggested) {
+        firstHalf.matched_ref = suggested.firstRef;
+        secondHalf.matched_ref = suggested.secondRef;
+        // Resolve text for both halves in parallel
+        const resolve = async (ref) => {
+            try {
+                const canonical = _normalizeRef(ref);
+                const resp = await fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(canonical)}`);
+                const data = await resp.json();
+                if (data.text) return { text: data.text, display_text: data.display_text || data.text };
+            } catch (_) { /* fall through */ }
+            return null;
+        };
+        const [r1, r2] = await Promise.all([resolve(suggested.firstRef), resolve(suggested.secondRef)]);
+        if (r1) { firstHalf.matched_text = r1.text; firstHalf.display_text = r1.display_text; }
+        if (r2) { secondHalf.matched_text = r2.text; secondHalf.display_text = r2.display_text; }
     }
 
     if (useSegData) {
