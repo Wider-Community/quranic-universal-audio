@@ -49,7 +49,7 @@ You can also open the **statistics** panel for graphs on confidence scores, segm
 | **Adjust** | Drag handles on the waveform to modify the segment's start and end time |
 | **Split** | Divide a segment into two at the playhead position |
 | **Merge** | Combine two adjacent segments into one |
-| **Edit Reference** | Change the matched Qur'anic text reference |
+| **Edit Reference** | Change the Qur'anic reference (`surah:verse:word-surah:verse:word` format or shortcut `surah:verse` |
 | **Delete** | Remove a segment entirely |
 | **Auto-fill** | Extend an adjacent segment to cover a missing word (available on Missing Words cards) |
 | **Ignore** | Dismiss the issue for this category, marking the segment as reviewed-and-correct |
@@ -94,7 +94,7 @@ A gap in word indices between two segments within a verse. Most of the time, **a
 
 #### Detected Repetitions
 
-The reciter repeated the same text (or part of it) detected in that segment. These can be false detections. **Ignore** if the detection is wrong, or **split** the segment based on how it was actually recited, including repetitions. In general, if there is a few hundred flagges segments as cross-verse, a portion of them are likely segmentation failures of undetcted pauses. 
+The reciter repeated the same text (or part of it) detected in that segment. These can be false detections. **Ignore** if the detection is wrong, or **split** the segment based on how it was actually recited, including repetitions.
 
 <!-- screenshot: repetition card -->
 
@@ -106,13 +106,13 @@ Alignment confidence is below the threshold. This could be a genuine mismatch, m
 
 #### Cross-verse
 
-A segment spans multiple verses. If the reciter recited them continuously without pausing, **ignore** — the segment is correct as-is. If the reciter did pause between verses, **split** the segment at the pause point. This is highly recommended because verse-level timestamps and audio clips rely on accurate verse boundaries.
+A segment spans multiple verses. If the reciter recited them continuously (wasl) without pausing, **ignore** — the segment is correct as-is. If the reciter did pause between verses (waqf), **split** the segment at the pause point. This is highly recommended because verse-level timestamps and audio clips rely on accurate verse boundaries. In general, if there is 100-200+ flagged segments as cross-verse, a portion of them are likely segmentation failures of undetcted pauses. 
 
 <!-- screenshot: cross-verse segment -->
 
 #### Qalqala
 
-The last word of the segment ends with a qalqala letter (ق ط ب ج د). Check the end of the segment audio to verify the qalqala sound is audible. Most of the time this is either **ignored** (sound is present) or **adjusted** so the boundary captures the full sound.
+The last word of the segment ends with a qalqala letter (ق ط ب ج د), which is sometimes falsely detected as silence and segmented too early. Check the end of the segment audio to verify the qalqala sound is audible. Most of the time this is either **ignored** (sound is present) or **adjusted** so the boundary captures the full sound.
 
 This is especially important at verse boundaries — the HuggingFace dataset reconstructs audio clips for every verse, so a missing qalqala means the listener hears a cut-off ending. If the segment is mid-verse, it's less critical but still good to fix. The letter ق tends to have the most issues, but this varies by reciter and the silence thresholds used during segmentation.
 
@@ -129,13 +129,13 @@ Segments starting with huruf muqatta'at (e.g. الم, طه, يس). Flagged for m
 
 The automatic error categories are best-effort and catch most issues, but some errors can go undetected. A few additional things you can do:
 
-1. **Listen through full chapters** — load a chapter in the main display and play through all its segments (use auto-play for convenience, or single-segment play for accurate checking of each segment's audio cutoff boundaries). This catches errors that automated checks miss.
-2. **Use the filters** — combine filters on duration, word count, verses spanned, confidence, and silence between segments to surface unusual combinations that might indicate problems.
-3. **Raise the confidence threshold** — the default low-confidence cutoff is 80%. Increasing it to 85 or 90 surfaces more segments for review. Lower confidence doesn't always mean an error (it can be model noise or uncertainty), but checking these gives greater certainty that the data is correct.
+1. **Listen through full chapters** — load a chapter in the main display and play through all its segments (use auto-play for convenience, or segment by segment for verifying audio cutoff boundaries). This catches errors that automated checks miss.
+2. **Use the filters** — combine filters on duration, word count, verses spanned, confidence, and silence between segments to explore and surface unusual combinations that might indicate problems.
+3. **Raise the confidence threshold** — the default low-confidence cutoff is 80%. Increasing it to 85 or 90 surfaces more segments for review. Lower confidence can be a genuine error, model noise or uncertainty, but checking these gives greater certainty that the data is correct.
 
 ### Edit history
 
-Every save is recorded in the edit history. You can browse past edits, filter by edit type or error category, and sort. You can use the **Undo** button to reverse any edit. 
+Every save is recorded in the edit history. You can browse past edits, filter by edit type or error category, and sort. You can use the **Undo** button to reverse any edit. It is highly recommended to review the full edit history to verify all edits are sensible and changes have been saved correctly without bugs.
 
 ### Continuous refinement
 
