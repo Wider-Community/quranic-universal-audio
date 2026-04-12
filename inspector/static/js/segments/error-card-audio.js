@@ -5,6 +5,7 @@
 
 import { state, dom } from './state.js';
 import { drawWaveformFromPeaksForSeg, drawSegPlayhead, _drawSplitHighlight } from './waveform-draw.js';
+import { safePlay } from '../shared/audio.js';
 
 // ---------------------------------------------------------------------------
 // getValCardAudio -- lazy-create a dedicated <audio> element for error cards
@@ -122,13 +123,13 @@ export function playErrorCardAudio(seg, btn, seekToMs) {
             audio.currentTime = seekSec;
             state.valCardStopTime = endSec;
             audio.playbackRate = parseFloat(dom.segSpeedSelect.value);
-            audio.play();
+            safePlay(audio);
         });
     } else {
         audio.currentTime = seekSec;
         state.valCardStopTime = endSec;
         audio.playbackRate = parseFloat(dom.segSpeedSelect.value);
-        audio.play();
+        safePlay(audio);
     }
     btn.textContent = '\u23F9';
     state.valCardPlayingBtn = btn;

@@ -7,6 +7,7 @@ import { state, dom, createOp, snapshotSeg } from './state.js';
 import { resolveSegFromRow, _getEditCanvas } from './rendering.js';
 import { drawWaveformFromPeaksForSeg } from './waveform-draw.js';
 import { stopSegAnimation } from './playback.js';
+import { safePlay } from '../shared/audio.js';
 import { getSegByChapterIndex } from './data.js';
 import { stopErrorCardAudio } from './error-card-audio.js';
 
@@ -212,7 +213,7 @@ export function _playRange(startMs, endMs) {
     const doPlay = () => {
         dom.segAudioEl.currentTime = start;
         dom.segAudioEl.playbackRate = parseFloat(dom.segSpeedSelect.value);
-        dom.segAudioEl.play();
+        safePlay(dom.segAudioEl);
         state._playRangeRAF = requestAnimationFrame(animatePlayhead);
     };
 

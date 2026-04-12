@@ -7,6 +7,7 @@ import { getSegByChapterIndex } from './data.js';
 import { formatTimeMs } from './references.js';
 import { drawWaveformFromPeaksForSeg, drawSegPlayhead } from './waveform-draw.js';
 import { stopErrorCardAudio } from './error-card-audio.js';
+import { safePlay } from '../shared/audio.js';
 
 /** Compare a segment's audio_url against segAudioEl.src. */
 function _audioSrcMatch(segUrl, elSrc) {
@@ -35,7 +36,7 @@ export function playFromSegment(segIndex, chapterOverride, seekToMs) {
 
     dom.segAudioEl.playbackRate = parseFloat(dom.segSpeedSelect.value);
     dom.segAudioEl.currentTime = (seekToMs != null ? seekToMs : seg.time_start) / 1000;
-    dom.segAudioEl.play();
+    safePlay(dom.segAudioEl);
     state.segCurrentIdx = segIndex;
     updateSegPlayStatus();
 
@@ -79,7 +80,7 @@ export function onSegPlayClick() {
                 if (curSeg) state._segPlayEndMs = curSeg.time_end;
             }
             dom.segAudioEl.playbackRate = parseFloat(dom.segSpeedSelect.value);
-            dom.segAudioEl.play();
+            safePlay(dom.segAudioEl);
         }
     } else {
         state._segContinuousPlay = false;

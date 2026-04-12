@@ -10,6 +10,7 @@ import { loadRandomTimestamp } from './index.js';
 import { updateDisplay } from './playback.js';
 import { navigateVerse } from './playback.js';
 import { switchView } from './animation.js';
+import { safePlay } from '../shared/audio.js';
 
 // NOTE: circular dependency with index.js (getSegRelTime, loadRandomTimestamp).
 // Safe because this function is only called at runtime via keydown events,
@@ -27,7 +28,7 @@ export function handleKeydown(e) {
                 if (state.tsSegEnd > 0 && dom.audio.currentTime >= state.tsSegEnd) {
                     dom.audio.currentTime = state.tsSegOffset;
                 }
-                dom.audio.play();
+                safePlay(dom.audio);
             } else {
                 dom.audio.pause();
             }
