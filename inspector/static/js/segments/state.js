@@ -93,6 +93,10 @@ export const state = {
     // Peaks
     segPeaksByAudio: null,       // {url: {duration_ms, peaks}}
     _peaksPollTimer: null,
+    _segPeaksByUrl: null,            // {url: [{startMs, endMs, peaks, durationMs}]} for covering-range lookup
+    _observerPeaksQueue: [],         // queue of {url, startMs, endMs} pending batch fetch
+    _observerPeaksTimer: null,       // debounce timer for observer queue flush
+    _observerPeaksRequested: new Set(), // "url:startMs:endMs" keys already requested
 
     // Rendering
     _cardRenderRafId: null,
@@ -313,8 +317,21 @@ export function isIndexDirty(chapter, index) {
 // (resolves waveform <-> waveform-draw circular dependency)
 // ---------------------------------------------------------------------------
 
-export function _findCoveringPeaks(audioUrl) {
+export function _findCoveringPeaks(audioUrl, startMs, endMs) {
     if (!state.segPeaksByAudio) return null;
+    // First try full-file peaks (exact URL match)
     const pe = state.segPeaksByAudio[audioUrl];
-    return pe?.peaks?.length > 0 ? pe : null;
+    if (pe?.peaks?.length > 0) return pe;
+    // Then try segment-level peaks covering the requested range
+    if (startMs != null && endMs != null && state._segPeaksByUrl) {
+        const entries = state._segPeaksByUrl[audioUrl];
+        if (entries) {
+            for (const entry of entries) {
+                if (entry.startMs <= startMs && entry.endMs >= endMs) {
+                    return { peaks: entry.peaks, duration_ms: entry.durationMs };
+                }
+            }
+        }
+    }
+    return null;
 }

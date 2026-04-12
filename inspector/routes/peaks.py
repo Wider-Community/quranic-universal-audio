@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from services import cache
 from services.data_loader import load_detailed
-from services.peaks import get_peaks_for_reciter
+from services.peaks import get_peaks_for_reciter, compute_segment_peaks
 from utils.references import chapter_from_ref
 
 peaks_bp = Blueprint("peaks", __name__, url_prefix="/api/seg")
@@ -26,6 +26,8 @@ def seg_peaks(reciter):
         except ValueError:
             pass
 
+    cached_only = request.args.get("cached_only", "").lower() == "true"
+
     target_urls = set()
     for entry in entries:
         ch = chapter_from_ref(entry["ref"])
@@ -42,7 +44,7 @@ def seg_peaks(reciter):
     complete = len(result) >= len(target_urls)
 
     cache_key = f"{reciter}:{chapters_param}"
-    if not complete and not cache.is_peaks_computing(cache_key):
+    if not complete and not cached_only and not cache.is_peaks_computing(cache_key):
         cache.add_peaks_computing(cache_key)
 
         def _bg():
@@ -54,3 +56,23 @@ def seg_peaks(reciter):
         threading.Thread(target=_bg, daemon=True).start()
 
     return jsonify({"peaks": result, "complete": complete})
+
+
+@peaks_bp.route("/segment-peaks/<reciter>", methods=["POST"])
+def seg_segment_peaks(reciter):
+    """Fetch peaks for individual segments via HTTP Range requests."""
+    body = request.get_json(silent=True) or {}
+    segments = body.get("segments", [])
+    cached_only = body.get("cached_only", False)
+    results = {}
+    for seg in segments:
+        url = seg.get("url", "")
+        start_ms = seg.get("start_ms", 0)
+        end_ms = seg.get("end_ms", 0)
+        if not url or end_ms <= start_ms:
+            continue
+        key = f"{url}:{start_ms}:{end_ms}"
+        data = compute_segment_peaks(url, start_ms, end_ms, reciter, cached_only=cached_only)
+        if data:
+            results[key] = data
+    return jsonify({"peaks": results})

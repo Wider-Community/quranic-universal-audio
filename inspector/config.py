@@ -85,6 +85,8 @@ RANGE_DECODE_PAD_SEC = 5
 ID3_PROBE_BYTES = 50_000
 MIN_SEG_PEAK_BUCKETS = 10
 MIN_FULL_PEAK_BUCKETS = 100
+PEAKS_BUCKETS_PER_SEC = 50                # target peak density for segment-level peaks
+PEAKS_NEIGHBOR_COUNT = 0                  # neighbors to pre-fetch (0 = disabled, observer-only)
 
 # Validation thresholds
 LOW_CONFIDENCE_THRESHOLD = 0.80

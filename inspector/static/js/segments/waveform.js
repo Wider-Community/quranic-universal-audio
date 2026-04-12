@@ -3,7 +3,7 @@
  * Uses canvas callback pattern for edit-mode draws.
  */
 
-import { state, dom } from './state.js';
+import { state, dom, _findCoveringPeaks } from './state.js';
 import { getSegByChapterIndex } from './data.js';
 import { _getEditCanvas } from './rendering.js';
 import { drawWaveformFromPeaksForSeg, _drawSplitHighlight, _drawTrimHighlight, _drawMergeHighlight } from './waveform-draw.js';
@@ -18,6 +18,26 @@ let _drawTrimWaveformFn = null;
 export function registerWaveformHandlers(handlers) {
     if (handlers.drawSplitWaveform) _drawSplitWaveformFn = handlers.drawSplitWaveform;
     if (handlers.drawTrimWaveform) _drawTrimWaveformFn = handlers.drawTrimWaveform;
+}
+
+// ---------------------------------------------------------------------------
+// Segment-level peaks URL index: enables covering-range lookups
+// ---------------------------------------------------------------------------
+
+function _indexSegPeaksBulk(peaksMap) {
+    if (!peaksMap) return;
+    for (const [key, data] of Object.entries(peaksMap)) {
+        if (!data?.peaks?.length || data.start_ms == null) continue;
+        const url = key.split(':').slice(0, -2).join(':');  // strip ":startMs:endMs"
+        if (!state._segPeaksByUrl) state._segPeaksByUrl = {};
+        if (!state._segPeaksByUrl[url]) state._segPeaksByUrl[url] = [];
+        state._segPeaksByUrl[url].push({
+            startMs: data.start_ms,
+            endMs: data.end_ms,
+            peaks: data.peaks,
+            durationMs: data.duration_ms,
+        });
+    }
 }
 
 export function _ensureWaveformObserver() {
@@ -70,6 +90,8 @@ export function _ensureWaveformObserver() {
                 _drawMergeHighlight(canvas, seg);
                 state._waveformObserver.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
+            } else {
+                _queueObserverPeaksFetch(seg, chapter);
             }
         });
     }, { rootMargin: '200px' });
@@ -121,10 +143,49 @@ export function _fetchChapterPeaksIfNeeded(reciter, chapter) {
     _fetchPeaks(reciter, [chapter]);
 }
 
+// ---------------------------------------------------------------------------
+// Observer-triggered segment-level peaks pre-fetch
+// ---------------------------------------------------------------------------
+
+function _queueObserverPeaksFetch(seg, chapter) {
+    const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    if (!audioUrl) return;
+    const key = `${audioUrl}:${seg.time_start}:${seg.time_end}`;
+    if (state._observerPeaksRequested.has(key)) return;
+    state._observerPeaksRequested.add(key);
+    state._observerPeaksQueue.push({ url: audioUrl, start_ms: seg.time_start, end_ms: seg.time_end });
+
+    if (state._observerPeaksTimer) clearTimeout(state._observerPeaksTimer);
+    state._observerPeaksTimer = setTimeout(_flushObserverPeaksQueue, 150);
+}
+
+function _flushObserverPeaksQueue() {
+    state._observerPeaksTimer = null;
+    const queue = state._observerPeaksQueue.splice(0);
+    if (queue.length === 0) return;
+    const reciter = dom.segReciterSelect.value;
+    if (!reciter) return;
+
+    fetch(`/api/seg/segment-peaks/${reciter}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segments: queue, cached_only: true }),
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
+            const newPeaks = data.peaks || {};
+            if (Object.keys(newPeaks).length === 0) return;
+            _indexSegPeaksBulk(newPeaks);
+            _redrawPeaksWaveforms();
+        })
+        .catch(() => {});
+}
+
 export function _redrawPeaksWaveforms() {
     const observer = _ensureWaveformObserver();
     const editCanvas = _getEditCanvas();
-    [dom.segListEl, dom.segValidationEl, dom.segValidationGlobalEl, dom.segHistoryView].forEach(container => {
+    [dom.segListEl, dom.segValidationEl, dom.segValidationGlobalEl, dom.segHistoryView, dom.segSavePreview].forEach(container => {
         if (!container) return;
         container.querySelectorAll('canvas[data-needs-waveform]').forEach(c => {
             if (c === editCanvas) return;

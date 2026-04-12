@@ -2,7 +2,7 @@
  * Waveform drawing functions -- peaks-based rendering, playhead, overlays.
  */
 
-import { state } from './state.js';
+import { state, _findCoveringPeaks } from './state.js';
 
 export function drawSegmentWaveformFromPeaks(canvas, startMs, endMs, peaks, totalDurationMs) {
     const ctx = canvas.getContext('2d');
@@ -71,6 +71,12 @@ export function drawWaveformFromPeaksForSeg(canvas, seg, chapter) {
         drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);
         return true;
     }
+    // Fallback: try covering-range peaks (segment-level or padded)
+    const covering = _findCoveringPeaks(audioUrl, seg.time_start, seg.time_end);
+    if (covering?.peaks?.length > 0) {
+        drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, covering.peaks, covering.duration_ms);
+        return true;
+    }
     return false;
 }
 
@@ -116,7 +122,10 @@ export function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs, audioUrl)
 /** Slice peaks for a time range and resample to `buckets` bins. */
 export function _slicePeaks(audioUrl, startMs, endMs, buckets) {
     if (!state.segPeaksByAudio) return null;
-    const pe = state.segPeaksByAudio[audioUrl];
+    let pe = state.segPeaksByAudio[audioUrl];
+    if (!pe?.peaks?.length) {
+        pe = _findCoveringPeaks(audioUrl, startMs, endMs);
+    }
     if (!pe?.peaks?.length) return null;
     const pps = pe.peaks.length / pe.duration_ms;
     const startIdx = Math.max(0, Math.floor(startMs * pps));

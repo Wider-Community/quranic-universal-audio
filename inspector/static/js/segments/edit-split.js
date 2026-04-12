@@ -6,6 +6,7 @@ import { state, dom, snapshotSeg, finalizeOp, markDirty } from './state.js';
 import { _getEditCanvas } from './rendering.js';
 import { getChapterSegments, syncChapterSegsToAll } from './data.js';
 import { _slicePeaks } from './waveform-draw.js';
+import { _fetchChapterPeaksIfNeeded } from './waveform.js';
 import { computeSilenceAfter, applyVerseFilterAndRender } from './filters.js';
 import { exitEditMode, _playRange, _addEditOverlay } from './edit-common.js';
 import { startRefEdit } from './edit-reference.js';
@@ -69,6 +70,11 @@ export function enterSplitMode(seg, row, prePausePlayMs = null) {
     canvas._splitBaseCache = null;
     drawSplitWaveform(canvas);
     setupSplitDragHandle(canvas, seg);
+
+    // Pre-fetch peaks for the segment being split if not available
+    if (splitAudioUrl && !state.segPeaksByAudio?.[splitAudioUrl]) {
+        _fetchChapterPeaksIfNeeded(dom.segReciterSelect.value, chapter);
+    }
 }
 
 // ---------------------------------------------------------------------------

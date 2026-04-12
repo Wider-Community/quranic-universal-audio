@@ -284,6 +284,10 @@ export function clearSegDisplay() {
     state._segPlayEndMs = 0;
     state.segPeaksByAudio = null;
     if (state._peaksPollTimer) { clearTimeout(state._peaksPollTimer); state._peaksPollTimer = null; }
+    state._segPeaksByUrl = null;
+    state._observerPeaksQueue = [];
+    if (state._observerPeaksTimer) { clearTimeout(state._observerPeaksTimer); state._observerPeaksTimer = null; }
+    state._observerPeaksRequested = new Set();
     dom.segListEl.innerHTML = '';
     dom.segPlayBtn.disabled = true;
     dom.segSaveBtn.disabled = true;
