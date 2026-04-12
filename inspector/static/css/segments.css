@@ -309,10 +309,25 @@
 
 /* ============ Segment Edit Modes ============ */
 
-/* Dimmed rows during edit mode -- single class on body, CSS does the rest */
-body.seg-edit-active .seg-row:not(.seg-edit-target) {
-    opacity: 0.3;
+/* Fixed overlay for edit dimming -- O(1) instead of O(N rows) */
+.seg-edit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 10;
     pointer-events: none;
+}
+
+body.seg-edit-active #seg-list,
+body.seg-edit-active #seg-validation,
+body.seg-edit-active #seg-validation-global {
+    pointer-events: none;
+}
+
+.seg-row.seg-edit-target {
+    position: relative;
+    z-index: 11;
+    pointer-events: auto;
 }
 
 /* Play / Go-to column at the far left of the row (between waveforms) */

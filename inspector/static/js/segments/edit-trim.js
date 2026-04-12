@@ -7,7 +7,7 @@ import { _getEditCanvas, syncAllCardsForSegment } from './rendering.js';
 import { getChapterSegments, syncChapterSegsToAll, _getChapterSegs } from './data.js';
 import { _slicePeaks } from './waveform-draw.js';
 import { computeSilenceAfter, applyVerseFilterAndRender } from './filters.js';
-import { exitEditMode, _playRange } from './edit-common.js';
+import { exitEditMode, _playRange, _addEditOverlay } from './edit-common.js';
 
 // ---------------------------------------------------------------------------
 // enterTrimMode
@@ -23,6 +23,7 @@ export function enterTrimMode(seg, row) {
 
     row.classList.add('seg-edit-target');
     document.body.classList.add('seg-edit-active');
+    _addEditOverlay();
 
     const actions = row.querySelector('.seg-actions');
     if (actions) actions.hidden = true;

@@ -14,6 +14,22 @@ import { stopErrorCardAudio } from './error-card-audio.js';
 // Registration pattern: trim/split modules register their entry functions
 // ---------------------------------------------------------------------------
 
+let _editOverlay = null;
+
+export function _addEditOverlay() {
+    if (_editOverlay) return;
+    _editOverlay = document.createElement('div');
+    _editOverlay.className = 'seg-edit-overlay';
+    document.body.appendChild(_editOverlay);
+}
+
+function _removeEditOverlay() {
+    if (_editOverlay) {
+        _editOverlay.remove();
+        _editOverlay = null;
+    }
+}
+
 let _enterTrimMode = null;
 let _enterSplitMode = null;
 let _drawSplitWaveformFn = null;
@@ -60,6 +76,7 @@ export function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
         state._pendingOp = null;
         state.segEditMode = null;
         state.segEditIndex = -1;
+        _removeEditOverlay();
         document.body.classList.remove('seg-edit-active');
         const targetRow = document.querySelector('.seg-row.seg-edit-target');
         if (targetRow) {
@@ -110,6 +127,7 @@ export function exitEditMode() {
         state._previewStopHandler = null;
     }
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
+    _removeEditOverlay();
     document.body.classList.remove('seg-edit-active');
     editRow?.classList.remove('seg-edit-target');
 }

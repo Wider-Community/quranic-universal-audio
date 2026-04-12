@@ -155,12 +155,7 @@ export function handleSegRowClick(e) {
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
             state._accordionOpCtx = { wrapper };
-            if (_handlers._isWrapperContextShown?.(wrapper) || !wrapper.querySelector('.val-card-actions')) {
-                _handlers.enterEditWithBuffer?.(seg, row, 'split', splitCat);
-            } else {
-                _handlers.ensureContextShown?.(row);
-                setTimeout(() => _handlers.enterEditWithBuffer?.(seg, row, 'split', splitCat), 1000);
-            }
+            _handlers.enterEditWithBuffer?.(seg, row, 'split', splitCat);
             return;
         }
         _handlers.enterEditWithBuffer?.(seg, row, 'split', splitCat);
@@ -177,16 +172,8 @@ export function handleSegRowClick(e) {
         const mergePrevCat = row.closest('details[data-category]')?.dataset?.category || null;
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
-            if (_handlers._isWrapperContextShown?.(wrapper) || !wrapper.querySelector('.val-card-actions')) {
-                state._accordionOpCtx = { wrapper, direction: 'prev' };
-                _handlers.mergeAdjacent?.(seg, 'prev', mergePrevCat);
-            } else {
-                _handlers.ensureContextShown?.(row);
-                setTimeout(() => {
-                    state._accordionOpCtx = { wrapper, direction: 'prev' };
-                    _handlers.mergeAdjacent?.(seg, 'prev', mergePrevCat);
-                }, 1000);
-            }
+            state._accordionOpCtx = { wrapper, direction: 'prev' };
+            _handlers.mergeAdjacent?.(seg, 'prev', mergePrevCat);
             return;
         }
         _handlers.mergeAdjacent?.(seg, 'prev', mergePrevCat);
@@ -201,16 +188,8 @@ export function handleSegRowClick(e) {
         const mergeNextCat = row.closest('details[data-category]')?.dataset?.category || null;
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest('.val-card-wrapper');
-            if (_handlers._isWrapperContextShown?.(wrapper) || !wrapper.querySelector('.val-card-actions')) {
-                state._accordionOpCtx = { wrapper, direction: 'next' };
-                _handlers.mergeAdjacent?.(seg, 'next', mergeNextCat);
-            } else {
-                _handlers.ensureContextShown?.(row);
-                setTimeout(() => {
-                    state._accordionOpCtx = { wrapper, direction: 'next' };
-                    _handlers.mergeAdjacent?.(seg, 'next', mergeNextCat);
-                }, 1000);
-            }
+            state._accordionOpCtx = { wrapper, direction: 'next' };
+            _handlers.mergeAdjacent?.(seg, 'next', mergeNextCat);
             return;
         }
         _handlers.mergeAdjacent?.(seg, 'next', mergeNextCat);

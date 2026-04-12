@@ -54,7 +54,7 @@ SEG_WORD_SPACING = "0.2em"                # gap between words in segment cards
 # Adjust (trim) mode settings
 TRIM_PAD_LEFT = 10000                     # ms padding before segment
 TRIM_PAD_RIGHT = 10000                    # ms padding after segment
-TRIM_DIM_ALPHA = 0.3                      # dimming opacity for padded regions
+TRIM_DIM_ALPHA = 0.4                      # dimming opacity for padded regions
 
 # Boundary adjustment: phoneme tail mismatch detection
 BOUNDARY_TAIL_K = 3                       # number of trailing phonemes to compare
