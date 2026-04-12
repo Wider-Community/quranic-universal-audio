@@ -87,8 +87,7 @@ Once the segments are ready, you will be automatically assigned to the [pull req
 **1. Check out the pull request branch**
 
 ```bash
-git pull origin main                            # get latest code updates
-git fetch origin                                # fetch remote branches
+git pull origin main  # get latest updates
 git branch -r                                   # list available branches
 git checkout feat/add-segments-mishary-alafasi  # switch to the PR branch
 ```

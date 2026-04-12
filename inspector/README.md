@@ -58,7 +58,7 @@ Segments are validated automatically and upon every save. Issues appear in colla
 | Low Confidence | Should fix | Ignore, merge, or adjust |
 | Cross-verse | Highly recommended | Ignore or split at pause |
 | Qalqala | Highly recommended | Ignore or adjust boundary |
-| Muqattaat | Display only | Edit if needed |
+| Muqatta'at | Display only | Edit if needed |
 
 > **General tip:** if a flagged segment has no actual error, click **Ignore** to so it disappears from the category and help us know that it is reviewed and correct.
 
@@ -108,11 +108,11 @@ This is especially important at verse boundaries — the HuggingFace dataset rec
 
 <!-- screenshot: qalqala segment with waveform showing the sound -->
 
-#### Muqattaat
+#### Muqatta'at
 
-Segments starting with huruf muqattaat (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if there are any issues with the reference or boundaries.
+Segments starting with huruf muqatta'at (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if any issues are spotted.
 
-<!-- screenshot: muqattaat segment -->
+<!-- screenshot: muqatta'at segment -->
 
 <!-- screenshot: editing operations in action -->
 
