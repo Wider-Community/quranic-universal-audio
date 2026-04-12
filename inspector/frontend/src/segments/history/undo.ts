@@ -10,6 +10,12 @@ import { renderEditHistoryPanel, _buildSplitLineage, _buildSplitChains } from '.
 import { renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows, _countVersesFromBatches } from './rendering';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
 import { hideSavePreview, buildSavePreviewData } from '../save';
+import { fetchJson, fetchJsonOrNull } from '../../shared/api';
+import type {
+    SegEditHistoryResponse,
+    SegUndoBatchResponse,
+    SegUndoOpsResponse,
+} from '../../types/api';
 
 // ---------------------------------------------------------------------------
 // _afterUndoSuccess -- shared post-undo refresh
@@ -17,9 +23,11 @@ import { hideSavePreview, buildSavePreviewData } from '../save';
 
 export async function _afterUndoSuccess(reciter, opsReversed) {
     try {
-        const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
-        if (histResp.ok) {
-            state.segHistoryData = await histResp.json();
+        const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
+            `/api/seg/edit-history/${reciter}`,
+        );
+        if (hist) {
+            state.segHistoryData = hist;
             renderEditHistoryPanel(state.segHistoryData);
             const observer = _ensureWaveformObserver();
             dom.segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
@@ -29,7 +37,7 @@ export async function _afterUndoSuccess(reciter, opsReversed) {
         }
     } catch (_) { /* non-critical */ }
     state._segDataStale = true;
-    fetch(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
+    fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
     dom.segPlayStatus.textContent = `Undo successful \u2014 ${opsReversed} op${opsReversed !== 1 ? 's' : ''} reversed`;
 }
 
@@ -47,12 +55,14 @@ export async function onBatchUndoClick(batchId, chapter, btn) {
     btn.textContent = 'Undoing...';
 
     try {
-        const resp = await fetch(`/api/seg/undo-batch/${reciter}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ batch_id: batchId }),
-        });
-        const result = await resp.json();
+        const result = await fetchJson<SegUndoBatchResponse & { error?: string; operations_reversed?: number }>(
+            `/api/seg/undo-batch/${reciter}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ batch_id: batchId }),
+            },
+        );
         if (result.ok) {
             await _afterUndoSuccess(reciter, result.operations_reversed);
         } else {
@@ -81,12 +91,14 @@ export async function onOpUndoClick(batchId, opIds, btn) {
     btn.textContent = 'Undoing...';
 
     try {
-        const resp = await fetch(`/api/seg/undo-ops/${reciter}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ batch_id: batchId, op_ids: opIds }),
-        });
-        const result = await resp.json();
+        const result = await fetchJson<SegUndoOpsResponse & { error?: string; operations_reversed?: number }>(
+            `/api/seg/undo-ops/${reciter}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ batch_id: batchId, op_ids: opIds }),
+            },
+        );
         if (result.ok) {
             await _afterUndoSuccess(reciter, result.operations_reversed);
         } else {
@@ -136,12 +148,14 @@ export async function onChainUndoClick(batchIds, chapter, btn) {
     let failed = false;
     for (const batchId of batchIds) {
         try {
-            const resp = await fetch(`/api/seg/undo-batch/${reciter}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ batch_id: batchId }),
-            });
-            const result = await resp.json();
+            const result = await fetchJson<SegUndoBatchResponse & { error?: string; operations_reversed?: number }>(
+                `/api/seg/undo-batch/${reciter}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ batch_id: batchId }),
+                },
+            );
             if (result.ok) {
                 totalReversed += result.operations_reversed || 0;
             } else {

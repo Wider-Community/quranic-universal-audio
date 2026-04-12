@@ -4,6 +4,12 @@
  */
 
 import { state, dom } from '../state';
+import { fetchJson } from '../../shared/api';
+import type {
+    SegAudioCacheStatusResponse,
+    SegDeleteAudioCacheResponse,
+    SegPrepareAudioResponse,
+} from '../../types/api';
 
 export function _isCurrentReciterBySurah() {
     const reciter = dom.segReciterSelect.value;
@@ -78,8 +84,9 @@ export function _updateCacheStatusUI(data) {
 
 export async function _fetchCacheStatus(reciter) {
     try {
-        const resp = await fetch(`/api/seg/audio-cache-status/${reciter}`);
-        const data = await resp.json();
+        const data = await fetchJson<SegAudioCacheStatusResponse>(
+            `/api/seg/audio-cache-status/${reciter}`,
+        );
         const bar = document.getElementById('seg-cache-bar');
         if (bar) bar.hidden = false;
         _updateCacheStatusUI(data);
@@ -91,7 +98,9 @@ export async function _prepareAudio(reciter) {
     const prepBtn = document.getElementById('seg-prepare-btn');
     if (prepBtn) { prepBtn.disabled = true; prepBtn.hidden = true; }
     try {
-        await fetch(`/api/seg/prepare-audio/${reciter}`, { method: 'POST' });
+        await fetchJson<SegPrepareAudioResponse>(`/api/seg/prepare-audio/${reciter}`, {
+            method: 'POST',
+        });
     } catch { /* poll will handle */ }
     if (state._audioCachePollTimer) clearInterval(state._audioCachePollTimer);
     state._audioCachePollTimer = setInterval(async () => {
@@ -112,7 +121,9 @@ export async function _deleteAudioCache(reciter) {
     const delBtn = document.getElementById('seg-delete-cache-btn');
     if (delBtn) { delBtn.disabled = true; delBtn.textContent = 'Deleting...'; }
     try {
-        await fetch(`/api/seg/delete-audio-cache/${reciter}`, { method: 'DELETE' });
+        await fetchJson<SegDeleteAudioCacheResponse>(`/api/seg/delete-audio-cache/${reciter}`, {
+            method: 'DELETE',
+        });
     } catch { /* ignore */ }
     if (delBtn) { delBtn.disabled = false; delBtn.textContent = 'Delete Cache'; }
     await _fetchCacheStatus(reciter);

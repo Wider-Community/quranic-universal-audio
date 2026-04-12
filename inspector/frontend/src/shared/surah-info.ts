@@ -7,11 +7,14 @@
  * to the exporting module's variable.
  */
 
-export let surahInfo = {};
+import { fetchJson } from './api';
+import type { SurahInfoResponse } from '../types/api';
 
-export const surahInfoReady = fetch('/api/surah-info')
-    .then(r => r.json())
-    .then(data => { surahInfo = data; });
+export let surahInfo: SurahInfoResponse = {};
+
+export const surahInfoReady = fetchJson<SurahInfoResponse>('/api/surah-info').then((data) => {
+    surahInfo = data;
+});
 
 export function surahOptionText(num) {
     const info = surahInfo[String(num)];

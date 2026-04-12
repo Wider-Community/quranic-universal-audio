@@ -14,6 +14,8 @@ import { renderEditHistoryPanel } from './history/index';
 import { _buildSplitLineage, _buildSplitChains } from './history/index';
 import { renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows, _countVersesFromBatches } from './history/rendering';
 import { stopErrorCardAudio } from './validation/error-card-audio';
+import { fetchJson, fetchJsonOrNull } from '../shared/api';
+import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
 
 // ---------------------------------------------------------------------------
 // onSegSaveClick -- entry point from Save button
@@ -224,12 +226,14 @@ export async function executeSave() {
                 savedChanges += chOps.length;
             }
 
-            const resp = await fetch(`/api/seg/save/${reciter}/${ch}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            const result = await resp.json();
+            const result = await fetchJson<SegSaveResponse & { error?: string }>(
+                `/api/seg/save/${reciter}/${ch}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                },
+            );
             if (!result.ok) {
                 dom.segPlayStatus.textContent = `Save error (ch ${ch}): ${result.error}`;
                 allOk = false;
@@ -249,13 +253,15 @@ export async function executeSave() {
             dom.segSaveBtn.textContent = msg;
             document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
             setTimeout(() => { dom.segSaveBtn.textContent = 'Save'; }, 2500);
-            fetch(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
+            fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
                 .then(() => refreshValidation())
                 .catch(() => refreshValidation());
             try {
-                const histResp = await fetch(`/api/seg/edit-history/${reciter}`);
-                if (histResp.ok) {
-                    state.segHistoryData = await histResp.json();
+                const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
+                    `/api/seg/edit-history/${reciter}`,
+                );
+                if (hist) {
+                    state.segHistoryData = hist;
                     renderEditHistoryPanel(state.segHistoryData);
                 }
             } catch (_) { /* non-critical */ }

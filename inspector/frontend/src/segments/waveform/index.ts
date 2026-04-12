@@ -9,6 +9,8 @@ import { getSegByChapterIndex } from '../data';
 import { _getEditCanvas } from '../rendering';
 import { drawWaveformFromPeaksForSeg, _drawSplitHighlight, _drawTrimHighlight, _drawMergeHighlight } from './draw';
 import { _isCurrentReciterBySurah } from '../playback/audio-cache';
+import { fetchJson } from '../../shared/api';
+import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
 
 // Forward references for edit-mode draw functions (Phase 7).
 // The observer needs to call drawSplitWaveform/drawTrimWaveform when it encounters
@@ -116,7 +118,7 @@ export function _fetchPeaks(reciter, chapters) {
     if (state._peaksPollTimer) { clearTimeout(state._peaksPollTimer); state._peaksPollTimer = null; }
     if (!chapters || chapters.length === 0) return;
     let url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
-    fetch(url).then(r => r.json()).then(data => {
+    fetchJson<SegPeaksResponse>(url).then(data => {
         if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
         if (!state.segPeaksByAudio) state.segPeaksByAudio = {};
         Object.assign(state.segPeaksByAudio, data.peaks || {});
@@ -167,12 +169,11 @@ function _flushObserverPeaksQueue() {
     const reciter = dom.segReciterSelect.value;
     if (!reciter) return;
 
-    fetch(`/api/seg/segment-peaks/${reciter}`, {
+    fetchJson<SegSegmentPeaksResponse>(`/api/seg/segment-peaks/${reciter}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ segments: queue, cached_only: true }),
     })
-        .then(r => r.json())
         .then(data => {
             if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
             const newPeaks = data.peaks || {};

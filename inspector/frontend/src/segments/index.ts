@@ -34,6 +34,8 @@ import { renderEditHistoryPanel, showHistoryView, hideHistoryView } from './hist
 import { clearHistoryFilters, setHistorySort } from './history/filters';
 import { playErrorCardAudio, stopErrorCardAudio } from './validation/error-card-audio';
 import { ensureContextShown, _isWrapperContextShown } from './validation/error-cards';
+import { fetchJsonOrNull } from '../shared/api';
+import type { SegConfigResponse } from '../types/api';
 
 // ---------------------------------------------------------------------------
 // Inject the classify function to break the state <-> categories cycle
@@ -169,9 +171,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load display config
     try {
-        const cfgResp = await fetch('/api/seg/config');
-        if (cfgResp.ok) {
-            const cfg = await cfgResp.json();
+        const cfg = await fetchJsonOrNull<SegConfigResponse>('/api/seg/config');
+        if (cfg) {
             const root = document.documentElement.style;
             if (cfg.seg_font_size) root.setProperty('--seg-font-size', cfg.seg_font_size);
             if (cfg.seg_word_spacing) root.setProperty('--seg-word-spacing', cfg.seg_word_spacing);

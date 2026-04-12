@@ -4,6 +4,8 @@
  */
 
 import { Chart } from '../shared/chart';
+import { fetchJson } from '../shared/api';
+import type { SegSaveChartResponse } from '../types/api';
 import { state, dom } from './state';
 
 // ---------------------------------------------------------------------------
@@ -74,8 +76,10 @@ function _saveChart(canvas, key) {
     canvas.toBlob((blob) => {
         if (!blob) return;
         const fd = new FormData(); fd.append('name', key); fd.append('image', blob, key + '.png');
-        fetch(`/api/seg/stats/${encodeURIComponent(reciter)}/save-chart`, { method: 'POST', body: fd })
-            .then(r => r.json()).then(data => { if (data.ok) { const tip = document.createElement('span'); tip.className = 'seg-stats-saved-tip'; tip.textContent = 'Saved'; document.body.appendChild(tip); setTimeout(() => tip.remove(), 1200); } });
+        fetchJson<SegSaveChartResponse>(
+            `/api/seg/stats/${encodeURIComponent(reciter)}/save-chart`,
+            { method: 'POST', body: fd },
+        ).then((data) => { if (data.ok) { const tip = document.createElement('span'); tip.className = 'seg-stats-saved-tip'; tip.textContent = 'Saved'; document.body.appendChild(tip); setTimeout(() => tip.remove(), 1200); } });
     }, 'image/png');
 }
 

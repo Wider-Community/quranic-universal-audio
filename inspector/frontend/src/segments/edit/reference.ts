@@ -7,6 +7,8 @@ import { state, dom, createOp, snapshotSeg, finalizeOp, markDirty } from '../sta
 import { _normalizeRef, formatRef } from '../references';
 import { syncAllCardsForSegment } from '../rendering';
 import { stopSegAnimation } from '../playback/index';
+import { fetchJson } from '../../shared/api';
+import type { SegResolveRefResponse } from '../../types/api';
 
 // ---------------------------------------------------------------------------
 // startRefEdit -- inline ref input on a segment card
@@ -134,8 +136,9 @@ export async function commitRefEdit(seg, newRef, row) {
 
     if (newRef) {
         try {
-            const resp = await fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(newRef)}`);
-            const data = await resp.json();
+            const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
+                `/api/seg/resolve_ref?ref=${encodeURIComponent(newRef)}`,
+            );
             if (data.text) {
                 seg.matched_text = data.text;
                 seg.display_text = data.display_text || data.text;

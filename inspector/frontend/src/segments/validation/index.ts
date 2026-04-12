@@ -11,6 +11,8 @@ import { renderCategoryCards } from './error-cards';
 import { applyFiltersAndRender } from '../filters';
 import { jumpToSegment, jumpToVerse, jumpToMissingVerseContext } from '../navigation';
 import { _ensureWaveformObserver } from '../waveform/index';
+import { fetchJson } from '../../shared/api';
+import type { SegValidateResponse } from '../../types/api';
 
 // ---------------------------------------------------------------------------
 // captureValPanelState / restoreValPanelState
@@ -332,8 +334,7 @@ export async function refreshValidation() {
     try {
         const globalState = captureValPanelState(dom.segValidationGlobalEl);
         const chState = captureValPanelState(dom.segValidationEl);
-        const valResp = await fetch(`/api/seg/validate/${reciter}`);
-        state.segValidation = await valResp.json();
+        state.segValidation = await fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`);
         const ch = dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : null;
         if (ch !== null) {
             renderValidationPanel(state.segValidation, null, dom.segValidationGlobalEl, 'All Chapters');

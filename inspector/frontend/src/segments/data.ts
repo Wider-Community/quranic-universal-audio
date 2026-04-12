@@ -16,6 +16,16 @@ import { stopSegAnimation } from './playback/index';
 import { renderValidationPanel, captureValPanelState, restoreValPanelState } from './validation/index';
 import { renderStatsPanel } from './stats';
 import { renderEditHistoryPanel } from './history/index';
+import { fetchJson, fetchJsonOrNull } from '../shared/api';
+import type {
+    SegAllResponse,
+    SegChaptersResponse,
+    SegDataResponse,
+    SegEditHistoryResponse,
+    SegRecitersResponse,
+    SegStatsResponse,
+    SegValidateResponse,
+} from '../types/api';
 
 // ---------------------------------------------------------------------------
 // Reciter loading
@@ -23,8 +33,7 @@ import { renderEditHistoryPanel } from './history/index';
 
 export async function loadSegReciters() {
     try {
-        const resp = await fetch('/api/seg/reciters');
-        state.segAllReciters = await resp.json();
+        state.segAllReciters = await fetchJson<SegRecitersResponse>('/api/seg/reciters');
         filterAndRenderReciters();
 
         const _savedSegReciter = localStorage.getItem(LS_KEYS.SEG_RECITER);
@@ -114,9 +123,9 @@ export async function onSegReciterChange() {
     if (!reciter) return;
 
     try {
-        const resp = await fetch(`/api/seg/chapters/${reciter}`);
+        const chapters = await fetchJson<SegChaptersResponse>(`/api/seg/chapters/${reciter}`);
         if (dom.segReciterSelect.value !== reciter) return;
-        const chapters = await resp.json();
+        if (!Array.isArray(chapters)) return;
         chapters.forEach(ch => {
             const opt = document.createElement('option');
             opt.value = ch;
@@ -131,10 +140,10 @@ export async function onSegReciterChange() {
     if (dom.segReciterSelect.value !== reciter) return;
 
     const [valResult, statsResult, allResult, histResult] = await Promise.allSettled([
-        fetch(`/api/seg/validate/${reciter}`).then(r => r.json()),
-        fetch(`/api/seg/stats/${reciter}`).then(r => r.json()),
-        fetch(`/api/seg/all/${reciter}`).then(r => r.json()),
-        fetch(`/api/seg/edit-history/${reciter}`).then(r => r.ok ? r.json() : null),
+        fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`),
+        fetchJson<SegStatsResponse>(`/api/seg/stats/${reciter}`),
+        fetchJson<SegAllResponse>(`/api/seg/all/${reciter}`),
+        fetchJsonOrNull<SegEditHistoryResponse>(`/api/seg/edit-history/${reciter}`),
     ]);
 
     if (dom.segReciterSelect.value !== reciter) return;
@@ -207,9 +216,9 @@ export async function onSegChapterChange() {
     dom.segPlayBtn.disabled = false;
 
     try {
-        const resp = await fetch(`/api/seg/data/${reciter}/${chapter}`);
+        const segData = await fetchJson<SegDataResponse & { error?: string }>(`/api/seg/data/${reciter}/${chapter}`);
         if (dom.segReciterSelect.value !== reciter || dom.segChapterSelect.value !== chapter) return;
-        state.segData = await resp.json();
+        state.segData = segData;
         if (state.segData.error) return;
         if (_isCurrentReciterBySurah() && state.segData.audio_url && !state.segData.audio_url.startsWith('/api/')) {
             state.segData.audio_url = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(state.segData.audio_url)}`;

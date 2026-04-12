@@ -7,6 +7,7 @@ import { state, dom } from './state';
 import { AUDIO_BUFFER_CACHE_SIZE } from '../shared/constants';
 import { getSegRelTime, getSegDuration } from './index';
 import { updateDisplay } from './playback';
+import { fetchArrayBuffer } from '../shared/api';
 
 // NOTE: circular dependency with index.js (getSegRelTime, getSegDuration) and
 // playback.js (updateDisplay for handleCanvasClick). Safe because these
@@ -34,8 +35,7 @@ export async function decodeWaveform(url) {
         if (state.audioBufferCache.has(url)) {
             audioBuffer = state.audioBufferCache.get(url);
         } else {
-            const response = await fetch(url);
-            const arrayBuffer = await response.arrayBuffer();
+            const arrayBuffer = await fetchArrayBuffer(url);
             audioBuffer = await state.audioContext.decodeAudioData(arrayBuffer);
             // Evict oldest if cache exceeds 5 entries
             if (state.audioBufferCache.size >= AUDIO_BUFFER_CACHE_SIZE) {

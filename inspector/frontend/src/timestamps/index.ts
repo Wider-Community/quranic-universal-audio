@@ -10,6 +10,15 @@
 import { SearchableSelect } from '../shared/searchable-select';
 import { surahInfoReady, surahOptionText } from '../shared/surah-info';
 import { LS_KEYS } from '../shared/constants';
+import { fetchJson } from '../shared/api';
+import type {
+    TsChaptersResponse,
+    TsConfigResponse,
+    TsDataResponse,
+    TsRecitersResponse,
+    TsValidateResponse,
+    TsVersesResponse,
+} from '../types/api';
 
 import { state, dom } from './state';
 import { setupCanvas, decodeWaveform, cacheWaveformSnapshot, handleCanvasClick } from './waveform';
@@ -88,7 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await surahInfoReady;
     state.tsChapterSS = new SearchableSelect(dom.tsChapterSelect);
     loadTsReciters();
-    fetch('/api/ts/config').then(r => r.json()).then(cfg => {
+    fetchJson<TsConfigResponse>('/api/ts/config').then(cfg => {
         const root = document.documentElement.style;
         root.setProperty('--unified-display-max-height', cfg.unified_display_max_height + 'px');
         root.setProperty('--anim-highlight-color', cfg.anim_highlight_color);
@@ -228,8 +237,7 @@ function setupEventListeners() {
 
 async function loadTsReciters() {
     try {
-        const resp = await fetch('/api/ts/reciters');
-        state.tsAllReciters = await resp.json();
+        state.tsAllReciters = await fetchJson<TsRecitersResponse>('/api/ts/reciters');
         renderTsReciters();
 
         // Restore saved reciter
@@ -299,10 +307,10 @@ async function onTsReciterChange() {
 
     try {
         const [chapResult, valResult] = await Promise.allSettled([
-            fetch(`/api/ts/chapters/${reciter}`).then(r => r.json()),
-            fetch(`/api/ts/validate/${reciter}`).then(r => r.json()),
+            fetchJson<TsChaptersResponse>(`/api/ts/chapters/${reciter}`),
+            fetchJson<TsValidateResponse>(`/api/ts/validate/${reciter}`),
         ]);
-        if (chapResult.status === 'fulfilled') {
+        if (chapResult.status === 'fulfilled' && Array.isArray(chapResult.value)) {
             chapResult.value.forEach(ch => {
                 const opt = document.createElement('option');
                 opt.value = ch; opt.textContent = surahOptionText(ch);
@@ -354,8 +362,9 @@ export async function onTsChapterChange() {
     if (!reciter || !chapter) return;
 
     try {
-        const resp = await fetch(`/api/ts/verses/${reciter}/${chapter}`);
-        const data = await resp.json();
+        const data = await fetchJson<TsVersesResponse & { error?: string }>(
+            `/api/ts/verses/${reciter}/${chapter}`,
+        );
         if (data.error) return;
 
         const verses = data.verses || [];
@@ -388,8 +397,9 @@ async function loadTimestampVerse(reciter, verseRef) {
     document.body.classList.add('loading');
 
     try {
-        const resp = await fetch(`/api/ts/data/${reciter}/${verseRef}`);
-        const data = await resp.json();
+        const data = await fetchJson<TsDataResponse & { error?: string }>(
+            `/api/ts/data/${reciter}/${verseRef}`,
+        );
 
         if (data.error) {
             alert('Error: ' + data.error);
@@ -449,8 +459,7 @@ export async function loadRandomTimestamp(reciter = null) {
 
     try {
         const url = reciter ? `/api/ts/random/${encodeURIComponent(reciter)}` : '/api/ts/random';
-        const resp = await fetch(url);
-        const data = await resp.json();
+        const data = await fetchJson<TsDataResponse & { error?: string }>(url);
 
         if (data.error) {
             alert('Error: ' + data.error);
@@ -478,8 +487,9 @@ export async function loadRandomTimestamp(reciter = null) {
         // Populate chapter + verse dropdowns in parallel (lightweight APIs only)
         const fetches = [];
         if (reciterChanged) fetches.push(
-            fetch(`/api/ts/chapters/${encodeURIComponent(data.reciter)}`).then(r => r.json()).then(chapters => {
+            fetchJson<TsChaptersResponse>(`/api/ts/chapters/${encodeURIComponent(data.reciter)}`).then(chapters => {
                 dom.tsChapterSelect.innerHTML = '<option value="">-- select --</option>';
+                if (!Array.isArray(chapters)) return;
                 chapters.forEach(ch => {
                     const opt = document.createElement('option');
                     opt.value = ch; opt.textContent = surahOptionText(ch);
@@ -490,7 +500,7 @@ export async function loadRandomTimestamp(reciter = null) {
             })
         );
         if (reciterChanged || chapterChanged) fetches.push(
-            fetch(`/api/ts/verses/${encodeURIComponent(data.reciter)}/${data.chapter}`).then(r => r.json()).then(vData => {
+            fetchJson<TsVersesResponse>(`/api/ts/verses/${encodeURIComponent(data.reciter)}/${data.chapter}`).then(vData => {
                 dom.tsSegmentSelect.innerHTML = '<option value="">--</option>';
                 (vData.verses || []).forEach(v => {
                     const opt = document.createElement('option');

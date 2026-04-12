@@ -9,6 +9,8 @@
 import { SearchableSelect } from '../shared/searchable-select';
 import { surahInfoReady, surahOptionText } from '../shared/surah-info';
 import { LS_KEYS } from '../shared/constants';
+import { fetchJson } from '../shared/api';
+import type { AudioSourcesResponse, AudioSurahsResponse } from '../types/api';
 
 const categoryToggle = document.getElementById('aud-category-toggle');
 const reciterSelect = document.getElementById('aud-reciter-select');
@@ -50,8 +52,7 @@ async function loadSources() {
         await surahInfoReady;
         audReciterSS = new SearchableSelect(reciterSelect);
         audSurahSS = new SearchableSelect(surahSelect);
-        const res = await fetch('/api/audio/sources');
-        audioSources = await res.json();
+        audioSources = await fetchJson<AudioSourcesResponse>('/api/audio/sources');
 
         // Restore category from saved reciter before populating
         const _savedAudReciter = localStorage.getItem(LS_KEYS.AUD_RECITER);
@@ -133,8 +134,9 @@ reciterSelect.addEventListener('change', async () => {
     try {
         let urls = urlCache[cacheKey];
         if (!urls) {
-            const res = await fetch(`/api/audio/surahs/${currentCategory}/${sourceSlug}`);
-            const data = await res.json();
+            const data = await fetchJson<AudioSurahsResponse>(
+                `/api/audio/surahs/${currentCategory}/${sourceSlug}`,
+            );
             urls = data.surahs || {};
             urlCache[cacheKey] = urls;
         }

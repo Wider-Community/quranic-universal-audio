@@ -33,7 +33,7 @@ with the fixing commit SHA and phase.
 | B05 | Split chain UID lost on undo                                   | inspector/static/js/segments/state.js:111-112        | SEEDED | exploration    | OPEN   |         | `state._splitChainUid` set but never restored after undo; next history view loses parent/child linkage. |
 | B06 | Silence-after staleness if computed without re-render          | inspector/static/js/segments/filters.js:25-41        | SEEDED | exploration    | OPEN   |         | `computeSilenceAfter` mutates segments in `segAllData`; `segData` (chapter view) is a filtered copy and may show stale `silence_after_ms` until next `renderSegList`. |
 | B07 | Validation accordion half-state when some categories null      | inspector/static/js/segments/validation.js:72-76     | SEEDED | exploration    | OPEN   |         | `hasAny` check tolerates mixed null/empty categories; panel opens with some sections unrendered → empty accordions. |
-| B08 | /api/seg/edit-history returns JSONL but JS calls r.json()      | inspector/static/js/segments/data.js:136             | SEEDED | exploration    | OPEN   |         | Response is newline-delimited JSON; `r.json()` fails or silently returns null. Fixed-by-construction in Phase 3 via `shared/api.fetchJsonl`. |
+| B08 | /api/seg/edit-history returns JSONL but JS calls r.json()      | inspector/frontend/src/segments/data.ts:138          | SEEDED | exploration    | CLOSED | phase-3 | **Not a bug** — the Flask route `seg_edit_history` reads `edit_history.jsonl` server-side, parses each line, and returns `jsonify({batches, summary})` (one JSON object). The exploration agent misread the route. Re-verified at `inspector/routes/segments_validation.py:63-151`. `r.json()` is correct. `fetchJsonl` helper consequently not needed and was omitted from `shared/api.ts`. |
 
 ## Section 2 — TypeScript-caught
 
@@ -58,7 +58,6 @@ _No rows yet — review agents append if regressions appear in the per-phase gat
 
 ## Section 5 — Closed
 
-_No rows yet — rows move here with commit SHA and closing phase when resolved._
-
 | ID | Origin section | Fix summary | Fix-SHA | Phase |
 |----|----------------|-------------|---------|-------|
+| B08 | Section 1 | Not a bug — `/api/seg/edit-history` returns `{batches, summary}` as JSON; the server parses JSONL internally. `fetchJsonl` helper omitted. | _(this phase)_ | 3 |

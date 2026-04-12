@@ -15,6 +15,8 @@ import { _suggestSplitRefs } from '../references';
 import { _fixupValIndicesForSplit } from '../validation/index';
 import { _rebuildAccordionAfterSplit } from '../validation/error-cards';
 import { refreshOpenAccordionCards } from '../validation/index';
+import { fetchJsonOrNull } from '../../shared/api';
+import type { SegResolveRefResponse } from '../../types/api';
 
 // ---------------------------------------------------------------------------
 // enterSplitMode
@@ -285,8 +287,8 @@ export async function confirmSplit(seg) {
         firstHalf.matched_ref = suggested.first;
         secondHalf.matched_ref = suggested.second;
         const [r1, r2] = await Promise.allSettled([
-            fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.first)}`).then(r => r.ok ? r.json() : null),
-            fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.second)}`).then(r => r.ok ? r.json() : null),
+            fetchJsonOrNull<SegResolveRefResponse>(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.first)}`),
+            fetchJsonOrNull<SegResolveRefResponse>(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.second)}`),
         ]);
         if (r1.status === 'fulfilled' && r1.value?.text) {
             firstHalf.matched_text = r1.value.text;

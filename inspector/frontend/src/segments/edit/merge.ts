@@ -8,6 +8,8 @@ import { getChapterSegments, syncChapterSegsToAll } from '../data';
 import { computeSilenceAfter, applyVerseFilterAndRender } from '../filters';
 import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from '../validation/index';
 import { _rebuildAccordionAfterMerge } from '../validation/error-cards';
+import { fetchJson } from '../../shared/api';
+import type { SegResolveRefResponse } from '../../types/api';
 
 // ---------------------------------------------------------------------------
 // mergeAdjacent -- combine two adjacent segments
@@ -54,8 +56,9 @@ export async function mergeAdjacent(seg, direction, contextCategory = null) {
     let mergedDisplay = [first.display_text, second.display_text].filter(Boolean).join(' ');
     if (mergedRef) {
         try {
-            const resp = await fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(mergedRef)}`);
-            const data = await resp.json();
+            const data = await fetchJson<SegResolveRefResponse>(
+                `/api/seg/resolve_ref?ref=${encodeURIComponent(mergedRef)}`,
+            );
             if (data.text) {
                 mergedText = data.text;
                 mergedDisplay = data.display_text || data.text;
