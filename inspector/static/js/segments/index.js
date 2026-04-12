@@ -184,6 +184,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cfg.qalqala_letters) state._qalqalaLetters = new Set(cfg.qalqala_letters);
             if (cfg.standalone_refs) state._standaloneRefs = new Set(cfg.standalone_refs.map(([s,a,w]) => `${s}:${a}:${w}`));
             if (cfg.standalone_words) state._standaloneWords = new Set(cfg.standalone_words);
+            if (cfg.accordion_context) state._accordionContext = cfg.accordion_context;
         }
     } catch (_) { /* use CSS defaults */ }
 

@@ -26,6 +26,11 @@ export function renderHistoryFilterBar(data) {
 
     const opCounts = {};
     for (const item of allItems) { if (item.group.length === 0) continue; opCounts[item.group[0].op_type] = (opCounts[item.group[0].op_type] || 0) + 1; }
+    if (state._splitChains) {
+        for (const chain of state._splitChains.values()) {
+            opCounts['split_segment'] = (opCounts['split_segment'] || 0) + 1;
+        }
+    }
     const sortedOps = Object.entries(opCounts).sort((a, b) => b[1] - a[1]);
     for (const [opType, count] of sortedOps) {
         const pill = document.createElement('button');

@@ -11,6 +11,7 @@ from config import (
     SHOW_BOUNDARY_PHONEMES,
     LOW_CONF_DEFAULT_THRESHOLD,
     LOW_CONFIDENCE_THRESHOLD,
+    ACCORDION_CONTEXT,
 )
 from constants import (
     VALIDATION_CATEGORIES,
@@ -47,6 +48,7 @@ def seg_config():
         "qalqala_letters": sorted(_QALQALA_LETTERS),
         "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
         "standalone_words": sorted(_STANDALONE_WORDS),
+        "accordion_context": ACCORDION_CONTEXT,
     })
 
 

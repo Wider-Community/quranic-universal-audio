@@ -252,7 +252,7 @@ export function renderValidationPanel(data, chapter = null, targetEl = dom.segVa
         cardsDiv.className = 'val-cards-container';
         cardsDiv.hidden = true;
 
-        const _ctxDefaultShown = cat.type === 'failed' || cat.type === 'boundary_adj' || cat.type === 'audio_bleeding' || cat.type === 'repetitions' || cat.type === 'qalqala';
+        const _ctxDefaultShown = (state._accordionContext?.[cat.type] ?? 'hidden') !== 'hidden';
         const ctxAllRow = document.createElement('div');
         ctxAllRow.className = 'val-ctx-all-row';
         ctxAllRow.hidden = true;

@@ -131,6 +131,7 @@ export const state = {
     _standaloneWords: null,  // Set of stripped Arabic words
     _qalqalaLetters: null,   // Set of Arabic letters
     _lcDefaultThreshold: 80,
+    _accordionContext: null,
 
     // SearchableSelect instance
     segChapterSS: null,

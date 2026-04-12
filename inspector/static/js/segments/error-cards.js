@@ -179,8 +179,9 @@ export function renderCategoryCards(type, items, container) {
                 actionsRow.appendChild(ignoreBtn);
             }
             wrapper.appendChild(actionsRow);
-            const contextDefault = type === 'failed' || type === 'boundary_adj' || type === 'audio_bleeding' || type === 'repetitions' || type === 'qalqala';
-            const nextOnly = type === 'muqattaat' || type === 'qalqala';
+            const ctxMode = state._accordionContext?.[type] ?? 'hidden';
+            const contextDefault = ctxMode !== 'hidden';
+            const nextOnly = ctxMode === 'next_only';
             addContextToggle(actionsRow, [{ seg, card }], { defaultOpen: contextDefault, nextOnly });
             container.appendChild(wrapper);
         }

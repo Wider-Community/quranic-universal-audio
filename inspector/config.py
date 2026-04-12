@@ -60,6 +60,19 @@ TRIM_DIM_ALPHA = 0.4                      # dimming opacity for padded regions
 BOUNDARY_TAIL_K = 3                       # number of trailing phonemes to compare
 SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards
 
+# Accordion context: which validation categories auto-expand context cards
+# Values: "shown" (default open), "hidden" (default closed), "next_only" (open on nav)
+ACCORDION_CONTEXT = {
+    "failed": "shown",
+    "low_confidence": "shown",
+    "boundary_adj": "hidden",
+    "repetitions": "hidden",
+    "cross_verse": "shown",
+    "muqattaat": "hidden",
+    "qalqala": "hidden",
+    "audio_bleeding": "shown",
+}
+
 # HTTP / subprocess timeouts (seconds)
 FFPROBE_TIMEOUT = 5
 FFMPEG_TIMEOUT = 10
