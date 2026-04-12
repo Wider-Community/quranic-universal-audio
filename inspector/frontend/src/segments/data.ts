@@ -66,7 +66,8 @@ export function filterAndRenderReciters(): void {
     for (const source of Object.keys(grouped).sort()) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = source;
-        for (const r of grouped[source]) {
+        const reciters = grouped[source] ?? [];
+        for (const r of reciters) {
             const opt = document.createElement('option');
             opt.value = r.slug;
             opt.textContent = r.name;
@@ -228,7 +229,7 @@ export async function onSegChapterChange(): Promise<void> {
             .filter((s: Segment) => s.chapter === parseInt(chapter) && !!s.matched_ref)
             .forEach((s: Segment) => {
                 const start = s.matched_ref.split('-')[0]?.split(':');
-                if (start && start.length >= 2) verses.add(parseInt(start[1]));
+                if (start && start.length >= 2 && start[1] != null) verses.add(parseInt(start[1]));
             });
         [...verses].sort((a, b) => a - b).forEach((v) => {
             const opt = document.createElement('option');
@@ -324,7 +325,8 @@ export function getChapterSegments(chapter: number | string): Segment[] {
             byIndex.set(`${ch}:${s.index}`, s);
         });
         for (const ch of Object.keys(byChapter)) {
-            byChapter[ch].sort((a, b) => a.index - b.index);
+            const list = byChapter[ch];
+            if (list) list.sort((a, b) => a.index - b.index);
         }
         all._byChapter = byChapter;
         all._byChapterIndex = byIndex;
@@ -348,8 +350,8 @@ export function getAdjacentSegments(chapter: number | string, index: number): Ad
     const segs = getChapterSegments(chapter);
     const pos = segs.findIndex((s) => s.index === index);
     return {
-        prev: pos > 0 ? segs[pos - 1] : null,
-        next: pos >= 0 && pos < segs.length - 1 ? segs[pos + 1] : null,
+        prev: pos > 0 ? (segs[pos - 1] ?? null) : null,
+        next: pos >= 0 && pos < segs.length - 1 ? (segs[pos + 1] ?? null) : null,
     };
 }
 

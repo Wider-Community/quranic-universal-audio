@@ -161,7 +161,8 @@ export function renderValidationPanel(
             btnClass: 'val-error',
             onClick: (i: SegValMissingWordsItem) => {
                 const indices = i.seg_indices || [];
-                if (indices.length > 0) jumpToSegment(i.chapter, indices[0]);
+                const first = indices[0];
+                if (first != null) jumpToSegment(i.chapter, first);
                 else jumpToVerse(i.chapter, i.verse_key);
             },
         } as ValCategoryDescriptor<SegValMissingWordsItem>) as ValCategoryDescriptor<SegValAnyItem>,
@@ -493,7 +494,9 @@ function _forEachValItem(chapter: number, fn: ValFixupFn): void {
             if (item.chapter !== chapter) continue;
             if (item.seg_indices) {
                 for (let i = 0; i < item.seg_indices.length; i++) {
-                    const wrapped: ValIndexedItem<'seg_index'> = { seg_index: item.seg_indices[i] };
+                    const idx = item.seg_indices[i];
+                    if (idx == null) continue;
+                    const wrapped: ValIndexedItem<'seg_index'> = { seg_index: idx };
                     fn(wrapped, 'seg_index');
                     item.seg_indices[i] = wrapped.seg_index;
                 }

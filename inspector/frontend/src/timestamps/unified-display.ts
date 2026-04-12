@@ -60,7 +60,8 @@ export function computeBridgeAtBoundary(prevWord: TsWord, currWord: TsWord): Bri
     const noonOrTanween = prevEndsNoon || prevHasTanween;
 
     for (const pi of currIndices) {
-        const phone = state.intervals[pi] && state.intervals[pi]!.phone;
+        const iv = state.intervals[pi];
+        const phone = iv?.phone;
         if (!phone) break;
         const requiredLetter = IDGHAM_GHUNNAH_START[phone];
         if (!requiredLetter) break;
@@ -78,7 +79,8 @@ export function computeBridgeAtBoundary(prevWord: TsWord, currWord: TsWord): Bri
         for (let k = prevIndices.length - 1; k >= 0; k--) {
             const pi = prevIndices[k];
             if (pi === undefined) continue;
-            const phone = state.intervals[pi] && state.intervals[pi]!.phone;
+            const iv = state.intervals[pi];
+            const phone = iv?.phone;
             if (phone === 'm\u0303') {
                 fromPrev.push(pi);
             } else {

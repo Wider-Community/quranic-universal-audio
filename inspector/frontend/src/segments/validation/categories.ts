@@ -42,7 +42,8 @@ export function _stripQuranDeco(text: string): string {
 export function _lastArabicLetter(text: string): string | null {
     const stripped = _stripQuranDeco(text);
     for (let i = stripped.length - 1; i >= 0; i--) {
-        if (_LETTER_RE.test(stripped[i])) return stripped[i];
+        const ch = stripped[i];
+        if (ch != null && _LETTER_RE.test(ch)) return ch;
     }
     return null;
 }
@@ -79,9 +80,10 @@ export function _classifySegCategories(seg: Segment | SegClassifyInput): string[
 
     // Parse canonical ref: "surah:ayah:word-surah:ayah:word"
     const parts = ref.split('-');
-    if (parts.length !== 2) return cats;
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return cats;
     const sp = parts[0].split(':'), ep = parts[1].split(':');
     if (sp.length !== 3 || ep.length !== 3) return cats;
+    if (sp[0] == null || sp[1] == null || sp[2] == null || ep[1] == null || ep[2] == null) return cats;
     const surah = +sp[0], sAyah = +sp[1], sWord = +sp[2];
     const eAyah = +ep[1], eWord = +ep[2];
 
@@ -156,9 +158,9 @@ export function _classifySnapIssues(snap: SnapForIssues | null | undefined): str
     if ((snap.confidence ?? 0) < 0.80) issues.push('low_confidence');
     if (snap.wrap_word_ranges || snap.has_repeated_words) issues.push('repetitions');
     const parts = snap.matched_ref.split('-');
-    if (parts.length === 2) {
+    if (parts.length === 2 && parts[0] && parts[1]) {
         const sp = parts[0].split(':'), ep = parts[1].split(':');
-        if (sp.length >= 2 && ep.length >= 2) {
+        if (sp.length >= 2 && ep.length >= 2 && sp[1] != null && ep[1] != null) {
             if (parseInt(sp[1]) !== parseInt(ep[1])) issues.push('cross_verse');
         }
     }
@@ -176,6 +178,7 @@ export interface OpIssueDelta {
 export function _deriveOpIssueDelta(group: EditOp[] | null | undefined): OpIssueDelta {
     if (!group || group.length === 0) return { resolved: [], introduced: [] };
     const primary = group[0];
+    if (!primary) return { resolved: [], introduced: [] };
 
     const beforeIssues = new Set<string>();
     for (const snap of (primary.targets_before || [])) {
@@ -193,7 +196,7 @@ export function _deriveOpIssueDelta(group: EditOp[] | null | undefined): OpIssue
 
     const afterSnaps: SnapForIssues[] = hasAnyAfterUid
         ? [...finalSnaps.values()]
-        : ((group[group.length - 1].targets_after || []) as SnapForIssues[]);
+        : ((group[group.length - 1]?.targets_after || []) as SnapForIssues[]);
 
     const afterIssues = new Set<string>();
     for (const snap of afterSnaps) {

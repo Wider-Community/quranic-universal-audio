@@ -657,7 +657,7 @@ export function _findCoveringPeaks(
     if (!state.segPeaksByAudio) return null;
     // First try full-file peaks (exact URL match)
     const pe = state.segPeaksByAudio[audioUrl];
-    if (pe?.peaks?.length > 0) return pe;
+    if (pe && pe.peaks && pe.peaks.length > 0) return pe;
     // Then try segment-level peaks covering the requested range
     if (startMs != null && endMs != null && state._segPeaksByUrl) {
         const entries = state._segPeaksByUrl[audioUrl];

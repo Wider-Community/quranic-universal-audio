@@ -44,15 +44,17 @@ export function computeSilenceAfter(): void {
     const pad = state.segAllData.pad_ms || 0;
     const segs = state.segAllData.segments;
     for (let i = 0; i < segs.length; i++) {
+        const cur = segs[i];
+        if (!cur) continue;
         const next = segs[i + 1];
-        const sameEntry = next && segs[i].audio_url === next.audio_url
-                               && segs[i].entry_idx === next.entry_idx;
-        if (sameEntry) {
-            segs[i].silence_after_ms = (next.time_start - segs[i].time_end) + 2 * pad;
-            segs[i].silence_after_raw_ms = next.time_start - segs[i].time_end;
+        const sameEntry = next && cur.audio_url === next.audio_url
+                               && cur.entry_idx === next.entry_idx;
+        if (sameEntry && next) {
+            cur.silence_after_ms = (next.time_start - cur.time_end) + 2 * pad;
+            cur.silence_after_raw_ms = next.time_start - cur.time_end;
         } else {
-            segs[i].silence_after_ms = null;
-            segs[i].silence_after_raw_ms = null;
+            cur.silence_after_ms = null;
+            cur.silence_after_raw_ms = null;
         }
     }
 }
@@ -131,15 +133,19 @@ export function applyFiltersAndRender(): void {
 
             const groups: Segment[][] = [];
             for (let i = 0; i < segs.length; i++) {
-                if (!segs[i]._isNeighbour) {
-                    const group: Segment[] = [segs[i]];
-                    if (segs[i + 1] && segs[i + 1]._isNeighbour) {
-                        group.push(segs[++i]);
+                const seg = segs[i];
+                if (!seg) continue;
+                if (!seg._isNeighbour) {
+                    const group: Segment[] = [seg];
+                    const nxt = segs[i + 1];
+                    if (nxt && nxt._isNeighbour) {
+                        group.push(nxt);
+                        i++;
                     }
                     groups.push(group);
                 }
             }
-            groups.sort((a, b) => (a[0].silence_after_ms ?? Infinity) - (b[0].silence_after_ms ?? Infinity));
+            groups.sort((a, b) => ((a[0]?.silence_after_ms ?? Infinity) - (b[0]?.silence_after_ms ?? Infinity)));
             segs = groups.flat();
         } else {
             segs = matched;
@@ -186,7 +192,9 @@ export function renderFilterBar(): void {
             fieldSel.appendChild(o);
         });
         fieldSel.addEventListener('change', () => {
-            state.segActiveFilters[i].field = fieldSel.value; applyFiltersAndRender();
+            const row = state.segActiveFilters[i];
+            if (!row) return;
+            row.field = fieldSel.value; applyFiltersAndRender();
         });
 
         const opSel = document.createElement('select');
@@ -197,7 +205,9 @@ export function renderFilterBar(): void {
             opSel.appendChild(o);
         });
         opSel.addEventListener('change', () => {
-            state.segActiveFilters[i].op = opSel.value; applyFiltersAndRender();
+            const row = state.segActiveFilters[i];
+            if (!row) return;
+            row.op = opSel.value; applyFiltersAndRender();
         });
 
         const valInput = document.createElement('input');
@@ -205,8 +215,10 @@ export function renderFilterBar(): void {
         valInput.value = f.value != null ? String(f.value) : '';
         valInput.step = 'any'; valInput.placeholder = 'value';
         valInput.addEventListener('input', () => {
+            const row = state.segActiveFilters[i];
+            if (!row) return;
             const v = parseFloat(valInput.value);
-            state.segActiveFilters[i].value = isNaN(v) ? null : v;
+            row.value = isNaN(v) ? null : v;
             if (state._segFilterDebounceTimer !== null) {
                 clearTimeout(state._segFilterDebounceTimer);
             }

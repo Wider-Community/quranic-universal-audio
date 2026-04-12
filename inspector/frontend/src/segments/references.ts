@@ -24,7 +24,7 @@ function _getVwc(): VerseWordCounts | undefined {
 export function isCrossVerse(ref: Ref | null | undefined): boolean {
     if (!ref) return false;
     const parts = ref.split('-');
-    if (parts.length !== 2) return false;
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
     const startAyah = parts[0].split(':')[1];
     const endAyah = parts[1].split(':')[1];
     return startAyah !== endAyah;
@@ -33,9 +33,10 @@ export function isCrossVerse(ref: Ref | null | undefined): boolean {
 export function parseSegRef(ref: Ref | null | undefined): ParsedSegRef | null {
     if (!ref) return null;
     const parts = ref.split('-');
-    if (parts.length !== 2) return null;
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
     const s = parts[0].split(':'), e = parts[1].split(':');
     if (s.length < 3 || e.length < 3) return null;
+    if (s[0] == null || s[1] == null || s[2] == null || e[1] == null || e[2] == null) return null;
     return { surah: +s[0], ayah_from: +s[1], word_from: +s[2], ayah_to: +e[1], word_to: +e[2] };
 }
 
@@ -55,7 +56,7 @@ export function countSegWords(ref: Ref | null | undefined): number {
 }
 
 export function _toArabicNumeral(n: number): string {
-    return String(n).split('').map((d) => _ARABIC_DIGITS[+d]).join('');
+    return String(n).split('').map((d) => _ARABIC_DIGITS[+d] ?? d).join('');
 }
 
 /** Normalize a short ref to canonical surah:ayah:word-surah:ayah:word format. */
@@ -63,7 +64,7 @@ export function _normalizeRef(ref: Ref | null | undefined): Ref | null | undefin
     if (!ref) return ref;
     const vwc = _getVwc();
     const parts = ref.split('-');
-    if (parts.length === 2) {
+    if (parts.length === 2 && parts[0] && parts[1]) {
         const s = parts[0].split(':'), e = parts[1].split(':');
         if (s.length === 3 && e.length === 3) return ref; // already canonical
         if (s.length === 2 && e.length === 2) {
@@ -94,8 +95,10 @@ export function _addVerseMarkers(text: string | null | undefined, ref: Ref | nul
     let ay = p.ayah_from, w = p.word_from;
 
     for (let i = 0; i < words.length; i++) {
-        out.push(words[i]);
-        if (!/[\u0600-\u066F]/.test(words[i])) continue;
+        const word = words[i];
+        if (word == null) continue;
+        out.push(word);
+        if (!/[\u0600-\u066F]/.test(word)) continue;
         const total = vwc[`${p.surah}:${ay}`] || 0;
         if (total > 0 && w >= total) {
             out.push('\u06DD' + _toArabicNumeral(ay));
@@ -113,14 +116,14 @@ export function formatRef(ref: Ref | null | undefined): string {
     const vwc = _getVwc();
     if (!vwc) return ref;
     const parts = ref.split('-');
-    if (parts.length !== 2) return ref;
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return ref;
     const start = parts[0].split(':');
     const end = parts[1].split(':');
     if (start.length !== 3 || end.length !== 3) return ref;
     if (start[0] === end[0] && start[1] === end[1] && start[2] === '1') {
         const key = `${start[0]}:${start[1]}`;
         const totalWords = vwc[key];
-        if (totalWords && parseInt(end[2]) === totalWords) {
+        if (totalWords && end[2] != null && parseInt(end[2]) === totalWords) {
             return key;
         }
     }

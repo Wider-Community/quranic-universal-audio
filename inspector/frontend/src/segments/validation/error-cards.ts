@@ -235,7 +235,10 @@ export function renderCategoryCards(type: string, items: SegValAnyItem[], contai
 
     function processBatch(startIdx: number): void {
         const end = Math.min(startIdx + BATCH_SIZE, items.length);
-        for (let i = startIdx; i < end; i++) renderOneItem(items[i]);
+        for (let i = startIdx; i < end; i++) {
+            const item = items[i];
+            if (item) renderOneItem(item);
+        }
         container.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach((c) => observer.observe(c));
         if (end < items.length) { state._cardRenderRafId = requestAnimationFrame(() => processBatch(end)); }
         else { state._cardRenderRafId = null; }
@@ -288,6 +291,7 @@ export function addContextToggle(
     function showContext(): void {
         const first = segsInWrapper[0];
         const last = segsInWrapper[segsInWrapper.length - 1];
+        if (!first || !last) return;
         const cardParent = first.card.parentNode;
         if (!cardParent) return;
         const firstChapter = first.seg.chapter;
@@ -400,7 +404,7 @@ export function _rebuildAccordionAfterSplit(
         const { prev } = getAdjacentSegments(firstMainSeg.chapter ?? chapter, firstMainSeg.index);
         if (prev) {
             const prevCard = renderErrorCard(prev, { isContext: true, contextLabel: 'Previous' });
-            wrapper.insertBefore(prevCard, updatedMain[0]);
+            wrapper.insertBefore(prevCard, updatedMain[0] ?? null);
             prevCard.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach((c) => observer.observe(c));
         }
     }

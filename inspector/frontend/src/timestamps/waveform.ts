@@ -159,14 +159,14 @@ export function drawVisualization(): void {
         ctx.beginPath();
         for (let i = 0; i < buckets; i++) {
             const x = (i / buckets) * width;
-            const maxVal = state.waveformData[i * 2 + 1];
+            const maxVal = state.waveformData[i * 2 + 1] ?? 0;
             const y = centerY - maxVal * scale;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
         for (let i = buckets - 1; i >= 0; i--) {
             const x = (i / buckets) * width;
-            const minVal = state.waveformData[i * 2];
+            const minVal = state.waveformData[i * 2] ?? 0;
             const y = centerY - minVal * scale;
             ctx.lineTo(x, y);
         }
@@ -180,7 +180,7 @@ export function drawVisualization(): void {
         ctx.beginPath();
         for (let i = 0; i < buckets; i++) {
             const x = (i / buckets) * width;
-            const maxVal = state.waveformData[i * 2 + 1];
+            const maxVal = state.waveformData[i * 2 + 1] ?? 0;
             const y = centerY - maxVal * scale;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
@@ -189,7 +189,7 @@ export function drawVisualization(): void {
         ctx.beginPath();
         for (let i = 0; i < buckets; i++) {
             const x = (i / buckets) * width;
-            const minVal = state.waveformData[i * 2];
+            const minVal = state.waveformData[i * 2] ?? 0;
             const y = centerY - minVal * scale;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
