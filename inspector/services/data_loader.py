@@ -10,8 +10,10 @@ from pathlib import Path
 
 from config import (
     AUDIO_METADATA_PATH,
+    DK_SCRIPT_PATH,
     MAX_AYAH_BOUNDARY_CHECK,
     METADATA_PEEK_BYTES,
+    QPC_HAFS_PATH,
     RECITATION_SEGMENTS_PATH,
     SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
@@ -19,10 +21,6 @@ from config import (
 from constants import STOP_SIGNS
 from services import cache
 from utils.references import chapter_from_ref
-
-# Paths for QPC / DK data
-_QPC_PATH = Path(__file__).resolve().parent.parent.parent / "quranic_universal_aligner" / "data" / "qpc_hafs.json"
-_DK_PATH = Path(__file__).resolve().parent.parent.parent / "quranic_universal_aligner" / "data" / "digital_khatt_v2_script.json"
 
 
 # ---------------------------------------------------------------------------
@@ -34,8 +32,8 @@ def load_qpc() -> dict[str, dict]:
     cached = cache.get_qpc_cache()
     if cached is not None:
         return cached
-    if _QPC_PATH.exists():
-        with open(_QPC_PATH, encoding="utf-8") as f:
+    if QPC_HAFS_PATH.exists():
+        with open(QPC_HAFS_PATH, encoding="utf-8") as f:
             data = json.load(f)
     else:
         data = {}
@@ -48,8 +46,8 @@ def load_dk() -> dict[str, dict]:
     cached = cache.get_dk_cache()
     if cached is not None:
         return cached
-    if _DK_PATH.exists():
-        with open(_DK_PATH, encoding="utf-8") as f:
+    if DK_SCRIPT_PATH.exists():
+        with open(DK_SCRIPT_PATH, encoding="utf-8") as f:
             data = json.load(f)
     else:
         data = {}

@@ -11,6 +11,7 @@ from config import (
     ANIM_CHAR_TRANSITION_DURATION, ANIM_TRANSITION_EASING,
     ANIM_WORD_SPACING, ANIM_LINE_HEIGHT, ANIM_FONT_SIZE,
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
+    SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
 )
 from services.data_loader import (
@@ -255,8 +256,7 @@ def ts_validate(reciter):
     if ts_dir is None:
         return jsonify({"error": "Reciter not found"}), 404
 
-    surah_info_path = Path(__file__).resolve().parent.parent.parent / "data" / "surah_info.json"
-    wc = _load_ts_wc(surah_info_path)
+    wc = _load_ts_wc(SURAH_INFO_PATH)
     result = _validate_ts(ts_dir, wc)
 
     if result.get("skipped"):

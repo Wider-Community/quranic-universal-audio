@@ -13,6 +13,7 @@ from config import (
     BOUNDARY_TAIL_K,
     LOW_CONFIDENCE_THRESHOLD,
     SHOW_BOUNDARY_PHONEMES,
+    SURAH_INFO_PATH,
 )
 from constants import (
     MUQATTAAT_VERSES,
@@ -549,8 +550,7 @@ def run_validation_log(reciter_dir: Path) -> None:
     from datetime import datetime as _dt
     from validators.validate_segments import validate_reciter, load_word_counts
 
-    surah_info_path = Path(__file__).resolve().parent.parent.parent / "data" / "surah_info.json"
-    wc = load_word_counts(surah_info_path)
+    wc = load_word_counts(SURAH_INFO_PATH)
     report_path = reciter_dir / "validation.log"
 
     buf = _io.StringIO()

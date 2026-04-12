@@ -1,8 +1,8 @@
 """Phoneme tail matching: detect boundary adjustment issues via ASR vs. canonical tails."""
 
 import json
-from pathlib import Path
 
+from config import PHONEME_SUB_COSTS_PATH
 from constants import BOUNDARY_VOWELS
 from services import cache
 from services.data_loader import get_word_counts
@@ -13,10 +13,9 @@ def get_phoneme_sub_pairs() -> set[frozenset]:
     cached = cache.get_phoneme_sub_pairs_cache()
     if cached is not None:
         return cached
-    sub_path = Path(__file__).resolve().parent.parent.parent / "quranic_universal_aligner" / "data" / "phoneme_sub_costs.json"
     pairs: set[frozenset] = set()
-    if sub_path.exists():
-        with open(sub_path, encoding="utf-8") as f:
+    if PHONEME_SUB_COSTS_PATH.exists():
+        with open(PHONEME_SUB_COSTS_PATH, encoding="utf-8") as f:
             data = json.load(f)
         for category, entries in data.items():
             if category == "_meta":
