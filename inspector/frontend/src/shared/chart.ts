@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Chart.js bootstrap.
  *
