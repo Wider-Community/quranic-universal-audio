@@ -1,5 +1,19 @@
 # Stage-1 Bug Log
 
+## Stage 1 final summary — added 2026-04-12
+
+- **Total rows:** 20 (B01-B20, no gaps)
+- **Seeded bugs (Section 1):** 4 of 8 still OPEN — B01, B02, B04, B05. Closed this stage: B03 (not-a-bug per code audit), B06 (not-a-bug per Phase 7 audit — segData/segAllData share references), B07 (mitigated via typed shared/accordion helpers), B08 (not-a-bug per Phase 3 route re-read).
+- **TS-caught (Section 2):** 3 / 3 CLOSED — B13 (Phase 5), B14 (Phase 5), B17 (Phase 7 — the sole preserved-verbatim latent bug, finally fixed in Block 3).
+- **API-drift (Section 3):** 9 / 9 CLOSED — B09-B12 (Phase 4), B15-B16 (Phase 5), B18-B20 (Phase 6). Zero runtime diffs; all were type-level contract alignments against the actual server emit.
+- **New introduced (Section 4):** 0 — no regressions observed across 7 phases of typing + sub-foldering + strictness ratchet.
+- **Total CLOSED:** 16 / 20.
+- **Remaining OPEN, with priority hint for Stage 2 or follow-up work:**
+  - **B01** (Filter state saved-view leak) — UX-visible wedge; medium priority. Fix at `inspector/frontend/src/segments/filters.ts:166-168` + `:255-258` — restore `state.segDisplayedSegments` when re-applying filters after a saved view is cleared.
+  - **B02** (segData / segAllData chapter-index desync) — data-integrity risk on save; medium-high priority. Two branches in `inspector/frontend/src/segments/edit/delete.ts:30-43` diverge on how they re-index. Unify.
+  - **B04** (waveform peaks orphaned after audio-proxy URL rewrite) — cosmetic (black canvas until re-fetch); low-medium. Invalidate `state.segPeaksByAudio` inside `_rewriteAudioUrls` at `inspector/frontend/src/segments/playback/audio-cache.ts:27-40`.
+  - **B05** (split chain UID lost on undo) — minor state-loss on undo; low. Restore `state._splitChainUid` alongside `_segSavedChains` in the undo path.
+
 Shared append-only document maintained by the orchestrator and every refactor agent during
 the TypeScript + Vite migration (Stage 1 only — no Svelte).
 
@@ -31,7 +45,7 @@ with the fixing commit SHA and phase.
 | B03 | Validation missing_words `target_seg_index` not re-indexed on manual-fix rows | inspector/static/js/segments/validation.js:386-409 | SEEDED | exploration | OPEN |  | Inside `_forEachValItem`, `seg_indices[i]` is always re-indexed (line ~400), but `target_seg_index` is only re-indexed when `item.auto_fix` exists (line ~408). Rows without `auto_fix` keep stale `target_seg_index` after split/merge/delete. Scoped to that one field, not the whole row. |
 | B04 | Waveform peaks orphaned after audio-proxy URL rewrite          | inspector/static/js/segments/audio-cache.js:27-31    | SEEDED | exploration    | OPEN   |         | `segAllData.audio_by_chapter` + per-segment `audio_url` rewritten to proxy URLs; `segPeaksByAudio` cache (keyed by original URL) is NOT invalidated → black canvas until re-fetch. |
 | B05 | Split chain UID lost on undo                                   | inspector/static/js/segments/state.js:111-112        | SEEDED | exploration    | OPEN   |         | `state._splitChainUid` set but never restored after undo; next history view loses parent/child linkage. |
-| B06 | Silence-after staleness if computed without re-render          | inspector/static/js/segments/filters.js:25-41        | SEEDED | exploration    | OPEN   |         | `computeSilenceAfter` mutates segments in `segAllData`; `segData` (chapter view) is a filtered copy and may show stale `silence_after_ms` until next `renderSegList`. |
+| B06 | Silence-after staleness if computed without re-render          | inspector/static/js/segments/filters.js:25-41        | SEEDED | exploration    | CLOSED | _(this commit's SHA)_ | **Not a bug** — re-audited in Phase 7 under strict typing. `state.segData.segments = state.segAllData.segments.filter(...)` (see `segments/data.ts:241`) returns references to the SAME segment objects, so mutations to `seg.silence_after_ms` on `segAllData` are visible via `segData` immediately. No stale-display path. |
 | B07 | Validation accordion half-state when some categories null      | inspector/static/js/segments/validation.js:72-76     | SEEDED | exploration    | OPEN   |         | `hasAny` check tolerates mixed null/empty categories; panel opens with some sections unrendered → empty accordions. |
 | B08 | /api/seg/edit-history returns JSONL but JS calls r.json()      | inspector/frontend/src/segments/data.ts:138          | SEEDED | exploration    | CLOSED | phase-3 | **Not a bug** — the Flask route `seg_edit_history` reads `edit_history.jsonl` server-side, parses each line, and returns `jsonify({batches, summary})` (one JSON object). The exploration agent misread the route. Re-verified at `inspector/routes/segments_validation.py:63-151`. `r.json()` is correct. `fetchJsonl` helper consequently not needed and was omitted from `shared/api.ts`. |
 
@@ -72,3 +86,4 @@ _No rows yet — review agents append if regressions appear in the per-phase gat
 | B03 | Section 1 | Not a bug — `target_seg_index` lives inside `auto_fix`, so the `if (item.auto_fix)` guard correctly covers the only place that index exists on a `missing_words` row. Items without `auto_fix` have no `target_seg_index` field to re-index. Verified while typing `_forEachValItem` in `validation/index.ts`; server emit in `services/validation.py:375-394` confirms `target_seg_index` is only nested in `auto_fix`. | _(this phase)_ | 5 |
 | B07 | Section 1 | Mitigated — extracted accordion primitives to `shared/accordion.ts` (`collapseSiblingDetails`, `capturePanelOpenState`, `restorePanelOpenState`) used by the now-typed `validation/index.ts`. The "half-state" concern in the original note was speculative: the render loop already skips empty categories (`if (!cat.items \|\| cat.items.length === 0) return`), and `restoreValPanelState` silently skips categories that no longer have a `<details>` element. No runtime fix needed; behavior documented via the typed shared API. | _(this phase)_ | 5 |
 | B17 | Section 2 | Tooltip rewritten to use actual server fields (`i.side`, `i.diff_ms`): `"${i.side} boundary drift: ${i.diff_ms}ms"`. Removed the `(i: any)` cast + eslint-disable. `TsBoundaryMismatch` now type-checks the consumer without the escape hatch. | _(this commit's SHA)_ | 7 |
+| B06 | Section 1 | Not a bug — `segData.segments = segAllData.segments.filter(...)` shares object references, so `computeSilenceAfter`'s in-place mutations are immediately visible via `segData`. Re-audited under Phase 7 strict typing. | _(this commit's SHA)_ | 7 |
