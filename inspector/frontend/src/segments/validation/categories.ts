@@ -1,16 +1,34 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Per-segment category classification -- mirrors server-side validation logic.
  * Pure functions that read from state but don't mutate it.
  */
 
 import { state, _MN_RE, _STRIP_CHARS, _LETTER_RE } from '../state';
+import type { EditOp, Segment } from '../../types/domain';
+
+// A segment-like record that `_classifySegCategories` / `_isIgnoredFor` can
+// read. Live segments satisfy `Segment`; history snapshots (opaque
+// `SegSnapshot` records) also satisfy this loose shape.
+interface SegClassifyInput {
+    matched_ref?: string;
+    matched_text?: string;
+    display_text?: string;
+    confidence?: number;
+    audio_url?: string;
+    entry_ref?: string;
+    chapter?: number;
+    wrap_word_ranges?: unknown;
+    has_repeated_words?: boolean;
+    ignored_categories?: string[];
+    /** Back-compat: legacy boolean from pre-categories ignore flag. */
+    ignored?: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Text helpers
 // ---------------------------------------------------------------------------
 
-export function _stripQuranDeco(text) {
+export function _stripQuranDeco(text: string): string {
     const nfd = text.normalize('NFD');
     let out = '';
     for (const ch of nfd) {
@@ -21,7 +39,7 @@ export function _stripQuranDeco(text) {
     return out.trim();
 }
 
-export function _lastArabicLetter(text) {
+export function _lastArabicLetter(text: string): string | null {
     const stripped = _stripQuranDeco(text);
     for (let i = stripped.length - 1; i >= 0; i--) {
         if (_LETTER_RE.test(stripped[i])) return stripped[i];
@@ -29,16 +47,16 @@ export function _lastArabicLetter(text) {
     return null;
 }
 
-export function _isStandaloneWord(text) {
+export function _isStandaloneWord(text: string): boolean {
     if (!state._standaloneWords) return false;
     return state._standaloneWords.has(_stripQuranDeco(text));
 }
 
 /** Check if a segment is ignored for a specific validation category. */
-export function _isIgnoredFor(seg, category) {
+export function _isIgnoredFor(seg: SegClassifyInput, category: string): boolean {
     const ic = seg.ignored_categories;
     if (ic) return ic.includes('_all') || ic.includes(category);
-    return !!seg.ignored;  // back-compat for old boolean
+    return !!seg.ignored; // back-compat for old boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -49,8 +67,8 @@ export function _isIgnoredFor(seg, category) {
  * Classify a segment into ALL applicable validation categories.
  * Returns an array of category strings. Works on live segments and snapshots.
  */
-export function _classifySegCategories(seg) {
-    const cats = [];
+export function _classifySegCategories(seg: Segment | SegClassifyInput): string[] {
+    const cats: string[] = [];
     const ref = seg.matched_ref || '';
     const confidence = seg.confidence ?? 0;
 
@@ -114,14 +132,28 @@ export function _classifySegCategories(seg) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Edit-history snapshot shape used for issue classification. The shape is
+ * a subset of `SegSnapshot` (which `state.snapshotSeg` produces) plus the
+ * `categories` field stamped in at snapshot time.
+ */
+interface SnapForIssues {
+    matched_ref?: string;
+    confidence?: number;
+    wrap_word_ranges?: unknown;
+    has_repeated_words?: boolean;
+    categories?: string[];
+    segment_uid?: string | null;
+}
+
+/**
  * Classify a segment snapshot into validation issue categories.
  * Uses pre-computed categories when available, falls back to basic detection.
  */
-export function _classifySnapIssues(snap) {
+export function _classifySnapIssues(snap: SnapForIssues | null | undefined): string[] {
     if (snap?.categories) return [...snap.categories];
-    const issues = [];
+    const issues: string[] = [];
     if (!snap || !snap.matched_ref) { if (snap) issues.push('failed'); return issues; }
-    if (snap.confidence < 0.80) issues.push('low_confidence');
+    if ((snap.confidence ?? 0) < 0.80) issues.push('low_confidence');
     if (snap.wrap_word_ranges || snap.has_repeated_words) issues.push('repetitions');
     const parts = snap.matched_ref.split('-');
     if (parts.length === 2) {
@@ -133,35 +165,43 @@ export function _classifySnapIssues(snap) {
     return issues;
 }
 
+export interface OpIssueDelta {
+    resolved: string[];
+    introduced: string[];
+}
+
 /**
  * Derive per-op-group issue delta from snapshot data.
  */
-export function _deriveOpIssueDelta(group) {
+export function _deriveOpIssueDelta(group: EditOp[] | null | undefined): OpIssueDelta {
     if (!group || group.length === 0) return { resolved: [], introduced: [] };
     const primary = group[0];
 
-    const beforeIssues = new Set();
-    for (const snap of (primary.targets_before || []))
-        _classifySnapIssues(snap).forEach(i => beforeIssues.add(i));
+    const beforeIssues = new Set<string>();
+    for (const snap of (primary.targets_before || [])) {
+        _classifySnapIssues(snap as SnapForIssues).forEach((i) => beforeIssues.add(i));
+    }
 
-    const finalSnaps = new Map();
+    const finalSnaps = new Map<string, SnapForIssues>();
     let hasAnyAfterUid = false;
     for (const op of group) {
         for (const snap of (op.targets_after || [])) {
-            if (snap.segment_uid) { finalSnaps.set(snap.segment_uid, snap); hasAnyAfterUid = true; }
+            const s = snap as SnapForIssues;
+            if (s.segment_uid) { finalSnaps.set(s.segment_uid, s); hasAnyAfterUid = true; }
         }
     }
 
-    const afterSnaps = hasAnyAfterUid
+    const afterSnaps: SnapForIssues[] = hasAnyAfterUid
         ? [...finalSnaps.values()]
-        : (group[group.length - 1].targets_after || []);
+        : ((group[group.length - 1].targets_after || []) as SnapForIssues[]);
 
-    const afterIssues = new Set();
-    for (const snap of afterSnaps)
-        _classifySnapIssues(snap).forEach(i => afterIssues.add(i));
+    const afterIssues = new Set<string>();
+    for (const snap of afterSnaps) {
+        _classifySnapIssues(snap).forEach((i) => afterIssues.add(i));
+    }
 
     return {
-        resolved:   [...beforeIssues].filter(i => !afterIssues.has(i)),
-        introduced: [...afterIssues].filter(i => !beforeIssues.has(i)),
+        resolved:   [...beforeIssues].filter((i) => !afterIssues.has(i)),
+        introduced: [...afterIssues].filter((i) => !beforeIssues.has(i)),
     };
 }

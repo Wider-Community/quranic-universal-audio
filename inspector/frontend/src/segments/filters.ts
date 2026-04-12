@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Filter bar UI and filter application logic.
  */
@@ -6,12 +5,29 @@
 import { state, dom, SEG_FILTER_FIELDS, SEG_FILTER_OPS } from './state';
 import { parseSegRef, countSegWords } from './references';
 import { renderSegList } from './rendering';
+import type { Segment } from '../types/domain';
 
 // ---------------------------------------------------------------------------
 // Derived-property helpers for filtering
 // ---------------------------------------------------------------------------
 
-export function segDerivedProps(seg) {
+/** Derived per-segment numeric properties exposed to the filter predicate. */
+export interface SegDerivedProps {
+    duration_s: number;
+    num_words: number;
+    num_verses: number;
+    confidence_pct: number;
+    /** `null` when no "next" segment in the same entry — meaning "unknown". */
+    silence_after_ms: number | null | undefined;
+    [k: string]: number | null | undefined;
+}
+
+/** `Segment` with the cached derived-props field used by the filter. */
+interface SegWithDerived extends Segment {
+    _derived?: SegDerivedProps;
+}
+
+export function segDerivedProps(seg: SegWithDerived): SegDerivedProps {
     if (seg._derived) return seg._derived;
     const duration_s     = (seg.time_end - seg.time_start) / 1000;
     const num_words      = countSegWords(seg.matched_ref);
@@ -23,7 +39,7 @@ export function segDerivedProps(seg) {
     return seg._derived;
 }
 
-export function computeSilenceAfter() {
+export function computeSilenceAfter(): void {
     if (!state.segAllData) return;
     const pad = state.segAllData.pad_ms || 0;
     const segs = state.segAllData.segments;
@@ -41,7 +57,7 @@ export function computeSilenceAfter() {
     }
 }
 
-function _compareFilter(actual, op, value) {
+function _compareFilter(actual: number | null | undefined, op: string, value: number): boolean {
     if (actual == null) return false;
     switch (op) {
         case '>':  return actual >  value;
@@ -57,11 +73,13 @@ function _compareFilter(actual, op, value) {
 // Filter application
 // ---------------------------------------------------------------------------
 
-export function applyFiltersAndRender() {
+export function applyFiltersAndRender(): void {
     if (!state.segAllData) return;
     const chapter = dom.segChapterSelect.value;
 
-    const activeValid = state.segActiveFilters.filter(f => f.value !== null);
+    const activeValid = state.segActiveFilters.filter((f) => f.value !== null) as Array<
+        { field: string; op: string; value: number }
+    >;
 
     if (!chapter && activeValid.length === 0) {
         state.segDisplayedSegments = [];
@@ -70,50 +88,51 @@ export function applyFiltersAndRender() {
         return;
     }
 
-    let segs = state.segAllData.segments;
+    let segs: Segment[] = state.segAllData.segments;
 
     if (chapter) {
-        segs = segs.filter(s => s.chapter === parseInt(chapter));
+        segs = segs.filter((s) => s.chapter === parseInt(chapter));
     }
 
     const verse = dom.segVerseSelect.value;
     if (verse && chapter) {
         const prefix = `${chapter}:${verse}:`;
-        segs = segs.filter(s => s.matched_ref && s.matched_ref.startsWith(prefix));
+        segs = segs.filter((s) => s.matched_ref && s.matched_ref.startsWith(prefix));
     }
 
     // Clear stale neighbour tags
-    state.segAllData.segments.forEach(s => delete s._isNeighbour);
+    state.segAllData.segments.forEach((s) => { delete s._isNeighbour; });
 
     if (activeValid.length > 0) {
-        const matched = segs.filter(seg =>
-            activeValid.every(f => {
-                const actual = segDerivedProps(seg)[f.field];
+        const matched = segs.filter((seg) =>
+            activeValid.every((f) => {
+                const actual = segDerivedProps(seg as SegWithDerived)[f.field];
                 return _compareFilter(actual, f.op, f.value);
             })
         );
 
-        const hasNeighbourFilter = activeValid.some(f =>
-            SEG_FILTER_FIELDS.find(fd => fd.value === f.field)?.neighbour
+        const hasNeighbourFilter = activeValid.some((f) =>
+            SEG_FILTER_FIELDS.find((fd) => fd.value === f.field)?.neighbour
         );
 
         if (hasNeighbourFilter) {
-            const posMap = new Map(segs.map((s, i) => [s, i]));
-            const resultSet = new Set(matched);
-            matched.forEach(seg => {
+            const posMap = new Map<Segment, number>(segs.map((s, i) => [s, i]));
+            const resultSet = new Set<Segment>(matched);
+            matched.forEach((seg) => {
                 const idx = posMap.get(seg);
+                if (idx === undefined) return;
                 const next = segs[idx + 1];
                 if (next && next.audio_url === seg.audio_url) {
                     next._isNeighbour = true;
                     resultSet.add(next);
                 }
             });
-            segs = segs.filter(seg => resultSet.has(seg));
+            segs = segs.filter((seg) => resultSet.has(seg));
 
-            const groups = [];
+            const groups: Segment[][] = [];
             for (let i = 0; i < segs.length; i++) {
                 if (!segs[i]._isNeighbour) {
-                    const group = [segs[i]];
+                    const group: Segment[] = [segs[i]];
                     if (segs[i + 1] && segs[i + 1]._isNeighbour) {
                         group.push(segs[++i]);
                     }
@@ -128,7 +147,7 @@ export function applyFiltersAndRender() {
     }
 
     const total = chapter
-        ? state.segAllData.segments.filter(s => s.chapter === parseInt(chapter)).length
+        ? state.segAllData.segments.filter((s) => s.chapter === parseInt(chapter)).length
         : state.segAllData.segments.length;
     if (dom.segFilterStatusEl) {
         dom.segFilterStatusEl.textContent = (activeValid.length > 0 || verse)
@@ -136,7 +155,7 @@ export function applyFiltersAndRender() {
     }
 
     state.segDisplayedSegments = segs;
-    state._segIndexMap = new Map(segs.map(s => [`${s.chapter}:${s.index}`, s]));
+    state._segIndexMap = new Map(segs.map((s) => [`${s.chapter}:${s.index}`, s]));
 
     if (activeValid.length > 0 && state._segSavedFilterView) {
         state._segSavedFilterView = null;
@@ -145,7 +164,7 @@ export function applyFiltersAndRender() {
     renderSegList(state.segDisplayedSegments);
 }
 
-export function applyVerseFilterAndRender() {
+export function applyVerseFilterAndRender(): void {
     applyFiltersAndRender();
 }
 
@@ -153,7 +172,7 @@ export function applyVerseFilterAndRender() {
 // Filter bar UI
 // ---------------------------------------------------------------------------
 
-export function renderFilterBar() {
+export function renderFilterBar(): void {
     dom.segFilterRowsEl.innerHTML = '';
     state.segActiveFilters.forEach((f, i) => {
         const row = document.createElement('div');
@@ -161,7 +180,7 @@ export function renderFilterBar() {
 
         const fieldSel = document.createElement('select');
         fieldSel.className = 'seg-filter-field';
-        SEG_FILTER_FIELDS.forEach(opt => {
+        SEG_FILTER_FIELDS.forEach((opt) => {
             const o = document.createElement('option');
             o.value = opt.value; o.textContent = opt.label; o.selected = opt.value === f.field;
             fieldSel.appendChild(o);
@@ -172,7 +191,7 @@ export function renderFilterBar() {
 
         const opSel = document.createElement('select');
         opSel.className = 'seg-filter-op';
-        SEG_FILTER_OPS.forEach(op => {
+        SEG_FILTER_OPS.forEach((op) => {
             const o = document.createElement('option');
             o.value = op; o.textContent = op; o.selected = op === f.op;
             opSel.appendChild(o);
@@ -183,11 +202,14 @@ export function renderFilterBar() {
 
         const valInput = document.createElement('input');
         valInput.type = 'number'; valInput.className = 'seg-filter-value';
-        valInput.value = f.value ?? ''; valInput.step = 'any'; valInput.placeholder = 'value';
+        valInput.value = f.value != null ? String(f.value) : '';
+        valInput.step = 'any'; valInput.placeholder = 'value';
         valInput.addEventListener('input', () => {
             const v = parseFloat(valInput.value);
             state.segActiveFilters[i].value = isNaN(v) ? null : v;
-            clearTimeout(state._segFilterDebounceTimer);
+            if (state._segFilterDebounceTimer !== null) {
+                clearTimeout(state._segFilterDebounceTimer);
+            }
             state._segFilterDebounceTimer = setTimeout(applyFiltersAndRender, 300);
         });
 
@@ -204,21 +226,21 @@ export function renderFilterBar() {
     });
 }
 
-export function updateFilterBarControls() {
+export function updateFilterBarControls(): void {
     const n = state.segActiveFilters.length;
     if (dom.segFilterCountEl) dom.segFilterCountEl.textContent = n > 0 ? `(${n})` : '';
     if (dom.segFilterClearBtn) dom.segFilterClearBtn.hidden = n === 0;
 }
 
-export function addSegFilterCondition() {
+export function addSegFilterCondition(): void {
     state.segActiveFilters.push({ field: 'duration_s', op: '>', value: null });
     renderFilterBar(); updateFilterBarControls();
-    dom.segFilterRowsEl.querySelectorAll('.seg-filter-value').forEach((el, i, arr) => {
+    dom.segFilterRowsEl.querySelectorAll<HTMLInputElement>('.seg-filter-value').forEach((el, i, arr) => {
         if (i === arr.length - 1) el.focus();
     });
 }
 
-export function clearAllSegFilters() {
+export function clearAllSegFilters(): void {
     state.segActiveFilters = [];
     state._segSavedFilterView = null;
     renderFilterBar(); updateFilterBarControls(); applyFiltersAndRender();

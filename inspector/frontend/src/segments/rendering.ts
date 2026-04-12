@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Segment card rendering -- renderSegCard, renderSegList, and card update helpers.
  */
@@ -7,18 +6,31 @@ import { state, dom, isIndexDirty } from './state';
 import { formatRef, formatTimeMs, _addVerseMarkers } from './references';
 import { getAdjacentSegments, getSegByChapterIndex } from './data';
 import { _ensureWaveformObserver } from './waveform/index';
+import type { Segment } from '../types/domain';
 
-export function getConfClass(seg) {
+/** Options consumed by `renderSegCard`. */
+export interface RenderSegCardOptions {
+    showChapter?: boolean;
+    showPlayBtn?: boolean;
+    showGotoBtn?: boolean;
+    isContext?: boolean;
+    contextLabel?: string;
+    missingWordSegIndices?: Set<number> | null;
+    readOnly?: boolean;
+}
+
+export function getConfClass(seg: Segment | { matched_ref?: string; confidence?: number }): string {
     if (!seg.matched_ref) return 'conf-fail';
-    if (seg.confidence >= 0.80) return 'conf-high';
-    if (seg.confidence >= 0.60) return 'conf-mid';
+    const confidence = seg.confidence ?? 0;
+    if (confidence >= 0.80) return 'conf-high';
+    if (confidence >= 0.60) return 'conf-mid';
     return 'conf-low';
 }
 
 /**
  * Render a single segment card (.seg-row).
  */
-export function renderSegCard(seg, options = {}) {
+export function renderSegCard(seg: Segment, options: RenderSegCardOptions = {}): HTMLDivElement {
     const {
         showChapter = false,
         showPlayBtn = false,
@@ -29,15 +41,16 @@ export function renderSegCard(seg, options = {}) {
         readOnly = false,
     } = options;
 
+    const chapterForDirty = seg.chapter ?? parseInt(dom.segChapterSelect.value);
     const row = document.createElement('div');
-    row.className = 'seg-row' + (!readOnly && isIndexDirty(seg.chapter || parseInt(dom.segChapterSelect.value), seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
-    row.dataset.segIndex = seg.index;
-    row.dataset.segChapter = seg.chapter;
+    row.className = 'seg-row' + (!readOnly && isIndexDirty(chapterForDirty, seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
+    row.dataset.segIndex = String(seg.index);
+    if (seg.chapter != null) row.dataset.segChapter = String(seg.chapter);
     if (seg.segment_uid) row.dataset.segUid = seg.segment_uid;
 
     if (readOnly) {
-        row.dataset.histTimeStart = seg.time_start;
-        row.dataset.histTimeEnd = seg.time_end;
+        row.dataset.histTimeStart = String(seg.time_start);
+        row.dataset.histTimeEnd = String(seg.time_end);
         if (seg.audio_url) row.dataset.histAudioUrl = seg.audio_url;
     }
 
@@ -88,7 +101,7 @@ export function renderSegCard(seg, options = {}) {
         trimBtn.className = 'btn btn-sm btn-adjust';
         trimBtn.textContent = 'Adjust';
 
-        const { prev: adjPrev, next: adjNext } = getAdjacentSegments(seg.chapter, seg.index);
+        const { prev: adjPrev, next: adjNext } = getAdjacentSegments(seg.chapter ?? 0, seg.index);
 
         const mergePrevBtn = document.createElement('button');
         mergePrevBtn.className = 'btn btn-sm btn-merge-prev';
@@ -178,7 +191,7 @@ export function renderSegCard(seg, options = {}) {
 
     const confSpan = document.createElement('span');
     confSpan.className = `seg-text-conf ${confClass}`;
-    confSpan.textContent = seg.matched_ref ? (seg.confidence * 100).toFixed(1) + '%' : 'FAIL';
+    confSpan.textContent = seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL';
     metaCol.appendChild(confSpan);
 
     if (contextLabel) {
@@ -199,7 +212,7 @@ export function renderSegCard(seg, options = {}) {
     return row;
 }
 
-export function renderSegList(segments) {
+export function renderSegList(segments: Segment[] | null | undefined): void {
     state._prevHighlightedRow = null; state._prevHighlightedIdx = -1;
     state._prevPlayheadRow = null; state._currentPlayheadRow = null; state._prevPlayheadIdx = -1;
     dom.segListEl.innerHTML = '';
@@ -208,12 +221,12 @@ export function renderSegList(segments) {
         return;
     }
 
-    const missingWordSegIndices = new Set();
+    const missingWordSegIndices = new Set<number>();
     if (state.segValidation && state.segValidation.missing_words) {
         const chapter = parseInt(dom.segChapterSelect.value) || 0;
-        state.segValidation.missing_words.forEach(mw => {
+        state.segValidation.missing_words.forEach((mw) => {
             if (mw.chapter === chapter && mw.seg_indices) {
-                mw.seg_indices.forEach(idx => missingWordSegIndices.add(idx));
+                mw.seg_indices.forEach((idx) => missingWordSegIndices.add(idx));
             }
         });
     }
@@ -234,7 +247,7 @@ export function renderSegList(segments) {
                 wrapper.className = 'seg-silence-gap-wrapper';
                 const gapDiv = document.createElement('div');
                 gapDiv.className = 'seg-silence-gap';
-                gapDiv.textContent = `\u23F8 ${Math.round(seg.silence_after_ms)}ms (raw: ${Math.round(seg.silence_after_raw_ms)}ms)`;
+                gapDiv.textContent = `\u23F8 ${Math.round(seg.silence_after_ms)}ms (raw: ${Math.round(seg.silence_after_raw_ms ?? 0)}ms)`;
                 wrapper.appendChild(gapDiv);
                 fragment.appendChild(wrapper);
             }
@@ -242,37 +255,39 @@ export function renderSegList(segments) {
     });
 
     dom.segListEl.appendChild(fragment);
-    dom.segListEl.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+    dom.segListEl.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach((c) => observer.observe(c));
 }
 
 /** Update a single .seg-row card in-place. */
-export function updateSegCard(row, seg) {
+export function updateSegCard(row: HTMLElement, seg: Segment): void {
     row.classList.add('dirty');
 
-    const ignoreBtn = row.querySelector('.val-action-btn.ignore-btn')
-        || row.closest('.val-card-wrapper')?.querySelector('.val-action-btn.ignore-btn');
+    const ignoreBtn: HTMLButtonElement | null =
+        row.querySelector<HTMLButtonElement>('.val-action-btn.ignore-btn')
+        ?? row.closest('.val-card-wrapper')?.querySelector<HTMLButtonElement>('.val-action-btn.ignore-btn')
+        ?? null;
     if (ignoreBtn && !ignoreBtn.disabled) {
         ignoreBtn.disabled = true;
         ignoreBtn.title = 'Cannot ignore -- this segment already has unsaved edits';
     }
 
     const confClass = getConfClass(seg);
-    const textBox = row.querySelector('.seg-text');
+    const textBox = row.querySelector<HTMLElement>('.seg-text');
     if (textBox) textBox.className = `seg-text ${confClass}`;
 
-    const refSpan = row.querySelector('.seg-text-ref');
+    const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
     if (refSpan) refSpan.textContent = formatRef(seg.matched_ref);
 
-    const confSpan = row.querySelector('.seg-text-conf');
+    const confSpan = row.querySelector<HTMLElement>('.seg-text-conf');
     if (confSpan) {
         confSpan.className = `seg-text-conf ${confClass}`;
-        confSpan.textContent = seg.matched_ref ? (seg.confidence * 100).toFixed(1) + '%' : 'FAIL';
+        confSpan.textContent = seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL';
     }
 
-    const body = row.querySelector('.seg-text-body');
+    const body = row.querySelector<HTMLElement>('.seg-text-body');
     if (body) body.textContent = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref) || '(alignment failed)';
 
-    const durSpan = row.querySelector('.seg-text-duration');
+    const durSpan = row.querySelector<HTMLElement>('.seg-text-duration');
     if (durSpan) {
         const durSec = (seg.time_end - seg.time_start) / 1000;
         durSpan.textContent = durSec.toFixed(1) + 's';
@@ -281,10 +296,10 @@ export function updateSegCard(row, seg) {
 }
 
 /** Sync all .seg-row cards matching this segment across the entire page. */
-export function syncAllCardsForSegment(seg) {
-    document.querySelectorAll(
-        `.seg-row[data-seg-chapter="${seg.chapter}"][data-seg-index="${seg.index}"]`
-    ).forEach(row => {
+export function syncAllCardsForSegment(seg: Segment): void {
+    document.querySelectorAll<HTMLElement>(
+        `.seg-row[data-seg-chapter="${seg.chapter}"][data-seg-index="${seg.index}"]`,
+    ).forEach((row) => {
         if (!row.classList.contains('seg-row-context')) {
             updateSegCard(row, seg);
         }
@@ -292,18 +307,26 @@ export function syncAllCardsForSegment(seg) {
 }
 
 /** Resolve a segment object from a .seg-row element. */
-export function resolveSegFromRow(row) {
+export function resolveSegFromRow(row: HTMLElement | null | undefined): Segment | null {
     if (!row) return null;
-    const idx = parseInt(row.dataset.segIndex);
-    const chapter = parseInt(row.dataset.segChapter);
+    const idx = parseInt(row.dataset.segIndex ?? '');
+    const chapter = parseInt(row.dataset.segChapter ?? '');
     if (row.dataset.histTimeStart !== undefined) {
-        return {
-            chapter, index: idx,
+        // History-row synthetic segment — carries only the fields the waveform
+        // / playback code reads from read-only rows.
+        const synth: Segment = {
+            chapter,
+            index: idx,
+            entry_idx: 0,
             time_start: parseFloat(row.dataset.histTimeStart),
-            time_end: parseFloat(row.dataset.histTimeEnd),
+            time_end: parseFloat(row.dataset.histTimeEnd ?? '0'),
             audio_url: row.dataset.histAudioUrl || '',
-            matched_ref: '', matched_text: '', confidence: 0,
+            matched_ref: '',
+            matched_text: '',
+            display_text: '',
+            confidence: 0,
         };
+        return synth;
     }
     const fromMap = state._segIndexMap?.get(`${chapter}:${idx}`);
     if (fromMap) return fromMap;
@@ -312,7 +335,7 @@ export function resolveSegFromRow(row) {
 }
 
 /** Find the card canvas that's currently in edit mode. */
-export function _getEditCanvas() {
-    const row = document.querySelector('.seg-row.seg-edit-target');
-    return row?.querySelector('canvas') || null;
+export function _getEditCanvas(): HTMLCanvasElement | null {
+    const row = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
+    return row?.querySelector<HTMLCanvasElement>('canvas') || null;
 }

@@ -1,11 +1,27 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Reference parsing, formatting, and time formatting utilities.
  */
 
 import { state, _ARABIC_DIGITS } from './state';
+import type { Ref, VerseRef } from '../types/domain';
 
-export function isCrossVerse(ref) {
+/** Parsed canonical segment ref. */
+export interface ParsedSegRef {
+    surah: number;
+    ayah_from: number;
+    word_from: number;
+    ayah_to: number;
+    word_to: number;
+}
+
+type VerseWordCounts = Record<VerseRef, number>;
+
+/** Read verse_word_counts from the active data source (segAllData preferred). */
+function _getVwc(): VerseWordCounts | undefined {
+    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+}
+
+export function isCrossVerse(ref: Ref | null | undefined): boolean {
     if (!ref) return false;
     const parts = ref.split('-');
     if (parts.length !== 2) return false;
@@ -14,7 +30,7 @@ export function isCrossVerse(ref) {
     return startAyah !== endAyah;
 }
 
-export function parseSegRef(ref) {
+export function parseSegRef(ref: Ref | null | undefined): ParsedSegRef | null {
     if (!ref) return null;
     const parts = ref.split('-');
     if (parts.length !== 2) return null;
@@ -23,11 +39,11 @@ export function parseSegRef(ref) {
     return { surah: +s[0], ayah_from: +s[1], word_from: +s[2], ayah_to: +e[1], word_to: +e[2] };
 }
 
-export function countSegWords(ref) {
+export function countSegWords(ref: Ref | null | undefined): number {
     const p = parseSegRef(ref);
     if (!p) return 0;
     if (p.ayah_from === p.ayah_to) return p.word_to - p.word_from + 1;
-    const vwc = state.segAllData && state.segAllData.verse_word_counts;
+    const vwc = state.segAllData?.verse_word_counts;
     let total = 0;
     for (let a = p.ayah_from; a <= p.ayah_to; a++) {
         const key = `${p.surah}:${a}`;
@@ -38,14 +54,14 @@ export function countSegWords(ref) {
     return total;
 }
 
-export function _toArabicNumeral(n) {
-    return String(n).split('').map(d => _ARABIC_DIGITS[+d]).join('');
+export function _toArabicNumeral(n: number): string {
+    return String(n).split('').map((d) => _ARABIC_DIGITS[+d]).join('');
 }
 
 /** Normalize a short ref to canonical surah:ayah:word-surah:ayah:word format. */
-export function _normalizeRef(ref) {
+export function _normalizeRef(ref: Ref | null | undefined): Ref | null | undefined {
     if (!ref) return ref;
-    const vwc = (state.segAllData || state.segData || {}).verse_word_counts;
+    const vwc = _getVwc();
     const parts = ref.split('-');
     if (parts.length === 2) {
         const s = parts[0].split(':'), e = parts[1].split(':');
@@ -66,14 +82,15 @@ export function _normalizeRef(ref) {
 }
 
 /** Insert verse end markers at verse boundaries within segment text. */
-export function _addVerseMarkers(text, ref) {
-    if (!text || !ref) return text;
-    const vwc = (state.segAllData || state.segData || {}).verse_word_counts;
-    const p = parseSegRef(_normalizeRef(ref));
+export function _addVerseMarkers(text: string | null | undefined, ref: Ref | null | undefined): string {
+    if (!text || !ref) return text ?? '';
+    const vwc = _getVwc();
+    const normalized = _normalizeRef(ref);
+    const p = parseSegRef(normalized);
     if (!p || !vwc) return text;
 
     const words = text.split(/\s+/).filter(Boolean);
-    const out = [];
+    const out: string[] = [];
     let ay = p.ayah_from, w = p.word_from;
 
     for (let i = 0; i < words.length; i++) {
@@ -91,9 +108,9 @@ export function _addVerseMarkers(text, ref) {
     return out.join(' ');
 }
 
-export function formatRef(ref) {
+export function formatRef(ref: Ref | null | undefined): string {
     if (!ref) return '(no match)';
-    const vwc = (state.segAllData && state.segAllData.verse_word_counts) || (state.segData && state.segData.verse_word_counts);
+    const vwc = _getVwc();
     if (!vwc) return ref;
     const parts = ref.split('-');
     if (parts.length !== 2) return ref;
@@ -110,7 +127,7 @@ export function formatRef(ref) {
     return ref;
 }
 
-export function formatTimeMs(ms) {
+export function formatTimeMs(ms: number): string {
     if (!isFinite(ms)) return '0:00';
     const totalSec = ms / 1000;
     const mins = Math.floor(totalSec / 60);
@@ -118,7 +135,7 @@ export function formatTimeMs(ms) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function formatDurationMs(ms) {
+export function formatDurationMs(ms: number): string {
     if (!isFinite(ms) || ms === 0) return '0s';
     const seconds = ms / 1000;
     if (seconds < 60) return seconds.toFixed(1) + 's';
@@ -131,23 +148,23 @@ export function formatDurationMs(ms) {
  * Suggest per-verse refs for the two halves when splitting a cross-verse segment.
  * Returns {first, second} ref strings or null if single-verse or data unavailable.
  */
-export function _suggestSplitRefs(ref) {
+export function _suggestSplitRefs(ref: Ref): { first: Ref; second: Ref } | null {
     const p = parseSegRef(ref);
     if (!p || p.ayah_from === p.ayah_to) return null;
-    const vwc = (state.segAllData || state.segData || {}).verse_word_counts;
+    const vwc = _getVwc();
     if (!vwc) return null;
     const firstVerseKey = `${p.surah}:${p.ayah_from}`;
     const firstEnd = vwc[firstVerseKey];
     if (!firstEnd) return null;
 
     // First half: from parent's word_from to last word of ayah_from
-    const first = (p.word_from === 1 && p.word_from <= firstEnd)
+    const first: Ref = (p.word_from === 1 && p.word_from <= firstEnd)
         ? `${p.surah}:${p.ayah_from}`
         : `${p.surah}:${p.ayah_from}:${p.word_from}-${p.surah}:${p.ayah_from}:${firstEnd}`;
 
     // Second half: from word 1 of next ayah to parent's word_to
     const nextAyah = p.ayah_from + 1;
-    const second = (nextAyah === p.ayah_to)
+    const second: Ref = (nextAyah === p.ayah_to)
         ? `${p.surah}:${p.ayah_to}:1-${p.surah}:${p.ayah_to}:${p.word_to}`
         : `${p.surah}:${nextAyah}:1-${p.surah}:${p.ayah_to}:${p.word_to}`;
 

@@ -37,10 +37,10 @@ with the fixing commit SHA and phase.
 
 ## Section 2 — TypeScript-caught
 
-_No rows yet — agents append during Phases 3–7 as TSC flags real issues._
-
 | ID | Title | File:Line | TSC rule | Phase | Status | Fix-SHA | Notes |
 |----|-------|-----------|----------|-------|--------|---------|-------|
+| B13 | `renderValidationPanel` re-reads `state.segValidation` inside deferred rAF after a reciter change could null it | inspector/frontend/src/segments/data.ts:194 | `strictNullChecks` | 5 | CLOSED | _(this phase)_ | The rAF callback inside `onSegChapterChange` referenced `state.segValidation` that TSC flagged as possibly null at callback-time (outer guard is at deferral-time). Added an inner `if (!state.segValidation) return;` — prevents a theoretical NPE on rapid reciter-change race. Zero runtime diff in the common path. |
+| B14 | `silence_after_ms` domain type was `number?` but code writes literal `null` | inspector/frontend/src/types/domain.ts:48-53, inspector/frontend/src/segments/filters.ts:38-42 | `strictNullChecks` | 5 | CLOSED | _(this phase)_ | `computeSilenceAfter` assigns `null` on no-neighbour (pre-existing behavior). Type was tightened to `number \| null`. All consumers use `!= null` already, so no runtime diff. |
 
 ## Section 3 — API-drift findings (authored while writing `types/api.ts`)
 
@@ -50,6 +50,8 @@ _No rows yet — agents append during Phases 3–7 as TSC flags real issues._
 | B10 | /api/seg/data, /api/seg/all | `Segment` missed legacy `ignored?: boolean` fallback used by `validation/categories.ts:_isIgnoredFor` for pre-`ignored_categories` rows. | inspector/frontend/src/segments/validation/categories.ts:41 | inspector/frontend/src/types/domain.ts:24-50 | 4 | CLOSED | Added `ignored?: boolean` with a doc comment flagging it as back-compat. |
 | B11 | /api/ts/data | `PhonemeInterval` missed `geminate_start?` / `geminate_end?` — emitted by `mfa_aligner/app.py:605-607` and consumed by `timestamps/playback.ts`, `timestamps/unified-display.ts`. | mfa_aligner/app.py:605-607 | inspector/frontend/src/types/domain.ts:158-168 | 4 | CLOSED | Added both as optional booleans. |
 | B12 | /api/surah-info | `SurahInfo` declared `{en, ar}`; server returns `{name_en, name_ar, num_verses}` (see `services/data_loader.py:267-268`), which is what `shared/surah-info.ts:surahOptionText` actually reads. | inspector/services/data_loader.py:267-268 | inspector/frontend/src/types/domain.ts:228-234 | 4 | CLOSED | Renamed fields on `SurahInfo` to match server payload. |
+| B15 | /api/seg/config | `SegConfigResponse.accordion_context` typed as `Record<string, number>`, but `inspector/config.py:70-79` defines `ACCORDION_CONTEXT` with string values (`"hidden"`, `"shown"`, `"next_only"`) and the route jsonifies the dict directly. State hub `_accordionContext: Record<string, string>` was correct; the `api.ts` type was off. Surfaced by Sonnet review of Phase 5. | inspector/config.py:70-79 | inspector/frontend/src/types/api.ts:107 | 5 | CLOSED | Changed to `Record<string, string>`. Prevents a blocker in Phase 6 when `segments/index.ts` is typed and assigns `cfg.accordion_context → state._accordionContext`. |
+| B16 | /api/seg/validate | `SegValMissingVerseItem.msg` typed optional; server emits literal `"missing verse"` unconditionally at `inspector/services/validation.py`. Flagged by Sonnet nit review. | inspector/services/validation.py | inspector/frontend/src/types/domain.ts:269 | 5 | CLOSED | Tightened to required `msg: string`. All consumers already handle it safely. |
 
 ## Section 4 — New bugs introduced by refactor
 
@@ -63,3 +65,5 @@ _No rows yet — review agents append if regressions appear in the per-phase gat
 | ID | Origin section | Fix summary | Fix-SHA | Phase |
 |----|----------------|-------------|---------|-------|
 | B08 | Section 1 | Not a bug — `/api/seg/edit-history` returns `{batches, summary}` as JSON; the server parses JSONL internally. `fetchJsonl` helper omitted. | _(this phase)_ | 3 |
+| B03 | Section 1 | Not a bug — `target_seg_index` lives inside `auto_fix`, so the `if (item.auto_fix)` guard correctly covers the only place that index exists on a `missing_words` row. Items without `auto_fix` have no `target_seg_index` field to re-index. Verified while typing `_forEachValItem` in `validation/index.ts`; server emit in `services/validation.py:375-394` confirms `target_seg_index` is only nested in `auto_fix`. | _(this phase)_ | 5 |
+| B07 | Section 1 | Mitigated — extracted accordion primitives to `shared/accordion.ts` (`collapseSiblingDetails`, `capturePanelOpenState`, `restorePanelOpenState`) used by the now-typed `validation/index.ts`. The "half-state" concern in the original note was speculative: the render loop already skips empty categories (`if (!cat.items \|\| cat.items.length === 0) return`), and `restoreValPanelState` silently skips categories that no longer have a `<details>` element. No runtime fix needed; behavior documented via the typed shared API. | _(this phase)_ | 5 |

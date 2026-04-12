@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Data loading, chapter management, and segment lookups.
  */
@@ -6,9 +5,7 @@
 import { state, dom } from './state';
 import { LS_KEYS } from '../shared/constants';
 import { surahOptionText } from '../shared/surah-info';
-import { SearchableSelect } from '../shared/searchable-select';
 import { computeSilenceAfter } from './filters';
-import { renderSegList } from './rendering';
 import { applyFiltersAndRender } from './filters';
 import { _fetchPeaks, _fetchChapterPeaksIfNeeded } from './waveform/index';
 import { _isCurrentReciterBySurah, _fetchCacheStatus, _rewriteAudioUrls } from './playback/audio-cache';
@@ -26,12 +23,13 @@ import type {
     SegStatsResponse,
     SegValidateResponse,
 } from '../types/api';
+import type { Segment } from '../types/domain';
 
 // ---------------------------------------------------------------------------
 // Reciter loading
 // ---------------------------------------------------------------------------
 
-export async function loadSegReciters() {
+export async function loadSegReciters(): Promise<void> {
     try {
         state.segAllReciters = await fetchJson<SegRecitersResponse>('/api/seg/reciters');
         filterAndRenderReciters();
@@ -48,12 +46,12 @@ export async function loadSegReciters() {
     }
 }
 
-export function filterAndRenderReciters() {
+export function filterAndRenderReciters(): void {
     dom.segReciterSelect.innerHTML = '<option value="">-- select --</option>';
     clearSegDisplay();
 
-    const grouped = {};
-    const uncategorized = [];
+    const grouped: Record<string, typeof state.segAllReciters> = {};
+    const uncategorized: typeof state.segAllReciters = [];
 
     for (const r of state.segAllReciters) {
         const src = r.audio_source || '';
@@ -94,7 +92,7 @@ export function filterAndRenderReciters() {
 // Chapter/reciter change handlers
 // ---------------------------------------------------------------------------
 
-export async function onSegReciterChange() {
+export async function onSegReciterChange(): Promise<void> {
     const reciter = dom.segReciterSelect.value;
     if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
     dom.segChapterSelect.innerHTML = '<option value="">-- select --</option>';
@@ -126,9 +124,9 @@ export async function onSegReciterChange() {
         const chapters = await fetchJson<SegChaptersResponse>(`/api/seg/chapters/${reciter}`);
         if (dom.segReciterSelect.value !== reciter) return;
         if (!Array.isArray(chapters)) return;
-        chapters.forEach(ch => {
+        chapters.forEach((ch: number) => {
             const opt = document.createElement('option');
-            opt.value = ch;
+            opt.value = String(ch);
             opt.textContent = surahOptionText(ch);
             dom.segChapterSelect.appendChild(opt);
         });
@@ -181,7 +179,7 @@ export async function onSegReciterChange() {
     }
 }
 
-export async function onSegChapterChange() {
+export async function onSegChapterChange(): Promise<void> {
     const reciter = dom.segReciterSelect.value;
     const chapter = dom.segChapterSelect.value;
     dom.segVerseSelect.innerHTML = '<option value="">All</option>';
@@ -193,6 +191,7 @@ export async function onSegChapterChange() {
 
     if (state.segValidation) {
         requestAnimationFrame(() => {
+            if (!state.segValidation) return;
             const globalState = captureValPanelState(dom.segValidationGlobalEl);
             const chState = captureValPanelState(dom.segValidationEl);
             const ch = chapter ? parseInt(chapter) : null;
@@ -216,7 +215,7 @@ export async function onSegChapterChange() {
     dom.segPlayBtn.disabled = false;
 
     try {
-        const segData = await fetchJson<SegDataResponse & { error?: string }>(`/api/seg/data/${reciter}/${chapter}`);
+        const segData = await fetchJson<SegDataResponse>(`/api/seg/data/${reciter}/${chapter}`);
         if (dom.segReciterSelect.value !== reciter || dom.segChapterSelect.value !== chapter) return;
         state.segData = segData;
         if (state.segData.error) return;
@@ -224,21 +223,21 @@ export async function onSegChapterChange() {
             state.segData.audio_url = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(state.segData.audio_url)}`;
         }
 
-        const verses = new Set();
+        const verses = new Set<number>();
         (state.segAllData?.segments || [])
-            .filter(s => s.chapter === parseInt(chapter) && s.matched_ref)
-            .forEach(s => {
+            .filter((s: Segment) => s.chapter === parseInt(chapter) && !!s.matched_ref)
+            .forEach((s: Segment) => {
                 const start = s.matched_ref.split('-')[0]?.split(':');
-                if (start?.length >= 2) verses.add(parseInt(start[1]));
+                if (start && start.length >= 2) verses.add(parseInt(start[1]));
             });
-        [...verses].sort((a, b) => a - b).forEach(v => {
+        [...verses].sort((a, b) => a - b).forEach((v) => {
             const opt = document.createElement('option');
-            opt.value = v; opt.textContent = v;
+            opt.value = String(v); opt.textContent = String(v);
             dom.segVerseSelect.appendChild(opt);
         });
 
         const chNum = parseInt(chapter);
-        state.segData.segments = (state.segAllData?.segments || []).filter(s => s.chapter === chNum);
+        state.segData.segments = (state.segAllData?.segments || []).filter((s: Segment) => s.chapter === chNum);
 
         _fetchChapterPeaksIfNeeded(reciter, chNum);
 
@@ -255,7 +254,7 @@ export async function onSegChapterChange() {
 // Display clear
 // ---------------------------------------------------------------------------
 
-export function clearSegDisplay() {
+export function clearSegDisplay(): void {
     if (state._waveformObserver) { state._waveformObserver.disconnect(); state._waveformObserver = null; }
     state._segIndexMap = null;
     state.segAllData = null;
@@ -310,49 +309,63 @@ export function clearSegDisplay() {
 // ---------------------------------------------------------------------------
 
 /** Build lazily-indexed per-chapter segment lookup from segAllData */
-export function getChapterSegments(chapter) {
-    if (!state.segAllData || !state.segAllData.segments) return [];
-    if (!state.segAllData._byChapter) {
-        state.segAllData._byChapter = {};
-        state.segAllData._byChapterIndex = new Map();
-        state.segAllData.segments.forEach(s => {
-            const ch = s.chapter;
-            if (!state.segAllData._byChapter[ch]) state.segAllData._byChapter[ch] = [];
-            state.segAllData._byChapter[ch].push(s);
-            state.segAllData._byChapterIndex.set(`${ch}:${s.index}`, s);
+export function getChapterSegments(chapter: number | string): Segment[] {
+    const all = state.segAllData;
+    if (!all || !all.segments) return [];
+    if (!all._byChapter) {
+        const byChapter: Record<string, Segment[]> = {};
+        const byIndex = new Map<string, Segment>();
+        all.segments.forEach((s) => {
+            const ch: number | undefined = s.chapter;
+            if (ch == null) return;
+            const key = String(ch);
+            if (!byChapter[key]) byChapter[key] = [];
+            byChapter[key].push(s);
+            byIndex.set(`${ch}:${s.index}`, s);
         });
-        for (const ch of Object.keys(state.segAllData._byChapter)) {
-            state.segAllData._byChapter[ch].sort((a, b) => a.index - b.index);
+        for (const ch of Object.keys(byChapter)) {
+            byChapter[ch].sort((a, b) => a.index - b.index);
         }
+        all._byChapter = byChapter;
+        all._byChapterIndex = byIndex;
     }
-    return state.segAllData._byChapter[chapter] || [];
+    return all._byChapter[String(chapter)] || [];
 }
 
-export function getSegByChapterIndex(chapter, index) {
-    if (!state.segAllData || !state.segAllData.segments) return null;
-    if (!state.segAllData._byChapterIndex) getChapterSegments(chapter);
-    return state.segAllData._byChapterIndex.get(`${chapter}:${index}`) || null;
+export function getSegByChapterIndex(chapter: number | string, index: number): Segment | null {
+    const all = state.segAllData;
+    if (!all || !all.segments) return null;
+    if (!all._byChapterIndex) getChapterSegments(chapter);
+    return all._byChapterIndex?.get(`${chapter}:${index}`) || null;
 }
 
-export function getAdjacentSegments(chapter, index) {
+export interface AdjacentSegments {
+    prev: Segment | null;
+    next: Segment | null;
+}
+
+export function getAdjacentSegments(chapter: number | string, index: number): AdjacentSegments {
     const segs = getChapterSegments(chapter);
-    const pos = segs.findIndex(s => s.index === index);
+    const pos = segs.findIndex((s) => s.index === index);
     return {
         prev: pos > 0 ? segs[pos - 1] : null,
-        next: pos >= 0 && pos < segs.length - 1 ? segs[pos + 1] : null
+        next: pos >= 0 && pos < segs.length - 1 ? segs[pos + 1] : null,
     };
 }
 
 /**
  * Sync segData.segments (chapter-specific edits) back into segAllData.segments.
  */
-export function syncChapterSegsToAll() {
+export function syncChapterSegsToAll(): void {
     if (!state.segAllData || !state.segData || !state.segData.segments) return;
     const chapter = parseInt(dom.segChapterSelect.value);
     if (!chapter) return;
-    const other = state.segAllData.segments.filter(s => s.chapter !== chapter);
-    const updated = state.segData.segments.map(s => { s.chapter = chapter; return s; });
-    const insertIdx = other.findIndex(s => s.chapter > chapter);
+    const other = state.segAllData.segments.filter((s) => s.chapter !== chapter);
+    const updated = state.segData.segments.map((s) => {
+        s.chapter = chapter;
+        return s;
+    });
+    const insertIdx = other.findIndex((s) => (s.chapter ?? 0) > chapter);
     if (insertIdx === -1) {
         state.segAllData.segments = [...other, ...updated];
     } else {
@@ -362,16 +375,17 @@ export function syncChapterSegsToAll() {
             ...other.slice(insertIdx),
         ];
     }
-    state.segAllData._byChapter = null; state.segAllData._byChapterIndex = null;
+    state.segAllData._byChapter = null;
+    state.segAllData._byChapterIndex = null;
 }
 
 /**
  * Get the current chapter's segments from segData or segAllData.
  */
-export function _getChapterSegs() {
+export function _getChapterSegs(): Segment[] {
     if (state.segData?.segments?.length) return state.segData.segments;
     const ch = parseInt(dom.segChapterSelect.value);
-    if (ch && state.segAllData?.segments) return state.segAllData.segments.filter(s => s.chapter === ch);
+    if (ch && state.segAllData?.segments) return state.segAllData.segments.filter((s) => s.chapter === ch);
     return [];
 }
 
@@ -380,15 +394,23 @@ export function _getChapterSegs() {
 // ---------------------------------------------------------------------------
 
 /** Extract unique chapter numbers from all validation error categories. */
-function _collectErrorChapters(validation) {
+function _collectErrorChapters(validation: SegValidateResponse | null): number[] {
     if (!validation) return [];
-    const chapters = new Set();
-    const cats = ['errors', 'missing_verses', 'missing_words', 'failed',
-                  'low_confidence', 'boundary_adj',
-                  'cross_verse', 'audio_bleeding', 'repetitions'];
+    const chapters = new Set<number>();
+    const cats: ReadonlyArray<keyof SegValidateResponse> = [
+        'errors', 'missing_verses', 'missing_words', 'failed',
+        'low_confidence', 'boundary_adj',
+        'cross_verse', 'audio_bleeding', 'repetitions',
+    ];
     for (const cat of cats) {
         const items = validation[cat];
-        if (items) items.forEach(i => { if (i.chapter) chapters.add(i.chapter); });
+        if (Array.isArray(items)) {
+            items.forEach((i: unknown) => {
+                if (i && typeof i === 'object' && typeof (i as { chapter?: number }).chapter === 'number') {
+                    chapters.add((i as { chapter: number }).chapter);
+                }
+            });
+        }
     }
     return [...chapters].sort((a, b) => a - b);
 }

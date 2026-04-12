@@ -15,6 +15,17 @@ import type {
     SegmentsChapterSummary,
     SegmentPeaks,
     SegReciter,
+    SegValAudioBleedingItem,
+    SegValBoundaryAdjItem,
+    SegValCrossVerseItem,
+    SegValFailedItem,
+    SegValLowConfidenceItem,
+    SegValMissingVerseItem,
+    SegValMissingWordsItem,
+    SegValMuqattaatItem,
+    SegValQalqalaItem,
+    SegValRepetitionItem,
+    SegValStructuralErrorItem,
     SurahInfoMap,
     TsBoundaryMismatch,
     TsMfaFailure,
@@ -93,7 +104,7 @@ export interface SegConfigResponse {
     qalqala_letters: string[];
     standalone_refs: Array<[number, number, number]>;
     standalone_words: string[];
-    accordion_context: Record<string, number>;
+    accordion_context: Record<string, string>;
 }
 
 /** GET /api/seg/reciters */
@@ -173,20 +184,22 @@ export interface SegTriggerValidationResponse {
     ok: true;
 }
 
-/** GET /api/seg/validate/:reciter — shape varies by category; keep loose. */
+/** GET /api/seg/validate/:reciter — array shapes tracked per-category in types/domain.ts. */
 export interface SegValidateResponse {
-    errors?: unknown[];
-    failed?: unknown[];
-    missing_verses?: unknown[];
-    missing_words?: unknown[];
-    structural_errors?: unknown[];
-    low_confidence?: unknown[];
-    boundary_adj?: unknown[];
-    cross_verse?: unknown[];
-    audio_bleeding?: unknown[];
-    repetitions?: unknown[];
-    muqattaat?: unknown[];
-    qalqala?: unknown[];
+    /** Structural validation issues — the server actually emits this key. */
+    errors?: SegValStructuralErrorItem[];
+    failed?: SegValFailedItem[];
+    missing_verses?: SegValMissingVerseItem[];
+    missing_words?: SegValMissingWordsItem[];
+    /** Never emitted by the server; kept as a defensive alias in case a future route adds it. */
+    structural_errors?: SegValStructuralErrorItem[];
+    low_confidence?: SegValLowConfidenceItem[];
+    boundary_adj?: SegValBoundaryAdjItem[];
+    cross_verse?: SegValCrossVerseItem[];
+    audio_bleeding?: SegValAudioBleedingItem[];
+    repetitions?: SegValRepetitionItem[];
+    muqattaat?: SegValMuqattaatItem[];
+    qalqala?: SegValQalqalaItem[];
     [k: string]: unknown;
 }
 
