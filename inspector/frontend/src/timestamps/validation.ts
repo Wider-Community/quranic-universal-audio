@@ -52,12 +52,10 @@ export function renderTsValidationPanel(data: TsValidateResponse | null): void {
         name: 'Boundary Mismatches', items: boundary_mismatches || [],
         countClass: 'has-warnings', btnClass: 'val-warning',
         getLabel: i => i.label,
-        // Legacy title string references `ts_ms` / `seg_ms`; the server emits
-        // neither — only (side, diff_ms). Preserved verbatim for zero-behavior-
-        // change typing; see bug log B17. TSC: cast to any at this call site
-        // so we don't type-whitewash the latent bug.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        getTitle: (i: any) => `timestamps ${i.ts_ms}ms vs segments ${i.seg_ms}ms`,
+        // B17 fix: server emits `{side, diff_ms}`; the pre-refactor tooltip
+        // read `{ts_ms, seg_ms}` (never emitted) and rendered "undefined ms
+        // vs undefined ms". Use the actual fields.
+        getTitle: i => `${i.side} boundary drift: ${i.diff_ms}ms`,
         getVerseKey: i => i.verse_key,
     };
 
