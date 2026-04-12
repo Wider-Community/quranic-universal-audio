@@ -1,11 +1,13 @@
 """
 Alignment Inspector Server
 
-Flask entry point: creates app, registers blueprints, serves static files
-and cross-tab routes, and runs the startup sequence.
+Flask entry point: creates app, registers blueprints, serves the Vite-built
+SPA shell (inspector/frontend/dist/) and cross-tab routes, and runs the
+startup sequence.
 """
 import argparse
 import concurrent.futures
+import sys
 from pathlib import Path
 
 from flask import Flask, jsonify, send_file, send_from_directory
@@ -15,23 +17,31 @@ from routes import register_blueprints
 from services.data_loader import discover_ts_reciters, load_surah_info_lite, load_timestamps
 from services.phonemizer_service import get_phonemizer, has_phonemizer
 
-app = Flask(__name__, static_folder="static")
+_HERE = Path(__file__).parent.resolve()
+FRONTEND_DIST = _HERE / "frontend" / "dist"
+
+# Flask's built-in static handler serves everything under FRONTEND_DIST at
+# the site root (`/assets/<hash>.js`, `/fonts/DigitalKhattV2.otf`, …). The
+# `/` route below handles index.html explicitly.
+app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
 register_blueprints(app)
 
 # ---------------------------------------------------------------------------
 # Static / index routes
 # ---------------------------------------------------------------------------
 
+_BUILD_HINT = (
+    "Frontend not built. Run:\n"
+    "  cd inspector/frontend && npm ci && npm run build\n"
+)
+
+
 @app.route("/")
 def index():
-    """Serve the main HTML page."""
-    return send_from_directory("static", "index.html")
-
-
-@app.route("/static/<path:filename>")
-def serve_static(filename):
-    """Serve static files."""
-    return send_from_directory("static", filename)
+    """Serve the Vite-built SPA shell."""
+    if not (FRONTEND_DIST / "index.html").exists():
+        return _BUILD_HINT, 500, {"Content-Type": "text/plain"}
+    return send_from_directory(str(FRONTEND_DIST), "index.html")
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +74,15 @@ if __name__ == "__main__":
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+    if not (FRONTEND_DIST / "index.html").exists():
+        print(
+            f"WARNING: {FRONTEND_DIST / 'index.html'} not found.\n"
+            "         Run `cd inspector/frontend && npm ci && npm run build` before visiting /.\n"
+            "         For frontend development: `cd inspector/frontend && npm run dev` and\n"
+            "         visit http://localhost:5173 (Vite proxies /api + /audio to this Flask).",
+            file=sys.stderr,
+        )
+
     # Eagerly initialize phonemizer
     if has_phonemizer():
         print("Initializing phonemizer...")
@@ -86,29 +105,7 @@ if __name__ == "__main__":
                 print(f"  Preloaded timestamps: {slug}")
         print("All timestamp data cached.")
 
-    # extra_files for Flask reloader — watches static assets and route modules
-    _base = Path(__file__).parent
-    extra = [
-        str(_base / "static" / "js" / "main.js"),
-        str(_base / "static" / "js" / "timestamps.js"),
-        str(_base / "static" / "js" / "segments.js"),
-        str(_base / "static" / "js" / "audio" / "index.js"),
-        str(_base / "static" / "js" / "shared" / "searchable-select.js"),
-        str(_base / "static" / "js" / "shared" / "arabic-text.js"),
-        str(_base / "static" / "js" / "shared" / "surah-info.js"),
-        str(_base / "static" / "js" / "shared" / "constants.js"),
-        str(_base / "static" / "css" / "base.css"),
-        str(_base / "static" / "css" / "components.css"),
-        str(_base / "static" / "css" / "timestamps.css"),
-        str(_base / "static" / "css" / "segments.css"),
-        str(_base / "static" / "css" / "validation.css"),
-        str(_base / "static" / "css" / "history.css"),
-        str(_base / "static" / "css" / "stats.css"),
-        str(_base / "static" / "css" / "filters.css"),
-        str(_base / "static" / "css" / "audio-tab.css"),
-        str(_base / "static" / "index.html"),
-    ]
-
+    # Vite owns frontend file-watching (HMR in dev; rebuild on npm run build).
+    # Flask reloader only needs to watch Python modules, which it does natively.
     print(f"Starting server at http://localhost:{args.port}")
-    app.run(host="0.0.0.0", port=args.port, debug=True, use_reloader=True,
-            extra_files=extra)
+    app.run(host="0.0.0.0", port=args.port, debug=True, use_reloader=True)

@@ -6,6 +6,19 @@
  * handlers before the event fires (modules execute before DOMContentLoaded).
  */
 
+// Stylesheets — order matches the original <link> tag order in index.html.
+// Vite injects these into <head> during dev and extracts them to a bundled
+// CSS file in production builds.
+import './styles/base.css';
+import './styles/components.css';
+import './styles/timestamps.css';
+import './styles/segments.css';
+import './styles/validation.css';
+import './styles/history.css';
+import './styles/stats.css';
+import './styles/filters.css';
+import './styles/audio-tab.css';
+
 import { LS_KEYS } from './shared/constants.js';
 
 // Static imports — module-level code in each tab runs immediately,

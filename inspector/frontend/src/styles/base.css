@@ -3,7 +3,7 @@
 
 @font-face {
     font-family: 'DigitalKhatt';
-    src: url('/static/fonts/DigitalKhattV2.otf') format('opentype');
+    src: url('/fonts/DigitalKhattV2.otf') format('opentype');
 }
 
 :root {
