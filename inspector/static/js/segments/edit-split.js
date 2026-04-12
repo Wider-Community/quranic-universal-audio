@@ -9,6 +9,7 @@ import { _slicePeaks } from './waveform-draw.js';
 import { computeSilenceAfter, applyVerseFilterAndRender } from './filters.js';
 import { exitEditMode, _playRange } from './edit-common.js';
 import { startRefEdit } from './edit-reference.js';
+import { _suggestSplitRefs } from './references.js';
 import { _fixupValIndicesForSplit } from './validation.js';
 import { _rebuildAccordionAfterSplit } from './error-cards.js';
 import { refreshOpenAccordionCards } from './validation.js';
@@ -246,7 +247,7 @@ export function updateSplitInfo(canvas, seg, splitTime) {
 // confirmSplit -- apply the split and chain ref editing
 // ---------------------------------------------------------------------------
 
-export function confirmSplit(seg) {
+export async function confirmSplit(seg) {
     const canvas = _getEditCanvas();
     const splitTime = canvas?._splitData?.currentSplit;
     if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
@@ -269,6 +270,25 @@ export function confirmSplit(seg) {
         index: seg.index + 1,
         time_start: splitTime,
     };
+
+    // Auto-suggest per-verse refs for cross-verse splits
+    const suggested = _suggestSplitRefs(seg.matched_ref);
+    if (suggested) {
+        firstHalf.matched_ref = suggested.first;
+        secondHalf.matched_ref = suggested.second;
+        const [r1, r2] = await Promise.allSettled([
+            fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.first)}`).then(r => r.ok ? r.json() : null),
+            fetch(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.second)}`).then(r => r.ok ? r.json() : null),
+        ]);
+        if (r1.status === 'fulfilled' && r1.value?.text) {
+            firstHalf.matched_text = r1.value.text;
+            firstHalf.display_text = r1.value.display_text || r1.value.text;
+        }
+        if (r2.status === 'fulfilled' && r2.value?.text) {
+            secondHalf.matched_text = r2.value.text;
+            secondHalf.display_text = r2.value.display_text || r2.value.text;
+        }
+    }
 
     const splitOp = state._pendingOp;
     state._pendingOp = null;

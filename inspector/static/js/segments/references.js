@@ -125,3 +125,30 @@ export function formatDurationMs(ms) {
     const secs = (seconds % 60).toFixed(0);
     return `${mins}m ${secs}s`;
 }
+
+/**
+ * Suggest per-verse refs for the two halves when splitting a cross-verse segment.
+ * Returns {first, second} ref strings or null if single-verse or data unavailable.
+ */
+export function _suggestSplitRefs(ref) {
+    const p = parseSegRef(ref);
+    if (!p || p.ayah_from === p.ayah_to) return null;
+    const vwc = (state.segAllData || state.segData || {}).verse_word_counts;
+    if (!vwc) return null;
+    const firstVerseKey = `${p.surah}:${p.ayah_from}`;
+    const firstEnd = vwc[firstVerseKey];
+    if (!firstEnd) return null;
+
+    // First half: from parent's word_from to last word of ayah_from
+    const first = (p.word_from === 1 && p.word_from <= firstEnd)
+        ? `${p.surah}:${p.ayah_from}`
+        : `${p.surah}:${p.ayah_from}:${p.word_from}-${p.surah}:${p.ayah_from}:${firstEnd}`;
+
+    // Second half: from word 1 of next ayah to parent's word_to
+    const nextAyah = p.ayah_from + 1;
+    const second = (nextAyah === p.ayah_to)
+        ? `${p.surah}:${p.ayah_to}:1-${p.surah}:${p.ayah_to}:${p.word_to}`
+        : `${p.surah}:${nextAyah}:1-${p.surah}:${p.ayah_to}:${p.word_to}`;
+
+    return { first, second };
+}
