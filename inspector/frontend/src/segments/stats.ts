@@ -137,7 +137,6 @@ export function drawBarChart(canvas: ChartCanvas, dist: Distribution, cfg: Chart
     const hoverColors = bgColors.map(c => { const r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16); return `rgb(${Math.min(255, r + 40)}, ${Math.min(255, g + 40)}, ${Math.min(255, b + 40)})`; });
     // Chart.js annotation plugin types live in a separate package and are
     // verbose to spell out; cast to a loose record here. Budget: 1 `any`.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const annotations: Record<string, any> = {};
     if (cfg.refLine != null && bins.length >= 2) {
         annotations.refLine = { type: 'line', scaleID: 'x', value: _findBinIndex(bins, cfg.refLine), borderColor: '#f44336', borderWidth: 1.5, borderDash: [4, 3], label: { display: true, content: cfg.refLabel || '', position: 'start', color: '#f44336', font: { size: 9, family: 'monospace' }, backgroundColor: 'rgba(15,15,35,0.7)' } };
@@ -193,7 +192,6 @@ export function drawBarChart(canvas: ChartCanvas, dist: Distribution, cfg: Chart
                     },
                 },
                 // Annotation plugin lives outside core Chart.js types; attach via cast.
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 ...(({ annotation: { annotations } as any })),
             },
             scales: {

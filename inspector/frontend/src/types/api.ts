@@ -32,7 +32,6 @@ import type {
     TsMissingWords,
     TsReciter,
     TsVerseData,
-    ValidationSummarySnapshot,
     VerseRef,
 } from './domain';
 

@@ -6,7 +6,7 @@ import { state, dom, EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../state';
 import { _deriveOpIssueDelta } from '../validation/categories';
 import { _ensureWaveformObserver } from '../waveform/index';
 import {
-    renderHistorySummaryStats, renderHistoryBatches,
+    renderHistorySummaryStats,
     _flattenBatchesToItems, _renderHistoryDisplayItems,
     drawHistoryArrows, _versesFromRef,
 } from './rendering';

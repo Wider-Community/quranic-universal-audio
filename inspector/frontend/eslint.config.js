@@ -11,7 +11,12 @@ export default [
         rules: {
             // Stage 1 migration tolerance — tightened in Phase 7 cleanup.
             '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+            '@typescript-eslint/no-unused-vars': ['warn', {
+                argsIgnorePattern: '^_',
+                varsIgnorePattern: '^_',
+                caughtErrorsIgnorePattern: '^_',
+                destructuredArrayIgnorePattern: '^_',
+            }],
             '@typescript-eslint/ban-ts-comment': 'warn',
             'no-unused-vars': 'off',
         },

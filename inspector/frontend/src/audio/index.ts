@@ -79,7 +79,7 @@ async function loadSources(): Promise<void> {
         }
 
         populateReciters();
-    } catch (e) {
+    } catch (_e) {
         reciterSelect.innerHTML = '<option value="">Error loading sources</option>';
         if (audReciterSS) audReciterSS.refresh();
     }
@@ -161,7 +161,7 @@ reciterSelect.addEventListener('change', async () => {
             const nums = Object.keys(urls).map(Number).sort((a, b) => a - b);
             populateSurahSelect(nums);
         }
-    } catch (e) {
+    } catch (_e) {
         surahSelect.innerHTML = '<option value="">Error loading</option>';
     }
 });
