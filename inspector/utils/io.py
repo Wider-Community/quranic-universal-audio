@@ -26,4 +26,4 @@ def file_sha256(path: Path) -> str:
 def backup_file(path: Path) -> None:
     """Create a ``.bak`` copy of *path* if it exists."""
     if path.exists():
-        shutil.copy2(path, path.with_suffix(".json.bak"))
+        shutil.copy2(path, path.with_name(path.name + ".bak"))

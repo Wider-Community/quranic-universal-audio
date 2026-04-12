@@ -208,6 +208,7 @@ def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
         "operations": operations,
     }
     history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+    backup_file(history_path)
     with open(history_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(batch, ensure_ascii=False) + "\n")
 

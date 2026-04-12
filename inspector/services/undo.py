@@ -239,6 +239,7 @@ def _append_revert_record(history_path: Path, target_batch_id: str, reciter: str
                           val_before: dict, val_after: dict,
                           reverts_op_ids: list[str] | None = None) -> None:
     """Append a revert record to edit_history.jsonl."""
+    backup_file(history_path)
     revert = {
         "schema_version": 1,
         "batch_id": uuid7(),
