@@ -3,6 +3,7 @@
  */
 
 import { state, dom, _SEG_NORMAL_IDS } from '../state';
+import type { SplitChain, HistorySnapshot } from '../state';
 import { onSegReciterChange } from '../data';
 import { _ensureWaveformObserver } from '../waveform/index';
 import { _fetchPeaks } from '../waveform/index';
@@ -13,7 +14,7 @@ import {
 } from './rendering';
 import { renderHistoryFilterBar } from './filters';
 import type { SegEditHistoryResponse } from '../../types/api';
-import type { EditOp, HistoryBatch } from '../../types/domain';
+import type { HistoryBatch } from '../../types/domain';
 
 interface SplitLineageEntry {
     wfStart: number;
@@ -21,13 +22,6 @@ interface SplitLineageEntry {
     audioUrl: string;
 }
 type SplitLineage = Map<string, SplitLineageEntry>;
-
-interface SplitChain {
-    rootSnap?: Record<string, unknown>;
-    rootBatch: HistoryBatch;
-    ops: Array<{ op: EditOp; batch: HistoryBatch }>;
-    latestDate: string;
-}
 
 interface BuildChainsResult {
     chains: Map<string, SplitChain>;
@@ -99,7 +93,7 @@ export function renderEditHistoryPanel(data: SegEditHistoryResponse | null | und
     state._allHistoryItems = null;
     const splitLineage = _buildSplitLineage(data.batches);
     const { chains, chainedOpIds } = _buildSplitChains(data.batches, splitLineage);
-    state._splitChains = chains as unknown as Map<string, unknown>;
+    state._splitChains = chains;
     state._chainedOpIds = chainedOpIds;
 
     // Prefetch peaks for all history chapters
@@ -164,7 +158,7 @@ export function _buildSplitChains(allBatches: HistoryBatch[], splitLineage: Spli
             const parentUid = parentBefore?.segment_uid;
             if (parentUid && splitLineage.has(parentUid)) continue;
             chains.set(op.op_id, {
-                rootSnap: op.targets_before?.[0],
+                rootSnap: op.targets_before?.[0] as HistorySnapshot | undefined,
                 rootBatch: batch,
                 ops: [{ op, batch }],
                 latestDate: batch.saved_at_utc || '',

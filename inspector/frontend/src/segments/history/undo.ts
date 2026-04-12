@@ -16,9 +16,7 @@ import type {
 } from '../../types/api';
 import type { HistoryBatch } from '../../types/domain';
 
-interface SplitChain {
-    ops: Array<{ batch?: { batch_id?: string } | null }>;
-}
+import type { SplitChain } from '../state';
 
 // ---------------------------------------------------------------------------
 // _afterUndoSuccess -- shared post-undo refresh
@@ -209,8 +207,8 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as unknown as HistoryBatch[])];
     const splitLineage = _buildSplitLineage(allBatches);
     const built = _buildSplitChains(allBatches, splitLineage);
-    state._splitChains = built.chains as Map<string, unknown> | null;
-    state._chainedOpIds = built.chainedOpIds as Set<string> | null;
+    state._splitChains = built.chains;
+    state._chainedOpIds = built.chainedOpIds;
     renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
     if (data.warningChapters.length > 0) {
         const warn = document.createElement('div');

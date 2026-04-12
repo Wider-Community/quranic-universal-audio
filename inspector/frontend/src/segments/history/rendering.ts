@@ -4,7 +4,7 @@
  */
 
 import { state, dom, EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../state';
-import type { HistoryDisplayItem } from '../state';
+import type { OpFlatItem, SplitChain, HistorySnapshot } from '../state';
 import { _classifySnapIssues, _deriveOpIssueDelta } from '../validation/categories';
 import { renderSegCard } from '../rendering';
 import { surahOptionText } from '../../shared/surah-info';
@@ -12,36 +12,8 @@ import { onOpUndoClick, onChainUndoClick, onPendingBatchDiscard, _getChainBatchI
 import type { EditOp, HistoryBatch, Segment } from '../../types/domain';
 import type { SegCanvas } from '../waveform/types';
 
-/** Narrow view of a snapshot as used by the history renderer. */
-type Snapshot = {
-    index_at_save?: number;
-    segment_uid?: string;
-    audio_url?: string;
-    time_start: number;
-    time_end: number;
-    matched_ref?: string;
-    matched_text?: string;
-    display_text?: string;
-    confidence?: number;
-    wrap_word_ranges?: unknown;
-    has_repeated_words?: boolean;
-    [k: string]: unknown;
-};
-
-/** Chain operation descriptor (op + enclosing batch). */
-interface ChainOp {
-    op: EditOp;
-    batch?: HistoryBatch | null;
-}
-
-/** Split chain built by `_buildSplitChains`. */
-interface SplitChain {
-    ops: ChainOp[];
-    rootSnap?: Snapshot | null;
-    rootBatch?: HistoryBatch | null;
-    latestDate?: string | null;
-    chainId?: string;
-}
+/** Narrow view of a snapshot as used by the history renderer (re-export alias). */
+type Snapshot = HistorySnapshot;
 
 interface HistSummary {
     total_operations: number;
@@ -51,19 +23,6 @@ interface HistSummary {
     fix_kind_counts?: Record<string, number>;
 }
 
-/** Renderer-level flat item built by `_flattenBatchesToItems`. */
-interface OpFlatItem {
-    type: 'op-card' | 'strip-specials-card' | 'multi-chapter-card' | 'revert-card';
-    group: EditOp[];
-    chapter: number | null;
-    chapters?: number[];
-    batchId: string | null;
-    date: string;
-    isRevert: boolean;
-    isPending: boolean;
-    batchIdx: number;
-    groupIdx: number;
-}
 
 type DisplayEntry =
     | { type: 'chain'; chain: SplitChain; date: string }
@@ -150,7 +109,7 @@ export function renderHistoryBatches(
 // ---------------------------------------------------------------------------
 
 export function _renderHistoryDisplayItems(
-    opItems: HistoryDisplayItem[] | OpFlatItem[],
+    opItems: OpFlatItem[],
     batches: HistoryBatch[],
     container: HTMLElement,
 ): void {
@@ -160,14 +119,14 @@ export function _renderHistoryDisplayItems(
         const showSplitChains = state._histFilterOpTypes.size === 0 || state._histFilterOpTypes.has('split_segment');
         if (showSplitChains) {
             const batchOpIds = new Set<string>(batches.flatMap(b => (b.operations || []).map(op => op.op_id)));
-            for (const chain of state._splitChains.values() as unknown as IterableIterator<SplitChain>) {
+            for (const chain of state._splitChains.values()) {
                 if (chain.ops.some(({ op }) => batchOpIds.has(op.op_id))) {
                     displayItems.push({ type: 'chain', chain, date: chain.latestDate || '' });
                 }
             }
         }
     }
-    for (const item of opItems as OpFlatItem[]) {
+    for (const item of opItems) {
         displayItems.push({ type: 'op-item', item, date: item.date });
     }
 

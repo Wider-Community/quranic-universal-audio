@@ -11,7 +11,7 @@ import { _isCurrentReciterBySurah } from '../playback/audio-cache';
 import { fetchJson } from '../../shared/api';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
 import type { DrawWaveformFn } from '../../types/registry';
-import type { PeakBucket, Segment } from '../../types/domain';
+import type { Segment, SegmentPeaks } from '../../types/domain';
 import type { SegCanvas } from './types';
 
 // NOTE: un-used helper for future Phase 7 typing of _findCoveringPeaks
@@ -37,17 +37,15 @@ export function registerWaveformHandlers(handlers: WaveformHandlers): void {
 // Segment-level peaks URL index: enables covering-range lookups
 // ---------------------------------------------------------------------------
 
-interface SegPeaksEntry {
-    peaks?: PeakBucket[];
-    start_ms?: number;
-    end_ms?: number;
-    duration_ms: number;
-}
+/** Raw segment-peaks entry as received from the server (fields may be missing
+ *  on partial/error responses — guarded below). Shape is `Partial<SegmentPeaks>`
+ *  at the runtime boundary. */
+type SegPeaksEntry = Partial<SegmentPeaks>;
 
 function _indexSegPeaksBulk(peaksMap: Record<string, SegPeaksEntry> | null | undefined): void {
     if (!peaksMap) return;
     for (const [key, data] of Object.entries(peaksMap)) {
-        if (!data?.peaks?.length || data.start_ms == null || data.end_ms == null) continue;
+        if (!data?.peaks?.length || data.start_ms == null || data.end_ms == null || data.duration_ms == null) continue;
         const url = key.split(':').slice(0, -2).join(':');  // strip ":startMs:endMs"
         if (!state._segPeaksByUrl) state._segPeaksByUrl = {};
         if (!state._segPeaksByUrl[url]) state._segPeaksByUrl[url] = [];

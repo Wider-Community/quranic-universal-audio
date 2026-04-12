@@ -106,20 +106,57 @@ export interface SegSavedFilterView {
     scrollTop: number;
 }
 
-/** Flattened history display item: a group of related ops + batch metadata.
- *  Loose shape — history/rendering.ts attaches its own sub-type fields. */
-export interface HistoryDisplayItem {
+/** One op + its enclosing batch, as held inside a SplitChain. */
+export interface SplitChainOp {
+    op: EditOp;
+    batch: HistoryBatch;
+}
+
+/** Narrow view of a segment snapshot as referenced by history views. Loose
+ *  by design — unknown fields preserved via index signature. */
+export interface HistorySnapshot {
+    index_at_save?: number;
+    segment_uid?: string;
+    audio_url?: string;
+    time_start: number;
+    time_end: number;
+    matched_ref?: string;
+    matched_text?: string;
+    display_text?: string;
+    confidence?: number;
+    wrap_word_ranges?: unknown;
+    has_repeated_words?: boolean;
+    [k: string]: unknown;
+}
+
+/** Group of related split/trim/refine ops chained by segment lineage.
+ *  Built by `_buildSplitChains` (history/index.ts) and consumed by
+ *  history/rendering.ts + history/undo.ts. */
+export interface SplitChain {
+    /** The pre-split parent snapshot (first `targets_before` of root op). */
+    rootSnap?: HistorySnapshot;
+    /** The batch containing the root `split_segment` op. */
+    rootBatch: HistoryBatch;
+    /** All ops in the chain, in insertion order. */
+    ops: SplitChainOp[];
+    /** ISO timestamp of the latest absorbed op — used for sorting. */
+    latestDate: string;
+}
+
+/** Flattened history display item produced by `_flattenBatchesToItems`
+ *  (history/rendering.ts). This is the runtime shape of `_allHistoryItems`
+ *  and the argument to `_renderHistoryDisplayItems`. */
+export interface OpFlatItem {
+    type: 'op-card' | 'strip-specials-card' | 'multi-chapter-card' | 'revert-card';
     group: EditOp[];
-    batch?: HistoryBatch | null;
-    chapter?: number | null;
+    chapter: number | null;
     chapters?: number[];
-    date?: string;
-    batchId?: string | null;
-    isRevert?: boolean;
-    isPending?: boolean;
-    type?: string;
-    batchIdx?: number;
-    groupIdx?: number;
+    batchId: string | null;
+    date: string;
+    isRevert: boolean;
+    isPending: boolean;
+    batchIdx: number;
+    groupIdx: number;
 }
 
 /** Segment-level peaks entry keyed by URL inside `_segPeaksByUrl`. */
@@ -153,7 +190,7 @@ export interface AccordionOpCtx {
 
 /** Snapshot of the split-chain state captured while showing the save preview. */
 export interface SavedChainsSnapshot {
-    splitChains: Map<string, unknown> | null;
+    splitChains: Map<string, SplitChain> | null;
     chainedOpIds: Set<string> | null;
 }
 
@@ -253,10 +290,10 @@ export interface SegmentsState {
     /** Flat list of display items built from batches.
      *  `group` is an `EditOp[]` grouped by display; extra fields come from the
      *  enclosing batch. Produced/consumed by history/rendering + history/filters. */
-    _allHistoryItems: HistoryDisplayItem[] | null;
+    _allHistoryItems: OpFlatItem[] | null;
 
-    // Split chain state (Map of chain id -> chain descriptor; opaque here)
-    _splitChains: Map<string, unknown> | null;
+    // Split chain state (Map of chain id -> chain descriptor)
+    _splitChains: Map<string, SplitChain> | null;
     _chainedOpIds: Set<string> | null;
     _segSavedChains: SavedChainsSnapshot | null;
 

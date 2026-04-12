@@ -3,7 +3,6 @@
  */
 
 import { state, dom, EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../state';
-import type { HistoryDisplayItem } from '../state';
 import { _deriveOpIssueDelta } from '../validation/categories';
 import { _ensureWaveformObserver } from '../waveform/index';
 import {
@@ -11,6 +10,7 @@ import {
     _flattenBatchesToItems, _renderHistoryDisplayItems,
     drawHistoryArrows, _versesFromRef,
 } from './rendering';
+import type { OpFlatItem } from '../state';
 import type { SegEditHistoryResponse } from '../../types/api';
 
 // ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ export function renderHistoryFilterBar(data: SegEditHistoryResponse): void {
     dom.segHistoryFilterClear.hidden = true;
     if (!data.summary && (!data.batches || data.batches.length === 0)) { dom.segHistoryFilters.hidden = true; return; }
     const chainedOpIds = state._chainedOpIds || new Set<string>();
-    const allItems = _flattenBatchesToItems(data.batches, chainedOpIds) as HistoryDisplayItem[];
+    const allItems = _flattenBatchesToItems(data.batches, chainedOpIds);
     state._allHistoryItems = allItems;
 
     const opCounts: Record<string, number> = {};
@@ -97,8 +97,8 @@ export function applyHistoryFilters(): void {
     const hasFilters = state._histFilterOpTypes.size > 0 || state._histFilterErrCats.size > 0;
     dom.segHistoryFilterClear.hidden = !hasFilters;
     const chainedIds = state._chainedOpIds || new Set<string>();
-    const allItems: HistoryDisplayItem[] = state._allHistoryItems
-        || (state._allHistoryItems = _flattenBatchesToItems(allBatches, chainedIds) as unknown as HistoryDisplayItem[]);
+    const allItems: OpFlatItem[] = state._allHistoryItems
+        || (state._allHistoryItems = _flattenBatchesToItems(allBatches, chainedIds));
     const filtered = hasFilters
         ? allItems.filter(item => {
             if (state._histFilterOpTypes.size > 0 && !_itemMatchesOpFilter(item, state._histFilterOpTypes)) return false;
@@ -149,11 +149,11 @@ export function setHistorySort(mode: 'time' | 'quran'): void {
 // Filter match helpers
 // ---------------------------------------------------------------------------
 
-function _itemMatchesOpFilter(item: HistoryDisplayItem, opTypes: Set<string>): boolean {
+function _itemMatchesOpFilter(item: OpFlatItem, opTypes: Set<string>): boolean {
     return item.group.some(op => opTypes.has(op.op_type));
 }
 
-function _itemMatchesCatFilter(item: HistoryDisplayItem, cats: Set<string>): boolean {
+function _itemMatchesCatFilter(item: OpFlatItem, cats: Set<string>): boolean {
     for (const op of item.group) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
     const delta = _deriveOpIssueDelta(item.group);
     for (const cat of cats) { if (delta.resolved.includes(cat) || delta.introduced.includes(cat)) return true; }
@@ -172,7 +172,7 @@ interface FilteredItemSummary {
     fix_kind_counts: Record<string, number>;
 }
 
-function _computeFilteredItemSummary(items: HistoryDisplayItem[]): FilteredItemSummary {
+function _computeFilteredItemSummary(items: OpFlatItem[]): FilteredItemSummary {
     const opCounts: Record<string, number> = {};
     const fixKindCounts: Record<string, number> = {};
     const chaptersEdited = new Set<number>();
@@ -198,7 +198,7 @@ function _computeFilteredItemSummary(items: HistoryDisplayItem[]): FilteredItemS
 // _countVersesFromItems
 // ---------------------------------------------------------------------------
 
-function _countVersesFromItems(items: HistoryDisplayItem[]): number {
+function _countVersesFromItems(items: OpFlatItem[]): number {
     const verses = new Set<string>();
     for (const item of items) {
         for (const op of item.group) {
@@ -215,7 +215,7 @@ function _countVersesFromItems(items: HistoryDisplayItem[]): number {
 // _updateFilterPillCounts -- cross-filter faceted counts
 // ---------------------------------------------------------------------------
 
-function _updateFilterPillCounts(allItems: HistoryDisplayItem[]): void {
+function _updateFilterPillCounts(allItems: OpFlatItem[]): void {
     const catActive = state._histFilterErrCats.size > 0;
     const itemsForOpCounts = catActive ? allItems.filter(item => _itemMatchesCatFilter(item, state._histFilterErrCats)) : allItems;
     const opCounts: Record<string, number> = {};

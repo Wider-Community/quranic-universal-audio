@@ -361,7 +361,6 @@ export interface SurahInfo {
     name_en: string;
     name_ar: string;
     num_verses?: number;
-    [k: string]: unknown;
 }
 
 export type SurahInfoMap = Record<string, SurahInfo>;

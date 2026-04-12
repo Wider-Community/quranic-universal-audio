@@ -100,8 +100,8 @@ export function showSavePreview(): void {
     const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as unknown as HistoryBatch[])];
     const splitLineage = _buildSplitLineage(allBatches);
     const built = _buildSplitChains(allBatches, splitLineage);
-    state._splitChains = built.chains as Map<string, unknown> | null;
-    state._chainedOpIds = built.chainedOpIds as Set<string> | null;
+    state._splitChains = built.chains;
+    state._chainedOpIds = built.chainedOpIds;
 
     renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
 
