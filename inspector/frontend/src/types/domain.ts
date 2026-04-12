@@ -32,7 +32,13 @@ export interface Segment {
     confidence: number; // 0..1
     audio_url: string;
     ignored_categories?: string[];
+    /** Back-compat legacy boolean from pre-categories ignore flag. Drift: absent from types/api.ts. */
+    ignored?: boolean;
     wrap_word_ranges?: unknown; // opaque — used by repetition detection
+    /** Server-side repetition flag persisted via save/undo. */
+    has_repeated_words?: boolean;
+    /** Space-separated ASR phoneme string used by tail-phoneme matching. */
+    phonemes_asr?: string;
     /** Chapter number; present on /api/seg/all responses, derived client-side on /data. */
     chapter?: number;
     /** Stable UID assigned on first server load; present on /api/seg/all. */
@@ -160,6 +166,10 @@ export interface PhonemeInterval {
     phone: string;
     start: number; // seconds
     end: number; // seconds
+    /** Set when the MFA aligner split a geminate into two tokens. */
+    geminate_start?: boolean;
+    /** Set on the second half of a split geminate; consumers use this to skip rendering. */
+    geminate_end?: boolean;
 }
 
 /** Single letter with optional per-letter timing. */
@@ -228,8 +238,9 @@ export interface TsBoundaryMismatch {
 // ---------------------------------------------------------------------------
 
 export interface SurahInfo {
-    en: string;
-    ar: string;
+    name_en: string;
+    name_ar: string;
+    num_verses?: number;
     [k: string]: unknown;
 }
 

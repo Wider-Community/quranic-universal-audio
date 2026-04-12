@@ -44,10 +44,12 @@ _No rows yet — agents append during Phases 3–7 as TSC flags real issues._
 
 ## Section 3 — API-drift findings (authored while writing `types/api.ts`)
 
-_No rows yet — agents append during Phase 3 while mirroring Python response shapes._
-
 | ID | Endpoint | Drift summary | Python route:line | types/api.ts:line | Phase | Status | Resolution |
 |----|----------|---------------|--------------------|---------------------|-------|--------|------------|
+| B09 | /api/seg/data, /api/seg/all | `Segment` missed `has_repeated_words?: boolean` and `phonemes_asr?: string` — both persisted by `services/save.py` and read by `services/validation.py` and the client's `_classifySegCategories` / `snapshotSeg`. | inspector/services/save.py:107-122, inspector/services/validation.py:122-318 | inspector/frontend/src/types/domain.ts:24-50 | 4 | CLOSED | Added both fields as optional on `Segment`. No runtime change. |
+| B10 | /api/seg/data, /api/seg/all | `Segment` missed legacy `ignored?: boolean` fallback used by `validation/categories.ts:_isIgnoredFor` for pre-`ignored_categories` rows. | inspector/frontend/src/segments/validation/categories.ts:41 | inspector/frontend/src/types/domain.ts:24-50 | 4 | CLOSED | Added `ignored?: boolean` with a doc comment flagging it as back-compat. |
+| B11 | /api/ts/data | `PhonemeInterval` missed `geminate_start?` / `geminate_end?` — emitted by `mfa_aligner/app.py:605-607` and consumed by `timestamps/playback.ts`, `timestamps/unified-display.ts`. | mfa_aligner/app.py:605-607 | inspector/frontend/src/types/domain.ts:158-168 | 4 | CLOSED | Added both as optional booleans. |
+| B12 | /api/surah-info | `SurahInfo` declared `{en, ar}`; server returns `{name_en, name_ar, num_verses}` (see `services/data_loader.py:267-268`), which is what `shared/surah-info.ts:surahOptionText` actually reads. | inspector/services/data_loader.py:267-268 | inspector/frontend/src/types/domain.ts:228-234 | 4 | CLOSED | Renamed fields on `SurahInfo` to match server payload. |
 
 ## Section 4 — New bugs introduced by refactor
 

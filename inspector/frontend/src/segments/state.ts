@@ -1,17 +1,44 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Segments tab -- shared mutable state, DOM references, constants,
  * dirty/op helpers, and the _findCoveringPeaks pure function.
  *
  * Every module in segments/ imports { state, dom } and reads/writes
  * properties directly: state.segData, dom.segListEl, etc.
+ *
+ * Typing conventions (Phase 4):
+ *  - DOM refs: fields are typed as the narrow element interface (e.g.
+ *    `HTMLSelectElement`) and initialised to `null as unknown as T`. The
+ *    DOMContentLoaded handler in `segments/index.ts` assigns real elements
+ *    before any call site reads them. Fields that MAY legitimately be null
+ *    at call sites (e.g. optional widgets, post-cleanup state) are typed as
+ *    `T | null` and the callers null-check.
+ *  - `state` helpers (createOp/snapshotSeg/etc) have explicit return types
+ *    so signatures are visible in the 28 consumer files (which still have
+ *    per-file type checking suppressed until later phases).
+ *  - The interfaces are exported so Phase 5+ can refine them (e.g. swap
+ *    `unknown` for a narrow shape once the consumer is typed).
  */
+
+import type {
+    AudioPeaks,
+    EditOp,
+    SegReciter,
+    Segment,
+} from '../types/domain';
+import type {
+    SegAllResponse,
+    SegDataResponse,
+    SegEditHistoryResponse,
+    SegStatsResponse,
+    SegValidateResponse,
+} from '../types/api';
+import type { SearchableSelect } from '../shared/searchable-select';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const EDIT_OP_LABELS = {
+export const EDIT_OP_LABELS: Record<string, string> = {
     trim_segment: 'Boundary adjustment', split_segment: 'Split',
     merge_segments: 'Merge', delete_segment: 'Deletion',
     edit_reference: 'Reference edit', confirm_reference: 'Reference confirmation',
@@ -19,7 +46,7 @@ export const EDIT_OP_LABELS = {
     waqf_sakt: 'Waqf sakt merge', remove_sadaqa: 'Remove Sadaqa',
 };
 
-export const ERROR_CAT_LABELS = {
+export const ERROR_CAT_LABELS: Record<string, string> = {
     failed: 'Failed', low_confidence: 'Low confidence',
     boundary_adj: 'Boundary adj.',
     cross_verse: 'Cross-verse', missing_words: 'Missing words',
@@ -29,7 +56,15 @@ export const ERROR_CAT_LABELS = {
     qalqala: 'Qalqala',
 };
 
-export const SEG_FILTER_FIELDS = [
+/** Filter field descriptor — referenced by filters.ts / state.segActiveFilters. */
+export interface SegFilterField {
+    value: string;
+    label: string;
+    type: 'float' | 'int';
+    neighbour?: boolean;
+}
+
+export const SEG_FILTER_FIELDS: readonly SegFilterField[] = [
     { value: 'duration_s',        label: 'Duration (s)',       type: 'float' },
     { value: 'num_words',         label: 'Word count',         type: 'int'   },
     { value: 'num_verses',        label: 'Verses spanned',     type: 'int'   },
@@ -37,52 +72,251 @@ export const SEG_FILTER_FIELDS = [
     { value: 'silence_after_ms',  label: 'Silence after (ms)',  type: 'float', neighbour: true },
 ];
 
-export const SEG_FILTER_OPS = ['>', '>=', '<', '<=', '='];
+export const SEG_FILTER_OPS: readonly string[] = ['>', '>=', '<', '<=', '='];
 
-export const SEG_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
+export const SEG_SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
 
-export const _SEG_NORMAL_IDS = ['seg-stats-panel', 'seg-validation-global', 'seg-validation',
+export const _SEG_NORMAL_IDS: readonly string[] = ['seg-stats-panel', 'seg-validation-global', 'seg-validation',
     'seg-filter-bar', 'seg-list'];
 
-export const _ARABIC_DIGITS = ['\u0660','\u0661','\u0662','\u0663','\u0664','\u0665','\u0666','\u0667','\u0668','\u0669'];
+export const _ARABIC_DIGITS: readonly string[] = ['\u0660','\u0661','\u0662','\u0663','\u0664','\u0665','\u0666','\u0667','\u0668','\u0669'];
 
 export const _MN_RE = /[\u0300-\u036F\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7-\u06E8\u06EA-\u06ED\u08D3-\u08FF\uFE20-\uFE2F]/;
-export const _STRIP_CHARS = new Set(['\u0640', '\u06DE', '\u06E6', '\u06E9', '\u200F']);
+export const _STRIP_CHARS: ReadonlySet<string> = new Set(['\u0640', '\u06DE', '\u06E6', '\u06E9', '\u200F']);
 export const _LETTER_RE = /\p{L}/u;
 
 // ---------------------------------------------------------------------------
-// Mutable state
+// Supporting types (not exported from types/ because they are segments-local)
 // ---------------------------------------------------------------------------
 
-export const state = {
+/** One active filter row — field + comparator + literal value. */
+export interface SegActiveFilter {
+    field: string;
+    op: string;
+    value: number | null;
+}
+
+/** Saved UI snapshot so navigation.ts can restore a filter + scroll view. */
+export interface SegSavedFilterView {
+    filters: SegActiveFilter[];
+    chapter: string;
+    verse: string;
+    scrollTop: number;
+}
+
+/** Segment-level peaks entry keyed by URL inside `_segPeaksByUrl`. */
+export interface SegPeaksRangeEntry {
+    startMs: number;
+    endMs: number;
+    peaks: number[];
+    durationMs: number;
+}
+
+/** Queue item for the observer-driven segment-peaks batch fetcher. */
+export interface ObserverPeaksQueueItem {
+    url: string;
+    startMs: number;
+    endMs: number;
+}
+
+/** Dirty-map entry — edited indices plus structural-change flag. */
+export interface DirtyEntry {
+    indices: Set<number>;
+    structural: boolean;
+}
+
+/** The accordion op context captured at the row / prev / next button click site. */
+export interface AccordionOpCtx {
+    wrapper: HTMLElement;
+    direction?: 'prev' | 'next';
+}
+
+/** Snapshot of the split-chain state captured while showing the save preview. */
+export interface SavedChainsSnapshot {
+    splitChains: Map<string, unknown> | null;
+    chainedOpIds: Set<string> | null;
+}
+
+/** Saved scroll position snapshot around showSavePreview. */
+export interface SegSavedPreviewState {
+    scrollTop: number;
+}
+
+/** Augmented `SegAllResponse` — client adds lazy chapter indices. */
+export interface SegAllDataState extends SegAllResponse {
+    _byChapter?: Record<string, Segment[]> | null;
+    _byChapterIndex?: Map<string, Segment> | null;
+}
+
+/** Augmented `SegDataResponse` — client may overwrite audio_url with a proxy URL. */
+export type SegDataState = SegDataResponse;
+
+// setTimeout / setInterval / requestAnimationFrame return values are branded
+// in both DOM and Node envs. Use ReturnType so both environments compile.
+export type TimerHandle = ReturnType<typeof setTimeout>;
+export type RafHandle = number;
+
+/** `_previewLooping` is a trivalued flag: false, or one of the three loop keys. */
+export type PreviewLoopMode = false | 'trim' | 'split-left' | 'split-right';
+
+// ---------------------------------------------------------------------------
+// Mutable state — THE hub
+// ---------------------------------------------------------------------------
+
+/** Public shape of the segments tab mutable state singleton. */
+export interface SegmentsState {
     // Core data
-    segData: null,          // { audio_url, summary, verse_word_counts, segments } -- chapter-specific
-    segAllData: null,       // { segments, audio_by_chapter, verse_word_counts } -- reciter-level
-    segActiveFilters: [],   // [{ field, op, value }, ...]
-    segAnimId: null,        // animation frame ID for playback
-    segCurrentIdx: -1,      // currently playing segment index
-    segDisplayedSegments: null, // segments currently shown (may be filtered)
-    segDirtyMap: new Map(),     // Map<chapter, {indices: Set, structural: boolean}>
-    segEditMode: null,          // null | 'trim' | 'split'
-    segEditIndex: -1,           // index of segment being edited
+    segData: SegDataState | null;
+    segAllData: SegAllDataState | null;
+    segActiveFilters: SegActiveFilter[];
+    segAnimId: RafHandle | null;
+    segCurrentIdx: number;
+    segDisplayedSegments: Segment[] | null;
+    segDirtyMap: Map<number, DirtyEntry>;
+    segEditMode: 'trim' | 'split' | null;
+    segEditIndex: number;
 
     // Prefetch & playback
-    _segPrefetchCache: {},      // url -> Promise<void> for prefetched audio
-    _segContinuousPlay: false,  // true while continuous playback is active
-    _segAutoPlayEnabled: true,  // user preference: auto-advance
-    _segPlayEndMs: 0,           // time_end (ms) of the currently playing segment
+    _segPrefetchCache: Record<string, Promise<unknown>>;
+    _segContinuousPlay: boolean;
+    _segAutoPlayEnabled: boolean;
+    _segPlayEndMs: number;
 
     // Validation & stats
-    segValidation: null,        // cached validation data for current reciter
-    segAllReciters: [],         // full list from /api/seg/reciters
-    segStatsData: null,         // cached stats data for current reciter
+    segValidation: SegValidateResponse | null;
+    segAllReciters: SegReciter[];
+    segStatsData: SegStatsResponse | null;
+
+    // Filter
+    _segFilterDebounceTimer: TimerHandle | null;
+
+    // Audio source tracking
+    _activeAudioSource: 'main' | 'error' | null;
+    _segIndexMap: Map<string, Segment> | null;
+
+    // Waveform observer
+    _waveformObserver: IntersectionObserver | null;
+
+    // Filter view save/restore
+    _segSavedFilterView: SegSavedFilterView | null;
+    _segSavedPreviewState: SegSavedPreviewState | null;
+
+    // Peaks
+    segPeaksByAudio: Record<string, AudioPeaks> | null;
+    _peaksPollTimer: TimerHandle | null;
+    _segPeaksByUrl: Record<string, SegPeaksRangeEntry[]> | null;
+    _observerPeaksQueue: ObserverPeaksQueueItem[];
+    _observerPeaksTimer: TimerHandle | null;
+    _observerPeaksRequested: Set<string>;
+
+    // Rendering
+    _cardRenderRafId: RafHandle | null;
+
+    // Accordion edit context
+    _accordionOpCtx: AccordionOpCtx | null;
+    _splitChainWrapper: HTMLElement | null;
+
+    // Edit history
+    segOpLog: Map<number, EditOp[]>;
+    _pendingOp: EditOp | null;
+    _splitChainUid: string | null;
+    _splitChainCategory: string | null;
+
+    // Edit history viewer state
+    segHistoryData: SegEditHistoryResponse | null;
+    _segDataStale: boolean;
+
+    // History filter & sort state
+    _histFilterOpTypes: Set<string>;
+    _histFilterErrCats: Set<string>;
+    _histSortMode: 'time' | 'quran';
+    /** Flat list of display items built from batches; opaque to state.ts. */
+    _allHistoryItems: unknown[] | null;
+
+    // Split chain state (Map of chain id -> chain descriptor; opaque here)
+    _splitChains: Map<string, unknown> | null;
+    _chainedOpIds: Set<string> | null;
+    _segSavedChains: SavedChainsSnapshot | null;
+
+    // Server-provided canonical category list (from /api/seg/config)
+    _validationCategories: string[] | null;
+
+    // Classification data for per-segment category detection
+    _muqattaatVerses: Set<string> | null;
+    _standaloneRefs: Set<string> | null;
+    _standaloneWords: Set<string> | null;
+    _qalqalaLetters: Set<string> | null;
+    _lcDefaultThreshold: number;
+    _accordionContext: Record<string, string> | null;
+
+    // SearchableSelect instance
+    segChapterSS: SearchableSelect | null;
+
+    // Highlight tracking (playback)
+    _prevHighlightedRow: Element | null;
+    _prevHighlightedIdx: number;
+    _prevPlayheadIdx: number;
+    _prevPlayheadRow: Element | null;
+    _currentPlayheadRow: Element | null;
+
+    // Canvas scrub
+    _segScrubActive: boolean;
+
+    // Adjust/trim mode config (overridden by server config)
+    TRIM_PAD_LEFT: number;
+    TRIM_PAD_RIGHT: number;
+    TRIM_DIM_ALPHA: number;
+    SHOW_BOUNDARY_PHONEMES: boolean;
+
+    // Preview playback
+    _previewStopHandler: ((ev: Event) => void) | null;
+    _previewLooping: PreviewLoopMode;
+    _previewJustSeeked: boolean;
+    _playRangeRAF: RafHandle | null;
+
+    // Error card audio
+    valCardAudio: HTMLAudioElement | null;
+    valCardPlayingBtn: HTMLElement | null;
+    valCardStopTime: number | null;
+    valCardAnimId: RafHandle | null;
+    valCardAnimSeg: Segment | null;
+
+    // Audio cache
+    _audioCachePollTimer: TimerHandle | null;
+
+    // Validation index fixup categories
+    _VAL_SINGLE_INDEX_CATS: readonly string[];
+}
+
+export const state: SegmentsState = {
+    // Core data
+    segData: null,
+    segAllData: null,
+    segActiveFilters: [],
+    segAnimId: null,
+    segCurrentIdx: -1,
+    segDisplayedSegments: null,
+    segDirtyMap: new Map(),
+    segEditMode: null,
+    segEditIndex: -1,
+
+    // Prefetch & playback
+    _segPrefetchCache: {},
+    _segContinuousPlay: false,
+    _segAutoPlayEnabled: true,
+    _segPlayEndMs: 0,
+
+    // Validation & stats
+    segValidation: null,
+    segAllReciters: [],
+    segStatsData: null,
 
     // Filter
     _segFilterDebounceTimer: null,
 
     // Audio source tracking
-    _activeAudioSource: null,      // 'main' | 'error' | null
-    _segIndexMap: null,            // Map<'chapter:index', segment> for O(1) lookups
+    _activeAudioSource: null,
+    _segIndexMap: null,
 
     // Waveform observer
     _waveformObserver: null,
@@ -92,18 +326,18 @@ export const state = {
     _segSavedPreviewState: null,
 
     // Peaks
-    segPeaksByAudio: null,       // {url: {duration_ms, peaks}}
+    segPeaksByAudio: null,
     _peaksPollTimer: null,
-    _segPeaksByUrl: null,            // {url: [{startMs, endMs, peaks, durationMs}]} for covering-range lookup
-    _observerPeaksQueue: [],         // queue of {url, startMs, endMs} pending batch fetch
-    _observerPeaksTimer: null,       // debounce timer for observer queue flush
-    _observerPeaksRequested: new Set(), // "url:startMs:endMs" keys already requested
+    _segPeaksByUrl: null,
+    _observerPeaksQueue: [],
+    _observerPeaksTimer: null,
+    _observerPeaksRequested: new Set(),
 
     // Rendering
     _cardRenderRafId: null,
 
     // Accordion edit context
-    _accordionOpCtx: null,       // { wrapper, direction? }
+    _accordionOpCtx: null,
     _splitChainWrapper: null,
 
     // Edit history
@@ -131,10 +365,10 @@ export const state = {
     _validationCategories: null,
 
     // Classification data for per-segment category detection
-    _muqattaatVerses: null,  // Set of "surah:ayah"
-    _standaloneRefs: null,   // Set of "surah:ayah:word"
-    _standaloneWords: null,  // Set of stripped Arabic words
-    _qalqalaLetters: null,   // Set of Arabic letters
+    _muqattaatVerses: null,
+    _standaloneRefs: null,
+    _standaloneWords: null,
+    _qalqalaLetters: null,
     _lcDefaultThreshold: 80,
     _accordionContext: null,
 
@@ -178,59 +412,124 @@ export const state = {
 };
 
 // ---------------------------------------------------------------------------
-// DOM references -- set in index.js DOMContentLoaded
+// DOM references -- set in index.ts DOMContentLoaded
 // ---------------------------------------------------------------------------
 
-export const dom = {
-    segReciterSelect: null,
-    segChapterSelect: null,
-    segVerseSelect: null,
-    segListEl: null,
-    segAudioEl: null,
-    segPlayBtn: null,
-    segAutoPlayBtn: null,
-    segSpeedSelect: null,
-    segSaveBtn: null,
-    segPlayStatus: null,
-    segValidationGlobalEl: null,
-    segValidationEl: null,
-    segStatsPanel: null,
-    segStatsCharts: null,
-    segFilterBarEl: null,
-    segFilterRowsEl: null,
-    segFilterAddBtn: null,
-    segFilterClearBtn: null,
-    segFilterCountEl: null,
-    segFilterStatusEl: null,
+/**
+ * Public shape of the segments tab DOM references.
+ *
+ * All fields are non-nullable and narrowed to their actual element type.
+ * They are initialised to `null as unknown as T` below; the DOMContentLoaded
+ * handler in `segments/index.ts` populates them before any feature code runs.
+ * The alternative would be to type each as `T | null` and null-check at every
+ * call site — that would add noise to 28 modules for a guarantee already
+ * established by the ordering of import-time registration vs DOMContentLoaded.
+ */
+export interface DomRefs {
+    segReciterSelect: HTMLSelectElement;
+    segChapterSelect: HTMLSelectElement;
+    segVerseSelect: HTMLSelectElement;
+    segListEl: HTMLDivElement;
+    segAudioEl: HTMLAudioElement;
+    segPlayBtn: HTMLButtonElement;
+    segAutoPlayBtn: HTMLButtonElement;
+    segSpeedSelect: HTMLSelectElement;
+    segSaveBtn: HTMLButtonElement;
+    segPlayStatus: HTMLElement;
+    segValidationGlobalEl: HTMLDivElement;
+    segValidationEl: HTMLDivElement;
+    segStatsPanel: HTMLDivElement;
+    segStatsCharts: HTMLDivElement;
+    segFilterBarEl: HTMLDivElement;
+    segFilterRowsEl: HTMLDivElement;
+    segFilterAddBtn: HTMLButtonElement;
+    segFilterClearBtn: HTMLButtonElement;
+    segFilterCountEl: HTMLElement;
+    segFilterStatusEl: HTMLElement;
 
     // History view
-    segHistoryView: null,
-    segHistoryBtn: null,
-    segHistoryBackBtn: null,
-    segHistoryStats: null,
-    segHistoryBatches: null,
-    segHistoryFilters: null,
-    segHistoryFilterOps: null,
-    segHistoryFilterCats: null,
-    segHistoryFilterClear: null,
-    segHistorySortTime: null,
-    segHistorySortQuran: null,
+    segHistoryView: HTMLDivElement;
+    segHistoryBtn: HTMLButtonElement;
+    segHistoryBackBtn: HTMLButtonElement;
+    segHistoryStats: HTMLDivElement;
+    segHistoryBatches: HTMLDivElement;
+    segHistoryFilters: HTMLDivElement;
+    segHistoryFilterOps: HTMLDivElement;
+    segHistoryFilterCats: HTMLDivElement;
+    segHistoryFilterClear: HTMLButtonElement;
+    segHistorySortTime: HTMLButtonElement;
+    segHistorySortQuran: HTMLButtonElement;
 
     // Save preview
-    segSavePreview: null,
-    segSavePreviewCancel: null,
-    segSavePreviewConfirm: null,
-    segSavePreviewStats: null,
-    segSavePreviewBatches: null,
+    segSavePreview: HTMLDivElement;
+    segSavePreviewCancel: HTMLButtonElement;
+    segSavePreviewConfirm: HTMLButtonElement;
+    segSavePreviewStats: HTMLDivElement;
+    segSavePreviewBatches: HTMLDivElement;
+}
+
+// Sentinel for DOM ref seeding. `never` is assignable to every field type,
+// so this satisfies `DomRefs` without writing `null as unknown as HTMLXxx` at
+// every slot. Populated by `document.getElementById(...)` inside the
+// DOMContentLoaded handler in `segments/index.ts` before any consumer runs.
+// Trade-off: a forgotten id (returning null from getElementById) would NPE
+// at first use with no TSC warning. If that becomes a real footgun, flip the
+// fields to `T | null` and accept the call-site ripple.
+const _UNSET = null as unknown as never;
+
+export const dom: DomRefs = {
+    segReciterSelect: _UNSET,
+    segChapterSelect: _UNSET,
+    segVerseSelect: _UNSET,
+    segListEl: _UNSET,
+    segAudioEl: _UNSET,
+    segPlayBtn: _UNSET,
+    segAutoPlayBtn: _UNSET,
+    segSpeedSelect: _UNSET,
+    segSaveBtn: _UNSET,
+    segPlayStatus: _UNSET,
+    segValidationGlobalEl: _UNSET,
+    segValidationEl: _UNSET,
+    segStatsPanel: _UNSET,
+    segStatsCharts: _UNSET,
+    segFilterBarEl: _UNSET,
+    segFilterRowsEl: _UNSET,
+    segFilterAddBtn: _UNSET,
+    segFilterClearBtn: _UNSET,
+    segFilterCountEl: _UNSET,
+    segFilterStatusEl: _UNSET,
+
+    // History view
+    segHistoryView: _UNSET,
+    segHistoryBtn: _UNSET,
+    segHistoryBackBtn: _UNSET,
+    segHistoryStats: _UNSET,
+    segHistoryBatches: _UNSET,
+    segHistoryFilters: _UNSET,
+    segHistoryFilterOps: _UNSET,
+    segHistoryFilterCats: _UNSET,
+    segHistoryFilterClear: _UNSET,
+    segHistorySortTime: _UNSET,
+    segHistorySortQuran: _UNSET,
+
+    // Save preview
+    segSavePreview: _UNSET,
+    segSavePreviewCancel: _UNSET,
+    segSavePreviewConfirm: _UNSET,
+    segSavePreviewStats: _UNSET,
+    segSavePreviewBatches: _UNSET,
 };
 
 // ---------------------------------------------------------------------------
 // Classify function injection (breaks state <-> categories cycle)
 // ---------------------------------------------------------------------------
 
-let _classifyFn = () => [];
+/** Shape of the classifier injected by `setClassifyFn` at module-top in index.ts. */
+export type ClassifyFn = (seg: Segment) => string[];
 
-export function setClassifyFn(fn) {
+let _classifyFn: ClassifyFn = () => [];
+
+export function setClassifyFn(fn: ClassifyFn): void {
     _classifyFn = fn;
 }
 
@@ -238,7 +537,12 @@ export function setClassifyFn(fn) {
 // Operation helpers
 // ---------------------------------------------------------------------------
 
-export function createOp(opType, { contextCategory = null, fixKind = 'manual' } = {}) {
+export interface CreateOpOptions {
+    contextCategory?: string | null;
+    fixKind?: string;
+}
+
+export function createOp(opType: string, { contextCategory = null, fixKind = 'manual' }: CreateOpOptions = {}): EditOp {
     return {
         op_id: crypto.randomUUID(),
         op_type: opType,
@@ -252,8 +556,13 @@ export function createOp(opType, { contextCategory = null, fixKind = 'manual' } 
     };
 }
 
-export function snapshotSeg(seg) {
-    const snap = {
+/** Snapshot of a segment captured at op-start / op-end. Shape mirrors `Segment`
+ *  with a few client-added flags (`index_at_save`, `categories`). Loose-typed
+ *  so downstream history rendering doesn't have to cast every read. */
+export type SegSnapshot = Record<string, unknown>;
+
+export function snapshotSeg(seg: Segment): SegSnapshot {
+    const snap: SegSnapshot = {
         segment_uid: seg.segment_uid || null,
         index_at_save: seg.index,
         audio_url: seg.audio_url || null,
@@ -274,10 +583,10 @@ export function snapshotSeg(seg) {
     return snap;
 }
 
-export function finalizeOp(chapter, op) {
+export function finalizeOp(chapter: number, op: EditOp): void {
     op.ready_at_utc = new Date().toISOString();
     if (!state.segOpLog.has(chapter)) state.segOpLog.set(chapter, []);
-    state.segOpLog.get(chapter).push(op);
+    state.segOpLog.get(chapter)!.push(op);
     state._pendingOp = null;
 }
 
@@ -285,17 +594,17 @@ export function finalizeOp(chapter, op) {
 // Dirty-state helpers
 // ---------------------------------------------------------------------------
 
-export function markDirty(chapter, index, structural = false) {
+export function markDirty(chapter: number, index?: number, structural = false): void {
     if (!state.segDirtyMap.has(chapter)) {
         state.segDirtyMap.set(chapter, { indices: new Set(), structural: false });
     }
-    const entry = state.segDirtyMap.get(chapter);
+    const entry = state.segDirtyMap.get(chapter)!;
     if (index !== undefined) entry.indices.add(index);
     if (structural) entry.structural = true;
     dom.segSaveBtn.disabled = false;
 }
 
-export function unmarkDirty(chapter, index) {
+export function unmarkDirty(chapter: number, index: number): void {
     const entry = state.segDirtyMap.get(chapter);
     if (!entry) return;
     entry.indices.delete(index);
@@ -304,11 +613,11 @@ export function unmarkDirty(chapter, index) {
     }
 }
 
-export function isDirty() {
+export function isDirty(): boolean {
     return state.segDirtyMap.size > 0;
 }
 
-export function isIndexDirty(chapter, index) {
+export function isIndexDirty(chapter: number, index: number): boolean {
     const entry = state.segDirtyMap.get(chapter);
     return entry ? entry.indices.has(index) : false;
 }
@@ -318,7 +627,11 @@ export function isIndexDirty(chapter, index) {
 // (resolves waveform <-> waveform-draw circular dependency)
 // ---------------------------------------------------------------------------
 
-export function _findCoveringPeaks(audioUrl, startMs, endMs) {
+export function _findCoveringPeaks(
+    audioUrl: string,
+    startMs?: number | null,
+    endMs?: number | null,
+): AudioPeaks | null {
     if (!state.segPeaksByAudio) return null;
     // First try full-file peaks (exact URL match)
     const pe = state.segPeaksByAudio[audioUrl];
