@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Timestamps tab — keyboard shortcut handler.
  */
@@ -6,19 +5,19 @@
 import { state, dom } from './state';
 import { LS_KEYS } from '../shared/constants';
 import { getActiveTab } from '../main';
-import { getSegRelTime } from './index';
 import { loadRandomTimestamp } from './index';
 import { updateDisplay } from './playback';
 import { navigateVerse } from './playback';
 import { switchView } from './animation';
 import { safePlay } from '../shared/audio';
 
-// NOTE: circular dependency with index.js (getSegRelTime, loadRandomTimestamp).
+// NOTE: circular dependency with index.ts (loadRandomTimestamp).
 // Safe because this function is only called at runtime via keydown events,
 // long after all module-level code has executed.
 
-export function handleKeydown(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+export function handleKeydown(e: KeyboardEvent): void {
+    const target = e.target as Element | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
     if (getActiveTab() !== 'timestamps') return;
 
     switch (e.code) {
@@ -50,10 +49,11 @@ export function handleKeydown(e) {
         case 'ArrowUp': {
             e.preventDefault();
             const time = dom.audio.currentTime - state.tsSegOffset;
-            let prevStart = null;
+            let prevStart: number | null = null;
             for (let i = state.words.length - 1; i >= 0; i--) {
-                if (state.words[i].start < time - 0.01) {
-                    prevStart = state.words[i].start;
+                const w = state.words[i];
+                if (w && w.start < time - 0.01) {
+                    prevStart = w.start;
                     break;
                 }
             }
@@ -69,10 +69,11 @@ export function handleKeydown(e) {
         case 'ArrowDown': {
             e.preventDefault();
             const time = dom.audio.currentTime - state.tsSegOffset;
-            let nextStart = null;
+            let nextStart: number | null = null;
             for (let i = 0; i < state.words.length; i++) {
-                if (state.words[i].start > time + 0.01) {
-                    nextStart = state.words[i].start;
+                const w = state.words[i];
+                if (w && w.start > time + 0.01) {
+                    nextStart = w.start;
                     break;
                 }
             }
@@ -95,8 +96,10 @@ export function handleKeydown(e) {
             const newIdx = e.code === 'Period'
                 ? Math.min(idx + 1, opts.length - 1)
                 : Math.max(idx - 1, 0);
-            dom.tsSpeedSelect.value = opts[newIdx];
-            dom.audio.playbackRate = opts[newIdx];
+            const newVal = opts[newIdx];
+            if (newVal === undefined) break;
+            dom.tsSpeedSelect.value = String(newVal);
+            dom.audio.playbackRate = newVal;
             localStorage.setItem(LS_KEYS.TS_SPEED, dom.tsSpeedSelect.value);
             break;
         }
@@ -106,7 +109,8 @@ export function handleKeydown(e) {
             if (state.tsViewMode === 'animation') {
                 const cache = state.tsGranularity === 'characters' ? state.animCharCache : state.animWordCache;
                 if (cache && state.lastAnimIdx >= 0 && state.lastAnimIdx < cache.length) {
-                    cache[state.lastAnimIdx].el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const item = cache[state.lastAnimIdx];
+                    if (item) item.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             } else {
                 const activeBlock = dom.unifiedDisplay.querySelector('.mega-block.active');
@@ -129,7 +133,7 @@ export function handleKeydown(e) {
             e.preventDefault();
             const newMode = state.tsViewMode === 'analysis' ? 'animation' : 'analysis';
             switchView(newMode);
-            document.querySelectorAll('.ts-view-btn').forEach(b => {
+            document.querySelectorAll<HTMLElement>('.ts-view-btn').forEach(b => {
                 b.classList.toggle('active', b.dataset.view === newMode);
             });
             break;

@@ -5,11 +5,10 @@
  * frame-id tracking. The callback may return `false` to self-stop (the
  * helper then cancels its own frame), or anything else to continue.
  *
- * Currently unused by production callers — `segments/playback/index.ts` and
- * `timestamps/playback.ts` still manage their own RAF ids via `state.*AnimId`.
- * Migration is deferred to Phase 6 when those files are typed and their
- * stop-side-effects (button text reset, activeAudioSource clearing) can be
- * detangled from the loop lifecycle.
+ * Used by `segments/playback/index.ts` (`_segAnimLoop`) and
+ * `timestamps/playback.ts` (`_tsAnimLoop`). Both keep their legacy sentinel
+ * `state.*AnimId` in sync (1 when running, null when stopped) so that
+ * external truthiness checks continue to work.
  */
 
 export interface AnimationLoop {

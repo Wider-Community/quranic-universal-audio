@@ -1,12 +1,22 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Waveform drawing functions -- peaks-based rendering, playhead, overlays.
  */
 
 import { state, _findCoveringPeaks } from '../state';
+import type { SegCanvas } from './types';
+import type { AudioPeaks, PeakBucket, Segment } from '../../types/domain';
 
-export function drawSegmentWaveformFromPeaks(canvas, startMs, endMs, peaks, totalDurationMs) {
+type Peaks = PeakBucket[];
+
+export function drawSegmentWaveformFromPeaks(
+    canvas: SegCanvas,
+    startMs: number,
+    endMs: number,
+    peaks: Peaks,
+    totalDurationMs: number,
+): void {
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const width = canvas.width;
     const height = canvas.height;
     const centerY = height / 2;
@@ -24,12 +34,12 @@ export function drawSegmentWaveformFromPeaks(canvas, startMs, endMs, peaks, tota
     const buckets = width;
     const scale = height / 2 * 0.9;
 
-    function sampleAt(arr, idx, component) {
+    function sampleAt(arr: Peaks, idx: number, component: 0 | 1): number {
         const fi = (idx / buckets) * (arr.length - 1);
         const lo = Math.floor(fi);
         const hi = Math.min(lo + 1, arr.length - 1);
         const t = fi - lo;
-        return arr[lo][component] * (1 - t) + arr[hi][component] * t;
+        return (arr[lo]?.[component] ?? 0) * (1 - t) + (arr[hi]?.[component] ?? 0) * t;
     }
 
     ctx.beginPath();
@@ -64,25 +74,32 @@ export function drawSegmentWaveformFromPeaks(canvas, startMs, endMs, peaks, tota
 }
 
 /** Draw waveform from peaks for a segment, resolving its audio URL. Returns true if drawn. */
-export function drawWaveformFromPeaksForSeg(canvas, seg, chapter) {
+export function drawWaveformFromPeaksForSeg(canvas: SegCanvas, seg: Segment, chapter: number | string): boolean {
     if (!state.segPeaksByAudio) return false;
     const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
     const pe = state.segPeaksByAudio[audioUrl];
-    if (pe?.peaks?.length > 0) {
+    if (pe?.peaks?.length) {
         drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);
         return true;
     }
     // Fallback: try covering-range peaks (segment-level or padded)
     const covering = _findCoveringPeaks(audioUrl, seg.time_start, seg.time_end);
-    if (covering?.peaks?.length > 0) {
-        drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, covering.peaks, covering.duration_ms);
+    if (covering?.peaks?.length) {
+        drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, covering.peaks as Peaks, covering.duration_ms);
         return true;
     }
     return false;
 }
 
-export function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs, audioUrl) {
+export function drawSegPlayhead(
+    canvas: SegCanvas,
+    startMs: number,
+    endMs: number,
+    currentTimeMs: number,
+    audioUrl: string,
+): void {
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const cacheKey = `${startMs}:${endMs}`;
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
@@ -120,18 +137,29 @@ export function drawSegPlayhead(canvas, startMs, endMs, currentTimeMs, audioUrl)
     ctx.fill();
 }
 
+interface SlicedPeaks {
+    maxVals: Float32Array;
+    minVals: Float32Array;
+}
+
 /** Slice peaks for a time range and resample to `buckets` bins. */
-export function _slicePeaks(audioUrl, startMs, endMs, buckets) {
+export function _slicePeaks(
+    audioUrl: string,
+    startMs: number,
+    endMs: number,
+    buckets: number,
+): SlicedPeaks | null {
     if (!state.segPeaksByAudio) return null;
-    let pe = state.segPeaksByAudio[audioUrl];
+    let pe: AudioPeaks | undefined = state.segPeaksByAudio[audioUrl];
     if (!pe?.peaks?.length) {
-        pe = _findCoveringPeaks(audioUrl, startMs, endMs);
+        pe = _findCoveringPeaks(audioUrl, startMs, endMs) ?? undefined;
     }
     if (!pe?.peaks?.length) return null;
-    const pps = pe.peaks.length / pe.duration_ms;
+    const peaks = pe.peaks;
+    const pps = peaks.length / pe.duration_ms;
     const startIdx = Math.max(0, Math.floor(startMs * pps));
-    const endIdx = Math.min(pe.peaks.length, Math.ceil(endMs * pps));
-    const slice = pe.peaks.slice(startIdx, endIdx);
+    const endIdx = Math.min(peaks.length, Math.ceil(endMs * pps));
+    const slice = peaks.slice(startIdx, endIdx);
     if (slice.length === 0) return null;
     const maxVals = new Float32Array(buckets);
     const minVals = new Float32Array(buckets);
@@ -142,8 +170,10 @@ export function _slicePeaks(audioUrl, startMs, endMs, buckets) {
             const to = Math.min(Math.ceil((i + 1) * blockSize), slice.length);
             let mx = -1, mn = 1;
             for (let j = from; j < to; j++) {
-                if (slice[j][1] > mx) mx = slice[j][1];
-                if (slice[j][0] < mn) mn = slice[j][0];
+                const bk = slice[j];
+                if (!bk) continue;
+                if (bk[1] > mx) mx = bk[1];
+                if (bk[0] < mn) mn = bk[0];
             }
             maxVals[i] = mx;
             minVals[i] = mn;
@@ -154,18 +184,22 @@ export function _slicePeaks(audioUrl, startMs, endMs, buckets) {
             const lo = Math.floor(fi);
             const hi = Math.min(lo + 1, slice.length - 1);
             const t = fi - lo;
-            minVals[i] = slice[lo][0] * (1 - t) + slice[hi][0] * t;
-            maxVals[i] = slice[lo][1] * (1 - t) + slice[hi][1] * t;
+            const loBk = slice[lo];
+            const hiBk = slice[hi];
+            if (!loBk || !hiBk) continue;
+            minVals[i] = loBk[0] * (1 - t) + hiBk[0] * t;
+            maxVals[i] = loBk[1] * (1 - t) + hiBk[1] * t;
         }
     }
     return { maxVals, minVals };
 }
 
 /** Draw red/green overlay on history card waveforms to show trim changes. */
-export function _drawTrimHighlight(canvas, seg) {
+export function _drawTrimHighlight(canvas: SegCanvas, seg: Segment): void {
     const hl = canvas._trimHL;
     if (!hl) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const w = canvas.width, h = canvas.height;
     const dur = seg.time_end - seg.time_start;
     if (dur <= 0) return;
@@ -173,39 +207,31 @@ export function _drawTrimHighlight(canvas, seg) {
     const rgba = hl.color === 'red' ? 'rgba(244, 67, 54, 0.3)' : 'rgba(76, 175, 80, 0.3)';
     ctx.fillStyle = rgba;
 
-    if (hl.color === 'red') {
-        if (seg.time_start < hl.otherStart) {
-            const x2 = ((hl.otherStart - seg.time_start) / dur) * w;
-            ctx.fillRect(0, 0, x2, h);
-        }
-        if (seg.time_end > hl.otherEnd) {
-            const x1 = ((hl.otherEnd - seg.time_start) / dur) * w;
-            ctx.fillRect(x1, 0, w - x1, h);
-        }
-    } else {
-        if (seg.time_start < hl.otherStart) {
-            const x2 = ((hl.otherStart - seg.time_start) / dur) * w;
-            ctx.fillRect(0, 0, x2, h);
-        }
-        if (seg.time_end > hl.otherEnd) {
-            const x1 = ((hl.otherEnd - seg.time_start) / dur) * w;
-            ctx.fillRect(x1, 0, w - x1, h);
-        }
+    if (seg.time_start < hl.otherStart) {
+        const x2 = ((hl.otherStart - seg.time_start) / dur) * w;
+        ctx.fillRect(0, 0, x2, h);
+    }
+    if (seg.time_end > hl.otherEnd) {
+        const x1 = ((hl.otherEnd - seg.time_start) / dur) * w;
+        ctx.fillRect(x1, 0, w - x1, h);
     }
 }
 
 /** Draw dim + green overlay on split chain after-card waveforms. */
-export function _drawSplitHighlight(canvas, wfSeg) {
+export function _drawSplitHighlight(canvas: SegCanvas, wfSeg: Segment): void {
     const hl = canvas._splitHL;
     if (!hl) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const w = canvas.width, h = canvas.height;
     const dur = wfSeg.time_end - wfSeg.time_start;
     if (dur <= 0) return;
-    const toX = ms => Math.max(0, Math.min(w, ((ms - wfSeg.time_start) / dur) * w));
+    const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - wfSeg.time_start) / dur) * w));
 
-    const x1 = toX(hl.hlStart);
-    const x2 = toX(hl.hlEnd);
+    const hlStart = hl.hlStart ?? hl.wfStart;
+    const hlEnd = hl.hlEnd ?? hl.wfEnd;
+    const x1 = toX(hlStart);
+    const x2 = toX(hlEnd);
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
     if (x1 > 0) ctx.fillRect(0, 0, x1, h);
@@ -216,14 +242,15 @@ export function _drawSplitHighlight(canvas, wfSeg) {
 }
 
 /** Draw dim + green overlay on merge result card showing the absorbed segment's range. */
-export function _drawMergeHighlight(canvas, seg) {
+export function _drawMergeHighlight(canvas: SegCanvas, seg: Segment): void {
     const hl = canvas._mergeHL;
     if (!hl) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const w = canvas.width, h = canvas.height;
     const dur = seg.time_end - seg.time_start;
     if (dur <= 0) return;
-    const toX = ms => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
+    const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
 
     const x1 = toX(hl.hlStart);
     const x2 = toX(hl.hlEnd);

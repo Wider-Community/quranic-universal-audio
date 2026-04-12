@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Timestamps tab — unified display (analysis view): word blocks, letter rows,
  * phoneme elements, and cross-word bridge detection for ghunna/idgham.
@@ -10,8 +9,9 @@ import {
     stripTashkeel,
 } from '../shared/arabic-text';
 import { updateDisplay } from './playback';
+import type { PhonemeInterval, TsWord } from '../types/domain';
 
-// NOTE: circular dependency with playback.js (updateDisplay for click handlers).
+// NOTE: circular dependency with playback.ts (updateDisplay for click handlers).
 // Safe because updateDisplay is only called at runtime via event handlers,
 // long after all module-level code has executed.
 
@@ -19,20 +19,20 @@ import { updateDisplay } from './playback';
 // Cross-word ghunna detection: letter + phoneme contextual validation
 // ---------------------------------------------------------------------------
 
-export function getLastBaseLetter(word) {
+export function getLastBaseLetter(word: TsWord): string {
     const bare = stripTashkeel(word.text || '');
-    return bare.length ? bare[bare.length - 1] : '';
+    return bare.length ? bare[bare.length - 1] ?? '' : '';
 }
 
-export function getFirstBaseLetter(word) {
+export function getFirstBaseLetter(word: TsWord): string {
     const bare = stripTashkeel(word.text || '');
     for (const ch of bare) {
         if (ch !== '\u0671' && ch !== '\u0627') return ch;  // skip alef wasla and alef
     }
-    return bare.length ? bare[0] : '';
+    return bare.length ? bare[0] ?? '' : '';
 }
 
-export function hasTanween(word) {
+export function hasTanween(word: TsWord): boolean {
     const text = word.text || '';
     const lastBase = stripTashkeel(text);
     const endsWithAlef = lastBase.length > 0 &&
@@ -41,12 +41,17 @@ export function hasTanween(word) {
         return /[\u064B\u08F0]/.test(text);  // tanween fatha (standard + open) before trailing alef
     }
     const tail = text.slice(-3);
-    return /[\u064C\u064D\u08F1\u08F2]/.test(tail);  // tanween damma/kasra (standard + open) on last letter
+    return /[\u064C\u064D\u08F1\u08F2]/.test(tail);
 }
 
-export function computeBridgeAtBoundary(prevWord, currWord) {
-    const fromPrev = [];
-    const fromCurr = [];
+interface BridgeInfo {
+    fromPrev: number[];
+    fromCurr: number[];
+}
+
+export function computeBridgeAtBoundary(prevWord: TsWord, currWord: TsWord): BridgeInfo | null {
+    const fromPrev: number[] = [];
+    const fromCurr: number[] = [];
 
     // 1. Prefix of current word: idgham ghunnah phonemes
     const currIndices = currWord.phoneme_indices || [];
@@ -55,7 +60,7 @@ export function computeBridgeAtBoundary(prevWord, currWord) {
     const noonOrTanween = prevEndsNoon || prevHasTanween;
 
     for (const pi of currIndices) {
-        const phone = state.intervals[pi] && state.intervals[pi].phone;
+        const phone = state.intervals[pi] && state.intervals[pi]!.phone;
         if (!phone) break;
         const requiredLetter = IDGHAM_GHUNNAH_START[phone];
         if (!requiredLetter) break;
@@ -72,7 +77,8 @@ export function computeBridgeAtBoundary(prevWord, currWord) {
         getFirstBaseLetter(currWord) === '\u0645') {
         for (let k = prevIndices.length - 1; k >= 0; k--) {
             const pi = prevIndices[k];
-            const phone = state.intervals[pi] && state.intervals[pi].phone;
+            if (pi === undefined) continue;
+            const phone = state.intervals[pi] && state.intervals[pi]!.phone;
             if (phone === 'm\u0303') {
                 fromPrev.push(pi);
             } else {
@@ -86,13 +92,14 @@ export function computeBridgeAtBoundary(prevWord, currWord) {
     return { fromPrev, fromCurr };
 }
 
-export function createCrosswordBridge(bridgeIndices) {
+export function createCrosswordBridge(bridgeIndices: number[]): HTMLDivElement {
     const bridge = document.createElement('div');
     bridge.className = 'crossword-bridge' + (state.tsShowPhonemes ? '' : ' hidden');
 
     bridgeIndices.forEach(pi => {
-        if (state.intervals[pi] && !state.intervals[pi].geminate_end) {
-            bridge.appendChild(createPhonemeElement(state.intervals[pi], pi));
+        const interval = state.intervals[pi];
+        if (interval && !interval.geminate_end) {
+            bridge.appendChild(createPhonemeElement(interval, pi));
         }
     });
 
@@ -103,11 +110,11 @@ export function createCrosswordBridge(bridgeIndices) {
 // Unified display building
 // ---------------------------------------------------------------------------
 
-export function buildUnifiedDisplay() {
+export function buildUnifiedDisplay(): void {
     dom.unifiedDisplay.innerHTML = '';
 
     // Build a map: for each interval, which word owns it
-    const intervalToWord = new Array(state.intervals.length).fill(-1);
+    const intervalToWord = new Array<number>(state.intervals.length).fill(-1);
     state.words.forEach((word, wi) => {
         if (word.phoneme_indices) {
             word.phoneme_indices.forEach(pi => {
@@ -117,10 +124,10 @@ export function buildUnifiedDisplay() {
     });
 
     // Helper to populate cached DOM refs after building display
-    function _cacheDisplayRefs() {
-        state.cachedBlocks = Array.from(dom.unifiedDisplay.querySelectorAll('.mega-block'));
-        state.cachedPhonemes = Array.from(dom.unifiedDisplay.querySelectorAll('.mega-phoneme'));
-        state.cachedLetterEls = Array.from(dom.unifiedDisplay.querySelectorAll('.mega-letter:not(.null-ts)'));
+    function _cacheDisplayRefs(): void {
+        state.cachedBlocks = Array.from(dom.unifiedDisplay.querySelectorAll<HTMLElement>('.mega-block'));
+        state.cachedPhonemes = Array.from(dom.unifiedDisplay.querySelectorAll<HTMLElement>('.mega-phoneme'));
+        state.cachedLetterEls = Array.from(dom.unifiedDisplay.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)'));
         state.prevActiveWordIdx = -1;
         state.prevActivePhonemeIdx = -1;
     }
@@ -142,7 +149,7 @@ export function buildUnifiedDisplay() {
         state.words.forEach((word, wi) => {
             const block = document.createElement('div');
             block.className = 'mega-block';
-            block.dataset.wordIndex = wi;
+            block.dataset.wordIndex = String(wi);
 
             const wordEl = document.createElement('div');
             wordEl.className = 'mega-word';
@@ -165,25 +172,29 @@ export function buildUnifiedDisplay() {
     }
 
     // Pre-compute bridges for all word boundaries
-    const bridges = [];  // bridges[wi] = bridge BEFORE word wi (between wi-1 and wi)
+    const bridges: Array<BridgeInfo | null | undefined> = [];
     for (let wi = 1; wi < state.words.length; wi++) {
-        bridges[wi] = computeBridgeAtBoundary(state.words[wi - 1], state.words[wi]);
+        const prev = state.words[wi - 1];
+        const curr = state.words[wi];
+        bridges[wi] = (prev && curr) ? computeBridgeAtBoundary(prev, curr) : null;
     }
 
     // Collect all phoneme indices to exclude per word (moved to bridges)
-    const excludeFromWord = state.words.map(() => new Set());
+    const excludeFromWord: Set<number>[] = state.words.map(() => new Set<number>());
     for (let wi = 1; wi < state.words.length; wi++) {
         const b = bridges[wi];
         if (!b) continue;
-        b.fromPrev.forEach(pi => excludeFromWord[wi - 1].add(pi));
-        b.fromCurr.forEach(pi => excludeFromWord[wi].add(pi));
+        const exPrev = excludeFromWord[wi - 1];
+        const exCurr = excludeFromWord[wi];
+        if (exPrev) b.fromPrev.forEach(pi => exPrev.add(pi));
+        if (exCurr) b.fromCurr.forEach(pi => exCurr.add(pi));
     }
 
     // Walk through intervals, grouping by word
     let i = 0;
-    const renderedWords = new Set();
+    const renderedWords = new Set<number>();
     while (i < state.intervals.length) {
-        const wi = intervalToWord[i];
+        const wi = intervalToWord[i] ?? -1;
 
         if (wi === -1) {
             i++;
@@ -197,10 +208,11 @@ export function buildUnifiedDisplay() {
         renderedWords.add(wi);
 
         const word = state.words[wi];
+        if (!word) { i++; continue; }
 
         // Render bridge BEFORE this word's block (if any)
-        if (wi > 0 && bridges[wi]) {
-            const b = bridges[wi];
+        const b = bridges[wi];
+        if (wi > 0 && b) {
             const allBridgeIndices = [...b.fromPrev, ...b.fromCurr];
             if (allBridgeIndices.length > 0) {
                 dom.unifiedDisplay.appendChild(createCrosswordBridge(allBridgeIndices));
@@ -210,7 +222,7 @@ export function buildUnifiedDisplay() {
         // Build mega-block
         const block = document.createElement('div');
         block.className = 'mega-block';
-        block.dataset.wordIndex = wi;
+        block.dataset.wordIndex = String(wi);
 
         const wordEl = document.createElement('div');
         wordEl.className = 'mega-word';
@@ -226,11 +238,12 @@ export function buildUnifiedDisplay() {
         phoneRow.className = 'mega-phonemes' + (state.tsShowPhonemes ? '' : ' hidden');
 
         const indices = word.phoneme_indices || [];
-        const excluded = excludeFromWord[wi];
+        const excluded = excludeFromWord[wi] ?? new Set<number>();
         indices.forEach(pi => {
             if (excluded.has(pi)) return;
-            if (state.intervals[pi] && !state.intervals[pi].geminate_end) {
-                phoneRow.appendChild(createPhonemeElement(state.intervals[pi], pi));
+            const interval = state.intervals[pi];
+            if (interval && !interval.geminate_end) {
+                phoneRow.appendChild(createPhonemeElement(interval, pi));
             }
         });
 
@@ -251,10 +264,10 @@ export function buildUnifiedDisplay() {
     _cacheDisplayRefs();
 }
 
-export function createPhonemeElement(interval, index) {
+export function createPhonemeElement(interval: PhonemeInterval, index: number): HTMLSpanElement {
     const el = document.createElement('span');
     el.className = 'mega-phoneme';
-    el.dataset.index = index;
+    el.dataset.index = String(index);
 
     const phone = interval.phone;
 
@@ -277,7 +290,14 @@ export function createPhonemeElement(interval, index) {
     return el;
 }
 
-export function createLetterRow(word) {
+interface LetterGroup {
+    chars: string;
+    start: number | null;
+    end: number | null;
+    isNull: boolean;
+}
+
+export function createLetterRow(word: TsWord): HTMLDivElement | null {
     const letters = word.letters || [];
     if (!letters.length) return null;
 
@@ -285,7 +305,7 @@ export function createLetterRow(word) {
     row.className = 'mega-letters' + (state.tsShowLetters ? '' : ' hidden');
 
     // Group consecutive letters with identical (start, end) into one box
-    const groups = [];
+    const groups: LetterGroup[] = [];
     for (const letter of letters) {
         const isNull = letter.start == null || letter.end == null;
         const last = groups[groups.length - 1];
@@ -306,11 +326,11 @@ export function createLetterRow(word) {
             el.classList.add('null-ts');
             el.addEventListener('click', e => e.stopPropagation());
         } else {
-            el.dataset.letterStart = group.start;
-            el.dataset.letterEnd = group.end;
+            el.dataset.letterStart = String(group.start);
+            el.dataset.letterEnd = String(group.end);
             el.addEventListener('click', e => {
                 e.stopPropagation();
-                dom.audio.currentTime = group.start + state.tsSegOffset;
+                dom.audio.currentTime = (group.start ?? 0) + state.tsSegOffset;
                 updateDisplay();
             });
         }
@@ -324,7 +344,7 @@ export function createLetterRow(word) {
  * Clear and rebuild phoneme labels strip below the waveform.
  * NOT dead code -- called from loadedmetadata handler and on verse load.
  */
-export function buildPhonemeLabels() {
+export function buildPhonemeLabels(): void {
     dom.phonemeLabels.innerHTML = '';
     state.cachedLabels = [];
 }

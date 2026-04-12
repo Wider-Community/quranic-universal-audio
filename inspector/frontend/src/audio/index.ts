@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Audio Tab -- browse and listen to full surah/ayah recitations.
  * Supports hierarchical audio sources: by_surah/<source> and by_ayah/<source>.
@@ -12,42 +11,56 @@ import { LS_KEYS } from '../shared/constants';
 import { fetchJson } from '../shared/api';
 import type { AudioSourcesResponse, AudioSurahsResponse } from '../types/api';
 
-const categoryToggle = document.getElementById('aud-category-toggle');
-const reciterSelect = document.getElementById('aud-reciter-select');
-const surahSelect = document.getElementById('aud-surah-select');
-const ayahSelect = document.getElementById('aud-ayah-select');
-const ayahLabel = document.getElementById('aud-ayah-label');
-const player = document.getElementById('aud-player');
-const prevBtn = document.getElementById('aud-prev-btn');
-const nextBtn = document.getElementById('aud-next-btn');
+interface AudioReciter {
+    slug: string;
+    name: string;
+}
+type AudioCategorySources = Record<string, AudioReciter[]>;
+
+function mustGet<T extends HTMLElement>(id: string): T {
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`Missing #${id}`);
+    return el as T;
+}
+
+const categoryToggle = mustGet<HTMLElement>('aud-category-toggle');
+const reciterSelect = mustGet<HTMLSelectElement>('aud-reciter-select');
+const surahSelect = mustGet<HTMLSelectElement>('aud-surah-select');
+const ayahSelect = mustGet<HTMLSelectElement>('aud-ayah-select');
+const ayahLabel = mustGet<HTMLElement>('aud-ayah-label');
+const player = mustGet<HTMLAudioElement>('aud-player');
+const prevBtn = mustGet<HTMLButtonElement>('aud-prev-btn');
+const nextBtn = mustGet<HTMLButtonElement>('aud-next-btn');
 
 // State
-let selectedCategory = 'by_surah';  // driven by toggle
-let currentCategory = null;  // derived from selected reciter (may differ until reciter chosen)
-let audioSources = {};
+let selectedCategory: 'by_surah' | 'by_ayah' = 'by_surah';
+let currentCategory: string | null = null;
+let audioSources: AudioSourcesResponse = {};
 // Cache: "category/source/slug" -> {key: url}
-const urlCache = {};
+const urlCache: Record<string, Record<string, string>> = {};
 // For by_ayah: parsed structure { surahNum -> [ayahNum, ...] } and flat sorted keys
-let ayahBySurah = {};   // { 1: [1,2,...,7], 2: [1,...,286], ... }
-let allSurahNums = [];  // sorted surah numbers available
+let ayahBySurah: Record<number, number[]> = {};
+let allSurahNums: number[] = [];
 
-let audReciterSS = null;  // SearchableSelect for reciter dropdown
-let audSurahSS = null;  // SearchableSelect for surah dropdown
+let audReciterSS: SearchableSelect | null = null;
+let audSurahSS: SearchableSelect | null = null;
 
-categoryToggle.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-cat]');
+categoryToggle.addEventListener('click', (e: MouseEvent) => {
+    const target = e.target as Element | null;
+    const btn = target?.closest<HTMLElement>('[data-cat]');
     if (!btn) return;
     const cat = btn.dataset.cat;
-    if (cat === selectedCategory) return;
+    if (!cat || cat === selectedCategory) return;
+    if (cat !== 'by_surah' && cat !== 'by_ayah') return;
     selectedCategory = cat;
-    categoryToggle.querySelectorAll('.ts-view-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+    categoryToggle.querySelectorAll<HTMLElement>('.ts-view-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
     ayahLabel.hidden = (selectedCategory !== 'by_ayah');
     populateReciters();
 });
 
 document.addEventListener('DOMContentLoaded', loadSources);
 
-async function loadSources() {
+async function loadSources(): Promise<void> {
     try {
         await surahInfoReady;
         audReciterSS = new SearchableSelect(reciterSelect);
@@ -60,7 +73,7 @@ async function loadSources() {
             const _savedCat = _savedAudReciter.split('/')[0];
             if ((_savedCat === 'by_surah' || _savedCat === 'by_ayah') && _savedCat !== selectedCategory) {
                 selectedCategory = _savedCat;
-                categoryToggle.querySelectorAll('[data-cat]').forEach(b => b.classList.toggle('active', b.dataset.cat === selectedCategory));
+                categoryToggle.querySelectorAll<HTMLElement>('[data-cat]').forEach(b => b.classList.toggle('active', b.dataset.cat === selectedCategory));
                 ayahLabel.hidden = (selectedCategory !== 'by_ayah');
             }
         }
@@ -72,14 +85,14 @@ async function loadSources() {
     }
 }
 
-function populateReciters() {
+function populateReciters(): void {
     reciterSelect.innerHTML = '<option value="">-- Select reciter --</option>';
     resetSurahSelect();
     resetAyahSelect();
     clearPlayer();
     currentCategory = null;
 
-    const catData = audioSources[selectedCategory];
+    const catData = audioSources[selectedCategory] as AudioCategorySources | undefined;
     if (catData) {
         for (const source of Object.keys(catData).sort()) {
             const reciters = catData[source];
@@ -126,7 +139,7 @@ reciterSelect.addEventListener('change', async () => {
 
     // val is "category/source/slug"
     const parts = val.split('/');
-    currentCategory = parts[0];
+    currentCategory = parts[0] ?? null;
     const sourceSlug = parts.slice(1).join('/');  // "source/slug"
 
     const cacheKey = val;
@@ -173,54 +186,54 @@ nextBtn.addEventListener('click', () => navigate(+1));
 
 // -- Helpers --
 
-function buildAyahStructure(urls) {
+function buildAyahStructure(urls: Record<string, string>): void {
     ayahBySurah = {};
     for (const key of Object.keys(urls)) {
         const parts = key.split(':');
         const s = Number(parts[0]);
         const a = Number(parts[1]);
         if (!ayahBySurah[s]) ayahBySurah[s] = [];
-        ayahBySurah[s].push(a);
+        ayahBySurah[s]!.push(a);
     }
     for (const s of Object.keys(ayahBySurah)) {
-        ayahBySurah[s].sort((a, b) => a - b);
+        ayahBySurah[Number(s)]!.sort((a, b) => a - b);
     }
     allSurahNums = Object.keys(ayahBySurah).map(Number).sort((a, b) => a - b);
 }
 
-function populateSurahSelect(nums) {
+function populateSurahSelect(nums: number[]): void {
     surahSelect.innerHTML = '<option value="">-- Select --</option>';
     for (const n of nums) {
         const opt = document.createElement('option');
-        opt.value = n;
+        opt.value = String(n);
         opt.textContent = surahOptionText(n);
         surahSelect.appendChild(opt);
     }
     if (audSurahSS) audSurahSS.refresh();
 }
 
-function populateAyahSelect() {
+function populateAyahSelect(): void {
     resetAyahSelect();
     const s = Number(surahSelect.value);
     if (!s || !ayahBySurah[s]) return;
 
     ayahSelect.innerHTML = '<option value="">-- Select --</option>';
-    for (const a of ayahBySurah[s]) {
+    for (const a of ayahBySurah[s] ?? []) {
         const opt = document.createElement('option');
-        opt.value = a;
-        opt.textContent = a;
+        opt.value = String(a);
+        opt.textContent = String(a);
         ayahSelect.appendChild(opt);
     }
 }
 
-function playCurrentSelection() {
+function playCurrentSelection(): void {
     const val = reciterSelect.value;
     if (!val) { clearPlayer(); return; }
 
     const urls = urlCache[val];
     if (!urls) { clearPlayer(); return; }
 
-    let key;
+    let key: string;
     if (currentCategory === 'by_ayah') {
         const s = surahSelect.value;
         const a = ayahSelect.value;
@@ -240,7 +253,7 @@ function playCurrentSelection() {
     }
 }
 
-function navigate(delta) {
+function navigate(delta: number): void {
     if (currentCategory === 'by_ayah') {
         navigateAyah(delta);
     } else {
@@ -253,12 +266,13 @@ function navigate(delta) {
     }
 }
 
-function navigateAyah(delta) {
+function navigateAyah(delta: number): void {
     const s = Number(surahSelect.value);
     const a = Number(ayahSelect.value);
     if (!s || !a) return;
 
     const ayahs = ayahBySurah[s];
+    if (!ayahs) return;
     const idx = ayahs.indexOf(a);
     const newIdx = idx + delta;
 
@@ -270,7 +284,8 @@ function navigateAyah(delta) {
         const sIdx = allSurahNums.indexOf(s);
         if (sIdx >= allSurahNums.length - 1) return;
         const nextS = allSurahNums[sIdx + 1];
-        surahSelect.value = nextS;
+        if (nextS === undefined) return;
+        surahSelect.value = String(nextS);
         if (audSurahSS) audSurahSS.refresh();
         populateAyahSelect();
         ayahSelect.selectedIndex = 1; // first ayah after placeholder
@@ -279,7 +294,8 @@ function navigateAyah(delta) {
         const sIdx = allSurahNums.indexOf(s);
         if (sIdx <= 0) return;
         const prevS = allSurahNums[sIdx - 1];
-        surahSelect.value = prevS;
+        if (prevS === undefined) return;
+        surahSelect.value = String(prevS);
         if (audSurahSS) audSurahSS.refresh();
         populateAyahSelect();
         ayahSelect.selectedIndex = ayahSelect.options.length - 1; // last ayah
@@ -288,7 +304,7 @@ function navigateAyah(delta) {
     updateNavButtons();
 }
 
-function updateNavButtons() {
+function updateNavButtons(): void {
     if (currentCategory === 'by_ayah') {
         const s = Number(surahSelect.value);
         const a = Number(ayahSelect.value);
@@ -298,6 +314,7 @@ function updateNavButtons() {
             return;
         }
         const ayahs = ayahBySurah[s];
+        if (!ayahs) { prevBtn.disabled = true; nextBtn.disabled = true; return; }
         const aIdx = ayahs.indexOf(a);
         const sIdx = allSurahNums.indexOf(s);
         prevBtn.disabled = (sIdx === 0 && aIdx === 0);
@@ -310,18 +327,18 @@ function updateNavButtons() {
     }
 }
 
-function resetSurahSelect() {
+function resetSurahSelect(): void {
     surahSelect.innerHTML = '<option value="">--</option>';
     ayahBySurah = {};
     allSurahNums = [];
     if (audSurahSS) audSurahSS.refresh();
 }
 
-function resetAyahSelect() {
+function resetAyahSelect(): void {
     ayahSelect.innerHTML = '<option value="">--</option>';
 }
 
-function clearPlayer() {
+function clearPlayer(): void {
     player.removeAttribute('src');
     player.load();
     updateNavButtons();

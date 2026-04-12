@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Shared surah info: fetched once at import time, available across all tabs.
  *
@@ -16,7 +15,7 @@ export const surahInfoReady = fetchJson<SurahInfoResponse>('/api/surah-info').th
     surahInfo = data;
 });
 
-export function surahOptionText(num) {
+export function surahOptionText(num: number | string): string {
     const info = surahInfo[String(num)];
     if (!info) return String(num);
     const ar = info.name_ar.replace(/^سُورَةُ\s*/, '');

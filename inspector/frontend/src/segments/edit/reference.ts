@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Reference editing: startRefEdit, commitRefEdit, _chainSplitRefEdit.
  */
@@ -9,12 +8,18 @@ import { syncAllCardsForSegment } from '../rendering';
 import { stopSegAnimation } from '../playback/index';
 import { fetchJson } from '../../shared/api';
 import type { SegResolveRefResponse } from '../../types/api';
+import type { Segment } from '../../types/domain';
 
 // ---------------------------------------------------------------------------
 // startRefEdit -- inline ref input on a segment card
 // ---------------------------------------------------------------------------
 
-export function startRefEdit(refSpan, seg, row, contextCategory = null) {
+export function startRefEdit(
+    refSpan: HTMLElement,
+    seg: Segment,
+    row: HTMLElement,
+    contextCategory: string | null = null,
+): void {
     if (refSpan.querySelector('input')) return;
 
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
@@ -36,14 +41,14 @@ export function startRefEdit(refSpan, seg, row, contextCategory = null) {
 
     let committed = false;
 
-    function commit() {
+    function commit(): void {
         if (committed) return;
         committed = true;
         const newRef = input.value.trim();
         commitRefEdit(seg, newRef, row);
     }
 
-    input.addEventListener('keydown', (e) => {
+    input.addEventListener('keydown', (e: KeyboardEvent) => {
         e.stopPropagation();
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -58,14 +63,15 @@ export function startRefEdit(refSpan, seg, row, contextCategory = null) {
     });
 
     input.addEventListener('blur', commit);
-    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('click', (e: MouseEvent) => e.stopPropagation());
 }
 
 // ---------------------------------------------------------------------------
 // _chainSplitRefEdit -- after split, auto-chain ref editing to second half
 // ---------------------------------------------------------------------------
 
-export function _chainSplitRefEdit(chapter) {
+export function _chainSplitRefEdit(chapter: number): void {
+    void chapter;
     if (!state._splitChainUid) return;
     const chainUid = state._splitChainUid;
     const chainWrapper = state._splitChainWrapper;
@@ -77,12 +83,12 @@ export function _chainSplitRefEdit(chapter) {
     const secondSeg = allSegs.find(s => s.segment_uid === chainUid);
     if (!secondSeg) return;
     const selector = `.seg-row[data-seg-chapter="${secondSeg.chapter}"][data-seg-index="${secondSeg.index}"]`;
-    const secondRow = (chainWrapper && chainWrapper.querySelector(selector))
-        || dom.segListEl.querySelector(selector)
-        || document.querySelector(selector);
+    const secondRow = (chainWrapper && chainWrapper.querySelector<HTMLElement>(selector))
+        || dom.segListEl.querySelector<HTMLElement>(selector)
+        || document.querySelector<HTMLElement>(selector);
     if (!secondRow) return;
     secondRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    const refSpan = secondRow.querySelector('.seg-text-ref');
+    const refSpan = secondRow.querySelector<HTMLElement>('.seg-text-ref');
     if (refSpan) {
         dom.segPlayStatus.textContent = 'Now edit second half reference';
         setTimeout(() => startRefEdit(refSpan, secondSeg, secondRow, chainCat), 100);
@@ -93,12 +99,12 @@ export function _chainSplitRefEdit(chapter) {
 // commitRefEdit -- resolve reference and apply edit
 // ---------------------------------------------------------------------------
 
-export async function commitRefEdit(seg, newRef, row) {
+export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLElement): Promise<void> {
     const oldRef = seg.matched_ref || '';
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
-    newRef = _normalizeRef(newRef);
+    const newRef = _normalizeRef(newRefIn) ?? '';
     if (newRef === oldRef) {
-        if (seg.confidence < 1.0) {
+        if ((seg.confidence ?? 0) < 1.0) {
             if (state._pendingOp) {
                 state._pendingOp.op_type = 'confirm_reference';
                 state._pendingOp.fix_kind = 'audit';
@@ -119,7 +125,7 @@ export async function commitRefEdit(seg, newRef, row) {
             }
         } else {
             state._pendingOp = null;
-            const refSpan = row.querySelector('.seg-text-ref');
+            const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
             if (refSpan) refSpan.textContent = formatRef(oldRef);
         }
         _chainSplitRefEdit(chapter);

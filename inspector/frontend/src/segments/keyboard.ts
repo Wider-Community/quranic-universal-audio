@@ -1,7 +1,6 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Keyboard handler for the Segments tab.
- * Uses registerHandler pattern for Phase 7 functions (save, undo, edit).
+ * Uses registerHandler pattern for edit/save functions.
  */
 
 import { state, dom, isDirty } from './state';
@@ -9,13 +8,19 @@ import { LS_KEYS } from '../shared/constants';
 import { getActiveTab } from '../main';
 import { playFromSegment, onSegPlayClick } from './playback/index';
 import { _restoreFilterView } from './navigation';
+import type { SegKeyboardHandlerName, SegKeyboardHandlerRegistry } from '../types/registry';
 
-// Handler registry
-const _handlers = {};
-export function registerKeyboardHandler(name, fn) { _handlers[name] = fn; }
+const _handlers: SegKeyboardHandlerRegistry = {};
+export function registerKeyboardHandler<K extends SegKeyboardHandlerName>(
+    name: K,
+    fn: NonNullable<SegKeyboardHandlerRegistry[K]>,
+): void {
+    _handlers[name] = fn as SegKeyboardHandlerRegistry[K];
+}
 
-export function handleSegKeydown(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+export function handleSegKeydown(e: KeyboardEvent): void {
+    const target = e.target as Element | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
     if (getActiveTab() !== 'segments') return;
 
     switch (e.code) {
@@ -41,7 +46,7 @@ export function handleSegKeydown(e) {
             const curPos = state.segDisplayedSegments.findIndex(s => s.index === state.segCurrentIdx);
             const prevPos = curPos > 0 ? curPos - 1 : 0;
             const prev = state.segDisplayedSegments[prevPos];
-            playFromSegment(prev.index, prev.chapter);
+            if (prev) playFromSegment(prev.index, prev.chapter);
             break;
         }
         case 'ArrowDown': {
@@ -50,7 +55,7 @@ export function handleSegKeydown(e) {
             const curPos = state.segDisplayedSegments.findIndex(s => s.index === state.segCurrentIdx);
             const nextPos = curPos >= 0 && curPos < state.segDisplayedSegments.length - 1 ? curPos + 1 : (curPos === -1 ? 0 : curPos);
             const nxt = state.segDisplayedSegments[nextPos];
-            playFromSegment(nxt.index, nxt.chapter);
+            if (nxt) playFromSegment(nxt.index, nxt.chapter);
             break;
         }
         case 'Period':
@@ -63,15 +68,17 @@ export function handleSegKeydown(e) {
             const newIdx = e.code === 'Period'
                 ? Math.min(idx + 1, opts.length - 1)
                 : Math.max(idx - 1, 0);
-            dom.segSpeedSelect.value = opts[newIdx];
-            dom.segAudioEl.playbackRate = opts[newIdx];
-            if (state.valCardAudio) state.valCardAudio.playbackRate = opts[newIdx];
+            const newVal = opts[newIdx];
+            if (newVal === undefined) break;
+            dom.segSpeedSelect.value = String(newVal);
+            dom.segAudioEl.playbackRate = newVal;
+            if (state.valCardAudio) state.valCardAudio.playbackRate = newVal;
             localStorage.setItem(LS_KEYS.SEG_SPEED, dom.segSpeedSelect.value);
             break;
         }
         case 'KeyJ': {
             e.preventDefault();
-            const row = dom.segListEl.querySelector(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
+            const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
             if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
             break;
         }
@@ -114,12 +121,12 @@ export function handleSegKeydown(e) {
         case 'KeyE': {
             if (state.segEditMode || state.segCurrentIdx < 0) break;
             e.preventDefault();
-            const row = dom.segListEl.querySelector(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
+            const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
             const seg = state.segDisplayedSegments
                 ? state.segDisplayedSegments.find(s => s.index === state.segCurrentIdx)
                 : null;
             if (row && seg) {
-                const refSpan = row.querySelector('.seg-text-ref');
+                const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
                 if (refSpan) _handlers.startRefEdit?.(refSpan, seg, row);
             }
             break;

@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Timestamps tab — waveform decoding, peak computation, and canvas drawing.
  */
@@ -9,13 +8,15 @@ import { getSegRelTime, getSegDuration } from './index';
 import { updateDisplay } from './playback';
 import { fetchArrayBuffer } from '../shared/api';
 
-// NOTE: circular dependency with index.js (getSegRelTime, getSegDuration) and
-// playback.js (updateDisplay for handleCanvasClick). Safe because these
+// NOTE: circular dependency with index.ts (getSegRelTime, getSegDuration) and
+// playback.ts (updateDisplay for handleCanvasClick). Safe because these
 // functions are only called at runtime via event handlers, long after all
 // module-level code has executed.
 
-export function setupCanvas() {
-    const rect = dom.canvas.parentElement.getBoundingClientRect();
+export function setupCanvas(): void {
+    const parent = dom.canvas.parentElement;
+    if (!parent) return;
+    const rect = parent.getBoundingClientRect();
     dom.canvas.width = rect.width;
     dom.canvas.height = 200;
 }
@@ -24,14 +25,19 @@ export function setupCanvas() {
 // Waveform decoding (segment slice)
 // ---------------------------------------------------------------------------
 
-export async function decodeWaveform(url) {
+type AudioCtxCtor = typeof AudioContext;
+
+export async function decodeWaveform(url: string): Promise<void> {
     if (!url) return;
     try {
         if (!state.audioContext) {
-            state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const Ctor: AudioCtxCtor =
+                window.AudioContext ||
+                (window as unknown as { webkitAudioContext: AudioCtxCtor }).webkitAudioContext;
+            state.audioContext = new Ctor();
         }
 
-        let audioBuffer;
+        let audioBuffer: AudioBuffer | undefined;
         if (state.audioBufferCache.has(url)) {
             audioBuffer = state.audioBufferCache.get(url);
         } else {
@@ -40,10 +46,11 @@ export async function decodeWaveform(url) {
             // Evict oldest if cache exceeds 5 entries
             if (state.audioBufferCache.size >= AUDIO_BUFFER_CACHE_SIZE) {
                 const oldest = state.audioBufferCache.keys().next().value;
-                state.audioBufferCache.delete(oldest);
+                if (oldest !== undefined) state.audioBufferCache.delete(oldest);
             }
             state.audioBufferCache.set(url, audioBuffer);
         }
+        if (!audioBuffer) return;
         state.fullAudioBuffer = audioBuffer;
 
         // Extract segment slice from the full audio
@@ -67,7 +74,7 @@ export async function decodeWaveform(url) {
     }
 }
 
-export function computePeaks(rawData) {
+export function computePeaks(rawData: Float32Array): void {
     const buckets = dom.canvas.width || 1200;
     const blockSize = Math.max(1, Math.floor(rawData.length / buckets));
     const peaks = new Float32Array(buckets * 2); // [min0, max0, min1, max1, ...]
@@ -92,7 +99,7 @@ export function computePeaks(rawData) {
 // Canvas drawing
 // ---------------------------------------------------------------------------
 
-export function cacheWaveformSnapshot() {
+export function cacheWaveformSnapshot(): void {
     drawVisualization();
     if (!dom.canvas.width || !dom.canvas.height) return;
     if (!state.waveformSnapshot) {
@@ -100,11 +107,14 @@ export function cacheWaveformSnapshot() {
     }
     state.waveformSnapshot.width = dom.canvas.width;
     state.waveformSnapshot.height = dom.canvas.height;
-    state.waveformSnapshot.getContext('2d').drawImage(dom.canvas, 0, 0);
+    const snapCtx = state.waveformSnapshot.getContext('2d');
+    if (snapCtx) snapCtx.drawImage(dom.canvas, 0, 0);
 }
 
-export function drawVisualization() {
+export function drawVisualization(): void {
     if (!dom.canvas.width || !dom.canvas.height) return;
+    const ctx = dom.ctx;
+    if (!ctx) return;
 
     const width = dom.canvas.width;
     const height = dom.canvas.height;
@@ -113,31 +123,31 @@ export function drawVisualization() {
     const centerY = waveH / 2;
 
     // Clear canvas
-    dom.ctx.fillStyle = '#0f0f23';
-    dom.ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, width, height);
 
     // Draw phoneme boundaries (gray, thin)
-    dom.ctx.strokeStyle = '#333';
-    dom.ctx.lineWidth = 1;
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
 
     state.intervals.forEach(interval => {
         const x = (interval.start / duration) * width;
-        dom.ctx.beginPath();
-        dom.ctx.moveTo(x, 0);
-        dom.ctx.lineTo(x, waveH);
-        dom.ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, waveH);
+        ctx.stroke();
     });
 
     // Draw word boundaries (gold, thicker)
-    dom.ctx.strokeStyle = '#f0a500';
-    dom.ctx.lineWidth = 2;
+    ctx.strokeStyle = '#f0a500';
+    ctx.lineWidth = 2;
 
     state.words.forEach(word => {
         const x = (word.start / duration) * width;
-        dom.ctx.beginPath();
-        dom.ctx.moveTo(x, 0);
-        dom.ctx.lineTo(x, waveH);
-        dom.ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, waveH);
+        ctx.stroke();
     });
 
     // Draw waveform
@@ -146,51 +156,53 @@ export function drawVisualization() {
         const scale = waveH / 2 * 0.95;
 
         // Filled waveform shape
-        dom.ctx.beginPath();
+        ctx.beginPath();
         for (let i = 0; i < buckets; i++) {
             const x = (i / buckets) * width;
             const maxVal = state.waveformData[i * 2 + 1];
             const y = centerY - maxVal * scale;
-            if (i === 0) dom.ctx.moveTo(x, y);
-            else dom.ctx.lineTo(x, y);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
         }
         for (let i = buckets - 1; i >= 0; i--) {
             const x = (i / buckets) * width;
             const minVal = state.waveformData[i * 2];
             const y = centerY - minVal * scale;
-            dom.ctx.lineTo(x, y);
+            ctx.lineTo(x, y);
         }
-        dom.ctx.closePath();
-        dom.ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
-        dom.ctx.fill();
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+        ctx.fill();
 
         // Waveform outline
-        dom.ctx.strokeStyle = '#4361ee';
-        dom.ctx.lineWidth = 1;
-        dom.ctx.beginPath();
+        ctx.strokeStyle = '#4361ee';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
         for (let i = 0; i < buckets; i++) {
             const x = (i / buckets) * width;
             const maxVal = state.waveformData[i * 2 + 1];
             const y = centerY - maxVal * scale;
-            if (i === 0) dom.ctx.moveTo(x, y);
-            else dom.ctx.lineTo(x, y);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
         }
-        dom.ctx.stroke();
-        dom.ctx.beginPath();
+        ctx.stroke();
+        ctx.beginPath();
         for (let i = 0; i < buckets; i++) {
             const x = (i / buckets) * width;
             const minVal = state.waveformData[i * 2];
             const y = centerY - minVal * scale;
-            if (i === 0) dom.ctx.moveTo(x, y);
-            else dom.ctx.lineTo(x, y);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
         }
-        dom.ctx.stroke();
+        ctx.stroke();
     }
 }
 
-export function drawVisualizationWithPlayhead(progress) {
+export function drawVisualizationWithPlayhead(progress: number): void {
+    const ctx = dom.ctx;
+    if (!ctx) return;
     if (state.waveformSnapshot && state.waveformSnapshot.width) {
-        dom.ctx.drawImage(state.waveformSnapshot, 0, 0);
+        ctx.drawImage(state.waveformSnapshot, 0, 0);
     } else {
         drawVisualization();
     }
@@ -202,48 +214,52 @@ export function drawVisualizationWithPlayhead(progress) {
 
     // Draw current word highlight (subtle gold)
     for (let i = 0; i < state.words.length; i++) {
-        if (time >= state.words[i].start && time < state.words[i].end) {
-            const startX = (state.words[i].start / duration) * width;
-            const endX = (state.words[i].end / duration) * width;
+        const w = state.words[i];
+        if (!w) continue;
+        if (time >= w.start && time < w.end) {
+            const startX = (w.start / duration) * width;
+            const endX = (w.end / duration) * width;
 
-            dom.ctx.fillStyle = 'rgba(240, 165, 0, 0.1)';
-            dom.ctx.fillRect(startX, 0, endX - startX, height);
+            ctx.fillStyle = 'rgba(240, 165, 0, 0.1)';
+            ctx.fillRect(startX, 0, endX - startX, height);
             break;
         }
     }
 
     // Draw current phoneme highlight (blue)
     for (let i = 0; i < state.intervals.length; i++) {
-        if (time >= state.intervals[i].start && time < state.intervals[i].end) {
-            const startX = (state.intervals[i].start / duration) * width;
-            const endX = (state.intervals[i].end / duration) * width;
+        const iv = state.intervals[i];
+        if (!iv) continue;
+        if (time >= iv.start && time < iv.end) {
+            const startX = (iv.start / duration) * width;
+            const endX = (iv.end / duration) * width;
 
-            dom.ctx.fillStyle = 'rgba(76, 201, 240, 0.2)';
-            dom.ctx.fillRect(startX, 0, endX - startX, height);
+            ctx.fillStyle = 'rgba(76, 201, 240, 0.2)';
+            ctx.fillRect(startX, 0, endX - startX, height);
             break;
         }
     }
 
     // Draw playhead
     const x = progress * width;
-    dom.ctx.strokeStyle = '#f72585';
-    dom.ctx.lineWidth = 2;
-    dom.ctx.beginPath();
-    dom.ctx.moveTo(x, 0);
-    dom.ctx.lineTo(x, height);
-    dom.ctx.stroke();
+    ctx.strokeStyle = '#f72585';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
 
     // Draw playhead triangle
-    dom.ctx.fillStyle = '#f72585';
-    dom.ctx.beginPath();
-    dom.ctx.moveTo(x - 6, 0);
-    dom.ctx.lineTo(x + 6, 0);
-    dom.ctx.lineTo(x, 10);
-    dom.ctx.closePath();
-    dom.ctx.fill();
+    ctx.fillStyle = '#f72585';
+    ctx.beginPath();
+    ctx.moveTo(x - 6, 0);
+    ctx.lineTo(x + 6, 0);
+    ctx.lineTo(x, 10);
+    ctx.closePath();
+    ctx.fill();
 }
 
-export function handleCanvasClick(e) {
+export function handleCanvasClick(e: MouseEvent): void {
     if (!dom.audio.duration) return;
 
     const rect = dom.canvas.getBoundingClientRect();

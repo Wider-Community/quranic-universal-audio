@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Shared constants: localStorage keys and placeholder strings.
  */
@@ -15,7 +14,7 @@ export const LS_KEYS = {
     SEG_SPEED:       'insp_seg_speed',
     SEG_AUTOPLAY:    'insp_seg_autoplay',
     AUD_RECITER:     'insp_aud_reciter',
-};
+} as const;
 
 export const PLACEHOLDER_SELECT = '-- select --';
 export const PLACEHOLDER_DASH   = '--';

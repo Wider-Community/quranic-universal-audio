@@ -7,19 +7,12 @@ import { state, dom } from '../state';
 import { drawWaveformFromPeaksForSeg, drawSegPlayhead, _drawSplitHighlight } from '../waveform/draw';
 import { safePlay } from '../../shared/audio';
 import type { Segment } from '../../types/domain';
+import type { SegCanvas } from '../waveform/types';
 
-// ---------------------------------------------------------------------------
 // Canvas metadata attached by other edit modes; error-card animation
-// re-reads these to decide whether to keep drawing.
-// ---------------------------------------------------------------------------
-
-interface ValCanvas extends HTMLCanvasElement {
-    _splitData?: unknown;
-    _trimWindow?: unknown;
-    _splitHL?: { wfStart: number; wfEnd: number };
-    _wfCache?: ImageData;
-    _wfCacheKey?: string;
-}
+// re-reads these to decide whether to keep drawing. Use SegCanvas
+// canonical surface from waveform/types.ts.
+type ValCanvas = SegCanvas;
 
 // ---------------------------------------------------------------------------
 // getValCardAudio -- lazy-create a dedicated <audio> element for error cards
@@ -72,7 +65,7 @@ function _startValCardAnimation(btn: HTMLElement, seg: Segment): void {
     const row = btn.closest('.seg-row');
     const canvas = row ? row.querySelector<ValCanvas>('canvas') : null;
     if (!canvas) return;
-    const chapter = seg.chapter;
+    const chapter = seg.chapter ?? 0;
     const segAudioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
     const splitHL = canvas._splitHL;
     const wfStart = splitHL ? splitHL.wfStart : seg.time_start;

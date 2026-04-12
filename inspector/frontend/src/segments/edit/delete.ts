@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Delete segment operation.
  */
@@ -8,12 +7,14 @@ import { formatRef } from '../references';
 import { getChapterSegments, syncChapterSegsToAll } from '../data';
 import { computeSilenceAfter, applyVerseFilterAndRender } from '../filters';
 import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from '../validation/index';
+import type { Segment } from '../../types/domain';
 
 // ---------------------------------------------------------------------------
 // deleteSegment -- remove a segment and reindex
 // ---------------------------------------------------------------------------
 
-export function deleteSegment(seg, row, contextCategory = null) {
+export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: string | null = null): void {
+    void row;
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
     const currentChapter = parseInt(dom.segChapterSelect.value);
     const label = seg.chapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;

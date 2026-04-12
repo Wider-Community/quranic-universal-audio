@@ -1,7 +1,6 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Timestamps tab — init, dropdowns, data loading, event wiring.
- * This is the entry point: main.js imports './timestamps/index'.
+ * This is the entry point: main.ts imports './timestamps/index'.
  *
  * DOMContentLoaded initialises DOM refs (state.dom), sets up all event
  * listeners, restores localStorage preferences, and loads reciters.
@@ -19,6 +18,7 @@ import type {
     TsValidateResponse,
     TsVersesResponse,
 } from '../types/api';
+import type { TsReciter } from '../types/domain';
 
 import { state, dom } from './state';
 import { setupCanvas, decodeWaveform, cacheWaveformSnapshot, handleCanvasClick } from './waveform';
@@ -32,12 +32,19 @@ import { renderTsValidationPanel } from './validation';
 // Segment-relative time helpers (used by waveform, playback, animation, keyboard)
 // ---------------------------------------------------------------------------
 
-export function getSegRelTime() {
+export function getSegRelTime(): number {
     return dom.audio.currentTime - state.tsSegOffset;
 }
 
-export function getSegDuration() {
+export function getSegDuration(): number {
     return (state.tsSegEnd - state.tsSegOffset) || dom.audio.duration || 1;
+}
+
+// Non-null DOM lookup helper — state hub's _UNSET sentinel is populated here.
+function getElem<T extends HTMLElement>(id: string): T {
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`Missing #${id} in DOMContentLoaded`);
+    return el as T;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,25 +53,25 @@ export function getSegDuration() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Populate dom refs
-    dom.audio = document.getElementById('audio-player');
-    dom.canvas = document.getElementById('waveform-canvas');
+    dom.audio = getElem<HTMLAudioElement>('audio-player');
+    dom.canvas = getElem<HTMLCanvasElement>('waveform-canvas');
     dom.ctx = dom.canvas.getContext('2d');
-    dom.tsReciterSelect = document.getElementById('ts-reciter-select');
-    dom.tsChapterSelect = document.getElementById('ts-chapter-select');
-    dom.tsSegmentSelect = document.getElementById('ts-segment-select');
-    dom.phonemeLabels = document.getElementById('phoneme-labels');
-    dom.unifiedDisplay = document.getElementById('unified-display');
-    dom.randomBtn = document.getElementById('random-btn');
-    dom.randomReciterBtn = document.getElementById('random-reciter-btn');
-    dom.tsPrevBtn = document.getElementById('ts-prev-btn');
-    dom.tsNextBtn = document.getElementById('ts-next-btn');
-    dom.animDisplay = document.getElementById('animation-display');
-    dom.modeBtnA = document.getElementById('ts-mode-btn-a');
-    dom.modeBtnB = document.getElementById('ts-mode-btn-b');
-    dom.tsValidationEl = document.getElementById('ts-validation');
-    dom.tsSpeedSelect = document.getElementById('ts-speed-select');
-    dom.autoNextBtn = document.getElementById('ts-auto-next');
-    dom.autoRandomBtn = document.getElementById('ts-auto-random');
+    dom.tsReciterSelect = getElem<HTMLSelectElement>('ts-reciter-select');
+    dom.tsChapterSelect = getElem<HTMLSelectElement>('ts-chapter-select');
+    dom.tsSegmentSelect = getElem<HTMLSelectElement>('ts-segment-select');
+    dom.phonemeLabels = getElem<HTMLDivElement>('phoneme-labels');
+    dom.unifiedDisplay = getElem<HTMLDivElement>('unified-display');
+    dom.randomBtn = getElem<HTMLButtonElement>('random-btn');
+    dom.randomReciterBtn = getElem<HTMLButtonElement>('random-reciter-btn');
+    dom.tsPrevBtn = getElem<HTMLButtonElement>('ts-prev-btn');
+    dom.tsNextBtn = getElem<HTMLButtonElement>('ts-next-btn');
+    dom.animDisplay = getElem<HTMLDivElement>('animation-display');
+    dom.modeBtnA = getElem<HTMLButtonElement>('ts-mode-btn-a');
+    dom.modeBtnB = getElem<HTMLButtonElement>('ts-mode-btn-b');
+    dom.tsValidationEl = getElem<HTMLDivElement>('ts-validation');
+    dom.tsSpeedSelect = getElem<HTMLSelectElement>('ts-speed-select');
+    dom.autoNextBtn = getElem<HTMLButtonElement>('ts-auto-next');
+    dom.autoRandomBtn = getElem<HTMLButtonElement>('ts-auto-random');
 
     setupCanvas();
     setupEventListeners();
@@ -75,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Restore view mode + sub-settings immediately (no dependency on reciters)
     const _savedTsView = localStorage.getItem(LS_KEYS.TS_VIEW_MODE);
-    if (_savedTsView) {
+    if (_savedTsView === 'analysis' || _savedTsView === 'animation') {
         switchView(_savedTsView);
         if (_savedTsView === 'analysis') {
             const _savedLetters = localStorage.getItem(LS_KEYS.TS_SHOW_LETTERS);
@@ -90,7 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } else {
             const _savedGran = localStorage.getItem(LS_KEYS.TS_GRANULARITY);
-            if (_savedGran) switchGranularity(_savedGran);
+            if (_savedGran === 'words' || _savedGran === 'characters') switchGranularity(_savedGran);
         }
     }
 
@@ -106,11 +113,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const easing = cfg.anim_transition_easing === 'none' ? 'linear' : cfg.anim_transition_easing;
         root.setProperty('--anim-word-transition', 'opacity ' + wordDur + ' ' + easing);
         root.setProperty('--anim-char-transition', 'opacity ' + charDur + ' ' + easing);
-        root.setProperty('--anim-word-spacing', cfg.anim_word_spacing);
-        root.setProperty('--anim-line-height', cfg.anim_line_height);
-        root.setProperty('--anim-font-size', cfg.anim_font_size);
-        root.setProperty('--analysis-word-font-size', cfg.analysis_word_font_size);
-        root.setProperty('--analysis-letter-font-size', cfg.analysis_letter_font_size);
+        root.setProperty('--anim-word-spacing', String(cfg.anim_word_spacing));
+        root.setProperty('--anim-line-height', String(cfg.anim_line_height));
+        root.setProperty('--anim-font-size', String(cfg.anim_font_size));
+        root.setProperty('--analysis-word-font-size', String(cfg.analysis_word_font_size));
+        root.setProperty('--analysis-letter-font-size', String(cfg.analysis_letter_font_size));
     });
 });
 
@@ -118,7 +125,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Event listeners
 // ---------------------------------------------------------------------------
 
-function setupEventListeners() {
+function setupEventListeners(): void {
     dom.randomBtn.addEventListener('click', () => loadRandomTimestamp());
     dom.randomReciterBtn.addEventListener('click', () => loadRandomTimestamp(dom.tsReciterSelect.value || null));
     dom.tsPrevBtn.addEventListener('click', () => navigateVerse(-1));
@@ -141,7 +148,7 @@ function setupEventListeners() {
     dom.audio.addEventListener('error', () => {
         const err = dom.audio.error;
         const code = err ? err.code : 0;
-        const msgs = { 1: 'aborted', 2: 'network error', 3: 'decode error', 4: 'unsupported format' };
+        const msgs: Record<number, string> = { 1: 'aborted', 2: 'network error', 3: 'decode error', 4: 'unsupported format' };
         console.error('Audio load error:', msgs[code] || `code ${code}`, dom.audio.src);
         // Clean up pending listener
         if (state._currentOnMeta) {
@@ -179,9 +186,9 @@ function setupEventListeners() {
 
     document.addEventListener('keydown', handleKeydown);
 
-    let _resizeTimer = null;
+    let _resizeTimer: ReturnType<typeof setTimeout> | null = null;
     window.addEventListener('resize', () => {
-        clearTimeout(_resizeTimer);
+        if (_resizeTimer !== null) clearTimeout(_resizeTimer);
         _resizeTimer = setTimeout(() => {
             setupCanvas();
             cacheWaveformSnapshot();
@@ -193,7 +200,7 @@ function setupEventListeners() {
         if (state.tsViewMode === 'analysis') {
             state.tsShowLetters = !state.tsShowLetters;
             dom.modeBtnA.classList.toggle('active', state.tsShowLetters);
-            localStorage.setItem(LS_KEYS.TS_SHOW_LETTERS, state.tsShowLetters);
+            localStorage.setItem(LS_KEYS.TS_SHOW_LETTERS, String(state.tsShowLetters));
             dom.unifiedDisplay.querySelectorAll('.mega-letters').forEach(el => {
                 el.classList.toggle('hidden', !state.tsShowLetters);
             });
@@ -207,7 +214,7 @@ function setupEventListeners() {
         if (state.tsViewMode === 'analysis') {
             state.tsShowPhonemes = !state.tsShowPhonemes;
             dom.modeBtnB.classList.toggle('active', state.tsShowPhonemes);
-            localStorage.setItem(LS_KEYS.TS_SHOW_PHONEMES, state.tsShowPhonemes);
+            localStorage.setItem(LS_KEYS.TS_SHOW_PHONEMES, String(state.tsShowPhonemes));
             dom.unifiedDisplay.querySelectorAll('.mega-phonemes').forEach(el => {
                 el.classList.toggle('hidden', !state.tsShowPhonemes);
             });
@@ -222,11 +229,12 @@ function setupEventListeners() {
     });
 
     // View toggle (Analysis / Animation)
-    document.querySelectorAll('.ts-view-btn').forEach(btn => {
+    document.querySelectorAll<HTMLElement>('.ts-view-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.ts-view-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            switchView(btn.dataset.view);
+            const view = btn.dataset.view;
+            if (view === 'analysis' || view === 'animation') switchView(view);
         });
     });
 }
@@ -235,7 +243,7 @@ function setupEventListeners() {
 // Selection flow: Reciter -> Chapter -> Segment
 // ---------------------------------------------------------------------------
 
-async function loadTsReciters() {
+async function loadTsReciters(): Promise<void> {
     try {
         state.tsAllReciters = await fetchJson<TsRecitersResponse>('/api/ts/reciters');
         renderTsReciters();
@@ -253,18 +261,18 @@ async function loadTsReciters() {
     }
 }
 
-function renderTsReciters() {
+function renderTsReciters(): void {
     dom.tsReciterSelect.innerHTML = '<option value="">-- select --</option>';
 
     // Group by audio_source
-    const grouped = {};  // source -> [reciter, ...]
-    const uncategorized = [];
+    const grouped: Record<string, TsReciter[]> = {};
+    const uncategorized: TsReciter[] = [];
 
     for (const r of state.tsAllReciters) {
         const src = r.audio_source || '';
         if (src) {
             if (!grouped[src]) grouped[src] = [];
-            grouped[src].push(r);
+            grouped[src]!.push(r);
         } else {
             uncategorized.push(r);
         }
@@ -273,7 +281,7 @@ function renderTsReciters() {
     for (const source of Object.keys(grouped).sort()) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = source;
-        for (const r of grouped[source]) {
+        for (const r of grouped[source] ?? []) {
             const opt = document.createElement('option');
             opt.value = r.slug;
             opt.textContent = r.name;
@@ -295,7 +303,7 @@ function renderTsReciters() {
     }
 }
 
-async function onTsReciterChange() {
+async function onTsReciterChange(): Promise<void> {
     const reciter = dom.tsReciterSelect.value;
     if (reciter) localStorage.setItem(LS_KEYS.TS_RECITER, reciter);
     dom.tsChapterSelect.innerHTML = '<option value="">-- select --</option>';
@@ -313,12 +321,12 @@ async function onTsReciterChange() {
         if (chapResult.status === 'fulfilled' && Array.isArray(chapResult.value)) {
             chapResult.value.forEach(ch => {
                 const opt = document.createElement('option');
-                opt.value = ch; opt.textContent = surahOptionText(ch);
+                opt.value = String(ch); opt.textContent = surahOptionText(ch);
                 dom.tsChapterSelect.appendChild(opt);
             });
             if (state.tsChapterSS) state.tsChapterSS.refresh();
         }
-        if (valResult.status === 'fulfilled' && !valResult.value.error) {
+        if (valResult.status === 'fulfilled' && !(valResult.value as unknown as { error?: string }).error) {
             state.tsValidationData = valResult.value;
             renderTsValidationPanel(state.tsValidationData);
         }
@@ -327,15 +335,15 @@ async function onTsReciterChange() {
     }
 }
 
-export function clearTsValidation() {
+export function clearTsValidation(): void {
     state.tsValidationData = null;
     dom.tsValidationEl.innerHTML = '';
     dom.tsValidationEl.hidden = true;
 }
 
-export async function jumpToTsVerse(verseKey) {
+export async function jumpToTsVerse(verseKey: string): Promise<void> {
     if (!verseKey || !verseKey.includes(':')) return;
-    const chapter = verseKey.split(':')[0];
+    const chapter = verseKey.split(':')[0] ?? '';
 
     if (dom.tsChapterSelect.value !== chapter) {
         dom.tsChapterSelect.value = chapter;
@@ -345,7 +353,7 @@ export async function jumpToTsVerse(verseKey) {
 
     const opts = dom.tsSegmentSelect.options;
     for (let i = 0; i < opts.length; i++) {
-        if (opts[i].value === verseKey) {
+        if (opts[i]?.value === verseKey) {
             dom.tsSegmentSelect.selectedIndex = i;
             break;
         }
@@ -354,7 +362,7 @@ export async function jumpToTsVerse(verseKey) {
     updateNavButtons();
 }
 
-export async function onTsChapterChange() {
+export async function onTsChapterChange(): Promise<void> {
     const reciter = dom.tsReciterSelect.value;
     const chapter = dom.tsChapterSelect.value;
     dom.tsSegmentSelect.innerHTML = '<option value="">--</option>';
@@ -371,7 +379,7 @@ export async function onTsChapterChange() {
         verses.forEach(v => {
             const opt = document.createElement('option');
             opt.value = v.ref;
-            opt.textContent = v.ref.split(':')[1];
+            opt.textContent = v.ref.split(':')[1] ?? v.ref;
             opt.dataset.audioUrl = v.audio_url || '';
             dom.tsSegmentSelect.appendChild(opt);
         });
@@ -381,7 +389,7 @@ export async function onTsChapterChange() {
     updateNavButtons();
 }
 
-export async function onTsVerseChange() {
+export async function onTsVerseChange(): Promise<void> {
     const reciter = dom.tsReciterSelect.value;
     const chapter = dom.tsChapterSelect.value;
     const verseRef = dom.tsSegmentSelect.value;
@@ -390,7 +398,7 @@ export async function onTsVerseChange() {
     await loadTimestampVerse(reciter, verseRef);
 }
 
-async function loadTimestampVerse(reciter, verseRef) {
+async function loadTimestampVerse(reciter: string, verseRef: string): Promise<void> {
     state.tsSegEnd = Infinity;  // prevent timeupdate auto-advance during load
     dom.randomBtn.disabled = true;
     dom.randomReciterBtn.disabled = true;
@@ -451,7 +459,7 @@ async function loadTimestampVerse(reciter, verseRef) {
     }
 }
 
-export async function loadRandomTimestamp(reciter = null) {
+export async function loadRandomTimestamp(reciter: string | null = null): Promise<void> {
     state.tsSegEnd = Infinity;  // prevent timeupdate auto-advance during load
     dom.randomBtn.disabled = true;
     dom.randomReciterBtn.disabled = true;
@@ -485,14 +493,14 @@ export async function loadRandomTimestamp(reciter = null) {
         }
 
         // Populate chapter + verse dropdowns in parallel (lightweight APIs only)
-        const fetches = [];
+        const fetches: Promise<void>[] = [];
         if (reciterChanged) fetches.push(
             fetchJson<TsChaptersResponse>(`/api/ts/chapters/${encodeURIComponent(data.reciter)}`).then(chapters => {
                 dom.tsChapterSelect.innerHTML = '<option value="">-- select --</option>';
                 if (!Array.isArray(chapters)) return;
                 chapters.forEach(ch => {
                     const opt = document.createElement('option');
-                    opt.value = ch; opt.textContent = surahOptionText(ch);
+                    opt.value = String(ch); opt.textContent = surahOptionText(ch);
                     dom.tsChapterSelect.appendChild(opt);
                 });
                 dom.tsChapterSelect.value = String(data.chapter);
@@ -504,7 +512,7 @@ export async function loadRandomTimestamp(reciter = null) {
                 dom.tsSegmentSelect.innerHTML = '<option value="">--</option>';
                 (vData.verses || []).forEach(v => {
                     const opt = document.createElement('option');
-                    opt.value = v.ref; opt.textContent = v.ref.split(':')[1];
+                    opt.value = v.ref; opt.textContent = v.ref.split(':')[1] ?? v.ref;
                     opt.dataset.audioUrl = v.audio_url || '';
                     dom.tsSegmentSelect.appendChild(opt);
                 });
@@ -532,7 +540,7 @@ export async function loadRandomTimestamp(reciter = null) {
     }
 }
 
-function clearDisplay() {
+function clearDisplay(): void {
     state.intervals = [];
     state.words = [];
     state.waveformData = null;
@@ -552,14 +560,14 @@ function clearDisplay() {
     state.cachedLabels = [];
     state.prevActiveWordIdx = -1;
     state.prevActivePhonemeIdx = -1;
-    if (dom.canvas.width && dom.canvas.height) {
+    if (dom.ctx && dom.canvas.width && dom.canvas.height) {
         dom.ctx.fillStyle = '#0f0f23';
         dom.ctx.fillRect(0, 0, dom.canvas.width, dom.canvas.height);
     }
     updateNavButtons();
 }
 
-function updateNavButtons() {
+function updateNavButtons(): void {
     const idx = dom.tsSegmentSelect.selectedIndex;
     const len = dom.tsSegmentSelect.options.length;
     dom.tsPrevBtn.disabled = (idx <= 1);           // 0 = "--" placeholder, 1 = first verse

@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Save flow: preview, confirm, execute save to server.
  */
@@ -7,8 +6,6 @@ import { state, dom, isDirty, _SEG_NORMAL_IDS } from './state';
 import { surahOptionText } from '../shared/surah-info';
 import { getChapterSegments, onSegReciterChange } from './data';
 import { _ensureWaveformObserver } from './waveform/index';
-import { applyFiltersAndRender } from './filters';
-import { renderSegList } from './rendering';
 import { refreshValidation } from './validation/index';
 import { renderEditHistoryPanel } from './history/index';
 import { _buildSplitLineage, _buildSplitChains } from './history/index';
@@ -16,12 +13,34 @@ import { renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows, _co
 import { stopErrorCardAudio } from './validation/error-card-audio';
 import { fetchJson, fetchJsonOrNull } from '../shared/api';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
+import type { HistoryBatch, EditOp, Segment } from '../types/domain';
+
+interface SavePreviewBatch {
+    batch_id: null;
+    saved_at_utc: null;
+    chapter: number;
+    save_mode: 'full_replace' | 'patch';
+    operations: EditOp[];
+}
+
+interface SavePreviewData {
+    batches: SavePreviewBatch[];
+    summary: {
+        total_operations: number;
+        total_batches: number;
+        chapters_edited: number;
+        verses_edited: number;
+        op_counts: Record<string, number>;
+        fix_kind_counts: Record<string, number>;
+    };
+    warningChapters: number[];
+}
 
 // ---------------------------------------------------------------------------
 // onSegSaveClick -- entry point from Save button
 // ---------------------------------------------------------------------------
 
-export async function onSegSaveClick() {
+export async function onSegSaveClick(): Promise<void> {
     if (!isDirty()) return;
     const reciter = dom.segReciterSelect.value;
     if (!reciter) return;
@@ -32,11 +51,11 @@ export async function onSegSaveClick() {
 // buildSavePreviewData
 // ---------------------------------------------------------------------------
 
-export function buildSavePreviewData() {
-    const batches = [];
-    const warningChapters = [];
-    const opCounts = {};
-    const fixKindCounts = {};
+export function buildSavePreviewData(): SavePreviewData {
+    const batches: SavePreviewBatch[] = [];
+    const warningChapters: number[] = [];
+    const opCounts: Record<string, number> = {};
+    const fixKindCounts: Record<string, number> = {};
     let totalOps = 0;
 
     for (const [ch, dirtyEntry] of state.segDirtyMap) {
@@ -44,13 +63,14 @@ export function buildSavePreviewData() {
         if (chOps.length === 0) { warningChapters.push(ch); continue; }
         for (const op of chOps) {
             opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
-            fixKindCounts[op.fix_kind || 'manual'] = (fixKindCounts[op.fix_kind || 'manual'] || 0) + 1;
+            const kind = op.fix_kind || 'manual';
+            fixKindCounts[kind] = (fixKindCounts[kind] || 0) + 1;
             totalOps++;
         }
         batches.push({
             batch_id: null,
             saved_at_utc: null,
-            chapter: parseInt(ch),
+            chapter: typeof ch === 'string' ? parseInt(ch) : ch,
             save_mode: dirtyEntry.structural ? 'full_replace' : 'patch',
             operations: chOps,
         });
@@ -60,7 +80,7 @@ export function buildSavePreviewData() {
         total_operations: totalOps,
         total_batches: batches.length + warningChapters.length,
         chapters_edited: batches.length + warningChapters.length,
-        verses_edited: _countVersesFromBatches(batches) ?? 0,
+        verses_edited: _countVersesFromBatches(batches as unknown as HistoryBatch[]) ?? 0,
         op_counts: opCounts,
         fix_kind_counts: fixKindCounts,
     };
@@ -71,17 +91,17 @@ export function buildSavePreviewData() {
 // showSavePreview
 // ---------------------------------------------------------------------------
 
-export function showSavePreview() {
+export function showSavePreview(): void {
     if (!dom.segSavePreview.hidden) return;
     state._segSavedPreviewState = { scrollTop: dom.segListEl.scrollTop };
     const data = buildSavePreviewData();
 
     state._segSavedChains = { splitChains: state._splitChains, chainedOpIds: state._chainedOpIds };
-    const allBatches = [...(state.segHistoryData?.batches || []), ...data.batches];
+    const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as unknown as HistoryBatch[])];
     const splitLineage = _buildSplitLineage(allBatches);
     const built = _buildSplitChains(allBatches, splitLineage);
-    state._splitChains = built.chains;
-    state._chainedOpIds = built.chainedOpIds;
+    state._splitChains = built.chains as Map<string, unknown> | null;
+    state._chainedOpIds = built.chainedOpIds as Set<string> | null;
 
     renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
 
@@ -94,9 +114,9 @@ export function showSavePreview() {
         dom.segSavePreviewStats.prepend(warn);
     }
 
-    renderHistoryBatches(data.batches, dom.segSavePreviewBatches);
+    renderHistoryBatches(data.batches as unknown as HistoryBatch[], dom.segSavePreviewBatches);
 
-    dom.segSavePreviewBatches.querySelectorAll('.seg-history-batch-time').forEach(el => {
+    dom.segSavePreviewBatches.querySelectorAll<HTMLElement>('.seg-history-batch-time').forEach(el => {
         if (el.textContent === 'Pending') el.style.color = '#f0a500';
     });
 
@@ -105,18 +125,18 @@ export function showSavePreview() {
         if (el) { el.dataset.hiddenByPreview = el.hidden ? '1' : ''; el.hidden = true; }
     }
     const panel = document.getElementById('segments-panel');
-    const controls = panel.querySelector('.seg-controls');
+    const controls = panel?.querySelector<HTMLElement>('.seg-controls');
     if (controls) { controls.dataset.hiddenByPreview = controls.hidden ? '1' : ''; controls.hidden = true; }
-    const shortcuts = panel.querySelector('.shortcuts-guide');
+    const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
     if (shortcuts) { shortcuts.dataset.hiddenByPreview = shortcuts.hidden ? '1' : ''; shortcuts.hidden = true; }
     dom.segHistoryView.hidden = true;
 
     dom.segSavePreview.hidden = false;
 
     const observer = _ensureWaveformObserver();
-    dom.segSavePreview.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+    dom.segSavePreview.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
     requestAnimationFrame(() => {
-        dom.segSavePreview.querySelectorAll('.seg-history-diff').forEach(d => drawHistoryArrows(d));
+        dom.segSavePreview.querySelectorAll<HTMLElement>('.seg-history-diff').forEach(d => drawHistoryArrows(d));
     });
 }
 
@@ -124,7 +144,7 @@ export function showSavePreview() {
 // hideSavePreview
 // ---------------------------------------------------------------------------
 
-export function hideSavePreview(restoreScroll = true) {
+export function hideSavePreview(restoreScroll = true): void {
     stopErrorCardAudio();
     dom.segSavePreview.hidden = true;
     dom.segSavePreviewStats.innerHTML = '';
@@ -141,9 +161,9 @@ export function hideSavePreview(restoreScroll = true) {
         if (el) { if (el.dataset.hiddenByPreview !== '1') el.hidden = false; delete el.dataset.hiddenByPreview; }
     }
     const panel = document.getElementById('segments-panel');
-    const controls = panel.querySelector('.seg-controls');
+    const controls = panel?.querySelector<HTMLElement>('.seg-controls');
     if (controls) { if (controls.dataset.hiddenByPreview !== '1') controls.hidden = false; delete controls.dataset.hiddenByPreview; }
-    const shortcuts = panel.querySelector('.shortcuts-guide');
+    const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
     if (shortcuts) { if (shortcuts.dataset.hiddenByPreview !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByPreview; }
 
     if (state._segDataStale) {
@@ -161,12 +181,46 @@ export function hideSavePreview(restoreScroll = true) {
 // confirmSaveFromPreview / executeSave
 // ---------------------------------------------------------------------------
 
-export async function confirmSaveFromPreview() {
+export async function confirmSaveFromPreview(): Promise<void> {
     hideSavePreview(false);
     await executeSave();
 }
 
-export async function executeSave() {
+interface SaveSegmentPayloadFull {
+    segment_uid: string;
+    time_start: number;
+    time_end: number;
+    matched_ref: string;
+    matched_text: string;
+    confidence: number;
+    phonemes_asr: string;
+    audio_url: string;
+    wrap_word_ranges?: unknown;
+    has_repeated_words?: boolean;
+    ignored_categories?: string[];
+}
+
+interface SaveSegmentPayloadPatch {
+    index: number;
+    segment_uid: string;
+    matched_ref: string;
+    matched_text: string;
+    confidence: number;
+    ignored_categories?: string[];
+}
+
+interface SavePayloadFull {
+    full_replace: true;
+    segments: SaveSegmentPayloadFull[];
+    operations: EditOp[];
+}
+
+interface SavePayloadPatch {
+    segments: SaveSegmentPayloadPatch[];
+    operations: EditOp[];
+}
+
+export async function executeSave(): Promise<void> {
     const reciter = dom.segReciterSelect.value;
     if (!reciter) return;
 
@@ -179,15 +233,15 @@ export async function executeSave() {
 
     try {
         for (const [ch, entry] of state.segDirtyMap) {
-            const chSegs = getChapterSegments(ch);
-            let payload;
+            const chSegs: Segment[] = getChapterSegments(ch);
+            let payload: SavePayloadFull | SavePayloadPatch;
             const chOps = state.segOpLog.get(ch) || [];
 
             if (entry.structural) {
                 payload = {
                     full_replace: true,
                     segments: chSegs.map(s => {
-                        const o = {
+                        const o: SaveSegmentPayloadFull = {
                             segment_uid: s.segment_uid || '',
                             time_start: s.time_start,
                             time_end: s.time_end,
@@ -206,11 +260,11 @@ export async function executeSave() {
                 };
                 savedChanges += chOps.length;
             } else {
-                const updates = [];
+                const updates: SaveSegmentPayloadPatch[] = [];
                 for (const idx of entry.indices) {
                     const seg = chSegs.find(s => s.index === idx);
                     if (seg) {
-                        const upd = {
+                        const upd: SaveSegmentPayloadPatch = {
                             index: seg.index,
                             segment_uid: seg.segment_uid || '',
                             matched_ref: seg.matched_ref,

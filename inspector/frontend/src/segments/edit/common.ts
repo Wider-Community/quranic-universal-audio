@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Shared edit-mode infrastructure: enterEditWithBuffer, exitEditMode,
  * _playRange, and the registration pattern for trim/split modes.
@@ -11,38 +10,41 @@ import { stopSegAnimation } from '../playback/index';
 import { safePlay } from '../../shared/audio';
 import { getSegByChapterIndex } from '../data';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
+import type { Segment } from '../../types/domain';
+import type { SegCanvas } from '../waveform/types';
+import type { DrawWaveformFn, EnterTrimModeFn, EnterSplitModeFn } from '../../types/registry';
 
 // ---------------------------------------------------------------------------
 // Registration pattern: trim/split modules register their entry functions
 // ---------------------------------------------------------------------------
 
-let _editOverlay = null;
+let _editOverlay: HTMLDivElement | null = null;
 
-export function _addEditOverlay() {
+export function _addEditOverlay(): void {
     if (_editOverlay) return;
     _editOverlay = document.createElement('div');
     _editOverlay.className = 'seg-edit-overlay';
     document.body.appendChild(_editOverlay);
 }
 
-function _removeEditOverlay() {
+function _removeEditOverlay(): void {
     if (_editOverlay) {
         _editOverlay.remove();
         _editOverlay = null;
     }
 }
 
-let _enterTrimMode = null;
-let _enterSplitMode = null;
-let _drawSplitWaveformFn = null;
-let _drawTrimWaveformFn = null;
+let _enterTrimMode: EnterTrimModeFn | null = null;
+let _enterSplitMode: EnterSplitModeFn | null = null;
+let _drawSplitWaveformFn: DrawWaveformFn | null = null;
+let _drawTrimWaveformFn: DrawWaveformFn | null = null;
 
-export function registerEditModes(trim, split) {
+export function registerEditModes(trim: EnterTrimModeFn, split: EnterSplitModeFn): void {
     _enterTrimMode = trim;
     _enterSplitMode = split;
 }
 
-export function registerEditDrawFns(trimDraw, splitDraw) {
+export function registerEditDrawFns(trimDraw: DrawWaveformFn, splitDraw: DrawWaveformFn): void {
     _drawTrimWaveformFn = trimDraw;
     _drawSplitWaveformFn = splitDraw;
 }
@@ -51,19 +53,24 @@ export function registerEditDrawFns(trimDraw, splitDraw) {
 // enterEditWithBuffer -- entry point for trim/split from event delegation
 // ---------------------------------------------------------------------------
 
-export function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
+export function enterEditWithBuffer(
+    seg: Segment,
+    row: HTMLElement,
+    mode: 'trim' | 'split',
+    contextCategory: string | null = null,
+): void {
     if (state.segEditMode) return;
 
     const isErrorPlaying = state._activeAudioSource === 'error' && state.valCardAudio && !state.valCardAudio.paused;
     const prePausePlayMs = isErrorPlaying
-        ? state.valCardAudio.currentTime * 1000
+        ? state.valCardAudio!.currentTime * 1000
         : (dom.segAudioEl.paused ? null : dom.segAudioEl.currentTime * 1000);
 
     if (isErrorPlaying) stopErrorCardAudio();
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
     state._segContinuousPlay = false;
 
-    const playCol = row.querySelector('.seg-play-col');
+    const playCol = row.querySelector<HTMLElement>('.seg-play-col');
     if (playCol) playCol.hidden = true;
 
     state._pendingOp = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment',
@@ -71,8 +78,8 @@ export function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
     state._pendingOp.targets_before = [snapshotSeg(seg)];
 
     try {
-        if (mode === 'trim') _enterTrimMode(seg, row);
-        else if (mode === 'split') _enterSplitMode(seg, row, prePausePlayMs);
+        if (mode === 'trim' && _enterTrimMode) _enterTrimMode(seg, row);
+        else if (mode === 'split' && _enterSplitMode) _enterSplitMode(seg, row, prePausePlayMs);
     } catch (e) {
         console.error(`[${mode}] error entering edit mode:`, e);
         state._pendingOp = null;
@@ -80,10 +87,10 @@ export function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
         state.segEditIndex = -1;
         _removeEditOverlay();
         document.body.classList.remove('seg-edit-active');
-        const targetRow = document.querySelector('.seg-row.seg-edit-target');
+        const targetRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
         if (targetRow) {
             targetRow.querySelector('.seg-edit-inline')?.remove();
-            const acts = targetRow.querySelector('.seg-actions');
+            const acts = targetRow.querySelector<HTMLElement>('.seg-actions');
             if (acts) acts.hidden = false;
             targetRow.classList.remove('seg-edit-target');
         }
@@ -94,19 +101,19 @@ export function enterEditWithBuffer(seg, row, mode, contextCategory = null) {
 // exitEditMode -- shared cleanup for trim/split
 // ---------------------------------------------------------------------------
 
-export function exitEditMode() {
+export function exitEditMode(): void {
     state._pendingOp = null;
     state._accordionOpCtx = null;
 
-    const editRow = document.querySelector('.seg-row.seg-edit-target');
+    const editRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
     if (editRow) {
         editRow.querySelector('.seg-edit-inline')?.remove();
-        const actions = editRow.querySelector('.seg-actions');
+        const actions = editRow.querySelector<HTMLElement>('.seg-actions');
         if (actions) actions.hidden = false;
-        const playCol = editRow.querySelector('.seg-play-col');
+        const playCol = editRow.querySelector<HTMLElement>('.seg-play-col');
         if (playCol) playCol.hidden = false;
 
-        const canvas = editRow.querySelector('canvas');
+        const canvas = editRow.querySelector<SegCanvas>('canvas');
         if (canvas) {
             canvas._editCleanup?.();
             delete canvas._trimWindow; delete canvas._splitData;
@@ -115,7 +122,7 @@ export function exitEditMode() {
             canvas._wfCache = null;
             canvas.style.cursor = '';
             const seg = resolveSegFromRow(editRow);
-            if (seg) drawWaveformFromPeaksForSeg(canvas, seg, seg.chapter);
+            if (seg) drawWaveformFromPeaksForSeg(canvas, seg, seg.chapter ?? 0);
         }
     }
 
@@ -138,37 +145,38 @@ export function exitEditMode() {
 // _playRange -- shared preview playback with animated playhead
 // ---------------------------------------------------------------------------
 
-export function _playRange(startMs, endMs) {
+export function _playRange(startMs: number, endMs: number): void {
     if (state._previewStopHandler) {
         dom.segAudioEl.removeEventListener('timeupdate', state._previewStopHandler);
         state._previewStopHandler = null;
     }
     if (state._playRangeRAF) { cancelAnimationFrame(state._playRangeRAF); state._playRangeRAF = null; }
     const start = startMs / 1000;
-    const canvas = _getEditCanvas();
+    const canvas = _getEditCanvas() as SegCanvas | null;
 
-    let wfStart, wfEnd;
+    let wfStart: number, wfEnd: number;
     if (canvas?._trimWindow) { wfStart = canvas._trimWindow.windowStart; wfEnd = canvas._trimWindow.windowEnd; }
     else if (canvas?._splitData) { wfStart = canvas._splitData.seg.time_start; wfEnd = canvas._splitData.seg.time_end; }
     else { wfStart = startMs; wfEnd = endMs; }
 
-    const cleanup = () => {
+    const cleanup = (): void => {
         if (state._playRangeRAF) { cancelAnimationFrame(state._playRangeRAF); state._playRangeRAF = null; }
         if (canvas?._splitData) _drawSplitWaveformFn?.(canvas);
         else if (canvas?._trimWindow) _drawTrimWaveformFn?.(canvas);
     };
 
     const inEditMode = canvas && (canvas._splitData || canvas._trimWindow);
-    let _playRangeSnapshot = null;
+    let _playRangeSnapshot: ImageData | null = null;
     if (canvas && !inEditMode) {
-        _playRangeSnapshot = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const ctx = canvas.getContext('2d');
+        if (ctx) _playRangeSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
 
-    function animatePlayhead() {
+    function animatePlayhead(): void {
         if (!canvas || dom.segAudioEl.paused) return;
         const curMs = dom.segAudioEl.currentTime * 1000;
         let effectiveEnd = endMs;
-        let loopStart = null;
+        let loopStart: number | null = null;
         if (state._previewLooping === 'trim' && canvas?._trimWindow) {
             effectiveEnd = canvas._trimWindow.currentEnd;
             loopStart = canvas._trimWindow.currentStart;
@@ -198,10 +206,13 @@ export function _playRange(startMs, endMs) {
         if (canvas._splitData) _drawSplitWaveformFn?.(canvas);
         else if (canvas._trimWindow) _drawTrimWaveformFn?.(canvas);
         else if (_playRangeSnapshot) {
-            canvas.getContext('2d').putImageData(_playRangeSnapshot, 0, 0);
+            const ctx2 = canvas.getContext('2d');
+            if (ctx2) ctx2.putImageData(_playRangeSnapshot, 0, 0);
         }
         if (curMs >= wfStart && curMs <= wfEnd) {
-            const ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { state._playRangeRAF = requestAnimationFrame(animatePlayhead); return; }
+            const w = canvas.width, h = canvas.height;
             const x = ((curMs - wfStart) / (wfEnd - wfStart)) * w;
             ctx.strokeStyle = '#f72585'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
@@ -211,7 +222,7 @@ export function _playRange(startMs, endMs) {
         state._playRangeRAF = requestAnimationFrame(animatePlayhead);
     }
 
-    const doPlay = () => {
+    const doPlay = (): void => {
         dom.segAudioEl.currentTime = start;
         dom.segAudioEl.playbackRate = parseFloat(dom.segSpeedSelect.value);
         safePlay(dom.segAudioEl);

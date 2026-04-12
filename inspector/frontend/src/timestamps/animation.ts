@@ -1,10 +1,10 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Timestamps tab — animation view: reveal-mode engine, granularity switching,
  * DOM building, and per-frame animation update.
  */
 
 import { state, dom } from './state';
+import type { TsAnimCache, TsAnimCacheItem } from './state';
 import {
     DAGGER_ALEF, ZWSP,
     isCombiningMark, charsMatch, splitIntoCharGroups,
@@ -13,7 +13,7 @@ import { LS_KEYS } from '../shared/constants';
 import { getSegRelTime } from './index';
 import { updateDisplay } from './playback';
 
-// NOTE: circular dependency with index.js (getSegRelTime) and playback.js
+// NOTE: circular dependency with index.ts (getSegRelTime) and playback.ts
 // (updateDisplay for word click handlers). Safe because these functions are
 // only called at runtime, long after all module-level code has executed.
 
@@ -22,7 +22,7 @@ import { updateDisplay } from './playback';
 // ---------------------------------------------------------------------------
 
 /** Build animation display DOM from words array. */
-export function buildAnimationDisplay() {
+export function buildAnimationDisplay(): void {
     dom.animDisplay.innerHTML = '';
     if (!state.words.length) return;
 
@@ -36,8 +36,8 @@ export function buildAnimationDisplay() {
 
         const wordSpan = document.createElement('span');
         wordSpan.className = 'anim-word';
-        wordSpan.dataset.start = word.start;
-        wordSpan.dataset.end = word.end;
+        wordSpan.dataset.start = String(word.start);
+        wordSpan.dataset.end = String(word.end);
         wordSpan.dataset.pos = word.location;
 
         const displayText = word.display_text || word.text;
@@ -56,43 +56,51 @@ export function buildAnimationDisplay() {
 
         // Fuzzy two-pointer: walk display chars + MFA letters simultaneously
         let mfaIdx = 0;
-        const stamped = new Set();
+        const stamped = new Set<number>();
         for (let di = 0; di < charSpans.length; di++) {
             if (stamped.has(di)) continue;
-            const displayChar = charSpans[di].text;
+            const span = charSpans[di];
+            if (!span) continue;
+            const displayChar = span.text;
             if (mfaIdx < letters.length) {
-                const mfaChar = letters[mfaIdx].char || '';
+                const lt = letters[mfaIdx];
+                if (!lt) { mfaIdx++; continue; }
+                const mfaChar = lt.char || '';
                 if (charsMatch(mfaChar, displayChar)) {
-                    const lt = letters[mfaIdx];
                     const start = (lt.start != null) ? lt.start : word.start;
                     const end = (lt.end != null) ? lt.end : word.end;
-                    charSpans[di].el.dataset.start = start;
-                    charSpans[di].el.dataset.end = end;
+                    span.el.dataset.start = String(start);
+                    span.el.dataset.end = String(end);
 
                     // Peek ahead: combining-mark-only groups that belong to same MFA letter
                     const mfaNfd = mfaChar.normalize('NFD');
                     let peek = di + 1;
                     while (peek < charSpans.length) {
-                        const peekText = charSpans[peek].text.replace(/\u0640/g, '');
-                        if (!peekText || ![...peekText].every(c => isCombiningMark(c.codePointAt(0))))
+                        const peekSpan = charSpans[peek];
+                        if (!peekSpan) break;
+                        const peekText = peekSpan.text.replace(/\u0640/g, '');
+                        if (!peekText || ![...peekText].every(c => {
+                            const cp = c.codePointAt(0);
+                            return cp !== undefined && isCombiningMark(cp);
+                        }))
                             break;
                         if (![...peekText].some(c => mfaNfd.includes(c)))
                             break;
-                        charSpans[peek].el.dataset.start = start;
-                        charSpans[peek].el.dataset.end = end;
+                        peekSpan.el.dataset.start = String(start);
+                        peekSpan.el.dataset.end = String(end);
                         stamped.add(peek);
                         peek++;
                     }
                     mfaIdx++;
                 } else {
                     // No match -- use word timing as fallback
-                    charSpans[di].el.dataset.start = word.start;
-                    charSpans[di].el.dataset.end = word.end;
+                    span.el.dataset.start = String(word.start);
+                    span.el.dataset.end = String(word.end);
                 }
             } else {
                 // Exhausted MFA letters -- use word timing
-                charSpans[di].el.dataset.start = word.start;
-                charSpans[di].el.dataset.end = word.end;
+                span.el.dataset.start = String(word.start);
+                span.el.dataset.end = String(word.end);
             }
         }
 
@@ -111,12 +119,13 @@ export function buildAnimationDisplay() {
     });
 
     // Merge group IDs for chars with identical start+end across ALL words
-    const allChars = dom.animDisplay.querySelectorAll('.anim-char');
-    const timingMap = {};  // "start|end" -> groupId
+    const allChars = dom.animDisplay.querySelectorAll<HTMLElement>('.anim-char');
+    const timingMap: Record<string, string | undefined> = {};
     allChars.forEach(ch => {
         const key = `${ch.dataset.start}|${ch.dataset.end}`;
-        if (timingMap[key]) {
-            ch.dataset.groupId = timingMap[key];
+        const existing = timingMap[key];
+        if (existing) {
+            ch.dataset.groupId = existing;
         } else {
             timingMap[key] = ch.dataset.groupId;
         }
@@ -124,21 +133,21 @@ export function buildAnimationDisplay() {
 }
 
 /** Build animation cache from container elements. */
-export function initAnimCache(container, selector) {
-    const elements = Array.from(container.querySelectorAll(selector));
-    const cache = elements.map((el, idx) => ({
+export function initAnimCache(container: HTMLElement, selector: string): TsAnimCache {
+    const elements = Array.from(container.querySelectorAll<HTMLElement>(selector));
+    const cache: TsAnimCache = elements.map((el, idx): TsAnimCacheItem => ({
         el,
-        start: parseFloat(el.dataset.start),
-        end: parseFloat(el.dataset.end),
+        start: parseFloat(el.dataset.start ?? '0'),
+        end: parseFloat(el.dataset.end ?? '0'),
         groupId: el.dataset.groupId || null,
         cacheIdx: idx,
     }));
     // Build group index: groupId -> [cacheIdx, ...]
-    const groupIndex = {};
+    const groupIndex: Record<string, number[]> = {};
     cache.forEach(item => {
         if (item.groupId) {
             if (!groupIndex[item.groupId]) groupIndex[item.groupId] = [];
-            groupIndex[item.groupId].push(item.cacheIdx);
+            groupIndex[item.groupId]!.push(item.cacheIdx);
         }
     });
     cache._groupIndex = groupIndex;
@@ -146,7 +155,7 @@ export function initAnimCache(container, selector) {
 }
 
 /** Apply class to element and all members of its group. */
-export function applyAnimClass(cache, idx, className, add) {
+export function applyAnimClass(cache: TsAnimCache, idx: number, className: string, add: boolean): void {
     const item = cache[idx];
     if (!item) return;
     if (add) item.el.classList.add(className);
@@ -156,15 +165,17 @@ export function applyAnimClass(cache, idx, className, add) {
         const members = cache._groupIndex[item.groupId] || [];
         members.forEach(mi => {
             if (mi !== idx) {
-                if (add) cache[mi].el.classList.add(className);
-                else cache[mi].el.classList.remove(className);
+                const member = cache[mi];
+                if (!member) return;
+                if (add) member.el.classList.add(className);
+                else member.el.classList.remove(className);
             }
         });
     }
 }
 
 /** Apply opacity to element and all members of its group. */
-export function applyAnimOpacity(cache, idx, opacity) {
+export function applyAnimOpacity(cache: TsAnimCache, idx: number, opacity: string | null): void {
     const item = cache[idx];
     if (!item) return;
     if (opacity === null) item.el.style.removeProperty('opacity');
@@ -174,8 +185,10 @@ export function applyAnimOpacity(cache, idx, opacity) {
         const members = cache._groupIndex[item.groupId] || [];
         members.forEach(mi => {
             if (mi !== idx) {
-                if (opacity === null) cache[mi].el.style.removeProperty('opacity');
-                else cache[mi].el.style.opacity = opacity;
+                const member = cache[mi];
+                if (!member) return;
+                if (opacity === null) member.el.style.removeProperty('opacity');
+                else member.el.style.opacity = opacity;
             }
         });
     }
@@ -185,7 +198,7 @@ export function applyAnimOpacity(cache, idx, opacity) {
  * Apply Reveal-mode opacity: all previous visible, active highlighted, future hidden.
  * Simplified from animation-core.js applyWindowOpacity().
  */
-export function applyRevealOpacity(cache, newIdx, prevIdx) {
+export function applyRevealOpacity(cache: TsAnimCache | null, newIdx: number, prevIdx: number): void {
     if (!cache || cache.length === 0) return;
 
     // Fast path: advancing by 1
@@ -212,49 +225,55 @@ export function applyRevealOpacity(cache, newIdx, prevIdx) {
     if (cache._groupIndex) {
         for (const gid of Object.keys(cache._groupIndex)) {
             const members = cache._groupIndex[gid];
-            if (members.length <= 1) continue;
+            if (!members || members.length <= 1) continue;
             let anyActive = false;
             let maxOp = -1;
             for (const mi of members) {
-                if (cache[mi].el.classList.contains('active')) { anyActive = true; break; }
-                const op = cache[mi].el.style.opacity;
+                const member = cache[mi];
+                if (!member) continue;
+                if (member.el.classList.contains('active')) { anyActive = true; break; }
+                const op = member.el.style.opacity;
                 if (op !== '') {
                     const val = parseFloat(op);
                     if (!isNaN(val) && val > maxOp) maxOp = val;
                 }
             }
             if (anyActive) {
-                members.forEach(mi => { cache[mi].el.style.opacity = '1'; });
+                members.forEach(mi => { const m = cache[mi]; if (m) m.el.style.opacity = '1'; });
             } else if (maxOp > 0) {
                 const s = String(maxOp);
-                members.forEach(mi => { cache[mi].el.style.opacity = s; });
+                members.forEach(mi => { const m = cache[mi]; if (m) m.el.style.opacity = s; });
             }
         }
     }
 }
 
 /** Update animation display at the given segment-relative time. */
-export function updateAnimationDisplay(time) {
+export function updateAnimationDisplay(time: number): void {
     const cache = state.tsGranularity === 'characters' ? state.animCharCache : state.animWordCache;
     if (!cache || cache.length === 0) return;
 
     // Fast-path tick: check current -> next -> full scan
     let newIdx = -1;
-    if (state.lastAnimIdx >= 0 && state.lastAnimIdx < cache.length &&
-        time >= cache[state.lastAnimIdx].start && time < cache[state.lastAnimIdx].end) {
-        newIdx = state.lastAnimIdx;
-    } else if (state.lastAnimIdx + 1 < cache.length &&
-        time >= cache[state.lastAnimIdx + 1].start && time < cache[state.lastAnimIdx + 1].end) {
-        newIdx = state.lastAnimIdx + 1;
+    const lastIdx = state.lastAnimIdx;
+    const lastItem = lastIdx >= 0 && lastIdx < cache.length ? cache[lastIdx] : undefined;
+    const nextItem = lastIdx + 1 < cache.length ? cache[lastIdx + 1] : undefined;
+    if (lastItem && time >= lastItem.start && time < lastItem.end) {
+        newIdx = lastIdx;
+    } else if (nextItem && time >= nextItem.start && time < nextItem.end) {
+        newIdx = lastIdx + 1;
     } else {
         for (let i = 0; i < cache.length; i++) {
-            if (time >= cache[i].start && time < cache[i].end) {
+            const it = cache[i];
+            if (!it) continue;
+            if (time >= it.start && time < it.end) {
                 newIdx = i;
                 break;
             }
         }
         // Clamp to last when past its end
-        if (newIdx === -1 && cache.length > 0 && time >= cache[cache.length - 1].start) {
+        const lastCacheItem = cache[cache.length - 1];
+        if (newIdx === -1 && cache.length > 0 && lastCacheItem && time >= lastCacheItem.start) {
             newIdx = cache.length - 1;
         }
     }
@@ -277,14 +296,15 @@ export function updateAnimationDisplay(time) {
             applyRevealOpacity(cache, newIdx, state.lastAnimIdx);
 
             // Scroll active element into view
-            cache[newIdx].el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            const item = cache[newIdx];
+            if (item) item.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         state.lastAnimIdx = newIdx;
     }
 }
 
 /** Switch between analysis and animation views. */
-export function switchView(mode) {
+export function switchView(mode: 'analysis' | 'animation'): void {
     state.tsViewMode = mode;
     localStorage.setItem(LS_KEYS.TS_VIEW_MODE, mode);
     dom.unifiedDisplay.style.display = (mode === 'animation') ? 'none' : '';
@@ -317,7 +337,7 @@ export function switchView(mode) {
 }
 
 /** Rebuild animation view DOM and caches. */
-export function rebuildAnimationView() {
+export function rebuildAnimationView(): void {
     buildAnimationDisplay();
     state.animWordCache = initAnimCache(dom.animDisplay, '.anim-word');
     state.animCharCache = initAnimCache(dom.animDisplay, '.anim-char');
@@ -326,11 +346,11 @@ export function rebuildAnimationView() {
 }
 
 /** Switch between word and character granularity. */
-export function switchGranularity(gran) {
+export function switchGranularity(gran: 'words' | 'characters'): void {
     state.tsGranularity = gran;
     if (state.tsViewMode === 'animation') localStorage.setItem(LS_KEYS.TS_GRANULARITY, gran);
     // Clear all highlights
-    dom.animDisplay.querySelectorAll('.anim-word, .anim-char').forEach(el => {
+    dom.animDisplay.querySelectorAll<HTMLElement>('.anim-word, .anim-char').forEach(el => {
         el.classList.remove('active', 'reached');
         el.style.removeProperty('opacity');
     });

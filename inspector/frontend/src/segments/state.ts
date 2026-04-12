@@ -22,6 +22,8 @@
 import type {
     AudioPeaks,
     EditOp,
+    HistoryBatch,
+    PeakBucket,
     SegReciter,
     Segment,
 } from '../types/domain';
@@ -104,19 +106,37 @@ export interface SegSavedFilterView {
     scrollTop: number;
 }
 
+/** Flattened history display item: a group of related ops + batch metadata.
+ *  Loose shape — history/rendering.ts attaches its own sub-type fields. */
+export interface HistoryDisplayItem {
+    group: EditOp[];
+    batch?: HistoryBatch | null;
+    chapter?: number | null;
+    chapters?: number[];
+    date?: string;
+    batchId?: string | null;
+    isRevert?: boolean;
+    isPending?: boolean;
+    type?: string;
+    batchIdx?: number;
+    groupIdx?: number;
+}
+
 /** Segment-level peaks entry keyed by URL inside `_segPeaksByUrl`. */
 export interface SegPeaksRangeEntry {
     startMs: number;
     endMs: number;
-    peaks: number[];
+    peaks: PeakBucket[];
     durationMs: number;
 }
 
-/** Queue item for the observer-driven segment-peaks batch fetcher. */
+/** Queue item for the observer-driven segment-peaks batch fetcher.
+ *  Field names match the wire format (`POST /api/seg/segment-peaks/`) so the
+ *  queue can be sent straight through as `segments:[]`. See B18. */
 export interface ObserverPeaksQueueItem {
     url: string;
-    startMs: number;
-    endMs: number;
+    start_ms: number;
+    end_ms: number;
 }
 
 /** Dirty-map entry — edited indices plus structural-change flag. */
@@ -230,8 +250,10 @@ export interface SegmentsState {
     _histFilterOpTypes: Set<string>;
     _histFilterErrCats: Set<string>;
     _histSortMode: 'time' | 'quran';
-    /** Flat list of display items built from batches; opaque to state.ts. */
-    _allHistoryItems: unknown[] | null;
+    /** Flat list of display items built from batches.
+     *  `group` is an `EditOp[]` grouped by display; extra fields come from the
+     *  enclosing batch. Produced/consumed by history/rendering + history/filters. */
+    _allHistoryItems: HistoryDisplayItem[] | null;
 
     // Split chain state (Map of chain id -> chain descriptor; opaque here)
     _splitChains: Map<string, unknown> | null;

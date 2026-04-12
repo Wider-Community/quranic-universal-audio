@@ -53,6 +53,8 @@ export interface Segment {
     silence_after_raw_ms?: number | null;
     /** Client-only flag for filter "neighbour" highlighting. */
     _isNeighbour?: boolean;
+    /** Client-only cached derived reference info (parsed surah/ayah/word). Cleared on ref edit. */
+    _derived?: unknown;
 }
 
 /** Summary stats per-chapter, from /api/seg/data. */
@@ -85,6 +87,8 @@ export interface EditOp {
     ready_at_utc: string | null;
     targets_before: Array<Record<string, unknown>>;
     targets_after: Array<Record<string, unknown>>;
+    /** Set on merge ops — `'prev'` or `'next'`. */
+    merge_direction?: 'prev' | 'next';
 }
 
 /** Validation summary snapshot — server records before/after each save. */
@@ -129,15 +133,19 @@ export interface HistorySummary {
 // Peaks / Waveform
 // ---------------------------------------------------------------------------
 
-/** Pre-computed waveform peaks for an audio URL (full-file). */
+/** A single peak bucket: [min, max] pair. Server rounds to 4 decimal places. */
+export type PeakBucket = [number, number];
+
+/** Pre-computed waveform peaks for an audio URL (full-file).
+ *  Server emits `peaks: [[min, max], ...]` — see `services/peaks.py`. B19. */
 export interface AudioPeaks {
-    peaks: number[];
+    peaks: PeakBucket[];
     duration_ms: number;
 }
 
 /** Peaks for a segment sub-range fetched via HTTP Range. */
 export interface SegmentPeaks {
-    peaks: number[];
+    peaks: PeakBucket[];
     start_ms: number;
     end_ms: number;
     duration_ms: number;

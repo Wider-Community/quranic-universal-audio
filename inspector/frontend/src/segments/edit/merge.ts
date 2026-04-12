@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Merge adjacent segments operation.
  */
@@ -10,16 +9,21 @@ import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from '../validati
 import { _rebuildAccordionAfterMerge } from '../validation/error-cards';
 import { fetchJson } from '../../shared/api';
 import type { SegResolveRefResponse } from '../../types/api';
+import type { Segment } from '../../types/domain';
 
 // ---------------------------------------------------------------------------
 // mergeAdjacent -- combine two adjacent segments
 // ---------------------------------------------------------------------------
 
-export async function mergeAdjacent(seg, direction, contextCategory = null) {
+export async function mergeAdjacent(
+    seg: Segment,
+    direction: 'prev' | 'next',
+    contextCategory: string | null = null,
+): Promise<void> {
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
     const currentChapter = parseInt(dom.segChapterSelect.value);
 
-    let chapterSegs;
+    let chapterSegs: Segment[] | undefined;
     if (chapter === currentChapter && state.segData?.segments) {
         chapterSegs = state.segData.segments;
     } else if (state.segAllData?.segments) {
@@ -32,6 +36,7 @@ export async function mergeAdjacent(seg, direction, contextCategory = null) {
     const otherIdx = direction === 'prev' ? idx - 1 : idx + 1;
     if (otherIdx < 0 || otherIdx >= chapterSegs.length) return;
     const other = chapterSegs[otherIdx];
+    if (!other) return;
 
     const first = direction === 'prev' ? other : seg;
     const second = direction === 'prev' ? seg : other;
@@ -47,8 +52,10 @@ export async function mergeAdjacent(seg, direction, contextCategory = null) {
     let mergedRef = '';
     const refs = [first.matched_ref, second.matched_ref].filter(Boolean);
     if (refs.length > 0) {
-        const s = refs[0].includes('-') ? refs[0].split('-')[0] : refs[0];
-        const e = refs[refs.length - 1].includes('-') ? refs[refs.length - 1].split('-')[1] : refs[refs.length - 1];
+        const firstRef = refs[0]!;
+        const lastRef = refs[refs.length - 1]!;
+        const s = firstRef.includes('-') ? firstRef.split('-')[0] : firstRef;
+        const e = lastRef.includes('-') ? lastRef.split('-')[1] : lastRef;
         mergedRef = `${s}-${e}`;
     }
 
@@ -68,7 +75,7 @@ export async function mergeAdjacent(seg, direction, contextCategory = null) {
         }
     }
 
-    const merged = {
+    const merged: Segment = {
         ...first,
         segment_uid: crypto.randomUUID(),
         index: first.index,
@@ -79,7 +86,7 @@ export async function mergeAdjacent(seg, direction, contextCategory = null) {
         display_text: mergedDisplay,
         confidence: 1.0,
     };
-    const mergedIc = new Set([
+    const mergedIc = new Set<string>([
         ...(first.ignored_categories || []),
         ...(second.ignored_categories || []),
     ]);
@@ -117,14 +124,14 @@ export async function mergeAdjacent(seg, direction, contextCategory = null) {
 
     const accCtx = state._accordionOpCtx;
     state._accordionOpCtx = null;
-    const accCategory = accCtx?.wrapper?.closest('details[data-category]')?.dataset?.category;
+    const accCategory = accCtx?.wrapper?.closest<HTMLElement>('details[data-category]')?.dataset?.category;
 
     refreshOpenAccordionCards();
 
     if (accCtx && accCategory) {
         const freshDetails = document.querySelector(`details[data-category="${accCategory}"]`);
-        const mergedCard = freshDetails?.querySelector(`.seg-row[data-seg-uid="${merged.segment_uid}"]`);
-        const freshWrapper = mergedCard?.closest('.val-card-wrapper');
+        const mergedCard = freshDetails?.querySelector<HTMLElement>(`.seg-row[data-seg-uid="${merged.segment_uid}"]`);
+        const freshWrapper = mergedCard?.closest<HTMLElement>('.val-card-wrapper');
         if (freshWrapper) {
             _rebuildAccordionAfterMerge(freshWrapper, chapter, merged, accCtx.direction);
         }

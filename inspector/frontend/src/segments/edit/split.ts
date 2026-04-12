@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Split edit mode: enter, drag handle, preview, confirm.
  */
@@ -17,12 +16,14 @@ import { _rebuildAccordionAfterSplit } from '../validation/error-cards';
 import { refreshOpenAccordionCards } from '../validation/index';
 import { fetchJsonOrNull } from '../../shared/api';
 import type { SegResolveRefResponse } from '../../types/api';
+import type { Segment } from '../../types/domain';
+import type { SegCanvas } from '../waveform/types';
 
 // ---------------------------------------------------------------------------
 // enterSplitMode
 // ---------------------------------------------------------------------------
 
-export function enterSplitMode(seg, row, prePausePlayMs = null) {
+export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: number | null = null): void {
     if (state.segEditMode) {
         console.warn('[split] blocked: already in edit mode:', state.segEditMode);
         return;
@@ -34,11 +35,12 @@ export function enterSplitMode(seg, row, prePausePlayMs = null) {
     document.body.classList.add('seg-edit-active');
     _addEditOverlay();
 
-    const actions = row.querySelector('.seg-actions');
+    const actions = row.querySelector<HTMLElement>('.seg-actions');
     if (actions) actions.hidden = true;
 
-    const canvas = row.querySelector('canvas');
-    const segLeft = row.querySelector('.seg-left');
+    const canvas = row.querySelector<SegCanvas>('canvas');
+    const segLeft = row.querySelector<HTMLElement>('.seg-left');
+    if (!canvas || !segLeft) return;
 
     const mid = Math.round((seg.time_start + seg.time_end) / 2);
     const defaultSplit = (prePausePlayMs !== null && prePausePlayMs > seg.time_start && prePausePlayMs < seg.time_end)
@@ -54,7 +56,13 @@ export function enterSplitMode(seg, row, prePausePlayMs = null) {
 
     const btnRow = document.createElement('div');
     btnRow.className = 'seg-edit-buttons';
-    const mkBtn = (text, cls, fn) => { const b = document.createElement('button'); b.className = `btn btn-sm ${cls}`; b.textContent = text; b.addEventListener('click', fn); return b; };
+    const mkBtn = (text: string, cls: string, fn: () => void): HTMLButtonElement => {
+        const b = document.createElement('button');
+        b.className = `btn btn-sm ${cls}`;
+        b.textContent = text;
+        b.addEventListener('click', fn);
+        return b;
+    };
     btnRow.appendChild(mkBtn('Cancel', 'btn-cancel', exitEditMode));
     btnRow.appendChild(mkBtn('Play Left', 'btn-preview', () => previewSplitAudio('left')));
     btnRow.appendChild(mkBtn('Play Right', 'btn-preview', () => previewSplitAudio('right')));
@@ -84,13 +92,15 @@ export function enterSplitMode(seg, row, prePausePlayMs = null) {
 // _ensureSplitBaseCache
 // ---------------------------------------------------------------------------
 
-export function _ensureSplitBaseCache(canvas) {
+export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
     if (canvas._splitBaseCache) return true;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
     const width = canvas.width;
     const height = canvas.height;
     const centerY = height / 2;
     const sd = canvas._splitData;
+    if (!sd) return false;
     const seg = sd.seg;
 
     ctx.fillStyle = '#0f0f23';
@@ -110,11 +120,11 @@ export function _ensureSplitBaseCache(canvas) {
 
     ctx.beginPath();
     for (let i = 0; i < width; i++) {
-        const y = centerY - data.maxVals[i] * scale;
+        const y = centerY - (data.maxVals[i] ?? 0) * scale;
         if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
     }
     for (let i = width - 1; i >= 0; i--) {
-        ctx.lineTo(i, centerY - data.minVals[i] * scale);
+        ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
     }
     ctx.closePath();
     ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
@@ -124,7 +134,7 @@ export function _ensureSplitBaseCache(canvas) {
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i < width; i++) {
-        const y = centerY - data.maxVals[i] * scale;
+        const y = centerY - (data.maxVals[i] ?? 0) * scale;
         if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
     }
     ctx.stroke();
@@ -137,15 +147,18 @@ export function _ensureSplitBaseCache(canvas) {
 // drawSplitWaveform -- redraw split overlay (yellow line + right-tint)
 // ---------------------------------------------------------------------------
 
-export function drawSplitWaveform(canvas) {
-    const hasCachedBase = _ensureSplitBaseCache(canvas);
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    const sd = canvas._splitData;
+export function drawSplitWaveform(canvas: SegCanvas): void {
+    const c = canvas;
+    const hasCachedBase = _ensureSplitBaseCache(c);
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const width = c.width;
+    const height = c.height;
+    const sd = c._splitData;
+    if (!sd) return;
     const seg = sd.seg;
 
-    if (hasCachedBase) ctx.putImageData(canvas._splitBaseCache, 0, 0);
+    if (hasCachedBase && c._splitBaseCache) ctx.putImageData(c._splitBaseCache, 0, 0);
 
     const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * width;
 
@@ -177,14 +190,15 @@ export function drawSplitWaveform(canvas) {
 // setupSplitDragHandle -- mouse event handlers for split line
 // ---------------------------------------------------------------------------
 
-export function setupSplitDragHandle(canvas, seg) {
+export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
     let dragging = false;
     let didDrag = false;
 
-    function onMousedown(e) {
+    function onMousedown(e: MouseEvent): void {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
         const sd = canvas._splitData;
+        if (!sd) return;
         const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * canvas.width;
         didDrag = false;
         if (Math.abs(x - splitX) < 15) {
@@ -193,10 +207,11 @@ export function setupSplitDragHandle(canvas, seg) {
         }
     }
 
-    function onMousemove(e) {
+    function onMousemove(e: MouseEvent): void {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
         const sd = canvas._splitData;
+        if (!sd) return;
         const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * canvas.width;
 
         if (!dragging) {
@@ -211,11 +226,12 @@ export function setupSplitDragHandle(canvas, seg) {
         drawSplitWaveform(canvas);
     }
 
-    function onMouseup(e) {
+    function onMouseup(e: MouseEvent): void {
         if (!dragging && !didDrag) {
             const rect = canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (canvas.width / rect.width);
             const sd = canvas._splitData;
+            if (!sd) return;
             const timeAtX = seg.time_start + (x / canvas.width) * (seg.time_end - seg.time_start);
             if (timeAtX < sd.currentSplit) {
                 _playRange(timeAtX, sd.currentSplit);
@@ -226,14 +242,14 @@ export function setupSplitDragHandle(canvas, seg) {
         dragging = false;
         canvas.style.cursor = '';
     }
-    function onMouseleave() { dragging = false; canvas.style.cursor = ''; }
+    function onMouseleave(): void { dragging = false; canvas.style.cursor = ''; }
 
     canvas.addEventListener('mousedown', onMousedown);
     canvas.addEventListener('mousemove', onMousemove);
     canvas.addEventListener('mouseup', onMouseup);
     canvas.addEventListener('mouseleave', onMouseleave);
 
-    canvas._editCleanup = () => {
+    canvas._editCleanup = (): void => {
         canvas.removeEventListener('mousedown', onMousedown);
         canvas.removeEventListener('mousemove', onMousemove);
         canvas.removeEventListener('mouseup', onMouseup);
@@ -245,9 +261,9 @@ export function setupSplitDragHandle(canvas, seg) {
 // updateSplitInfo -- update the L/R duration display
 // ---------------------------------------------------------------------------
 
-export function updateSplitInfo(canvas, seg, splitTime) {
-    canvas = canvas || _getEditCanvas();
-    const el = canvas?._splitEls?.infoSpan;
+export function updateSplitInfo(canvas: SegCanvas | null | undefined, seg: Segment, splitTime: number): void {
+    const c = (canvas ?? (_getEditCanvas() as SegCanvas | null)) ?? null;
+    const el = c?._splitEls?.infoSpan;
     if (el) {
         el.textContent = `L ${((splitTime - seg.time_start) / 1000).toFixed(2)}s | R ${((seg.time_end - splitTime) / 1000).toFixed(2)}s`;
     }
@@ -257,8 +273,8 @@ export function updateSplitInfo(canvas, seg, splitTime) {
 // confirmSplit -- apply the split and chain ref editing
 // ---------------------------------------------------------------------------
 
-export async function confirmSplit(seg) {
-    const canvas = _getEditCanvas();
+export async function confirmSplit(seg: Segment): Promise<void> {
+    const canvas = _getEditCanvas() as SegCanvas | null;
     const splitTime = canvas?._splitData?.currentSplit;
     if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
         dom.segPlayStatus.textContent = 'Invalid split point';
@@ -269,12 +285,12 @@ export async function confirmSplit(seg) {
     const currentChapter = parseInt(dom.segChapterSelect.value);
     const useSegData = chapter === currentChapter && state.segData?.segments;
 
-    const firstHalf = {
+    const firstHalf: Segment = {
         ...seg,
         segment_uid: crypto.randomUUID(),
         time_end: splitTime,
     };
-    const secondHalf = {
+    const secondHalf: Segment = {
         ...seg,
         segment_uid: crypto.randomUUID(),
         index: seg.index + 1,
@@ -307,13 +323,13 @@ export async function confirmSplit(seg) {
         splitOp.targets_after = [snapshotSeg(firstHalf), snapshotSeg(secondHalf)];
     }
 
-    if (useSegData) {
+    if (useSegData && state.segData) {
         const segIdx = state.segData.segments.findIndex(s => s.index === seg.index);
         state.segData.segments.splice(segIdx, 1, firstHalf, secondHalf);
         state.segData.segments.forEach((s, i) => { s.index = i; });
         syncChapterSegsToAll();
         state.segData.segments = getChapterSegments(chapter);
-    } else {
+    } else if (state.segAllData) {
         const globalIdx = state.segAllData.segments.indexOf(seg);
         if (globalIdx !== -1) {
             state.segAllData.segments.splice(globalIdx, 1, firstHalf, secondHalf);
@@ -343,14 +359,14 @@ export async function confirmSplit(seg) {
 
     dom.segPlayStatus.textContent = 'Split \u2014 edit first half reference, then second';
 
-    state._splitChainUid = secondHalf.segment_uid;
+    state._splitChainUid = secondHalf.segment_uid ?? null;
     state._splitChainCategory = splitOp?.op_context_category || null;
     state._splitChainWrapper = accCtx ? accCtx.wrapper : null;
-    const searchRoot = accCtx ? accCtx.wrapper : dom.segListEl;
-    const firstRow = searchRoot.querySelector(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
+    const searchRoot: ParentNode = accCtx ? accCtx.wrapper : dom.segListEl;
+    const firstRow = searchRoot.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
     if (firstRow) {
         firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        const refSpan = firstRow.querySelector('.seg-text-ref');
+        const refSpan = firstRow.querySelector<HTMLElement>('.seg-text-ref');
         if (refSpan) {
             startRefEdit(refSpan, firstHalf, firstRow, state._splitChainCategory);
         }
@@ -361,11 +377,11 @@ export async function confirmSplit(seg) {
 // previewSplitAudio -- toggle looping preview of left/right half
 // ---------------------------------------------------------------------------
 
-export function previewSplitAudio(side) {
-    const canvas = _getEditCanvas();
+export function previewSplitAudio(side: 'left' | 'right'): void {
+    const canvas = _getEditCanvas() as SegCanvas | null;
     const sd = canvas?._splitData;
-    if (!sd) return;
-    const loopKey = `split-${side}`;
+    if (!sd || !canvas) return;
+    const loopKey = `split-${side}` as const;
     if (state._previewLooping === loopKey && !dom.segAudioEl.paused) {
         state._previewLooping = false;
         state._previewJustSeeked = false;

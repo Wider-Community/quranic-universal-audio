@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Shared Arabic text utilities — used by timestamps tab for cross-word
  * ghunna detection and animation character matching.
@@ -7,7 +6,7 @@
 export const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u08F0-\u08F2]/g;
 
 /** Idgham ghunnah phonemes at START of current word -> required Arabic start letter */
-export const IDGHAM_GHUNNAH_START = {
+export const IDGHAM_GHUNNAH_START: Record<string, string> = {
     'ñ': '\u0646',  // ن
     'j̃': '\u064A',  // ي
     'w̃': '\u0648',  // و
@@ -16,17 +15,17 @@ export const IDGHAM_GHUNNAH_START = {
 
 export const ZWSP = '\u2060';        // Word Joiner
 export const DAGGER_ALEF = '\u0670'; // Superscript Alef
-export const CHAR_EQUIVALENTS = new Map([
+export const CHAR_EQUIVALENTS = new Map<string, string>([
     ['\u0649', '\u064A'],  // Alef Maksura -> Yaa
     ['\u064A', '\u0649'],  // Yaa -> Alef Maksura
 ]);
 
-export function stripTashkeel(text) {
+export function stripTashkeel(text: string): string {
     return text.replace(TASHKEEL, '');
 }
 
 /** Check if codepoint is a Unicode combining mark (category M). */
-export function isCombiningMark(cp) {
+export function isCombiningMark(cp: number): boolean {
     if (cp >= 0x0300 && cp <= 0x036F) return true;
     if (cp >= 0x0610 && cp <= 0x061A) return true;
     if (cp >= 0x064B && cp <= 0x065F) return true;
@@ -41,16 +40,17 @@ export function isCombiningMark(cp) {
 }
 
 /** Extract first non-combining base character after NFD normalization. */
-export function firstBase(s) {
+export function firstBase(s: string): string {
     const nfd = s.normalize('NFD');
     for (const ch of nfd) {
-        if (!isCombiningMark(ch.codePointAt(0))) return ch;
+        const cp = ch.codePointAt(0);
+        if (cp !== undefined && !isCombiningMark(cp)) return ch;
     }
     return s[0] || '';
 }
 
 /** Fuzzy match between an MFA letter char and a display char group. */
-export function charsMatch(mfaChar, displayChar) {
+export function charsMatch(mfaChar: string, displayChar: string): boolean {
     const stripped = displayChar.replace(/\u0640/g, '');
     if (mfaChar === stripped || stripped.includes(mfaChar) || mfaChar.includes(stripped))
         return true;
@@ -66,11 +66,12 @@ export function charsMatch(mfaChar, displayChar) {
  * Split text into character groups (base char + combining marks).
  * Port of quranic_universal_aligner/src/ui/segments.py:split_into_char_groups()
  */
-export function splitIntoCharGroups(text) {
-    const groups = [];
+export function splitIntoCharGroups(text: string): string[] {
+    const groups: string[] = [];
     let current = '';
     for (const ch of text) {
         const cp = ch.codePointAt(0);
+        if (cp === undefined) continue;
         if (cp === 0x0640 || cp === 0x2060) {
             current += ch;
         } else if (cp === 0x0654 || cp === 0x0655) {

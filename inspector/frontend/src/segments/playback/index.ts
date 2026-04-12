@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Audio playback, animation, highlight tracking, and play status.
  */
@@ -9,15 +8,21 @@ import { formatTimeMs } from '../references';
 import { drawWaveformFromPeaksForSeg, drawSegPlayhead } from '../waveform/draw';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
 import { safePlay } from '../../shared/audio';
+import { createAnimationLoop } from '../../shared/animation';
+import type { SegCanvas } from '../waveform/types';
 
 /** Compare a segment's audio_url against segAudioEl.src. */
-function _audioSrcMatch(segUrl, elSrc) {
+function _audioSrcMatch(segUrl: string | null | undefined, elSrc: string | null | undefined): boolean {
     if (!segUrl || !elSrc) return false;
     if (segUrl === elSrc) return true;
     return elSrc.endsWith(segUrl);
 }
 
-export function playFromSegment(segIndex, chapterOverride, seekToMs) {
+export function playFromSegment(
+    segIndex: number,
+    chapterOverride?: number | null,
+    seekToMs?: number | null,
+): void {
     if (!state.segAllData) return;
     stopErrorCardAudio();
     state._activeAudioSource = 'main';
@@ -44,27 +49,27 @@ export function playFromSegment(segIndex, chapterOverride, seekToMs) {
     _prefetchNextSegAudio(segIndex);
 }
 
-function _nextDisplayedSeg(afterIndex) {
+function _nextDisplayedSeg(afterIndex: number) {
     if (!state.segDisplayedSegments) return null;
     const pos = state.segDisplayedSegments.findIndex(s => s.index === afterIndex);
     if (pos >= 0 && pos < state.segDisplayedSegments.length - 1) {
-        return state.segDisplayedSegments[pos + 1];
+        return state.segDisplayedSegments[pos + 1] ?? null;
     }
     return null;
 }
 
-function _prefetchNextSegAudio(currentIndex) {
+function _prefetchNextSegAudio(currentIndex: number): void {
     const next = _nextDisplayedSeg(currentIndex);
     if (!next) return;
     const currentUrl = dom.segAudioEl.src || '';
     if (!next.audio_url || _audioSrcMatch(next.audio_url, currentUrl)) return;
-    if (state._segPrefetchCache[next.audio_url]) return;
+    if (next.audio_url in state._segPrefetchCache) return;
     state._segPrefetchCache[next.audio_url] = fetch(next.audio_url)
         .then(r => r.blob())
         .catch(() => {});
 }
 
-export function onSegPlayClick() {
+export function onSegPlayClick(): void {
     if (state.valCardAudio && !state.valCardAudio.paused) {
         stopErrorCardAudio();
         return;
@@ -72,7 +77,7 @@ export function onSegPlayClick() {
     if (dom.segAudioEl.paused) {
         if (state.segDisplayedSegments && state.segDisplayedSegments.length > 0 && state.segCurrentIdx < 0) {
             const first = state.segDisplayedSegments[0];
-            playFromSegment(first.index, first.chapter);
+            if (first) playFromSegment(first.index, first.chapter);
         } else {
             state._segContinuousPlay = state._segAutoPlayEnabled;
             state._activeAudioSource = 'main';
@@ -89,7 +94,7 @@ export function onSegPlayClick() {
     }
 }
 
-export function onSegTimeUpdate() {
+export function onSegTimeUpdate(): void {
     const timeMs = dom.segAudioEl.currentTime * 1000;
     const currentSrc = dom.segAudioEl.src || '';
 
@@ -97,18 +102,18 @@ export function onSegTimeUpdate() {
     if (state.segDisplayedSegments && state.segDisplayedSegments.length > 0) {
         for (let i = state.segDisplayedSegments.length - 1; i >= 0; i--) {
             const s = state.segDisplayedSegments[i];
-            if (_audioSrcMatch(s.audio_url, currentSrc)) {
+            if (s && _audioSrcMatch(s.audio_url, currentSrc)) {
                 lastSegOnAudio = s;
                 break;
             }
         }
-        if (!lastSegOnAudio) lastSegOnAudio = state.segDisplayedSegments[state.segDisplayedSegments.length - 1];
+        if (!lastSegOnAudio) lastSegOnAudio = state.segDisplayedSegments[state.segDisplayedSegments.length - 1] ?? null;
     }
 
     if (lastSegOnAudio && timeMs >= lastSegOnAudio.time_end) {
         const nextSeg = _nextDisplayedSeg(lastSegOnAudio.index);
         const isConsecutive = nextSeg && nextSeg.index === lastSegOnAudio.index + 1;
-        if (state._segContinuousPlay && isConsecutive && !_audioSrcMatch(nextSeg.audio_url, currentSrc)) {
+        if (state._segContinuousPlay && isConsecutive && nextSeg && !_audioSrcMatch(nextSeg.audio_url, currentSrc)) {
             playFromSegment(nextSeg.index, nextSeg.chapter);
             return;
         }
@@ -156,7 +161,7 @@ export function onSegTimeUpdate() {
             state._segPlayEndMs = 0;
             return;
         }
-        if (state.segCurrentIdx >= 0) {
+        if (state.segCurrentIdx >= 0 && state.segDisplayedSegments) {
             const curSeg = state.segDisplayedSegments.find(s => s.index === state.segCurrentIdx);
             if (curSeg) state._segPlayEndMs = curSeg.time_end;
         }
@@ -166,32 +171,53 @@ export function onSegTimeUpdate() {
     }
 }
 
-export function startSegAnimation() {
+// ---------------------------------------------------------------------------
+// Animation loop (wraps shared/animation.ts createAnimationLoop)
+// ---------------------------------------------------------------------------
+// Behavior preserved verbatim from the old rAF loop: each frame calls
+// updateSegHighlight + drawActivePlayhead, and returns `false` to self-stop
+// when continuous-play has ended. `state.segAnimId` is synced so external
+// checks (truthy means "running") behave identically.
+const _segAnimLoop = createAnimationLoop(() => {
+    updateSegHighlight();
+    drawActivePlayhead();
+    if (!state._segContinuousPlay && state._segPlayEndMs > 0 && !dom.segAudioEl.paused
+            && dom.segAudioEl.currentTime * 1000 >= state._segPlayEndMs) {
+        dom.segAudioEl.pause();
+        // stopSegAnimation will set segAnimId=null and update UI; return false
+        // so the loop itself cancels cleanly.
+        stopSegAnimation();
+        state._segPlayEndMs = 0;
+        return false;
+    }
+    return;
+});
+
+export function startSegAnimation(): void {
     dom.segPlayBtn.textContent = 'Pause';
     state._activeAudioSource = 'main';
     if (state._prevHighlightedRow) {
         const btn = state._prevHighlightedRow.querySelector('.seg-card-play-btn');
         if (btn) btn.textContent = '\u25A0';
     }
-    animateSeg();
+    _segAnimLoop.start();
+    state.segAnimId = 1;
 }
 
-export function stopSegAnimation() {
+export function stopSegAnimation(): void {
     if (!state.valCardAudio || state.valCardAudio.paused) {
         dom.segPlayBtn.textContent = 'Play';
     }
     if (state._activeAudioSource === 'main') state._activeAudioSource = null;
-    if (state.segAnimId) {
-        cancelAnimationFrame(state.segAnimId);
-        state.segAnimId = null;
-    }
+    _segAnimLoop.stop();
+    state.segAnimId = null;
     if (state._prevHighlightedRow) {
         const btn = state._prevHighlightedRow.querySelector('.seg-card-play-btn');
         if (btn) btn.textContent = '\u25B6';
     }
 }
 
-export function onSegAudioEnded() {
+export function onSegAudioEnded(): void {
     if (state._segContinuousPlay && state.segCurrentIdx >= 0) {
         const next = _nextDisplayedSeg(state.segCurrentIdx);
         if (next && next.audio_url) {
@@ -203,20 +229,12 @@ export function onSegAudioEnded() {
     stopSegAnimation();
 }
 
-export function animateSeg() {
-    updateSegHighlight();
-    drawActivePlayhead();
-    if (!state._segContinuousPlay && state._segPlayEndMs > 0 && !dom.segAudioEl.paused
-            && dom.segAudioEl.currentTime * 1000 >= state._segPlayEndMs) {
-        dom.segAudioEl.pause();
-        stopSegAnimation();
-        state._segPlayEndMs = 0;
-        return;
-    }
-    state.segAnimId = requestAnimationFrame(animateSeg);
+/** Exposed for legacy callers; equivalent to startSegAnimation(). */
+export function animateSeg(): void {
+    startSegAnimation();
 }
 
-export function updateSegHighlight() {
+export function updateSegHighlight(): void {
     if (state.segCurrentIdx === state._prevHighlightedIdx) return;
     if (state._prevHighlightedRow) {
         state._prevHighlightedRow.classList.remove('playing');
@@ -226,7 +244,7 @@ export function updateSegHighlight() {
     state._prevHighlightedRow = null;
     state._prevHighlightedIdx = state.segCurrentIdx;
     if (state.segCurrentIdx >= 0) {
-        const row = dom.segListEl.querySelector(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
+        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
         if (row) {
             row.classList.add('playing');
             state._prevHighlightedRow = row;
@@ -238,7 +256,7 @@ export function updateSegHighlight() {
     }
 }
 
-export function drawActivePlayhead() {
+export function drawActivePlayhead(): void {
     if (!state.segAllData || !dom.segChapterSelect.value) return;
     if (state.segEditMode && state.segCurrentIdx === state.segEditIndex) return;
     const chapter = parseInt(dom.segChapterSelect.value);
@@ -247,9 +265,9 @@ export function drawActivePlayhead() {
     const indexChanged = state._prevPlayheadIdx !== state.segCurrentIdx;
 
     if (state._prevPlayheadIdx >= 0 && indexChanged) {
-        const prevRow = state._prevPlayheadRow || dom.segListEl.querySelector(`.seg-row[data-seg-index="${state._prevPlayheadIdx}"]`);
+        const prevRow = state._prevPlayheadRow || dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state._prevPlayheadIdx}"]`);
         if (prevRow) {
-            const canvas = prevRow.querySelector('canvas');
+            const canvas = prevRow.querySelector<SegCanvas>('canvas');
             const seg = getSegByChapterIndex(chapter, state._prevPlayheadIdx);
             if (canvas && seg) {
                 drawWaveformFromPeaksForSeg(canvas, seg, chapter);
@@ -260,7 +278,7 @@ export function drawActivePlayhead() {
     if (indexChanged) {
         state._prevPlayheadRow = state._currentPlayheadRow;
         state._currentPlayheadRow = state.segCurrentIdx >= 0
-            ? dom.segListEl.querySelector(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`)
+            ? dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`)
             : null;
     }
     state._prevPlayheadIdx = state.segCurrentIdx;
@@ -268,7 +286,7 @@ export function drawActivePlayhead() {
     if (state.segCurrentIdx >= 0) {
         const row = state._currentPlayheadRow;
         if (row) {
-            const canvas = row.querySelector('canvas');
+            const canvas = row.querySelector<SegCanvas>('canvas');
             const seg = getSegByChapterIndex(chapter, state.segCurrentIdx);
             if (canvas && seg) {
                 const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
@@ -278,7 +296,7 @@ export function drawActivePlayhead() {
     }
 }
 
-export function updateSegPlayStatus() {
+export function updateSegPlayStatus(): void {
     if (state.segCurrentIdx >= 0 && state.segAllData && dom.segChapterSelect.value) {
         const chapter = parseInt(dom.segChapterSelect.value);
         const seg = getSegByChapterIndex(chapter, state.segCurrentIdx);

@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Jump-to-segment, jump-to-verse, missing verse context, and filter view save/restore.
  */
@@ -7,8 +6,16 @@ import { state, dom } from './state';
 import { parseSegRef } from './references';
 import { getChapterSegments, onSegChapterChange } from './data';
 import { applyFiltersAndRender, renderFilterBar, updateFilterBarControls } from './filters';
+import type { Segment } from '../types/domain';
 
-export async function jumpToSegment(chapter, segIndex) {
+interface MissingVerseContext {
+    prev: Segment | null;
+    next: Segment | null;
+    targetVerse: number | null;
+    covered: boolean;
+}
+
+export async function jumpToSegment(chapter: number | string, segIndex: number): Promise<void> {
     const fromFilterView = !!state._segSavedFilterView;
     if (fromFilterView) {
         state.segActiveFilters = [];
@@ -24,7 +31,7 @@ export async function jumpToSegment(chapter, segIndex) {
         applyFiltersAndRender();
     }
 
-    const row = dom.segListEl.querySelector(`.seg-row[data-seg-index="${segIndex}"]`);
+    const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${segIndex}"]`);
     if (row) {
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.classList.add('playing');
@@ -36,21 +43,24 @@ export async function jumpToSegment(chapter, segIndex) {
     }
 }
 
-export function _parseVerseFromKey(verseKey) {
+export function _parseVerseFromKey(verseKey: string | null | undefined): number | null {
     const parts = (verseKey || '').split(':');
     if (parts.length < 2) return null;
-    const verse = parseInt(parts[1], 10);
+    const verse = parseInt(parts[1] ?? '', 10);
     return Number.isFinite(verse) ? verse : null;
 }
 
-export function findMissingVerseBoundarySegments(chapter, verseKey) {
+export function findMissingVerseBoundarySegments(
+    chapter: number | string,
+    verseKey: string,
+): MissingVerseContext {
     const targetVerse = _parseVerseFromKey(verseKey);
     if (!targetVerse) return { prev: null, next: null, targetVerse: null, covered: false };
 
     const segs = getChapterSegments(chapter);
-    let prev = null;
+    let prev: Segment | null = null;
     let prevVerse = -Infinity;
-    let next = null;
+    let next: Segment | null = null;
     let nextVerse = Infinity;
 
     for (const seg of segs) {
@@ -74,7 +84,7 @@ export function findMissingVerseBoundarySegments(chapter, verseKey) {
     return { prev, next, targetVerse, covered: false };
 }
 
-export async function jumpToMissingVerseContext(chapter, verseKey) {
+export async function jumpToMissingVerseContext(chapter: number | string, verseKey: string): Promise<void> {
     const targetVerse = _parseVerseFromKey(verseKey);
     if (!targetVerse) {
         await jumpToVerse(chapter, verseKey);
@@ -113,13 +123,13 @@ export async function jumpToMissingVerseContext(chapter, verseKey) {
         return;
     }
 
-    const rows = [];
+    const rows: HTMLElement[] = [];
     if (prev) {
-        const row = dom.segListEl.querySelector(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${prev.index}"]`);
+        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${prev.index}"]`);
         if (row) rows.push(row);
     }
     if (next && (!prev || next.index !== prev.index)) {
-        const row = dom.segListEl.querySelector(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${next.index}"]`);
+        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${next.index}"]`);
         if (row) rows.push(row);
     }
 
@@ -129,7 +139,7 @@ export async function jumpToMissingVerseContext(chapter, verseKey) {
     }
 
     if (rows.length === 1) {
-        rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        rows[0]!.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else {
         const top = Math.min(...rows.map(r => r.offsetTop));
         const bottom = Math.max(...rows.map(r => r.offsetTop + r.offsetHeight));
@@ -144,7 +154,7 @@ export async function jumpToMissingVerseContext(chapter, verseKey) {
         dom.segPlayStatus.textContent = `Missing verse ${verseKey} is between #${prev.index} and #${next.index}.`;
     } else if (prev) {
         dom.segPlayStatus.textContent = `Missing verse ${verseKey} is after #${prev.index}.`;
-    } else {
+    } else if (next) {
         dom.segPlayStatus.textContent = `Missing verse ${verseKey} is before #${next.index}.`;
     }
 
@@ -153,7 +163,7 @@ export async function jumpToMissingVerseContext(chapter, verseKey) {
     }
 }
 
-export async function jumpToVerse(chapter, verseKey) {
+export async function jumpToVerse(chapter: number | string, verseKey: string): Promise<void> {
     if (dom.segChapterSelect.value !== String(chapter)) {
         dom.segChapterSelect.value = String(chapter);
         if (state.segChapterSS) state.segChapterSS.refresh();
@@ -162,11 +172,12 @@ export async function jumpToVerse(chapter, verseKey) {
     if (!state.segAllData) return;
     const parts = verseKey.split(':');
     const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : verseKey;
+    const chapterNum = typeof chapter === 'string' ? parseInt(chapter) : chapter;
     const seg = state.segAllData.segments.find(s =>
-        s.chapter === parseInt(chapter) && s.matched_ref && s.matched_ref.startsWith(prefix)
+        s.chapter === chapterNum && s.matched_ref && s.matched_ref.startsWith(prefix)
     );
     if (seg) {
-        const row = dom.segListEl.querySelector(`.seg-row[data-seg-index="${seg.index}"]`);
+        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${seg.index}"]`);
         if (row) {
             row.scrollIntoView({ behavior: 'smooth', block: 'center' });
             row.classList.add('playing');
@@ -181,16 +192,16 @@ export async function jumpToVerse(chapter, verseKey) {
 // Filter view save / restore (Go To -> Back navigation)
 // ---------------------------------------------------------------------------
 
-export function _showBackToResultsBanner() {
+export function _showBackToResultsBanner(): void {
     dom.segListEl.querySelector('.seg-back-banner')?.remove();
     const banner = document.createElement('div');
     banner.className = 'seg-back-banner';
     banner.innerHTML = '<button class="btn btn-sm seg-back-btn">\u2190 Back to filter results</button>';
-    banner.querySelector('.seg-back-btn').addEventListener('click', _restoreFilterView);
+    banner.querySelector<HTMLButtonElement>('.seg-back-btn')?.addEventListener('click', _restoreFilterView);
     dom.segListEl.insertBefore(banner, dom.segListEl.firstChild);
 }
 
-export function _restoreFilterView() {
+export function _restoreFilterView(): void {
     if (!state._segSavedFilterView) return;
     const saved = state._segSavedFilterView;
     state._segSavedFilterView = null;

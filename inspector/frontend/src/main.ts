@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Main entry point -- tab switching, tab module imports.
  * Single <script type="module"> loaded by index.html.
@@ -30,38 +29,41 @@ import './audio/index';
 
 let activeTab = 'timestamps';
 
-export function getActiveTab() {
+export function getActiveTab(): string {
     return activeTab;
 }
 
-function setupTabSwitching() {
+function setupTabSwitching(): void {
     const panels = ['timestamps', 'segments', 'audio'];
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    document.querySelectorAll<HTMLElement>('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            activeTab = btn.dataset.tab;
+            const tab = btn.dataset.tab;
+            if (!tab) return;
+            activeTab = tab;
             localStorage.setItem(LS_KEYS.ACTIVE_TAB, activeTab);
             panels.forEach(p => {
-                document.getElementById(p + '-panel').hidden = (activeTab !== p);
+                const panel = document.getElementById(p + '-panel');
+                if (panel) panel.hidden = (activeTab !== p);
             });
             // Pause audio from other tabs (use getElementById to avoid importing tab state)
             if (activeTab !== 'timestamps') {
-                const tsAudio = document.getElementById('audio-player');
+                const tsAudio = document.getElementById('audio-player') as HTMLAudioElement | null;
                 if (tsAudio) tsAudio.pause();
             }
             if (activeTab !== 'segments') {
-                const segAudio = document.getElementById('seg-audio-player');
+                const segAudio = document.getElementById('seg-audio-player') as HTMLAudioElement | null;
                 if (segAudio) segAudio.pause();
-                // valCardAudio is created dynamically by error-card-audio.js;
+                // valCardAudio is created dynamically by error-card-audio.ts;
                 // we find it via the DOM by checking all <audio> elements in the segments panel
                 const segPanel = document.getElementById('segments-panel');
                 if (segPanel) {
-                    segPanel.querySelectorAll('audio').forEach(a => { if (a.id !== 'seg-audio-player') a.pause(); });
+                    segPanel.querySelectorAll<HTMLAudioElement>('audio').forEach(a => { if (a.id !== 'seg-audio-player') a.pause(); });
                 }
             }
             if (activeTab !== 'audio') {
-                const audPlayer = document.getElementById('aud-player');
+                const audPlayer = document.getElementById('aud-player') as HTMLAudioElement | null;
                 if (audPlayer) audPlayer.pause();
             }
         });
@@ -74,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Restore active tab last
     const savedTab = localStorage.getItem(LS_KEYS.ACTIVE_TAB);
     if (savedTab) {
-        const tabBtn = document.querySelector(`.tab-btn[data-tab="${savedTab}"]`);
+        const tabBtn = document.querySelector<HTMLElement>(`.tab-btn[data-tab="${savedTab}"]`);
         if (tabBtn) tabBtn.click();
     }
 });

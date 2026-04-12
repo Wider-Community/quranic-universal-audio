@@ -1,9 +1,9 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Edit history filter bar, sort controls, and filter application.
  */
 
 import { state, dom, EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../state';
+import type { HistoryDisplayItem } from '../state';
 import { _deriveOpIssueDelta } from '../validation/categories';
 import { _ensureWaveformObserver } from '../waveform/index';
 import {
@@ -11,24 +11,31 @@ import {
     _flattenBatchesToItems, _renderHistoryDisplayItems,
     drawHistoryArrows, _versesFromRef,
 } from './rendering';
+import type { SegEditHistoryResponse } from '../../types/api';
 
 // ---------------------------------------------------------------------------
 // renderHistoryFilterBar
 // ---------------------------------------------------------------------------
 
-export function renderHistoryFilterBar(data) {
+export function renderHistoryFilterBar(data: SegEditHistoryResponse): void {
     dom.segHistoryFilterOps.innerHTML = '';
     dom.segHistoryFilterCats.innerHTML = '';
     dom.segHistoryFilterClear.hidden = true;
     if (!data.summary && (!data.batches || data.batches.length === 0)) { dom.segHistoryFilters.hidden = true; return; }
-    const chainedOpIds = state._chainedOpIds || new Set();
-    const allItems = _flattenBatchesToItems(data.batches, chainedOpIds);
+    const chainedOpIds = state._chainedOpIds || new Set<string>();
+    const allItems = _flattenBatchesToItems(data.batches, chainedOpIds) as HistoryDisplayItem[];
     state._allHistoryItems = allItems;
 
-    const opCounts = {};
-    for (const item of allItems) { if (item.group.length === 0) continue; opCounts[item.group[0].op_type] = (opCounts[item.group[0].op_type] || 0) + 1; }
+    const opCounts: Record<string, number> = {};
+    for (const item of allItems) {
+        if (item.group.length === 0) continue;
+        const op = item.group[0];
+        if (!op) continue;
+        opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
+    }
     if (state._splitChains) {
-        for (const chain of state._splitChains.values()) {
+        for (const _chain of state._splitChains.values()) {
+            void _chain;
             opCounts['split_segment'] = (opCounts['split_segment'] || 0) + 1;
         }
     }
@@ -43,11 +50,14 @@ export function renderHistoryFilterBar(data) {
         dom.segHistoryFilterOps.appendChild(pill);
     }
 
-    const catCounts = {};
+    const catCounts: Record<string, number> = {};
     for (const item of allItems) {
         if (item.group.length === 0) continue;
         const delta = _deriveOpIssueDelta(item.group);
-        const touchedCats = new Set([...delta.resolved, ...delta.introduced, ...item.group.map(op => op.op_context_category).filter(Boolean)]);
+        const touchedCats = new Set<string>([
+            ...delta.resolved, ...delta.introduced,
+            ...item.group.map(op => op.op_context_category).filter((c): c is string => !!c),
+        ]);
         for (const cat of touchedCats) catCounts[cat] = (catCounts[cat] || 0) + 1;
     }
     const sortedCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]);
@@ -61,8 +71,8 @@ export function renderHistoryFilterBar(data) {
         dom.segHistoryFilterCats.appendChild(pill);
     }
 
-    dom.segHistoryFilterOps.parentElement.hidden = (sortedOps.length < 2);
-    dom.segHistoryFilterCats.parentElement.hidden = (sortedCats.length < 2);
+    if (dom.segHistoryFilterOps.parentElement) dom.segHistoryFilterOps.parentElement.hidden = (sortedOps.length < 2);
+    if (dom.segHistoryFilterCats.parentElement) dom.segHistoryFilterCats.parentElement.hidden = (sortedCats.length < 2);
     dom.segHistoryFilters.hidden = false;
 }
 
@@ -70,7 +80,7 @@ export function renderHistoryFilterBar(data) {
 // toggleHistoryFilter
 // ---------------------------------------------------------------------------
 
-export function toggleHistoryFilter(type, value, pill) {
+export function toggleHistoryFilter(type: 'op' | 'cat', value: string, pill: HTMLElement): void {
     const set = type === 'op' ? state._histFilterOpTypes : state._histFilterErrCats;
     if (set.has(value)) { set.delete(value); pill.classList.remove('active'); }
     else { set.add(value); pill.classList.add('active'); }
@@ -81,13 +91,14 @@ export function toggleHistoryFilter(type, value, pill) {
 // applyHistoryFilters
 // ---------------------------------------------------------------------------
 
-export function applyHistoryFilters() {
+export function applyHistoryFilters(): void {
     if (!state.segHistoryData) return;
     const allBatches = state.segHistoryData.batches;
     const hasFilters = state._histFilterOpTypes.size > 0 || state._histFilterErrCats.size > 0;
     dom.segHistoryFilterClear.hidden = !hasFilters;
-    const chainedIds = state._chainedOpIds || new Set();
-    const allItems = state._allHistoryItems || (state._allHistoryItems = _flattenBatchesToItems(allBatches, chainedIds));
+    const chainedIds = state._chainedOpIds || new Set<string>();
+    const allItems: HistoryDisplayItem[] = state._allHistoryItems
+        || (state._allHistoryItems = _flattenBatchesToItems(allBatches, chainedIds) as unknown as HistoryDisplayItem[]);
     const filtered = hasFilters
         ? allItems.filter(item => {
             if (state._histFilterOpTypes.size > 0 && !_itemMatchesOpFilter(item, state._histFilterOpTypes)) return false;
@@ -110,8 +121,8 @@ export function applyHistoryFilters() {
     _renderHistoryDisplayItems(filtered, allBatches, dom.segHistoryBatches);
     if (!dom.segHistoryView.hidden) {
         const observer = _ensureWaveformObserver();
-        dom.segHistoryView.querySelectorAll('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-        requestAnimationFrame(() => { dom.segHistoryView.querySelectorAll('.seg-history-diff').forEach(drawHistoryArrows); });
+        dom.segHistoryView.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
+        requestAnimationFrame(() => { dom.segHistoryView.querySelectorAll<HTMLElement>('.seg-history-diff').forEach(drawHistoryArrows); });
     }
 }
 
@@ -119,7 +130,7 @@ export function applyHistoryFilters() {
 // clearHistoryFilters / setHistorySort
 // ---------------------------------------------------------------------------
 
-export function clearHistoryFilters() {
+export function clearHistoryFilters(): void {
     state._histFilterOpTypes.clear();
     state._histFilterErrCats.clear();
     dom.segHistoryFilterOps.querySelectorAll('.seg-history-filter-pill.active').forEach(p => p.classList.remove('active'));
@@ -127,7 +138,7 @@ export function clearHistoryFilters() {
     applyHistoryFilters();
 }
 
-export function setHistorySort(mode) {
+export function setHistorySort(mode: 'time' | 'quran'): void {
     state._histSortMode = mode;
     dom.segHistorySortTime.classList.toggle('active', mode === 'time');
     dom.segHistorySortQuran.classList.toggle('active', mode === 'quran');
@@ -138,11 +149,11 @@ export function setHistorySort(mode) {
 // Filter match helpers
 // ---------------------------------------------------------------------------
 
-function _itemMatchesOpFilter(item, opTypes) {
+function _itemMatchesOpFilter(item: HistoryDisplayItem, opTypes: Set<string>): boolean {
     return item.group.some(op => opTypes.has(op.op_type));
 }
 
-function _itemMatchesCatFilter(item, cats) {
+function _itemMatchesCatFilter(item: HistoryDisplayItem, cats: Set<string>): boolean {
     for (const op of item.group) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
     const delta = _deriveOpIssueDelta(item.group);
     for (const cat of cats) { if (delta.resolved.includes(cat) || delta.introduced.includes(cat)) return true; }
@@ -153,16 +164,25 @@ function _itemMatchesCatFilter(item, cats) {
 // _computeFilteredItemSummary
 // ---------------------------------------------------------------------------
 
-function _computeFilteredItemSummary(items) {
-    const opCounts = {};
-    const fixKindCounts = {};
-    const chaptersEdited = new Set();
+interface FilteredItemSummary {
+    total_operations: number;
+    chapters_edited: number;
+    verses_edited: number;
+    op_counts: Record<string, number>;
+    fix_kind_counts: Record<string, number>;
+}
+
+function _computeFilteredItemSummary(items: HistoryDisplayItem[]): FilteredItemSummary {
+    const opCounts: Record<string, number> = {};
+    const fixKindCounts: Record<string, number> = {};
+    const chaptersEdited = new Set<number>();
     for (const item of items) {
         if (item.chapter != null) chaptersEdited.add(item.chapter);
         if (Array.isArray(item.chapters)) item.chapters.forEach(ch => chaptersEdited.add(ch));
         for (const op of item.group) {
             opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
-            fixKindCounts[op.fix_kind || 'unknown'] = (fixKindCounts[op.fix_kind || 'unknown'] || 0) + 1;
+            const kind = op.fix_kind || 'unknown';
+            fixKindCounts[kind] = (fixKindCounts[kind] || 0) + 1;
         }
     }
     return {
@@ -178,12 +198,13 @@ function _computeFilteredItemSummary(items) {
 // _countVersesFromItems
 // ---------------------------------------------------------------------------
 
-function _countVersesFromItems(items) {
-    const verses = new Set();
+function _countVersesFromItems(items: HistoryDisplayItem[]): number {
+    const verses = new Set<string>();
     for (const item of items) {
         for (const op of item.group) {
             for (const snap of [...(op.targets_before || []), ...(op.targets_after || [])]) {
-                for (const v of _versesFromRef(snap.matched_ref)) verses.add(v);
+                const matchedRef = (snap as { matched_ref?: string }).matched_ref;
+                for (const v of _versesFromRef(matchedRef ?? '')) verses.add(v);
             }
         }
     }
@@ -194,21 +215,37 @@ function _countVersesFromItems(items) {
 // _updateFilterPillCounts -- cross-filter faceted counts
 // ---------------------------------------------------------------------------
 
-function _updateFilterPillCounts(allItems) {
+function _updateFilterPillCounts(allItems: HistoryDisplayItem[]): void {
     const catActive = state._histFilterErrCats.size > 0;
     const itemsForOpCounts = catActive ? allItems.filter(item => _itemMatchesCatFilter(item, state._histFilterErrCats)) : allItems;
-    const opCounts = {};
-    for (const item of itemsForOpCounts) { if (item.group.length === 0) continue; opCounts[item.group[0].op_type] = (opCounts[item.group[0].op_type] || 0) + 1; }
-    for (const pill of dom.segHistoryFilterOps.querySelectorAll('.seg-history-filter-pill')) { const span = pill.querySelector('.pill-count'); if (span) span.textContent = opCounts[pill.dataset.filterValue] || 0; }
+    const opCounts: Record<string, number> = {};
+    for (const item of itemsForOpCounts) {
+        if (item.group.length === 0) continue;
+        const op = item.group[0];
+        if (!op) continue;
+        opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
+    }
+    for (const pill of Array.from(dom.segHistoryFilterOps.querySelectorAll<HTMLElement>('.seg-history-filter-pill'))) {
+        const span = pill.querySelector<HTMLElement>('.pill-count');
+        const val = pill.dataset.filterValue;
+        if (span && val) span.textContent = String(opCounts[val] || 0);
+    }
 
     const opActive = state._histFilterOpTypes.size > 0;
     const itemsForCatCounts = opActive ? allItems.filter(item => _itemMatchesOpFilter(item, state._histFilterOpTypes)) : allItems;
-    const catCounts = {};
+    const catCounts: Record<string, number> = {};
     for (const item of itemsForCatCounts) {
         if (item.group.length === 0) continue;
         const delta = _deriveOpIssueDelta(item.group);
-        const touchedCats = new Set([...delta.resolved, ...delta.introduced, ...item.group.map(op => op.op_context_category).filter(Boolean)]);
+        const touchedCats = new Set<string>([
+            ...delta.resolved, ...delta.introduced,
+            ...item.group.map(op => op.op_context_category).filter((c): c is string => !!c),
+        ]);
         for (const cat of touchedCats) catCounts[cat] = (catCounts[cat] || 0) + 1;
     }
-    for (const pill of dom.segHistoryFilterCats.querySelectorAll('.seg-history-filter-pill')) { const span = pill.querySelector('.pill-count'); if (span) span.textContent = catCounts[pill.dataset.filterValue] || 0; }
+    for (const pill of Array.from(dom.segHistoryFilterCats.querySelectorAll<HTMLElement>('.seg-history-filter-pill'))) {
+        const span = pill.querySelector<HTMLElement>('.pill-count');
+        const val = pill.dataset.filterValue;
+        if (span && val) span.textContent = String(catCounts[val] || 0);
+    }
 }

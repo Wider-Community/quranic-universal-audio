@@ -1,4 +1,3 @@
-// @ts-nocheck — removed per-file as each module is typed in Phases 4+
 /**
  * Trim (boundary adjustment) edit mode: enter, drag handles, preview, confirm.
  */
@@ -9,12 +8,14 @@ import { getChapterSegments, syncChapterSegsToAll, _getChapterSegs } from '../da
 import { _slicePeaks } from '../waveform/draw';
 import { computeSilenceAfter, applyVerseFilterAndRender } from '../filters';
 import { exitEditMode, _playRange, _addEditOverlay } from './common';
+import type { Segment } from '../../types/domain';
+import type { SegCanvas } from '../waveform/types';
 
 // ---------------------------------------------------------------------------
 // enterTrimMode
 // ---------------------------------------------------------------------------
 
-export function enterTrimMode(seg, row) {
+export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     if (state.segEditMode) {
         console.warn('[trim] blocked: already in edit mode:', state.segEditMode);
         return;
@@ -26,11 +27,12 @@ export function enterTrimMode(seg, row) {
     document.body.classList.add('seg-edit-active');
     _addEditOverlay();
 
-    const actions = row.querySelector('.seg-actions');
+    const actions = row.querySelector<HTMLElement>('.seg-actions');
     if (actions) actions.hidden = true;
 
-    const canvas = row.querySelector('canvas');
-    const segLeft = row.querySelector('.seg-left');
+    const canvas = row.querySelector<SegCanvas>('canvas');
+    const segLeft = row.querySelector<HTMLElement>('.seg-left');
+    if (!canvas || !segLeft) return;
 
     const inline = document.createElement('div');
     inline.className = 'seg-edit-inline';
@@ -43,7 +45,13 @@ export function enterTrimMode(seg, row) {
     statusSpan.className = 'seg-edit-status';
     const btnRow = document.createElement('div');
     btnRow.className = 'seg-edit-buttons';
-    const mkBtn = (text, cls, fn) => { const b = document.createElement('button'); b.className = `btn btn-sm ${cls}`; b.textContent = text; b.addEventListener('click', fn); return b; };
+    const mkBtn = (text: string, cls: string, fn: () => void): HTMLButtonElement => {
+        const b = document.createElement('button');
+        b.className = `btn btn-sm ${cls}`;
+        b.textContent = text;
+        b.addEventListener('click', fn);
+        return b;
+    };
     btnRow.appendChild(mkBtn('Cancel', 'btn-cancel', exitEditMode));
     btnRow.appendChild(mkBtn('Preview', 'btn-preview', previewTrimAudio));
     btnRow.appendChild(mkBtn('Apply', 'btn-confirm', () => confirmTrim(seg)));
@@ -59,11 +67,11 @@ export function enterTrimMode(seg, row) {
     const currentChapter = parseInt(dom.segChapterSelect.value);
     const chapterSegs = (chapter === currentChapter) ? _getChapterSegs() : getChapterSegments(chapter);
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
-    const prevEnd = segIdx > 0 ? chapterSegs[segIdx - 1].time_end : 0;
+    const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
     const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
     const peaksDuration = state.segPeaksByAudio?.[audioUrl]?.duration_ms;
     const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
-        ? chapterSegs[segIdx + 1].time_start
+        ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + 1000)
         : (peaksDuration || seg.time_end + 1000);
     const windowStart = Math.max(prevEnd, seg.time_start - state.TRIM_PAD_LEFT);
     const windowEnd = Math.min(nextStart, seg.time_end + state.TRIM_PAD_RIGHT);
@@ -79,13 +87,15 @@ export function enterTrimMode(seg, row) {
 // _ensureTrimBaseCache -- cache the base waveform image for trim overlay
 // ---------------------------------------------------------------------------
 
-export function _ensureTrimBaseCache(canvas) {
+export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
     if (canvas._trimBaseCache) return true;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
     const width = canvas.width;
     const height = canvas.height;
     const centerY = height / 2;
     const tw = canvas._trimWindow;
+    if (!tw) return false;
 
     ctx.fillStyle = '#0f0f23';
     ctx.fillRect(0, 0, width, height);
@@ -98,11 +108,11 @@ export function _ensureTrimBaseCache(canvas) {
 
     ctx.beginPath();
     for (let i = 0; i < width; i++) {
-        const y = centerY - data.maxVals[i] * scale;
+        const y = centerY - (data.maxVals[i] ?? 0) * scale;
         if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
     }
     for (let i = width - 1; i >= 0; i--) {
-        ctx.lineTo(i, centerY - data.minVals[i] * scale);
+        ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
     }
     ctx.closePath();
     ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
@@ -119,14 +129,17 @@ export function _ensureTrimBaseCache(canvas) {
 // drawTrimWaveform -- redraw trim overlay (handles + dimmed regions)
 // ---------------------------------------------------------------------------
 
-export function drawTrimWaveform(canvas) {
-    if (!_ensureTrimBaseCache(canvas)) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    const tw = canvas._trimWindow;
+export function drawTrimWaveform(canvas: SegCanvas): void {
+    const c = canvas;
+    if (!_ensureTrimBaseCache(c)) return;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const width = c.width;
+    const height = c.height;
+    const tw = c._trimWindow;
+    if (!tw || !c._trimBaseCache) return;
 
-    ctx.putImageData(canvas._trimBaseCache, 0, 0);
+    ctx.putImageData(c._trimBaseCache, 0, 0);
 
     const startX = ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
     const endX = ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
@@ -158,20 +171,22 @@ export function drawTrimWaveform(canvas) {
 // setupTrimDragHandles -- mouse event handlers for trim handles
 // ---------------------------------------------------------------------------
 
-export function setupTrimDragHandles(canvas, seg) {
-    let dragging = null;
+export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
+    void seg; // reserved for future per-seg snap tuning
+    let dragging: 'start' | 'end' | null = null;
     let didDrag = false;
     const HANDLE_THRESHOLD = 12;
 
-    function _getHandleXs() {
-        const tw = canvas._trimWindow, w = canvas.width;
+    function _getHandleXs(): { startX: number; endX: number } {
+        const tw = canvas._trimWindow!;
+        const w = canvas.width;
         return {
             startX: ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * w,
             endX: ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * w,
         };
     }
 
-    function onMousedown(e) {
+    function onMousedown(e: MouseEvent): void {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
         const { startX, endX } = _getHandleXs();
@@ -182,10 +197,11 @@ export function setupTrimDragHandles(canvas, seg) {
         if (dragging) canvas.style.cursor = 'col-resize';
     }
 
-    function onMousemove(e) {
+    function onMousemove(e: MouseEvent): void {
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvas.width / rect.width);
         const tw = canvas._trimWindow;
+        if (!tw) return;
         const width = canvas.width;
 
         if (!dragging) {
@@ -206,11 +222,12 @@ export function setupTrimDragHandles(canvas, seg) {
         drawTrimWaveform(canvas);
     }
 
-    function onMouseup(e) {
+    function onMouseup(e: MouseEvent): void {
         if (!dragging && !didDrag) {
             const rect = canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (canvas.width / rect.width);
             const tw = canvas._trimWindow;
+            if (!tw) return;
             const timeAtX = tw.windowStart + (x / canvas.width) * (tw.windowEnd - tw.windowStart);
             const snapped = Math.round(timeAtX / 10) * 10;
             _playRange(snapped, tw.currentEnd);
@@ -218,14 +235,14 @@ export function setupTrimDragHandles(canvas, seg) {
         dragging = null;
         canvas.style.cursor = '';
     }
-    function onMouseleave() { dragging = null; canvas.style.cursor = ''; }
+    function onMouseleave(): void { dragging = null; canvas.style.cursor = ''; }
 
     canvas.addEventListener('mousedown', onMousedown);
     canvas.addEventListener('mousemove', onMousemove);
     canvas.addEventListener('mouseup', onMouseup);
     canvas.addEventListener('mouseleave', onMouseleave);
 
-    canvas._editCleanup = () => {
+    canvas._editCleanup = (): void => {
         canvas.removeEventListener('mousedown', onMousedown);
         canvas.removeEventListener('mousemove', onMousemove);
         canvas.removeEventListener('mouseup', onMouseup);
@@ -237,10 +254,10 @@ export function setupTrimDragHandles(canvas, seg) {
 // updateTrimDuration -- update the duration display
 // ---------------------------------------------------------------------------
 
-export function updateTrimDuration(canvas) {
-    canvas = canvas || _getEditCanvas();
-    const tw = canvas?._trimWindow;
-    const el = canvas?._trimEls?.durationSpan;
+export function updateTrimDuration(canvas?: SegCanvas | null): void {
+    const c = (canvas ?? (_getEditCanvas() as SegCanvas | null)) ?? null;
+    const tw = c?._trimWindow;
+    const el = c?._trimEls?.durationSpan;
     if (!tw || !el) return;
     el.textContent = `${((tw.currentEnd - tw.currentStart) / 1000).toFixed(2)}s`;
 }
@@ -249,8 +266,8 @@ export function updateTrimDuration(canvas) {
 // confirmTrim -- apply the trim and finalize
 // ---------------------------------------------------------------------------
 
-export function confirmTrim(seg) {
-    const canvas = _getEditCanvas();
+export function confirmTrim(seg: Segment): void {
+    const canvas = _getEditCanvas() as SegCanvas | null;
     const tw = canvas?._trimWindow;
     const trimStatus = canvas?._trimEls?.statusSpan || null;
     const newStart = tw?.currentStart;
@@ -294,7 +311,10 @@ export function confirmTrim(seg) {
     }
 
     if (chapter !== currentChapter || !state.segData?.segments) {
-        state.segAllData._byChapter = null; state.segAllData._byChapterIndex = null;
+        if (state.segAllData) {
+            state.segAllData._byChapter = null;
+            state.segAllData._byChapterIndex = null;
+        }
     } else {
         syncChapterSegsToAll();
     }
@@ -313,10 +333,10 @@ export function confirmTrim(seg) {
 // previewTrimAudio -- toggle looping preview of trimmed region
 // ---------------------------------------------------------------------------
 
-export function previewTrimAudio() {
-    const canvas = _getEditCanvas();
+export function previewTrimAudio(): void {
+    const canvas = _getEditCanvas() as SegCanvas | null;
     const tw = canvas?._trimWindow;
-    if (!tw) return;
+    if (!tw || !canvas) return;
     if (state._previewLooping && !dom.segAudioEl.paused) {
         state._previewLooping = false;
         state._previewJustSeeked = false;
