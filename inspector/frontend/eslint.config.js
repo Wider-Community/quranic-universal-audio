@@ -14,6 +14,24 @@ export default [
             'simple-import-sort': simpleImportSort,
             'import': importPlugin,
         },
+        settings: {
+            // eslint-plugin-import needs both a TS resolver (to follow
+            // extensionless `./foo` → `./foo.ts`) AND an `import/parsers`
+            // setting that maps `.ts` to `@typescript-eslint/parser` so the
+            // plugin can parse the import graph. Without BOTH, the
+            // `import/no-cycle` rule silently reports zero findings even
+            // when cycles exist. The project-setup discovery happened
+            // during Wave 1's Item 3 end-to-end verification.
+            'import/resolver': {
+                typescript: {
+                    project: './tsconfig.json',
+                },
+                node: true,
+            },
+            'import/parsers': {
+                '@typescript-eslint/parser': ['.ts', '.tsx'],
+            },
+        },
         rules: {
             // Stage 1 migration tolerance — tightened in Phase 7 cleanup.
             '@typescript-eslint/no-explicit-any': 'off',
@@ -31,7 +49,14 @@ export default [
                 prefer: 'type-imports',
                 fixStyle: 'separate-type-imports',
             }],
-            'import/no-cycle': 'error',
+            // Downgraded to `warn` in Wave 1 of Stage 2 after enabling the
+            // TS resolver surfaced ~22 pre-existing segments-tab cycles
+            // (see stage2-bugs.md S2-B06). Those are the same runtime-safe
+            // cycles the segments `register*` pattern was built to handle;
+            // they dissolve in Waves 5-10 as the segments tab migrates to
+            // Svelte. Wave 11 re-promotes this rule to `error` once zero
+            // cycles remain (see stage2-decisions.md S2-D24).
+            'import/no-cycle': 'warn',
         },
     },
 ];

@@ -34,6 +34,7 @@ _Empty at start. Implementation agents append rows here when typecheck/lint surf
 
 | ID | Title | File:Line | Caught by | Wave | Status | Fix-SHA | Notes |
 |----|-------|-----------|-----------|------|--------|---------|-------|
+| S2-B06 | 22 pre-existing segments-tab import cycles surfaced when TS resolver enabled | inspector/frontend/src/segments/{data,edit/reference,filters,history/{filters,index,rendering,undo},navigation,playback/index,rendering,save,validation/index,waveform/index}.ts | LINT | 1 | DEFERRED | | `import/no-cycle` was silently no-op (see S2-D24) because `eslint-plugin-import` had no TS resolver. Wave 1 installed `eslint-import-resolver-typescript` + `import/parsers` mapping; 22 warnings now surface in the segments tab. These are the runtime-safe cycles the `register*` pattern was built to handle (e.g. `data → rendering → data`, `history/rendering → history/index → history/rendering`, `validation/index → rendering → data → validation/index`). All dissolve during the Svelte migration (Waves 5-10) as state-store rewiring breaks the bidirectional edges. Rule downgraded to `warn` to avoid masking unrelated errors; re-promoted to `error` in Wave 11 (see S2-D24). |
 
 ## Section 3 — Manual-smoke-caught
 

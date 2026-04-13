@@ -3,7 +3,7 @@
  * Uses registerHandler pattern for edit/save functions.
  */
 
-import { getActiveTab } from '../main';
+import { getActiveTab } from '../shared/active-tab';
 import { LS_KEYS } from '../shared/constants';
 import { cycleSpeed } from '../shared/speed-control';
 import { _restoreFilterView } from './navigation';

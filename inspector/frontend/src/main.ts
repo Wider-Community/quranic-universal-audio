@@ -24,13 +24,8 @@ import './timestamps/index';
 import './segments/index';
 import './audio/index';
 
+import { getActiveTab, setActiveTab } from './shared/active-tab';
 import { LS_KEYS } from './shared/constants';
-
-let activeTab = 'timestamps';
-
-export function getActiveTab(): string {
-    return activeTab;
-}
 
 function setupTabSwitching(): void {
     const panels = ['timestamps', 'segments', 'audio'];
@@ -40,18 +35,19 @@ function setupTabSwitching(): void {
             btn.classList.add('active');
             const tab = btn.dataset.tab;
             if (!tab) return;
-            activeTab = tab;
-            localStorage.setItem(LS_KEYS.ACTIVE_TAB, activeTab);
+            setActiveTab(tab);
+            const current = getActiveTab();
+            localStorage.setItem(LS_KEYS.ACTIVE_TAB, current);
             panels.forEach(p => {
                 const panel = document.getElementById(p + '-panel');
-                if (panel) panel.hidden = (activeTab !== p);
+                if (panel) panel.hidden = (current !== p);
             });
             // Pause audio from other tabs (use getElementById to avoid importing tab state)
-            if (activeTab !== 'timestamps') {
+            if (current !== 'timestamps') {
                 const tsAudio = document.getElementById('audio-player') as HTMLAudioElement | null;
                 if (tsAudio) tsAudio.pause();
             }
-            if (activeTab !== 'segments') {
+            if (current !== 'segments') {
                 const segAudio = document.getElementById('seg-audio-player') as HTMLAudioElement | null;
                 if (segAudio) segAudio.pause();
                 // valCardAudio is created dynamically by error-card-audio.ts;
@@ -61,7 +57,7 @@ function setupTabSwitching(): void {
                     segPanel.querySelectorAll<HTMLAudioElement>('audio').forEach(a => { if (a.id !== 'seg-audio-player') a.pause(); });
                 }
             }
-            if (activeTab !== 'audio') {
+            if (current !== 'audio') {
                 const audPlayer = document.getElementById('aud-player') as HTMLAudioElement | null;
                 if (audPlayer) audPlayer.pause();
             }

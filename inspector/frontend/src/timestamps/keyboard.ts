@@ -2,7 +2,7 @@
  * Timestamps tab — keyboard shortcut handler.
  */
 
-import { getActiveTab } from '../main';
+import { getActiveTab } from '../shared/active-tab';
 import { safePlay } from '../shared/audio';
 import { LS_KEYS } from '../shared/constants';
 import { cycleSpeed } from '../shared/speed-control';
