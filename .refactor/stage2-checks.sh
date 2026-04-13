@@ -113,24 +113,41 @@ echo "ok: $cycle_warnings cycle warnings (ceiling: $CYCLE_CEILING)"
 
 cd "$REPO_ROOT/inspector"
 
+# -----------------------------------------------------------------------------
+# Wave 2+ Docker smoke — enabled once Dockerfile landed at Wave 2a.
+# Skipped when docker isn't available (e.g. WSL w/o Docker Desktop) so the
+# pre-flight still completes on dev machines that can't build the image.
+# -----------------------------------------------------------------------------
+
+cd "$REPO_ROOT"
+if command -v docker >/dev/null 2>&1; then
+    echo
+    echo "[wave-2+] Docker smoke"
+    if ! docker build -t inspector:dev . ; then
+        echo "FAIL: docker build"
+        exit 1
+    fi
+    if ! docker run --rm --detach --name inspector-dev \
+            -v "$REPO_ROOT/data:/data" -p 5000:5000 inspector:dev >/dev/null ; then
+        echo "FAIL: docker run"
+        exit 1
+    fi
+    # Give Flask a moment to bind (eager phonemizer + timestamp preload can
+    # take a few seconds on first start).
+    sleep 5
+    if curl -s -f http://localhost:5000/api/seg/config > /dev/null; then
+        echo "ok: docker smoke"
+        docker rm -f inspector-dev >/dev/null
+    else
+        echo "FAIL: docker smoke (curl /api/seg/config)"
+        docker logs inspector-dev || true
+        docker rm -f inspector-dev >/dev/null || true
+        exit 1
+    fi
+else
+    echo
+    echo "[wave-2+] Docker smoke SKIPPED (docker not available on this machine)"
+fi
+
 echo
 echo "== All Stage-2 pre-flight checks passed =="
-
-# -----------------------------------------------------------------------------
-# After Wave 2 (Docker distribution): uncomment when Dockerfile lands.
-# -----------------------------------------------------------------------------
-# echo
-# echo "[wave-2] Docker smoke"
-# docker build -t inspector:dev . && \
-#     docker run --rm --detach --name inspector-dev \
-#         -v "$REPO_ROOT/data:/data" -p 5000:5000 inspector:dev >/dev/null
-# sleep 3
-# if curl -s -f http://localhost:5000/api/seg/config > /dev/null; then
-#     echo "ok: docker smoke"
-# else
-#     echo "FAIL: docker smoke"
-#     docker logs inspector-dev
-#     docker rm -f inspector-dev
-#     exit 1
-# fi
-# docker rm -f inspector-dev >/dev/null
