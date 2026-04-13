@@ -7,15 +7,54 @@ startup sequence.
 """
 import argparse
 import concurrent.futures
-import sys
+import json
+import logging
+import os
 from pathlib import Path
 
 from flask import Flask, jsonify, send_file, send_from_directory
+from werkzeug.exceptions import HTTPException
 
 from config import AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR
 from routes import register_blueprints
 from services.data_loader import discover_ts_reciters, load_surah_info_lite, load_timestamps
 from services.phonemizer_service import get_phonemizer, has_phonemizer
+
+
+# ---------------------------------------------------------------------------
+# Structured logging
+# ---------------------------------------------------------------------------
+
+class JSONFormatter(logging.Formatter):
+    """Emit log records as single-line JSON for downstream aggregation."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "time": self.formatTime(record, datefmt="%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "name": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def _configure_logging() -> None:
+    """Install the JSON formatter on the root logger (idempotent)."""
+    root = logging.getLogger()
+    # Avoid duplicate handlers on reload (Flask's reloader re-imports this module).
+    if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, JSONFormatter)
+           for h in root.handlers):
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(JSONFormatter())
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+
+_configure_logging()
+logger = logging.getLogger("inspector")
 
 _HERE = Path(__file__).parent.resolve()
 FRONTEND_DIST = _HERE / "frontend" / "dist"
@@ -25,6 +64,24 @@ FRONTEND_DIST = _HERE / "frontend" / "dist"
 # `/` route below handles index.html explicitly.
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
 register_blueprints(app)
+
+
+# ---------------------------------------------------------------------------
+# Error handlers — preserve {error: str} envelope across all routes
+# ---------------------------------------------------------------------------
+
+@app.errorhandler(HTTPException)
+def _handle_http_exception(e: HTTPException):
+    """Return the canonical ``{error: <description>}`` envelope with the HTTP status."""
+    return jsonify({"error": e.description}), e.code
+
+
+@app.errorhandler(Exception)
+def _handle_unexpected_exception(e: Exception):
+    """Log uncaught exceptions and return a generic envelope (don't leak internals)."""
+    logger.exception("unhandled exception: %s", e)
+    return jsonify({"error": "internal server error"}), 500
+
 
 # ---------------------------------------------------------------------------
 # Static / index routes
@@ -75,25 +132,24 @@ if __name__ == "__main__":
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     if not (FRONTEND_DIST / "index.html").exists():
-        print(
-            f"WARNING: {FRONTEND_DIST / 'index.html'} not found.\n"
-            "         Run `cd inspector/frontend && npm ci && npm run build` before visiting /.\n"
-            "         For frontend development: `cd inspector/frontend && npm run dev` and\n"
-            "         visit http://localhost:5173 (Vite proxies /api + /audio to this Flask).",
-            file=sys.stderr,
+        logger.warning(
+            "%s not found. Run `cd inspector/frontend && npm ci && npm run build` "
+            "before visiting /. For frontend dev: `cd inspector/frontend && npm run dev` "
+            "and visit http://localhost:5173 (Vite proxies /api + /audio to this Flask).",
+            FRONTEND_DIST / "index.html",
         )
 
     # Eagerly initialize phonemizer
     if has_phonemizer():
-        print("Initializing phonemizer...")
+        logger.info("Initializing phonemizer...")
         get_phonemizer()
-        print("Phonemizer ready.")
+        logger.info("Phonemizer ready.")
     else:
-        print("Phonemizer not available (reference resolution disabled)")
+        logger.info("Phonemizer not available (reference resolution disabled)")
 
     # Eagerly discover timestamp reciters
     reciters = discover_ts_reciters()
-    print(f"Discovered {len(reciters)} timestamp reciter(s).")
+    logger.info("Discovered %d timestamp reciter(s).", len(reciters))
 
     # Preload all timestamp data in background threads
     if reciters:
@@ -102,10 +158,13 @@ if __name__ == "__main__":
             return slug
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(reciters), 8)) as pool:
             for slug in pool.map(_preload, [r["slug"] for r in reciters]):
-                print(f"  Preloaded timestamps: {slug}")
-        print("All timestamp data cached.")
+                logger.info("Preloaded timestamps: %s", slug)
+        logger.info("All timestamp data cached.")
 
     # Vite owns frontend file-watching (HMR in dev; rebuild on npm run build).
     # Flask reloader only needs to watch Python modules, which it does natively.
-    print(f"Starting server at http://localhost:{args.port}")
-    app.run(host="0.0.0.0", port=args.port, debug=True, use_reloader=True)
+    # Debug + reloader default off for production; opt in with `FLASK_ENV=development`
+    # (matches plan §4: `debug=False` unless `FLASK_ENV=development`).
+    debug = os.environ.get("FLASK_ENV") == "development"
+    logger.info("Starting server at http://localhost:%d (debug=%s)", args.port, debug)
+    app.run(host="0.0.0.0", port=args.port, debug=debug, use_reloader=debug)
