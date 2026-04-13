@@ -9,7 +9,7 @@ import { commitRefEdit } from '../edit/reference';
 import { findMissingVerseBoundarySegments } from '../navigation';
 import { renderSegCard, resolveSegFromRow,syncAllCardsForSegment } from '../rendering';
 import { createOp, dom, finalizeOp, isDirty, isIndexDirty,markDirty, snapshotSeg, state, unmarkDirty } from '../state';
-import { _ensureWaveformObserver, _fetchPeaks } from '../waveform/index';
+import { _ensureWaveformObserver } from '../waveform/index';
 import { _isIgnoredFor } from './categories';
 
 // ---------------------------------------------------------------------------
@@ -67,20 +67,6 @@ export function renderCategoryCards(type: string, items: SegValAnyItem[], contai
     const BATCH_SIZE = 30;
     const observer = _ensureWaveformObserver();
 
-    if (state.segPeaksByAudio) {
-        const missingChapters = new Set<number>();
-        items.forEach((item) => {
-            const ch = item.chapter;
-            if (!ch) return;
-            const url = state.segAllData?.audio_by_chapter?.[String(ch)] || '';
-            if (url && state.segPeaksByAudio && !state.segPeaksByAudio[url]) missingChapters.add(ch);
-        });
-        if (missingChapters.size > 0) {
-            const reciter = dom.segReciterSelect.value;
-            if (reciter) _fetchPeaks(reciter, [...missingChapters]);
-        }
-    }
-
     function renderOneItem(issue: SegValAnyItem): void {
         if (type === 'missing_words') {
             const mwIssue = issue as SegValMissingWordsItem;
@@ -106,7 +92,7 @@ export function renderCategoryCards(type: string, items: SegValAnyItem[], contai
                 const autoFix = mwIssue.auto_fix;
                 const fixBtn = document.createElement('button');
                 fixBtn.className = 'val-action-btn';
-                fixBtn.textContent = 'Auto Fix';
+                fixBtn.textContent = 'Auto Fill';
                 fixBtn.title = 'Extend segment ref to cover the missing word';
                 fixBtn.addEventListener('click', async () => {
                     const seg = getSegByChapterIndex(mwIssue.chapter, autoFix.target_seg_index);
@@ -131,7 +117,7 @@ export function renderCategoryCards(type: string, items: SegValAnyItem[], contai
                     const undoBtn = document.createElement('button');
                     undoBtn.className = 'val-action-btn val-action-btn-danger';
                     undoBtn.textContent = 'Undo';
-                    undoBtn.title = 'Revert auto-fix';
+                    undoBtn.title = 'Revert auto-fill';
                     undoBtn.addEventListener('click', () => {
                         seg.matched_ref = oldRef;
                         seg.matched_text = oldText;
@@ -140,7 +126,7 @@ export function renderCategoryCards(type: string, items: SegValAnyItem[], contai
                         if (oldIgnoredCats) seg.ignored_categories = oldIgnoredCats; else delete seg.ignored_categories;
                         if (!wasDirty) unmarkDirty(segChapter, seg.index);
                         fixBtn.disabled = false;
-                        fixBtn.textContent = 'Auto Fix';
+                        fixBtn.textContent = 'Auto Fill';
                         wrapper.style.opacity = '1';
                         syncAllCardsForSegment(seg);
                         undoBtn.remove();
@@ -360,6 +346,14 @@ export function _isWrapperContextShown(wrapper: Element | null | undefined): boo
 // _rebuildAccordionAfterSplit
 // ---------------------------------------------------------------------------
 
+function _buildSegUidMap(segs: Segment[]): Map<string, Segment> {
+    const map = new Map<string, Segment>();
+    for (const s of segs) {
+        if (s.segment_uid) map.set(s.segment_uid, s);
+    }
+    return map;
+}
+
 export function _rebuildAccordionAfterSplit(
     wrapper: HTMLElement,
     chapter: number,
@@ -369,6 +363,7 @@ export function _rebuildAccordionAfterSplit(
 ): void {
     const observer = _ensureWaveformObserver();
     const allSegs: Segment[] = state.segAllData?.segments || state.segData?.segments || [];
+    const uidMap = _buildSegUidMap(allSegs);
     wrapper.querySelectorAll('.seg-row-context').forEach((c) => c.remove());
     const mainCards = [...wrapper.querySelectorAll<HTMLElement>('.seg-row:not(.seg-row-context)')];
     const splitCard = mainCards.find((c) =>
@@ -393,7 +388,7 @@ export function _rebuildAccordionAfterSplit(
     wrapper.querySelectorAll<HTMLElement>('.seg-row:not(.seg-row-context)').forEach((card) => {
         const uid = card.dataset.segUid;
         if (!uid) return;
-        const updatedSeg = allSegs.find((s) => s.segment_uid === uid);
+        const updatedSeg = uidMap.get(uid);
         if (updatedSeg) card.dataset.segIndex = String(updatedSeg.index);
     });
     const updatedMain = [...wrapper.querySelectorAll<HTMLElement>('.seg-row:not(.seg-row-context)')];
@@ -426,6 +421,23 @@ export function _rebuildAccordionAfterSplit(
 
 export function _refreshSiblingCardIndices(): void {
     // Indices are refreshed during _rebuildAccordionAfterSplit
+}
+
+/** Refresh `data-seg-index` on every open-accordion card by UID, so stale
+ *  indices after split/merge/delete don't misroute playback via
+ *  resolveSegFromRow → _segIndexMap. `skipWrapper` excludes a wrapper that
+ *  was just rebuilt in-place. */
+export function _refreshStaleSegIndices(skipWrapper?: HTMLElement): void {
+    const allSegs: Segment[] = state.segAllData?.segments || state.segData?.segments || [];
+    if (!allSegs.length) return;
+    const uidMap = _buildSegUidMap(allSegs);
+    document.querySelectorAll<HTMLElement>('details[data-category] .seg-row[data-seg-uid]').forEach((card) => {
+        if (skipWrapper && skipWrapper.contains(card)) return;
+        const uid = card.dataset.segUid;
+        if (!uid) return;
+        const seg = uidMap.get(uid);
+        if (seg) card.dataset.segIndex = String(seg.index);
+    });
 }
 
 // ---------------------------------------------------------------------------

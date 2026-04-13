@@ -264,7 +264,6 @@ export interface SegmentsState {
     _prevHighlightedRow: Element | null;
     _prevHighlightedIdx: number;
     _prevPlayheadIdx: number;
-    _prevPlayheadRow: Element | null;
     _currentPlayheadRow: Element | null;
 
     // Canvas scrub
@@ -387,7 +386,6 @@ export const state: SegmentsState = {
     _prevHighlightedRow: null,
     _prevHighlightedIdx: -1,
     _prevPlayheadIdx: -1,
-    _prevPlayheadRow: null,
     _currentPlayheadRow: null,
 
     // Canvas scrub
@@ -650,7 +648,7 @@ export function _findCoveringPeaks(
         if (entries) {
             for (const entry of entries) {
                 if (entry.startMs <= startMs && entry.endMs >= endMs) {
-                    return { peaks: entry.peaks, duration_ms: entry.durationMs };
+                    return { peaks: entry.peaks, duration_ms: entry.durationMs, start_ms: entry.startMs };
                 }
             }
         }

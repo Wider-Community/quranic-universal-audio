@@ -24,7 +24,6 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     state.segEditIndex = seg.index;
 
     row.classList.add('seg-edit-target');
-    document.body.classList.add('seg-edit-active');
     _addEditOverlay();
 
     const actions = row.querySelector<HTMLElement>('.seg-actions');

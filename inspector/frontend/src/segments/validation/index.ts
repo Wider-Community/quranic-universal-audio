@@ -237,15 +237,18 @@ export function renderValidationPanel(
 
         let lcThreshold: number = LC_DEFAULT;
         let activeQalqalaLetter: string | null = null;
+        let qalqalaEndOfVerse: boolean = false;
         const getVisibleItems = (): SegValAnyItem[] => {
             if (isLowConf) {
                 return (cat.items as SegValLowConfidenceItem[])
                     .filter((i) => (i.confidence * 100) < lcThreshold)
                     .sort((a, b) => a.confidence - b.confidence);
             }
-            if (isQalqala && activeQalqalaLetter) {
-                return (cat.items as SegValQalqalaItem[])
-                    .filter((i) => i.qalqala_letter === activeQalqalaLetter);
+            if (isQalqala) {
+                let items = cat.items as SegValQalqalaItem[];
+                if (activeQalqalaLetter) items = items.filter((i) => i.qalqala_letter === activeQalqalaLetter);
+                if (qalqalaEndOfVerse) items = items.filter((i) => i.end_of_verse === true);
+                return items;
             }
             return cat.items;
         };
@@ -307,6 +310,21 @@ export function renderValidationPanel(
                 });
                 row.appendChild(btn);
             });
+            const eovBtn = document.createElement('button');
+            eovBtn.className = 'val-btn val-cross qalqala-eov-btn';
+            eovBtn.textContent = 'End of verse';
+            eovBtn.title = 'Show only segments that end at a verse boundary';
+            eovBtn.addEventListener('click', () => {
+                qalqalaEndOfVerse = !qalqalaEndOfVerse;
+                eovBtn.classList.toggle('active', qalqalaEndOfVerse);
+                const visible = getVisibleItems();
+                const countEl = summary.querySelector('[data-lc-count]');
+                if (countEl) countEl.textContent = String(visible.length);
+                if (state._cardRenderRafId) { cancelAnimationFrame(state._cardRenderRafId); state._cardRenderRafId = null; }
+                cardsDiv.innerHTML = '';
+                renderCategoryCards(cat.type, visible, cardsDiv);
+            });
+            row.appendChild(eovBtn);
             details.appendChild(row);
         }
 

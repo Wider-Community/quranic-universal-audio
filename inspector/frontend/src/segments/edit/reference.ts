@@ -111,9 +111,12 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
             }
             seg.confidence = 1.0;
             if (state._pendingOp?.op_context_category) {
-                if (!seg.ignored_categories) seg.ignored_categories = [];
-                if (!seg.ignored_categories.includes(state._pendingOp.op_context_category))
-                    seg.ignored_categories.push(state._pendingOp.op_context_category);
+                const _cat = state._pendingOp.op_context_category;
+                if (_cat !== 'muqattaat') {
+                    if (!seg.ignored_categories) seg.ignored_categories = [];
+                    if (!seg.ignored_categories.includes(_cat))
+                        seg.ignored_categories.push(_cat);
+                }
             }
             delete seg._derived;
             markDirty(chapter, seg.index);
@@ -135,9 +138,12 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
     seg.matched_ref = newRef;
     seg.confidence = 1.0;
     if (state._pendingOp?.op_context_category) {
-        if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(state._pendingOp.op_context_category))
-            seg.ignored_categories.push(state._pendingOp.op_context_category);
+        const _cat = state._pendingOp.op_context_category;
+        if (_cat !== 'muqattaat') {
+            if (!seg.ignored_categories) seg.ignored_categories = [];
+            if (!seg.ignored_categories.includes(_cat))
+                seg.ignored_categories.push(_cat);
+        }
     }
 
     if (newRef) {

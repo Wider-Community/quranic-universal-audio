@@ -82,10 +82,13 @@ export function drawWaveformFromPeaksForSeg(canvas: SegCanvas, seg: Segment, cha
         drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);
         return true;
     }
-    // Fallback: try covering-range peaks (segment-level or padded)
+    // Fallback: try covering-range peaks (segment-level or padded).
+    // Subtract range start offset: per-segment peaks begin at start_ms within the file,
+    // not at t=0.  Without this, time_start/duration_ms > 1 → empty slice → blank canvas.
     const covering = _findCoveringPeaks(audioUrl, seg.time_start, seg.time_end);
     if (covering?.peaks?.length) {
-        drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, covering.peaks as Peaks, covering.duration_ms);
+        const rs = covering.start_ms ?? 0;
+        drawSegmentWaveformFromPeaks(canvas, seg.time_start - rs, seg.time_end - rs, covering.peaks as Peaks, covering.duration_ms);
         return true;
     }
     return false;
@@ -104,10 +107,14 @@ export function drawSegPlayhead(
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
     } else {
-        if (state.segPeaksByAudio && audioUrl) {
-            const pe = state.segPeaksByAudio[audioUrl];
+        if (audioUrl) {
+            // Use covering-peaks lookup: supports both full-file peaks and per-segment
+            // chunk peaks (fetched via _fetchPeaksForClick). Without this, chunk peaks
+            // don't draw here -- only a blank canvas + playhead shows.
+            const pe = _findCoveringPeaks(audioUrl, startMs, endMs);
             if (pe?.peaks?.length) {
-                drawSegmentWaveformFromPeaks(canvas, startMs, endMs, pe.peaks, pe.duration_ms);
+                const rs = pe.start_ms ?? 0;
+                drawSegmentWaveformFromPeaks(canvas, startMs - rs, endMs - rs, pe.peaks as PeakBucket[], pe.duration_ms);
             }
         }
         canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -156,9 +163,10 @@ export function _slicePeaks(
     }
     if (!pe?.peaks?.length) return null;
     const peaks = pe.peaks;
+    const rs = pe.start_ms ?? 0;
     const pps = peaks.length / pe.duration_ms;
-    const startIdx = Math.max(0, Math.floor(startMs * pps));
-    const endIdx = Math.min(peaks.length, Math.ceil(endMs * pps));
+    const startIdx = Math.max(0, Math.floor((startMs - rs) * pps));
+    const endIdx = Math.min(peaks.length, Math.ceil((endMs - rs) * pps));
     const slice = peaks.slice(startIdx, endIdx);
     if (slice.length === 0) return null;
     const maxVals = new Float32Array(buckets);

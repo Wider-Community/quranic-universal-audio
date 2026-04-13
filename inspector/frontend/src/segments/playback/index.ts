@@ -9,6 +9,7 @@ import { formatTimeMs } from '../references';
 import { dom,state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
 import { drawSegPlayhead,drawWaveformFromPeaksForSeg } from '../waveform/draw';
+import { _fetchPeaksForClick } from '../waveform/index';
 import type { SegCanvas } from '../waveform/types';
 
 
@@ -41,6 +42,10 @@ export function playFromSegment(
     updateSegPlayStatus();
 
     _prefetchNextSegAudio(segIndex);
+
+    // Fetch waveform peaks on-demand via ffmpeg HTTP Range (brief delay expected).
+    const chapterForPeaks = chapter ?? parseInt(dom.segChapterSelect.value);
+    void _fetchPeaksForClick(seg, chapterForPeaks);
 }
 
 function _nextDisplayedSeg(afterIndex: number) {
@@ -161,7 +166,17 @@ export function onSegTimeUpdate(): void {
         }
         updateSegHighlight();
         updateSegPlayStatus();
-        if (state.segCurrentIdx >= 0) _prefetchNextSegAudio(state.segCurrentIdx);
+        if (state.segCurrentIdx >= 0) {
+            _prefetchNextSegAudio(state.segCurrentIdx);
+            // Trigger on-demand peaks fetch for the segment we just entered during
+            // continuous play (auto-advance on same audio file doesn't go through
+            // playFromSegment, so peaks would otherwise never load here).
+            const curSeg = state.segDisplayedSegments?.find(s => s.index === state.segCurrentIdx);
+            if (curSeg) {
+                const chapterForPeaks = curSeg.chapter ?? (dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : 0);
+                if (chapterForPeaks) void _fetchPeaksForClick(curSeg, chapterForPeaks);
+            }
+        }
     }
 }
 
@@ -258,8 +273,11 @@ export function drawActivePlayhead(): void {
 
     const indexChanged = state._prevPlayheadIdx !== state.segCurrentIdx;
 
+    // On index change: clear playhead on the previous segment's canvas by
+    // redrawing its waveform. _currentPlayheadRow at frame start still points
+    // to last frame's current row -- which IS this frame's previous row.
     if (state._prevPlayheadIdx >= 0 && indexChanged) {
-        const prevRow = state._prevPlayheadRow || dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state._prevPlayheadIdx}"]`);
+        const prevRow = state._currentPlayheadRow || dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state._prevPlayheadIdx}"]`);
         if (prevRow) {
             const canvas = prevRow.querySelector<SegCanvas>('canvas');
             const seg = getSegByChapterIndex(chapter, state._prevPlayheadIdx);
@@ -270,7 +288,6 @@ export function drawActivePlayhead(): void {
     }
 
     if (indexChanged) {
-        state._prevPlayheadRow = state._currentPlayheadRow;
         state._currentPlayheadRow = state.segCurrentIdx >= 0
             ? dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`)
             : null;

@@ -23,7 +23,7 @@ import { stopSegAnimation } from './playback/index';
 import { dom,state } from './state';
 import { renderStatsPanel } from './stats';
 import { captureValPanelState, renderValidationPanel, restoreValPanelState } from './validation/index';
-import { _fetchChapterPeaksIfNeeded,_fetchPeaks } from './waveform/index';
+import { _fetchChapterPeaksIfNeeded } from './waveform/index';
 
 // ---------------------------------------------------------------------------
 // Reciter loading
@@ -167,8 +167,6 @@ export async function onSegReciterChange(): Promise<void> {
         computeSilenceAfter();
         if (dom.segFilterBarEl) dom.segFilterBarEl.hidden = false;
         applyFiltersAndRender();
-        const errorChapters = _collectErrorChapters(state.segValidation);
-        if (errorChapters.length > 0) _fetchPeaks(reciter, errorChapters);
         if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
     } else {
         console.error('Error loading all segments:', allResult.reason);
@@ -391,28 +389,3 @@ export function _getChapterSegs(): Segment[] {
     return [];
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Extract unique chapter numbers from all validation error categories. */
-function _collectErrorChapters(validation: SegValidateResponse | null): number[] {
-    if (!validation) return [];
-    const chapters = new Set<number>();
-    const cats: ReadonlyArray<keyof SegValidateResponse> = [
-        'errors', 'missing_verses', 'missing_words', 'failed',
-        'low_confidence', 'boundary_adj',
-        'cross_verse', 'audio_bleeding', 'repetitions',
-    ];
-    for (const cat of cats) {
-        const items = validation[cat];
-        if (Array.isArray(items)) {
-            items.forEach((i: unknown) => {
-                if (i && typeof i === 'object' && typeof (i as { chapter?: number }).chapter === 'number') {
-                    chapters.add((i as { chapter: number }).chapter);
-                }
-            });
-        }
-    }
-    return [...chapters].sort((a, b) => a - b);
-}

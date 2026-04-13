@@ -10,7 +10,6 @@ import type { HistorySnapshot,SplitChain } from '../state';
 import { dom,state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
 import { _ensureWaveformObserver } from '../waveform/index';
-import { _fetchPeaks } from '../waveform/index';
 import { renderHistoryFilterBar } from './filters';
 import {
     _countVersesFromBatches,
@@ -96,18 +95,6 @@ export function renderEditHistoryPanel(data: SegEditHistoryResponse | null | und
     const { chains, chainedOpIds } = _buildSplitChains(data.batches, splitLineage);
     state._splitChains = chains;
     state._chainedOpIds = chainedOpIds;
-
-    // Prefetch peaks for all history chapters
-    {
-        const reciter = dom.segReciterSelect.value;
-        const allHistoryChapters: number[] = [...new Set<number>(data.batches.flatMap(b => {
-            const chs: number[] = [];
-            if (b.chapter != null) chs.push(b.chapter);
-            if (Array.isArray(b.chapters)) chs.push(...b.chapters);
-            return chs;
-        }).filter((ch): ch is number => ch != null))];
-        if (reciter && allHistoryChapters.length > 0) _fetchPeaks(reciter, allHistoryChapters);
-    }
 
     if (data.summary) {
         data.summary.verses_edited = _countVersesFromBatches(data.batches);

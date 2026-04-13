@@ -10,7 +10,7 @@ import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
 import { _suggestSplitRefs } from '../references';
 import { _getEditCanvas } from '../rendering';
 import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
-import { _rebuildAccordionAfterSplit } from '../validation/error-cards';
+import { _rebuildAccordionAfterSplit, _refreshStaleSegIndices } from '../validation/error-cards';
 import { _fixupValIndicesForSplit } from '../validation/index';
 import { refreshOpenAccordionCards } from '../validation/index';
 import { _slicePeaks } from '../waveform/draw';
@@ -32,7 +32,6 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     state.segEditIndex = seg.index;
 
     row.classList.add('seg-edit-target');
-    document.body.classList.add('seg-edit-active');
     _addEditOverlay();
 
     const actions = row.querySelector<HTMLElement>('.seg-actions');
@@ -351,6 +350,10 @@ export async function confirmSplit(seg: Segment): Promise<void> {
 
     if (accCtx) {
         _rebuildAccordionAfterSplit(accCtx.wrapper, chapter, seg, firstHalf, secondHalf);
+        // Other open accordion wrappers keep stale data-seg-index values after
+        // the reindex; without this sweep, resolveSegFromRow on their play
+        // buttons maps stale index → wrong segment → wrong time.
+        _refreshStaleSegIndices(accCtx.wrapper);
     } else {
         refreshOpenAccordionCards();
     }

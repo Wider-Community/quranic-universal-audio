@@ -17,21 +17,11 @@ export function _isCurrentReciterBySurah(): boolean {
 }
 
 
-/** Rewrite all audio URLs in segAllData to go through the server proxy (by_surah only). */
-export function _rewriteAudioUrls(): void {
-    if (!state.segAllData || !_isCurrentReciterBySurah()) return;
-    const reciter = dom.segReciterSelect.value;
-    const rewrite = (url: string | null | undefined): string =>
-        url && !url.startsWith('/api/') ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(url)}` : (url || '');
-    if (state.segAllData.audio_by_chapter) {
-        for (const ch of Object.keys(state.segAllData.audio_by_chapter)) {
-            state.segAllData.audio_by_chapter[ch] = rewrite(state.segAllData.audio_by_chapter[ch]);
-        }
-    }
-    if (state.segAllData.segments) {
-        state.segAllData.segments.forEach(s => { if (s.audio_url) s.audio_url = rewrite(s.audio_url); });
-    }
-}
+/** Formerly rewrote audio URLs to proxy paths. No-op: raw CDN URLs must be preserved
+ *  so that the server's HTTP Range peak computation (`/api/seg/segment-peaks`) can reach
+ *  CDN directly. Playback proxy rewriting happens only at audio-element src assignment time
+ *  (see `onSegChapterChange` in data.ts). */
+export function _rewriteAudioUrls(): void {}
 
 export function _formatBytes(bytes: number): string {
     if (bytes < 1024) return bytes + ' B';

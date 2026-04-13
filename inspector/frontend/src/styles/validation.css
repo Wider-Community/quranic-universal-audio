@@ -168,6 +168,11 @@
     border-color: #4cc9f0;
     color: #fff;
 }
+.val-btn.qalqala-eov-btn.active {
+    background: rgba(76, 201, 240, 0.3);
+    border-color: #4cc9f0;
+    color: #fff;
+}
 .val-ctx-all-row { padding: 4px 10px 2px; }
 
 .val-btn.val-bleed {
@@ -209,6 +214,12 @@
     border-radius: 6px;
     padding: 8px;
     background: #0f0f23;
+    /* Skip layout + paint for offscreen error cards. Deliberately NOT using
+     * `contain: layout` — it would create a stacking context per wrapper and
+     * trap the edit-target row's `z-index: 11` below the fixed overlay at
+     * root z-index: 10. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 120px;
 }
 
 /* Context cards (dimmed, non-editable) */

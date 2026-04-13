@@ -86,7 +86,6 @@ export function enterEditWithBuffer(
         state.segEditMode = null;
         state.segEditIndex = -1;
         _removeEditOverlay();
-        document.body.classList.remove('seg-edit-active');
         const targetRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
         if (targetRow) {
             targetRow.querySelector('.seg-edit-inline')?.remove();
@@ -137,7 +136,6 @@ export function exitEditMode(): void {
     }
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
     _removeEditOverlay();
-    document.body.classList.remove('seg-edit-active');
     editRow?.classList.remove('seg-edit-target');
 }
 

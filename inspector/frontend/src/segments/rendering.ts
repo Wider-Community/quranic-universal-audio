@@ -214,7 +214,7 @@ export function renderSegCard(seg: Segment, options: RenderSegCardOptions = {}):
 
 export function renderSegList(segments: Segment[] | null | undefined): void {
     state._prevHighlightedRow = null; state._prevHighlightedIdx = -1;
-    state._prevPlayheadRow = null; state._currentPlayheadRow = null; state._prevPlayheadIdx = -1;
+    state._currentPlayheadRow = null; state._prevPlayheadIdx = -1;
     dom.segListEl.innerHTML = '';
     if (!segments || segments.length === 0) {
         dom.segListEl.innerHTML = '<div class="seg-loading">No segments to display</div>';

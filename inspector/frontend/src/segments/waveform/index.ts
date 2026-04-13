@@ -6,7 +6,7 @@
 import { fetchJson } from '../../shared/api';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
 import type { Segment, SegmentPeaks } from '../../types/domain';
-import { getSegByChapterIndex } from '../data';
+import { getAdjacentSegments,getSegByChapterIndex } from '../data';
 import { _isCurrentReciterBySurah } from '../playback/audio-cache';
 import type { DrawWaveformFn } from '../registry';
 import { _getEditCanvas } from '../rendering';
@@ -147,7 +147,9 @@ export function _fetchPeaks(reciter: string, chapters: Array<number | string>): 
             }
         }
         _redrawPeaksWaveforms();
-        if (!data.complete) {
+        // Only poll while some peaks arrived (i.e. audio is partially cached).
+        // Empty result means no local audio files -- per-segment on-demand handles it.
+        if (!data.complete && Object.keys(data.peaks || {}).length > 0) {
             state._peaksPollTimer = setTimeout(() => _fetchPeaks(reciter, chapters), 3000);
         }
     }).catch(() => {});
@@ -189,6 +191,8 @@ function _flushObserverPeaksQueue(): void {
     fetchJson<SegSegmentPeaksResponse>(`/api/seg/segment-peaks/${reciter}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // cached_only: true -- observer only uses disk cache; on-demand ffmpeg is triggered by
+        // _fetchPeaksForClick on play/click so we don't saturate the server with concurrent ffmpeg calls.
         body: JSON.stringify({ segments: queue, cached_only: true }),
     })
         .then(data => {
@@ -199,6 +203,49 @@ function _flushObserverPeaksQueue(): void {
             _redrawPeaksWaveforms();
         })
         .catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// On-demand peak fetch for a clicked / played segment (ffmpeg HTTP Range)
+// ---------------------------------------------------------------------------
+
+/** Fetch waveform peaks for a segment via HTTP Range + ffmpeg on the server.
+ *  Called on play-button click so peaks appear with a brief delay instead of
+ *  never (the observer only checks disk cache, cached_only: true). */
+export async function _fetchPeaksForClick(seg: Segment, chapter: number | string): Promise<void> {
+    const reciter = dom.segReciterSelect.value;
+    if (!reciter || !state.segAllData) return;
+    const audioUrl = seg.audio_url || state.segAllData.audio_by_chapter?.[String(chapter)] || '';
+    if (!audioUrl) return;
+    // Skip if already have usable peaks for this segment
+    if (state.segPeaksByAudio?.[audioUrl]?.peaks?.length) return;
+    if (_findCoveringPeaks(audioUrl, seg.time_start, seg.time_end)) return;
+
+    // Cap the padded range by prev/next segment boundaries so the chunk does
+    // not overlap neighbour segments -- otherwise N's covering peaks engulf
+    // N+1 (TRIM_PAD is 10s) and N+1's waveform renders before it plays.
+    // Matches edit/trim.ts window clamping.
+    const { prev, next } = getAdjacentSegments(chapter, seg.index);
+    const prevEnd = prev?.time_end ?? 0;
+    const nextStart = next?.time_start ?? Number.POSITIVE_INFINITY;
+    const entry = {
+        url: audioUrl,
+        start_ms: Math.max(prevEnd, seg.time_start - state.TRIM_PAD_LEFT, 0),
+        end_ms: Math.min(nextStart, seg.time_end + state.TRIM_PAD_RIGHT),
+    };
+
+    try {
+        const data = await fetchJson<SegSegmentPeaksResponse>(`/api/seg/segment-peaks/${reciter}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ segments: [entry] }),
+        });
+        if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
+        const newPeaks = data.peaks || {};
+        if (Object.keys(newPeaks).length === 0) return;
+        _indexSegPeaksBulk(newPeaks as unknown as Record<string, SegPeaksEntry>);
+        _redrawPeaksWaveforms();
+    } catch { /* ignore */ }
 }
 
 export function _redrawPeaksWaveforms(): void {

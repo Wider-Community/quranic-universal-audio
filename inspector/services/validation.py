@@ -333,11 +333,13 @@ def validate_reciter_segments(reciter: str) -> dict:
 
             _last_ltr = last_arabic_letter(seg.get("matched_text", ""))
             if _last_ltr and _last_ltr in QALQALA_LETTERS and not is_ignored_for(seg, "qalqala"):
+                _eov = (e_word == word_counts.get((surah, e_ayah), 0))
                 qalqala.append({
                     "chapter": chapter,
                     "seg_index": i,
                     "ref": matched_ref,
                     "qalqala_letter": _last_ltr,
+                    "end_of_verse": _eov,
                 })
 
     # Missing word pairs

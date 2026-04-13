@@ -143,6 +143,10 @@ export type PeakBucket = [number, number];
 export interface AudioPeaks {
     peaks: PeakBucket[];
     duration_ms: number;
+    /** Start offset of this chunk within the audio file (ms). Present on per-segment peaks;
+     *  absent/0 for full-file peaks. Drawing must subtract this from seg.time_start/time_end
+     *  before slicing into the peaks array. */
+    start_ms?: number;
 }
 
 /** Peaks for a segment sub-range fetched via HTTP Range. */
@@ -339,6 +343,7 @@ export interface SegValQalqalaItem extends SegValItemBase {
     seg_index: number;
     ref: Ref;
     qalqala_letter: string;
+    end_of_verse: boolean;
 }
 
 /** Union of every validation item variant the panel renders. */

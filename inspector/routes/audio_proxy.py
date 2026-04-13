@@ -2,7 +2,7 @@
 import concurrent.futures
 import threading
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, redirect, request, send_file
 
 from config import AUDIO_CACHE_MAX_AGE, AUDIO_MIME_TYPES
 from services import cache
@@ -21,9 +21,7 @@ def seg_audio_proxy(reciter):
         return jsonify({"error": "No url provided"}), 400
     cache_path = cache.audio_cache_path(reciter, url)
     if not cache_path.exists():
-        result = download_audio(reciter, url)
-        if not result:
-            return jsonify({"error": "Download failed"}), 502
+        return redirect(url, 302)
     mime = AUDIO_MIME_TYPES.get(cache_path.suffix.lower(), "audio/mpeg")
     resp = send_file(cache_path, mimetype=mime)
     resp.headers["Cache-Control"] = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
