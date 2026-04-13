@@ -1,0 +1,9 @@
+# Development-only dependencies for the inspector.
+#
+# Intentionally empty at Stage 2 — automated testing is deferred per S2-D07
+# (see .refactor/stage2-decisions.md). Future additions (pytest, pytest-cov,
+# mypy, ruff, etc.) land here, not in requirements.txt — the production Docker
+# image stays lean because the Dockerfile only `pip install`s requirements.txt.
+#
+# Install dev deps locally with:
+#   pip install -r inspector/requirements.txt -r inspector/requirements-dev.txt
