@@ -1,7 +1,5 @@
 """Timestamps tab routes (/api/ts/*)."""
 import random
-import sys
-from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
@@ -22,11 +20,6 @@ from services.data_loader import (
     load_dk,
 )
 from utils.formatting import format_ms
-
-# ── Validators path setup (for timestamp validation route) ─────────────────
-_VALIDATORS_DIR = Path(__file__).resolve().parent.parent.parent / "validators"
-if str(_VALIDATORS_DIR.parent) not in sys.path:
-    sys.path.insert(0, str(_VALIDATORS_DIR.parent))
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 
