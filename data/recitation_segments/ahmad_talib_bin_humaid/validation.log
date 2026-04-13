@@ -1,4 +1,4 @@
-Generated: 2026-04-12 18:32:36
+Generated: 2026-04-13 23:59:57
 
 ========================================================================
   ahmad_talib_bin_humaid
@@ -11,88 +11,54 @@ Generated: 2026-04-12 18:32:36
   Padding:       80 ms
 
 --- Coverage ---
-  Verses found:   5561 / 6236
-  Missing verses: 0
+  Verses found:   5560 / 6236
+  Missing verses: 1
   Word gaps:      0 verses
 
 --- Segments ---
-  Total:            9514
+  Total:            9495
   Single-seg:       3047
-  Multi-seg verses: 2358 (6467 segs)
+  Multi-seg verses: 2357 (6448 segs)
   Cross-verse keys: 152
   Max segs/verse:   17
 
 --- Segment Duration ---
-  Min:    0.92s
+  Min:    0.96s
   Median: 6.96s
   Mean:   7.35s
   Max:    26.98s
 
 --- True Silence Duration (padding reversed) ---
-  Min:    0.20s
+  Min:    0.18s
   Median: 0.50s
-  Mean:   0.74s
-  Max:    158.40s
+  Mean:   0.61s
+  Max:    56.01s
 
 --- Alignment Confidence ---
   Min:       0.6200
   Median:    1.0000
-  Mean:      0.9812
+  Mean:      0.9815
   Max:       1.0000
   Below 60%: 0
-  Below 80%: 24
-  Failed:    13 (no alignment)
-  Empty ASR: 2 (matched but no phonemes)
+  Below 80%: 16
+  Failed:    1 (no alignment)
+  Empty ASR: 7 (matched but no phonemes)
 
---- Failed Alignments (13) ---
-  10:58.5 - 11:06.8  (8.26s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
-    asr:   j a: ʔ a jj u h a ll a ð i: n a ʔ a: m a n u: l a: j a ħ i ll u l a k u m ʔ a ŋ t a r i θ u ñ i s a: ʔ a k a rˤ h a:
-  11:07.2 - 11:18.0  (10.82s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
-    asr:   w a l a: t a ʕ dˤ u l u: h u ñ a l i t a ð h a b u: b i b a ʕ dˤ i m a: ʔ a: t a j t u m u: h u ñ a ʔ i ll a: ʔ a j̃ a ʔ t i: n a b i f a: ħ i ʃ a t i m̃ u b a jj i n a h
-  11:22.3 - 11:31.7  (9.38s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
-    asr:   f a ʔ i ŋ k a r i h t u m u: h u ñ a f a ʕ a s a: ʔ a ŋ t a k rˤ aˤ h u: ʃ a j ʔ a w̃ a j a ʒ Q ʕ a l a lˤlˤ aˤ: h u f i: h i x aˤ j rˤ a ŋ k a θ i: rˤ a:
-  11:32.2 - 11:42.6  (10.39s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
-    asr:   w a ʔ i n ʔ a rˤ aˤ tt u m u s t i b Q d a: l a z a w ʒ i m̃ a k a: n a z a w ʒ i w̃ a ʔ a: t a j t u m ʔ i ħ d a: h u ñ a q i ŋ tˤ aˤ: rˤ a ŋ f a l a: t a ʔ x u ð u: m i n h u ʃ a j ʔ a:
-  11:42.8 - 11:47.8  (5.02s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
-    asr:   ʔ a t a ʔ x u ð u: n a h u: b u h t a: n a w̃ a ʔ i θ m a m̃ u b i: n a:
-  11:47.9 - 11:57.0  (9.04s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
-    asr:   w a k a j f a t a ʔ x u ð u: n a h u: w a q aˤ d Q ʔ a f dˤ aˤ: b a ʕ dˤ u k u m ʔ i l a: b a ʕ dˤ i w̃ a ʔ a x aˤ ð n a m i ŋ k u m̃ i: θ a: q a n ɣ aˤ l i: ðˤ a:
-  33:56.1 - 33:57.5  (1.32s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/006.mp3
-    asr:   w a ʔ i n ʔ a tˤ Q ʕ a b Q
-  19:55.6 - 20:01.7  (6.12s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/010.mp3
-    asr:   f a l a m̃ a: ʒ a: ʔ a t h u m ʔ a: j a: t u n a: m u b Q sˤ i rˤ aˤ t a ŋ q aˤ: l u:
-  0:02.0 - 0:03.5  (1.48s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/015.mp3
-    asr:   s t a w h
-  16:06.9 - 16:07.9  (1.06s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/015.mp3
-    asr:   ʔ a lˤlˤ aˤ: h u m
-  ... and 3 more
+--- Failed Alignments (1) ---
+  0:36.6 - 0:42.9  (6.29s)
+    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/114.mp3
+    asr:   m i n a l ʒ i ñ u n u ñ a t i w a ñ a: rˤ
 
---- Low Confidence <80% (24) ---
-  [0.6200]  4:25:27-4:25:28  @ 11:18.5 - 11:22.1
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
-           text:  أُجُورَهُنَّ بِٱلْمَعْرُوفِ
+--- Missing Verses (1) ---
+  MISS  114:6  (3 words)
+
+--- Low Confidence <80% (16) ---
   [0.6200]  68:18:1-68:18:2  @ 2:26.9 - 2:30.9
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/068.mp3
            text:  وَلَا يَسْتَثْنُونَ
   [0.6700]  20:1:1-20:1:1  @ 0:05.8 - 0:07.1
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
            text:  طه
-  [0.6700]  28:40:1-28:40:2  @ 13:34.2 - 13:38.5
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/028.mp3
-           text:  فَأَخَذْنَـٰهُ وَجُنُودَهُۥ
-  [0.6700]  35:45:25-35:45:25  @ 10:40.0 - 10:40.9
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
-           text:  بَصِيرًا
   [0.6800]  68:27:1-68:27:3  @ 3:40.4 - 3:45.4
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/068.mp3
            text:  بَلْ نَحْنُ مَحْرُومُونَ
@@ -105,10 +71,19 @@ Generated: 2026-04-12 18:32:36
   [0.7000]  31:1:1-31:1:1  @ 0:05.6 - 0:15.8
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/031.mp3
            text:  الٓمٓ
-  [0.7000]  44:41:1-44:41:2  @ 5:18.6 - 5:20.1
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/044.mp3
-           text:  يَوْمَ لَا
-  ... and 14 more
+  [0.7100]  46:35:22-46:35:22  @ 13:37.6 - 13:39.3
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/046.mp3
+           text:  بَلَـٰغٌ ۚ
+  [0.7100]  68:26:1-68:26:5  @ 3:28.2 - 3:40.0
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/068.mp3
+           text:  فَلَمَّا رَأَوْهَا قَالُوٓا۟ إِنَّا لَضَآلُّونَ
+  [0.7400]  18:14:11-18:14:19  @ 2:40.8 - 2:51.3
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/018.mp3
+           text:  لَن نَّدْعُوَا۟ مِن دُونِهِۦٓ إِلَـٰهًا ۖ لَّقَدْ قُلْنَآ إِذًا شَطَطًا
+  [0.7500]  68:1:1-68:1:1  @ 0:06.1 - 0:09.8
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/068.mp3
+           text:  نٓ ۚ
+  ... and 6 more
 
 --- Detected Repetitions (6) ---
   [0.8700]  5:68:16-5:68:25  @ 29:57.6 - 30:11.6
@@ -130,7 +105,7 @@ Generated: 2026-04-12 18:32:36
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/060.mp3
            text:  وَقَدْ كَفَرُوا۟ بِمَا جَآءَكُم مِّنَ ٱلْحَقِّ يُخْرِجُونَ ٱلرَّسُولَ وَإِيَّاكُمْ ۙ أَن تُؤْمِنُوا۟ بِٱللَّهِ رَبِّكُمْ إِن كُنتُمْ خَرَجْتُمْ جِهَـٰدًا فِى سَبِيلِى وَٱبْتِغَآءَ مَرْضَاتِى ۚ
 
---- May Require Boundary Adjustment (11) ---
+--- May Require Boundary Adjustment (10) ---
   [1.0000]  2:81:1-2:81:1  @ 21:08.4 - 21:09.4
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/002.mp3
            text:  بَلَىٰ
@@ -155,13 +130,12 @@ Generated: 2026-04-12 18:32:36
   [0.8000]  26:209:1-26:209:1  @ 18:30.3 - 18:31.4
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/026.mp3
            text:  ذِكْرَىٰ
-  [0.6700]  35:45:25-35:45:25  @ 10:40.0 - 10:40.9
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
-           text:  بَصِيرًا
   [0.9000]  37:138:1-37:138:1  @ 18:24.1 - 18:26.9
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/037.mp3
            text:  وَبِٱلَّيْلِ ۗ
-  ... and 1 more
+  [1.0000]  84:15:1-84:15:1  @ 1:31.4 - 1:32.5
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/084.mp3
+           text:  بَلَىٰٓ
 
 --- Cross-verse (152) ---
   [0.9800]  4:118:3-4:119:10  @ 43:37.9 - 43:56.3
@@ -262,13 +236,28 @@ Generated: 2026-04-12 18:32:36
            text:  وَإِلَـٰهُكُمْ إِلَـٰهٌ وَٰحِدٌ ۖ
   ... and 595 more
 
---- Empty ASR Phonemes (2) ---
+--- Empty ASR Phonemes (7) ---
   [1.0000]  4:171:1-4:171:12  @ 1:02:35.4 - 1:02:44.6
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
            text:  يَـٰٓأَهْلَ ٱلْكِتَـٰبِ لَا تَغْلُوا۟ فِى دِينِكُمْ وَلَا تَقُولُوا۟ عَلَى ٱللَّهِ إِلَّا ٱلْحَقَّ ۚ
   [1.0000]  28:88:16-28:88:19  @ 27:36.2 - 27:41.0
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/028.mp3
            text:  لَهُ ٱلْحُكْمُ وَإِلَيْهِ تُرْجَعُونَ
+  [1.0000]  35:45:18-35:45:25  @ 10:32.3 - 10:41.9
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
+           text:  فَإِذَا جَآءَ أَجَلُهُمْ فَإِنَّ ٱللَّهَ كَانَ بِعِبَادِهِۦ بَصِيرًا
+  [1.0000]  39:75:7-39:75:12  @ 23:38.5 - 23:45.6
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/039.mp3
+           text:  يُسَبِّحُونَ بِحَمْدِ رَبِّهِمْ ۖ وَقُضِىَ بَيْنَهُم بِٱلْحَقِّ
+  [1.0000]  41:36:1-41:36:7  @ 10:59.0 - 11:09.4
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/041.mp3
+           text:  وَإِمَّا يَنزَغَنَّكَ مِنَ ٱلشَّيْطَـٰنِ نَزْغٌ فَٱسْتَعِذْ بِٱللَّهِ ۖ
+  [1.0000]  50:19:1-50:19:4  @ 3:52.2 - 3:57.9
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/050.mp3
+           text:  وَجَآءَتْ سَكْرَةُ ٱلْمَوْتِ بِٱلْحَقِّ ۖ
+  [1.0000]  50:42:1-50:42:4  @ 7:57.0 - 8:01.5
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/050.mp3
+           text:  يَوْمَ يَسْمَعُونَ ٱلصَّيْحَةَ بِٱلْحَقِّ ۚ
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
