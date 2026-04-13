@@ -245,10 +245,72 @@ S2-B06 (pre-existing segments-tab cycles, ceiling=23) unchanged.
 
 ## 6. Review findings + disposition
 
-[TBD: orchestrator dispatches Sonnet + Opus + Haiku reviewers after this
-wave per plan §6.2 — Sonnet pattern-level, Opus for `save_seg_data` diff
-specifically, Haiku for file-exists / Dockerfile syntax. Reviewer rows
-and dispositions appended here when complete.]
+3-model review fired at Wave 2 boundary per plan §6.2. Summary:
+
+### Sonnet (pattern review) — APPROVE-WITH-CHANGES
+
+Verified handoff §6.3 conformity, plan-vs-delivery, Docker relocation
+documentation, commit granularity, bug-log discipline, decisions log,
+thin-route quality, `save_seg_data` orchestrator shape, magic-number
+sweep, `app.py` logging, carry-forward to Wave 3.
+
+Non-blocking concerns:
+- `ts_query._error` discriminant sentinel: Wave 11 cleanup candidate
+  (leaky abstraction; not a contract violation).
+- `ts_random` / `ts_random_reciter` calling `ts_data` as a Python function
+  (pre-existing pattern, works, fragile).
+- Orchestration-log token totals partially estimated / "not yet surfaced".
+  **Disposition: orchestrator fills Wave totals summary table.**
+- Handoff §6 was TBD placeholder. **Disposition: orchestrator populates
+  §6 (this section).**
+- `wip(inspector):` commit type is non-standard. Cosmetic, documented,
+  accepted.
+
+### Opus (judgment review) — APPROVE
+
+Traced all four execution quadrants of `save_seg_data` (full_replace ×
+{1, >1} × {success, error} + patch + 404s). Verdict: **behavior-preserving
+by construction** — operation order, return shapes, error envelopes,
+dict-key ordering, side-effect ordering (backup-before-write,
+cache-invalidate-after-success) all identical. Advisor-driven decision to
+keep load/validate guards inline rather than force a sum-type helper is
+the correct judgment call.
+
+Thin-route extractions clean (no Flask in services, handler bodies
+2–10 LOC each). `app.py` structured logging is minimal + robust + idempotent
+under Flask's reloader. Magic-number sweep is restrained and reuses
+existing `LOW_CONFIDENCE_RED` rather than duplicating.
+
+Wave 11 cleanup nits (logged for later; NOT Wave-2 blockers):
+- `_apply_full_replace` is missing `-> None | tuple[dict, int]` return annotation.
+- `get_verse_data`'s `_error` discriminant string is a leaky abstraction
+  (same item Sonnet flagged). Revisit during Svelte work if a cleaner
+  pattern emerges.
+
+**Verdict**: Wave 3 unblocked.
+
+### Haiku (mechanical verification) — 25 of 26 verified
+
+All factual claims about files, SHAs, constants, handler LOC, pre-flight
+gates, invariants, shared-doc updates confirmed.
+
+Single discrepancy: handoff §1 claims "13 commits landed between `7961bae`
+and current HEAD"; actual range is 15 commits (including `6d32308` WIP
++ `e98fb20` Docker relocation). Cosmetic off-by-2 in the handoff header;
+the per-item commit list in §10 is accurate. **Disposition**: noted here,
+not correcting the §1 header (append-only discipline; the count is
+trivially reproducible from `git log --oneline 7961bae..1a15c71`).
+
+### Orchestrator follow-up actions
+
+1. Populated `.refactor/stage2-orchestration-log.md` Wave totals summary
+   table with best-effort estimates (Sonnet ask).
+2. Appended Wave-2 reviewer rows to orchestration log.
+3. Logged the 2 Wave-11 cleanup nits in `.refactor/stage2-decisions.md`
+   as follow-up items for Wave 11 agent's task list.
+4. Filled this section with the above review-findings summary.
+
+No plan revisions needed; no gates failed; Wave 3 is go.
 
 ---
 

@@ -18,6 +18,10 @@ Each row records: wave, agent ID (from tool result), model, role, input tokens, 
 | 2a | _(self-reported)_ | opus 4.6 (1M) / Task | Implementation-Wave-2a | _(not yet surfaced)_ | _(not yet surfaced)_ | _(not yet surfaced)_ | ~25 tool calls (read/edit/write/bash/advisor) | Delivered all 8 items: WIP-commit `6d32308` inspected (only 2 four-line overlaps with Wave 2a, both orthogonal to planned changes); pre-flight baseline green at entry; `config.py` INSPECTOR_DATA_DIR + INSPECTOR_CACHE_DIR env overrides with all 5 data paths + CACHE_DIR derived from DATA_DIR (`c1e4ca5`); validators vendored at SHA fb889d7, `sys.path.insert` hack deleted (`5be027a`); Dockerfile (2-stage Node→Python) + docker-compose.yml + .dockerignore at repo root per S2-D03/04 (`7b72085`); `requirements-dev.txt` placeholder per S2-D05 (`55e175a`); pre-flight Docker smoke gate enabled and guarded on `command -v docker` (`5addf33`); handoff `stage2-wave-2a-handoff.md` written. Docker not installed on WSL worktree so actual image build deferred to a docker-equipped machine; confirmed Dockerfile logic by inspection + advisor pass. Divergence from distribution-doc draft: AUDIO_PATH stays equal to DATA_DIR (not DATA_DIR/recitation_segments) per `/audio/<reciter>/<file>` route in `app.py`. |
 | 2a-mid | _(orchestrator)_ | opus 4.6 (1M) | Post-2a relocation | — | — | — | 1 commit | Mid-wave reconsideration: moved Dockerfile / docker-compose.yml / .dockerignore from repo root into `inspector/` (`e98fb20`). Docker is inspector-specific; repo has multiple components. Build context rescoped; distribution doc + pre-flight Docker smoke path updated. Behavior-preserving (one extra `cd inspector` for users). |
 | 2b | _(self-reported)_ | opus 4.6 (1M) / Task | Implementation-Wave-2b | ~60k in (est.) | ~40k out (est.) | ~single session, ~20 min | ~40 tool calls (read/edit/write/bash/advisor) | Delivered all 5 items + full handoff: app.py structured logging via hand-written JSONFormatter + `@app.errorhandler(HTTPException)` + `@app.errorhandler(Exception)` + `debug=False` default with `FLASK_ENV=development` opt-in (`e805f4e`); 3 thin-route extractions each in their own commit — `seg_data → services/segments_query.py::get_chapter_data` (`d3137e7`), `ts_data → services/ts_query.py::get_verse_data` (`3269d77`, `_error` discriminant preserves two distinct 404 envelopes), `seg_edit_history → services/history_query.py::load_edit_history` (`e7bb136`); `save_seg_data` decomposed into 4 phase helpers + ~20-LOC orchestrator per S2-D08 pure extract-method — `_build_seg_lookups`, `_make_seg` (promoted from closure with explicit lookup params), `_apply_full_replace`, `_apply_patch`, `_persist_and_record` (`ddb743a`); config magic-number sweep — 7 new constants (`PEAKS_FFMPEG_SAMPLE_RATE`, `PEAKS_PCM_NORMALIZER`, `PEAKS_WORKER_COUNT`, `PEAKS_MIN_CHUNK_BYTES`, `STARTUP_PRELOAD_WORKERS`, `AUDIO_DL_WORKER_COUNT`, `DEFAULT_PORT`) + `LOW_CONFIDENCE_RED` usage swap (`0cd5830`); full Wave 2 handoff doc written (supersedes 2a interim). All 7 pre-flight gates green at exit `0cd5830` (23 cycles, ceiling 23). One advisor pass pre-implementation; advisor's `_load_and_validate` pushback re-shaped the save_seg_data decomposition to keep load/validate guards inline (behavior-preserving tuple return). Divergences from plan: none in Wave 2b. Frontend `0.60` literals + glottal-stop `\u0294` constant deferred (scope-outside / domain constants). |
+| 2-review | _(not surfaced)_ | sonnet / Explore | Wave-2 review — pattern | — | ~3,000 (est.) | ~minutes | Read+Grep+git show | APPROVE-WITH-CHANGES. Verified 11-section handoff, plan-vs-delivery, Docker relocation documentation, commit granularity, bug-log + decisions, thin-route quality, save_seg_data orchestrator shape, magic-number sweep, app.py logging, carry-forward. Non-blocking: ts_query `_error` leaky abstraction (revisit Wave 11); ts_random/ts_random_reciter pre-existing pattern; orchestration-log totals partially estimated; handoff §6 placeholder; `wip(inspector):` non-standard type. Wave 3 unblocked. |
+| 2-review | _(not surfaced)_ | opus / Explore | Wave-2 review — judgment (save_seg_data) | — | ~5,000 (est.) | ~minutes | Read+Grep+git show | APPROVE. Traced all 4 execution quadrants of `save_seg_data` line-by-line vs pre-extract inline body: operation order, return shapes, error envelopes, dict-key ordering, side-effect ordering all identical. Behavior-preserving by construction. Thin-route extractions clean. app.py design minimal + robust + idempotent. Magic-number sweep restrained. Docker relocation internally consistent. Wave 11 cleanup nits logged (not Wave-2 blockers): `_apply_full_replace` missing return annotation; `get_verse_data` `_error` string leaky abstraction (same item Sonnet flagged). |
+| 2-review | _(not surfaced)_ | haiku / Explore | Wave-2 review — mechanical | — | ~2,000 (est.) | ~minutes | Read+Grep+git show | 25 of 26 claims verified. Single off-by-2 discrepancy: handoff §1 claims 13 commits vs actual 15 between entry `7961bae` and exit `1a15c71` (handoff miscounted WIP + Docker relocation). Per-item commit list in §10 accurate. All file existence, constant values, handler LOC, pre-flight gates, invariants, shared-doc updates confirmed. |
+| 2-followup | _(orchestrator)_ | opus 4.6 (1M) | Post-review doc-hygiene | — | — | ~minutes | ~5 edits | Filled handoff §6 with reviewer findings + disposition; populated this wave-totals table; logged the 2 Wave-11 cleanup nits (`_apply_full_replace` annotation, `_error` discriminant) in `.refactor/stage2-decisions.md`. |
 
 _Process note: token totals from agent results are not always exposed to the orchestrator; estimate from output length where exact count is unavailable._
 
@@ -29,15 +33,24 @@ _Updated by the orchestrator at end of each wave._
 
 | Wave | Agents | In tokens | Out tokens | Duration | Notes |
 |------|--------|-----------|------------|----------|-------|
+| 0.5 | 1 (Opus Explore) | — | ~5.5k | ~few min | Pre-Wave-1 history/rendering.ts exploration. Dispatched as Explore (read-only) so output was returned inline; orchestrator persisted to `stage2-wave-0.5-handoff.md`. |
+| 1 | 4 (1 impl + 2 review + 1 follow-up) | ~210k in (impl) | ~215k out total | ~53 min impl + ~minutes for reviews + follow-up | Impl: Opus general-purpose; reviewers Sonnet + Opus Explore; follow-up: orchestrator doc edits. 8 commits + 1 orchestrator chore commit. |
+| 2a | 1 (Opus general-purpose) | ~50k in (est.) | ~58k out (est.) | ~15 min | Config + vendor + Docker + requirements-dev + Docker-smoke gate. 6 commits. |
+| 2-mid | 1 (Opus general-purpose) | ~30k in (est.) | ~28k out (est.) | ~5 min | Docker files relocation from repo root to `inspector/`. 1 commit. |
+| 2b | 1 (Opus general-purpose) | ~90k in (est.) | ~88k out (est.) | ~26 min | App logging + 3 thin-routes + save_seg_data extract-method + magic-number sweep + handoff. 7 commits. |
+| 2-review | 3 (Sonnet + Opus + Haiku Explore) | — | ~10k out total (est.) | ~minutes each | Pattern + judgment + mechanical review. |
+| 2-followup | 1 (orchestrator) | — | — | ~minutes | Handoff §6 fill + this table + Wave-11 nit log. |
 
 ---
 
-## Stage 2 grand totals
+## Stage 2 grand totals (running; updated end-of-stage)
 
-_Updated at end-of-stage retrospective._
+Estimates through end of Wave 2; orchestrator adjusts at retrospective.
 
-- Total agents: 0
-- Total input tokens: 0
-- Total output tokens: 0
-- Total wall-clock duration: 0
-- Stage 1 reference (for comparison, from `.refactor/stage1-bugs.md` summary): 7 phases, 0 introduced bugs, 16/20 closed bugs.
+- Total agents: ~11 (4 Wave-1 + 6 Wave-2 + 1 Wave-0.5)
+- Total output tokens (estimate): ~400k
+- Total wall-clock duration (sum of impl + review): ~120 min implementation + ~15 min reviews
+- Commits landed: 24 on `worktree-refactor+inspector-modularize` since Stage 1 (9 Wave-1 + 15 Wave-2 including WIP + handoffs + relocations)
+- Bugs closed: 1 (S2-B02); opened: 1 (S2-B06, deferred)
+- Pre-flight gate baseline: 7/7 green; cycle ceiling 23 (unchanged since Wave 1)
+- Stage 1 reference (from `.refactor/stage1-bugs.md` summary): 7 phases, 0 introduced bugs, 16/20 closed bugs.
