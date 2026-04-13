@@ -1,0 +1,21 @@
+# Inspector — reviewer-facing compose file.
+#
+# Usage (from a folder containing this file and a `data/` directory):
+#   docker compose up
+#   → http://localhost:5000
+#
+# Uses a locally-built image while the GHCR publish workflow is still pending;
+# once `.github/workflows/docker-publish.yml` lands and the package is public,
+# swap the `build:` block for `image: ghcr.io/<owner>/inspector:latest` and add
+# `pull_policy: always`.
+
+services:
+  inspector:
+    build: .
+    image: inspector:dev
+    container_name: inspector
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
