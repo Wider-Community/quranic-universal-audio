@@ -5,14 +5,9 @@
 
 import { createAnimationLoop } from '../shared/animation';
 import { updateAnimationDisplay } from './animation';
-import { getSegDuration, getSegRelTime, onTsVerseChange } from './index';
+import { getSegDuration, getSegRelTime, onTsVerseChange } from './registry';
 import { dom,state } from './state';
 import { drawVisualizationWithPlayhead } from './waveform';
-
-// NOTE: circular dependencies with index.ts (getSegRelTime, getSegDuration,
-// onTsVerseChange) and animation.ts (updateAnimationDisplay). Safe because
-// ES modules guarantee all module-level code runs before any cross-module
-// function calls occur — these are only called at runtime via event handlers.
 
 /**
  * Clean up any pending loadedmetadata listener and load+play the given audio URL.

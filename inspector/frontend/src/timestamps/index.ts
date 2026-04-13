@@ -23,6 +23,7 @@ import type { TsReciter } from '../types/domain';
 import { rebuildAnimationView,switchGranularity, switchView } from './animation';
 import { handleKeydown } from './keyboard';
 import { _loadAudioAndPlay, navigateVerse, startAnimation, stopAnimation, toggleAutoMode, updateDisplay } from './playback';
+import { registerTsIndexFns, registerTsPlaybackFns } from './registry';
 import { dom,state } from './state';
 import { buildPhonemeLabels,buildUnifiedDisplay } from './unified-display';
 import { renderTsValidationPanel } from './validation';
@@ -40,6 +41,16 @@ export function getSegDuration(): number {
     return (state.tsSegEnd - state.tsSegOffset) || dom.audio.duration || 1;
 }
 
+// ---------------------------------------------------------------------------
+// Wire the cross-module registry (breaks the 5 former `// NOTE: circular
+// dependency` cycles: animation / waveform / validation / keyboard /
+// unified-display → index / playback). Function declarations are hoisted,
+// so these references resolve at module-top even though `jumpToTsVerse`
+// and `loadRandomTimestamp` appear textually below.
+// ---------------------------------------------------------------------------
+
+registerTsIndexFns({ getSegRelTime, getSegDuration, jumpToTsVerse, loadRandomTimestamp, onTsVerseChange });
+registerTsPlaybackFns({ updateDisplay, navigateVerse });
 
 // ---------------------------------------------------------------------------
 // Initialize

@@ -8,12 +8,8 @@ import {
     stripTashkeel,
 } from '../shared/arabic-text';
 import type { PhonemeInterval, TsWord } from '../types/domain';
-import { updateDisplay } from './playback';
+import { updateDisplay } from './registry';
 import { dom,state } from './state';
-
-// NOTE: circular dependency with playback.ts (updateDisplay for click handlers).
-// Safe because updateDisplay is only called at runtime via event handlers,
-// long after all module-level code has executed.
 
 // ---------------------------------------------------------------------------
 // Cross-word ghunna detection: letter + phoneme contextual validation

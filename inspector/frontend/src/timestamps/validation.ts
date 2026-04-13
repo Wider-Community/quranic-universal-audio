@@ -4,12 +4,8 @@
 
 import type { TsValidateResponse } from '../types/api';
 import type { TsBoundaryMismatch,TsMfaFailure, TsMissingWords } from '../types/domain';
-import { jumpToTsVerse } from './index';
+import { jumpToTsVerse } from './registry';
 import { dom } from './state';
-
-// NOTE: circular dependency with index.ts (jumpToTsVerse).
-// Safe because this function is only called at runtime, long after both
-// modules have finished executing their top-level code.
 
 interface TsValCategory<T> {
     name: string;

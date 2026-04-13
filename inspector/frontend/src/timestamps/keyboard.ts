@@ -7,14 +7,8 @@ import { safePlay } from '../shared/audio';
 import { LS_KEYS } from '../shared/constants';
 import { cycleSpeed } from '../shared/speed-control';
 import { switchView } from './animation';
-import { loadRandomTimestamp } from './index';
-import { updateDisplay } from './playback';
-import { navigateVerse } from './playback';
+import { loadRandomTimestamp, navigateVerse, updateDisplay } from './registry';
 import { dom,state } from './state';
-
-// NOTE: circular dependency with index.ts (loadRandomTimestamp).
-// Safe because this function is only called at runtime via keydown events,
-// long after all module-level code has executed.
 
 export function handleKeydown(e: KeyboardEvent): void {
     const target = e.target as Element | null;

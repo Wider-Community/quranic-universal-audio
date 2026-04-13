@@ -4,14 +4,8 @@
 
 import { fetchArrayBuffer } from '../shared/api';
 import { AUDIO_BUFFER_CACHE_SIZE } from '../shared/constants';
-import { getSegDuration,getSegRelTime } from './index';
-import { updateDisplay } from './playback';
+import { getSegDuration,getSegRelTime, updateDisplay } from './registry';
 import { dom,state } from './state';
-
-// NOTE: circular dependency with index.ts (getSegRelTime, getSegDuration) and
-// playback.ts (updateDisplay for handleCanvasClick). Safe because these
-// functions are only called at runtime via event handlers, long after all
-// module-level code has executed.
 
 export function setupCanvas(): void {
     const parent = dom.canvas.parentElement;
