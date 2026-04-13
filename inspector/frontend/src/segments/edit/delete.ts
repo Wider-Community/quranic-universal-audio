@@ -3,7 +3,7 @@
  */
 
 import type { Segment } from '../../types/domain';
-import { getChapterSegments, syncChapterSegsToAll } from '../data';
+import { getChapterSegments } from '../data';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
 import { formatRef } from '../references';
 import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
@@ -12,6 +12,16 @@ import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from '../validat
 // ---------------------------------------------------------------------------
 // deleteSegment -- remove a segment and reindex
 // ---------------------------------------------------------------------------
+//
+// B02 fix: both branches (current-chapter display cache AND all-data) now go
+// through the same splice+reindex path against `segAllData.segments`, then
+// `segData.segments` is refreshed from the re-indexed `segAllData` via
+// `getChapterSegments(chapter)`. Previously the current-chapter branch
+// re-indexed `segData` and synced back to `segAllData`, while the other
+// branch re-indexed `segAllData` directly — the two paths could persist
+// mismatched chapter indices. Unifying on `segAllData` as the single source
+// of truth keeps both caches consistent regardless of which chapter is
+// currently displayed.
 
 export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: string | null = null): void {
     void row;
@@ -27,27 +37,24 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
     deleteOp.applied_at_utc = new Date().toISOString();
     deleteOp.targets_after = [];
 
-    if (chapter === currentChapter && state.segData?.segments) {
-        const segIdx = state.segData.segments.findIndex(s => s.index === seg.index);
-        if (segIdx === -1) return;
-        state.segData.segments.splice(segIdx, 1);
-        state.segData.segments.forEach((s, i) => { s.index = i; });
-        syncChapterSegsToAll();
-    } else if (state.segAllData?.segments) {
-        const globalIdx = state.segAllData.segments.findIndex(s => s.chapter === chapter && s.index === seg.index);
-        if (globalIdx === -1) return;
-        state.segAllData.segments.splice(globalIdx, 1);
-        let idx = 0;
-        state.segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
-        state.segAllData._byChapter = null; state.segAllData._byChapterIndex = null;
+    // Unified splice+reindex against segAllData (single source of truth).
+    if (!state.segAllData?.segments) return;
+    const globalIdx = state.segAllData.segments.findIndex(s => s.chapter === chapter && s.index === seg.index);
+    if (globalIdx === -1) return;
+    state.segAllData.segments.splice(globalIdx, 1);
+    let idx = 0;
+    state.segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
+    state.segAllData._byChapter = null;
+    state.segAllData._byChapterIndex = null;
+
+    // Refresh segData.segments from the re-indexed segAllData whenever the
+    // delete happened in the currently-displayed chapter.
+    if (chapter === currentChapter && state.segData) {
+        state.segData.segments = getChapterSegments(chapter);
     }
 
     markDirty(chapter, undefined, true);
     _fixupValIndicesForDelete(chapter, seg.index);
-
-    if (chapter === currentChapter && state.segData) {
-        state.segData.segments = getChapterSegments(chapter);
-    }
 
     computeSilenceAfter();
     applyVerseFilterAndRender();
