@@ -1,0 +1,39 @@
+# Keep the build context lean — exclude everything that isn't needed to build
+# or run the inspector inside the container. Paths are relative to the build
+# context, which is `inspector/` (this directory).
+
+# Agents / IDEs
+.vscode
+CLAUDE.md
+
+# Python build artifacts
+**/__pycache__
+**/*.pyc
+**/*.pyo
+*.egg-info
+.pytest_cache
+.mypy_cache
+
+# Node / frontend caches — Stage 1 rebuilds from package.json
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Local caches and backups
+.cache
+captures
+**/.cache
+*.bak
+
+# Python virtualenvs
+.venv
+.env
+env
+venv
+
+# macOS / Windows cruft
+.DS_Store
+Thumbs.db
+
+# Dev-only dependency file (prod image stays lean)
+requirements-dev.txt

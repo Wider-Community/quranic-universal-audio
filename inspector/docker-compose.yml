@@ -1,8 +1,13 @@
 # Inspector — reviewer-facing compose file.
 #
-# Usage (from a folder containing this file and a `data/` directory):
+# Usage (from `inspector/` in the repo):
 #   docker compose up
 #   → http://localhost:5000
+#
+# The host `data/` directory sits one level up (repo root), so the volume
+# mount reaches back out of the inspector/ folder. Reviewers consuming a
+# published image can copy just this file into any folder alongside a
+# `data/` dir and change `../data` to `./data`.
 #
 # Uses a locally-built image while the GHCR publish workflow is still pending;
 # once `.github/workflows/docker-publish.yml` lands and the package is public,
@@ -17,5 +22,5 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./data:/data
+      - ../data:/data
     restart: unless-stopped

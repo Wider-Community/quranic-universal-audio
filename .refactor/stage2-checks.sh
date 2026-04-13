@@ -123,7 +123,7 @@ cd "$REPO_ROOT"
 if command -v docker >/dev/null 2>&1; then
     echo
     echo "[wave-2+] Docker smoke"
-    if ! docker build -t inspector:dev . ; then
+    if ! docker build -t inspector:dev inspector/ ; then
         echo "FAIL: docker build"
         exit 1
     fi
