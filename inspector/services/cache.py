@@ -7,6 +7,7 @@ functions.  No other module uses ``global`` for cache variables.
 import hashlib
 import threading
 from pathlib import Path
+from typing import Any
 
 from config import CACHE_DIR
 
@@ -138,6 +139,45 @@ def add_peaks_computing(key: str) -> None:
 
 def discard_peaks_computing(key: str) -> None:
     _PEAKS_COMPUTING.discard(key)
+
+
+# ---------------------------------------------------------------------------
+# Remote audio meta cache (MP3 ID3 probing for HTTP Range segment-peaks)
+# ---------------------------------------------------------------------------
+
+# url -> {id3_offset: int, bytes_per_sec: int}. Absorbed from
+# services/peaks.py in Wave 1 of Stage 2 so the `global` keyword never
+# leaks outside this module.
+_URL_AUDIO_META: dict[str, dict] = {}
+
+
+def get_url_audio_meta(url: str) -> dict | None:
+    return _URL_AUDIO_META.get(url)
+
+
+def set_url_audio_meta(url: str, meta: dict) -> None:
+    _URL_AUDIO_META[url] = meta
+
+
+# ---------------------------------------------------------------------------
+# Phonemizer singleton
+# ---------------------------------------------------------------------------
+
+# The `quranic_phonemizer.Phonemizer` instance is built lazily on first use
+# and kept here. Typed as ``Any`` because the phonemizer package is an
+# optional dependency — introducing a hard import to this module would
+# regress the graceful-degradation behavior in
+# ``services/phonemizer_service.py``.
+_PHONEMIZER_SINGLETON: Any = None
+
+
+def get_phonemizer_singleton() -> Any:
+    return _PHONEMIZER_SINGLETON
+
+
+def set_phonemizer_singleton(phonemizer: Any) -> None:
+    global _PHONEMIZER_SINGLETON
+    _PHONEMIZER_SINGLETON = phonemizer
 
 
 # ---------------------------------------------------------------------------

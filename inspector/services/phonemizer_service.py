@@ -16,8 +16,6 @@ try:
 except Exception:
     _HAS_PHONEMIZER = False
 
-_phonemizer = None
-
 
 def has_phonemizer() -> bool:
     """Return whether the phonemizer package is available."""
@@ -29,12 +27,13 @@ def get_phonemizer():
 
     Raises ``RuntimeError`` if the package is not installed.
     """
-    global _phonemizer
-    if _phonemizer is None:
+    pm = cache.get_phonemizer_singleton()
+    if pm is None:
         if not _HAS_PHONEMIZER:
             raise RuntimeError("Phonemizer not available")
-        _phonemizer = Phonemizer()
-    return _phonemizer
+        pm = Phonemizer()
+        cache.set_phonemizer_singleton(pm)
+    return pm
 
 
 def get_canonical_phonemes(reciter: str) -> dict[str, list[str]] | None:

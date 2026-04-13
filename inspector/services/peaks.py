@@ -100,13 +100,12 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
 # HTTP Range infrastructure for segment-level peak extraction
 # ---------------------------------------------------------------------------
 
-_URL_AUDIO_META: dict[str, dict] = {}  # url -> {id3_offset, bytes_per_sec}
-
 
 def _get_audio_meta(url: str) -> dict:
     """Probe a remote MP3 URL for ID3v2 offset and approximate bytes_per_sec."""
-    if url in _URL_AUDIO_META:
-        return _URL_AUDIO_META[url]
+    cached = cache.get_url_audio_meta(url)
+    if cached is not None:
+        return cached
 
     id3_offset = 0
     try:
@@ -154,7 +153,7 @@ def _get_audio_meta(url: str) -> dict:
         pass
 
     meta = {"id3_offset": id3_offset, "bytes_per_sec": bytes_per_sec}
-    _URL_AUDIO_META[url] = meta
+    cache.set_url_audio_meta(url, meta)
     return meta
 
 
