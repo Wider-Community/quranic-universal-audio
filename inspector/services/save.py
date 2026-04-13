@@ -75,19 +75,16 @@ def rebuild_segments_json(reciter: str, entries: list[dict]) -> None:
         json.dump(seg_doc, f, ensure_ascii=False)
 
 
-def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
-    """Save edited segments.  Returns ``{"ok": True}`` or ``{"error": ...}``
-    with an HTTP status code as a second element in a tuple.
-    """
-    entries = load_detailed(reciter)
-    if not entries:
-        return {"error": "Reciter not found"}, 404
+# ---------------------------------------------------------------------------
+# save_seg_data — phase helpers (Wave 2b extract-method, S2-D08)
+# Pure behavior-preserving decomposition: each helper owns one sequential
+# phase of the orchestrator below. `_make_seg` was a closure in the original;
+# promoted to module-level with explicit lookup params.
+# ---------------------------------------------------------------------------
 
-    matching = [e for e in entries if chapter_from_ref(e["ref"]) == chapter]
-    if not matching:
-        return {"error": "Chapter not found"}, 404
 
-    # Build lookups of existing segments by time and by uid for field preservation
+def _build_seg_lookups(matching: list[dict]) -> tuple[dict, dict]:
+    """Build ``(by_time, by_uid)`` lookups of existing segments for field preservation."""
     existing_by_time = {}
     existing_by_uid = {}
     for e in matching:
@@ -97,88 +94,105 @@ def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
             uid = seg.get("segment_uid", "")
             if uid:
                 existing_by_uid[uid] = seg
+    return existing_by_time, existing_by_uid
 
-    def _make_seg(s):
-        existing = existing_by_time.get((s.get("time_start", 0), s.get("time_end", 0)), {})
-        if not existing:
-            uid = s.get("segment_uid", "")
-            if uid:
-                existing = existing_by_uid.get(uid, {})
-        phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
-        seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
-        result = {
-            "segment_uid": seg_uid,
-            "time_start": s.get("time_start", 0),
-            "time_end": s.get("time_end", 0),
-            "matched_ref": normalize_ref_with_wc(s.get("matched_ref", "")),
-            "matched_text": s.get("matched_text", ""),
-            "confidence": s.get("confidence", 0.0),
-            "phonemes_asr": phonemes,
-        }
-        wrap = s.get("wrap_word_ranges") or existing.get("wrap_word_ranges")
-        if wrap:
-            result["wrap_word_ranges"] = wrap
-        if s.get("has_repeated_words") or existing.get("has_repeated_words"):
-            result["has_repeated_words"] = True
-        ic = s.get("ignored_categories") or existing.get("ignored_categories")
-        if ic:
-            result["ignored_categories"] = list(ic)
-        elif s.get("ignored") or existing.get("ignored"):
-            result["ignored_categories"] = ["_all"]
-        return result
 
-    # Snapshot validation counts before mutation
-    meta = cache.get_seg_meta(reciter)
-    val_before = chapter_validation_counts(entries, chapter, meta)
+def _make_seg(s: dict, existing_by_time: dict, existing_by_uid: dict) -> dict:
+    """Build a canonical segment dict, preserving fields from an existing match if any."""
+    existing = existing_by_time.get((s.get("time_start", 0), s.get("time_end", 0)), {})
+    if not existing:
+        uid = s.get("segment_uid", "")
+        if uid:
+            existing = existing_by_uid.get(uid, {})
+    phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
+    seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
+    result = {
+        "segment_uid": seg_uid,
+        "time_start": s.get("time_start", 0),
+        "time_end": s.get("time_end", 0),
+        "matched_ref": normalize_ref_with_wc(s.get("matched_ref", "")),
+        "matched_text": s.get("matched_text", ""),
+        "confidence": s.get("confidence", 0.0),
+        "phonemes_asr": phonemes,
+    }
+    wrap = s.get("wrap_word_ranges") or existing.get("wrap_word_ranges")
+    if wrap:
+        result["wrap_word_ranges"] = wrap
+    if s.get("has_repeated_words") or existing.get("has_repeated_words"):
+        result["has_repeated_words"] = True
+    ic = s.get("ignored_categories") or existing.get("ignored_categories")
+    if ic:
+        result["ignored_categories"] = list(ic)
+    elif s.get("ignored") or existing.get("ignored"):
+        result["ignored_categories"] = ["_all"]
+    return result
 
-    if updates.get("full_replace"):
-        if len(matching) == 1:
-            matching[0]["segments"] = [_make_seg(s) for s in updates["segments"]]
-        else:
-            entry_by_audio: dict[str, list[dict]] = defaultdict(list)
-            for e in matching:
-                audio = e.get("audio", "")
-                if audio:
-                    entry_by_audio[audio].append(e)
-                e["segments"] = []
 
-            for s in updates["segments"]:
-                seg_audio = s.get("audio_url", "")
-                if not seg_audio:
-                    return {"error": (
-                        "Rejected structural save for by_ayah: segment payload is "
-                        "missing audio_url. Reload Inspector and try again."
-                    )}, 400
+def _apply_full_replace(matching: list[dict], updates: dict,
+                       existing_by_time: dict, existing_by_uid: dict):
+    """Mutate ``matching`` in place for a full_replace save.
 
-                candidates = entry_by_audio.get(seg_audio, [])
-                if len(candidates) != 1:
-                    if len(candidates) == 0:
-                        return {"error": (
-                            "Rejected structural save for by_ayah: segment audio_url "
-                            "does not belong to this chapter."
-                        )}, 400
-                    return {"error": (
-                        "Rejected structural save for by_ayah: ambiguous audio_url "
-                        "matched multiple chapter entries."
-                    )}, 400
+    Returns ``None`` on success or an ``(error_dict, http_status)`` tuple on
+    input validation failure (propagated by the caller as the route response).
+    """
+    if len(matching) == 1:
+        matching[0]["segments"] = [
+            _make_seg(s, existing_by_time, existing_by_uid) for s in updates["segments"]
+        ]
+        return None
 
-                candidates[0]["segments"].append(_make_seg(s))
-    else:
-        flat_segments = []
-        for e in matching:
-            for seg in e.get("segments", []):
-                flat_segments.append(seg)
+    entry_by_audio: dict[str, list[dict]] = defaultdict(list)
+    for e in matching:
+        audio = e.get("audio", "")
+        if audio:
+            entry_by_audio[audio].append(e)
+        e["segments"] = []
 
-        for upd in updates["segments"]:
-            idx = upd.get("index")
-            if idx is not None and 0 <= idx < len(flat_segments):
-                flat_segments[idx]["matched_ref"] = normalize_ref_with_wc(upd.get("matched_ref", ""))
-                flat_segments[idx]["matched_text"] = upd.get("matched_text", "")
-                if "confidence" in upd:
-                    flat_segments[idx]["confidence"] = upd["confidence"]
-                if upd.get("ignored_categories"):
-                    flat_segments[idx]["ignored_categories"] = upd["ignored_categories"]
+    for s in updates["segments"]:
+        seg_audio = s.get("audio_url", "")
+        if not seg_audio:
+            return {"error": (
+                "Rejected structural save for by_ayah: segment payload is "
+                "missing audio_url. Reload Inspector and try again."
+            )}, 400
 
+        candidates = entry_by_audio.get(seg_audio, [])
+        if len(candidates) != 1:
+            if len(candidates) == 0:
+                return {"error": (
+                    "Rejected structural save for by_ayah: segment audio_url "
+                    "does not belong to this chapter."
+                )}, 400
+            return {"error": (
+                "Rejected structural save for by_ayah: ambiguous audio_url "
+                "matched multiple chapter entries."
+            )}, 400
+
+        candidates[0]["segments"].append(_make_seg(s, existing_by_time, existing_by_uid))
+    return None
+
+
+def _apply_patch(matching: list[dict], updates: dict) -> None:
+    """Mutate ``matching`` in place for a patch save (field-level updates by index)."""
+    flat_segments = []
+    for e in matching:
+        for seg in e.get("segments", []):
+            flat_segments.append(seg)
+
+    for upd in updates["segments"]:
+        idx = upd.get("index")
+        if idx is not None and 0 <= idx < len(flat_segments):
+            flat_segments[idx]["matched_ref"] = normalize_ref_with_wc(upd.get("matched_ref", ""))
+            flat_segments[idx]["matched_text"] = upd.get("matched_text", "")
+            if "confidence" in upd:
+                flat_segments[idx]["confidence"] = upd["confidence"]
+            if upd.get("ignored_categories"):
+                flat_segments[idx]["ignored_categories"] = upd["ignored_categories"]
+
+
+def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,
+                        val_before: dict, updates: dict) -> dict:
+    """Persist mutated entries to disk, append edit_history, invalidate caches."""
     # Backup before writing
     detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
     segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
@@ -216,3 +230,32 @@ def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
     cache.invalidate_seg_caches(reciter)
 
     return {"ok": True}
+
+
+def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
+    """Save edited segments.  Returns ``{"ok": True}`` or ``{"error": ...}``
+    with an HTTP status code as a second element in a tuple.
+    """
+    entries = load_detailed(reciter)
+    if not entries:
+        return {"error": "Reciter not found"}, 404
+
+    matching = [e for e in entries if chapter_from_ref(e["ref"]) == chapter]
+    if not matching:
+        return {"error": "Chapter not found"}, 404
+
+    # Build lookups of existing segments by time and by uid for field preservation
+    existing_by_time, existing_by_uid = _build_seg_lookups(matching)
+
+    # Snapshot validation counts before mutation
+    meta = cache.get_seg_meta(reciter)
+    val_before = chapter_validation_counts(entries, chapter, meta)
+
+    if updates.get("full_replace"):
+        err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid)
+        if err is not None:
+            return err
+    else:
+        _apply_patch(matching, updates)
+
+    return _persist_and_record(reciter, chapter, entries, meta, val_before, updates)
