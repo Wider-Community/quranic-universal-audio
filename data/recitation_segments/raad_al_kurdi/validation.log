@@ -1,0 +1,320 @@
+Generated: 2026-04-13 23:30:51
+
+========================================================================
+  raad_al_kurdi
+  data\recitation_segments\raad_al_kurdi
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   300 ms
+  Min speech:    0 ms
+  Padding:       120 ms
+
+--- Coverage ---
+  Verses found:   6233 / 6236
+  Missing verses: 3
+  Word gaps:      4 verses
+
+--- Segments ---
+  Total:            11531
+  Single-seg:       2920
+  Multi-seg verses: 3052 (8611 segs)
+  Cross-verse keys: 373
+  Max segs/verse:   18
+
+--- Segment Duration ---
+  Min:    1.12s
+  Median: 9.24s
+  Mean:   9.62s
+  Max:    40.61s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.24s
+  Median: 0.54s
+  Mean:   0.62s
+  Max:    39.27s
+
+--- Alignment Confidence ---
+  Min:       0.5900
+  Median:    0.9800
+  Mean:      0.9725
+  Max:       1.0000
+  Below 60%: 1
+  Below 80%: 35
+  Failed:    26 (no alignment)
+  Empty ASR: 10 (matched but no phonemes)
+
+--- Failed Alignments (26) ---
+  35:16.0 - 35:23.6  (7.54s)
+    audio: https://server6.mp3quran.net/kurdi/006.mp3
+    asr:   w a j a w m a j u ŋ f a x u f i sˤsˤ u: rˤ
+  38:48.3 - 39:05.8  (17.52s)
+    audio: https://server6.mp3quran.net/kurdi/006.mp3
+    asr:   w a k a j f a ʔ a x aˤ: f u m a: ʔ a ʃ rˤ aˤ k t u m w a l a: t a x aˤ: f u: n a ʔ a ñ a k u m ʔ a ʃ rˤ aˤ k t u ŋ b i ll a: h i m a: l a m j u n a zz i l b i h i: s u l tˤ aˤ: n a:
+  35:28.1 - 35:34.1  (6.00s)
+    audio: https://server6.mp3quran.net/kurdi/016.mp3
+    asr:   w a j a w u: b i ʕ a h d i ll a: h i θ a m a n a ŋ q aˤ l i: l a:
+  39:03.8 - 39:08.6  (4.86s)
+    audio: https://server6.mp3quran.net/kurdi/017.mp3
+    asr:   w a l a m j a k u ll a h u: w a l i jj
+  32:51.6 - 32:52.0  (0.40s)
+    audio: https://server6.mp3quran.net/kurdi/021.mp3
+    asr:   q Q
+  0:00.5 - 0:01.4  (0.88s)
+    audio: https://server6.mp3quran.net/kurdi/023.mp3
+    asr:   b i s m i ll a: h
+  35:15.0 - 35:15.8  (0.84s)
+    audio: https://server6.mp3quran.net/kurdi/024.mp3
+    asr:   ʔ a lˤlˤ aˤ: h
+  32:07.1 - 32:07.9  (0.80s)
+    audio: https://server6.mp3quran.net/kurdi/027.mp3
+    asr:   ʔ a lˤlˤ aˤ: h
+  11:50.5 - 11:51.5  (0.96s)
+    audio: https://server6.mp3quran.net/kurdi/036.mp3
+    asr:   ʔ a lˤlˤ aˤ: h
+  28:44.2 - 28:45.5  (1.34s)
+    audio: https://server6.mp3quran.net/kurdi/040.mp3
+    asr:   a j u: n
+  ... and 16 more
+
+--- Missing Verses (3) ---
+  MISS  4:127  (40 words)
+  MISS  16:82  (6 words)
+  MISS  16:83  (7 words)
+
+--- Missing Words (4) ---
+  6:73  @ 34:58.3 - 35:37.6
+    missing words: [13, 14, 15, 16, 17, 18]
+    audio: https://server6.mp3quran.net/kurdi/006.mp3
+  6:81  @ 39:06.5 - 39:18.6
+    missing words: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    audio: https://server6.mp3quran.net/kurdi/006.mp3
+  16:95  @ 35:34.2 - 35:44.9
+    missing words: [1, 2, 3, 4, 5, 6]
+    audio: https://server6.mp3quran.net/kurdi/016.mp3
+  17:111  @ 38:49.9 - 39:03.3
+    missing words: [14, 15, 16, 17, 18, 19, 20, 21]
+    audio: https://server6.mp3quran.net/kurdi/017.mp3
+
+--- Structural Errors (1) ---
+  ERROR  35:1  @ 20:19.6 - 0:21.0
+    time overlap: seg[0] ends 20:21.6, seg[1] starts 0:07.6
+    audio: https://server6.mp3quran.net/kurdi/034.mp3
+
+--- Low Confidence <80% (35) ---
+  [0.5900]  7:1:1-7:1:1  @ 0:01.5 - 0:13.3
+           audio: https://server6.mp3quran.net/kurdi/007.mp3
+           text:  الٓمٓصٓ
+  [0.6200]  35:1:19-35:1:20  @ 20:19.6 - 20:21.6
+           audio: https://server6.mp3quran.net/kurdi/034.mp3
+           text:  إِنَّ ٱللَّهَ
+  [0.6400]  3:1:1-3:1:1  @ 0:04.9 - 0:14.5
+           audio: https://server6.mp3quran.net/kurdi/003.mp3
+           text:  الٓمٓ
+  [0.6400]  10:1:1-10:1:1  @ 0:02.2 - 0:07.6
+           audio: https://server6.mp3quran.net/kurdi/010.mp3
+           text:  الٓر ۚ
+  [0.6400]  40:53:8-40:53:8  @ 20:39.6 - 20:44.2
+           audio: https://server6.mp3quran.net/kurdi/040.mp3
+           text:  ٱلْكِتَـٰبَ
+  [0.6700]  38:49:1-38:49:2  @ 11:31.6 - 11:33.5
+           audio: https://server6.mp3quran.net/kurdi/038.mp3
+           text:  هَـٰذَا ذِكْرٌ ۚ
+  [0.6700]  50:1:1-50:1:1  @ 0:02.0 - 0:06.2
+           audio: https://server6.mp3quran.net/kurdi/050.mp3
+           text:  قٓ ۚ
+  [0.6800]  38:23:8-38:23:10  @ 4:50.0 - 4:54.7
+           audio: https://server6.mp3quran.net/kurdi/038.mp3
+           text:  وَلِىَ نَعْجَةٌ وَٰحِدَةٌ
+  [0.7000]  2:1:1-2:1:1  @ 0:07.5 - 0:16.7
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  الٓمٓ
+  [0.7000]  15:1:1-15:1:1  @ 0:00.6 - 0:08.4
+           audio: https://server6.mp3quran.net/kurdi/015.mp3
+           text:  الٓر ۚ
+  ... and 25 more
+
+--- Detected Repetitions (13) ---
+  [0.8400]  4:128:1-4:128:11  @ 1:09:26.4 - 1:09:36.8
+           audio: https://server6.mp3quran.net/kurdi/004.mp3
+           text:  وَإِنِ ٱمْرَأَةٌ خَافَتْ مِن بَعْلِهَا نُشُوزًا أَوْ إِعْرَاضًا فَلَا جُنَاحَ عَلَيْهِمَآ
+  [0.9100]  5:52:1-5:52:12  @ 34:49.6 - 35:02.6
+           audio: https://server6.mp3quran.net/kurdi/005.mp3
+           text:  فَتَرَى ٱلَّذِينَ فِى قُلُوبِهِم مَّرَضٌ يُسَـٰرِعُونَ فِيهِمْ يَقُولُونَ نَخْشَىٰٓ أَن تُصِيبَنَا دَآئِرَ ةٌ ۚ
+  [0.9500]  5:54:29-5:56:6  @ 36:01.2 - 36:30.7
+           audio: https://server6.mp3quran.net/kurdi/005.mp3
+           text:  ذَٰلِكَ فَضْلُ ٱللَّهِ يُؤْتِيهِ مَن يَشَآءُ ۚ وَٱللَّهُ وَٰسِعٌ عَلِيمٌ إِنَّمَا وَلِيُّكُمُ ٱللَّهُ وَرَسُولُهُۥ وَٱلَّذِينَ ءَامَنُوا۟ ٱلَّذِينَ يُقِيمُونَ ٱلصَّلَوٰةَ وَيُؤْتُونَ ٱلزَّكَوٰةَ وَهُمْ رَٰكِعُونَ وَمَن يَتَوَلَّ ٱللَّهَ وَرَسُولَهُۥ وَٱلَّذِينَ ءَامَنُوا۟
+  [0.8700]  5:57:19-5:57:23  @ 36:56.9 - 37:06.7
+           audio: https://server6.mp3quran.net/kurdi/005.mp3
+           text:  وَٱتَّقُوا۟ ٱللَّهَ إِن كُنتُم مُّؤْمِنِينَ
+  [0.9300]  6:52:10-6:52:25  @ 23:03.8 - 23:31.9
+           audio: https://server6.mp3quran.net/kurdi/006.mp3
+           text:  مَا عَلَيْكَ مِنْ حِسَابِهِم مِّن شَىْءٍ وَمَا مِنْ حِسَابِكَ عَلَيْهِم مِّن شَىْءٍ فَتَطْرُدَهُمْ فَتَكُونَ مِنَ ٱلظَّـٰلِمِينَ
+  [0.9200]  8:59:6-8:59:8  @ 26:59.8 - 27:15.1
+           audio: https://server6.mp3quran.net/kurdi/008.mp3
+           text:  إِنَّهُمْ لَا يُعْجِزُونَ
+  [0.8900]  16:85:1-16:85:8  @ 29:58.9 - 30:08.4
+           audio: https://server6.mp3quran.net/kurdi/016.mp3
+           text:  وَإِذَا رَءَا ٱلَّذِينَ ظَلَمُوا۟ ٱلْعَذَابَ فَلَا يُخَفَّفُ عَنْهُمْ
+  [0.9400]  16:92:1-16:92:20  @ 33:40.1 - 34:10.4
+           audio: https://server6.mp3quran.net/kurdi/016.mp3
+           text:  وَلَا تَكُونُوا۟ كَٱلَّتِى نَقَضَتْ غَزْلَهَا مِن بَعْدِ قُوَّةٍ أَنكَـٰثًا تَتَّخِذُونَ أَيْمَـٰنَكُمْ دَخَلًا بَيْنَكُمْ أَن تَكُونَ أُمَّةٌ هِىَ أَرْبَىٰ مِنْ أُمَّةٍ ۚ
+  [0.8900]  20:123:12-20:123:18  @ 25:41.3 - 25:50.4
+           audio: https://server6.mp3quran.net/kurdi/020.mp3
+           text:  فَمَنِ ٱتَّبَعَ هُدَاىَ فَلَا يَضِلُّ وَلَا يَشْقَىٰ
+  [0.9200]  20:130:13-20:130:20  @ 27:08.2 - 27:20.4
+           audio: https://server6.mp3quran.net/kurdi/020.mp3
+           text:  وَمِنْ ءَانَآئِ ٱلَّيْلِ فَسَبِّحْ وَأَطْرَافَ ٱلنَّهَارِ لَعَلَّكَ تَرْضَىٰ
+  ... and 3 more
+
+--- May Require Boundary Adjustment (5) ---
+  [0.8000]  2:214:26-2:214:26  @ 1:34:14.5 - 1:34:18.3
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  أَلَآ
+  [0.8000]  4:23:29-4:23:29  @ 14:14.0 - 14:15.1
+           audio: https://server6.mp3quran.net/kurdi/004.mp3
+           text:  فَإِن
+  [1.0000]  7:142:19-7:142:19  @ 1:02:43.8 - 1:02:45.3
+           audio: https://server6.mp3quran.net/kurdi/007.mp3
+           text:  وَأَصْلِحْ
+  [1.0000]  9:4:14-9:4:14  @ 1:42.7 - 1:45.8
+           audio: https://server6.mp3quran.net/kurdi/009.mp3
+           text:  فَأَتِمُّوٓا۟
+  [0.6400]  40:53:8-40:53:8  @ 20:39.6 - 20:44.2
+           audio: https://server6.mp3quran.net/kurdi/040.mp3
+           text:  ٱلْكِتَـٰبَ
+
+--- Cross-verse (373) ---
+  [0.9700]  1:3:1-1:5:4  @ 0:12.9 - 0:22.6
+           audio: https://server6.mp3quran.net/kurdi/001.mp3
+           text:  ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ مَـٰلِكِ يَوْمِ ٱلدِّينِ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ
+  [0.9800]  1:6:1-1:7:4  @ 0:23.0 - 0:30.4
+           audio: https://server6.mp3quran.net/kurdi/001.mp3
+           text:  ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ
+  [0.9600]  2:74:33-2:75:17  @ 27:08.7 - 27:34.1
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  وَمَا ٱللَّهُ بِغَـٰفِلٍ عَمَّا تَعْمَلُونَ ۞ أَفَتَطْمَعُونَ أَن يُؤْمِنُوا۟ لَكُمْ وَقَدْ كَانَ فَرِيقٌ مِّنْهُمْ يَسْمَعُونَ كَلَـٰمَ ٱللَّهِ ثُمَّ يُحَرِّفُونَهُۥ مِن بَعْدِ مَا عَقَلُوهُ
+  [0.9800]  2:218:14-2:219:4  @ 1:37:14.9 - 1:37:24.1
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  وَٱللَّهُ غَفُورٌ رَّحِيمٌ ۞ يَسْـَٔلُونَكَ عَنِ ٱلْخَمْرِ وَٱلْمَيْسِرِ ۖ
+  [0.9300]  2:219:20-2:220:3  @ 1:37:48.2 - 1:37:59.8
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  كَذَٰلِكَ يُبَيِّنُ ٱللَّهُ لَكُمُ ٱلْـَٔايَـٰتِ لَعَلَّكُمْ تَتَفَكَّرُونَ فِى ٱلدُّنْيَا وَٱلْـَٔاخِرَةِ ۗ
+  [0.9500]  3:82:1-3:83:12  @ 32:16.1 - 32:40.5
+           audio: https://server6.mp3quran.net/kurdi/003.mp3
+           text:  فَمَن تَوَلَّىٰ بَعْدَ ذَٰلِكَ فَأُو۟لَـٰٓئِكَ هُمُ ٱلْفَـٰسِقُونَ أَفَغَيْرَ دِينِ ٱللَّهِ يَبْغُونَ وَلَهُۥٓ أَسْلَمَ مَن فِى ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضِ طَوْعًا وَكَرْهًا
+  [1.0000]  3:140:21-3:141:6  @ 52:44.4 - 52:59.2
+           audio: https://server6.mp3quran.net/kurdi/003.mp3
+           text:  وَٱللَّهُ لَا يُحِبُّ ٱلظَّـٰلِمِينَ وَلِيُمَحِّصَ ٱللَّهُ ٱلَّذِينَ ءَامَنُوا۟ وَيَمْحَقَ ٱلْكَـٰفِرِينَ
+  [0.9900]  5:52:23-5:54:9  @ 35:11.8 - 35:41.7
+           audio: https://server6.mp3quran.net/kurdi/005.mp3
+           text:  عَلَىٰ مَآ أَسَرُّوا۟ فِىٓ أَنفُسِهِمْ نَـٰدِمِينَ وَيَقُولُ ٱلَّذِينَ ءَامَنُوٓا۟ أَهَـٰٓؤُلَآءِ ٱلَّذِينَ أَقْسَمُوا۟ بِٱللَّهِ جَهْدَ أَيْمَـٰنِهِمْ ۙ إِنَّهُمْ لَمَعَكُمْ ۚ حَبِطَتْ أَعْمَـٰلُهُمْ فَأَصْبَحُوا۟ خَـٰسِرِينَ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ مَن يَرْتَدَّ مِنكُمْ عَن دِينِهِۦ فَسَوْفَ
+  [0.9500]  5:54:29-5:56:6  @ 36:01.2 - 36:30.7
+           audio: https://server6.mp3quran.net/kurdi/005.mp3
+           text:  ذَٰلِكَ فَضْلُ ٱللَّهِ يُؤْتِيهِ مَن يَشَآءُ ۚ وَٱللَّهُ وَٰسِعٌ عَلِيمٌ إِنَّمَا وَلِيُّكُمُ ٱللَّهُ وَرَسُولُهُۥ وَٱلَّذِينَ ءَامَنُوا۟ ٱلَّذِينَ يُقِيمُونَ ٱلصَّلَوٰةَ وَيُؤْتُونَ ٱلزَّكَوٰةَ وَهُمْ رَٰكِعُونَ وَمَن يَتَوَلَّ ٱللَّهَ وَرَسُولَهُۥ وَٱلَّذِينَ ءَامَنُوا۟
+  [0.9700]  5:61:1-5:62:9  @ 38:12.7 - 38:33.8
+           audio: https://server6.mp3quran.net/kurdi/005.mp3
+           text:  وَإِذَا جَآءُوكُمْ قَالُوٓا۟ ءَامَنَّا وَقَد دَّخَلُوا۟ بِٱلْكُفْرِ وَهُمْ قَدْ خَرَجُوا۟ بِهِۦ ۚ وَٱللَّهُ أَعْلَمُ بِمَا كَانُوا۟ يَكْتُمُونَ وَتَرَىٰ كَثِيرًا مِّنْهُمْ يُسَـٰرِعُونَ فِى ٱلْإِثْمِ وَٱلْعُدْوَٰنِ وَأَكْلِهِمُ ٱلسُّحْتَ ۚ
+  ... and 363 more
+
+--- Muqatta'at (24) ---
+  [0.7000]  2:1:1-2:1:1  @ 0:07.5 - 0:16.7
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  الٓمٓ
+  [0.6400]  3:1:1-3:1:1  @ 0:04.9 - 0:14.5
+           audio: https://server6.mp3quran.net/kurdi/003.mp3
+           text:  الٓمٓ
+  [0.5900]  7:1:1-7:1:1  @ 0:01.5 - 0:13.3
+           audio: https://server6.mp3quran.net/kurdi/007.mp3
+           text:  الٓمٓصٓ
+  [0.6400]  10:1:1-10:1:1  @ 0:02.2 - 0:07.6
+           audio: https://server6.mp3quran.net/kurdi/010.mp3
+           text:  الٓر ۚ
+  [0.8000]  11:1:1-11:1:1  @ 0:03.1 - 0:09.6
+           audio: https://server6.mp3quran.net/kurdi/011.mp3
+           text:  الٓر ۚ
+  [0.8000]  12:1:1-12:1:1  @ 0:02.5 - 0:07.9
+           audio: https://server6.mp3quran.net/kurdi/012.mp3
+           text:  الٓر ۚ
+  [0.8300]  13:1:1-13:1:1  @ 0:04.8 - 0:14.8
+           audio: https://server6.mp3quran.net/kurdi/013.mp3
+           text:  الٓمٓر ۚ
+  [0.9000]  14:1:1-14:1:1  @ 0:00.9 - 0:07.7
+           audio: https://server6.mp3quran.net/kurdi/014.mp3
+           text:  الٓر ۚ
+  [0.7000]  15:1:1-15:1:1  @ 0:00.6 - 0:08.4
+           audio: https://server6.mp3quran.net/kurdi/015.mp3
+           text:  الٓر ۚ
+  [0.8800]  19:1:1-19:1:1  @ 0:00.6 - 0:11.3
+           audio: https://server6.mp3quran.net/kurdi/019.mp3
+           text:  كٓهيعٓصٓ
+  ... and 14 more
+
+--- Qalqala (671) ---
+  [0.9800]  2:19:1-2:19:8  [ق]  @ 4:40.8 - 4:50.8
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
+  [0.9800]  2:44:1-2:44:8  [ب]  @ 15:27.2 - 15:41.0
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  ۞ أَتَأْمُرُونَ ٱلنَّاسَ بِٱلْبِرِّ وَتَنسَوْنَ أَنفُسَكُمْ وَأَنتُمْ تَتْلُونَ ٱلْكِتَـٰبَ ۚ
+  [0.9800]  2:49:1-2:49:8  [ب]  @ 16:50.2 - 17:01.3
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  وَإِذْ نَجَّيْنَـٰكُم مِّنْ ءَالِ فِرْعَوْنَ يَسُومُونَكُمْ سُوٓءَ ٱلْعَذَابِ
+  [0.9900]  2:61:45-2:61:54  [ق]  @ 22:06.5 - 22:20.2
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  ذَٰلِكَ بِأَنَّهُمْ كَانُوا۟ يَكْفُرُونَ بِـَٔايَـٰتِ ٱللَّهِ وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [0.9800]  2:85:39-2:85:44  [ب]  @ 32:57.1 - 33:07.6
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  وَيَوْمَ ٱلْقِيَـٰمَةِ يُرَدُّونَ إِلَىٰٓ أَشَدِّ ٱلْعَذَابِ ۗ
+  [0.9600]  2:90:21-2:90:24  [ب]  @ 35:20.1 - 35:25.7
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  فَبَآءُو بِغَضَبٍ عَلَىٰ غَضَبٍ ۚ
+  [0.9800]  2:102:57-2:102:66  [ق]  @ 41:27.1 - 41:35.6
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  وَلَقَدْ عَلِمُوا۟ لَمَنِ ٱشْتَرَىٰهُ مَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ ۚ
+  [0.9600]  2:109:12-2:109:21  [ق]  @ 44:02.5 - 44:13.9
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  حَسَدًا مِّنْ عِندِ أَنفُسِهِم مِّن بَعْدِ مَا تَبَيَّنَ لَهُمُ ٱلْحَقُّ ۖ
+  [0.9900]  2:113:1-2:113:15  [ب]  @ 45:35.0 - 45:52.6
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  وَقَالَتِ ٱلْيَهُودُ لَيْسَتِ ٱلنَّصَـٰرَىٰ عَلَىٰ شَىْءٍ وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
+  [0.9600]  2:115:1-2:115:3  [ب]  @ 46:51.1 - 46:55.5
+           audio: https://server6.mp3quran.net/kurdi/002.mp3
+           text:  وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  ... and 661 more
+
+--- Empty ASR Phonemes (10) ---
+  [1.0000]  5:79:7-5:79:10  @ 47:44.5 - 47:52.5
+           audio: https://server6.mp3quran.net/kurdi/005.mp3
+           text:  لَبِئْسَ مَا كَانُوا۟ يَفْعَلُونَ
+  [1.0000]  6:93:35-6:93:45  @ 46:27.4 - 46:40.1
+           audio: https://server6.mp3quran.net/kurdi/006.mp3
+           text:  ٱلْيَوْمَ تُجْزَوْنَ عَذَابَ ٱلْهُونِ بِمَا كُنتُمْ تَقُولُونَ عَلَى ٱللَّهِ غَيْرَ ٱلْحَقِّ
+  [1.0000]  7:89:34-7:89:39  @ 44:24.8 - 44:32.1
+           audio: https://server6.mp3quran.net/kurdi/007.mp3
+           text:  رَبَّنَا ٱفْتَحْ بَيْنَنَا وَبَيْنَ قَوْمِنَا بِٱلْحَقِّ
+  [1.0000]  7:89:40-7:89:42  @ 44:32.4 - 44:40.0
+           audio: https://server6.mp3quran.net/kurdi/007.mp3
+           text:  وَأَنتَ خَيْرُ ٱلْفَـٰتِحِينَ
+  [1.0000]  7:105:1-7:105:9  @ 49:52.8 - 49:59.7
+           audio: https://server6.mp3quran.net/kurdi/007.mp3
+           text:  حَقِيقٌ عَلَىٰٓ أَن لَّآ أَقُولَ عَلَى ٱللَّهِ إِلَّا ٱلْحَقَّ ۚ
+  [1.0000]  9:47:15-9:48:11  @ 26:00.0 - 26:20.1
+           audio: https://server6.mp3quran.net/kurdi/009.mp3
+           text:  وَٱللَّهُ عَلِيمٌ بِٱلظَّـٰلِمِينَ لَقَدِ ٱبْتَغَوُا۟ ٱلْفِتْنَةَ مِن قَبْلُ وَقَلَّبُوا۟ لَكَ ٱلْأُمُورَ حَتَّىٰ جَآءَ ٱلْحَقُّ
+  [1.0000]  14:19:1-14:19:8  @ 10:01.6 - 10:10.6
+           audio: https://server6.mp3quran.net/kurdi/014.mp3
+           text:  أَلَمْ تَرَ أَنَّ ٱللَّهَ خَلَقَ ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضَ بِٱلْحَقِّ ۚ
+  [1.0000]  24:41:1-24:41:12  @ 21:04.4 - 21:22.4
+           audio: https://server6.mp3quran.net/kurdi/024.mp3
+           text:  أَلَمْ تَرَ أَنَّ ٱللَّهَ يُسَبِّحُ لَهُۥ مَن فِى ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضِ وَٱلطَّيْرُ صَـٰٓفَّـٰتٍ ۖ
+  [1.0000]  68:1:1-68:1:1  @ 0:04.5 - 0:07.6
+           audio: https://server6.mp3quran.net/kurdi/068.mp3
+           text:  نٓ ۚ
+  [1.0000]  68:1:2-68:1:4  @ 0:07.8 - 0:12.2
+           audio: https://server6.mp3quran.net/kurdi/068.mp3
+           text:  وَٱلْقَلَمِ وَمَا يَسْطُرُونَ
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
