@@ -4,13 +4,31 @@ from pathlib import Path
 # Repo root (inspector/ is one level below)
 _REPO = Path(__file__).resolve().parent.parent
 
-# Audio files location
-AUDIO_PATH = _REPO / "data"
+# Data root — override with INSPECTOR_DATA_DIR for standalone / Docker deployments.
+# All per-category data paths below derive from this single root so a deployment
+# can volume-mount a single directory (e.g. `-v ./data:/data` with
+# INSPECTOR_DATA_DIR=/data).
+DATA_DIR = Path(os.environ.get("INSPECTOR_DATA_DIR", str(_REPO / "data"))).resolve()
 
-# Cache directory
-CACHE_DIR = _REPO / "inspector" / ".cache"
+# Audio files are served directly from the data root (`/audio/<reciter>/<file>`
+# maps to `<DATA_DIR>/<reciter>/<file>`), so AUDIO_PATH == DATA_DIR.
+AUDIO_PATH = DATA_DIR
 
-SURAH_INFO_PATH = _REPO / "data" / "surah_info.json"
+SURAH_INFO_PATH = DATA_DIR / "surah_info.json"
+
+# Recitation segments from extract_segments.py
+RECITATION_SEGMENTS_PATH = DATA_DIR / "recitation_segments"
+
+# Audio metadata (JSON files with surah URLs per reciter)
+AUDIO_METADATA_PATH = DATA_DIR / "audio"
+
+# Timestamps from MFA forced alignment (JSONL per reciter)
+TIMESTAMPS_PATH = DATA_DIR / "timestamps"
+
+# Cache directory — defaults under DATA_DIR so peak/audio/phoneme caches survive
+# container restarts when the data directory is a persistent volume (S2-D04).
+# Override via INSPECTOR_CACHE_DIR if a volatile / separate cache location is preferred.
+CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))).resolve()
 
 # Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).
 # Each consumer in services/ gracefully degrades to an empty set/dict if the file is
@@ -21,15 +39,6 @@ _QUA_DATA = Path(_QUA_DATA_OVERRIDE) if _QUA_DATA_OVERRIDE else _REPO / "quranic
 QPC_HAFS_PATH = _QUA_DATA / "qpc_hafs.json"
 DK_SCRIPT_PATH = _QUA_DATA / "digital_khatt_v2_script.json"
 PHONEME_SUB_COSTS_PATH = _QUA_DATA / "phoneme_sub_costs.json"
-
-# Recitation segments from extract_segments.py
-RECITATION_SEGMENTS_PATH = _REPO / "data" / "recitation_segments"
-
-# Audio metadata (JSON files with surah URLs per reciter)
-AUDIO_METADATA_PATH = _REPO / "data" / "audio"
-
-# Timestamps from MFA forced alignment (JSONL per reciter)
-TIMESTAMPS_PATH = _REPO / "data" / "timestamps"
 
 # Display settings
 UNIFIED_DISPLAY_MAX_HEIGHT = 800  # px
