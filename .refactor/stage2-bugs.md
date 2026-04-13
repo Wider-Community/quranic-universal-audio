@@ -24,7 +24,7 @@ All rows have a stable ID (`S2-B01`..`S2-B99`). **Append** new rows to the appro
 | ID | Title | File:Line | Origin | Wave-target | Status | Fix-SHA | Notes |
 |----|-------|-----------|--------|-------------|--------|---------|-------|
 | S2-B01 | Filter state saved-view leak | inspector/frontend/src/segments/filters.ts:166-168, :255-258 | STAGE1-CARRY | Wave 5 | OPEN | | UI wedges with no segments while `segAllData.segments` is still populated. Carry-over from Stage 1 B01. Reactive filters store should fix by construction. |
-| S2-B02 | segData / segAllData chapter-index desync on delete | inspector/frontend/src/segments/edit/delete.ts:30-43 | STAGE1-CARRY | Wave 1 | OPEN | | Two branches diverge on re-indexing; save can persist mismatched indices. Carry-over from Stage 1 B02. Medium-high priority. |
+| S2-B02 | segData / segAllData chapter-index desync on delete | inspector/frontend/src/segments/edit/delete.ts:30-43 | STAGE1-CARRY | Wave 1 | CLOSED | 2d06251 | Two branches diverge on re-indexing; save can persist mismatched indices. Carry-over from Stage 1 B02. Medium-high priority. Fixed in Wave 1 by unifying on `segAllData.segments` as single source of truth. See Section 5. |
 | S2-B04 | Waveform peaks orphaned after audio-proxy URL rewrite | inspector/frontend/src/segments/playback/audio-cache.ts:27-40 | STAGE1-CARRY | Wave 6 | OPEN | | `state.segPeaksByAudio` (keyed by original URL) not invalidated when URLs rewrite to proxy. Cosmetic until re-fetch. Carry-over from Stage 1 B04. Reactive waveform-cache util should fix on URL change. |
 | S2-B05 | Split chain UID lost on undo | inspector/frontend/src/segments/state.ts (`_splitChainUid`) | STAGE1-CARRY | Wave 9 | OPEN | | `state._splitChainUid` set but never restored after undo. Carry-over from Stage 1 B05. |
 
@@ -55,6 +55,7 @@ _Empty at start. Move rows here when fixed; record fix-SHA + closing wave + brie
 
 | ID | Origin section | Fix summary | Fix-SHA | Wave |
 |----|----------------|-------------|---------|------|
+| S2-B02 | Section 1 | Unified delete path on `segAllData.segments` as single source of truth: splice + re-index there, null `_byChapter`/`_byChapterIndex`, then refresh `segData.segments` from the re-indexed source via `getChapterSegments(chapter)` when the deletion was in the currently-displayed chapter. Removes the prior divergent re-indexing between the two branches. | 2d06251 | 1 |
 
 ---
 
