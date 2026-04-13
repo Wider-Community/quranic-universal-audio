@@ -2,10 +2,11 @@
  * Filter bar UI and filter application logic.
  */
 
-import { state, dom, SEG_FILTER_FIELDS, SEG_FILTER_OPS } from './state';
-import { parseSegRef, countSegWords } from './references';
-import { renderSegList } from './rendering';
 import type { Segment } from '../types/domain';
+import { SEG_FILTER_FIELDS, SEG_FILTER_OPS } from './constants';
+import { countSegWords,parseSegRef } from './references';
+import { renderSegList } from './rendering';
+import { dom,state } from './state';
 
 // ---------------------------------------------------------------------------
 // Derived-property helpers for filtering

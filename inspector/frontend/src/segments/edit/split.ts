@@ -2,22 +2,22 @@
  * Split edit mode: enter, drag handle, preview, confirm.
  */
 
-import { state, dom, snapshotSeg, finalizeOp, markDirty } from '../state';
-import { _getEditCanvas } from '../rendering';
-import { getChapterSegments, syncChapterSegsToAll } from '../data';
-import { _slicePeaks } from '../waveform/draw';
-import { _fetchChapterPeaksIfNeeded } from '../waveform/index';
-import { computeSilenceAfter, applyVerseFilterAndRender } from '../filters';
-import { exitEditMode, _playRange, _addEditOverlay } from './common';
-import { startRefEdit } from './reference';
-import { _suggestSplitRefs } from '../references';
-import { _fixupValIndicesForSplit } from '../validation/index';
-import { _rebuildAccordionAfterSplit } from '../validation/error-cards';
-import { refreshOpenAccordionCards } from '../validation/index';
 import { fetchJsonOrNull } from '../../shared/api';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
+import { getChapterSegments, syncChapterSegsToAll } from '../data';
+import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
+import { _suggestSplitRefs } from '../references';
+import { _getEditCanvas } from '../rendering';
+import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
+import { _rebuildAccordionAfterSplit } from '../validation/error-cards';
+import { _fixupValIndicesForSplit } from '../validation/index';
+import { refreshOpenAccordionCards } from '../validation/index';
+import { _slicePeaks } from '../waveform/draw';
+import { _fetchChapterPeaksIfNeeded } from '../waveform/index';
 import type { SegCanvas } from '../waveform/types';
+import { _addEditOverlay,_playRange, exitEditMode } from './common';
+import { startRefEdit } from './reference';
 
 // ---------------------------------------------------------------------------
 // enterSplitMode

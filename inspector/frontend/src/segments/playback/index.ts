@@ -2,21 +2,15 @@
  * Audio playback, animation, highlight tracking, and play status.
  */
 
-import { state, dom } from '../state';
+import { createAnimationLoop } from '../../shared/animation';
+import { audioSrcMatches,safePlay } from '../../shared/audio';
 import { getSegByChapterIndex } from '../data';
 import { formatTimeMs } from '../references';
-import { drawWaveformFromPeaksForSeg, drawSegPlayhead } from '../waveform/draw';
+import { dom,state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
-import { safePlay } from '../../shared/audio';
-import { createAnimationLoop } from '../../shared/animation';
+import { drawSegPlayhead,drawWaveformFromPeaksForSeg } from '../waveform/draw';
 import type { SegCanvas } from '../waveform/types';
 
-/** Compare a segment's audio_url against segAudioEl.src. */
-function _audioSrcMatch(segUrl: string | null | undefined, elSrc: string | null | undefined): boolean {
-    if (!segUrl || !elSrc) return false;
-    if (segUrl === elSrc) return true;
-    return elSrc.endsWith(segUrl);
-}
 
 export function playFromSegment(
     segIndex: number,
@@ -62,7 +56,7 @@ function _prefetchNextSegAudio(currentIndex: number): void {
     const next = _nextDisplayedSeg(currentIndex);
     if (!next) return;
     const currentUrl = dom.segAudioEl.src || '';
-    if (!next.audio_url || _audioSrcMatch(next.audio_url, currentUrl)) return;
+    if (!next.audio_url || audioSrcMatches(next.audio_url, currentUrl)) return;
     if (next.audio_url in state._segPrefetchCache) return;
     state._segPrefetchCache[next.audio_url] = fetch(next.audio_url)
         .then(r => r.blob())
@@ -102,7 +96,7 @@ export function onSegTimeUpdate(): void {
     if (state.segDisplayedSegments && state.segDisplayedSegments.length > 0) {
         for (let i = state.segDisplayedSegments.length - 1; i >= 0; i--) {
             const s = state.segDisplayedSegments[i];
-            if (s && _audioSrcMatch(s.audio_url, currentSrc)) {
+            if (s && audioSrcMatches(s.audio_url, currentSrc)) {
                 lastSegOnAudio = s;
                 break;
             }
@@ -113,7 +107,7 @@ export function onSegTimeUpdate(): void {
     if (lastSegOnAudio && timeMs >= lastSegOnAudio.time_end) {
         const nextSeg = _nextDisplayedSeg(lastSegOnAudio.index);
         const isConsecutive = nextSeg && nextSeg.index === lastSegOnAudio.index + 1;
-        if (state._segContinuousPlay && isConsecutive && nextSeg && !_audioSrcMatch(nextSeg.audio_url, currentSrc)) {
+        if (state._segContinuousPlay && isConsecutive && nextSeg && !audioSrcMatches(nextSeg.audio_url, currentSrc)) {
             playFromSegment(nextSeg.index, nextSeg.chapter);
             return;
         }
@@ -129,7 +123,7 @@ export function onSegTimeUpdate(): void {
     if (state.segDisplayedSegments) {
         for (const seg of state.segDisplayedSegments) {
             if (timeMs >= seg.time_start && timeMs < seg.time_end) {
-                if (currentSrc && !_audioSrcMatch(seg.audio_url, currentSrc)) continue;
+                if (currentSrc && !audioSrcMatches(seg.audio_url, currentSrc)) continue;
                 state.segCurrentIdx = seg.index;
                 break;
             }
@@ -139,10 +133,10 @@ export function onSegTimeUpdate(): void {
     if (state.segCurrentIdx === -1 && state._segPlayEndMs > 0 && timeMs >= state._segPlayEndMs) {
         if (state._segContinuousPlay && state.segDisplayedSegments) {
             const justEnded = state.segDisplayedSegments.find(s => s.time_end === state._segPlayEndMs
-                && _audioSrcMatch(s.audio_url, currentSrc));
+                && audioSrcMatches(s.audio_url, currentSrc));
             if (justEnded) {
                 const nextSeg2 = _nextDisplayedSeg(justEnded.index);
-                if (nextSeg2 && _audioSrcMatch(nextSeg2.audio_url, currentSrc)) {
+                if (nextSeg2 && audioSrcMatches(nextSeg2.audio_url, currentSrc)) {
                     return;
                 }
             }

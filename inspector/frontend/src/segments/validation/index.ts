@@ -3,18 +3,13 @@
  * Renders accordion panels for each validation category.
  */
 
-import { state, dom } from '../state';
-import { renderSegList } from '../rendering';
-import { renderCategoryCards } from './error-cards';
-import { applyFiltersAndRender } from '../filters';
-import { jumpToSegment, jumpToVerse, jumpToMissingVerseContext } from '../navigation';
-import { fetchJson } from '../../shared/api';
 import {
+    type AccordionOpenState,
     capturePanelOpenState,
     collapseSiblingDetails,
     restorePanelOpenState,
-    type AccordionOpenState,
 } from '../../shared/accordion';
+import { fetchJson } from '../../shared/api';
 import type { SegValidateResponse } from '../../types/api';
 import type {
     SegValAnyItem,
@@ -31,6 +26,11 @@ import type {
     SegValRepetitionItem,
     SegValStructuralErrorItem,
 } from '../../types/domain';
+import { applyFiltersAndRender } from '../filters';
+import { jumpToMissingVerseContext,jumpToSegment, jumpToVerse } from '../navigation';
+import { renderSegList } from '../rendering';
+import { dom,state } from '../state';
+import { renderCategoryCards } from './error-cards';
 
 // ---------------------------------------------------------------------------
 // captureValPanelState / restoreValPanelState — thin wrappers over

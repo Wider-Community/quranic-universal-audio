@@ -3,19 +3,19 @@
  * Uses registerHandler pattern for edit/save functions.
  */
 
-import { state, dom, isDirty } from './state';
-import { LS_KEYS } from '../shared/constants';
 import { getActiveTab } from '../main';
-import { playFromSegment, onSegPlayClick } from './playback/index';
+import { LS_KEYS } from '../shared/constants';
+import { cycleSpeed } from '../shared/speed-control';
 import { _restoreFilterView } from './navigation';
-import type { SegKeyboardHandlerName, SegKeyboardHandlerRegistry } from '../types/registry';
+import { onSegPlayClick,playFromSegment } from './playback/index';
+import type { SegKeyboardHandlerRegistry } from './registry';
+import { dom, isDirty,state } from './state';
 
-const _handlers: SegKeyboardHandlerRegistry = {};
-export function registerKeyboardHandler<K extends SegKeyboardHandlerName>(
-    name: K,
-    fn: NonNullable<SegKeyboardHandlerRegistry[K]>,
-): void {
-    _handlers[name] = fn as SegKeyboardHandlerRegistry[K];
+// Handler registry — populated exactly once from segments/index.ts during
+// DOMContentLoaded, after which every slot is guaranteed non-null.
+let _handlers: SegKeyboardHandlerRegistry = null as unknown as SegKeyboardHandlerRegistry;
+export function registerAllSegKeyboardHandlers(handlers: SegKeyboardHandlerRegistry): void {
+    _handlers = handlers;
 }
 
 export function handleSegKeydown(e: KeyboardEvent): void {
@@ -61,19 +61,8 @@ export function handleSegKeydown(e: KeyboardEvent): void {
         case 'Period':
         case 'Comma': {
             e.preventDefault();
-            const opts = Array.from(dom.segSpeedSelect.options).map(o => parseFloat(o.value));
-            const curRate = parseFloat(dom.segSpeedSelect.value);
-            const curIdx = opts.findIndex(s => Math.abs(s - curRate) < 0.01);
-            const idx = curIdx === -1 ? opts.indexOf(1) : curIdx;
-            const newIdx = e.code === 'Period'
-                ? Math.min(idx + 1, opts.length - 1)
-                : Math.max(idx - 1, 0);
-            const newVal = opts[newIdx];
-            if (newVal === undefined) break;
-            dom.segSpeedSelect.value = String(newVal);
-            dom.segAudioEl.playbackRate = newVal;
-            if (state.valCardAudio) state.valCardAudio.playbackRate = newVal;
-            localStorage.setItem(LS_KEYS.SEG_SPEED, dom.segSpeedSelect.value);
+            cycleSpeed(dom.segSpeedSelect, dom.segAudioEl, e.code === 'Period' ? 'up' : 'down', LS_KEYS.SEG_SPEED);
+            if (state.valCardAudio) state.valCardAudio.playbackRate = parseFloat(dom.segSpeedSelect.value);
             break;
         }
         case 'KeyJ': {
@@ -85,17 +74,17 @@ export function handleSegKeydown(e: KeyboardEvent): void {
         case 'KeyS': {
             if (isDirty()) {
                 e.preventDefault();
-                _handlers.onSegSaveClick?.();
+                _handlers.onSegSaveClick();
             }
             break;
         }
         case 'Escape':
             if (!dom.segSavePreview.hidden) {
                 e.preventDefault();
-                _handlers.hideSavePreview?.();
+                _handlers.hideSavePreview();
             } else if (state.segEditMode) {
                 e.preventDefault();
-                _handlers.exitEditMode?.();
+                _handlers.exitEditMode();
             } else if (state._segSavedFilterView) {
                 e.preventDefault();
                 _restoreFilterView();
@@ -105,15 +94,15 @@ export function handleSegKeydown(e: KeyboardEvent): void {
         case 'Enter':
             if (!dom.segSavePreview.hidden) {
                 e.preventDefault();
-                _handlers.confirmSaveFromPreview?.();
+                _handlers.confirmSaveFromPreview();
             } else if (state.segEditMode && state.segCurrentIdx >= 0) {
                 e.preventDefault();
                 const seg = state.segDisplayedSegments
                     ? state.segDisplayedSegments.find(s => s.index === state.segCurrentIdx)
                     : null;
                 if (seg) {
-                    if (state.segEditMode === 'trim') _handlers.confirmTrim?.(seg);
-                    else if (state.segEditMode === 'split') _handlers.confirmSplit?.(seg);
+                    if (state.segEditMode === 'trim') _handlers.confirmTrim(seg);
+                    else if (state.segEditMode === 'split') _handlers.confirmSplit(seg);
                 }
             }
             break;
@@ -127,7 +116,7 @@ export function handleSegKeydown(e: KeyboardEvent): void {
                 : null;
             if (row && seg) {
                 const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
-                if (refSpan) _handlers.startRefEdit?.(refSpan, seg, row);
+                if (refSpan) _handlers.startRefEdit(refSpan, seg, row);
             }
             break;
         }

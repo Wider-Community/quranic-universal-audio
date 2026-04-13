@@ -2,10 +2,10 @@
  * Timestamps tab — validation panel rendering.
  */
 
-import { dom } from './state';
-import { jumpToTsVerse } from './index';
 import type { TsValidateResponse } from '../types/api';
-import type { TsMfaFailure, TsMissingWords, TsBoundaryMismatch } from '../types/domain';
+import type { TsBoundaryMismatch,TsMfaFailure, TsMissingWords } from '../types/domain';
+import { jumpToTsVerse } from './index';
+import { dom } from './state';
 
 // NOTE: circular dependency with index.ts (jumpToTsVerse).
 // Safe because this function is only called at runtime, long after both

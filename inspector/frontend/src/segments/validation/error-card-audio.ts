@@ -3,10 +3,10 @@
  * Manages a dedicated <audio> element for playing segments from validation cards.
  */
 
-import { state, dom } from '../state';
-import { drawWaveformFromPeaksForSeg, drawSegPlayhead, _drawSplitHighlight } from '../waveform/draw';
 import { safePlay } from '../../shared/audio';
 import type { Segment } from '../../types/domain';
+import { dom,state } from '../state';
+import { _drawSplitHighlight,drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw';
 import type { SegCanvas } from '../waveform/types';
 
 // Canvas metadata attached by other edit modes; error-card animation

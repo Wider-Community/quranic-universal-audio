@@ -2,11 +2,11 @@
  * Segment card rendering -- renderSegCard, renderSegList, and card update helpers.
  */
 
-import { state, dom, isIndexDirty } from './state';
-import { formatRef, formatTimeMs, _addVerseMarkers } from './references';
-import { getAdjacentSegments, getSegByChapterIndex } from './data';
-import { _ensureWaveformObserver } from './waveform/index';
 import type { Segment } from '../types/domain';
+import { getAdjacentSegments, getSegByChapterIndex } from './data';
+import { _addVerseMarkers,formatRef, formatTimeMs } from './references';
+import { dom, isIndexDirty,state } from './state';
+import { _ensureWaveformObserver } from './waveform/index';
 
 /** Options consumed by `renderSegCard`. */
 export interface RenderSegCardOptions {

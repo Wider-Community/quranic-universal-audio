@@ -2,19 +2,20 @@
  * Edit history panel lifecycle (show/hide) and data loading.
  */
 
-import { state, dom, _SEG_NORMAL_IDS } from '../state';
-import type { SplitChain, HistorySnapshot } from '../state';
-import { onSegReciterChange } from '../data';
-import { _ensureWaveformObserver } from '../waveform/index';
-import { _fetchPeaks } from '../waveform/index';
-import { stopErrorCardAudio } from '../validation/error-card-audio';
-import {
-    renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows,
-    _countVersesFromBatches,
-} from './rendering';
-import { renderHistoryFilterBar } from './filters';
 import type { SegEditHistoryResponse } from '../../types/api';
 import type { HistoryBatch } from '../../types/domain';
+import { _SEG_NORMAL_IDS } from '../constants';
+import { onSegReciterChange } from '../data';
+import type { HistorySnapshot,SplitChain } from '../state';
+import { dom,state } from '../state';
+import { stopErrorCardAudio } from '../validation/error-card-audio';
+import { _ensureWaveformObserver } from '../waveform/index';
+import { _fetchPeaks } from '../waveform/index';
+import { renderHistoryFilterBar } from './filters';
+import {
+    _countVersesFromBatches,
+drawHistoryArrows,
+renderHistoryBatches,     renderHistorySummaryStats, } from './rendering';
 
 interface SplitLineageEntry {
     wfStart: number;
@@ -109,12 +110,8 @@ export function renderEditHistoryPanel(data: SegEditHistoryResponse | null | und
     }
 
     if (data.summary) {
-        (data.summary as unknown as Record<string, unknown>).verses_edited = _countVersesFromBatches(data.batches);
-        renderHistorySummaryStats(data.summary as unknown as {
-            total_operations: number;
-            chapters_edited: number;
-            verses_edited?: number;
-        });
+        data.summary.verses_edited = _countVersesFromBatches(data.batches);
+        renderHistorySummaryStats(data.summary);
     }
     renderHistoryFilterBar(data);
     renderHistoryBatches(data.batches);

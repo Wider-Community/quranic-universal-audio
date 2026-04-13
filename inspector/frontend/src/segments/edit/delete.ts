@@ -2,12 +2,12 @@
  * Delete segment operation.
  */
 
-import { state, dom, createOp, snapshotSeg, finalizeOp, markDirty } from '../state';
-import { formatRef } from '../references';
-import { getChapterSegments, syncChapterSegsToAll } from '../data';
-import { computeSilenceAfter, applyVerseFilterAndRender } from '../filters';
-import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from '../validation/index';
 import type { Segment } from '../../types/domain';
+import { getChapterSegments, syncChapterSegsToAll } from '../data';
+import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
+import { formatRef } from '../references';
+import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
+import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from '../validation/index';
 
 // ---------------------------------------------------------------------------
 // deleteSegment -- remove a segment and reindex

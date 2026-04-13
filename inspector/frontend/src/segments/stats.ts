@@ -2,11 +2,12 @@
  * Stats panel with Chart.js bar charts (histograms with percentile annotations).
  */
 
-import { Chart } from '../shared/chart';
 import type { ChartConfiguration, TooltipItem } from 'chart.js';
+
 import { fetchJson } from '../shared/api';
+import { Chart } from '../shared/chart';
 import type { SegSaveChartResponse, SegStatsResponse } from '../types/api';
-import { state, dom } from './state';
+import { dom,state } from './state';
 
 void state; // unused import placeholder — kept for parity with legacy file
 

@@ -3,15 +3,15 @@
  * DOM building, and per-frame animation update.
  */
 
-import { state, dom } from './state';
-import type { TsAnimCache, TsAnimCacheItem } from './state';
 import {
-    DAGGER_ALEF, ZWSP,
-    isCombiningMark, charsMatch, splitIntoCharGroups,
+charsMatch,     DAGGER_ALEF,     isCombiningMark, splitIntoCharGroups,
+ZWSP,
 } from '../shared/arabic-text';
 import { LS_KEYS } from '../shared/constants';
 import { getSegRelTime } from './index';
 import { updateDisplay } from './playback';
+import type { TsAnimCache, TsAnimCacheItem } from './state';
+import { dom,state } from './state';
 
 // NOTE: circular dependency with index.ts (getSegRelTime) and playback.ts
 // (updateDisplay for word click handlers). Safe because these functions are

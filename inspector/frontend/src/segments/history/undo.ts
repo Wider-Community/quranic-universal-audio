@@ -2,21 +2,20 @@
  * Undo operations: batch undo, op undo, chain undo, pending discard.
  */
 
-import { state, dom, isDirty } from '../state';
-import { surahOptionText } from '../../shared/surah-info';
-import { _ensureWaveformObserver } from '../waveform/index';
-import { renderEditHistoryPanel, _buildSplitLineage, _buildSplitChains } from './index';
-import { renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows } from './rendering';
-import { hideSavePreview, buildSavePreviewData } from '../save';
 import { fetchJson, fetchJsonOrNull } from '../../shared/api';
+import { surahOptionText } from '../../shared/surah-info';
 import type {
     SegEditHistoryResponse,
     SegUndoBatchResponse,
     SegUndoOpsResponse,
 } from '../../types/api';
 import type { HistoryBatch } from '../../types/domain';
-
+import { buildSavePreviewData,hideSavePreview } from '../save';
 import type { SplitChain } from '../state';
+import { dom, isDirty,state } from '../state';
+import { _ensureWaveformObserver } from '../waveform/index';
+import { _buildSplitChains,_buildSplitLineage, renderEditHistoryPanel } from './index';
+import { drawHistoryArrows,renderHistoryBatches, renderHistorySummaryStats } from './rendering';
 
 // ---------------------------------------------------------------------------
 // _afterUndoSuccess -- shared post-undo refresh
@@ -204,7 +203,7 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
         return;
     }
     const data = buildSavePreviewData();
-    const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as unknown as HistoryBatch[])];
+    const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as HistoryBatch[])];
     const splitLineage = _buildSplitLineage(allBatches);
     const built = _buildSplitChains(allBatches, splitLineage);
     state._splitChains = built.chains;
@@ -218,7 +217,7 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
             + data.warningChapters.map(c => surahOptionText(c)).join(', ');
         dom.segSavePreviewStats.prepend(warn);
     }
-    renderHistoryBatches(data.batches as unknown as HistoryBatch[], dom.segSavePreviewBatches);
+    renderHistoryBatches(data.batches as HistoryBatch[], dom.segSavePreviewBatches);
     dom.segSavePreviewBatches.querySelectorAll<HTMLElement>('.seg-history-batch-time').forEach(el => {
         if (el.textContent === 'Pending') el.style.color = '#f0a500';
     });

@@ -10,9 +10,9 @@
  * are only ever produced and consumed by animation.ts internals.
  */
 
-import type { PhonemeInterval, TsReciter, TsVerseData, TsWord } from '../types/domain';
-import type { TsValidateResponse } from '../types/api';
 import type { SearchableSelect } from '../shared/searchable-select';
+import type { TsValidateResponse } from '../types/api';
+import type { PhonemeInterval, TsReciter, TsVerseData, TsWord } from '../types/domain';
 
 /** Animation-display cache item (granularity-aware word/character). */
 export interface TsAnimCacheItem {

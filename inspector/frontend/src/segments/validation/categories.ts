@@ -3,8 +3,9 @@
  * Pure functions that read from state but don't mutate it.
  */
 
-import { state, _MN_RE, _STRIP_CHARS, _LETTER_RE } from '../state';
 import type { EditOp, Segment } from '../../types/domain';
+import { _LETTER_RE,_MN_RE, _STRIP_CHARS } from '../constants';
+import { state } from '../state';
 
 // A segment-like record that `_classifySegCategories` / `_isIgnoredFor` can
 // read. Live segments satisfy `Segment`; history snapshots (opaque

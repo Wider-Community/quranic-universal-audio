@@ -15,3 +15,10 @@ export function safePlay(audioEl: HTMLAudioElement): Promise<void> | undefined {
     }
     return p;
 }
+
+/** True if `src` equals `target` or ends with `target` (handles relative vs absolute URL). */
+export function audioSrcMatches(src: string | null | undefined, target: string | null | undefined): boolean {
+    if (!src || !target) return false;
+    if (src === target) return true;
+    return target.endsWith(src);
+}

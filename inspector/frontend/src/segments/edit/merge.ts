@@ -2,14 +2,14 @@
  * Merge adjacent segments operation.
  */
 
-import { state, dom, createOp, snapshotSeg, finalizeOp, markDirty } from '../state';
-import { getChapterSegments, syncChapterSegsToAll } from '../data';
-import { computeSilenceAfter, applyVerseFilterAndRender } from '../filters';
-import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from '../validation/index';
-import { _rebuildAccordionAfterMerge } from '../validation/error-cards';
 import { fetchJson } from '../../shared/api';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
+import { getChapterSegments, syncChapterSegsToAll } from '../data';
+import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
+import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
+import { _rebuildAccordionAfterMerge } from '../validation/error-cards';
+import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from '../validation/index';
 
 // ---------------------------------------------------------------------------
 // mergeAdjacent -- combine two adjacent segments

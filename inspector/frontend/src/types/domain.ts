@@ -108,7 +108,7 @@ export interface ValidationSummarySnapshot {
 
 /** Edit history batch as returned by /api/seg/edit-history. */
 export interface HistoryBatch {
-    batch_id: string;
+    batch_id: string | null;
     batch_type: string | null;
     saved_at_utc: string | null;
     chapter: number | null;
@@ -127,6 +127,8 @@ export interface HistorySummary {
     chapters_edited: number;
     op_counts: Record<string, number>;
     fix_kind_counts: Record<string, number>;
+    /** Count of unique verse refs touched across all operations; optional for forward compat. */
+    verses_edited?: number;
 }
 
 // ---------------------------------------------------------------------------

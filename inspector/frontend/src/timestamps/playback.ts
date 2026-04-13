@@ -3,11 +3,11 @@
  * loop, and per-frame display update (highlighting, canvas playhead).
  */
 
-import { state, dom } from './state';
-import { getSegRelTime, getSegDuration, onTsVerseChange } from './index';
-import { drawVisualizationWithPlayhead } from './waveform';
-import { updateAnimationDisplay } from './animation';
 import { createAnimationLoop } from '../shared/animation';
+import { updateAnimationDisplay } from './animation';
+import { getSegDuration, getSegRelTime, onTsVerseChange } from './index';
+import { dom,state } from './state';
+import { drawVisualizationWithPlayhead } from './waveform';
 
 // NOTE: circular dependencies with index.ts (getSegRelTime, getSegDuration,
 // onTsVerseChange) and animation.ts (updateAnimationDisplay). Safe because

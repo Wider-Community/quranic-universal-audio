@@ -2,8 +2,9 @@
  * Reference parsing, formatting, and time formatting utilities.
  */
 
-import { state, _ARABIC_DIGITS } from './state';
 import type { Ref, VerseRef } from '../types/domain';
+import { _ARABIC_DIGITS } from './constants';
+import { state } from './state';
 
 /** Parsed canonical segment ref. */
 export interface ParsedSegRef {

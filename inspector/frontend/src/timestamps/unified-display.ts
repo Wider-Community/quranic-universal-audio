@@ -3,13 +3,13 @@
  * phoneme elements, and cross-word bridge detection for ghunna/idgham.
  */
 
-import { state, dom } from './state';
 import {
     IDGHAM_GHUNNAH_START,
     stripTashkeel,
 } from '../shared/arabic-text';
-import { updateDisplay } from './playback';
 import type { PhonemeInterval, TsWord } from '../types/domain';
+import { updateDisplay } from './playback';
+import { dom,state } from './state';
 
 // NOTE: circular dependency with playback.ts (updateDisplay for click handlers).
 // Safe because updateDisplay is only called at runtime via event handlers,

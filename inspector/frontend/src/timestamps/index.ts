@@ -6,10 +6,11 @@
  * listeners, restores localStorage preferences, and loads reciters.
  */
 
+import { fetchJson } from '../shared/api';
+import { LS_KEYS } from '../shared/constants';
+import { mustGet } from '../shared/dom';
 import { SearchableSelect } from '../shared/searchable-select';
 import { surahInfoReady, surahOptionText } from '../shared/surah-info';
-import { LS_KEYS } from '../shared/constants';
-import { fetchJson } from '../shared/api';
 import type {
     TsChaptersResponse,
     TsConfigResponse,
@@ -19,14 +20,13 @@ import type {
     TsVersesResponse,
 } from '../types/api';
 import type { TsReciter } from '../types/domain';
-
-import { state, dom } from './state';
-import { setupCanvas, decodeWaveform, cacheWaveformSnapshot, handleCanvasClick } from './waveform';
-import { buildUnifiedDisplay, buildPhonemeLabels } from './unified-display';
-import { switchView, switchGranularity, rebuildAnimationView } from './animation';
-import { _loadAudioAndPlay, navigateVerse, toggleAutoMode, startAnimation, stopAnimation, updateDisplay } from './playback';
+import { rebuildAnimationView,switchGranularity, switchView } from './animation';
 import { handleKeydown } from './keyboard';
+import { _loadAudioAndPlay, navigateVerse, startAnimation, stopAnimation, toggleAutoMode, updateDisplay } from './playback';
+import { dom,state } from './state';
+import { buildPhonemeLabels,buildUnifiedDisplay } from './unified-display';
 import { renderTsValidationPanel } from './validation';
+import { cacheWaveformSnapshot, decodeWaveform, handleCanvasClick,setupCanvas } from './waveform';
 
 // ---------------------------------------------------------------------------
 // Segment-relative time helpers (used by waveform, playback, animation, keyboard)
@@ -40,12 +40,6 @@ export function getSegDuration(): number {
     return (state.tsSegEnd - state.tsSegOffset) || dom.audio.duration || 1;
 }
 
-// Non-null DOM lookup helper — state hub's _UNSET sentinel is populated here.
-function getElem<T extends HTMLElement>(id: string): T {
-    const el = document.getElementById(id);
-    if (!el) throw new Error(`Missing #${id} in DOMContentLoaded`);
-    return el as T;
-}
 
 // ---------------------------------------------------------------------------
 // Initialize
@@ -53,25 +47,25 @@ function getElem<T extends HTMLElement>(id: string): T {
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Populate dom refs
-    dom.audio = getElem<HTMLAudioElement>('audio-player');
-    dom.canvas = getElem<HTMLCanvasElement>('waveform-canvas');
+    dom.audio = mustGet<HTMLAudioElement>('audio-player');
+    dom.canvas = mustGet<HTMLCanvasElement>('waveform-canvas');
     dom.ctx = dom.canvas.getContext('2d');
-    dom.tsReciterSelect = getElem<HTMLSelectElement>('ts-reciter-select');
-    dom.tsChapterSelect = getElem<HTMLSelectElement>('ts-chapter-select');
-    dom.tsSegmentSelect = getElem<HTMLSelectElement>('ts-segment-select');
-    dom.phonemeLabels = getElem<HTMLDivElement>('phoneme-labels');
-    dom.unifiedDisplay = getElem<HTMLDivElement>('unified-display');
-    dom.randomBtn = getElem<HTMLButtonElement>('random-btn');
-    dom.randomReciterBtn = getElem<HTMLButtonElement>('random-reciter-btn');
-    dom.tsPrevBtn = getElem<HTMLButtonElement>('ts-prev-btn');
-    dom.tsNextBtn = getElem<HTMLButtonElement>('ts-next-btn');
-    dom.animDisplay = getElem<HTMLDivElement>('animation-display');
-    dom.modeBtnA = getElem<HTMLButtonElement>('ts-mode-btn-a');
-    dom.modeBtnB = getElem<HTMLButtonElement>('ts-mode-btn-b');
-    dom.tsValidationEl = getElem<HTMLDivElement>('ts-validation');
-    dom.tsSpeedSelect = getElem<HTMLSelectElement>('ts-speed-select');
-    dom.autoNextBtn = getElem<HTMLButtonElement>('ts-auto-next');
-    dom.autoRandomBtn = getElem<HTMLButtonElement>('ts-auto-random');
+    dom.tsReciterSelect = mustGet<HTMLSelectElement>('ts-reciter-select');
+    dom.tsChapterSelect = mustGet<HTMLSelectElement>('ts-chapter-select');
+    dom.tsSegmentSelect = mustGet<HTMLSelectElement>('ts-segment-select');
+    dom.phonemeLabels = mustGet<HTMLDivElement>('phoneme-labels');
+    dom.unifiedDisplay = mustGet<HTMLDivElement>('unified-display');
+    dom.randomBtn = mustGet<HTMLButtonElement>('random-btn');
+    dom.randomReciterBtn = mustGet<HTMLButtonElement>('random-reciter-btn');
+    dom.tsPrevBtn = mustGet<HTMLButtonElement>('ts-prev-btn');
+    dom.tsNextBtn = mustGet<HTMLButtonElement>('ts-next-btn');
+    dom.animDisplay = mustGet<HTMLDivElement>('animation-display');
+    dom.modeBtnA = mustGet<HTMLButtonElement>('ts-mode-btn-a');
+    dom.modeBtnB = mustGet<HTMLButtonElement>('ts-mode-btn-b');
+    dom.tsValidationEl = mustGet<HTMLDivElement>('ts-validation');
+    dom.tsSpeedSelect = mustGet<HTMLSelectElement>('ts-speed-select');
+    dom.autoNextBtn = mustGet<HTMLButtonElement>('ts-auto-next');
+    dom.autoRandomBtn = mustGet<HTMLButtonElement>('ts-auto-random');
 
     setupCanvas();
     setupEventListeners();

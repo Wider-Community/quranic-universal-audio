@@ -2,14 +2,14 @@
  * Trim (boundary adjustment) edit mode: enter, drag handles, preview, confirm.
  */
 
-import { state, dom, snapshotSeg, finalizeOp, markDirty } from '../state';
-import { _getEditCanvas, syncAllCardsForSegment } from '../rendering';
-import { getChapterSegments, syncChapterSegsToAll, _getChapterSegs } from '../data';
-import { _slicePeaks } from '../waveform/draw';
-import { computeSilenceAfter, applyVerseFilterAndRender } from '../filters';
-import { exitEditMode, _playRange, _addEditOverlay } from './common';
 import type { Segment } from '../../types/domain';
+import { _getChapterSegs,getChapterSegments, syncChapterSegsToAll } from '../data';
+import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
+import { _getEditCanvas, syncAllCardsForSegment } from '../rendering';
+import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
+import { _slicePeaks } from '../waveform/draw';
 import type { SegCanvas } from '../waveform/types';
+import { _addEditOverlay,_playRange, exitEditMode } from './common';
 
 // ---------------------------------------------------------------------------
 // enterTrimMode

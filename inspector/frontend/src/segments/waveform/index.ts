@@ -3,15 +3,15 @@
  * Uses canvas callback pattern for edit-mode draws.
  */
 
-import { state, dom, _findCoveringPeaks } from '../state';
-import { getSegByChapterIndex } from '../data';
-import { _getEditCanvas } from '../rendering';
-import { drawWaveformFromPeaksForSeg, _drawSplitHighlight, _drawTrimHighlight, _drawMergeHighlight } from './draw';
-import { _isCurrentReciterBySurah } from '../playback/audio-cache';
 import { fetchJson } from '../../shared/api';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
-import type { DrawWaveformFn } from '../../types/registry';
 import type { Segment, SegmentPeaks } from '../../types/domain';
+import { getSegByChapterIndex } from '../data';
+import { _isCurrentReciterBySurah } from '../playback/audio-cache';
+import type { DrawWaveformFn } from '../registry';
+import { _getEditCanvas } from '../rendering';
+import { _findCoveringPeaks,dom, state } from '../state';
+import { _drawMergeHighlight,_drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './draw';
 import type { SegCanvas } from './types';
 
 // NOTE: un-used helper for future Phase 7 typing of _findCoveringPeaks

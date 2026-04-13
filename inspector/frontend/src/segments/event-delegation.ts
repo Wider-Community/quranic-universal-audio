@@ -3,20 +3,18 @@
  * Uses registerHandler pattern for edit operations (Phase 7 modules register handlers).
  */
 
-import { state, dom } from './state';
-import { resolveSegFromRow } from './rendering';
-import { playFromSegment } from './playback/index';
 import { jumpToSegment } from './navigation';
-import type { SegEventHandlerName, SegEventHandlerRegistry } from '../types/registry';
+import { playFromSegment } from './playback/index';
+import type { SegEventHandlerRegistry } from './registry';
+import { resolveSegFromRow } from './rendering';
+import { dom,state } from './state';
 import type { SegCanvas } from './waveform/types';
 
-// Handler registry -- edit modules register via registerHandler()
-const _handlers: SegEventHandlerRegistry = {};
-export function registerHandler<K extends SegEventHandlerName>(
-    name: K,
-    fn: NonNullable<SegEventHandlerRegistry[K]>,
-): void {
-    _handlers[name] = fn as SegEventHandlerRegistry[K];
+// Handler registry — populated exactly once from segments/index.ts during
+// DOMContentLoaded, after which every slot is guaranteed non-null.
+let _handlers: SegEventHandlerRegistry = null as unknown as SegEventHandlerRegistry;
+export function registerAllSegEventHandlers(handlers: SegEventHandlerRegistry): void {
+    _handlers = handlers;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +46,7 @@ function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas, row: HTMLElement
         if (state.valCardPlayingBtn === playBtn && state.valCardAudio && !state.valCardAudio.paused) {
             state.valCardAudio.currentTime = timeMs / 1000;
         } else {
-            _handlers.playErrorCardAudio?.(seg, playBtn, timeMs);
+            _handlers.playErrorCardAudio(seg, playBtn, timeMs);
         }
     }
 }
@@ -98,7 +96,7 @@ export function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (seg && row) {
             const refCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-            _handlers.startRefEdit?.(refSpan, seg, row, refCat);
+            _handlers.startRefEdit(refSpan, seg, row, refCat);
         }
         return;
     }
@@ -118,7 +116,7 @@ export function handleSegRowClick(e: MouseEvent): void {
             }
         } else {
             const seg = resolveSegFromRow(row);
-            if (seg) _handlers.playErrorCardAudio?.(seg, playBtn);
+            if (seg) _handlers.playErrorCardAudio(seg, playBtn);
         }
         return;
     }
@@ -150,7 +148,7 @@ export function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (seg && row) {
             const cat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-            _handlers.enterEditWithBuffer?.(seg, row, 'trim', cat);
+            _handlers.enterEditWithBuffer(seg, row, 'trim', cat);
         }
         return;
     }
@@ -166,10 +164,10 @@ export function handleSegRowClick(e: MouseEvent): void {
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) state._accordionOpCtx = { wrapper };
-            _handlers.enterEditWithBuffer?.(seg, row, 'split', splitCat);
+            _handlers.enterEditWithBuffer(seg, row, 'split', splitCat);
             return;
         }
-        _handlers.enterEditWithBuffer?.(seg, row, 'split', splitCat);
+        _handlers.enterEditWithBuffer(seg, row, 'split', splitCat);
         return;
     }
 
@@ -184,10 +182,10 @@ export function handleSegRowClick(e: MouseEvent): void {
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) state._accordionOpCtx = { wrapper, direction: 'prev' };
-            _handlers.mergeAdjacent?.(seg, 'prev', mergePrevCat);
+            _handlers.mergeAdjacent(seg, 'prev', mergePrevCat);
             return;
         }
-        _handlers.mergeAdjacent?.(seg, 'prev', mergePrevCat);
+        _handlers.mergeAdjacent(seg, 'prev', mergePrevCat);
         return;
     }
     const mergeNext = target.closest<HTMLElement>('.btn-merge-next');
@@ -200,10 +198,10 @@ export function handleSegRowClick(e: MouseEvent): void {
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) state._accordionOpCtx = { wrapper, direction: 'next' };
-            _handlers.mergeAdjacent?.(seg, 'next', mergeNextCat);
+            _handlers.mergeAdjacent(seg, 'next', mergeNextCat);
             return;
         }
-        _handlers.mergeAdjacent?.(seg, 'next', mergeNextCat);
+        _handlers.mergeAdjacent(seg, 'next', mergeNextCat);
         return;
     }
 
@@ -215,7 +213,7 @@ export function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (seg && row) {
             const delCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-            _handlers.deleteSegment?.(seg, row, delCat);
+            _handlers.deleteSegment(seg, row, delCat);
         }
         return;
     }
@@ -230,7 +228,7 @@ export function handleSegRowClick(e: MouseEvent): void {
             const refSpan2 = row.querySelector<HTMLElement>('.seg-text-ref');
             if (refSpan2) {
                 const editRefCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-                _handlers.startRefEdit?.(refSpan2, seg, row, editRefCat);
+                _handlers.startRefEdit(refSpan2, seg, row, editRefCat);
             }
         }
         return;
@@ -246,7 +244,7 @@ export function handleSegRowClick(e: MouseEvent): void {
         } else {
             const seg = resolveSegFromRow(row);
             const playBtn2 = row.querySelector<HTMLElement>('.seg-card-play-btn');
-            if (seg && playBtn2) _handlers.playErrorCardAudio?.(seg, playBtn2);
+            if (seg && playBtn2) _handlers.playErrorCardAudio(seg, playBtn2);
         }
     }
 }

@@ -2,13 +2,13 @@
  * Audio cache UI -- by_surah proxy cache management.
  */
 
-import { state, dom } from '../state';
 import { fetchJson } from '../../shared/api';
 import type {
     SegAudioCacheStatusResponse,
     SegDeleteAudioCacheResponse,
     SegPrepareAudioResponse,
 } from '../../types/api';
+import { dom,state } from '../state';
 
 export function _isCurrentReciterBySurah(): boolean {
     const reciter = dom.segReciterSelect.value;
@@ -16,12 +16,6 @@ export function _isCurrentReciterBySurah(): boolean {
     return !!(info && info.audio_source && info.audio_source.startsWith('by_surah'));
 }
 
-/** Compare a segment's audio_url (may be relative) against segAudioEl.src (always absolute). */
-export function _audioSrcMatch(segUrl: string | null | undefined, elSrc: string | null | undefined): boolean {
-    if (!segUrl || !elSrc) return false;
-    if (segUrl === elSrc) return true;
-    return elSrc.endsWith(segUrl);
-}
 
 /** Rewrite all audio URLs in segAllData to go through the server proxy (by_surah only). */
 export function _rewriteAudioUrls(): void {

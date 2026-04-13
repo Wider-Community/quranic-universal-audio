@@ -5,10 +5,11 @@
  * by_ayah: Surah dropdown + Ayah dropdown with prev/next navigation.
  */
 
+import { fetchJson } from '../shared/api';
+import { LS_KEYS } from '../shared/constants';
+import { mustGet } from '../shared/dom';
 import { SearchableSelect } from '../shared/searchable-select';
 import { surahInfoReady, surahOptionText } from '../shared/surah-info';
-import { LS_KEYS } from '../shared/constants';
-import { fetchJson } from '../shared/api';
 import type { AudioSourcesResponse, AudioSurahsResponse } from '../types/api';
 
 interface AudioReciter {
@@ -17,11 +18,6 @@ interface AudioReciter {
 }
 type AudioCategorySources = Record<string, AudioReciter[]>;
 
-function mustGet<T extends HTMLElement>(id: string): T {
-    const el = document.getElementById(id);
-    if (!el) throw new Error(`Missing #${id}`);
-    return el as T;
-}
 
 const categoryToggle = mustGet<HTMLElement>('aud-category-toggle');
 const reciterSelect = mustGet<HTMLSelectElement>('aud-reciter-select');

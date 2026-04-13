@@ -4,37 +4,37 @@
  * for event delegation and keyboard shortcuts.
  */
 
-import { state, dom, setClassifyFn } from './state';
-import { LS_KEYS } from '../shared/constants';
-import { surahInfoReady } from '../shared/surah-info';
-import { SearchableSelect } from '../shared/searchable-select';
-import { _classifySegCategories } from './validation/categories';
-import { loadSegReciters, onSegReciterChange, onSegChapterChange } from './data';
-import { applyFiltersAndRender, addSegFilterCondition, clearAllSegFilters } from './filters';
-import { startSegAnimation, stopSegAnimation, onSegPlayClick, onSegTimeUpdate, onSegAudioEnded } from './playback/index';
-import { handleSegRowClick, _handleSegCanvasMousedown, registerHandler } from './event-delegation';
-import { handleSegKeydown, registerKeyboardHandler } from './keyboard';
-import { _prepareAudio, _deleteAudioCache } from './playback/audio-cache';
-import { registerWaveformHandlers } from './waveform/index';
-
-// Edit modules
-import { enterEditWithBuffer, exitEditMode, registerEditModes, registerEditDrawFns } from './edit/common';
-import { startRefEdit } from './edit/reference';
-import { enterTrimMode, confirmTrim, drawTrimWaveform } from './edit/trim';
-import { enterSplitMode, confirmSplit, drawSplitWaveform } from './edit/split';
-import { mergeAdjacent } from './edit/merge';
-import { deleteSegment } from './edit/delete';
-import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview } from './save';
-
 // Validation / stats / history modules (imports for side-effect registration)
 import './validation/index';
 import './stats';
-import { showHistoryView, hideHistoryView } from './history/index';
-import { clearHistoryFilters, setHistorySort } from './history/filters';
-import { playErrorCardAudio } from './validation/error-card-audio';
-import { ensureContextShown, _isWrapperContextShown } from './validation/error-cards';
+
 import { fetchJsonOrNull } from '../shared/api';
+import { LS_KEYS } from '../shared/constants';
+import { mustGet } from '../shared/dom';
+import { SearchableSelect } from '../shared/searchable-select';
+import { surahInfoReady } from '../shared/surah-info';
 import type { SegConfigResponse } from '../types/api';
+import { loadSegReciters, onSegChapterChange,onSegReciterChange } from './data';
+// Edit modules
+import { enterEditWithBuffer, exitEditMode, registerEditDrawFns,registerEditModes } from './edit/common';
+import { deleteSegment } from './edit/delete';
+import { mergeAdjacent } from './edit/merge';
+import { startRefEdit } from './edit/reference';
+import { confirmSplit, drawSplitWaveform,enterSplitMode } from './edit/split';
+import { confirmTrim, drawTrimWaveform,enterTrimMode } from './edit/trim';
+import { _handleSegCanvasMousedown, handleSegRowClick, registerAllSegEventHandlers } from './event-delegation';
+import { addSegFilterCondition, applyFiltersAndRender, clearAllSegFilters } from './filters';
+import { clearHistoryFilters, setHistorySort } from './history/filters';
+import { hideHistoryView,showHistoryView } from './history/index';
+import { handleSegKeydown, registerAllSegKeyboardHandlers } from './keyboard';
+import { _deleteAudioCache,_prepareAudio } from './playback/audio-cache';
+import { onSegAudioEnded,onSegPlayClick, onSegTimeUpdate, startSegAnimation, stopSegAnimation } from './playback/index';
+import { confirmSaveFromPreview,hideSavePreview, onSegSaveClick } from './save';
+import { dom, setClassifyFn,state } from './state';
+import { _classifySegCategories } from './validation/categories';
+import { playErrorCardAudio } from './validation/error-card-audio';
+import { _isWrapperContextShown,ensureContextShown } from './validation/error-cards';
+import { registerWaveformHandlers } from './waveform/index';
 
 // ---------------------------------------------------------------------------
 // Inject the classify function to break the state <-> categories cycle
@@ -53,11 +53,6 @@ registerWaveformHandlers({
     drawTrimWaveform,
 });
 
-function getElem<T extends HTMLElement>(id: string): T {
-    const el = document.getElementById(id);
-    if (!el) throw new Error(`Missing #${id} in DOMContentLoaded`);
-    return el as T;
-}
 
 // ---------------------------------------------------------------------------
 // DOMContentLoaded
@@ -65,42 +60,42 @@ function getElem<T extends HTMLElement>(id: string): T {
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize DOM references
-    dom.segReciterSelect = getElem<HTMLSelectElement>('seg-reciter-select');
-    dom.segChapterSelect = getElem<HTMLSelectElement>('seg-chapter-select');
-    dom.segVerseSelect = getElem<HTMLSelectElement>('seg-verse-select');
-    dom.segListEl = getElem<HTMLDivElement>('seg-list');
-    dom.segAudioEl = getElem<HTMLAudioElement>('seg-audio-player');
-    dom.segPlayBtn = getElem<HTMLButtonElement>('seg-play-btn');
-    dom.segAutoPlayBtn = getElem<HTMLButtonElement>('seg-autoplay-btn');
-    dom.segSpeedSelect = getElem<HTMLSelectElement>('seg-speed-select');
-    dom.segSaveBtn = getElem<HTMLButtonElement>('seg-save-btn');
-    dom.segPlayStatus = getElem<HTMLElement>('seg-play-status');
-    dom.segValidationGlobalEl = getElem<HTMLDivElement>('seg-validation-global');
-    dom.segValidationEl = getElem<HTMLDivElement>('seg-validation');
-    dom.segStatsPanel = getElem<HTMLDivElement>('seg-stats-panel');
-    dom.segStatsCharts = getElem<HTMLDivElement>('seg-stats-charts');
-    dom.segFilterBarEl = getElem<HTMLDivElement>('seg-filter-bar');
-    dom.segFilterRowsEl = getElem<HTMLDivElement>('seg-filter-rows');
-    dom.segFilterAddBtn = getElem<HTMLButtonElement>('seg-filter-add-btn');
-    dom.segFilterClearBtn = getElem<HTMLButtonElement>('seg-filter-clear-btn');
-    dom.segFilterCountEl = getElem<HTMLElement>('seg-filter-count');
-    dom.segFilterStatusEl = getElem<HTMLElement>('seg-filter-status');
-    dom.segHistoryView = getElem<HTMLDivElement>('seg-history-view');
-    dom.segHistoryBtn = getElem<HTMLButtonElement>('seg-history-btn');
-    dom.segHistoryBackBtn = getElem<HTMLButtonElement>('seg-history-back-btn');
-    dom.segHistoryStats = getElem<HTMLDivElement>('seg-history-stats');
-    dom.segHistoryBatches = getElem<HTMLDivElement>('seg-history-batches');
-    dom.segHistoryFilters = getElem<HTMLDivElement>('seg-history-filters');
-    dom.segHistoryFilterOps = getElem<HTMLDivElement>('seg-history-filter-ops');
-    dom.segHistoryFilterCats = getElem<HTMLDivElement>('seg-history-filter-cats');
-    dom.segHistoryFilterClear = getElem<HTMLButtonElement>('seg-history-filter-clear');
-    dom.segHistorySortTime = getElem<HTMLButtonElement>('seg-history-sort-time');
-    dom.segHistorySortQuran = getElem<HTMLButtonElement>('seg-history-sort-quran');
-    dom.segSavePreview = getElem<HTMLDivElement>('seg-save-preview');
-    dom.segSavePreviewCancel = getElem<HTMLButtonElement>('seg-save-preview-cancel');
-    dom.segSavePreviewConfirm = getElem<HTMLButtonElement>('seg-save-preview-confirm');
-    dom.segSavePreviewStats = getElem<HTMLDivElement>('seg-save-preview-stats');
-    dom.segSavePreviewBatches = getElem<HTMLDivElement>('seg-save-preview-batches');
+    dom.segReciterSelect = mustGet<HTMLSelectElement>('seg-reciter-select');
+    dom.segChapterSelect = mustGet<HTMLSelectElement>('seg-chapter-select');
+    dom.segVerseSelect = mustGet<HTMLSelectElement>('seg-verse-select');
+    dom.segListEl = mustGet<HTMLDivElement>('seg-list');
+    dom.segAudioEl = mustGet<HTMLAudioElement>('seg-audio-player');
+    dom.segPlayBtn = mustGet<HTMLButtonElement>('seg-play-btn');
+    dom.segAutoPlayBtn = mustGet<HTMLButtonElement>('seg-autoplay-btn');
+    dom.segSpeedSelect = mustGet<HTMLSelectElement>('seg-speed-select');
+    dom.segSaveBtn = mustGet<HTMLButtonElement>('seg-save-btn');
+    dom.segPlayStatus = mustGet<HTMLElement>('seg-play-status');
+    dom.segValidationGlobalEl = mustGet<HTMLDivElement>('seg-validation-global');
+    dom.segValidationEl = mustGet<HTMLDivElement>('seg-validation');
+    dom.segStatsPanel = mustGet<HTMLDivElement>('seg-stats-panel');
+    dom.segStatsCharts = mustGet<HTMLDivElement>('seg-stats-charts');
+    dom.segFilterBarEl = mustGet<HTMLDivElement>('seg-filter-bar');
+    dom.segFilterRowsEl = mustGet<HTMLDivElement>('seg-filter-rows');
+    dom.segFilterAddBtn = mustGet<HTMLButtonElement>('seg-filter-add-btn');
+    dom.segFilterClearBtn = mustGet<HTMLButtonElement>('seg-filter-clear-btn');
+    dom.segFilterCountEl = mustGet<HTMLElement>('seg-filter-count');
+    dom.segFilterStatusEl = mustGet<HTMLElement>('seg-filter-status');
+    dom.segHistoryView = mustGet<HTMLDivElement>('seg-history-view');
+    dom.segHistoryBtn = mustGet<HTMLButtonElement>('seg-history-btn');
+    dom.segHistoryBackBtn = mustGet<HTMLButtonElement>('seg-history-back-btn');
+    dom.segHistoryStats = mustGet<HTMLDivElement>('seg-history-stats');
+    dom.segHistoryBatches = mustGet<HTMLDivElement>('seg-history-batches');
+    dom.segHistoryFilters = mustGet<HTMLDivElement>('seg-history-filters');
+    dom.segHistoryFilterOps = mustGet<HTMLDivElement>('seg-history-filter-ops');
+    dom.segHistoryFilterCats = mustGet<HTMLDivElement>('seg-history-filter-cats');
+    dom.segHistoryFilterClear = mustGet<HTMLButtonElement>('seg-history-filter-clear');
+    dom.segHistorySortTime = mustGet<HTMLButtonElement>('seg-history-sort-time');
+    dom.segHistorySortQuran = mustGet<HTMLButtonElement>('seg-history-sort-quran');
+    dom.segSavePreview = mustGet<HTMLDivElement>('seg-save-preview');
+    dom.segSavePreviewCancel = mustGet<HTMLButtonElement>('seg-save-preview-cancel');
+    dom.segSavePreviewConfirm = mustGet<HTMLButtonElement>('seg-save-preview-confirm');
+    dom.segSavePreviewStats = mustGet<HTMLDivElement>('seg-save-preview-stats');
+    dom.segSavePreviewBatches = mustGet<HTMLDivElement>('seg-save-preview-batches');
 
     // Restore persistent settings
     state._segAutoPlayEnabled = localStorage.getItem(LS_KEYS.SEG_AUTOPLAY) !== 'false';
@@ -142,23 +137,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         el.addEventListener('mousedown', _handleSegCanvasMousedown);
     });
 
-    // Register event delegation handlers (edit operations)
-    registerHandler('startRefEdit', startRefEdit);
-    registerHandler('enterEditWithBuffer', enterEditWithBuffer);
-    registerHandler('mergeAdjacent', mergeAdjacent);
-    registerHandler('deleteSegment', deleteSegment);
-    registerHandler('playErrorCardAudio', playErrorCardAudio);
-    registerHandler('ensureContextShown', ensureContextShown);
-    registerHandler('_isWrapperContextShown', _isWrapperContextShown);
+    // Register event delegation + keyboard handlers (all slots at once — TS
+    // enforces completeness; missing a key is a compile error).
+    registerAllSegEventHandlers({
+        startRefEdit,
+        enterEditWithBuffer,
+        mergeAdjacent,
+        deleteSegment,
+        playErrorCardAudio,
+        ensureContextShown,
+        _isWrapperContextShown,
+    });
 
-    // Register keyboard handlers
-    registerKeyboardHandler('onSegSaveClick', onSegSaveClick);
-    registerKeyboardHandler('hideSavePreview', hideSavePreview);
-    registerKeyboardHandler('confirmSaveFromPreview', confirmSaveFromPreview);
-    registerKeyboardHandler('exitEditMode', exitEditMode);
-    registerKeyboardHandler('confirmTrim', confirmTrim);
-    registerKeyboardHandler('confirmSplit', confirmSplit);
-    registerKeyboardHandler('startRefEdit', startRefEdit);
+    registerAllSegKeyboardHandlers({
+        onSegSaveClick,
+        hideSavePreview,
+        confirmSaveFromPreview,
+        exitEditMode,
+        confirmTrim,
+        confirmSplit,
+        startRefEdit,
+    });
 
     // Save button
     dom.segSaveBtn.addEventListener('click', onSegSaveClick);

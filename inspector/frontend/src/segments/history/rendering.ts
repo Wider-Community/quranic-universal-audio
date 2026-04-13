@@ -3,14 +3,15 @@
  * Pure rendering -- no data fetching or filter state mutation.
  */
 
-import { state, dom, EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../state';
-import type { OpFlatItem, SplitChain, HistorySnapshot } from '../state';
-import { _classifySnapIssues, _deriveOpIssueDelta } from '../validation/categories';
-import { renderSegCard } from '../rendering';
 import { surahOptionText } from '../../shared/surah-info';
-import { onOpUndoClick, onChainUndoClick, onPendingBatchDiscard, _getChainBatchIds } from './undo';
 import type { EditOp, HistoryBatch, Segment } from '../../types/domain';
+import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../constants';
+import { renderSegCard } from '../rendering';
+import type { HistorySnapshot,OpFlatItem, SplitChain } from '../state';
+import { dom,state } from '../state';
+import { _classifySnapIssues, _deriveOpIssueDelta } from '../validation/categories';
 import type { SegCanvas } from '../waveform/types';
+import { _getChainBatchIds,onChainUndoClick, onOpUndoClick, onPendingBatchDiscard } from './undo';
 
 /** Narrow view of a snapshot as used by the history renderer (re-export alias). */
 type Snapshot = HistorySnapshot;

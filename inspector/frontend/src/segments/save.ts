@@ -2,18 +2,19 @@
  * Save flow: preview, confirm, execute save to server.
  */
 
-import { state, dom, isDirty, _SEG_NORMAL_IDS } from './state';
-import { surahOptionText } from '../shared/surah-info';
-import { getChapterSegments, onSegReciterChange } from './data';
-import { _ensureWaveformObserver } from './waveform/index';
-import { refreshValidation } from './validation/index';
-import { renderEditHistoryPanel } from './history/index';
-import { _buildSplitLineage, _buildSplitChains } from './history/index';
-import { renderHistorySummaryStats, renderHistoryBatches, drawHistoryArrows, _countVersesFromBatches } from './history/rendering';
-import { stopErrorCardAudio } from './validation/error-card-audio';
 import { fetchJson, fetchJsonOrNull } from '../shared/api';
+import { surahOptionText } from '../shared/surah-info';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
-import type { HistoryBatch, EditOp, Segment } from '../types/domain';
+import type { EditOp, HistoryBatch, Segment } from '../types/domain';
+import { _SEG_NORMAL_IDS } from './constants';
+import { getChapterSegments, onSegReciterChange } from './data';
+import { renderEditHistoryPanel } from './history/index';
+import { _buildSplitChains,_buildSplitLineage } from './history/index';
+import { _countVersesFromBatches,drawHistoryArrows, renderHistoryBatches, renderHistorySummaryStats } from './history/rendering';
+import { dom, isDirty,state } from './state';
+import { stopErrorCardAudio } from './validation/error-card-audio';
+import { refreshValidation } from './validation/index';
+import { _ensureWaveformObserver } from './waveform/index';
 
 interface SavePreviewBatch {
     batch_id: null;
@@ -80,7 +81,7 @@ export function buildSavePreviewData(): SavePreviewData {
         total_operations: totalOps,
         total_batches: batches.length + warningChapters.length,
         chapters_edited: batches.length + warningChapters.length,
-        verses_edited: _countVersesFromBatches(batches as unknown as HistoryBatch[]) ?? 0,
+        verses_edited: _countVersesFromBatches(batches as HistoryBatch[]) ?? 0,
         op_counts: opCounts,
         fix_kind_counts: fixKindCounts,
     };
@@ -97,7 +98,7 @@ export function showSavePreview(): void {
     const data = buildSavePreviewData();
 
     state._segSavedChains = { splitChains: state._splitChains, chainedOpIds: state._chainedOpIds };
-    const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as unknown as HistoryBatch[])];
+    const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as HistoryBatch[])];
     const splitLineage = _buildSplitLineage(allBatches);
     const built = _buildSplitChains(allBatches, splitLineage);
     state._splitChains = built.chains;
@@ -114,7 +115,7 @@ export function showSavePreview(): void {
         dom.segSavePreviewStats.prepend(warn);
     }
 
-    renderHistoryBatches(data.batches as unknown as HistoryBatch[], dom.segSavePreviewBatches);
+    renderHistoryBatches(data.batches as HistoryBatch[], dom.segSavePreviewBatches);
 
     dom.segSavePreviewBatches.querySelectorAll<HTMLElement>('.seg-history-batch-time').forEach(el => {
         if (el.textContent === 'Pending') el.style.color = '#f0a500';

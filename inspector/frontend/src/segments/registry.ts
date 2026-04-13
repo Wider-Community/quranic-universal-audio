@@ -10,8 +10,8 @@
  * "Phase 2 registration pattern". Stage 2 (Svelte) will re-evaluate.
  */
 
-import type { Segment } from './domain';
-import type { SegCanvas } from '../segments/waveform/types';
+import type { Segment } from '../types/domain';
+import type { SegCanvas } from './waveform/types';
 
 // ---------------------------------------------------------------------------
 // event-delegation.ts — clicks on segment rows / canvas / buttons
@@ -54,23 +54,19 @@ export type DeleteSegmentFn = (
     contextCategory?: string | null,
 ) => void;
 
-/** Shape of the event-delegation registry keyed by handler name. */
+/** Shape of the event-delegation registry. All slots are required — populated
+ *  once at init time via `registerAllSegEventHandlers({...})`. */
 export interface SegEventHandlerRegistry {
-    playErrorCardAudio?: PlayErrorCardAudioFn;
-    startRefEdit?: StartRefEditFn;
-    enterEditWithBuffer?: EnterEditWithBufferFn;
-    mergeAdjacent?: MergeAdjacentFn;
-    deleteSegment?: DeleteSegmentFn;
-    /** Accordion "context shown" helpers — registered from segments/index.ts
-     *  for symmetry with the other accordion/edit entry points. Currently
-     *  unused by the event-delegation module itself but read by validation
-     *  error-cards via the registry — keep the slot wired. */
-    ensureContextShown?: (row: Element) => void;
-    _isWrapperContextShown?: (wrapper: Element | null | undefined) => boolean;
+    playErrorCardAudio: PlayErrorCardAudioFn;
+    startRefEdit: StartRefEditFn;
+    enterEditWithBuffer: EnterEditWithBufferFn;
+    mergeAdjacent: MergeAdjacentFn;
+    deleteSegment: DeleteSegmentFn;
+    /** Accordion "context shown" helpers registered by segments/index.ts;
+     *  read by validation error-cards via the registry. */
+    ensureContextShown: (row: Element) => void;
+    _isWrapperContextShown: (wrapper: Element | null | undefined) => boolean;
 }
-
-/** Union of valid handler names. */
-export type SegEventHandlerName = keyof SegEventHandlerRegistry;
 
 // ---------------------------------------------------------------------------
 // keyboard.ts — Ctrl+S save, Escape exit, Enter confirm
@@ -83,17 +79,16 @@ export type ExitEditModeFn = () => void;
 export type ConfirmTrimFn = (seg: Segment) => void;
 export type ConfirmSplitFn = (seg: Segment) => void | Promise<void>;
 
+/** All slots required — populated once via `registerAllSegKeyboardHandlers({...})`. */
 export interface SegKeyboardHandlerRegistry {
-    onSegSaveClick?: OnSegSaveClickFn;
-    hideSavePreview?: HideSavePreviewFn;
-    confirmSaveFromPreview?: ConfirmSaveFromPreviewFn;
-    exitEditMode?: ExitEditModeFn;
-    confirmTrim?: ConfirmTrimFn;
-    confirmSplit?: ConfirmSplitFn;
-    startRefEdit?: StartRefEditFn;
+    onSegSaveClick: OnSegSaveClickFn;
+    hideSavePreview: HideSavePreviewFn;
+    confirmSaveFromPreview: ConfirmSaveFromPreviewFn;
+    exitEditMode: ExitEditModeFn;
+    confirmTrim: ConfirmTrimFn;
+    confirmSplit: ConfirmSplitFn;
+    startRefEdit: StartRefEditFn;
 }
-
-export type SegKeyboardHandlerName = keyof SegKeyboardHandlerRegistry;
 
 // ---------------------------------------------------------------------------
 // edit/common.ts — trim/split mode entry + waveform redraw

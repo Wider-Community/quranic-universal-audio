@@ -16,11 +16,6 @@ export default defineConfig({
       input: resolve(here, 'index.html'),
     },
   },
-  resolve: {
-    alias: {
-      '@': resolve(here, 'src'),
-    },
-  },
   server: {
     port: 5173,
     strictPort: true,

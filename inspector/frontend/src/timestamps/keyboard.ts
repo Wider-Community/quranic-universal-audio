@@ -2,14 +2,15 @@
  * Timestamps tab — keyboard shortcut handler.
  */
 
-import { state, dom } from './state';
-import { LS_KEYS } from '../shared/constants';
 import { getActiveTab } from '../main';
+import { safePlay } from '../shared/audio';
+import { LS_KEYS } from '../shared/constants';
+import { cycleSpeed } from '../shared/speed-control';
+import { switchView } from './animation';
 import { loadRandomTimestamp } from './index';
 import { updateDisplay } from './playback';
 import { navigateVerse } from './playback';
-import { switchView } from './animation';
-import { safePlay } from '../shared/audio';
+import { dom,state } from './state';
 
 // NOTE: circular dependency with index.ts (loadRandomTimestamp).
 // Safe because this function is only called at runtime via keydown events,
@@ -89,18 +90,7 @@ export function handleKeydown(e: KeyboardEvent): void {
         case 'Period': // > speed up
         case 'Comma': { // < speed down
             e.preventDefault();
-            const opts = Array.from(dom.tsSpeedSelect.options).map(o => parseFloat(o.value));
-            const curRate = parseFloat(dom.tsSpeedSelect.value);
-            const curIdx = opts.findIndex(s => Math.abs(s - curRate) < 0.01);
-            const idx = curIdx === -1 ? opts.indexOf(1) : curIdx;
-            const newIdx = e.code === 'Period'
-                ? Math.min(idx + 1, opts.length - 1)
-                : Math.max(idx - 1, 0);
-            const newVal = opts[newIdx];
-            if (newVal === undefined) break;
-            dom.tsSpeedSelect.value = String(newVal);
-            dom.audio.playbackRate = newVal;
-            localStorage.setItem(LS_KEYS.TS_SPEED, dom.tsSpeedSelect.value);
+            cycleSpeed(dom.tsSpeedSelect, dom.audio, e.code === 'Period' ? 'up' : 'down', LS_KEYS.TS_SPEED);
             break;
         }
 

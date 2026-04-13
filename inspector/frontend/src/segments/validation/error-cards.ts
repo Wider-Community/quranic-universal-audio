@@ -3,14 +3,14 @@
  * Renders segment cards inside accordion panels with context, auto-fix, ignore.
  */
 
-import { state, dom, createOp, snapshotSeg, finalizeOp, markDirty, unmarkDirty, isDirty, isIndexDirty } from '../state';
-import { _isIgnoredFor } from './categories';
-import { getChapterSegments, getSegByChapterIndex, getAdjacentSegments } from '../data';
-import { renderSegCard, syncAllCardsForSegment, resolveSegFromRow } from '../rendering';
+import type { Segment, SegValAnyItem, SegValMissingVerseItem,SegValMissingWordsItem } from '../../types/domain';
+import { getAdjacentSegments,getChapterSegments, getSegByChapterIndex } from '../data';
 import { commitRefEdit } from '../edit/reference';
-import { _ensureWaveformObserver, _fetchPeaks } from '../waveform/index';
 import { findMissingVerseBoundarySegments } from '../navigation';
-import type { Segment, SegValAnyItem, SegValMissingWordsItem, SegValMissingVerseItem } from '../../types/domain';
+import { renderSegCard, resolveSegFromRow,syncAllCardsForSegment } from '../rendering';
+import { createOp, dom, finalizeOp, isDirty, isIndexDirty,markDirty, snapshotSeg, state, unmarkDirty } from '../state';
+import { _ensureWaveformObserver, _fetchPeaks } from '../waveform/index';
+import { _isIgnoredFor } from './categories';
 
 // ---------------------------------------------------------------------------
 // Local interface types

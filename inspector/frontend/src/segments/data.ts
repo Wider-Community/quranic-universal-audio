@@ -2,18 +2,9 @@
  * Data loading, chapter management, and segment lookups.
  */
 
-import { state, dom } from './state';
+import { fetchJson, fetchJsonOrNull } from '../shared/api';
 import { LS_KEYS } from '../shared/constants';
 import { surahOptionText } from '../shared/surah-info';
-import { computeSilenceAfter } from './filters';
-import { applyFiltersAndRender } from './filters';
-import { _fetchPeaks, _fetchChapterPeaksIfNeeded } from './waveform/index';
-import { _isCurrentReciterBySurah, _fetchCacheStatus, _rewriteAudioUrls } from './playback/audio-cache';
-import { stopSegAnimation } from './playback/index';
-import { renderValidationPanel, captureValPanelState, restoreValPanelState } from './validation/index';
-import { renderStatsPanel } from './stats';
-import { renderEditHistoryPanel } from './history/index';
-import { fetchJson, fetchJsonOrNull } from '../shared/api';
 import type {
     SegAllResponse,
     SegChaptersResponse,
@@ -24,6 +15,15 @@ import type {
     SegValidateResponse,
 } from '../types/api';
 import type { Segment } from '../types/domain';
+import { computeSilenceAfter } from './filters';
+import { applyFiltersAndRender } from './filters';
+import { renderEditHistoryPanel } from './history/index';
+import { _fetchCacheStatus, _isCurrentReciterBySurah, _rewriteAudioUrls } from './playback/audio-cache';
+import { stopSegAnimation } from './playback/index';
+import { dom,state } from './state';
+import { renderStatsPanel } from './stats';
+import { captureValPanelState, renderValidationPanel, restoreValPanelState } from './validation/index';
+import { _fetchChapterPeaksIfNeeded,_fetchPeaks } from './waveform/index';
 
 // ---------------------------------------------------------------------------
 // Reciter loading

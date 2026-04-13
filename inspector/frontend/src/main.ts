@@ -18,14 +18,13 @@ import './styles/history.css';
 import './styles/stats.css';
 import './styles/filters.css';
 import './styles/audio-tab.css';
-
-import { LS_KEYS } from './shared/constants';
-
 // Static imports — module-level code in each tab runs immediately,
 // registering DOMContentLoaded handlers before the event fires.
 import './timestamps/index';
 import './segments/index';
 import './audio/index';
+
+import { LS_KEYS } from './shared/constants';
 
 let activeTab = 'timestamps';
 

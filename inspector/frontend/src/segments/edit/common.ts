@@ -3,16 +3,16 @@
  * _playRange, and the registration pattern for trim/split modes.
  */
 
-import { state, dom, createOp, snapshotSeg } from '../state';
-import { resolveSegFromRow, _getEditCanvas } from '../rendering';
-import { drawWaveformFromPeaksForSeg } from '../waveform/draw';
-import { stopSegAnimation } from '../playback/index';
 import { safePlay } from '../../shared/audio';
-import { getSegByChapterIndex } from '../data';
-import { stopErrorCardAudio } from '../validation/error-card-audio';
 import type { Segment } from '../../types/domain';
+import { getSegByChapterIndex } from '../data';
+import { stopSegAnimation } from '../playback/index';
+import type { DrawWaveformFn, EnterSplitModeFn,EnterTrimModeFn } from '../registry';
+import { _getEditCanvas,resolveSegFromRow } from '../rendering';
+import { createOp, dom, snapshotSeg,state } from '../state';
+import { stopErrorCardAudio } from '../validation/error-card-audio';
+import { drawWaveformFromPeaksForSeg } from '../waveform/draw';
 import type { SegCanvas } from '../waveform/types';
-import type { DrawWaveformFn, EnterTrimModeFn, EnterSplitModeFn } from '../../types/registry';
 
 // ---------------------------------------------------------------------------
 // Registration pattern: trim/split modules register their entry functions

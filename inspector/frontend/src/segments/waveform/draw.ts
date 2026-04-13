@@ -2,9 +2,9 @@
  * Waveform drawing functions -- peaks-based rendering, playhead, overlays.
  */
 
-import { state, _findCoveringPeaks } from '../state';
-import type { SegCanvas } from './types';
 import type { AudioPeaks, PeakBucket, Segment } from '../../types/domain';
+import { _findCoveringPeaks,state } from '../state';
+import type { SegCanvas } from './types';
 
 type Peaks = PeakBucket[];
 

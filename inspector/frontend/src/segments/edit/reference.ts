@@ -2,13 +2,13 @@
  * Reference editing: startRefEdit, commitRefEdit, _chainSplitRefEdit.
  */
 
-import { state, dom, createOp, snapshotSeg, finalizeOp, markDirty } from '../state';
-import { _normalizeRef, formatRef } from '../references';
-import { syncAllCardsForSegment } from '../rendering';
-import { stopSegAnimation } from '../playback/index';
 import { fetchJson } from '../../shared/api';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
+import { stopSegAnimation } from '../playback/index';
+import { _normalizeRef, formatRef } from '../references';
+import { syncAllCardsForSegment } from '../rendering';
+import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
 
 // ---------------------------------------------------------------------------
 // startRefEdit -- inline ref input on a segment card

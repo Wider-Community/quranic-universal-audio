@@ -2,16 +2,17 @@
  * Edit history filter bar, sort controls, and filter application.
  */
 
-import { state, dom, EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../state';
+import type { SegEditHistoryResponse } from '../../types/api';
+import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../constants';
+import type { OpFlatItem } from '../state';
+import { dom,state } from '../state';
 import { _deriveOpIssueDelta } from '../validation/categories';
 import { _ensureWaveformObserver } from '../waveform/index';
 import {
-    renderHistorySummaryStats,
     _flattenBatchesToItems, _renderHistoryDisplayItems,
-    drawHistoryArrows, _versesFromRef,
+_versesFromRef,
+    drawHistoryArrows,     renderHistorySummaryStats,
 } from './rendering';
-import type { OpFlatItem } from '../state';
-import type { SegEditHistoryResponse } from '../../types/api';
 
 // ---------------------------------------------------------------------------
 // renderHistoryFilterBar

@@ -2,11 +2,11 @@
  * Jump-to-segment, jump-to-verse, missing verse context, and filter view save/restore.
  */
 
-import { state, dom } from './state';
-import { parseSegRef } from './references';
+import type { Segment } from '../types/domain';
 import { getChapterSegments, onSegChapterChange } from './data';
 import { applyFiltersAndRender, renderFilterBar, updateFilterBarControls } from './filters';
-import type { Segment } from '../types/domain';
+import { parseSegRef } from './references';
+import { dom,state } from './state';
 
 interface MissingVerseContext {
     prev: Segment | null;

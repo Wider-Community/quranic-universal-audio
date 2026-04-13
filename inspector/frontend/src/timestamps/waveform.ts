@@ -2,11 +2,11 @@
  * Timestamps tab — waveform decoding, peak computation, and canvas drawing.
  */
 
-import { state, dom } from './state';
-import { AUDIO_BUFFER_CACHE_SIZE } from '../shared/constants';
-import { getSegRelTime, getSegDuration } from './index';
-import { updateDisplay } from './playback';
 import { fetchArrayBuffer } from '../shared/api';
+import { AUDIO_BUFFER_CACHE_SIZE } from '../shared/constants';
+import { getSegDuration,getSegRelTime } from './index';
+import { updateDisplay } from './playback';
+import { dom,state } from './state';
 
 // NOTE: circular dependency with index.ts (getSegRelTime, getSegDuration) and
 // playback.ts (updateDisplay for handleCanvasClick). Safe because these
