@@ -24,15 +24,15 @@ echo
 # -----------------------------------------------------------------------------
 
 cd inspector/frontend
-echo "[1/6] npm run typecheck (tsc --noEmit)"
+echo "[1/7] npm run typecheck (tsc --noEmit)"
 npm run typecheck
 
 echo
-echo "[2/6] npm run lint (ESLint; import/no-cycle at warn pending Svelte migration)"
+echo "[2/7] npm run lint (ESLint; import/no-cycle at warn pending Svelte migration)"
 npm run lint
 
 echo
-echo "[3/6] npm run build (Vite production build)"
+echo "[3/7] npm run build (Vite production build)"
 npm run build
 
 cd "$REPO_ROOT/inspector"
@@ -42,7 +42,7 @@ cd "$REPO_ROOT/inspector"
 # -----------------------------------------------------------------------------
 
 echo
-echo "[4/6] Backend: no 'global' keyword outside services/cache.py"
+echo "[4/7] Backend: no 'global' keyword outside services/cache.py"
 # Use `|| true` because grep exits 1 on no match; we want non-empty to FAIL.
 leaks="$(grep -rn "^\s*global\s" services/ | grep -v "^\s*#" | grep -v "services/cache.py" || true)"
 if [[ -n "$leaks" ]]; then
@@ -59,7 +59,7 @@ echo "ok: no global keyword outside cache.py"
 # -----------------------------------------------------------------------------
 
 echo
-echo "[5/6] Backend: _URL_AUDIO_META and _phonemizer live only in services/cache.py"
+echo "[5/7] Backend: _URL_AUDIO_META and _phonemizer live only in services/cache.py"
 orphans="$(grep -rln --include="*.py" "_URL_AUDIO_META\|^\s*_phonemizer\s*=" services/ | grep -v "services/cache.py" || true)"
 if [[ -n "$orphans" ]]; then
     echo "FAIL: _URL_AUDIO_META or _phonemizer referenced outside cache.py:"
@@ -73,7 +73,7 @@ echo "ok: no orphan global cache vars"
 # -----------------------------------------------------------------------------
 
 echo
-echo "[6/6] Frontend: zero '// NOTE: circular dependency' comments"
+echo "[6/7] Frontend: zero '// NOTE: circular dependency' comments"
 cycle_notes="$(grep -rn "// NOTE: circular dependency" frontend/src/ || true)"
 if [[ -n "$cycle_notes" ]]; then
     echo "FAIL: cycle NOTE comments remain:"
@@ -81,6 +81,37 @@ if [[ -n "$cycle_notes" ]]; then
     exit 1
 fi
 echo "ok: no cycle NOTEs"
+
+
+# -----------------------------------------------------------------------------
+# Frontend: import/no-cycle warning ceiling (added Wave-1 review per Opus).
+#
+# The rule is at `warn` severity through Waves 5-10 while segments cycles
+# are dissolved by the Svelte migration. This gate asserts the warning count
+# is monotonically non-increasing — prevents new cycles from being introduced
+# in backend-adjacent frontend work.
+#
+# Baseline set at end of Wave 1: 23 warnings (all pre-existing segments cycles;
+# Wave-1 handoff reported 22 — off-by-one; actual is 23). Update $CYCLE_CEILING
+# downward as Svelte waves dissolve cycles; set to 0 at Wave 11 when the rule
+# is re-promoted to `error`.
+# -----------------------------------------------------------------------------
+
+echo
+echo "[7/7] Frontend: import/no-cycle warning count does not exceed ceiling"
+cd "$REPO_ROOT/inspector/frontend"
+CYCLE_CEILING="${CYCLE_CEILING:-23}"
+cycle_warnings="$(npm run -s lint 2>&1 | grep -c "import/no-cycle" || true)"
+# grep -c emits 0 when nothing matches; strip any newlines just in case.
+cycle_warnings="${cycle_warnings//$'\n'/}"
+if (( cycle_warnings > CYCLE_CEILING )); then
+    echo "FAIL: import/no-cycle warnings ($cycle_warnings) exceed ceiling ($CYCLE_CEILING)"
+    npm run -s lint 2>&1 | grep "import/no-cycle" || true
+    exit 1
+fi
+echo "ok: $cycle_warnings cycle warnings (ceiling: $CYCLE_CEILING)"
+
+cd "$REPO_ROOT/inspector"
 
 echo
 echo "== All Stage-2 pre-flight checks passed =="

@@ -184,6 +184,7 @@ Exploration (7 parallel agents, 2026-04-13) surfaced:
   | `shared/accordion.ts` | DELETED OR `lib/utils/accordion.ts` | If `<AccordionPanel>` absorbs full behavior, delete; else keep |
   | `shared/searchable-select.ts` | DELETED | Replaced by `<SearchableSelect>` component |
   | `shared/surah-info.ts` | `lib/stores/surah-info.ts` (or `lib/utils/surah-info.ts`) | Singleton data cache; reactive store if any UI binds to it, else util |
+  | `shared/active-tab.ts` | `lib/utils/active-tab.ts` OR fold into `App.svelte` tab-router store | Added in Wave 1 per S2-D25. Leaf module exporting `getActiveTab`/`setActiveTab`. Svelte's App.svelte likely replaces this with a reactive `activeTab` store. |
 
 - No testing-library. No Vitest. Manual smoke + review.
 
@@ -236,6 +237,7 @@ Exploration (7 parallel agents, 2026-04-13) surfaced:
 - **Convert audio tab** (per Sonnet review fix): `src/audio/index.ts` (341 LOC self-contained) → `tabs/audio/AudioTab.svelte` + `tabs/audio/AudioPlayer.svelte` + (if needed) `lib/stores/audio/index.ts`. Small enough to bundle into cleanup; warm-up was skipped per user.
 - Delete obsolete `.ts` files (state.ts files, registry.ts, index.ts wiring modules, rendering modules).
 - Delete `src/styles/*.css` files fully ported to scoped `<style>` (verify by grep against the CSS migration map from Wave 3).
+- **Re-promote `import/no-cycle` from `warn` to `'error'`** in `inspector/frontend/eslint.config.js` (closes S2-B06, S2-D24). Verify `npm run lint` reports zero cycle warnings. Per Wave-1 reviewer consensus (Sonnet + Opus).
 - Update `inspector/CLAUDE.md` architecture section. **Explicitly note**: the "State object pattern" principle is superseded by stores-per-concern for the Svelte frontend.
 - Archive or delete `docs/inspector-refactor-notes.md` (the original Stage-2 notes; superseded by this plan once executed). Per Opus review.
 - Update `docs/inspector-docker-distribution.md` to mark pre-reqs done.
@@ -448,7 +450,7 @@ set -euo pipefail
 
 cd inspector/frontend
 npm run typecheck      # tsc --noEmit
-npm run lint           # ESLint (import/no-cycle=error enforced)
+npm run lint           # ESLint (import/no-cycle at 'warn' until Wave 11 per S2-D24)
 npm run build          # Vite production build
 
 cd ..
