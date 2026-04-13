@@ -122,6 +122,21 @@ AUDIO_CACHE_MAX_AGE = 31_536_000
 # Confidence thresholds
 LOW_CONFIDENCE_RED = 0.60           # below this = red highlight ("below_60" stat)
 
+# Peaks (ffmpeg) — waveform peak extraction defaults (services/peaks.py)
+PEAKS_FFMPEG_SAMPLE_RATE = 8000          # Hz — ffmpeg resample target for peak computation
+PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 1] float
+PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parallel peak compute
+PEAKS_MIN_CHUNK_BYTES = 100              # short-circuit below this raw-chunk size (prevents tiny ffmpeg invocations)
+
+# Startup preload (app.py)
+STARTUP_PRELOAD_WORKERS = 8              # ThreadPoolExecutor cap for eager timestamp preload
+
+# Audio-cache background download (routes/audio_proxy.py)
+AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download workers for by_surah cache warmup
+
+# Server defaults (app.py)
+DEFAULT_PORT = 5000                      # Flask --port default
+
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",

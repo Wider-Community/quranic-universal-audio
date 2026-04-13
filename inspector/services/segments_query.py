@@ -7,7 +7,7 @@ a pure behavior-preserving move.
 
 import statistics
 
-from config import LOW_CONFIDENCE_THRESHOLD
+from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
 from services import cache
 from services.data_loader import (
     dk_text_for_ref,
@@ -81,7 +81,7 @@ def get_chapter_data(reciter: str, chapter: int,
     for s in segments:
         if not s["matched_ref"]:
             issue_indices.append(s["index"])
-        elif s["confidence"] < 0.60:
+        elif s["confidence"] < LOW_CONFIDENCE_RED:
             issue_indices.append(s["index"])
 
     # Missing verses
@@ -113,7 +113,7 @@ def get_chapter_data(reciter: str, chapter: int,
         "conf_median": round(statistics.median(confidences), 4) if confidences else 0,
         "conf_mean": round(statistics.mean(confidences), 4) if confidences else 0,
         "conf_max": round(max(confidences), 4) if confidences else 0,
-        "below_60": sum(1 for c in confidences if c < 0.60),
+        "below_60": sum(1 for c in confidences if c < LOW_CONFIDENCE_RED),
         "below_80": sum(1 for c in confidences if c < LOW_CONFIDENCE_THRESHOLD),
         "total_speech_ms": round(total_speech),
         "avg_segment_ms": round(total_speech / len(segments)) if segments else 0,

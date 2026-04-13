@@ -4,7 +4,7 @@ import threading
 
 from flask import Blueprint, jsonify, redirect, request, send_file
 
-from config import AUDIO_CACHE_MAX_AGE, AUDIO_MIME_TYPES
+from config import AUDIO_CACHE_MAX_AGE, AUDIO_DL_WORKER_COUNT, AUDIO_MIME_TYPES
 from services import cache
 from services.audio_proxy import delete_audio_cache, download_audio, scan_audio_cache
 from services.data_loader import load_detailed
@@ -68,7 +68,7 @@ def seg_prepare_audio(reciter):
         })
 
     def _bg():
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=AUDIO_DL_WORKER_COUNT) as pool:
             futures = {pool.submit(download_audio, reciter, u): ch for ch, u in to_download.items()}
             for future in concurrent.futures.as_completed(futures):
                 with dl_lock:

@@ -15,7 +15,9 @@ from pathlib import Path
 
 from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     MIN_FULL_PEAK_BUCKETS, MIN_SEG_PEAK_BUCKETS,
-                    PEAKS_BUCKETS_PER_SEC, ID3_PROBE_BYTES,
+                    PEAKS_BUCKETS_PER_SEC, PEAKS_FFMPEG_SAMPLE_RATE,
+                    PEAKS_MIN_CHUNK_BYTES, PEAKS_PCM_NORMALIZER,
+                    PEAKS_WORKER_COUNT, ID3_PROBE_BYTES,
                     ID3_PROBE_TIMEOUT, DEFAULT_BYTES_PER_SEC,
                     RANGE_DECODE_PAD_SEC)
 from services import cache
@@ -48,10 +50,11 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
     if cached_only:
         return None
 
-    # Decode to raw mono 16-bit PCM at 8kHz via ffmpeg
+    # Decode to raw mono 16-bit PCM via ffmpeg at the configured peaks sample rate
     try:
         result = subprocess.run(
-            ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1", "-ar", "8000",
+            ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1",
+             "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
              "-v", "quiet", "-"],
             capture_output=True, timeout=FFMPEG_FULL_TIMEOUT,
         )
@@ -66,8 +69,8 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
         return None
     samples = struct.unpack(f"<{num_samples}h", raw)
 
-    duration_ms = int(num_samples / 8000 * 1000)
-    duration_sec = num_samples / 8000
+    duration_ms = int(num_samples / PEAKS_FFMPEG_SAMPLE_RATE * 1000)
+    duration_sec = num_samples / PEAKS_FFMPEG_SAMPLE_RATE
     num_buckets = max(MIN_FULL_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
 
     block_size = max(1, num_samples // num_buckets)
@@ -78,8 +81,8 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
         if start >= num_samples:
             break
         block = samples[start:end]
-        mn = min(block) / 32768.0
-        mx = max(block) / 32768.0
+        mn = min(block) / PEAKS_PCM_NORMALIZER
+        mx = max(block) / PEAKS_PCM_NORMALIZER
         peaks.append([round(mn, 4), round(mx, 4)])
 
     data = {"duration_ms": duration_ms, "peaks": peaks}
@@ -177,7 +180,7 @@ def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
     except Exception:
         return None
 
-    if len(chunk) < 100:
+    if len(chunk) < PEAKS_MIN_CHUNK_BYTES:
         return None
 
     # Write to temp file and decode with ffmpeg
@@ -190,7 +193,8 @@ def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
         result = subprocess.run(
             ["ffmpeg", "-ss", str(seek_within), "-i", tmp_path,
              "-t", str(duration_sec + 2 * pad),
-             "-f", "s16le", "-ac", "1", "-ar", "8000",
+             "-f", "s16le", "-ac", "1",
+             "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
              "-v", "quiet", "-"],
             capture_output=True, timeout=FFMPEG_TIMEOUT,
         )
@@ -238,7 +242,7 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
         return None
     samples = struct.unpack(f"<{num_samples}h", raw)
 
-    actual_duration_ms = int(num_samples / 8000 * 1000)
+    actual_duration_ms = int(num_samples / PEAKS_FFMPEG_SAMPLE_RATE * 1000)
     num_buckets = max(MIN_SEG_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
     block_size = max(1, num_samples // num_buckets)
     peaks = []
@@ -248,8 +252,8 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
         if s >= num_samples:
             break
         block = samples[s:e]
-        mn = min(block) / 32768.0
-        mx = max(block) / 32768.0
+        mn = min(block) / PEAKS_PCM_NORMALIZER
+        mx = max(block) / PEAKS_PCM_NORMALIZER
         peaks.append([round(mn, 4), round(mx, 4)])
 
     data = {
@@ -296,7 +300,7 @@ def get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None) 
 
     # Compute missing peaks in parallel
     results = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=PEAKS_WORKER_COUNT) as pool:
         future_to_url = {}
         for u in to_compute:
             local_path = cache.audio_cache_path(reciter, u)
