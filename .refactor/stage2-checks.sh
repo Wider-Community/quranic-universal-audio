@@ -100,7 +100,7 @@ echo "ok: no cycle NOTEs"
 echo
 echo "[7/7] Frontend: import/no-cycle warning count does not exceed ceiling"
 cd "$REPO_ROOT/inspector/frontend"
-CYCLE_CEILING="${CYCLE_CEILING:-19}"
+CYCLE_CEILING="${CYCLE_CEILING:-18}"
 cycle_warnings="$(npm run -s lint 2>&1 | grep -c "import/no-cycle" || true)"
 # grep -c emits 0 when nothing matches; strip any newlines just in case.
 cycle_warnings="${cycle_warnings//$'\n'/}"
