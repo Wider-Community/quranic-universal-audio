@@ -39,18 +39,36 @@
      *  trigger re-derivation on every $displayedSegments change — which
      *  fires after save+revalidate (applyFiltersAndRender → segAllData.update).
      *  Without this, missing-word tags would go stale after save until the
-     *  user changes chapters. */
+     *  user changes chapters.
+     *
+     *  D1 memoization (Wave 7a.2 prerequisite, Opus perf review): the Set
+     *  is expensive to pass-by-value — new identity marks every <SegmentRow>
+     *  dirty (O(N) reactive work per confirm at N≈1000 segs). Cache by
+     *  reference on (segValidation, selectedChapter); return the SAME Set
+     *  instance when neither dependency has changed. `void $displayedSegments`
+     *  keeps the reactive trigger path (save + revalidate notifies
+     *  segAllData → displayedSegments), but the Set only rebuilds when
+     *  `state.segValidation` actually changes. */
+    let _missingCache: Set<number> = new Set();
+    let _missingCacheValRef: typeof state.segValidation = null;
+    let _missingCacheChapter = '';
     $: missingWordSegIndices = (() => {
-        void $displayedSegments; // dependency: re-derive on list refresh
+        void $displayedSegments; // re-trigger on list refresh (covers save→revalidate)
+        if (state.segValidation === _missingCacheValRef && $selectedChapter === _missingCacheChapter) {
+            return _missingCache;
+        }
+        _missingCacheValRef = state.segValidation;
+        _missingCacheChapter = $selectedChapter;
         const set = new Set<number>();
-        if (!state.segValidation || !state.segValidation.missing_words) return set;
+        if (!state.segValidation || !state.segValidation.missing_words) { _missingCache = set; return set; }
         const chapter = parseInt($selectedChapter) || 0;
-        if (!chapter) return set;
+        if (!chapter) { _missingCache = set; return set; }
         for (const mw of state.segValidation.missing_words) {
             if (mw.chapter === chapter && mw.seg_indices) {
                 for (const idx of mw.seg_indices) set.add(idx);
             }
         }
+        _missingCache = set;
         return set;
     })();
 
