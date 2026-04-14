@@ -1,14 +1,13 @@
 /**
  * Segments tab — stats data store.
  *
- * Promotes `state.segStatsData` (previously a plain field on the `state`
- * object) to a Svelte writable store so StatsPanel.svelte can subscribe
- * reactively and render charts without imperative DOM manipulation.
+ * Segments tab — stats data for the currently-loaded reciter.
  *
+ * StatsPanel.svelte subscribes reactively; no imperative DOM manipulation.
  * Shape: single `SegStatsResponse | null` (provisional per S2-D11).
  *
- * Bridge: SegmentsTab.svelte syncs the store back to `state.segStatsData`
- * via a `$:` reactive statement so imperative callers continue working.
+ * Bridge NOTE (Wave 9 CF): state.segStatsData field deleted — the
+ * SegmentsTab bridge line is removed. No imperative consumers remain.
  *
  * Write sites (Wave 8b, 2026-04-14):
  *   - SegmentsTab.svelte (onReciterChange) → setStats()

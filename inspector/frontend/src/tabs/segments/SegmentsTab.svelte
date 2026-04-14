@@ -147,7 +147,7 @@
     $: state._segIndexMap = $segIndexMap;
     $: state._segSavedFilterView = $savedFilterView;
     $: state.segValidation = $segValidation; // Wave 8a: store → state bridge for imperative consumers
-    $: state.segStatsData = $segStats; // Wave 8b: store → state bridge
+    // Wave 8b CF (Wave 9): state.segStatsData field deleted — StatsPanel.svelte reads $segStats directly.
 
     // ---------------------------------------------------------------------
     // Config (CSS vars + edit-mode constants)

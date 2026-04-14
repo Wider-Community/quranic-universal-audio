@@ -25,7 +25,6 @@ import type {
     SegAllResponse,
     SegDataResponse,
     SegEditHistoryResponse,
-    SegStatsResponse,
     SegValidateResponse,
 } from '../types/api';
 import type {
@@ -192,7 +191,6 @@ export interface SegmentsState {
     // Validation & stats
     segValidation: SegValidateResponse | null;
     segAllReciters: SegReciter[];
-    segStatsData: SegStatsResponse | null;
 
     // Filter
     _segFilterDebounceTimer: TimerHandle | null;
@@ -317,7 +315,6 @@ export const state: SegmentsState = {
     // Validation & stats
     segValidation: null,
     segAllReciters: [],
-    segStatsData: null,
 
     // Filter
     _segFilterDebounceTimer: null,
