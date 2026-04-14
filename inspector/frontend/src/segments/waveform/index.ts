@@ -118,14 +118,10 @@ export function _ensureWaveformObserver(): IntersectionObserver {
     return observer;
 }
 
-export function drawAllSegWaveforms(): void {
-    if (!state.segDisplayedSegments) return;
-    const observer = _ensureWaveformObserver();
-    dom.segListEl.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(canvas => {
-        observer.unobserve(canvas);
-        observer.observe(canvas);
-    });
-}
+// Wave 7a.2: `drawAllSegWaveforms` deleted — dead since Wave 7a.1
+// (no callers; guarded on `state.segDisplayedSegments` which is never
+// written post-Wave 7). SegmentRow.svelte::onMount now registers each
+// canvas with the observer directly. (Wave 7a.1 handoff NB-2.)
 
 // ---------------------------------------------------------------------------
 // Peaks loading + polling
