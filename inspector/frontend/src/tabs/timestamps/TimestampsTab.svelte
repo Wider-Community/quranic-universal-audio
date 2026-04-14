@@ -65,6 +65,7 @@
         TsVersesResponse,
     } from '../../types/api';
     import AnimationDisplay from './AnimationDisplay.svelte';
+    import TimestampsValidationPanel from './TimestampsValidationPanel.svelte';
     import TimestampsWaveform from './TimestampsWaveform.svelte';
     import UnifiedDisplay from './UnifiedDisplay.svelte';
 
@@ -189,6 +190,22 @@
         } catch (e) {
             console.error('Error loading ts verses:', e);
         }
+    }
+
+    /**
+     * Jump the dropdowns to the given "surah:ayah" verse key, loading the
+     * chapter + verse list if needed.
+     */
+    async function jumpToTsVerse(verseKey: string): Promise<void> {
+        if (!verseKey || !verseKey.includes(':')) return;
+        const chapter = verseKey.split(':')[0] ?? '';
+
+        if (get(selectedChapter) !== chapter) {
+            selectedChapter.set(chapter);
+            await onChapterChange(chapter);
+        }
+        selectedVerse.set(verseKey);
+        await onVerseChange(verseKey);
     }
 
     async function onVerseChange(verseRef: string): Promise<void> {
@@ -727,8 +744,7 @@
         </div>
     </details>
 
-    <!-- Validation panel placeholder (sub-wave 4b) -->
-    <div id="ts-validation" class="seg-validation" hidden={$validationData === null}></div>
+    <TimestampsValidationPanel onJump={jumpToTsVerse} />
 
     <main>
         <div class="audio-controls">
