@@ -19,6 +19,13 @@
  * (setEdit) and exitEditMode / clearSegDisplay / clearPerReciterState
  * (clearEdit). EditOverlay.svelte subscribes to `editMode`.
  *
+ * Wave 7b status (2026-04-14): union extended to 'merge' | 'delete' |
+ * 'reference'. setEdit wired in mergeAdjacent / deleteSegment /
+ * startRefEdit + commitRefEdit cleanup paths. MergePanel / DeletePanel /
+ * ReferenceEditor shells landed; EditOverlay extended with new branches.
+ * Merge/delete are one-shot (instant) operations — backdrop omitted for
+ * those modes. Reference editing is inline — backdrop also omitted.
+ *
  * Wave 7b shape sufficiency: merge / delete / reference-edit each operate
  * on at most one primary segment resolvable by UID. Merge's target-adjacent
  * is derived at call time from segment index + direction ('prev' | 'next');
@@ -32,9 +39,11 @@
 
 import { writable } from 'svelte/store';
 
-/** Edit modes supported by the Segments tab. Extended in Wave 7b with
- *  'merge' | 'delete' | 'reference' once those panels land. */
-export type SegEditMode = 'trim' | 'split' | null;
+/** Edit modes supported by the Segments tab. Wave 7b added 'merge' |
+ *  'delete' | 'reference'. Note: merge + delete are one-shot (no backdrop);
+ *  reference editing is inline (no backdrop). Only trim + split show the
+ *  `.seg-edit-overlay` backdrop in EditOverlay.svelte. */
+export type SegEditMode = 'trim' | 'split' | 'merge' | 'delete' | 'reference' | null;
 
 /** Active edit mode for the segments tab. `null` = no edit in progress. */
 export const editMode = writable<SegEditMode>(null);
@@ -51,7 +60,7 @@ export function clearEdit(): void {
     editingSegUid.set(null);
 }
 
-/** Convenience setter — call when entering trim or split mode. */
+/** Convenience setter — call when entering any edit mode. */
 export function setEdit(mode: Exclude<SegEditMode, null>, segUid: string | null): void {
     editMode.set(mode);
     editingSegUid.set(segUid);
