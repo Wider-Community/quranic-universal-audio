@@ -249,7 +249,7 @@
 
         if (valResult.status === 'fulfilled') {
             setValidation(valResult.value);
-            renderValidationPanel(state.segValidation);
+            renderValidationPanel(valResult.value); // pass directly — $: bridge is batched, state.segValidation may lag
         } else {
             console.error('Error loading validation:', valResult.reason);
         }
