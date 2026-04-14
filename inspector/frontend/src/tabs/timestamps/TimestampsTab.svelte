@@ -65,6 +65,7 @@
         TsVersesResponse,
     } from '../../types/api';
     import AnimationDisplay from './AnimationDisplay.svelte';
+    import TimestampsWaveform from './TimestampsWaveform.svelte';
     import UnifiedDisplay from './UnifiedDisplay.svelte';
 
     // ---- Component refs ----
@@ -73,6 +74,7 @@
     let speedCtrl: SpeedControl;
     let unifiedEl: UnifiedDisplay;
     let animDisplayEl: AnimationDisplay;
+    let waveformTabEl: TimestampsWaveform;
 
     // ---- Pending loadedmetadata handler (for src changes) ----
     let _pendingOnMeta: ((ev: Event) => void) | null = null;
@@ -393,6 +395,7 @@
         } else {
             if (unifiedEl) unifiedEl.updateHighlights();
         }
+        if (waveformTabEl) waveformTabEl.drawOverlays();
     }
 
     // ---------------------------------------------------------------------
@@ -775,11 +778,7 @@
         </div>
 
         <div class="waveform-words-row">
-            <!-- Waveform canvas — full implementation in sub-wave 4b -->
-            <div class="visualization">
-                <canvas id="waveform-canvas"></canvas>
-                <div class="phoneme-labels" id="phoneme-labels"></div>
-            </div>
+            <TimestampsWaveform bind:this={waveformTabEl} />
             <div hidden={$viewMode === 'animation'}>
                 <UnifiedDisplay bind:this={unifiedEl} />
             </div>
