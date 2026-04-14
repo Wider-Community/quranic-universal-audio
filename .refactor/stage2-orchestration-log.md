@@ -23,6 +23,8 @@ Each row records: wave, agent ID (from tool result), model, role, input tokens, 
 | 2-review | _(not surfaced)_ | haiku / Explore | Wave-2 review — mechanical | — | ~2,000 (est.) | ~minutes | Read+Grep+git show | 25 of 26 claims verified. Single off-by-2 discrepancy: handoff §1 claims 13 commits vs actual 15 between entry `7961bae` and exit `1a15c71` (handoff miscounted WIP + Docker relocation). Per-item commit list in §10 accurate. All file existence, constant values, handler LOC, pre-flight gates, invariants, shared-doc updates confirmed. |
 | 2-followup | _(orchestrator)_ | opus 4.6 (1M) | Post-review doc-hygiene | — | — | ~minutes | ~5 edits | Filled handoff §6 with reviewer findings + disposition; populated this wave-totals table; logged the 2 Wave-11 cleanup nits (`_apply_full_replace` annotation, `_error` discriminant) in `.refactor/stage2-decisions.md`. |
 
+| 3 | _(self-reported)_ | sonnet 4.6 / Task | Implementation-Wave-3 | ~150k in (est.) | ~120k out (est.) | ~single session | ~70 tool calls (read/edit/write/bash/advisor) | Delivered all 8 items: CSS migration map (`6c073b8`); Svelte 4 toolchain install (`ab572eb`); build config — svelte.config.js + vite + tsconfig + eslint (`4902763`); `shared/` → `lib/api + lib/utils` migration with all import paths updated (`cecf6ea`); `App.svelte` tab router + `main.ts` Svelte mount (`c4fe04f`); 6 components — Button, SpeedControl, AccordionPanel, ValidationBadge, WaveformCanvas + waveform-draw.ts, SearchableSelect (`04ea249..c62a93f`). All 7/7 pre-flight gates green at exit; cycle count 23 = ceiling. Surprises: `export interface` not allowed in Svelte 4 script; `@tsconfig/svelte` not used as extends (conflicting strict flags); import sort fixups after path migration. |
+
 _Process note: token totals from agent results are not always exposed to the orchestrator; estimate from output length where exact count is unavailable._
 
 ---
@@ -40,6 +42,7 @@ _Updated by the orchestrator at end of each wave._
 | 2b | 1 (Opus general-purpose) | ~90k in (est.) | ~88k out (est.) | ~26 min | App logging + 3 thin-routes + save_seg_data extract-method + magic-number sweep + handoff. 7 commits. |
 | 2-review | 3 (Sonnet + Opus + Haiku Explore) | — | ~10k out total (est.) | ~minutes each | Pattern + judgment + mechanical review. |
 | 2-followup | 1 (orchestrator) | — | — | ~minutes | Handoff §6 fill + this table + Wave-11 nit log. |
+| 3 | 1 (Sonnet 4.6 general-purpose) | ~150k in (est.) | ~120k out (est.) | ~single session | Svelte foundations: CSS map + toolchain + config + shared/ migration + App.svelte + 6 components + waveform-draw.ts. 11 commits. |
 
 ---
 
