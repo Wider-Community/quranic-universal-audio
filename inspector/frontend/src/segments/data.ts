@@ -4,6 +4,7 @@
 
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
 import { clearEdit } from '../lib/stores/segments/edit';
+import { clearValidation, setValidation } from '../lib/stores/segments/validation';
 import { LS_KEYS } from '../lib/utils/constants';
 import { surahOptionText } from '../lib/utils/surah-info';
 import { clearWaveformCache } from '../lib/utils/waveform-cache';
@@ -104,12 +105,8 @@ export async function onSegReciterChange(): Promise<void> {
     dom.segVerseSelect.innerHTML = '<option value="">All</option>';
     clearSegDisplay();
     state._segDataStale = false;
-    // Hide validation, stats, and history
-    dom.segValidationGlobalEl.hidden = true;
-    dom.segValidationGlobalEl.innerHTML = '';
-    dom.segValidationEl.hidden = true;
-    dom.segValidationEl.innerHTML = '';
-    state.segValidation = null;
+    // Hide stats and history (validation owned by Svelte ValidationPanel via store)
+    clearValidation();
     dom.segStatsPanel.hidden = true;
     dom.segStatsPanel.removeAttribute('open');
     state.segStatsData = null;
@@ -152,7 +149,7 @@ export async function onSegReciterChange(): Promise<void> {
 
     if (valResult.status === 'fulfilled') {
         // Wave 8a.2: ValidationPanel.svelte handles rendering reactively via $segValidation store.
-        state.segValidation = valResult.value;
+        setValidation(valResult.value);
     } else {
         console.error('Error loading validation:', valResult.reason);
     }

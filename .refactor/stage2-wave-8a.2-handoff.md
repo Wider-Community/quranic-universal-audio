@@ -231,4 +231,56 @@ f04d135 chore(inspector): decrement import/no-cycle ceiling to 18 (Wave 8a.2)
 
 ---
 
+## 7. Review findings + disposition
+
+### Sonnet (pattern review) — **APPROVE-WITH-CHANGES**
+
+**Blocker:**
+
+| ID | Item | Disposition |
+|---|---|---|
+| B1 | `segments/data.ts::onSegReciterChange` bypasses the new `segValidation` store: writes `state.segValidation = null/value` (lines 112, 155) AND clobbers Svelte-owned DOM via `dom.segValidationGlobalEl.innerHTML = ''` + `.hidden = true` (lines 108-111). Callers `save.ts:173` and `history/index.ts:77` would corrupt `<ValidationPanel>` on save/undo. | **Fixed** by orchestrator in follow-up commit: replaced state writes with `clearValidation()` / `setValidation()`; removed 4 DOM-clobber lines. |
+
+**Non-blockers** (4): handoff §6.3 shape (7 sections vs 11 required — this §7+§8 restores); global panel open-state reset inconsistency (Wave 11); `_rebuildAccordionAfterMerge` innerHTML nuke (Wave 11 carry); cycle ceiling 18 vs actual 14 slack (Wave 8b tighten).
+
+**Validated:** S2-D17 faithful (3 branches with catch-all covering 9 similar categories, all <100 LOC — per S2-D17 rationale), S2-D33 open-state persistence (component-local), Wave 7a.1 NB-3 4-of-4 sites post-fix, dead-code grep (7 deleted symbols: zero live callers), pattern notes #1/#3/#4, D2 + S2-B07 greps clean, LC slider + qalqala reactive.
+
+### Opus (judgment review) — **REQUEST-CHANGES (pre-fix) → APPROVE (post-fix)**
+
+Independent confirmation of B1 as live regression at exit `0d3252d`. All 10 judgment questions (A-J) reasoned through:
+
+- **A (S2-D17 3-branch)** FAITHFUL — catch-all legitimately covers 9 structurally-similar categories; `canIgnore` gating, phoneme-tail for `boundary_adj` only, `failed` special-case all preserved.
+- **B (930 LOC deletion)** SAFE — zero live references to deleted exports; retained `_rebuildAccordionAfterSplit/Merge`, `_refreshStaleSegIndices`, `ensureContextShown`, `_isWrapperContextShown`, `refreshValidation`, `_fixupValIndicesFor*` all have live callers.
+- **C (B1)** BLOCKER confirmed — working-tree fix correct, matches SegmentsTab.svelte:295 precedent.
+- **D (auto-fix asymmetry)** NOT A BUG — auto-fix mutates segment data, not validation; post-save `refreshValidation()` replaces whole value.
+- **E (open-state local-let)** CORRECT — chapter reset intentional; global-panel immutable `chapter=null` → no spurious reset.
+- **F (dual-write)** NEEDED today — `_forEachValItem` reads `state.segValidation` from `.ts` context where `$:` bridge doesn't fire synchronously; remove once fixup helpers migrate to pure store ops (Wave 9/10).
+- **G (innerHTML nuke)** cosmetic-only window; next `segValidation.update(v=>v)` re-runs `{#each}`; NB carried to Wave 11.
+- **H (7 vs 11 sections)** ACCEPTABLE process drift; this §7 restores.
+- **I (LC slider semantics)** CORRECT — strict `<` matches Stage-1 label ("Show confidence < X%"); qalqala set-membership + `end_of_verse === true` boolean-strict; no off-by-one.
+- **J (ceiling 14/18 slack)** defensive — Wave 8b tighten to 16 (2-warning buffer) recommended.
+
+**Observation — `{#each as issue (issue)}` object-identity keying**: works today because `buildCategories` preserves item object references through filter paths. If any future validation pipeline clones items, ErrorCard `onMount` will re-run and re-inject cards. Document as carry-forward.
+
+### Orchestrator disposition
+
+- **B1 fixed** in orchestrator follow-up commit (4 source edits to `segments/data.ts`): import `clearValidation`/`setValidation`, replace `state.segValidation = null` with `clearValidation()`, replace `state.segValidation = valResult.value` with `setValidation(valResult.value)`, remove 4 `dom.segValidation*.hidden/.innerHTML` clobbers.
+- **Opus recommendation #4** (manual-QA regression test for save → `_segDataStale` → `onSegReciterChange` re-hydration): carry to Wave 8b smoke checklist.
+- **Wave 8b tighten cycle ceiling to 16** (not 14 — 2-warning buffer per Opus J).
+- All other NBs deferred to Wave 9/10/11 as noted.
+
+## 8. Handoff to Wave 8b (stats)
+
+**Prerequisites Wave 8b must respect:**
+
+1. Pattern notes #1-#8.
+2. `state.segStatsData` → `Writable<SegStatsResponse | null>` in `lib/stores/segments/stats.ts`. Mirror 8a.1 promotion pattern.
+3. Migrate write sites: `segments/data.ts` (reciter load + clear). AUDIT for the same B1 class of bug — ensure no `dom.segStatsPanel.innerHTML` / `.hidden` clobbers post-migration.
+4. Tighten cycle ceiling from 18 → 16 (14 actual + 2 defensive buffer per Opus).
+5. Optional: refactor `error-card-audio.ts` to `<AudioElement>`-based component if cheap.
+6. Carry 4 unresolved Wave 8a NBs (NB-2 global panel reset; NB-3 `_rebuildAccordionAfterMerge` innerHTML; NB-4 ceiling tighten; auto-fix notification asymmetry).
+7. **Manual-QA smoke item** (Opus rec): after save dirty edit + history undo, confirm ValidationPanel re-populates correctly (regression test for B1).
+
+---
+
 **END WAVE 8a.2 HANDOFF.**
