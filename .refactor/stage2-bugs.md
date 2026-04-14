@@ -45,10 +45,9 @@ _Empty at start. Implementation agents append rows here when smoke-checklist sur
 
 ## Section 4 — New bugs introduced by refactor
 
-_Empty at start. Reviewers append rows here if they spot regressions during the per-wave gate._
-
 | ID | Title | File:Line | Introduced-in-wave | Detected-in-wave | Status | Fix-SHA | Notes |
 |----|-------|-----------|--------------------|-------------------|--------|---------|-------|
+| S2-B07 | audio/index.ts module-top-level `mustGet` calls throw before App.svelte mounts | inspector/frontend/src/audio/index.ts:22-29 (pre-fix) | 3 | stop-point-1 (user smoke) | CLOSED | 0d2a4c6 | Wave 3 moved tab markup from index.html into App.svelte. `segments/index.ts` wrapped its `mustGet` calls inside a DOMContentLoaded handler; `audio/index.ts` did not — 8 `const X = mustGet(...)` declarations ran at module import time, BEFORE `new App()` mounted the audio-panel DOM. Bundle evaluation threw, main.ts aborted, App never mounted, blank page. Cascade error from segments/index.ts (its DOMContentLoaded handler fired AFTER the throw, found no App markup). **Missed by Wave-3 Sonnet and Opus reviewers** despite explicit mount-timing focus — reviewers reasoned about DOMContentLoaded handler timing but not module-top-level DOM access. Fix: module-level `let X!: Type` bindings + `initAudioTabDom()` called from DOMContentLoaded handler. See Section 5. |
 
 ## Section 5 — Closed
 
@@ -57,6 +56,7 @@ _Empty at start. Move rows here when fixed; record fix-SHA + closing wave + brie
 | ID | Origin section | Fix summary | Fix-SHA | Wave |
 |----|----------------|-------------|---------|------|
 | S2-B02 | Section 1 | Unified delete path on `segAllData.segments` as single source of truth: splice + re-index there, null `_byChapter`/`_byChapterIndex`, then refresh `segData.segments` from the re-indexed source via `getChapterSegments(chapter)` when the deletion was in the currently-displayed chapter. Removes the prior divergent re-indexing between the two branches. | 2d06251 | 1 |
+| S2-B07 | Section 4 | Wrapped `audio/index.ts` module-top-level `mustGet` calls + category-toggle click listener into `initAudioTabDom()` called from the existing DOMContentLoaded handler. Module-level `let X!: Type` bindings preserve closure access for the rest of the file. Zero behavior change post-load; fixes the "missing #aud-category-toggle" throw that aborted App.svelte mount. | 0d2a4c6 | stop-point-1 |
 
 ---
 
