@@ -342,6 +342,27 @@ items, all addressed:
    `export let` + hidden marker div (§1.7).
 4. **Handoff doc** — this file.
 
+### Sonnet (pattern review) — **APPROVE**
+
+No blockers. 3 minor non-blockers (all deferred).
+
+| ID | Item | Wave target |
+|---|---|---|
+| NB-1 | `_addEditOverlay` / `_removeEditOverlay` no-op stubs remain in `common.ts` (3 callers — `trim.ts:30`, `split.ts:38`, `common.ts:86`). | Wave 11 cleanup |
+| NB-2 | `SegmentsTab.svelte:370` still uses `document.getElementById('seg-audio-player')` in `onChapterChange` — `segAudioEl` binding is a better source. | Future wave |
+| NB-3 | TrimPanel/SplitPanel render only a hidden marker div today — intentional shell pattern per migration-strictness pref. | Wave 11 decision |
+
+**Wave 7b prerequisite**: `SegEditMode` union currently `'trim' | 'split' | null` — extend to `'trim' | 'split' | 'merge' | 'delete' | 'reference' | null` before wiring `setEdit` in merge/delete/reference entry paths.
+
+**Validated:** §6.3 conformity, D1 memoization correctness (Set identity preserved on unchanged inputs; `void $displayedSegments` trigger intact), **D2 class-invariant grep clean** (zero `class:playing`/`class:reached`/`class:past` in `tabs/`), S2-D33 audio-el plumbing (zero `document.getElementById` in `tabs/segments/edit/*.svelte`), drag delegation pattern sound (imperative helpers own drag state; shells own backdrop visibility only), edit store exports `setEdit`+`clearEdit`, pattern notes #1/#4/#8, S2-B07 grep clean, 7/7 gates + svelte-check 0/0 + cycle 19 unchanged.
+
+### Orchestrator disposition
+
+- Single-reviewer approval sufficient per plan §6.2 (Wave 7 → Sonnet+Opus allocation exhausted by 7a.1; 7a.2 is Sonnet-only since agent delegated to existing imperative helpers rather than rewriting).
+- 3 NBs all acceptable for deferral per user migration-strictness preference.
+- **Wave 7b prerequisite locked**: extend `SegEditMode` union before wiring merge/delete/reference.
+- Proceed to Wave 7b autonomously.
+
 ---
 
 ## 7. Surprises / lessons
