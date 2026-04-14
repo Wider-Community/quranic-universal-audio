@@ -6,7 +6,8 @@
      * Wave 7 adopted: replaces the Wave-5 imperative `renderSegList` bridge.
      * Rows render via {#each $displayedSegments as seg (key)} → <SegmentRow>.
      * Silence-gap markers are inlined; missing-word tags are computed from
-     * `state.segValidation` reactively (no observer post-walk needed —
+     * `$segValidation` store reactively (Wave 8a: promoted from state field —
+     * no observer post-walk needed —
      * SegmentRow.onMount registers each canvas with the IntersectionObserver
      * directly).
      *
@@ -27,7 +28,7 @@
 
     import { displayedSegments } from '../../lib/stores/segments/filters';
     import { selectedChapter } from '../../lib/stores/segments/chapter';
-    import { state } from '../../segments/state';
+    import { segValidation } from '../../lib/stores/segments/validation';
     import type { Segment } from '../../types/domain';
     import Navigation from './Navigation.svelte';
     import SegmentRow from './SegmentRow.svelte';
@@ -35,35 +36,32 @@
     export let onRestore: (() => void) | null = null;
 
     /** Compute missing-word seg-indices for the current chapter from
-     *  state.segValidation. `state.segValidation` is not a store, so we
-     *  trigger re-derivation on every $displayedSegments change — which
-     *  fires after save+revalidate (applyFiltersAndRender → segAllData.update).
-     *  Without this, missing-word tags would go stale after save until the
-     *  user changes chapters.
+     *  $segValidation. Now that segValidation is a proper writable store
+     *  (Wave 8a), the reactive derivation fires automatically on:
+     *    - initial load (setValidation in SegmentsTab reciter handler)
+     *    - refreshValidation() after save (validation/index.ts)
+     *    - fixup helpers after split/merge/delete (segValidation.update(v=>v))
+     *  The `void $displayedSegments` dep trigger workaround is no longer
+     *  needed (Wave 7a.1 NB-3 / D1 memoization simplification).
      *
-     *  D1 memoization (Wave 7a.2 prerequisite, Opus perf review): the Set
-     *  is expensive to pass-by-value — new identity marks every <SegmentRow>
-     *  dirty (O(N) reactive work per confirm at N≈1000 segs). Cache by
-     *  reference on (segValidation, selectedChapter); return the SAME Set
-     *  instance when neither dependency has changed. `void $displayedSegments`
-     *  keeps the reactive trigger path (save + revalidate notifies
-     *  segAllData → displayedSegments), but the Set only rebuilds when
-     *  `state.segValidation` actually changes. */
+     *  D1 memoization: the Set is expensive to pass-by-value — new identity
+     *  marks every <SegmentRow> dirty (O(N) reactive work per confirm at
+     *  N≈1000 segs). Cache by reference on ($segValidation, $selectedChapter);
+     *  return the SAME Set instance when neither dependency has changed. */
     let _missingCache: Set<number> = new Set();
-    let _missingCacheValRef: typeof state.segValidation = null;
+    let _missingCacheValRef: typeof $segValidation = null;
     let _missingCacheChapter = '';
     $: missingWordSegIndices = (() => {
-        void $displayedSegments; // re-trigger on list refresh (covers save→revalidate)
-        if (state.segValidation === _missingCacheValRef && $selectedChapter === _missingCacheChapter) {
+        if ($segValidation === _missingCacheValRef && $selectedChapter === _missingCacheChapter) {
             return _missingCache;
         }
-        _missingCacheValRef = state.segValidation;
+        _missingCacheValRef = $segValidation;
         _missingCacheChapter = $selectedChapter;
         const set = new Set<number>();
-        if (!state.segValidation || !state.segValidation.missing_words) { _missingCache = set; return set; }
+        if (!$segValidation || !$segValidation.missing_words) { _missingCache = set; return set; }
         const chapter = parseInt($selectedChapter) || 0;
         if (!chapter) { _missingCache = set; return set; }
-        for (const mw of state.segValidation.missing_words) {
+        for (const mw of $segValidation.missing_words) {
             if (mw.chapter === chapter && mw.seg_indices) {
                 for (const idx of mw.seg_indices) set.add(idx);
             }

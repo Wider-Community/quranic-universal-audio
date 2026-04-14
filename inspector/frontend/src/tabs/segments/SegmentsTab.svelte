@@ -46,6 +46,7 @@
         displayedSegments,
     } from '../../lib/stores/segments/filters';
     import { clearEdit } from '../../lib/stores/segments/edit';
+    import { clearValidation, segValidation, setValidation } from '../../lib/stores/segments/validation';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
@@ -147,6 +148,7 @@
     $: state.segDisplayedSegments = $displayedSegments;
     $: state._segIndexMap = $segIndexMap;
     $: state._segSavedFilterView = $savedFilterView;
+    $: state.segValidation = $segValidation; // Wave 8a: store → state bridge for imperative consumers
 
     // ---------------------------------------------------------------------
     // Config (CSS vars + edit-mode constants)
@@ -246,7 +248,7 @@
         void chResult; // chapters come from segAllData in Svelte; API response kept to preserve fetch parity
 
         if (valResult.status === 'fulfilled') {
-            state.segValidation = valResult.value;
+            setValidation(valResult.value);
             renderValidationPanel(state.segValidation);
         } else {
             console.error('Error loading validation:', valResult.reason);
@@ -293,7 +295,7 @@
 
         // Validation / stats / history panels — imperative markup inside
         // SegmentsTab, reset by innerHTML clearing. Wave 8/10 convert these.
-        state.segValidation = null;
+        clearValidation(); // Wave 8a: goes through store; bridge syncs state.segValidation
         const valG = document.getElementById('seg-validation-global') as HTMLDivElement | null;
         const valC = document.getElementById('seg-validation') as HTMLDivElement | null;
         if (valG) { valG.hidden = true; valG.innerHTML = ''; }

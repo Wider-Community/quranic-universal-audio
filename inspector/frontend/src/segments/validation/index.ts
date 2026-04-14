@@ -4,6 +4,7 @@
  */
 
 import { fetchJson } from '../../lib/api';
+import { segValidation } from '../../lib/stores/segments/validation';
 import {
     type AccordionOpenState,
     capturePanelOpenState,
@@ -433,7 +434,9 @@ export async function refreshValidation(): Promise<void> {
     try {
         const globalState = captureValPanelState(dom.segValidationGlobalEl);
         const chState = captureValPanelState(dom.segValidationEl);
-        state.segValidation = await fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`);
+        const valData = await fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`);
+        segValidation.set(valData);
+        state.segValidation = valData;
         const ch = dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : null;
         if (ch !== null) {
             renderValidationPanel(state.segValidation, null, dom.segValidationGlobalEl, 'All Chapters');
@@ -531,6 +534,7 @@ export function _fixupValIndicesForSplit(chapter: number, splitIndex: number): v
     _forEachValItem(chapter, <K extends string>(item: ValIndexedItem<K>, key: K) => {
         if (item[key] > splitIndex) item[key] = (item[key] + 1) as ValIndexedItem<K>[K];
     });
+    segValidation.update(v => v); // notify subscribers of in-place mutation
 }
 
 export function _fixupValIndicesForMerge(chapter: number, keptIndex: number, consumedIndex: number): void {
@@ -539,6 +543,7 @@ export function _fixupValIndicesForMerge(chapter: number, keptIndex: number, con
         if (item[key] === consumedIndex) item[key] = keptIndex as ValIndexedItem<K>[K];
         else if (item[key] > maxIdx) item[key] = (item[key] - 1) as ValIndexedItem<K>[K];
     });
+    segValidation.update(v => v); // notify subscribers of in-place mutation
 }
 
 export function _fixupValIndicesForDelete(chapter: number, deletedIndex: number): void {
@@ -546,4 +551,5 @@ export function _fixupValIndicesForDelete(chapter: number, deletedIndex: number)
         if (item[key] === deletedIndex) item[key] = -1 as ValIndexedItem<K>[K];
         else if (item[key] > deletedIndex) item[key] = (item[key] - 1) as ValIndexedItem<K>[K];
     });
+    segValidation.update(v => v); // notify subscribers of in-place mutation
 }
