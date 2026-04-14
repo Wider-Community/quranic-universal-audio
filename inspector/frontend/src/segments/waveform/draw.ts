@@ -8,6 +8,7 @@
  * covering-peaks resolution, playhead draw, and overlay highlights.
  */
 
+import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import { drawWaveformPeaks } from '../../lib/utils/waveform-draw';
 import type { AudioPeaks, PeakBucket, Segment } from '../../types/domain';
 import { _findCoveringPeaks,state } from '../state';
@@ -43,9 +44,10 @@ export function drawSegmentWaveformFromPeaks(
 
 /** Draw waveform from peaks for a segment, resolving its audio URL. Returns true if drawn. */
 export function drawWaveformFromPeaksForSeg(canvas: SegCanvas, seg: Segment, chapter: number | string): boolean {
-    if (!state.segPeaksByAudio) return false;
     const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
-    const pe = state.segPeaksByAudio[audioUrl];
+    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04)
+    // instead of `state.segPeaksByAudio` raw lookup.
+    const pe = getWaveformPeaks(audioUrl);
     if (pe?.peaks?.length) {
         drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);
         return true;
@@ -124,8 +126,8 @@ export function _slicePeaks(
     endMs: number,
     buckets: number,
 ): SlicedPeaks | null {
-    if (!state.segPeaksByAudio) return null;
-    let pe: AudioPeaks | undefined = state.segPeaksByAudio[audioUrl];
+    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04).
+    let pe: AudioPeaks | undefined = getWaveformPeaks(audioUrl);
     if (!pe?.peaks?.length) {
         pe = _findCoveringPeaks(audioUrl, startMs, endMs) ?? undefined;
     }

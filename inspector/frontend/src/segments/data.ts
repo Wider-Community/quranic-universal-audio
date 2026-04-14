@@ -5,6 +5,7 @@
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
 import { LS_KEYS } from '../lib/utils/constants';
 import { surahOptionText } from '../lib/utils/surah-info';
+import { clearWaveformCache } from '../lib/utils/waveform-cache';
 import type {
     SegAllResponse,
     SegChaptersResponse,
@@ -290,7 +291,7 @@ export function clearSegDisplay(): void {
     state._segPrefetchCache = {};
     state._segContinuousPlay = false;
     state._segPlayEndMs = 0;
-    state.segPeaksByAudio = null;
+    clearWaveformCache();
     if (state._peaksPollTimer) { clearTimeout(state._peaksPollTimer); state._peaksPollTimer = null; }
     state._segPeaksByUrl = null;
     state._observerPeaksQueue = [];

@@ -19,6 +19,7 @@
  *    `unknown` for a narrow shape once the consumer is typed).
  */
 
+import { getWaveformPeaks } from '../lib/utils/waveform-cache';
 import type { SearchableSelect } from '../shared/searchable-select';
 import type {
     SegAllResponse,
@@ -207,8 +208,8 @@ export interface SegmentsState {
     _segSavedFilterView: SegSavedFilterView | null;
     _segSavedPreviewState: SegSavedPreviewState | null;
 
-    // Peaks
-    segPeaksByAudio: Record<string, AudioPeaks> | null;
+    // Peaks (Wave 7: chapter-wide peaks moved to lib/utils/waveform-cache;
+    // _segPeaksByUrl still holds covering-range entries built from segment-peaks API).
     _peaksPollTimer: TimerHandle | null;
     _segPeaksByUrl: Record<string, SegPeaksRangeEntry[]> | null;
     _observerPeaksQueue: ObserverPeaksQueueItem[];
@@ -333,7 +334,6 @@ export const state: SegmentsState = {
     _segSavedPreviewState: null,
 
     // Peaks
-    segPeaksByAudio: null,
     _peaksPollTimer: null,
     _segPeaksByUrl: null,
     _observerPeaksQueue: [],
@@ -638,9 +638,8 @@ export function _findCoveringPeaks(
     startMs?: number | null,
     endMs?: number | null,
 ): AudioPeaks | null {
-    if (!state.segPeaksByAudio) return null;
-    // First try full-file peaks (exact URL match)
-    const pe = state.segPeaksByAudio[audioUrl];
+    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04).
+    const pe = getWaveformPeaks(audioUrl);
     if (pe && pe.peaks && pe.peaks.length > 0) return pe;
     // Then try segment-level peaks covering the requested range
     if (startMs != null && endMs != null && state._segPeaksByUrl) {

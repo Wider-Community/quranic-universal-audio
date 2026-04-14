@@ -3,6 +3,7 @@
  */
 
 import { fetchJsonOrNull } from '../../lib/api';
+import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { getChapterSegments, syncChapterSegsToAll } from '../data';
@@ -81,8 +82,9 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     drawSplitWaveform(canvas);
     setupSplitDragHandle(canvas, seg);
 
-    // Pre-fetch peaks for the segment being split if not available
-    if (splitAudioUrl && !state.segPeaksByAudio?.[splitAudioUrl]) {
+    // Pre-fetch peaks for the segment being split if not available.
+    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04).
+    if (splitAudioUrl && !getWaveformPeaks(splitAudioUrl)) {
         _fetchChapterPeaksIfNeeded(dom.segReciterSelect.value, chapter);
     }
 }

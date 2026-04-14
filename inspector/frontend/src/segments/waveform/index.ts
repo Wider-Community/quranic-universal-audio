@@ -138,15 +138,12 @@ export function _fetchPeaks(reciter: string, chapters: Array<number | string>): 
     fetchJson<SegPeaksResponse>(url).then(data => {
         if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
         // Store peaks via waveform-cache util (normalizes proxy URLs — fixes S2-B04).
-        // The old dual-keying workaround (storing under both CDN + proxy URL) is no
-        // longer needed: normalizeAudioUrl() in the cache util handles the translation.
+        // Wave 7 CF: backwards-compat sync to state.segPeaksByAudio removed —
+        // all read sites (draw.ts, _slicePeaks, _findCoveringPeaks, edit/trim,
+        // edit/split) now use getWaveformPeaks() directly.
         for (const [audioUrl, pe] of Object.entries(data.peaks || {})) {
             if (audioUrl) setWaveformPeaks(audioUrl, pe);
         }
-        // Keep state.segPeaksByAudio in sync for backwards-compat read sites that
-        // haven't migrated yet (waveform/draw.ts, validation/error-card-audio.ts, etc.).
-        if (!state.segPeaksByAudio) state.segPeaksByAudio = {};
-        Object.assign(state.segPeaksByAudio, data.peaks || {});
         _redrawPeaksWaveforms();
         // Only poll while some peaks arrived (i.e. audio is partially cached).
         // Empty result means no local audio files -- per-segment on-demand handles it.

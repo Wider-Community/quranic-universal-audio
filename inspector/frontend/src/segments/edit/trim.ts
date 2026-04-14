@@ -2,6 +2,7 @@
  * Trim (boundary adjustment) edit mode: enter, drag handles, preview, confirm.
  */
 
+import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { Segment } from '../../types/domain';
 import { _getChapterSegs,getChapterSegments, syncChapterSegsToAll } from '../data';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
@@ -68,7 +69,8 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
     const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
-    const peaksDuration = state.segPeaksByAudio?.[audioUrl]?.duration_ms;
+    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04).
+    const peaksDuration = getWaveformPeaks(audioUrl)?.duration_ms;
     const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
         ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + 1000)
         : (peaksDuration || seg.time_end + 1000);

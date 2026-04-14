@@ -72,6 +72,7 @@
         restoreValPanelState,
     } from '../../segments/validation/index';
     import { _fetchChapterPeaksIfNeeded } from '../../segments/waveform/index';
+    import { clearWaveformCache } from '../../lib/utils/waveform-cache';
     import type {
         SegAllResponse,
         SegChaptersResponse,
@@ -320,7 +321,7 @@
         state._segPrefetchCache = {};
         state._segContinuousPlay = false;
         state._segPlayEndMs = 0;
-        state.segPeaksByAudio = null;
+        clearWaveformCache();
         if (state._peaksPollTimer) { clearTimeout(state._peaksPollTimer); state._peaksPollTimer = null; }
         state._segPeaksByUrl = null;
         state._observerPeaksQueue = [];
