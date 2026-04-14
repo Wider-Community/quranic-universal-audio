@@ -24,7 +24,8 @@ import { _fetchCacheStatus, _isCurrentReciterBySurah, _rewriteAudioUrls } from '
 import { stopSegAnimation } from './playback/index';
 import { dom,state } from './state';
 import { renderStatsPanel } from './stats';
-import { captureValPanelState, renderValidationPanel, restoreValPanelState } from './validation/index';
+// Wave 8a.2: captureValPanelState / renderValidationPanel / restoreValPanelState removed
+// (ValidationPanel.svelte renders reactively; no imperative render calls needed).
 import { _fetchChapterPeaksIfNeeded } from './waveform/index';
 
 // ---------------------------------------------------------------------------
@@ -150,8 +151,8 @@ export async function onSegReciterChange(): Promise<void> {
     if (dom.segReciterSelect.value !== reciter) return;
 
     if (valResult.status === 'fulfilled') {
+        // Wave 8a.2: ValidationPanel.svelte handles rendering reactively via $segValidation store.
         state.segValidation = valResult.value;
-        renderValidationPanel(state.segValidation);
     } else {
         console.error('Error loading validation:', valResult.reason);
     }
@@ -190,25 +191,11 @@ export async function onSegChapterChange(): Promise<void> {
     stopSegAnimation();
     state._segPrefetchCache = {};
 
-    if (state.segValidation) {
-        requestAnimationFrame(() => {
-            if (!state.segValidation) return;
-            const globalState = captureValPanelState(dom.segValidationGlobalEl);
-            const chState = captureValPanelState(dom.segValidationEl);
-            const ch = chapter ? parseInt(chapter) : null;
-            if (ch !== null) {
-                renderValidationPanel(state.segValidation, null, dom.segValidationGlobalEl, 'All Chapters');
-                renderValidationPanel(state.segValidation, ch, dom.segValidationEl, `Chapter ${ch}`);
-                restoreValPanelState(dom.segValidationGlobalEl, globalState);
-                restoreValPanelState(dom.segValidationEl, chState);
-            } else {
-                dom.segValidationGlobalEl.hidden = true;
-                dom.segValidationGlobalEl.innerHTML = '';
-                renderValidationPanel(state.segValidation, null, dom.segValidationEl);
-                restoreValPanelState(dom.segValidationEl, chState);
-            }
-        });
-    }
+    // Wave 8a.2: ValidationPanel.svelte re-derives from $selectedChapter reactively.
+    // The imperative renderValidationPanel calls are no longer needed here.
+    // (This path is entered by navigation.ts::jumpToSegment when it calls
+    // dom.segChapterSelect.value = X; onSegChapterChange() — SegmentsTab.svelte
+    // sees the selectedChapter store change via the shim and re-renders ValidationPanel.)
 
     applyFiltersAndRender();
 

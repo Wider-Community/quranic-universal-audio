@@ -68,12 +68,8 @@
     import { computeSilenceAfter } from '../../lib/stores/segments/filters';
     import { state } from '../../segments/state';
     import { renderStatsPanel } from '../../segments/stats';
-    import {
-        captureValPanelState,
-        renderValidationPanel,
-        restoreValPanelState,
-    } from '../../segments/validation/index';
     import { _fetchChapterPeaksIfNeeded } from '../../segments/waveform/index';
+    import ValidationPanel from './validation/ValidationPanel.svelte';
     import { clearWaveformCache } from '../../lib/utils/waveform-cache';
     import type {
         SegAllResponse,
@@ -249,7 +245,8 @@
 
         if (valResult.status === 'fulfilled') {
             setValidation(valResult.value);
-            renderValidationPanel(valResult.value); // pass directly — $: bridge is batched, state.segValidation may lag
+            // Wave 8a.2: ValidationPanel.svelte subscribes to $segValidation reactively;
+            // no imperative renderValidationPanel call needed.
         } else {
             console.error('Error loading validation:', valResult.reason);
         }
@@ -293,13 +290,11 @@
         state.segEditIndex = -1;
         clearEdit();
 
-        // Validation / stats / history panels — imperative markup inside
-        // SegmentsTab, reset by innerHTML clearing. Wave 8/10 convert these.
-        clearValidation(); // Wave 8a: goes through store; bridge syncs state.segValidation
-        const valG = document.getElementById('seg-validation-global') as HTMLDivElement | null;
-        const valC = document.getElementById('seg-validation') as HTMLDivElement | null;
-        if (valG) { valG.hidden = true; valG.innerHTML = ''; }
-        if (valC) { valC.hidden = true; valC.innerHTML = ''; }
+        // Validation panel: Wave 8a.2 — ValidationPanel.svelte reacts to clearValidation()
+        // via $segValidation store; no imperative DOM clearing needed.
+        clearValidation();
+
+        // Stats / history panels — imperative markup, reset by innerHTML clearing (Wave 8b / 10).
 
         state.segStatsData = null;
         const statsPanel = document.getElementById('seg-stats-panel');
@@ -376,29 +371,8 @@
         stopSegAnimation();
         state._segPrefetchCache = {};
 
-        // Re-render chapter-scoped validation panel (imperative Wave-8 code).
-        if (state.segValidation) {
-            requestAnimationFrame(() => {
-                if (!state.segValidation) return;
-                const globalEl = document.getElementById('seg-validation-global') as HTMLDivElement | null;
-                const chEl = document.getElementById('seg-validation') as HTMLDivElement | null;
-                if (!globalEl || !chEl) return;
-                const globalState = captureValPanelState(globalEl);
-                const chState = captureValPanelState(chEl);
-                const ch = chapter ? parseInt(chapter) : null;
-                if (ch !== null) {
-                    renderValidationPanel(state.segValidation, null, globalEl, 'All Chapters');
-                    renderValidationPanel(state.segValidation, ch, chEl, `Chapter ${ch}`);
-                    restoreValPanelState(globalEl, globalState);
-                    restoreValPanelState(chEl, chState);
-                } else {
-                    globalEl.hidden = true;
-                    globalEl.innerHTML = '';
-                    renderValidationPanel(state.segValidation, null, chEl);
-                    restoreValPanelState(chEl, chState);
-                }
-            });
-        }
+        // Wave 8a.2: ValidationPanel.svelte re-derives from $selectedChapter reactively.
+        // No imperative renderValidationPanel call needed.
 
         if (!reciter || !chapter) return;
         if (playBtn) playBtn.disabled = false;
@@ -637,8 +611,24 @@
         <div id="seg-save-preview-batches" class="seg-history-batches"></div>
     </div>
 
-    <div id="seg-validation-global" class="seg-validation" hidden></div>
-    <div id="seg-validation" class="seg-validation" hidden></div>
+    <!-- Wave 8a.2: ValidationPanel.svelte replaces imperative renderValidationPanel.
+         IDs seg-validation-global / seg-validation preserved so legacy dom.segValidation*El
+         refs (segments/index.ts mustGet, event delegation) still resolve. Svelte content
+         replaces the innerHTML; hidden attr removed (ValidationPanel controls visibility).
+         Global panel shows all chapters when a chapter is selected.
+         When no chapter is selected, only the global (all-chapters) panel shows. -->
+    <div id="seg-validation-global" class="seg-validation">
+        {#if $selectedChapter}
+            <ValidationPanel chapter={null} label="All Chapters" />
+        {/if}
+    </div>
+    <div id="seg-validation" class="seg-validation">
+        {#if $selectedChapter}
+            <ValidationPanel chapter={parseInt($selectedChapter)} label="Chapter {$selectedChapter}" />
+        {:else}
+            <ValidationPanel chapter={null} />
+        {/if}
+    </div>
 
     <FiltersBar hidden={filterBarHidden} />
 
