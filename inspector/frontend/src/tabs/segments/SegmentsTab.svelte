@@ -45,6 +45,7 @@
         segIndexMap,
         displayedSegments,
     } from '../../lib/stores/segments/filters';
+    import { clearEdit } from '../../lib/stores/segments/edit';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
@@ -283,6 +284,7 @@
         state._pendingOp = null;
         state.segEditMode = null;
         state.segEditIndex = -1;
+        clearEdit();
 
         // Validation / stats / history panels — imperative markup inside
         // SegmentsTab, reset by innerHTML clearing. Wave 8/10 convert these.

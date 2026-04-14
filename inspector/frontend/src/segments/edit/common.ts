@@ -3,6 +3,7 @@
  * _playRange, and the registration pattern for trim/split modes.
  */
 
+import { clearEdit } from '../../lib/stores/segments/edit';
 import { safePlay } from '../../lib/utils/audio';
 import type { Segment } from '../../types/domain';
 import { getSegByChapterIndex } from '../data';
@@ -85,6 +86,7 @@ export function enterEditWithBuffer(
         state._pendingOp = null;
         state.segEditMode = null;
         state.segEditIndex = -1;
+        clearEdit();
         _removeEditOverlay();
         const targetRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
         if (targetRow) {
@@ -127,6 +129,7 @@ export function exitEditMode(): void {
 
     state.segEditMode = null;
     state.segEditIndex = -1;
+    clearEdit();
     state._previewLooping = false;
     state._previewJustSeeked = false;
     if (state._playRangeRAF) { cancelAnimationFrame(state._playRangeRAF); state._playRangeRAF = null; }

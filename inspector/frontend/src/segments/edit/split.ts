@@ -3,6 +3,7 @@
  */
 
 import { fetchJsonOrNull } from '../../lib/api';
+import { setEdit } from '../../lib/stores/segments/edit';
 import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
@@ -31,6 +32,7 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     }
     state.segEditMode = 'split';
     state.segEditIndex = seg.index;
+    setEdit('split', seg.segment_uid ?? null);
 
     row.classList.add('seg-edit-target');
     _addEditOverlay();

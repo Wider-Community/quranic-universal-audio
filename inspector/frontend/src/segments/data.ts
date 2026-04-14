@@ -3,6 +3,7 @@
  */
 
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
+import { clearEdit } from '../lib/stores/segments/edit';
 import { LS_KEYS } from '../lib/utils/constants';
 import { surahOptionText } from '../lib/utils/surah-info';
 import { clearWaveformCache } from '../lib/utils/waveform-cache';
@@ -274,6 +275,7 @@ export function clearSegDisplay(): void {
     state._pendingOp = null;
     state.segEditMode = null;
     state.segEditIndex = -1;
+    clearEdit();
     state.segStatsData = null;
     if (dom.segStatsPanel) { dom.segStatsPanel.hidden = true; dom.segStatsCharts.innerHTML = ''; }
     state.segHistoryData = null;

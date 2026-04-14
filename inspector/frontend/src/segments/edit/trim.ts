@@ -2,6 +2,7 @@
  * Trim (boundary adjustment) edit mode: enter, drag handles, preview, confirm.
  */
 
+import { setEdit } from '../../lib/stores/segments/edit';
 import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { Segment } from '../../types/domain';
 import { _getChapterSegs,getChapterSegments, syncChapterSegsToAll } from '../data';
@@ -23,6 +24,7 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     }
     state.segEditMode = 'trim';
     state.segEditIndex = seg.index;
+    setEdit('trim', seg.segment_uid ?? null);
 
     row.classList.add('seg-edit-target');
     _addEditOverlay();
