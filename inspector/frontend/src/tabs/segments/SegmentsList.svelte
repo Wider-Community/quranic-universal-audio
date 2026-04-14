@@ -35,9 +35,13 @@
     export let onRestore: (() => void) | null = null;
 
     /** Compute missing-word seg-indices for the current chapter from
-     *  state.segValidation. Reactive on $displayedSegments so any chapter or
-     *  validation update re-derives. */
+     *  state.segValidation. `state.segValidation` is not a store, so we
+     *  trigger re-derivation on every $displayedSegments change — which
+     *  fires after save+revalidate (applyFiltersAndRender → segAllData.update).
+     *  Without this, missing-word tags would go stale after save until the
+     *  user changes chapters. */
     $: missingWordSegIndices = (() => {
+        void $displayedSegments; // dependency: re-derive on list refresh
         const set = new Set<number>();
         if (!state.segValidation || !state.segValidation.missing_words) return set;
         const chapter = parseInt($selectedChapter) || 0;
