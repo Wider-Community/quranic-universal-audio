@@ -4,10 +4,10 @@
  */
 
 import { fetchJson } from '../../lib/api';
+import { getWaveformPeaks,setWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
 import type { Segment, SegmentPeaks } from '../../types/domain';
 import { getAdjacentSegments,getSegByChapterIndex } from '../data';
-import { _isCurrentReciterBySurah } from '../playback/audio-cache';
 import type { DrawWaveformFn } from '../registry';
 import { _getEditCanvas } from '../rendering';
 import { _findCoveringPeaks,dom, state } from '../state';
@@ -137,15 +137,16 @@ export function _fetchPeaks(reciter: string, chapters: Array<number | string>): 
     const url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
     fetchJson<SegPeaksResponse>(url).then(data => {
         if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
+        // Store peaks via waveform-cache util (normalizes proxy URLs — fixes S2-B04).
+        // The old dual-keying workaround (storing under both CDN + proxy URL) is no
+        // longer needed: normalizeAudioUrl() in the cache util handles the translation.
+        for (const [audioUrl, pe] of Object.entries(data.peaks || {})) {
+            if (audioUrl) setWaveformPeaks(audioUrl, pe);
+        }
+        // Keep state.segPeaksByAudio in sync for backwards-compat read sites that
+        // haven't migrated yet (waveform/draw.ts, validation/error-card-audio.ts, etc.).
         if (!state.segPeaksByAudio) state.segPeaksByAudio = {};
         Object.assign(state.segPeaksByAudio, data.peaks || {});
-        if (_isCurrentReciterBySurah()) {
-            for (const [origUrl, pe] of Object.entries(data.peaks || {})) {
-                if (origUrl && !origUrl.startsWith('/api/')) {
-                    state.segPeaksByAudio[`/api/seg/audio-proxy/${dom.segReciterSelect.value}?url=${encodeURIComponent(origUrl)}`] = pe;
-                }
-            }
-        }
         _redrawPeaksWaveforms();
         // Only poll while some peaks arrived (i.e. audio is partially cached).
         // Empty result means no local audio files -- per-segment on-demand handles it.
@@ -159,9 +160,8 @@ export function _fetchChapterPeaksIfNeeded(reciter: string, chapter: number | st
     if (!state.segAllData) return;
     const audioUrl = state.segAllData.audio_by_chapter?.[String(chapter)] || '';
     if (!audioUrl) return;
-    if (state.segPeaksByAudio?.[audioUrl]) return;
-    const proxyUrl = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
-    if (state.segPeaksByAudio?.[proxyUrl]) return;
+    // Single cache lookup via normalized key — covers both CDN and proxy URL forms (S2-B04).
+    if (getWaveformPeaks(audioUrl)) return;
     _fetchPeaks(reciter, [chapter]);
 }
 
@@ -217,8 +217,8 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
     if (!reciter || !state.segAllData) return;
     const audioUrl = seg.audio_url || state.segAllData.audio_by_chapter?.[String(chapter)] || '';
     if (!audioUrl) return;
-    // Skip if already have usable peaks for this segment
-    if (state.segPeaksByAudio?.[audioUrl]?.peaks?.length) return;
+    // Skip if already have usable peaks for this segment (normalized lookup — S2-B04)
+    if (getWaveformPeaks(audioUrl)?.peaks?.length) return;
     if (_findCoveringPeaks(audioUrl, seg.time_start, seg.time_end)) return;
 
     // Cap the padded range by prev/next segment boundaries so the chunk does
