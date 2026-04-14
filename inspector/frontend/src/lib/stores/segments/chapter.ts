@@ -17,7 +17,7 @@ import type {
     SegAllResponse,
     SegDataResponse,
 } from '../../../types/api';
-import type { SegReciter,Segment } from '../../../types/domain';
+import type { Segment,SegReciter } from '../../../types/domain';
 
 /** `SegAllResponse` + lazily-built per-chapter indices (mutable cache fields). */
 export interface SegAllDataState extends SegAllResponse {

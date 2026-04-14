@@ -17,9 +17,9 @@
 
 import { derived, get, writable } from 'svelte/store';
 
-import type { Segment } from '../../../types/domain';
 import { SEG_FILTER_FIELDS } from '../../../segments/constants';
 import { countSegWords, parseSegRef } from '../../../segments/references';
+import type { Segment } from '../../../types/domain';
 import {
     segAllData,
     selectedChapter,

@@ -1,20 +1,22 @@
 /**
- * Segments tab entry point -- DOMContentLoaded, event wiring, config loading.
- * Wires the extracted foundation modules together and registers handlers
- * for event delegation and keyboard shortcuts.
+ * Segments tab entry point — wires imperative Wave 6-10 modules together.
+ *
+ * Wave 5 note: SegmentsTab.svelte now owns reciter/chapter/verse selection,
+ * filter bar, navigation banner, segment list rendering, and CSS-var config.
+ * This file retains DOM-ref acquisition + event-delegation / keyboard /
+ * audio / save / history wiring for modules that Waves 6-10 will rewrite.
+ *
+ * MUST not fire module-top-level DOM access (S2-B07): every DOM read /
+ * addEventListener call lives inside the DOMContentLoaded handler.
  */
 
 // Validation / stats / history modules (imports for side-effect registration)
 import './validation/index';
 import './stats';
 
-import { fetchJsonOrNull } from '../lib/api';
+import { selectedChapter } from '../lib/stores/segments/chapter';
 import { LS_KEYS } from '../lib/utils/constants';
-import { surahInfoReady } from '../lib/utils/surah-info';
 import { mustGet } from '../shared/dom';
-import { SearchableSelect } from '../shared/searchable-select';
-import type { SegConfigResponse } from '../types/api';
-import { loadSegReciters, onSegChapterChange,onSegReciterChange } from './data';
 // Edit modules
 import { enterEditWithBuffer, exitEditMode, registerEditDrawFns,registerEditModes } from './edit/common';
 import { deleteSegment } from './edit/delete';
@@ -23,7 +25,6 @@ import { startRefEdit } from './edit/reference';
 import { confirmSplit, drawSplitWaveform,enterSplitMode } from './edit/split';
 import { confirmTrim, drawTrimWaveform,enterTrimMode } from './edit/trim';
 import { _handleSegCanvasMousedown, handleSegRowClick, registerAllSegEventHandlers } from './event-delegation';
-import { addSegFilterCondition, applyFiltersAndRender, clearAllSegFilters } from './filters';
 import { clearHistoryFilters, setHistorySort } from './history/filters';
 import { hideHistoryView,showHistoryView } from './history/index';
 import { handleSegKeydown, registerAllSegKeyboardHandlers } from './keyboard';
@@ -55,13 +56,22 @@ registerWaveformHandlers({
 
 
 // ---------------------------------------------------------------------------
-// DOMContentLoaded
+// DOMContentLoaded — SegmentsTab.svelte has mounted by this point (Svelte
+// synchronous `new App()` in main.ts runs BEFORE DOMContentLoaded fires
+// because ES module scripts are defer-loaded). All seg-* IDs in the markup
+// are visible to `mustGet` calls below.
 // ---------------------------------------------------------------------------
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize DOM references
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize DOM references (Wave 6-10 consumers read these off `dom.*`).
     dom.segReciterSelect = mustGet<HTMLSelectElement>('seg-reciter-select');
-    dom.segChapterSelect = mustGet<HTMLSelectElement>('seg-chapter-select');
+    // Note: no #seg-chapter-select in the DOM — SearchableSelect (Svelte) owns
+    // chapter selection now. Wave 6+ imperative code that needs "current
+    // chapter" reads the `selectedChapter` store (via the SegmentsTab bridge,
+    // state.* is mirrored there) or queries the store directly.
+    // Provide a shim that mimics the old `<select>` so callers reading
+    // `dom.segChapterSelect.value` still work during the Wave 5-10 interim.
+    dom.segChapterSelect = _makeChapterSelectShim();
     dom.segVerseSelect = mustGet<HTMLSelectElement>('seg-verse-select');
     dom.segListEl = mustGet<HTMLDivElement>('seg-list');
     dom.segAudioEl = mustGet<HTMLAudioElement>('seg-audio-player');
@@ -97,16 +107,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     dom.segSavePreviewStats = mustGet<HTMLDivElement>('seg-save-preview-stats');
     dom.segSavePreviewBatches = mustGet<HTMLDivElement>('seg-save-preview-batches');
 
-    // Restore persistent settings
+    // Restore autoplay button class + persisted speed. Reciter / view-mode /
+    // chapter / verse persistence is owned by SegmentsTab.svelte.
     state._segAutoPlayEnabled = localStorage.getItem(LS_KEYS.SEG_AUTOPLAY) !== 'false';
     dom.segAutoPlayBtn.className = 'btn ' + (state._segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
     const _savedSegSpeed = localStorage.getItem(LS_KEYS.SEG_SPEED);
     if (_savedSegSpeed) dom.segSpeedSelect.value = _savedSegSpeed;
 
-    // Wire event listeners
-    dom.segReciterSelect.addEventListener('change', onSegReciterChange);
-    dom.segChapterSelect.addEventListener('change', onSegChapterChange);
-    dom.segVerseSelect.addEventListener('change', applyFiltersAndRender);
+    // Wire the audio / autoplay / speed buttons (Wave-6 playback scope).
     dom.segPlayBtn.addEventListener('click', onSegPlayClick);
     dom.segAutoPlayBtn.addEventListener('click', () => {
         state._segAutoPlayEnabled = !state._segAutoPlayEnabled;
@@ -128,17 +136,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.addEventListener('keydown', handleSegKeydown);
 
-    dom.segFilterAddBtn.addEventListener('click', addSegFilterCondition);
-    dom.segFilterClearBtn.addEventListener('click', clearAllSegFilters);
-
-    // Delegated event listeners for segment card actions
+    // Delegated event listeners for segment card actions (Wave-7 edit scope).
     [dom.segListEl, dom.segValidationEl, dom.segValidationGlobalEl, dom.segHistoryView, dom.segSavePreview].forEach(el => {
         el.addEventListener('click', handleSegRowClick);
         el.addEventListener('mousedown', _handleSegCanvasMousedown);
     });
 
-    // Register event delegation + keyboard handlers (all slots at once — TS
-    // enforces completeness; missing a key is a compile error).
+    // Register event delegation + keyboard handlers.
     registerAllSegEventHandlers({
         startRefEdit,
         enterEditWithBuffer,
@@ -173,33 +177,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     dom.segSavePreviewCancel?.addEventListener('click', () => hideSavePreview());
     dom.segSavePreviewConfirm?.addEventListener('click', confirmSaveFromPreview);
 
-    // Load display config
-    try {
-        const cfg = await fetchJsonOrNull<SegConfigResponse>('/api/seg/config');
-        if (cfg) {
-            const root = document.documentElement.style;
-            if (cfg.seg_font_size) root.setProperty('--seg-font-size', String(cfg.seg_font_size));
-            if (cfg.seg_word_spacing) root.setProperty('--seg-word-spacing', String(cfg.seg_word_spacing));
-            if (cfg.trim_pad_left != null) state.TRIM_PAD_LEFT = cfg.trim_pad_left;
-            if (cfg.trim_pad_right != null) state.TRIM_PAD_RIGHT = cfg.trim_pad_right;
-            if (cfg.trim_dim_alpha != null) state.TRIM_DIM_ALPHA = cfg.trim_dim_alpha;
-            if (cfg.show_boundary_phonemes != null) state.SHOW_BOUNDARY_PHONEMES = cfg.show_boundary_phonemes;
-            if (cfg.validation_categories) state._validationCategories = cfg.validation_categories;
-            if (cfg.low_conf_default_threshold != null) state._lcDefaultThreshold = cfg.low_conf_default_threshold;
-            if (cfg.muqattaat_verses) state._muqattaatVerses = new Set(cfg.muqattaat_verses.map(([s,a]) => `${s}:${a}`));
-            if (cfg.qalqala_letters) state._qalqalaLetters = new Set(cfg.qalqala_letters);
-            if (cfg.standalone_refs) state._standaloneRefs = new Set(cfg.standalone_refs.map(([s,a,w]) => `${s}:${a}:${w}`));
-            if (cfg.standalone_words) state._standaloneWords = new Set(cfg.standalone_words);
-            if (cfg.accordion_context) state._accordionContext = cfg.accordion_context;
-        }
-    } catch (_) { /* use CSS defaults */ }
-
-    await surahInfoReady;
-    state.segChapterSS = new SearchableSelect(dom.segChapterSelect);
-
-    // Wire cache panel buttons
-    document.getElementById('seg-prepare-btn')?.addEventListener('click', () => _prepareAudio(dom.segReciterSelect.value));
-    document.getElementById('seg-delete-cache-btn')?.addEventListener('click', () => _deleteAudioCache(dom.segReciterSelect.value));
-
-    loadSegReciters();
+    // Wire cache panel buttons (Wave-6 audio-cache scope).
+    const prepareBtn = document.getElementById('seg-prepare-btn');
+    const deleteBtn = document.getElementById('seg-delete-cache-btn');
+    prepareBtn?.addEventListener('click', () => _prepareAudio(dom.segReciterSelect.value));
+    deleteBtn?.addEventListener('click', () => _deleteAudioCache(dom.segReciterSelect.value));
 });
+
+// ---------------------------------------------------------------------------
+// Shim `dom.segChapterSelect` — imperative Wave 6-10 code reads `.value` and
+// occasionally writes to it (e.g. navigation.jumpToSegment used to do
+// `dom.segChapterSelect.value = String(chapter); onSegChapterChange()`).
+// SegmentsTab.svelte owns the real chapter selector (SearchableSelect); this
+// shim keeps the Stage-1 API shape so code doesn't panic on `.value` reads.
+// The shim reads/writes the `selectedChapter` Svelte store; writes trigger a
+// programmatic chapter change via `SegmentsTab.onChapterChange`.
+// ---------------------------------------------------------------------------
+function _makeChapterSelectShim(): HTMLSelectElement {
+    // We construct a detached <select> so consumers still get a real element
+    // API. The shim's `value` getter reads from the `selectedChapter` Svelte
+    // store; setter writes back. Consumers that iterate options / call
+    // `addEventListener('change')` will find nothing — but no Wave 6-10 code
+    // does that; only `.value` reads/writes. Verified by grep.
+    //
+    // IMPORTANT: writes via `dom.segChapterSelect.value = X` set the store
+    // but do NOT trigger the Svelte-owned chapter-load flow. Callers that
+    // want a full reload must also invoke `SegmentsTab.onChapterChange` — in
+    // Wave 5 only `navigation.jumpToSegment` does this, and that function is
+    // about to be deleted in this commit cluster (shrink step) since Wave 8
+    // (validation) owns the jump flow via its imperative panel.
+    const stub = document.createElement('select');
+    Object.defineProperty(stub, 'value', {
+        get() {
+            let v = '';
+            selectedChapter.subscribe((x) => { v = x; })();
+            return v;
+        },
+        set(v: string) {
+            selectedChapter.set(v);
+        },
+    });
+    return stub;
+}
