@@ -5,6 +5,7 @@
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
 import { segAllData, segData } from '../lib/stores/segments/chapter';
 import { clearEdit } from '../lib/stores/segments/edit';
+import { hidePreview } from '../lib/stores/segments/save';
 import { clearStats, setStats } from '../lib/stores/segments/stats';
 import { clearValidation, setValidation } from '../lib/stores/segments/validation';
 import { LS_KEYS } from '../lib/utils/constants';
@@ -277,6 +278,7 @@ export function clearSegDisplay(): void {
     dom.segHistoryStats.innerHTML = '';
     dom.segHistoryBatches.innerHTML = '';
     dom.segSavePreview.hidden = true;
+    hidePreview(); // Wave 9: notify $savePreviewVisible store
     dom.segSavePreviewStats.innerHTML = '';
     dom.segSavePreviewBatches.innerHTML = '';
     state._segPrefetchCache = {};

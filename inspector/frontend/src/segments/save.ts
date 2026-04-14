@@ -3,6 +3,7 @@
  */
 
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
+import { hidePreview, showPreview } from '../lib/stores/segments/save';
 import { surahOptionText } from '../lib/utils/surah-info';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
 import type { EditOp, HistoryBatch, Segment } from '../types/domain';
@@ -133,6 +134,7 @@ export function showSavePreview(): void {
     dom.segHistoryView.hidden = true;
 
     dom.segSavePreview.hidden = false;
+    showPreview(); // Wave 9: notify $savePreviewVisible store (SavePreview.svelte hidden binding)
 
     const observer = _ensureWaveformObserver();
     dom.segSavePreview.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
@@ -148,6 +150,7 @@ export function showSavePreview(): void {
 export function hideSavePreview(restoreScroll = true): void {
     stopErrorCardAudio();
     dom.segSavePreview.hidden = true;
+    hidePreview(); // Wave 9: notify $savePreviewVisible store (SavePreview.svelte hidden binding)
     dom.segSavePreviewStats.innerHTML = '';
     dom.segSavePreviewBatches.innerHTML = '';
 
