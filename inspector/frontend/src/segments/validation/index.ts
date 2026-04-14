@@ -28,7 +28,6 @@ import type {
 } from '../../types/domain';
 import { applyFiltersAndRender } from '../filters';
 import { jumpToMissingVerseContext,jumpToSegment, jumpToVerse } from '../navigation';
-import { renderSegList } from '../rendering';
 import { dom,state } from '../state';
 import { renderCategoryCards } from './error-cards';
 
@@ -447,11 +446,11 @@ export async function refreshValidation(): Promise<void> {
             renderValidationPanel(state.segValidation, null, dom.segValidationEl);
             restoreValPanelState(dom.segValidationEl, chState);
         }
-        if (state.segData && state.segData.segments) {
-            applyFiltersAndRender();
-        } else if (state.segDisplayedSegments) {
-            renderSegList(state.segDisplayedSegments);
-        }
+        // Wave 7: both branches collapse to applyFiltersAndRender — the
+        // shim notifies stores so the {#each} re-renders. Stage-1 used
+        // renderSegList for the segDisplayedSegments-only path; today the
+        // derived `displayedSegments` re-fires on segAllData.update().
+        applyFiltersAndRender();
         if (state._segSavedPreviewState) {
             const saved = state._segSavedPreviewState;
             state._segSavedPreviewState = null;

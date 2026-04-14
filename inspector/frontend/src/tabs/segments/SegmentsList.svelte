@@ -1,61 +1,93 @@
 <script lang="ts">
     /**
-     * SegmentsList — the <div id="seg-list"> container + Navigation banner.
+     * SegmentsList — the <div id="seg-list"> container, Navigation banner, and
+     * Svelte-driven row rendering via {#each}.
      *
-     * Wave 5 interim: the actual row rendering stays IMPERATIVE via
-     * `renderSegList(state.segDisplayedSegments)` from segments/rendering.ts
-     * (legacy call site kept alive by edit / playback / validation modules
-     * through Waves 6-10). Svelte owns only the container + banner — the
-     * imperative list is appended as child DOM under #seg-list. Wave 6
-     * converts this to `<SegmentRow>` rendering once playback highlighting
-     * no longer needs imperative `classList` pokes.
+     * Wave 7 adopted: replaces the Wave-5 imperative `renderSegList` bridge.
+     * Rows render via {#each $displayedSegments as seg (key)} → <SegmentRow>.
+     * Silence-gap markers are inlined; missing-word tags are computed from
+     * `state.segValidation` reactively (no observer post-walk needed —
+     * SegmentRow.onMount registers each canvas with the IntersectionObserver
+     * directly).
      *
-     * This design avoids the "Svelte {#each} vs imperative innerHTML fight"
-     * problem: if Svelte renders rows AND edit/playback code mutates
-     * state.segDisplayedSegments in place + calls renderSegList, the two
-     * renderers collide. Letting imperative own it during interim preserves
-     * Stage-1 behaviour bit-for-bit.
+     * Edit/save/undo flows that mutate state.segAllData.segments in place call
+     * `applyFiltersAndRender()` (now a shim — segments/filters.ts) which does
+     *   activeFilters.set([...state.segActiveFilters])  // sync state → store
+     *   segAllData.update(a => a)                       // notify subscribers
+     * triggering the derived `displayedSegments` to re-fire and the {#each}
+     * to reconcile. Keyed by `segment_uid` (with chapter:index fallback) so
+     * stable rows survive reindexing across split/merge.
      *
-     * Reactive side-effect: whenever $displayedSegments changes, invoke
-     * imperative renderSegList so the DOM mirrors the current derivation.
-     *
-     * Back-banner position: `.seg-back-banner` uses `position: sticky`
-     * scoped to #seg-list's scroll container, so it must live inside
-     * #seg-list. renderSegList preserves the banner by walking children and
-     * removing only non-banner children before appending fresh rows.
+     * Banner: `.seg-back-banner` lives inside #seg-list (Navigation.svelte
+     * renders before {#each}) so its `position: sticky` scopes correctly to
+     * the list scroll container. Banner-preservation walk that Wave-5
+     * imperative `renderSegList` did is no longer needed — the banner is
+     * Svelte-owned and outside the {#each} block.
      */
 
-    import { onMount } from 'svelte';
-
     import { displayedSegments } from '../../lib/stores/segments/filters';
-    import { renderSegList } from '../../segments/rendering';
+    import { selectedChapter } from '../../lib/stores/segments/chapter';
+    import { state } from '../../segments/state';
+    import type { Segment } from '../../types/domain';
     import Navigation from './Navigation.svelte';
+    import SegmentRow from './SegmentRow.svelte';
 
     export let onRestore: (() => void) | null = null;
 
-    let listEl: HTMLDivElement | undefined;
+    /** Compute missing-word seg-indices for the current chapter from
+     *  state.segValidation. Reactive on $displayedSegments so any chapter or
+     *  validation update re-derives. */
+    $: missingWordSegIndices = (() => {
+        const set = new Set<number>();
+        if (!state.segValidation || !state.segValidation.missing_words) return set;
+        const chapter = parseInt($selectedChapter) || 0;
+        if (!chapter) return set;
+        for (const mw of state.segValidation.missing_words) {
+            if (mw.chapter === chapter && mw.seg_indices) {
+                for (const idx of mw.seg_indices) set.add(idx);
+            }
+        }
+        return set;
+    })();
 
-    // Side-effect: re-render the imperative list whenever the derived
-    // store changes (chapter load, verse filter, active-filter application,
-    // edit/save/undo refreshes triggered via applyFiltersAndRender). The
-    // imperative renderer attaches the IntersectionObserver and handles
-    // missing-word tags from state.segValidation — no duplication here.
-    let _prevRef: unknown = null;
-    $: if (listEl && $displayedSegments !== _prevRef) {
-        _prevRef = $displayedSegments;
-        renderSegList($displayedSegments);
+    /** Stable key for {#each} reconciliation. UID survives split-induced
+     *  index reshuffles; fallback compound key is unique within a chapter. */
+    function rowKey(s: Segment): string {
+        return s.segment_uid ?? `${s.chapter ?? ''}:${s.index}`;
     }
 
-    onMount(() => {
-        // Trigger initial render (if any segments are already in the store).
-        if (listEl) renderSegList($displayedSegments);
-    });
+    /** Whether to render a silence-gap wrapper between `seg` and the next
+     *  segment in the displayed list. Mirrors Stage-1 renderSegList logic
+     *  (only show when next-displayed is the consecutive index). */
+    function showSilenceGap(seg: Segment, displayIdx: number): boolean {
+        if (seg.silence_after_ms == null) return false;
+        const nextDisplayed = $displayedSegments[displayIdx + 1];
+        return !!nextDisplayed && nextDisplayed.index === seg.index + 1;
+    }
 </script>
 
-<div id="seg-list" class="seg-list" bind:this={listEl}>
+<div id="seg-list" class="seg-list">
     <!-- Navigation banner stays inside #seg-list so `.seg-back-banner`'s
-         `position: sticky` scopes to the list's scroll container. The
-         imperative renderSegList call path preserves this element — it
-         removes only non-banner children before appending fresh rows. -->
+         `position: sticky` scopes to the list's scroll container. -->
     <Navigation on:restore={() => onRestore && onRestore()} />
+
+    {#if $displayedSegments.length === 0}
+        <div class="seg-loading">No segments to display</div>
+    {:else}
+        {#each $displayedSegments as seg, displayIdx (rowKey(seg))}
+            <SegmentRow
+                {seg}
+                {missingWordSegIndices}
+                isNeighbour={!!seg._isNeighbour}
+            />
+            {#if showSilenceGap(seg, displayIdx)}
+                <div class="seg-silence-gap-wrapper">
+                    <div class="seg-silence-gap">
+                        &#9208; {Math.round(seg.silence_after_ms ?? 0)}ms
+                        (raw: {Math.round(seg.silence_after_raw_ms ?? 0)}ms)
+                    </div>
+                </div>
+            {/if}
+        {/each}
+    {/if}
 </div>

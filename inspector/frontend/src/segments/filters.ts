@@ -1,260 +1,119 @@
 /**
- * Filter bar UI and filter application logic.
+ * Filter application — Wave 7 shim.
+ *
+ * Pre-Wave-7, this file owned (a) imperative `applyFiltersAndRender` /
+ * `applyVerseFilterAndRender` (read state, computed displayed segments,
+ * imperatively wrote `state.segDisplayedSegments` and called `renderSegList`),
+ * and (b) imperative filter-bar UI (`renderFilterBar` etc.).
+ *
+ * As of Wave 7:
+ *  - FiltersBar.svelte owns the filter-bar UI (subscribes to `activeFilters`).
+ *  - SegmentsList.svelte owns row rendering via {#each}, subscribing to
+ *    `displayedSegments` (derived from segAllData + selectedChapter +
+ *    selectedVerse + activeFilters in lib/stores/segments/filters.ts).
+ *
+ * This shim remains because edit/save/undo/validation/navigation modules
+ * still mutate `state.segAllData.segments` in place and then call
+ * `applyFiltersAndRender()` (or `applyVerseFilterAndRender()`) to refresh
+ * the visible list. The shim:
+ *  1. Resets playback highlight DOM refs (the Wave-5 `renderSegList`
+ *     header). Without this, the highlight layer would point to nodes
+ *     destroyed by the next {#each} reconciliation.
+ *  2. Syncs `state.segActiveFilters` → `activeFilters` store (callers
+ *     that mutate state directly need their changes reflected).
+ *  3. Notifies `segAllData` subscribers via `update(a => a)` so the
+ *     derived `displayedSegments` re-fires and {#each} re-reconciles.
+ *
+ * `computeSilenceAfter` re-exports from lib/stores/segments/filters.ts
+ * (functionally identical — the lib version reads via `get(segAllData)`).
+ *
+ * Future deletion: when every imperative caller (edit modes, save/undo,
+ * validation, navigation) writes through Svelte stores, this shim can go.
+ * Until then, it is the bridge.
  */
 
-import type { Segment } from '../types/domain';
-import { SEG_FILTER_FIELDS, SEG_FILTER_OPS } from './constants';
-import { countSegWords,parseSegRef } from './references';
-import { renderSegList } from './rendering';
-import { dom,state } from './state';
+import { segAllData as segAllDataStore } from '../lib/stores/segments/chapter';
+import { activeFilters as activeFiltersStore } from '../lib/stores/segments/filters';
+import { state } from './state';
+
+// Re-export shared helpers so existing import sites keep working.
+export {
+    computeSilenceAfter,
+    segDerivedProps,
+} from '../lib/stores/segments/filters';
+export type { SegDerivedProps } from '../lib/stores/segments/filters';
 
 // ---------------------------------------------------------------------------
-// Derived-property helpers for filtering
+// applyFiltersAndRender — Wave 7 shim
 // ---------------------------------------------------------------------------
 
-/** Derived per-segment numeric properties exposed to the filter predicate. */
-export interface SegDerivedProps {
-    duration_s: number;
-    num_words: number;
-    num_verses: number;
-    confidence_pct: number;
-    /** `null` when no "next" segment in the same entry — meaning "unknown". */
-    silence_after_ms: number | null | undefined;
-    [k: string]: number | null | undefined;
-}
-
-/** `Segment` with the cached derived-props field used by the filter. */
-interface SegWithDerived extends Segment {
-    _derived?: SegDerivedProps;
-}
-
-export function segDerivedProps(seg: SegWithDerived): SegDerivedProps {
-    if (seg._derived) return seg._derived;
-    const duration_s     = (seg.time_end - seg.time_start) / 1000;
-    const num_words      = countSegWords(seg.matched_ref);
-    const p              = parseSegRef(seg.matched_ref);
-    const num_verses     = p ? p.ayah_to - p.ayah_from + 1 : 0;
-    const confidence_pct = (seg.confidence || 0) * 100;
-    const silence_after_ms = seg.silence_after_ms;
-    seg._derived = { duration_s, num_words, num_verses, confidence_pct, silence_after_ms };
-    return seg._derived;
-}
-
-export function computeSilenceAfter(): void {
-    if (!state.segAllData) return;
-    const pad = state.segAllData.pad_ms || 0;
-    const segs = state.segAllData.segments;
-    for (let i = 0; i < segs.length; i++) {
-        const cur = segs[i];
-        if (!cur) continue;
-        const next = segs[i + 1];
-        const sameEntry = next && cur.audio_url === next.audio_url
-                               && cur.entry_idx === next.entry_idx;
-        if (sameEntry && next) {
-            cur.silence_after_ms = (next.time_start - cur.time_end) + 2 * pad;
-            cur.silence_after_raw_ms = next.time_start - cur.time_end;
-        } else {
-            cur.silence_after_ms = null;
-            cur.silence_after_raw_ms = null;
-        }
-    }
-}
-
-function _compareFilter(actual: number | null | undefined, op: string, value: number): boolean {
-    if (actual == null) return false;
-    switch (op) {
-        case '>':  return actual >  value;
-        case '>=': return actual >= value;
-        case '<':  return actual <  value;
-        case '<=': return actual <= value;
-        case '=':  return actual === value;
-        default:   return true;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Filter application
-// ---------------------------------------------------------------------------
-
+/**
+ * Notify Svelte stores that segment data and/or active filters changed so
+ * the SegmentsList {#each} re-renders.
+ *
+ * Imperative callers that mutate `state.segAllData.segments` in place (edit
+ * confirm, save flow, undo) call this to publish their change. Callers that
+ * mutate `state.segActiveFilters` directly (navigation.ts restore path) get
+ * their change synced into the `activeFilters` store here.
+ */
 export function applyFiltersAndRender(): void {
-    if (!state.segAllData) return;
-    const chapter = dom.segChapterSelect.value;
+    // Reset playback highlight DOM refs — the previous {#each} reconciliation
+    // may have destroyed the rows these point to. Wave-5 renderSegList did
+    // this at line 216-217; the shim preserves the contract.
+    state._prevHighlightedRow = null;
+    state._prevHighlightedIdx = -1;
+    state._currentPlayheadRow = null;
+    state._prevPlayheadIdx = -1;
 
-    const activeValid = state.segActiveFilters.filter((f) => f.value !== null) as Array<
-        { field: string; op: string; value: number }
-    >;
+    // Sync state.* (mutated by imperative callers) → store.
+    // Spread so the store sees a fresh array reference even when content
+    // matches; otherwise `derived` may short-circuit.
+    activeFiltersStore.set([...state.segActiveFilters]);
 
-    if (!chapter && activeValid.length === 0) {
-        state.segDisplayedSegments = [];
-        dom.segListEl.innerHTML = '<div class="seg-loading">Select a chapter or add a filter to view segments</div>';
-        if (dom.segFilterStatusEl) dom.segFilterStatusEl.textContent = '';
-        return;
-    }
-
-    let segs: Segment[] = state.segAllData.segments;
-
-    if (chapter) {
-        segs = segs.filter((s) => s.chapter === parseInt(chapter));
-    }
-
-    const verse = dom.segVerseSelect.value;
-    if (verse && chapter) {
-        const prefix = `${chapter}:${verse}:`;
-        segs = segs.filter((s) => s.matched_ref && s.matched_ref.startsWith(prefix));
-    }
-
-    // Clear stale neighbour tags
-    state.segAllData.segments.forEach((s) => { delete s._isNeighbour; });
-
-    if (activeValid.length > 0) {
-        const matched = segs.filter((seg) =>
-            activeValid.every((f) => {
-                const actual = segDerivedProps(seg as SegWithDerived)[f.field];
-                return _compareFilter(actual, f.op, f.value);
-            })
-        );
-
-        const hasNeighbourFilter = activeValid.some((f) =>
-            SEG_FILTER_FIELDS.find((fd) => fd.value === f.field)?.neighbour
-        );
-
-        if (hasNeighbourFilter) {
-            const posMap = new Map<Segment, number>(segs.map((s, i) => [s, i]));
-            const resultSet = new Set<Segment>(matched);
-            matched.forEach((seg) => {
-                const idx = posMap.get(seg);
-                if (idx === undefined) return;
-                const next = segs[idx + 1];
-                if (next && next.audio_url === seg.audio_url) {
-                    next._isNeighbour = true;
-                    resultSet.add(next);
-                }
-            });
-            segs = segs.filter((seg) => resultSet.has(seg));
-
-            const groups: Segment[][] = [];
-            for (let i = 0; i < segs.length; i++) {
-                const seg = segs[i];
-                if (!seg) continue;
-                if (!seg._isNeighbour) {
-                    const group: Segment[] = [seg];
-                    const nxt = segs[i + 1];
-                    if (nxt && nxt._isNeighbour) {
-                        group.push(nxt);
-                        i++;
-                    }
-                    groups.push(group);
-                }
-            }
-            groups.sort((a, b) => ((a[0]?.silence_after_ms ?? Infinity) - (b[0]?.silence_after_ms ?? Infinity)));
-            segs = groups.flat();
-        } else {
-            segs = matched;
-        }
-    }
-
-    const total = chapter
-        ? state.segAllData.segments.filter((s) => s.chapter === parseInt(chapter)).length
-        : state.segAllData.segments.length;
-    if (dom.segFilterStatusEl) {
-        dom.segFilterStatusEl.textContent = (activeValid.length > 0 || verse)
-            ? `${segs.length} / ${total}` : '';
-    }
-
-    state.segDisplayedSegments = segs;
-    state._segIndexMap = new Map(segs.map((s) => [`${s.chapter}:${s.index}`, s]));
-
-    if (activeValid.length > 0 && state._segSavedFilterView) {
-        state._segSavedFilterView = null;
-    }
-
-    renderSegList(state.segDisplayedSegments);
+    // Notify segAllData subscribers — the derived `displayedSegments`
+    // recomputes from the current (in-place mutated) segments array.
+    segAllDataStore.update((a) => a);
 }
 
+/** Verse-filter alias preserved for compat (Stage-1 split this for clarity).
+ *  Today both paths are identical — the derived store handles verse + filters
+ *  together. */
 export function applyVerseFilterAndRender(): void {
     applyFiltersAndRender();
 }
 
 // ---------------------------------------------------------------------------
-// Filter bar UI
+// Filter-bar UI helpers — Wave 7 no-op shims
 // ---------------------------------------------------------------------------
+//
+// FiltersBar.svelte renders the filter rows reactively from `$activeFilters`.
+// The Stage-1 imperative helpers below would clobber Svelte's #seg-filter-rows
+// children; they are now no-ops kept only so navigation.ts and clearAllSegFilters
+// continue to compile. Each one writes through the store instead so the
+// FiltersBar re-renders.
 
 export function renderFilterBar(): void {
-    dom.segFilterRowsEl.innerHTML = '';
-    state.segActiveFilters.forEach((f, i) => {
-        const row = document.createElement('div');
-        row.className = 'seg-filter-row';
-
-        const fieldSel = document.createElement('select');
-        fieldSel.className = 'seg-filter-field';
-        SEG_FILTER_FIELDS.forEach((opt) => {
-            const o = document.createElement('option');
-            o.value = opt.value; o.textContent = opt.label; o.selected = opt.value === f.field;
-            fieldSel.appendChild(o);
-        });
-        fieldSel.addEventListener('change', () => {
-            const row = state.segActiveFilters[i];
-            if (!row) return;
-            row.field = fieldSel.value; applyFiltersAndRender();
-        });
-
-        const opSel = document.createElement('select');
-        opSel.className = 'seg-filter-op';
-        SEG_FILTER_OPS.forEach((op) => {
-            const o = document.createElement('option');
-            o.value = op; o.textContent = op; o.selected = op === f.op;
-            opSel.appendChild(o);
-        });
-        opSel.addEventListener('change', () => {
-            const row = state.segActiveFilters[i];
-            if (!row) return;
-            row.op = opSel.value; applyFiltersAndRender();
-        });
-
-        const valInput = document.createElement('input');
-        valInput.type = 'number'; valInput.className = 'seg-filter-value';
-        valInput.value = f.value != null ? String(f.value) : '';
-        valInput.step = 'any'; valInput.placeholder = 'value';
-        valInput.addEventListener('input', () => {
-            const row = state.segActiveFilters[i];
-            if (!row) return;
-            const v = parseFloat(valInput.value);
-            row.value = isNaN(v) ? null : v;
-            if (state._segFilterDebounceTimer !== null) {
-                clearTimeout(state._segFilterDebounceTimer);
-            }
-            state._segFilterDebounceTimer = setTimeout(applyFiltersAndRender, 300);
-        });
-
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'btn btn-sm btn-cancel seg-filter-remove';
-        removeBtn.textContent = '\u00d7';
-        removeBtn.addEventListener('click', () => {
-            state.segActiveFilters.splice(i, 1);
-            renderFilterBar(); updateFilterBarControls(); applyFiltersAndRender();
-        });
-
-        row.append(fieldSel, opSel, valInput, removeBtn);
-        dom.segFilterRowsEl.appendChild(row);
-    });
+    // No-op: FiltersBar.svelte renders rows from $activeFilters reactively.
+    // Sync state → store in case the caller mutated state.segActiveFilters
+    // directly (navigation.ts restore path does this).
+    activeFiltersStore.set([...state.segActiveFilters]);
 }
 
 export function updateFilterBarControls(): void {
-    const n = state.segActiveFilters.length;
-    if (dom.segFilterCountEl) dom.segFilterCountEl.textContent = n > 0 ? `(${n})` : '';
-    if (dom.segFilterClearBtn) dom.segFilterClearBtn.hidden = n === 0;
+    // No-op: FiltersBar.svelte derives count + clear-button visibility from
+    // $activeFilters reactively.
 }
 
 export function addSegFilterCondition(): void {
-    state.segActiveFilters.push({ field: 'duration_s', op: '>', value: null });
-    renderFilterBar(); updateFilterBarControls();
-    dom.segFilterRowsEl.querySelectorAll<HTMLInputElement>('.seg-filter-value').forEach((el, i, arr) => {
-        if (i === arr.length - 1) el.focus();
-    });
+    activeFiltersStore.update((list) => [
+        ...list,
+        { field: 'duration_s', op: '>', value: null },
+    ]);
 }
 
 export function clearAllSegFilters(): void {
     state.segActiveFilters = [];
     state._segSavedFilterView = null;
-    renderFilterBar(); updateFilterBarControls(); applyFiltersAndRender();
+    activeFiltersStore.set([]);
+    applyFiltersAndRender();
 }

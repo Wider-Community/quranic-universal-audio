@@ -297,7 +297,10 @@ export function clearSegDisplay(): void {
     state._observerPeaksQueue = [];
     if (state._observerPeaksTimer) { clearTimeout(state._observerPeaksTimer); state._observerPeaksTimer = null; }
     state._observerPeaksRequested = new Set();
-    dom.segListEl.innerHTML = '';
+    // Wave 7: SegmentsList.svelte renders #seg-list via {#each}; clearing
+    // segAllData (above) makes the derived `displayedSegments` empty, which
+    // shows the "No segments to display" placeholder. No imperative innerHTML
+    // wipe needed; doing so would clobber Svelte's reconciliation.
     dom.segPlayBtn.disabled = true;
     dom.segSaveBtn.disabled = true;
     dom.segPlayStatus.textContent = '';

@@ -1,7 +1,16 @@
 /**
  * Jump-to-segment, jump-to-verse, missing verse context, and filter view save/restore.
+ *
+ * Wave 7 note: the back-to-results banner is rendered by Navigation.svelte
+ * (subscribed to `backBannerVisible` derived from `savedFilterView`). The
+ * Stage-1 imperative `_showBackToResultsBanner` still exists so the
+ * pre-Wave-5 callers do something, but it now writes to the
+ * `savedFilterView` store instead of injecting a parallel DOM banner —
+ * Navigation.svelte handles the visual side.
  */
 
+import { activeFilters as activeFiltersStore } from '../lib/stores/segments/filters';
+import { savedFilterView as savedFilterViewStore } from '../lib/stores/segments/navigation';
 import type { Segment } from '../types/domain';
 import { getChapterSegments, onSegChapterChange } from './data';
 import { applyFiltersAndRender, renderFilterBar, updateFilterBarControls } from './filters';
@@ -192,23 +201,29 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
 // Filter view save / restore (Go To -> Back navigation)
 // ---------------------------------------------------------------------------
 
+/**
+ * Wave 7: the back-to-results banner is rendered by Navigation.svelte
+ * (subscribed to `backBannerVisible` derived from `savedFilterView`). This
+ * function used to inject a parallel imperative DOM banner; it now writes
+ * to both `state._segSavedFilterView` (for imperative consumers checking
+ * `if (state._segSavedFilterView)`) AND the `savedFilterView` store so the
+ * Svelte banner appears.
+ */
 export function _showBackToResultsBanner(): void {
-    dom.segListEl.querySelector('.seg-back-banner')?.remove();
-    const banner = document.createElement('div');
-    banner.className = 'seg-back-banner';
-    banner.innerHTML = '<button class="btn btn-sm seg-back-btn">\u2190 Back to filter results</button>';
-    banner.querySelector<HTMLButtonElement>('.seg-back-btn')?.addEventListener('click', _restoreFilterView);
-    dom.segListEl.insertBefore(banner, dom.segListEl.firstChild);
+    if (!state._segSavedFilterView) return;
+    // SegmentsTab bridge syncs store → state, but not state → store. Mirror
+    // explicitly so the Svelte Navigation banner appears.
+    savedFilterViewStore.set(state._segSavedFilterView);
 }
 
 export function _restoreFilterView(): void {
     if (!state._segSavedFilterView) return;
     const saved = state._segSavedFilterView;
     state._segSavedFilterView = null;
+    savedFilterViewStore.set(null);
 
     state.segActiveFilters = saved.filters;
-    renderFilterBar();
-    updateFilterBarControls();
+    activeFiltersStore.set([...saved.filters]);
 
     if (saved.chapter !== dom.segChapterSelect.value) {
         dom.segChapterSelect.value = saved.chapter;

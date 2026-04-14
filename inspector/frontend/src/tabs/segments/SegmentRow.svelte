@@ -2,32 +2,27 @@
     /**
      * SegmentRow — one .seg-row card in the segments list.
      *
-     * Mirrors the imperative `renderSegCard` helper (kept in Wave-5 under
-     * `lib/utils/segments-rendering.ts` for validation/history/edit modules
-     * that still render cards imperatively). The two renderers MUST stay in
-     * DOM sync (class names, data attributes, child order) — edit-delegation
-     * + waveform observer + playback code query the same selectors.
+     * Wave 7 adopted: this component is now mounted via {#each} in
+     * SegmentsList.svelte (no longer "provisioned-but-unused"). The imperative
+     * `renderSegList` / `renderSegCard` helpers in segments/rendering.ts stay
+     * for validation accordions + history view (read-only / accordion contexts);
+     * #seg-list itself is fully Svelte-driven now.
      *
-     * History-mode props (S2-D23): Wave 10 needs the same component for
-     * history op cards; accepted from day one so the signature is stable.
-     * Highlight props (splitHL / trimHL / mergeHL / changedFields) are
-     * declared but not yet consumed — Wave 6 (waveform) + Wave 10 (history)
-     * implement the visual overlays.
+     * History-mode props (S2-D23) accepted from day one. Highlight props
+     * (splitHL / trimHL / mergeHL / changedFields) are still future-Wave
+     * provisioning slots — Wave 10 implements the visual overlays.
      *
      * Layout: normal mode = horizontal (play-col | left-col | text-box).
      * History mode = vertical (waveform above text) — scoped via `class:mode-history`.
      *
-     * DOM refs: purely declarative via {#if}/{#each} + data-* attrs. No
-     * bind:this needed; the parent list attaches an IntersectionObserver to
-     * `canvas[data-needs-waveform]` via a post-render walk (see SegmentsList).
+     * Waveform observer: onMount registers the canvas with the segments
+     * IntersectionObserver via _ensureWaveformObserver().observe(canvas).
+     * On destroy the canvas is implicitly unobserved (the observer's weak
+     * tracking releases destroyed nodes; see segments/waveform/index.ts).
      */
 
-    import type { Segment } from '../../types/domain';
-    import type {
-        MergeHighlight,
-        SplitHighlight,
-        TrimHighlight,
-    } from '../../segments/waveform/types';
+    import { onMount } from 'svelte';
+
     import { getAdjacentSegments } from '../../lib/stores/segments/chapter';
     import {
         _addVerseMarkers,
@@ -35,6 +30,13 @@
         formatTimeMs,
     } from '../../segments/references';
     import { isIndexDirty } from '../../segments/state';
+    import type {
+        MergeHighlight,
+        SplitHighlight,
+        TrimHighlight,
+    } from '../../segments/waveform/types';
+    import { _ensureWaveformObserver } from '../../segments/waveform/index';
+    import type { Segment } from '../../types/domain';
 
     // ---- Required ----
     export let seg: Segment;
@@ -47,11 +49,11 @@
     export let contextLabel: string = '';
     export let missingWordSegIndices: Set<number> | null = null;
     export let isNeighbour: boolean = false;
-    /** Provisioning slot (S2-D23) — Wave 6 applies overlay. */
+    /** Provisioning slot (S2-D23) — Wave 10 applies overlay. */
     export let splitHL: SplitHighlight | null = null;
-    /** Provisioning slot (S2-D23) — Wave 6 applies overlay. */
+    /** Provisioning slot (S2-D23) — Wave 10 applies overlay. */
     export let trimHL: TrimHighlight | null = null;
-    /** Provisioning slot (S2-D23) — Wave 6 applies overlay. */
+    /** Provisioning slot (S2-D23) — Wave 10 applies overlay. */
     export let mergeHL: MergeHighlight | null = null;
     /** Provisioning slot (S2-D23) — Wave 10 marks changed fields in the card. */
     export let changedFields: Set<'ref' | 'duration' | 'conf' | 'body'> | null = null;
@@ -60,7 +62,7 @@
     /** Fallback chapter when `seg.chapter` is null — only used for dirty lookup. */
     export let fallbackChapter: number = 0;
 
-    // These props intentionally unused in Wave 5 (S2-D23 provisioning slots);
+    // These props intentionally unused in current waves (S2-D23 provisioning slots);
     // referenced so strict unused-prop TS doesn't flag them.
     $: if (splitHL || trimHL || mergeHL || changedFields) void 0;
 
@@ -99,6 +101,23 @@
         if (conf >= 0.60) return 'conf-mid';
         return 'conf-low';
     }
+
+    // ---------------------------------------------------------------------
+    // Waveform observer registration
+    // ---------------------------------------------------------------------
+    let canvasEl: HTMLCanvasElement | undefined;
+
+    onMount(() => {
+        if (!canvasEl) return;
+        const observer = _ensureWaveformObserver();
+        observer.observe(canvasEl);
+        return () => {
+            // IntersectionObserver doesn't strongly retain disconnected nodes,
+            // but unobserve explicitly avoids dangling entries when rows are
+            // recycled mid-edit (e.g. split → re-render).
+            observer.unobserve(canvasEl!);
+        };
+    });
 </script>
 
 <div
@@ -127,7 +146,12 @@
         {#if readOnly && showPlayBtn}
             <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
         {/if}
-        <canvas width="380" height="60" data-needs-waveform></canvas>
+        <canvas
+            bind:this={canvasEl}
+            width="380"
+            height="60"
+            data-needs-waveform
+        ></canvas>
         {#if !isContext && !readOnly}
             <div class="seg-actions">
                 <button class="btn btn-sm btn-adjust">Adjust</button>
