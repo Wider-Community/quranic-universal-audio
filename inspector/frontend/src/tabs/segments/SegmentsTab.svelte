@@ -49,6 +49,7 @@
     import { clearStats, segStats, setStats } from '../../lib/stores/segments/stats';
     import { clearValidation, segValidation, setValidation } from '../../lib/stores/segments/validation';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
+    import { hidePreview } from '../../lib/stores/segments/save';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import type { SegReciter } from '../../types/domain';
@@ -317,6 +318,7 @@
         if (histStats) histStats.innerHTML = '';
         if (histBatches) histBatches.innerHTML = '';
         if (savePrev) (savePrev as HTMLElement).hidden = true;
+        hidePreview();  // mirror to store so SavePreview.svelte stays consistent on re-render
         if (savePrevStats) savePrevStats.innerHTML = '';
         if (savePrevBatches) savePrevBatches.innerHTML = '';
 

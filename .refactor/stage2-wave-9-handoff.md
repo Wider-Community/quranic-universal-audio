@@ -328,3 +328,28 @@ Modified:
 - ~30 tool calls total (reads + edits + bash pre-flight runs).
 - No dev server started. No new circular dependencies introduced.
 - All 6 commits are atomic (one logical change each); pre-flight GREEN at every commit point.
+
+---
+
+## 12. Review findings + disposition
+
+### Sonnet (pattern review) — **APPROVE-WITH-CHANGES**
+
+**Non-blockers (NB-1 fixed inline; NB-2 carry-forward):**
+
+| ID | Item | Disposition |
+|---|---|---|
+| NB-1 | `SegmentsTab.svelte::clearPerReciterState` (line 319) sets `(savePrev as HTMLElement).hidden = true` but does NOT call `hidePreview()`. Store stays at `true` while DOM hidden. If anything re-renders SavePreview.svelte (reactive update or hot-reload), Svelte restores `hidden={!$savePreviewVisible}` from stale `true` → panel re-appears. **Reviewer escalated to "required before Wave 10 start"**. | **Fixed** by orchestrator: imported `hidePreview` + called inside `clearPerReciterState`. Pattern matches Wave 9's `data.ts::clearSegDisplay` fix (commit `3d48174`). |
+| NB-2 | `data.ts::onSegReciterChange` (line 165-166) mirrors `segAllData` but doesn't `segData.set(null)` at top — already handled by `clearSegDisplay` call at line 108. Not a bug; flag for Wave 10 audit of dual code-paths. | Carry-forward to Wave 10. |
+
+**Validated:** §6.3 conformity (all 11 sections), S2-B05 fix correctness (3 sites; fire-once-signal reasoning sound; bugs.md row in Section 5 with literal SHA), clearSegDisplay store-desync (segAllData.set(null) + segData.set(null) + post-success notify), B1-class audit (no Svelte-root clobbers), save store shape (minimal `writable<boolean>` per S2-D11), state.segStatsData drop (zero live refs), Wave 8b NB-3 carry, segValidation auto-fix asymmetry N/A (save calls refreshValidation post-server), patterns #1-#8, D2 + S2-B07 greps clean, runtime flow trace clean post-NB-1-fix.
+
+### Orchestrator disposition
+
+- NB-1 fixed inline (2 source edits to SegmentsTab.svelte: `hidePreview` import + call). Within trip-wire budget.
+- NB-2 + Wave 8b NB-3 (`refreshStats()` error-clear) carry-forward to Wave 10.
+- **STOP-POINT 2 reached** per plan §9. Wave 9 CLOSED. User approval requested before Wave 10 (history view); plan §9 also requires "Pre-Wave-10 revisits the Wave 0.5 exploration findings to confirm Wave 10 sub-wave sizing."
+
+---
+
+**END WAVE 9 HANDOFF.**
