@@ -25,6 +25,8 @@ Each row records: wave, agent ID (from tool result), model, role, input tokens, 
 
 | 3 | _(self-reported)_ | sonnet 4.6 / Task | Implementation-Wave-3 | ~150k in (est.) | ~120k out (est.) | ~single session | ~70 tool calls (read/edit/write/bash/advisor) | Delivered all 8 items: CSS migration map (`6c073b8`); Svelte 4 toolchain install (`ab572eb`); build config — svelte.config.js + vite + tsconfig + eslint (`4902763`); `shared/` → `lib/api + lib/utils` migration with all import paths updated (`cecf6ea`); `App.svelte` tab router + `main.ts` Svelte mount (`c4fe04f`); 6 components — Button, SpeedControl, AccordionPanel, ValidationBadge, WaveformCanvas + waveform-draw.ts, SearchableSelect (`04ea249..c62a93f`). All 7/7 pre-flight gates green at exit; cycle count 23 = ceiling. Surprises: `export interface` not allowed in Svelte 4 script; `@tsconfig/svelte` not used as extends (conflicting strict flags); import sort fixups after path migration. |
 
+| 3-followup | _(self-reported)_ | sonnet 4.6 / Task | Post-review dedup refinements | ~80k in (est.) | ~30k out (est.) | ~single session | ~35 tool calls (read/write/edit/bash/advisor) | 3 additive items per user feedback on Wave 3 reviewer findings: keyboard-guard helper (`3113a99`), AudioElement.svelte primitive (`d89a9ab`), WaveformCanvas sub-ranging + reactive resize (`88291ba`). 4 commits total (3 items + handoff). All 7/7 pre-flight gates green; cycle count 23 = ceiling unchanged. |
+
 _Process note: token totals from agent results are not always exposed to the orchestrator; estimate from output length where exact count is unavailable._
 
 ---

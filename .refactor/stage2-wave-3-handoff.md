@@ -216,3 +216,30 @@ c62a93f feat(inspector): lib/components/SearchableSelect.svelte (component repla
 ---
 
 **END WAVE 3 HANDOFF.**
+
+---
+
+## Wave-3 follow-up (post-review refinements, 2026-04-14)
+
+Three dedup refinements from user feedback on Wave 3 reviewer findings.
+All additive + back-compat with Wave 3 deliverables.
+
+- `lib/utils/keyboard-guard.ts` — `shouldHandleKey(e, tab)` helper; consumed
+  by segments/keyboard.ts + timestamps/keyboard.ts now (Stage-1 tabs adopt
+  the helper pre-Svelte so Wave 4/5 don't re-swap). Also adds `isContentEditable`
+  check (enhancement over original INPUT/TEXTAREA-only guards — documented in
+  commit message). SHA: `3113a9970103a6e8efb46d31db818ef6ffda6927`
+- `lib/components/AudioElement.svelte` — minimal `<audio>` primitive with
+  10 standard forwarded events + safePlay() wrapper + exposed play()/pause()
+  methods. Provisioned for Waves 4/5/11 consumption. No existing consumers
+  swapped. SHA: `d89a9ab709a7890151ad56eccf909757256de5ec`
+- `WaveformCanvas.svelte` + `waveform-draw.ts` — added optional `startMs` /
+  `endMs` / `totalDurationMs` props for time-range sub-drawing; reactive
+  trigger now includes width/height for resize support. `drawWaveformPeaks`
+  signature changed from positional `(ctx, peaks, w, h)` to opts-object
+  `DrawWaveformOptions`. Back-compat: consumers without sub-range props draw
+  full array as before. SHA: `88291ba48075d8c77a914cce380dc8d4c7a1f46f`
+
+Decisions: S2-D30 (audio primitive), S2-D31 (keyboard guard), S2-D32
+(waveform sub-ranging). All 7 pre-flight gates green. Cycle ceiling 23
+unchanged.
