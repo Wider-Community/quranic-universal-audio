@@ -2,6 +2,9 @@
  * Audio playback, animation, highlight tracking, and play status.
  */
 
+import { get } from 'svelte/store';
+
+import { selectedChapter } from '../../lib/stores/segments/chapter';
 import { createAnimationLoop } from '../../lib/utils/animation';
 import { audioSrcMatches,safePlay } from '../../lib/utils/audio';
 import { getSegByChapterIndex } from '../data';
@@ -21,7 +24,9 @@ export function playFromSegment(
     if (!state.segAllData) return;
     stopErrorCardAudio();
     state._activeAudioSource = 'main';
-    const chapter = chapterOverride ?? (dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : null);
+    // Wave 5 CF-1: use get(selectedChapter) — O(1) vs shim's O(subscriber-count).
+    const _chStr = get(selectedChapter);
+    const chapter = chapterOverride ?? (_chStr ? parseInt(_chStr) : null);
     const seg = chapter != null
         ? getSegByChapterIndex(chapter, segIndex)
         : (state.segDisplayedSegments ? state.segDisplayedSegments.find(s => s.index === segIndex) : null);
@@ -44,7 +49,7 @@ export function playFromSegment(
     _prefetchNextSegAudio(segIndex);
 
     // Fetch waveform peaks on-demand via ffmpeg HTTP Range (brief delay expected).
-    const chapterForPeaks = chapter ?? parseInt(dom.segChapterSelect.value);
+    const chapterForPeaks = chapter ?? parseInt(get(selectedChapter));
     void _fetchPeaksForClick(seg, chapterForPeaks);
 }
 
@@ -173,7 +178,7 @@ export function onSegTimeUpdate(): void {
             // playFromSegment, so peaks would otherwise never load here).
             const curSeg = state.segDisplayedSegments?.find(s => s.index === state.segCurrentIdx);
             if (curSeg) {
-                const chapterForPeaks = curSeg.chapter ?? (dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : 0);
+                const chapterForPeaks = curSeg.chapter ?? (get(selectedChapter) ? parseInt(get(selectedChapter)) : 0);
                 if (chapterForPeaks) void _fetchPeaksForClick(curSeg, chapterForPeaks);
             }
         }
@@ -266,9 +271,11 @@ export function updateSegHighlight(): void {
 }
 
 export function drawActivePlayhead(): void {
-    if (!state.segAllData || !dom.segChapterSelect.value) return;
+    // Wave 5 CF-1: get(selectedChapter) is O(1); shim .value is O(subscriber-count).
+    const _chStr = get(selectedChapter);
+    if (!state.segAllData || !_chStr) return;
     if (state.segEditMode && state.segCurrentIdx === state.segEditIndex) return;
-    const chapter = parseInt(dom.segChapterSelect.value);
+    const chapter = parseInt(_chStr);
     const time = dom.segAudioEl.currentTime * 1000;
 
     const indexChanged = state._prevPlayheadIdx !== state.segCurrentIdx;
@@ -308,8 +315,9 @@ export function drawActivePlayhead(): void {
 }
 
 export function updateSegPlayStatus(): void {
-    if (state.segCurrentIdx >= 0 && state.segAllData && dom.segChapterSelect.value) {
-        const chapter = parseInt(dom.segChapterSelect.value);
+    const _chStr = get(selectedChapter);
+    if (state.segCurrentIdx >= 0 && state.segAllData && _chStr) {
+        const chapter = parseInt(_chStr);
         const seg = getSegByChapterIndex(chapter, state.segCurrentIdx);
         if (seg) {
             dom.segPlayStatus.textContent = `Segment #${seg.index} -- ${formatTimeMs(dom.segAudioEl.currentTime * 1000)}`;
