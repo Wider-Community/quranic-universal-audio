@@ -176,7 +176,31 @@ No new OPEN bugs introduced.
 
 ## 6. Review findings + disposition
 
-*Reviewer appends here per plan §6.3.*
+### Sonnet (pattern review) — **APPROVE**
+
+No blockers. 2 non-blockers + 4 Wave-7 carry-forwards.
+
+**Non-blockers:**
+
+| ID | Item | Disposition |
+|---|---|---|
+| NB-1 | S2-B04 fix-SHA in `stage2-bugs.md` Section 5 said "(Wave 6b commit 3)" rather than literal `01468fd`. (Same gap on S2-B01 row, legacy "(commit below)" placeholder.) | **Fixed** by orchestrator — both rows now carry literal SHAs (`10a251c` for S2-B01, `01468fd` for S2-B04). |
+| NB-2 | `segments/edit/trim.ts:71` + `segments/edit/split.ts:85` read `state.segPeaksByAudio?.[audioUrl]?.duration_ms` directly (raw URL, not normalized). Backwards-compat sync in `_fetchPeaks` keeps the dict populated so no functional regression today, but Wave 7 must audit these call sites when it adopts edit-mode Svelte conversion. | Carry-forward to Wave 7. |
+
+**Wave 7 carry-forwards:**
+
+1. `segments/waveform/draw.ts::drawWaveformFromPeaksForSeg` (line 47, 60fps hot path) still reads `state.segPeaksByAudio` directly. Prioritize migration in Wave 7 since it's the most-called function.
+2. 2 `edit/` call sites (trim.ts:71, split.ts:85) read `state.segPeaksByAudio` raw — migrate during Wave 7a edit-store rewrite.
+3. `SegmentWaveformCanvas.svelte` `getCanvas()` exposed + `data-seg-index`/`data-seg-chapter` on wrapper `<div>` — Wave 7 must look up the canvas from within the `<div>` (observer observes `canvas[data-needs-waveform]`).
+4. `state.segPeaksByAudio` dual-write coexists (raw + normalized both populated for by_surah); safe but will sunset when Wave 7 fully migrates.
+
+**Validated:** §6.3 conformity, pattern #1/#5/#8 (waveform-cache = plain `Map` not `writable(new Map())`, 60fps hybrid preserved), S2-B04 fix correctness (normalize regex idempotent, handles missing `?url=` edge case), Wave 5 CF-1 migration (5 hot-path reads migrated in `playback/index.ts`; grep confirms zero remaining; ~30 non-hot-path reads intentionally on shim), S2-B07 grep (zero module-top DOM access), gates 7/7 + svelte-check 0/0.
+
+### Orchestrator disposition
+
+- NB-1 fixed inline (2 bug rows' fix-SHAs now literal).
+- NB-2 + 4 Wave-7 carry-forwards logged.
+- No blockers; Wave 6 (6a + 6b) is **CLOSED**. Proceed to Wave 7 autonomously.
 
 ---
 
