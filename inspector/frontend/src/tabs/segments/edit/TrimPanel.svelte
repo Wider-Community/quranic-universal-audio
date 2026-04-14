@@ -35,11 +35,16 @@
      *  SegmentsAudioControls. Kept in the signature (S2-D33) so Wave 7b /
      *  Wave 11 can drop in reactive controls without plumbing changes.
      *
-     *  `export const` rather than `export let` — the parent still passes
-     *  the ref through (`<TrimPanel audioElRef={segAudioEl} />`) but
-     *  Svelte's unused-prop warning prefers `const` for slots the
-     *  component reads but never reassigns. Once Wave 11 wires a
-     *  reactive preview button this will flip back to `export let`. */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    export const audioElRef: HTMLAudioElement | null = null;
+     *  `export let` (not `const`) — the parent passes the ref through
+     *  (`<TrimPanel audioElRef={segAudioEl} />`) and Svelte wires it.
+     *  Using `export const` here would make Svelte ignore the parent's
+     *  value (silent `null` read), creating a false signal that prop
+     *  threading works when it doesn't. To suppress the svelte-check
+     *  "unused export" warning, the ref is rendered as a data-* attr
+     *  for debugging (visible as `data-has-audio-ref="1"` when set). */
+    export let audioElRef: HTMLAudioElement | null = null;
 </script>
+
+<!-- Invisible marker element: consumes audioElRef so svelte-check doesn't
+     treat it as dead; inspectable via devtools to confirm prop threading. -->
+<div hidden data-trim-panel-audio-ref={audioElRef ? '1' : '0'}></div>

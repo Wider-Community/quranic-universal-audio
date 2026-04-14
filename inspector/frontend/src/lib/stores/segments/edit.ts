@@ -15,11 +15,25 @@
  * Stage-1; future Wave-7 refinements can drop that imperative line once
  * the panels render exclusively via the store.
  *
+ * Wave 7a.2 status (2026-04-14): wired from enterTrimMode / enterSplitMode
+ * (setEdit) and exitEditMode / clearSegDisplay / clearPerReciterState
+ * (clearEdit). EditOverlay.svelte subscribes to `editMode`.
+ *
+ * Wave 7b shape sufficiency: merge / delete / reference-edit each operate
+ * on at most one primary segment resolvable by UID. Merge's target-adjacent
+ * is derived at call time from segment index + direction ('prev' | 'next');
+ * delete and reference take a single UID. The existing `editingSegUid:
+ * string | null` shape covers all three — no `editingSegs: Segment[]`
+ * extension needed. If Wave 7b surfaces a multi-select edit operation
+ * (e.g. bulk ignore / bulk confidence-set), extend then.
+ *
  * Provisional shape per S2-D11 (store granularity may evolve through Wave 9).
  */
 
 import { writable } from 'svelte/store';
 
+/** Edit modes supported by the Segments tab. Extended in Wave 7b with
+ *  'merge' | 'delete' | 'reference' once those panels land. */
 export type SegEditMode = 'trim' | 'split' | null;
 
 /** Active edit mode for the segments tab. `null` = no edit in progress. */

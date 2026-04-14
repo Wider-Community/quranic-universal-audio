@@ -32,10 +32,10 @@
      */
 
     /** Audio element ref from SegmentsAudioControls — reserved for future
-     *  Svelte-native preview controls. See TrimPanel for rationale.
-     *
-     *  `export const` rather than `export let` — flips back to `let`
-     *  when Wave 7b / Wave 11 lands reactive preview controls. */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    export const audioElRef: HTMLAudioElement | null = null;
+     *  Svelte-native preview controls. See TrimPanel for rationale. */
+    export let audioElRef: HTMLAudioElement | null = null;
 </script>
+
+<!-- Invisible marker element: consumes audioElRef so svelte-check doesn't
+     treat it as dead; inspectable via devtools to confirm prop threading. -->
+<div hidden data-split-panel-audio-ref={audioElRef ? '1' : '0'}></div>
