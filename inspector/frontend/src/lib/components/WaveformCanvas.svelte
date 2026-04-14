@@ -24,15 +24,32 @@
     /** Optional inline style string forwarded to the <canvas> element. */
     export let style = '';
 
+    /**
+     * Sub-range start in milliseconds. When startMs, endMs, and
+     * totalDurationMs are all provided, only that time slice of peaks
+     * is rendered. Omit all three to draw the full array (Wave 3 behaviour).
+     */
+    export let startMs: number | undefined = undefined;
+    /** Sub-range end in milliseconds. See startMs. */
+    export let endMs: number | undefined = undefined;
+    /**
+     * Total duration that the full peaks array covers, in milliseconds.
+     * Required when startMs/endMs are set. See startMs.
+     */
+    export let totalDurationMs: number | undefined = undefined;
+
     let canvas: HTMLCanvasElement;
 
-    $: if (canvas && peaks) redraw(peaks);
+    // Reactive trigger includes all drawing inputs so resize + sub-range
+    // changes both cause a redraw.
+    $: if (canvas && peaks && (width, height, startMs, endMs, totalDurationMs)) redraw();
     $: if (canvas && !peaks) clearCanvas();
 
-    function redraw(p: PeakBucket[]): void {
+    function redraw(): void {
+        if (!canvas || !peaks) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        drawWaveformPeaks(ctx, p, canvas.width, canvas.height);
+        drawWaveformPeaks(ctx, peaks, { width: canvas.width, height: canvas.height, startMs, endMs, totalDurationMs });
     }
 
     function clearCanvas(): void {
@@ -43,7 +60,7 @@
     }
 
     onMount(() => {
-        if (peaks) redraw(peaks);
+        if (peaks) redraw();
         else clearCanvas();
     });
 

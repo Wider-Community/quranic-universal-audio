@@ -7,25 +7,65 @@
 import type { PeakBucket } from '../../types/domain';
 
 /**
+ * Options for drawWaveformPeaks().
+ *
+ * Sub-ranging: when startMs, endMs, and totalDurationMs are all provided,
+ * only the corresponding slice of the peaks array is drawn. This lets
+ * consumers pass a full chapter-wide peaks array and render just one
+ * segment's time range (used by Wave 6 per-row waveforms + Wave 10 history
+ * diff thumbnails). When any of the three are absent, the full array is drawn.
+ */
+export interface DrawWaveformOptions {
+    /** Canvas width in pixels. */
+    width: number;
+    /** Canvas height in pixels. */
+    height: number;
+    /**
+     * Start of the time range to draw, in milliseconds.
+     * Must be provided together with endMs and totalDurationMs.
+     */
+    startMs?: number;
+    /**
+     * End of the time range to draw, in milliseconds.
+     * Must be provided together with startMs and totalDurationMs.
+     */
+    endMs?: number;
+    /**
+     * Total audio duration in milliseconds (i.e. the duration the full
+     * peaks array covers). Must be provided together with startMs and endMs.
+     */
+    totalDurationMs?: number;
+}
+
+/**
  * Draw a peak-based waveform onto the given canvas context.
  *
- * @param ctx    - 2D canvas rendering context (canvas must be sized already)
- * @param peaks  - Array of [min, max] amplitude buckets (values in [-1, 1])
- * @param width  - Canvas width in pixels
- * @param height - Canvas height in pixels
+ * @param ctx   - 2D canvas rendering context (canvas must already be sized)
+ * @param peaks - Array of [min, max] amplitude buckets (values in [-1, 1])
+ * @param opts  - Drawing options (see DrawWaveformOptions)
  */
 export function drawWaveformPeaks(
     ctx: CanvasRenderingContext2D,
     peaks: PeakBucket[],
-    width: number,
-    height: number,
+    opts: DrawWaveformOptions,
 ): void {
+    const { width, height, startMs, endMs, totalDurationMs } = opts;
     const centerY = height / 2;
 
     ctx.fillStyle = '#0f0f23';
     ctx.fillRect(0, 0, width, height);
 
     if (!peaks || peaks.length === 0) return;
+
+    // Apply sub-range slicing when all three range params are present.
+    let drawPeaks = peaks;
+    if (startMs !== undefined && endMs !== undefined && totalDurationMs !== undefined && totalDurationMs > 0) {
+        const i0 = Math.floor(peaks.length * startMs / totalDurationMs);
+        const i1 = Math.ceil(peaks.length * endMs / totalDurationMs);
+        drawPeaks = peaks.slice(i0, i1);
+    }
+
+    if (drawPeaks.length === 0) return;
 
     const buckets = width;
     const scale = (height / 2) * 0.9;
@@ -42,13 +82,13 @@ export function drawWaveformPeaks(
     ctx.beginPath();
     for (let i = 0; i < buckets; i++) {
         const x = (i / buckets) * width;
-        const maxVal = sampleAt(peaks, i, 1);
+        const maxVal = sampleAt(drawPeaks, i, 1);
         const y = centerY - maxVal * scale;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     for (let i = buckets - 1; i >= 0; i--) {
         const x = (i / buckets) * width;
-        const minVal = sampleAt(peaks, i, 0);
+        const minVal = sampleAt(drawPeaks, i, 0);
         const y = centerY - minVal * scale;
         ctx.lineTo(x, y);
     }
@@ -62,7 +102,7 @@ export function drawWaveformPeaks(
     ctx.beginPath();
     for (let i = 0; i < buckets; i++) {
         const x = (i / buckets) * width;
-        const maxVal = sampleAt(peaks, i, 1);
+        const maxVal = sampleAt(drawPeaks, i, 1);
         const y = centerY - maxVal * scale;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
