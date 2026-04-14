@@ -10,8 +10,6 @@
      * `fullscreenDist` + `fullscreenCfg`; ChartFullscreen.svelte renders
      * the overlay.
      */
-    import { get } from 'svelte/store';
-
     import { segStats } from '../../lib/stores/segments/stats';
     import { selectedReciter } from '../../lib/stores/segments/chapter';
     import type { Distribution, ChartCfg } from './stats-types';
@@ -37,8 +35,7 @@
     // ---------------------------------------------------------------------------
 
     $: data = $segStats;
-    $: reciter = get(selectedReciter);
-    $: { void $selectedReciter; reciter = $selectedReciter; }
+    $: reciter = $selectedReciter;
 
     $: charts = data
         ? buildCharts(data.vad_params ?? { min_silence_ms: 300 })
@@ -85,7 +82,7 @@
 </script>
 
 {#if data}
-    <details class="seg-stats-panel" open={false}>
+    <details class="seg-stats-panel">
         <summary class="seg-stats-summary">Segmentation Statistics</summary>
         <div class="seg-stats-charts">
             {#each charts as cfg (cfg.key)}

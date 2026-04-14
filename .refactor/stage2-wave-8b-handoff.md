@@ -296,4 +296,38 @@ Deleted:
 
 ---
 
+## 12. Review findings + disposition
+
+### Sonnet (pattern review) — **APPROVE-WITH-CHANGES**
+
+**Blocker:**
+
+| ID | Item | Disposition |
+|---|---|---|
+| B1 | `StatsChart.svelte:43-46` — `onMount(() => buildChart())` AND reactive `$: if (canvasEl && dist) buildChart()` both fire on initial render. Result: Chart instantiated → destroyed → re-instantiated on every mount (wasteful; flicker risk on slow devices). | **Fixed** by orchestrator: removed redundant `onMount` call (reactive statement runs after `bind:this` populates `canvasEl`); pruned `onMount` import. |
+
+**Non-blockers (all fixed inline):**
+
+| ID | Item | Disposition |
+|---|---|---|
+| NB-1 | `StatsPanel.svelte:13,40` redundant `import { get }` + `$: reciter = get(selectedReciter)` line (the next `$:` does the right thing reactively). | **Fixed**: removed `get` import + collapsed two `$:` blocks into single `$: reciter = $selectedReciter`. |
+| NB-2 | `StatsPanel.svelte:85` `<details ... open={false}>` may not actually close in Svelte 4 (boolean-attr serialization). | **Fixed**: removed the attribute (default = closed). |
+| NB-3 | Error path (`statsResult.value.error` truthy) skips `setStats`, leaves prior `$segStats` value. Safe today (clearStats fires earlier on reciter switch); document for Wave 9 `refreshStats()` path. | Carry-forward: Wave 9 `refreshStats()` should explicitly clear on error or set sentinel. |
+
+**Observations / Wave 9-11 carry-forwards:**
+- O1: `drawBarChart` ~120 LOC duplicated between StatsChart + ChartFullscreen — Wave 11 `lib/utils/stats-chart-draw.ts` extraction.
+- O2: `state.segStatsData` field still in state.ts; bridge in SegmentsTab. Wave 9 can drop both.
+- O3: ChartFullscreen `<svelte:window on:keydown>` Escape handling validated safe.
+- O4: `requestAnimationFrame` wrap in ChartFullscreen's `new Chart()` validated correct (waits for layout).
+
+**Validated:** §6.3 conformity (12 sections present), B1-parallel audit (zero `segStatsPanel`/`segStatsCharts` live refs; one comment-only hit), patterns #1/#4/#5/#8, segments/stats.ts deletion safe (zero live callers for `renderStatsPanel`/`drawBarChart`/`_openChartFullscreen`), cycle ceiling 14/16 ratchet sound, D2 + S2-B07 greps clean, runtime flows traced (incl. save→re-hydrate path — stats not invalidated by save per Stage-1 parity).
+
+### Orchestrator disposition
+
+- B1 + NB-1 + NB-2 fixed inline (3 source edits to StatsChart.svelte + StatsPanel.svelte). NB-3 carry-forward to Wave 9 `refreshStats()` design.
+- O1-O4 logged for Wave 9-11.
+- **Wave 8 (8a + 8b) CLOSED.** Proceed to Wave 9 (save + undo) autonomously.
+
+---
+
 **END WAVE 8b HANDOFF.**

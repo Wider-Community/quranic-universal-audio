@@ -11,7 +11,7 @@
      * Chart lifecycle: full destroy+rebuild on data change (mirrors Stage-1
      * behaviour). onDestroy cleans up the Chart instance.
      */
-    import { onDestroy, onMount } from 'svelte';
+    import { onDestroy } from 'svelte';
 
     import { fetchJson } from '../../lib/api';
     import { Chart } from '../../lib/utils/chart';
@@ -39,10 +39,10 @@
         chartInstance = drawBarChart(canvasEl, dist, cfg) ?? null;
     }
 
-    // Rebuild when mounted.
-    onMount(() => { buildChart(); });
-
-    // Rebuild when dist or cfg changes after mount (e.g. store re-hydrate).
+    // Rebuild when canvas binds (mount) and on every dist/cfg change. The
+    // reactive statement runs once during initial render after `bind:this`
+    // populates `canvasEl`, so a separate `onMount(buildChart)` would
+    // double-fire (build → destroy → rebuild). Reactive-only is sufficient.
     $: if (canvasEl && dist) { buildChart(); }
 
     onDestroy(() => {
