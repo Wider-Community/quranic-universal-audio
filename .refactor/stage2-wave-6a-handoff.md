@@ -20,6 +20,28 @@
 
 ---
 
+## Review findings + disposition
+
+### Sonnet (pattern review) — **APPROVE**
+
+Clean, minimal, correct. No blockers.
+
+**Non-blockers:**
+
+| ID | Item | Disposition |
+|---|---|---|
+| NB-1 | `autoPlayBtn.className = autoPlayClass` at line 88 was a dead write — Svelte's `class={autoPlayClass}` on the template already applies the correct class during initial render before `onMount` fires. | **Fixed** by orchestrator post-review (1-line delete). |
+| NB-2 | `state._segContinuousPlay = next` in `handleAutoPlayToggle` can disable continuous-play mid-session (pre-existing Stage-1 behaviour preserved, not introduced). | Carry-forward note only — Wave 6b/7 awareness. |
+
+**Validated:** §6.3 conformity, pattern notes #1-#8, S2-B07 grep (zero module-top DOM access), 5 runtime flow traces (play-click, auto-play toggle, ended→next-seg, timeupdate animation, speed change), 7/7 gates green, svelte-check 0/0. S2-D30 non-adoption reasoning sound (imperative bridge needs raw DOM; AudioElement.element() would be identical with dispatch overhead; Wave 11 revisits). S2-D33 `createPlaybackStore()` non-factoring correct (timestamps 3 reactive fields vs segments 10-field imperative hot-path; factory would be net-negative). S2-D34 softened deferral of `loadSegReciters/onSegReciterChange` justified (callers need ~60 LOC panel re-render, not just `selectedReciter.set()` — Wave 9/10 is right landing).
+
+### Orchestrator disposition
+
+- NB-1 fixed inline. NB-2 recorded for Wave 6b/7 awareness.
+- No blockers; proceed to Wave 6b autonomously.
+
+---
+
 ## 1. Scope delivered
 
 ### 1.1 Store (1 file, ~34 LOC)

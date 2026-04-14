@@ -85,7 +85,6 @@
         // and we mirror into state.* here so playback/index.ts sees a consistent
         // value on first play).
         state._segAutoPlayEnabled = get(autoPlayEnabled);
-        autoPlayBtn.className = autoPlayClass;
 
         // Wire the 4 audio lifecycle listeners (moved from segments/index.ts
         // lines 132-135).
