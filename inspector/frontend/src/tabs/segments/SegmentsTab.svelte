@@ -85,6 +85,7 @@
     import SegmentsList from './SegmentsList.svelte';
     import SegmentsAudioControls from './SegmentsAudioControls.svelte';
     import StatsPanel from './StatsPanel.svelte';
+    import SavePreview from './save/SavePreview.svelte';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
     // EditOverlay uses this (S2-D33) instead of document.getElementById.
@@ -598,15 +599,9 @@
         <div id="seg-history-batches" class="seg-history-batches"></div>
     </div>
 
-    <div id="seg-save-preview" class="seg-history-view" hidden>
-        <div class="seg-history-toolbar seg-save-preview-toolbar">
-            <button id="seg-save-preview-cancel" class="btn">&larr; Cancel</button>
-            <span class="seg-history-title">Review Changes</span>
-            <button id="seg-save-preview-confirm" class="btn btn-save">Confirm Save</button>
-        </div>
-        <div id="seg-save-preview-stats" class="seg-history-stats"></div>
-        <div id="seg-save-preview-batches" class="seg-history-batches"></div>
-    </div>
+    <!-- Wave 9: SavePreview.svelte — visibility driven by $savePreviewVisible store.
+         IDs preserved inside component so mustGet() refs still resolve. -->
+    <SavePreview />
 
     <!-- Wave 8a.2: ValidationPanel.svelte replaces imperative renderValidationPanel.
          IDs seg-validation-global / seg-validation preserved so legacy dom.segValidation*El
