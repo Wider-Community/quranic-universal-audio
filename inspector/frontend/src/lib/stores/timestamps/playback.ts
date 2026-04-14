@@ -22,6 +22,3 @@ export const autoAdvancing = writable<boolean>(false);
 
 /** Audio element current time (seconds, absolute). Updated per animation frame. */
 export const currentTime = writable<number>(0);
-
-/** Playing state — derived from the AudioElement's play/pause events. */
-export const isPlaying = writable<boolean>(false);
