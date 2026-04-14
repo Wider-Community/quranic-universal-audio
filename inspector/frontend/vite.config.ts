@@ -1,3 +1,4 @@
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig({
   root: here,
   publicDir: 'public',
+  plugins: [svelte()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
