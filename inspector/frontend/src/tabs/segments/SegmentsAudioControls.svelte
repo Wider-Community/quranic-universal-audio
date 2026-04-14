@@ -42,7 +42,10 @@
 
     // Bind:this target — the audio element is assigned to dom.segAudioEl in
     // onMount so all imperative modules that read dom.segAudioEl keep working.
-    let audioEl: HTMLAudioElement;
+    // Also exposed to parent via `bind:audioEl` so EditOverlay / TrimPanel /
+    // SplitPanel can accept an `audioElRef` prop (S2-D33) instead of
+    // `document.getElementById('seg-audio-player')`.
+    export let audioEl: HTMLAudioElement | null = null;
     // Bind:this target for the play button — assigned to dom.segPlayBtn.
     let playBtn: HTMLButtonElement;
     // Bind:this target for the autoplay button — assigned to dom.segAutoPlayBtn.
@@ -74,8 +77,12 @@
     // -------------------------------------------------------------------------
 
     onMount(() => {
-        // Wire dom refs so imperative modules keep working.
-        dom.segAudioEl   = audioEl;
+        // `bind:this` assigns before onMount, so audioEl is non-null here.
+        // The `| null` in the export-prop type is only so the parent can
+        // declare the prop holder as `let segAudioEl: HTMLAudioElement | null
+        // = null;` pre-mount; once Svelte resolves the bind it's populated.
+        const el = audioEl!;
+        dom.segAudioEl   = el;
         dom.segPlayBtn   = playBtn;
         dom.segAutoPlayBtn = autoPlayBtn;
         dom.segPlayStatus  = playStatusEl;
@@ -88,17 +95,17 @@
 
         // Wire the 4 audio lifecycle listeners (moved from segments/index.ts
         // lines 132-135).
-        audioEl.addEventListener('play', startSegAnimation);
-        audioEl.addEventListener('pause', stopSegAnimation);
-        audioEl.addEventListener('ended', onSegAudioEnded);
-        audioEl.addEventListener('timeupdate', onSegTimeUpdate);
+        el.addEventListener('play', startSegAnimation);
+        el.addEventListener('pause', stopSegAnimation);
+        el.addEventListener('ended', onSegAudioEnded);
+        el.addEventListener('timeupdate', onSegTimeUpdate);
 
         return () => {
             // Cleanup on component destroy (tab hide / unmount).
-            audioEl.removeEventListener('play', startSegAnimation);
-            audioEl.removeEventListener('pause', stopSegAnimation);
-            audioEl.removeEventListener('ended', onSegAudioEnded);
-            audioEl.removeEventListener('timeupdate', onSegTimeUpdate);
+            el.removeEventListener('play', startSegAnimation);
+            el.removeEventListener('pause', stopSegAnimation);
+            el.removeEventListener('ended', onSegAudioEnded);
+            el.removeEventListener('timeupdate', onSegTimeUpdate);
             stopErrorCardAudio();
         };
     });

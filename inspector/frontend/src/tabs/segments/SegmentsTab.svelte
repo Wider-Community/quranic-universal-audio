@@ -83,9 +83,14 @@
         SegValidateResponse,
     } from '../../types/api';
     import type { Segment } from '../../types/domain';
+    import EditOverlay from './edit/EditOverlay.svelte';
     import FiltersBar from './FiltersBar.svelte';
     import SegmentsList from './SegmentsList.svelte';
     import SegmentsAudioControls from './SegmentsAudioControls.svelte';
+
+    // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
+    // EditOverlay uses this (S2-D33) instead of document.getElementById.
+    let segAudioEl: HTMLAudioElement | null = null;
 
     // ---- Derived UI state ----
     interface GroupedReciters {
@@ -635,7 +640,9 @@
 
     <FiltersBar hidden={filterBarHidden} />
 
-    <SegmentsAudioControls />
+    <SegmentsAudioControls bind:audioEl={segAudioEl} />
 
     <SegmentsList onRestore={onNavigationRestore} />
+
+    <EditOverlay audioElRef={segAudioEl} />
 </div>
