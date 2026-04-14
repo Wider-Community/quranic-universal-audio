@@ -3,6 +3,7 @@
  */
 
 import { fetchJson } from '../../lib/api';
+import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { stopSegAnimation } from '../playback/index';
@@ -24,6 +25,10 @@ export function startRefEdit(
 
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
     state._segContinuousPlay = false;
+
+    // Signal reference-edit mode so EditOverlay knows an inline edit is
+    // in progress. No backdrop shown for reference mode (see EditOverlay).
+    setEdit('reference', seg.segment_uid ?? null);
 
     state._pendingOp = createOp('edit_reference', contextCategory ? { contextCategory } : undefined);
     state._pendingOp.targets_before = [snapshotSeg(seg)];
@@ -58,6 +63,7 @@ export function startRefEdit(
             committed = true;
             state._pendingOp = null;
             state._splitChainUid = null; state._splitChainWrapper = null; state._splitChainCategory = null;
+            clearEdit();
             refSpan.textContent = formatRef(originalRef);
         }
     });
@@ -132,6 +138,7 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
             if (refSpan) refSpan.textContent = formatRef(oldRef);
         }
         _chainSplitRefEdit(chapter);
+        clearEdit();
         return;
     }
 
@@ -180,4 +187,5 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
     }
 
     _chainSplitRefEdit(chapter);
+    clearEdit();
 }

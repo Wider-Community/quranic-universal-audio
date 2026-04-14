@@ -3,6 +3,7 @@
  */
 
 import { fetchJson } from '../../lib/api';
+import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { getChapterSegments, syncChapterSegsToAll } from '../data';
@@ -41,13 +42,18 @@ export async function mergeAdjacent(
     const first = direction === 'prev' ? other : seg;
     const second = direction === 'prev' ? seg : other;
 
+    // Signal merge mode to EditOverlay (and future MergePanel).
+    // Placed after all pure guard checks so the store only reflects merge
+    // while we're actually committed to executing.
+    setEdit('merge', seg.segment_uid ?? null);
+
     const mergeOp = createOp('merge_segments', contextCategory ? { contextCategory } : undefined);
     mergeOp.merge_direction = direction;
     mergeOp.targets_before = [snapshotSeg(first), snapshotSeg(second)];
 
     const firstAudio = first.audio_url || '';
     const secondAudio = second.audio_url || '';
-    if (firstAudio !== secondAudio) return;
+    if (firstAudio !== secondAudio) { clearEdit(); return; }
 
     let mergedRef = '';
     const refs = [first.matched_ref, second.matched_ref].filter(Boolean);
@@ -138,5 +144,6 @@ export async function mergeAdjacent(
     }
 
     finalizeOp(chapter, mergeOp);
+    clearEdit();
     dom.segPlayStatus.textContent = 'Segments merged (unsaved)';
 }

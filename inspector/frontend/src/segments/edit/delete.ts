@@ -2,6 +2,7 @@
  * Delete segment operation.
  */
 
+import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
 import type { Segment } from '../../types/domain';
 import { getChapterSegments } from '../data';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
@@ -34,11 +35,14 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
 
     if (!confirm(`Delete segment ${label} (${formatRef(seg.matched_ref) || 'no match'})?`)) return;
 
+    // Signal delete mode to EditOverlay (confirmed — committed to executing).
+    setEdit('delete', seg.segment_uid ?? null);
+
     deleteOp.applied_at_utc = new Date().toISOString();
     deleteOp.targets_after = [];
 
     // Unified splice+reindex against segAllData (single source of truth).
-    if (!state.segAllData?.segments) return;
+    if (!state.segAllData?.segments) { clearEdit(); return; }
     const globalIdx = state.segAllData.segments.findIndex(s => s.chapter === chapter && s.index === seg.index);
     if (globalIdx === -1) return;
     state.segAllData.segments.splice(globalIdx, 1);
@@ -61,5 +65,6 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
     refreshOpenAccordionCards();
 
     finalizeOp(chapter, deleteOp);
+    clearEdit();
     dom.segPlayStatus.textContent = 'Segment deleted (unsaved)';
 }
