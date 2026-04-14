@@ -46,6 +46,7 @@
         displayedSegments,
     } from '../../lib/stores/segments/filters';
     import { clearEdit } from '../../lib/stores/segments/edit';
+    import { clearStats, segStats, setStats } from '../../lib/stores/segments/stats';
     import { clearValidation, segValidation, setValidation } from '../../lib/stores/segments/validation';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import { LS_KEYS } from '../../lib/utils/constants';
@@ -67,7 +68,6 @@
     import { stopSegAnimation } from '../../segments/playback/index';
     import { computeSilenceAfter } from '../../lib/stores/segments/filters';
     import { state } from '../../segments/state';
-    import { renderStatsPanel } from '../../segments/stats';
     import { _fetchChapterPeaksIfNeeded } from '../../segments/waveform/index';
     import ValidationPanel from './validation/ValidationPanel.svelte';
     import { clearWaveformCache } from '../../lib/utils/waveform-cache';
@@ -145,6 +145,7 @@
     $: state._segIndexMap = $segIndexMap;
     $: state._segSavedFilterView = $savedFilterView;
     $: state.segValidation = $segValidation; // Wave 8a: store → state bridge for imperative consumers
+    $: state.segStatsData = $segStats; // Wave 8b: store → state bridge
 
     // ---------------------------------------------------------------------
     // Config (CSS vars + edit-mode constants)
@@ -252,8 +253,8 @@
         }
 
         if (statsResult.status === 'fulfilled') {
-            state.segStatsData = statsResult.value;
-            if (!state.segStatsData.error) renderStatsPanel(state.segStatsData);
+            // Wave 8b: StatsPanel.svelte renders reactively via $segStats store.
+            if (!statsResult.value.error) setStats(statsResult.value);
         } else {
             console.error('Error loading stats:', statsResult.reason);
         }
@@ -294,13 +295,8 @@
         // via $segValidation store; no imperative DOM clearing needed.
         clearValidation();
 
-        // Stats / history panels — imperative markup, reset by innerHTML clearing (Wave 8b / 10).
-
-        state.segStatsData = null;
-        const statsPanel = document.getElementById('seg-stats-panel');
-        const statsCharts = document.getElementById('seg-stats-charts');
-        if (statsPanel) { (statsPanel as HTMLElement).hidden = true; statsPanel.removeAttribute('open'); }
-        if (statsCharts) statsCharts.innerHTML = '';
+        // Stats panel — Wave 8b: StatsPanel.svelte controls visibility via $segStats store.
+        clearStats();
 
         state.segHistoryData = null;
         state._allHistoryItems = null;

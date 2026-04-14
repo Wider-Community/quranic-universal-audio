@@ -4,6 +4,7 @@
 
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
 import { clearEdit } from '../lib/stores/segments/edit';
+import { clearStats, setStats } from '../lib/stores/segments/stats';
 import { clearValidation, setValidation } from '../lib/stores/segments/validation';
 import { LS_KEYS } from '../lib/utils/constants';
 import { surahOptionText } from '../lib/utils/surah-info';
@@ -24,7 +25,6 @@ import { renderEditHistoryPanel } from './history/index';
 import { _fetchCacheStatus, _isCurrentReciterBySurah, _rewriteAudioUrls } from './playback/audio-cache';
 import { stopSegAnimation } from './playback/index';
 import { dom,state } from './state';
-import { renderStatsPanel } from './stats';
 // Wave 8a.2: captureValPanelState / renderValidationPanel / restoreValPanelState removed
 // (ValidationPanel.svelte renders reactively; no imperative render calls needed).
 import { _fetchChapterPeaksIfNeeded } from './waveform/index';
@@ -105,11 +105,9 @@ export async function onSegReciterChange(): Promise<void> {
     dom.segVerseSelect.innerHTML = '<option value="">All</option>';
     clearSegDisplay();
     state._segDataStale = false;
-    // Hide stats and history (validation owned by Svelte ValidationPanel via store)
+    // Hide stats and history (validation + stats owned by Svelte via stores)
     clearValidation();
-    dom.segStatsPanel.hidden = true;
-    dom.segStatsPanel.removeAttribute('open');
-    state.segStatsData = null;
+    clearStats();
     dom.segHistoryView.hidden = true;
     dom.segHistoryBtn.hidden = true;
     dom.segHistoryStats.innerHTML = '';
@@ -155,8 +153,8 @@ export async function onSegReciterChange(): Promise<void> {
     }
 
     if (statsResult.status === 'fulfilled') {
-        state.segStatsData = statsResult.value;
-        if (!state.segStatsData.error) renderStatsPanel(state.segStatsData);
+        // Wave 8b: StatsPanel.svelte renders reactively via $segStats store.
+        if (!statsResult.value.error) setStats(statsResult.value);
     } else {
         console.error('Error loading stats:', statsResult.reason);
     }
@@ -260,8 +258,7 @@ export function clearSegDisplay(): void {
     state.segEditMode = null;
     state.segEditIndex = -1;
     clearEdit();
-    state.segStatsData = null;
-    if (dom.segStatsPanel) { dom.segStatsPanel.hidden = true; dom.segStatsCharts.innerHTML = ''; }
+    clearStats(); // Wave 8b: StatsPanel.svelte controls visibility via $segStats store
     state.segHistoryData = null;
     state._allHistoryItems = null;
     state._splitChains = null;
