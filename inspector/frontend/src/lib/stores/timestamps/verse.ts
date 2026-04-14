@@ -3,14 +3,14 @@
  *
  * Wraps the Stage-1 `state.currentData`, `state.intervals`, `state.words`,
  * reciter list, chapter list, verse list, and selection indices. UI
- * components subscribe to derived `recitersOptions`, `chaptersOptions`,
- * `versesOptions` for the three SearchableSelect / native selects.
+ * components subscribe to `chaptersOptions` and `versesOptions` for the
+ * two SearchableSelect / native selects.
  */
 
 import { derived, writable } from 'svelte/store';
 
 import type { TsValidateResponse } from '../../../types/api';
-import type { PhonemeInterval, TsReciter, TsVerseData, TsWord } from '../../../types/domain';
+import type { TsReciter, TsVerseData } from '../../../types/domain';
 import type { SelectOption } from '../../types/ui';
 import { surahOptionText } from '../../utils/surah-info';
 
@@ -53,17 +53,12 @@ export const selectedVerse = writable<string>('');
 /** Currently-loaded verse data (null before first load). */
 export const loadedVerse = writable<TsLoadedVerse | null>(null);
 
-/** Phoneme intervals for the currently loaded verse (seconds-based). */
-export const intervals = derived<typeof loadedVerse, PhonemeInterval[]>(
-    loadedVerse,
-    ($lv) => $lv?.data.intervals ?? [],
-);
-
-/** Word list for the currently loaded verse. */
-export const words = derived<typeof loadedVerse, TsWord[]>(
-    loadedVerse,
-    ($lv) => $lv?.data.words ?? [],
-);
+// NOTE: `intervals` and `words` derived stores (pass-through reads of
+// $loadedVerse.data.intervals / .words) were removed in Wave 5 cleanup
+// per S2-D33: components compute these inline via `$loadedVerse` + `$:`
+// reactive statements as needed (UnifiedDisplay / AnimationDisplay).
+// Re-introducing the derived stores without any `$store` consumer would
+// be a tautological pass-through (S2-D33 anti-pattern).
 
 // ---------------------------------------------------------------------------
 // Validation data
@@ -76,13 +71,9 @@ export const validationData = writable<TsValidateResponse | null>(null);
 // Derived dropdown options
 // ---------------------------------------------------------------------------
 
-/**
- * Reciter select options grouped by audio_source.
- * The underlying HTML select in `TimestampsTab.svelte` renders <optgroup>s
- * manually from this list (grouped natively since the Wave-3 SearchableSelect
- * component doesn't wrap the reciter dropdown).
- */
-export const recitersOptions = derived<typeof reciters, TsReciter[]>(reciters, ($rs) => $rs);
+// NOTE: `recitersOptions` removed in Wave 5 cleanup per S2-D33 — TimestampsTab
+// reads `$reciters` directly to build its grouped-<optgroup> structure; an
+// identity-wrap derived store had zero value.
 
 /** Chapter select options (passed to SearchableSelect). */
 export const chaptersOptions = derived<typeof chapters, SelectOption[]>(chapters, ($cs) =>
