@@ -343,20 +343,16 @@
     function onChapterSelectChange(e: CustomEvent<string>): void {
         const v = e.detail;
         selectedChapter.set(v);
-        // onChapterChange is invoked via the reactive subscription below,
-        // so the same path runs for SearchableSelect changes AND for
-        // programmatic writes (e.g. dom.segChapterSelect.value = X shim).
+        onChapterChange(v);
     }
-
-    // Track selectedChapter changes and run the chapter-load flow once per
-    // actual value change. `lastHandledChapter` prevents double-runs during
-    // the initial reactivity cascade at mount.
-    let _hasMounted = false;
-    let lastHandledChapter: string | null = null;
-    $: if (_hasMounted && $selectedChapter !== lastHandledChapter) {
-        lastHandledChapter = $selectedChapter;
-        onChapterChange($selectedChapter);
-    }
+    // NOTE: imperative callers (navigation.jumpToSegment etc.) that set
+    // `dom.segChapterSelect.value = X` via the shim (which sets the
+    // selectedChapter store) AND then invoke the imperative
+    // onSegChapterChange() from segments/data.ts — they continue to work as
+    // before because data.ts reads state.* and writes to state.*. The
+    // Svelte bridge then mirrors into the stores. No reactive
+    // onChapterChange fires here — we intentionally do NOT subscribe to
+    // $selectedChapter to avoid double-fetching on those call paths.
 
     async function onChapterChange(chapter: string): Promise<void> {
         const reciter = get(selectedReciter);
@@ -462,8 +458,6 @@
     // ---------------------------------------------------------------------
 
     onMount(async () => {
-        _hasMounted = true;
-        lastHandledChapter = get(selectedChapter);
         await surahInfoReady;
         await loadSegConfig();
         await loadReciters();
