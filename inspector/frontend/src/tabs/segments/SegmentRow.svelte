@@ -32,6 +32,7 @@
     import { isIndexDirty } from '../../segments/state';
     import type {
         MergeHighlight,
+        SegCanvas,
         SplitHighlight,
         TrimHighlight,
     } from '../../segments/waveform/types';
@@ -62,9 +63,17 @@
     /** Fallback chapter when `seg.chapter` is null — only used for dirty lookup. */
     export let fallbackChapter: number = 0;
 
-    // These props intentionally unused in current waves (S2-D23 provisioning slots);
-    // referenced so strict unused-prop TS doesn't flag them.
-    $: if (splitHL || trimHL || mergeHL || changedFields) void 0;
+    // Wave 10: apply history-mode highlight descriptors to the underlying
+    // canvas element so the IntersectionObserver draw pipeline
+    // (segments/waveform/index.ts + draw.ts) can read them via the SegCanvas
+    // ad-hoc fields. `canvasEl` is bound below; these statements run after
+    // it is assigned and re-run when any prop changes.
+    $: if (canvasEl) {
+        const c = canvasEl as SegCanvas;
+        c._splitHL = splitHL ?? undefined;
+        c._trimHL = trimHL ?? undefined;
+        c._mergeHL = mergeHL ?? undefined;
+    }
 
     // Derived values
     $: chapterForDirty = seg.chapter ?? fallbackChapter;
@@ -90,6 +99,14 @@
         ? 'Cannot merge segments from different audio files'
         : '';
     $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
+    // Wave 10: history-mode changed-field markers. `changedFields` is an
+    // optional Set that lists which per-row text spans should receive the
+    // `seg-history-changed` CSS class (preserved verbatim from the
+    // imperative _highlightChanges impl in rendering.ts).
+    $: changedRef = !!changedFields?.has('ref');
+    $: changedDur = !!changedFields?.has('duration');
+    $: changedConf = !!changedFields?.has('conf');
+    $: changedBody = !!changedFields?.has('body');
     $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref) || '(alignment failed)';
     $: confText = seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL';
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
@@ -175,18 +192,18 @@
             <div class="seg-text-header">
                 <span class="seg-text-index">{indexLabel}</span>
                 <span class="seg-text-sep">|</span>
-                <span class="seg-text-ref">{formatRef(seg.matched_ref)}</span>
+                <span class="seg-text-ref" class:seg-history-changed={changedRef}>{formatRef(seg.matched_ref)}</span>
                 <span class="seg-text-sep">|</span>
-                <span class="seg-text-duration" title={durTitle}>{durSec.toFixed(1)}s</span>
+                <span class="seg-text-duration" class:seg-history-changed={changedDur} title={durTitle}>{durSec.toFixed(1)}s</span>
                 {#if showMissingTag}
                     <span class="seg-tag seg-tag-missing">Missing words</span>
                 {/if}
             </div>
-            <span class="seg-text-conf {confClass}">{confText}</span>
+            <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
             {#if contextLabel}
                 <div class="seg-text-label">{contextLabel}</div>
             {/if}
         </div>
-        <div class="seg-text-body">{bodyText}</div>
+        <div class="seg-text-body" class:seg-history-changed={changedBody}>{bodyText}</div>
     </div>
 </div>
