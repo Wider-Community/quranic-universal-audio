@@ -1,12 +1,17 @@
 /**
- * Segment card rendering -- renderSegCard, renderSegList, and card update helpers.
+ * Segment card rendering helpers.
+ *
+ * Wave 7: `renderSegList` is gone — SegmentsList.svelte renders #seg-list
+ * via {#each}. `renderSegCard` is retained because validation/error-cards.ts
+ * and history/rendering.ts still build cards imperatively inside accordion
+ * panels and the history view (read-only contexts that have not been
+ * Svelte-ified yet — Wave 8 + Wave 10 own those).
  */
 
 import type { Segment } from '../types/domain';
 import { getAdjacentSegments, getSegByChapterIndex } from './data';
 import { _addVerseMarkers,formatRef, formatTimeMs } from './references';
 import { dom, isIndexDirty,state } from './state';
-import { _ensureWaveformObserver } from './waveform/index';
 
 /** Options consumed by `renderSegCard`. */
 export interface RenderSegCardOptions {
@@ -210,62 +215,6 @@ export function renderSegCard(seg: Segment, options: RenderSegCardOptions = {}):
 
     row.appendChild(textBox);
     return row;
-}
-
-export function renderSegList(segments: Segment[] | null | undefined): void {
-    state._prevHighlightedRow = null; state._prevHighlightedIdx = -1;
-    state._currentPlayheadRow = null; state._prevPlayheadIdx = -1;
-    // Preserve Svelte-owned banner (rendered as first child of #seg-list by
-    // SegmentsList.svelte's <Navigation>). Clear only .seg-row /
-    // .seg-silence-gap-wrapper / .seg-loading / .seg-back-banner-EXISTING
-    // children — then append the fresh row fragment after the banner.
-    Array.from(dom.segListEl.children).forEach((child) => {
-        if ((child as Element).classList?.contains('seg-back-banner')) return;
-        child.remove();
-    });
-    if (!segments || segments.length === 0) {
-        const loading = document.createElement('div');
-        loading.className = 'seg-loading';
-        loading.textContent = 'No segments to display';
-        dom.segListEl.appendChild(loading);
-        return;
-    }
-
-    const missingWordSegIndices = new Set<number>();
-    if (state.segValidation && state.segValidation.missing_words) {
-        const chapter = parseInt(dom.segChapterSelect.value) || 0;
-        state.segValidation.missing_words.forEach((mw) => {
-            if (mw.chapter === chapter && mw.seg_indices) {
-                mw.seg_indices.forEach((idx) => missingWordSegIndices.add(idx));
-            }
-        });
-    }
-
-    const fragment = document.createDocumentFragment();
-    const observer = _ensureWaveformObserver();
-
-    segments.forEach((seg, displayIdx) => {
-        const row = renderSegCard(seg, { missingWordSegIndices });
-
-        if (seg._isNeighbour) row.classList.add('seg-neighbour');
-        fragment.appendChild(row);
-
-        if (seg.silence_after_ms != null) {
-            const nextDisplayed = segments[displayIdx + 1];
-            if (nextDisplayed && nextDisplayed.index === seg.index + 1) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'seg-silence-gap-wrapper';
-                const gapDiv = document.createElement('div');
-                gapDiv.className = 'seg-silence-gap';
-                gapDiv.textContent = `\u23F8 ${Math.round(seg.silence_after_ms)}ms (raw: ${Math.round(seg.silence_after_raw_ms ?? 0)}ms)`;
-                wrapper.appendChild(gapDiv);
-                fragment.appendChild(wrapper);
-            }
-        }
-    });
-
-    dom.segListEl.appendChild(fragment);
-    dom.segListEl.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach((c) => observer.observe(c));
 }
 
 /** Update a single .seg-row card in-place. */
