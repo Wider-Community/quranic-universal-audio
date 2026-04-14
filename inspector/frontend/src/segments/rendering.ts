@@ -215,9 +215,19 @@ export function renderSegCard(seg: Segment, options: RenderSegCardOptions = {}):
 export function renderSegList(segments: Segment[] | null | undefined): void {
     state._prevHighlightedRow = null; state._prevHighlightedIdx = -1;
     state._currentPlayheadRow = null; state._prevPlayheadIdx = -1;
-    dom.segListEl.innerHTML = '';
+    // Preserve Svelte-owned banner (rendered as first child of #seg-list by
+    // SegmentsList.svelte's <Navigation>). Clear only .seg-row /
+    // .seg-silence-gap-wrapper / .seg-loading / .seg-back-banner-EXISTING
+    // children — then append the fresh row fragment after the banner.
+    Array.from(dom.segListEl.children).forEach((child) => {
+        if ((child as Element).classList?.contains('seg-back-banner')) return;
+        child.remove();
+    });
     if (!segments || segments.length === 0) {
-        dom.segListEl.innerHTML = '<div class="seg-loading">No segments to display</div>';
+        const loading = document.createElement('div');
+        loading.className = 'seg-loading';
+        loading.textContent = 'No segments to display';
+        dom.segListEl.appendChild(loading);
         return;
     }
 

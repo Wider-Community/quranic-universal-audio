@@ -54,5 +54,10 @@
     });
 </script>
 
-<Navigation on:restore={() => onRestore && onRestore()} />
-<div id="seg-list" class="seg-list" bind:this={listEl}></div>
+<div id="seg-list" class="seg-list" bind:this={listEl}>
+    <!-- Navigation banner stays inside #seg-list so `.seg-back-banner`'s
+         `position: sticky` scopes to the list's scroll container. The
+         imperative renderSegList call path preserves this element — it
+         removes only non-banner children before appending fresh rows. -->
+    <Navigation on:restore={() => onRestore && onRestore()} />
+</div>
