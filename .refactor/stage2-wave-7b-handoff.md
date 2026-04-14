@@ -248,6 +248,24 @@ No new OPEN bugs. No previously logged bugs closed this wave.
    total (union, wiring, shells+overlay).
 6. **setEdit placement in mergeAdjacent** — placed after guards per advice.
 
+### Sonnet (pattern review) — **APPROVE-WITH-CHANGES**
+
+1 blocker (fixed) + 1 non-blocker (deferred).
+
+| ID | Item | Disposition |
+|---|---|---|
+| B1 | `segments/edit/delete.ts:47` — `if (globalIdx === -1) return;` missing `clearEdit()`. After `setEdit('delete', uid)` at line 39, this guard-fail path would leave the store frozen in `'delete'` mode with no escape. Practically unreachable (UID was just looked up from `segAllData`) but pattern invariant broken. | **Fixed** by orchestrator: `if (globalIdx === -1) { clearEdit(); return; }` |
+| NB-1 | `EditOverlay.svelte:57` outer `{#if $editMode !== null}` is redundant — inner branch cascade already handles null. | Wave 11 cleanup |
+
+**Validated:** §6.3 conformity, Wave 7a.2 prerequisite satisfied (`SegEditMode` union extended at `edit.ts:46`), shell pattern conformity (3 panels all ~34-41 LOC matching TrimPanel/SplitPanel precedent with `export let audioElRef` + hidden marker div), setEdit/clearEdit placement correct in merge + reference (merge.ts:48+56+147; reference.ts:31+66+141+190), **backdrop correctly scoped to trim/split only** (`EditOverlay.svelte:61`), D2 class-invariant grep clean (zero hits in `tabs/`), S2-D33 audio-el plumbing clean (zero `document.getElementById` in `edit/*.svelte` outside comments), S2-B07 grep clean, single-UID edit store shape sufficient (merge resolves adjacent at call time from index+direction), pattern notes #1-#8.
+
+### Orchestrator disposition
+
+- Blocker B1 fixed inline (1 line in `delete.ts:47`) — single-Edit, trip-wire budget preserved.
+- NB-1 deferred to Wave 11 cleanup.
+- **Wave 7 CLOSED** (7a.1 + 7a.2 + 7b all APPROVED).
+- Proceed to Wave 8 (validation + stats) autonomously per user pref #7.
+
 ---
 
 ## 7. Surprises / lessons

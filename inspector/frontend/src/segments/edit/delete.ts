@@ -44,7 +44,7 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
     // Unified splice+reindex against segAllData (single source of truth).
     if (!state.segAllData?.segments) { clearEdit(); return; }
     const globalIdx = state.segAllData.segments.findIndex(s => s.chapter === chapter && s.index === seg.index);
-    if (globalIdx === -1) return;
+    if (globalIdx === -1) { clearEdit(); return; }
     state.segAllData.segments.splice(globalIdx, 1);
     let idx = 0;
     state.segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
