@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS } from './lib/utils/constants';
+    import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
     let activeTab = getActiveTab();
 
@@ -50,111 +51,8 @@
     </header>
 
     <!-- ============ Timestamps Tab ============ -->
-    <div id="timestamps-panel" hidden={activeTab !== 'timestamps'}>
-        <div class="info-bar">
-            <label>Reciter:
-                <select id="ts-reciter-select"><option value="">Loading...</option></select>
-            </label>
-            <label>Chapter:
-                <select id="ts-chapter-select"><option value="">--</option></select>
-            </label>
-            <label>Verse:
-                <select id="ts-segment-select"><option value="">--</option></select>
-            </label>
-            <div class="ts-random-group">
-                <button id="random-btn" class="btn" title="Random verse from any reciter">🎲 Any Reciter</button>
-                <button id="random-reciter-btn" class="btn" title="Random verse from current reciter">🎲 Current Reciter</button>
-            </div>
-        </div>
-
-        <details class="shortcuts-guide">
-            <summary class="shortcuts-guide-summary">Shortcuts &amp; Guide</summary>
-            <div class="shortcuts-guide-body">
-                <div class="sg-col">
-                    <h4>Playback</h4>
-                    <dl>
-                        <dt>Space</dt><dd>Play / pause</dd>
-                        <dt>&larr; / &rarr;</dt><dd>Seek &plusmn;3 s</dd>
-                        <dt>&uarr; / &darr;</dt><dd>Jump to prev / next word boundary</dd>
-                        <dt>, / .</dt><dd>Slower / faster playback</dd>
-                    </dl>
-                </div>
-                <div class="sg-col">
-                    <h4>Navigation</h4>
-                    <dl>
-                        <dt>[ / ]</dt><dd>Prev / next verse</dd>
-                        <dt>R</dt><dd>Random verse (current reciter)</dd>
-                        <dt>Shift+R</dt><dd>Random verse (any reciter)</dd>
-                        <dt>J</dt><dd>Scroll active word into view</dd>
-                    </dl>
-                </div>
-                <div class="sg-col">
-                    <h4>Display</h4>
-                    <dl>
-                        <dt>A</dt><dd>Toggle Analysis / Animation view</dd>
-                        <dt>L</dt><dd>Toggle letters (analysis) or words mode (animation)</dd>
-                        <dt>P</dt><dd>Toggle phonemes (analysis) or letters mode (animation)</dd>
-                    </dl>
-                </div>
-                <div class="sg-col">
-                    <h4>Interactions</h4>
-                    <dl>
-                        <dt>Click word</dt><dd>Seek to that word's start time</dd>
-                        <dt>Click waveform</dt><dd>Seek to that position</dd>
-                        <dt>Auto Next / Random</dt><dd>Auto-advance when verse ends</dd>
-                    </dl>
-                </div>
-            </div>
-        </details>
-
-        <div id="ts-validation" class="seg-validation" hidden></div>
-
-        <main>
-            <!-- Audio controls -->
-            <div class="audio-controls">
-                <button id="ts-prev-btn" class="btn btn-nav" disabled title="Previous verse ([)">&#9664; Prev</button>
-                <audio id="audio-player" controls></audio>
-                <button id="ts-next-btn" class="btn btn-nav" disabled title="Next verse (])">Next &#9654;</button>
-                <label class="ts-speed-label">Speed:
-                    <select id="ts-speed-select">
-                        <option value="0.5">0.5x</option>
-                        <option value="0.75">0.75x</option>
-                        <option value="1" selected>1x</option>
-                        <option value="1.25">1.25x</option>
-                        <option value="1.5">1.5x</option>
-                        <option value="2">2x</option>
-                        <option value="3">3x</option>
-                        <option value="4">4x</option>
-                        <option value="5">5x</option>
-                    </select>
-                </label>
-            </div>
-
-            <div class="ts-view-controls">
-                <div class="ts-view-toggle">
-                    <button class="ts-view-btn active" data-view="analysis">Analysis</button>
-                    <button class="ts-view-btn" data-view="animation">Animation</button>
-                </div>
-                <div class="ts-mode-toggle" id="ts-mode-toggle">
-                    <button class="ts-mode-btn active" id="ts-mode-btn-a">Letters</button>
-                    <button class="ts-mode-btn" id="ts-mode-btn-b">Phonemes</button>
-                </div>
-                <div class="ts-auto-toggles">
-                    <button class="ts-auto-btn" id="ts-auto-next" title="Auto-advance to next verse">Auto Next</button>
-                    <button class="ts-auto-btn" id="ts-auto-random" title="Auto-load random verse (any reciter)">Auto Random</button>
-                </div>
-            </div>
-
-            <!-- Waveform + Words side-by-side -->
-            <div class="waveform-words-row">
-                <div class="visualization">
-                    <canvas id="waveform-canvas"></canvas>
-                    <div class="phoneme-labels" id="phoneme-labels"></div>
-                </div>
-                <div id="unified-display" class="unified-display" dir="rtl"></div>
-                <div id="animation-display" class="anim-window" hidden></div>
-            </div>
-        </main>
+    <div hidden={activeTab !== 'timestamps'}>
+        <TimestampsTab />
     </div>
 
     <!-- ============ Segments Tab ============ -->
