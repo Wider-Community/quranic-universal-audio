@@ -1,13 +1,26 @@
 /**
  * Waveform drawing functions -- peaks-based rendering, playhead, overlays.
+ *
+ * The low-level draw algorithm is now delegated to lib/utils/waveform-draw.ts
+ * (drawWaveformPeaks) which is the shared primitive used by both the Segments
+ * tab and the WaveformCanvas.svelte component. This file retains the
+ * segments-specific logic: SegCanvas cache management, state lookups,
+ * covering-peaks resolution, playhead draw, and overlay highlights.
  */
 
+import { drawWaveformPeaks } from '../../lib/utils/waveform-draw';
 import type { AudioPeaks, PeakBucket, Segment } from '../../types/domain';
 import { _findCoveringPeaks,state } from '../state';
 import type { SegCanvas } from './types';
 
 type Peaks = PeakBucket[];
 
+/**
+ * Draw a waveform from a full peaks array for a sub-range [startMs, endMs].
+ * Delegates the draw algorithm to lib/utils/waveform-draw.ts::drawWaveformPeaks,
+ * then clears the SegCanvas image-data cache so the next playhead draw
+ * picks up the fresh waveform.
+ */
 export function drawSegmentWaveformFromPeaks(
     canvas: SegCanvas,
     startMs: number,
@@ -17,59 +30,14 @@ export function drawSegmentWaveformFromPeaks(
 ): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const width = canvas.width;
-    const height = canvas.height;
-    const centerY = height / 2;
-
-    ctx.fillStyle = '#0f0f23';
-    ctx.fillRect(0, 0, width, height);
-
-    if (!peaks || peaks.length === 0 || totalDurationMs <= 0) return;
-
-    const startIdx = Math.floor((startMs / totalDurationMs) * peaks.length);
-    const endIdx = Math.ceil((endMs / totalDurationMs) * peaks.length);
-    const slice = peaks.slice(Math.max(0, startIdx), Math.min(peaks.length, endIdx));
-    if (slice.length === 0) return;
-
-    const buckets = width;
-    const scale = height / 2 * 0.9;
-
-    function sampleAt(arr: Peaks, idx: number, component: 0 | 1): number {
-        const fi = (idx / buckets) * (arr.length - 1);
-        const lo = Math.floor(fi);
-        const hi = Math.min(lo + 1, arr.length - 1);
-        const t = fi - lo;
-        return (arr[lo]?.[component] ?? 0) * (1 - t) + (arr[hi]?.[component] ?? 0) * t;
-    }
-
-    ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const x = (i / buckets) * width;
-        const maxVal = sampleAt(slice, i, 1);
-        const y = centerY - maxVal * scale;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    for (let i = buckets - 1; i >= 0; i--) {
-        const x = (i / buckets) * width;
-        const minVal = sampleAt(slice, i, 0);
-        const y = centerY - minVal * scale;
-        ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
-    ctx.fill();
-
-    ctx.strokeStyle = '#4361ee';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const x = (i / buckets) * width;
-        const maxVal = sampleAt(slice, i, 1);
-        const y = centerY - maxVal * scale;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-
+    drawWaveformPeaks(ctx, peaks, {
+        width: canvas.width,
+        height: canvas.height,
+        startMs,
+        endMs,
+        totalDurationMs,
+    });
+    // Invalidate the ImageData cache so drawSegPlayhead re-captures the new waveform.
     canvas._wfCache = null;
 }
 
