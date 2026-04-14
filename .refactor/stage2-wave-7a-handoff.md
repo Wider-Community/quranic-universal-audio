@@ -249,7 +249,48 @@ Not landed (deferred per §3.1). The current `_addEditOverlay()` (in `segments/e
 
 ## 6. Review findings + disposition
 
-*Reviewer (Sonnet + Opus per plan §6.2) appends here.*
+### Sonnet (pattern review) — **APPROVE**
+
+All §6.3 conformity, pattern notes #1-#8, `{#each}` adoption correctness, `applyFiltersAndRender` shim coverage (8+ callers), cache migration completeness (zero live `segPeaksByAudio` references — only comment-text hits), cycle ceiling 19 confirmed, S2-B07 grep clean, runtime flows traced.
+
+**Non-blockers (all deferred to Wave 7a.2 / 8):**
+
+| ID | Item | Wave target |
+|---|---|---|
+| NB-1 | `syncAllCardsForSegment` (rendering.ts:259) mutates `.seg-text` / `.seg-text-ref` / `.seg-text-conf` in-place on Svelte-rendered rows; overwritten on next reconcile. Acceptable because trim/split confirm immediately fires `applyVerseFilterAndRender` — transient. Validation accordion context that calls it without subsequent refresh could show stale data. | Wave 8 |
+| NB-2 | `drawAllSegWaveforms` (waveform/index.ts:122) guards on `state.segDisplayedSegments` which is never written post-Wave-7 — effective no-op. Dead guard code smell. | Wave 11 |
+| NB-3 | `missingWordSegIndices` `void $displayedSegments` pattern (SegmentsList.svelte:44) — unconventional but correct Svelte-4 workaround for non-store imperative state. Handoff §7.3 queues `state.segValidation` → store promotion. | Wave 8 |
+
+### Opus (judgment review) — **APPROVE**
+
+7 judgment calls validated; 1 real perf concern + 1 fragility invariant flagged.
+
+**Judgment calls:**
+- A (`{#each}` + trim/split coexistence): **SOUND.** `trim.ts:324` + `split.ts:350-351` call `exitEditMode` BEFORE `applyVerseFilterAndRender` — inline DOM cleaned before store notify; split confirm creates fresh UIDs so `{#each}` splices cleanly.
+- B (`applyFiltersAndRender` shim): **CORRECT.** 8 callers confirmed; `navigation._restoreFilterView` writes both stores explicitly; double-source benign because shim resyncs on every call.
+- C (playback highlight / classList): **ROBUST, with fragility.** Svelte 4 `class:X={bool}` compiles to `classList.toggle`, not `className` rewrite — imperative `classList.add('playing')` persists. **Invariant**: 7a.2/7b must NOT add `class:playing={...}` to SegmentRow.svelte unless `updateSegHighlight` migrates to a store simultaneously.
+- D (TrimPanel/SplitPanel deferral): **JUSTIFIED.** Wave 7b has no dependency on 7a.2; clean commit boundary.
+- E (cycle ceiling): 19 confirmed. Narration in handoff §1.9 slightly misleading (rendering.ts is still in a cycle, just via reversed edge `waveform/index → rendering`); prose nit.
+- F (edit store with no consumers): **ACCEPTABLE PRIMING.** Thin shape anticipates 7a.2/7b needs; extend rather than rewrite if merge/delete need `editingSegs: Segment[]`.
+- G (state.* bridge coherence): **THIN BUT WORKING.** ~14 fields still bridged; `segPeaksByAudio` genuinely gone; `clearSegDisplay` store-desync carried forward.
+
+**Real perf concern (7a.2 must address):**
+- `SegmentsList.svelte:43-55` rebuilds `missingWordSegIndices` Set on every `$displayedSegments` tick and passes by reference to every `<SegmentRow>`. New Set identity → Svelte marks every row dirty → all `$:` blocks re-run. O(N) reactive work per edit confirm (N≈1000 segs possible). **Memoize when `state.segValidation` reference unchanged.**
+
+**7a.2 prerequisites from Opus:**
+1. Memoize `missingWordSegIndices` prop-churn.
+2. Preserve playing-class invariant (don't add `class:playing` to SegmentRow).
+3. Handoff §1.9 cycle-direction clarification.
+4. Edit store may need `editingSegs: Segment[]` or `editContext` for 7b merge/delete.
+5. `clearSegDisplay` store-desync (Wave 9/10).
+6. `event-delegation.ts:132` imperative `state._segSavedFilterView` write — don't add more.
+
+### Orchestrator disposition
+
+- Both reviewers APPROVE. No blockers.
+- Opus perf NB (`missingWordSegIndices` memoization) + fragility invariant (`class:playing` prohibition) carried into Wave 7a.2 brief as explicit prerequisites — NOT fixed inline per user migration-strictness preference (clean commit boundary; 7a.2 fresh agent handles alongside the TrimPanel/SplitPanel work).
+- Cycle ceiling 19 locked; Wave 7b likely dissolves 2-3 more.
+- Proceed to Wave 7a.2 in fresh agent with this handoff + §6 findings as primary input.
 
 ---
 
