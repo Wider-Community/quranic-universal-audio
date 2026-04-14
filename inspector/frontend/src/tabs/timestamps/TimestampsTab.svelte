@@ -64,6 +64,7 @@
         TsValidateResponse,
         TsVersesResponse,
     } from '../../types/api';
+    import AnimationDisplay from './AnimationDisplay.svelte';
     import UnifiedDisplay from './UnifiedDisplay.svelte';
 
     // ---- Component refs ----
@@ -71,6 +72,7 @@
     let audioHTMLEl: HTMLAudioElement | null = null;
     let speedCtrl: SpeedControl;
     let unifiedEl: UnifiedDisplay;
+    let animDisplayEl: AnimationDisplay;
 
     // ---- Pending loadedmetadata handler (for src changes) ----
     let _pendingOnMeta: ((ev: Event) => void) | null = null;
@@ -386,7 +388,11 @@
     function tick(): void {
         if (!audioHTMLEl) return;
         currentTime.set(audioHTMLEl.currentTime);
-        if (unifiedEl) unifiedEl.updateHighlights();
+        if (get(viewMode) === 'animation') {
+            if (animDisplayEl) animDisplayEl.updateHighlights();
+        } else {
+            if (unifiedEl) unifiedEl.updateHighlights();
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -547,7 +553,11 @@
                 break;
             case 'KeyJ':
                 e.preventDefault();
-                unifiedEl?.scrollActiveIntoView();
+                if (get(viewMode) === 'animation') {
+                    animDisplayEl?.scrollActiveIntoView();
+                } else {
+                    unifiedEl?.scrollActiveIntoView();
+                }
                 break;
         }
     }
@@ -770,9 +780,12 @@
                 <canvas id="waveform-canvas"></canvas>
                 <div class="phoneme-labels" id="phoneme-labels"></div>
             </div>
-            <UnifiedDisplay bind:this={unifiedEl} />
-            <!-- Animation display — full implementation in sub-wave 4b -->
-            <div id="animation-display" class="anim-window" hidden={$viewMode === 'analysis'}></div>
+            <div hidden={$viewMode === 'animation'}>
+                <UnifiedDisplay bind:this={unifiedEl} />
+            </div>
+            <div hidden={$viewMode === 'analysis'}>
+                <AnimationDisplay bind:this={animDisplayEl} />
+            </div>
         </div>
     </main>
 </div>
