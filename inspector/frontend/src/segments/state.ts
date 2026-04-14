@@ -444,8 +444,6 @@ export interface DomRefs {
     segPlayStatus: HTMLElement;
     segValidationGlobalEl: HTMLDivElement;
     segValidationEl: HTMLDivElement;
-    segStatsPanel: HTMLDivElement;
-    segStatsCharts: HTMLDivElement;
     segFilterBarEl: HTMLDivElement;
     segFilterRowsEl: HTMLDivElement;
     segFilterAddBtn: HTMLButtonElement;
@@ -496,8 +494,6 @@ export const dom: DomRefs = {
     segPlayStatus: _UNSET,
     segValidationGlobalEl: _UNSET,
     segValidationEl: _UNSET,
-    segStatsPanel: _UNSET,
-    segStatsCharts: _UNSET,
     segFilterBarEl: _UNSET,
     segFilterRowsEl: _UNSET,
     segFilterAddBtn: _UNSET,

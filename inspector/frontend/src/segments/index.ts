@@ -10,9 +10,9 @@
  * addEventListener call lives inside the DOMContentLoaded handler.
  */
 
-// Validation / stats / history modules (imports for side-effect registration)
+// Validation / history modules (imports for side-effect registration)
+// Note: './stats' removed — StatsPanel.svelte now owns stats rendering (Wave 8b).
 import './validation/index';
-import './stats';
 
 import { selectedChapter } from '../lib/stores/segments/chapter';
 import { LS_KEYS } from '../lib/utils/constants';
@@ -82,8 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.segSaveBtn = mustGet<HTMLButtonElement>('seg-save-btn');
     dom.segValidationGlobalEl = mustGet<HTMLDivElement>('seg-validation-global');
     dom.segValidationEl = mustGet<HTMLDivElement>('seg-validation');
-    dom.segStatsPanel = mustGet<HTMLDivElement>('seg-stats-panel');
-    dom.segStatsCharts = mustGet<HTMLDivElement>('seg-stats-charts');
+    // dom.segStatsPanel / dom.segStatsCharts removed: StatsPanel.svelte owns
+    // these elements reactively via $segStats store (Wave 8b).
     dom.segFilterBarEl = mustGet<HTMLDivElement>('seg-filter-bar');
     dom.segFilterRowsEl = mustGet<HTMLDivElement>('seg-filter-rows');
     dom.segFilterAddBtn = mustGet<HTMLButtonElement>('seg-filter-add-btn');

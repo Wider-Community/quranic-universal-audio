@@ -84,6 +84,7 @@
     import FiltersBar from './FiltersBar.svelte';
     import SegmentsList from './SegmentsList.svelte';
     import SegmentsAudioControls from './SegmentsAudioControls.svelte';
+    import StatsPanel from './StatsPanel.svelte';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
     // EditOverlay uses this (S2-D33) instead of document.getElementById.
@@ -565,10 +566,10 @@
         </div>
     </details>
 
-    <details id="seg-stats-panel" class="seg-stats-panel" hidden>
-        <summary class="seg-stats-summary">Segmentation Statistics</summary>
-        <div id="seg-stats-charts" class="seg-stats-charts"></div>
-    </details>
+    <!-- Wave 8b: StatsPanel.svelte replaces imperative renderStatsPanel;
+         $segStats store controls visibility. IDs removed — no imperative
+         consumers remain for seg-stats-panel / seg-stats-charts. -->
+    <StatsPanel />
 
     <div id="seg-history-view" class="seg-history-view" hidden>
         <div class="seg-history-toolbar">
