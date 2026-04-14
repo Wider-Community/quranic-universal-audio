@@ -29,7 +29,6 @@ import { clearHistoryFilters, setHistorySort } from './history/filters';
 import { hideHistoryView,showHistoryView } from './history/index';
 import { handleSegKeydown, registerAllSegKeyboardHandlers } from './keyboard';
 import { _deleteAudioCache,_prepareAudio } from './playback/audio-cache';
-import { onSegAudioEnded,onSegPlayClick, onSegTimeUpdate, startSegAnimation, stopSegAnimation } from './playback/index';
 import { confirmSaveFromPreview,hideSavePreview, onSegSaveClick } from './save';
 import { dom, setClassifyFn,state } from './state';
 import { _classifySegCategories } from './validation/categories';
@@ -74,12 +73,13 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.segChapterSelect = _makeChapterSelectShim();
     dom.segVerseSelect = mustGet<HTMLSelectElement>('seg-verse-select');
     dom.segListEl = mustGet<HTMLDivElement>('seg-list');
-    dom.segAudioEl = mustGet<HTMLAudioElement>('seg-audio-player');
-    dom.segPlayBtn = mustGet<HTMLButtonElement>('seg-play-btn');
-    dom.segAutoPlayBtn = mustGet<HTMLButtonElement>('seg-autoplay-btn');
+    // dom.segAudioEl, dom.segPlayBtn, dom.segAutoPlayBtn, dom.segPlayStatus are
+    // assigned by SegmentsAudioControls.svelte onMount (Wave 6a). By the time
+    // this DOMContentLoaded handler runs, Svelte has already mounted synchronously
+    // (main.ts is type="module" → defer; Svelte new App() runs before DCL fires),
+    // so the component's onMount has fired and all four dom.* refs are set.
     dom.segSpeedSelect = mustGet<HTMLSelectElement>('seg-speed-select');
     dom.segSaveBtn = mustGet<HTMLButtonElement>('seg-save-btn');
-    dom.segPlayStatus = mustGet<HTMLElement>('seg-play-status');
     dom.segValidationGlobalEl = mustGet<HTMLDivElement>('seg-validation-global');
     dom.segValidationEl = mustGet<HTMLDivElement>('seg-validation');
     dom.segStatsPanel = mustGet<HTMLDivElement>('seg-stats-panel');
@@ -107,32 +107,19 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.segSavePreviewStats = mustGet<HTMLDivElement>('seg-save-preview-stats');
     dom.segSavePreviewBatches = mustGet<HTMLDivElement>('seg-save-preview-batches');
 
-    // Restore autoplay button class + persisted speed. Reciter / view-mode /
-    // chapter / verse persistence is owned by SegmentsTab.svelte.
-    state._segAutoPlayEnabled = localStorage.getItem(LS_KEYS.SEG_AUTOPLAY) !== 'false';
-    dom.segAutoPlayBtn.className = 'btn ' + (state._segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
+    // Restore persisted speed. Autoplay state + button class restored by
+    // SegmentsAudioControls.svelte onMount (Wave 6a). Audio event listeners
+    // (play/pause/ended/timeupdate) and play/autoplay button click handlers
+    // have moved there too.
     const _savedSegSpeed = localStorage.getItem(LS_KEYS.SEG_SPEED);
     if (_savedSegSpeed) dom.segSpeedSelect.value = _savedSegSpeed;
 
-    // Wire the audio / autoplay / speed buttons (Wave-6 playback scope).
-    dom.segPlayBtn.addEventListener('click', onSegPlayClick);
-    dom.segAutoPlayBtn.addEventListener('click', () => {
-        state._segAutoPlayEnabled = !state._segAutoPlayEnabled;
-        state._segContinuousPlay = state._segAutoPlayEnabled;
-        dom.segAutoPlayBtn.className = 'btn ' + (state._segAutoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
-        localStorage.setItem(LS_KEYS.SEG_AUTOPLAY, String(state._segAutoPlayEnabled));
-    });
     dom.segSpeedSelect.addEventListener('change', () => {
         const rate = parseFloat(dom.segSpeedSelect.value);
         dom.segAudioEl.playbackRate = rate;
         if (state.valCardAudio) state.valCardAudio.playbackRate = rate;
         localStorage.setItem(LS_KEYS.SEG_SPEED, dom.segSpeedSelect.value);
     });
-
-    dom.segAudioEl.addEventListener('play', startSegAnimation);
-    dom.segAudioEl.addEventListener('pause', stopSegAnimation);
-    dom.segAudioEl.addEventListener('ended', onSegAudioEnded);
-    dom.segAudioEl.addEventListener('timeupdate', onSegTimeUpdate);
 
     document.addEventListener('keydown', handleSegKeydown);
 

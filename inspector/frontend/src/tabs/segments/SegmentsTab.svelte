@@ -83,6 +83,7 @@
     import type { Segment } from '../../types/domain';
     import FiltersBar from './FiltersBar.svelte';
     import SegmentsList from './SegmentsList.svelte';
+    import SegmentsAudioControls from './SegmentsAudioControls.svelte';
 
     // ---- Derived UI state ----
     interface GroupedReciters {
@@ -631,12 +632,7 @@
 
     <FiltersBar hidden={filterBarHidden} />
 
-    <div class="seg-controls">
-        <audio id="seg-audio-player"></audio>
-        <button id="seg-play-btn" class="btn" disabled>Play</button>
-        <button id="seg-autoplay-btn" class="btn seg-autoplay-on" title="Auto-play consecutive segments">Auto-play</button>
-        <span id="seg-play-status" class="seg-play-status"></span>
-    </div>
+    <SegmentsAudioControls />
 
     <SegmentsList onRestore={onNavigationRestore} />
 </div>
