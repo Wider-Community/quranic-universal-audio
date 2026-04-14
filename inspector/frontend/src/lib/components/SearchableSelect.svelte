@@ -14,11 +14,7 @@
 
     import { createEventDispatcher, onMount } from 'svelte';
 
-    interface SelectOption {
-        value: string;
-        label: string;
-        group?: string;
-    }
+    import type { SelectOption } from '../types/ui';
 
     export let options: SelectOption[] = [];
     export let value = '';
