@@ -40,6 +40,9 @@
 
     import { editMode } from '../../../lib/stores/segments/edit';
 
+    import DeletePanel from './DeletePanel.svelte';
+    import MergePanel from './MergePanel.svelte';
+    import ReferenceEditor from './ReferenceEditor.svelte';
     import SplitPanel from './SplitPanel.svelte';
     import TrimPanel from './TrimPanel.svelte';
 
@@ -52,10 +55,21 @@
 </script>
 
 {#if $editMode !== null}
-    <div class="seg-edit-overlay"></div>
+    <!-- Backdrop only for trim/split (persistent drag modes). Merge/delete
+         are one-shot operations and reference editing is inline — showing
+         a viewport-scoping overlay for those would be a UX regression. -->
+    {#if $editMode === 'trim' || $editMode === 'split'}
+        <div class="seg-edit-overlay"></div>
+    {/if}
     {#if $editMode === 'trim'}
         <TrimPanel {audioElRef} />
     {:else if $editMode === 'split'}
         <SplitPanel {audioElRef} />
+    {:else if $editMode === 'merge'}
+        <MergePanel {audioElRef} />
+    {:else if $editMode === 'delete'}
+        <DeletePanel {audioElRef} />
+    {:else if $editMode === 'reference'}
+        <ReferenceEditor {audioElRef} />
     {/if}
 {/if}
