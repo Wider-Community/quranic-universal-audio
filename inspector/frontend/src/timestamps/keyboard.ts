@@ -2,18 +2,16 @@
  * Timestamps tab — keyboard shortcut handler.
  */
 
-import { getActiveTab } from '../lib/utils/active-tab';
 import { safePlay } from '../lib/utils/audio';
 import { LS_KEYS } from '../lib/utils/constants';
+import { shouldHandleKey } from '../lib/utils/keyboard-guard';
 import { cycleSpeed } from '../lib/utils/speed-control';
 import { switchView } from './animation';
 import { loadRandomTimestamp, navigateVerse, updateDisplay } from './registry';
 import { dom,state } from './state';
 
 export function handleKeydown(e: KeyboardEvent): void {
-    const target = e.target as Element | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-    if (getActiveTab() !== 'timestamps') return;
+    if (!shouldHandleKey(e, 'timestamps')) return;
 
     switch (e.code) {
         case 'Space':

@@ -3,8 +3,8 @@
  * Uses registerHandler pattern for edit/save functions.
  */
 
-import { getActiveTab } from '../lib/utils/active-tab';
 import { LS_KEYS } from '../lib/utils/constants';
+import { shouldHandleKey } from '../lib/utils/keyboard-guard';
 import { cycleSpeed } from '../lib/utils/speed-control';
 import { _restoreFilterView } from './navigation';
 import { onSegPlayClick,playFromSegment } from './playback/index';
@@ -19,9 +19,7 @@ export function registerAllSegKeyboardHandlers(handlers: SegKeyboardHandlerRegis
 }
 
 export function handleSegKeydown(e: KeyboardEvent): void {
-    const target = e.target as Element | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-    if (getActiveTab() !== 'segments') return;
+    if (!shouldHandleKey(e, 'segments')) return;
 
     switch (e.code) {
         case 'Space':
