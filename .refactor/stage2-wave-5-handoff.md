@@ -165,9 +165,49 @@ Plan: "Wave 5 cleanup: remove or map 3 orphan derived stores". Completed in comm
 
 ---
 
-## 6. Review-findings placeholder
+## 6. Review findings + disposition
 
-*Reviewer (Sonnet + Opus) append findings here per §6.3 of the plan.*
+### Sonnet (pattern review) — **APPROVE**
+
+Wave 5 is well-constructed. All 7 pre-flight gates pass, svelte-check 0/0, both deviations are properly documented, S2-B01 fix is correct by construction.
+
+**Non-blockers:**
+
+| ID | Item | Disposition |
+|---|---|---|
+| NB-1 | Stale `<script>` comment in `SegmentsList.svelte` lines 23-27 described the pre-`cdaa3b9` "banner outside #seg-list" design that was abandoned. | **Fixed** by orchestrator post-review (1-line edit; doc-hygiene). |
+| NB-2 | `SegmentRow.svelte` exposes extra props beyond S2-D23 (`showGotoBtn?`, `isContext?`, `contextLabel?`, `missingWordSegIndices?`, `isNeighbour?`, `fallbackChapter?`). | Logged as S2-D35 (accept as additive, not regression). |
+
+**Carry-forwards to Wave 6+:**
+
+- CF-1: `_makeChapterSelectShim.value` getter is O(subscriber-count) per read — perf trap for Wave 6-10 hot loops (`timeupdate`, rAF). Wave 6-10 code should read `get(selectedChapter)` directly instead of `dom.segChapterSelect.value` inside hot paths.
+- CF-2: `segments/data.ts:165` still writes `state.segAllData = allResult.value` directly (dormant: SegmentsTab no longer calls `onSegReciterChange`). Wave 9 (save) + Wave 10 (history) authors must heed §7.2.
+- CF-3: `SegmentsTab.clearPerReciterState` (lines 288-331) uses `document.getElementById` inside handlers — acceptable (not module-top); defer cleanup to Wave 8/9/10.
+
+**Validated clean:** §6.3 conformity, pattern notes #1-#8, CSS vars `style:`, S2-D23 required props, S2-B07 grep (zero hits), S2-B01 closure, S2-D33 cleanup, App.svelte integration, sticky-banner preservation.
+
+### Opus (judgment review) — **APPROVE-WITH-CHANGES**
+
+Both Wave-5 deviations accepted; one mitigation mandated; Wave 6 split recommended.
+
+**Deviation A — imperative `renderSegList` kept, `<SegmentRow>` provisioned-but-unused**: **Accept.** Conflict argument sound — Svelte 4 `{#each}` reconciles via tracked VDOM; `renderSegList` at `segments/rendering.ts:215-245` removes non-banner children + appends fresh fragment, would orphan Svelte's reconciliation. Coexistence requires `renderSegList` to be rewritten as `segAllData.update()` + Svelte-driven — blocked until edit flows (Wave 7) stop mutating `state.segAllData.segments[i]` in place. Natural adoption point is **Wave 7 (edit)**, not Wave 6 (playback). Banner-preservation tweak (O(children) vs O(1)) has negligible perf cost (≤ display size ≤ ~1000; called once per filter/chapter change, not per frame).
+
+**Deviation B — 0 file deletions; 4 Stage-1 modules retained as pass-through**: **Accept-with-mitigation.** 30+ symbols × 15+ files; one-commit deletion genuinely risky. Bridge pattern one-way (Svelte → state.*). Ticking-bomb partially real: edit/save flows mutate `state.segAllData.segments[i]` in place (same object reference, Svelte derivations don't re-fire); imperative `renderSegList` keeps DOM consistent. Safe during interim.
+
+**Mandated mitigation (S2-D34):** Wave 6 MUST delete `segments/data.ts::loadSegReciters` + `onSegReciterChange` + migrate `save.ts:173` + `history/index.ts:77` callers. First concrete deletion milestone proves the incremental-absorption pattern; if Wave 6 can't, fire sub-wave 5b synchronously.
+
+**Orchestrator recommendations:**
+- **Split Wave 6** into 6a (playback + autoplay + mandated data.ts deletions) / 6b (waveform + peaks + S2-B04). Logged as S2-D34.
+- Cycle-ceiling stays at 23; first decrement lands with Wave 6a deletions.
+
+**Validated clean:** pattern notes #1-#8, store design matches matrix (no orphan-derived; cross-cutting filter→navigation coupling via option a), S2-B01 closure, runtime flows (reciter-switch-while-filter-active, jumpToSegment race, in-place-edit mutation), zero module-top-level DOM access in all 6 new `.svelte` files.
+
+### Orchestrator disposition
+
+- Both deviations ACCEPTED per plan §6.5 orchestrator discretion.
+- NB-1 fixed inline. NB-2/S2-D35 logged.
+- S2-D34 added to decisions log: Wave 6 → split 6a/6b + mandated data.ts deletions.
+- No blockers; proceed to Wave 6a autonomously (user preferences #6-7: run between Waves 5-9 without further stop-points).
 
 ---
 

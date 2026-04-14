@@ -19,12 +19,10 @@
      * Reactive side-effect: whenever $displayedSegments changes, invoke
      * imperative renderSegList so the DOM mirrors the current derivation.
      *
-     * Back-banner position: Stage-1 banner was inserted as first-child of
-     * #seg-list after renderSegList completed. We render <Navigation> via
-     * Svelte so it lives inside the #seg-list Svelte tree; renderSegList's
-     * imperative `innerHTML = ''` would wipe it. Fix: render the banner
-     * OUTSIDE #seg-list as a sibling, so imperative list innerHTML writes
-     * don't affect it.
+     * Back-banner position: `.seg-back-banner` uses `position: sticky`
+     * scoped to #seg-list's scroll container, so it must live inside
+     * #seg-list. renderSegList preserves the banner by walking children and
+     * removing only non-banner children before appending fresh rows.
      */
 
     import { onMount } from 'svelte';
