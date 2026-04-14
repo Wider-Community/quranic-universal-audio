@@ -2,8 +2,8 @@
  * Undo operations: batch undo, op undo, chain undo, pending discard.
  */
 
-import { fetchJson, fetchJsonOrNull } from '../../shared/api';
-import { surahOptionText } from '../../shared/surah-info';
+import { fetchJson, fetchJsonOrNull } from '../../lib/api';
+import { surahOptionText } from '../../lib/utils/surah-info';
 import type {
     SegEditHistoryResponse,
     SegUndoBatchResponse,

@@ -6,11 +6,11 @@
  * listeners, restores localStorage preferences, and loads reciters.
  */
 
-import { fetchJson } from '../shared/api';
-import { LS_KEYS } from '../shared/constants';
+import { fetchJson } from '../lib/api';
+import { LS_KEYS } from '../lib/utils/constants';
+import { surahInfoReady, surahOptionText } from '../lib/utils/surah-info';
 import { mustGet } from '../shared/dom';
 import { SearchableSelect } from '../shared/searchable-select';
-import { surahInfoReady, surahOptionText } from '../shared/surah-info';
 import type {
     TsChaptersResponse,
     TsConfigResponse,

@@ -2,10 +2,10 @@
  * Timestamps tab — keyboard shortcut handler.
  */
 
-import { getActiveTab } from '../shared/active-tab';
-import { safePlay } from '../shared/audio';
-import { LS_KEYS } from '../shared/constants';
-import { cycleSpeed } from '../shared/speed-control';
+import { getActiveTab } from '../lib/utils/active-tab';
+import { safePlay } from '../lib/utils/audio';
+import { LS_KEYS } from '../lib/utils/constants';
+import { cycleSpeed } from '../lib/utils/speed-control';
 import { switchView } from './animation';
 import { loadRandomTimestamp, navigateVerse, updateDisplay } from './registry';
 import { dom,state } from './state';

@@ -3,13 +3,13 @@
  * Renders accordion panels for each validation category.
  */
 
+import { fetchJson } from '../../lib/api';
 import {
     type AccordionOpenState,
     capturePanelOpenState,
     collapseSiblingDetails,
     restorePanelOpenState,
 } from '../../shared/accordion';
-import { fetchJson } from '../../shared/api';
 import type { SegValidateResponse } from '../../types/api';
 import type {
     SegValAnyItem,

@@ -2,9 +2,9 @@
  * Data loading, chapter management, and segment lookups.
  */
 
-import { fetchJson, fetchJsonOrNull } from '../shared/api';
-import { LS_KEYS } from '../shared/constants';
-import { surahOptionText } from '../shared/surah-info';
+import { fetchJson, fetchJsonOrNull } from '../lib/api';
+import { LS_KEYS } from '../lib/utils/constants';
+import { surahOptionText } from '../lib/utils/surah-info';
 import type {
     SegAllResponse,
     SegChaptersResponse,

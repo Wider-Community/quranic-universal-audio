@@ -1,3 +1,6 @@
+// Deprecated: superseded by lib/components/SearchableSelect.svelte; kept while
+// tab index.ts files still use the class API. Delete in Wave 11.
+
 /**
  * SearchableSelect -- lightweight filterable wrapper around a native <select>.
  * Hides the <select>, shows a text input + dropdown overlay.

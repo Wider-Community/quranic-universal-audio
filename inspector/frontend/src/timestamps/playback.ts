@@ -3,7 +3,7 @@
  * loop, and per-frame display update (highlighting, canvas playhead).
  */
 
-import { createAnimationLoop } from '../shared/animation';
+import { createAnimationLoop } from '../lib/utils/animation';
 import { updateAnimationDisplay } from './animation';
 import { getSegDuration, getSegRelTime, onTsVerseChange } from './registry';
 import { dom,state } from './state';

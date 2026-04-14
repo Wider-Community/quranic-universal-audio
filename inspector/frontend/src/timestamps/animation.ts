@@ -6,8 +6,8 @@
 import {
 charsMatch,     DAGGER_ALEF,     isCombiningMark, splitIntoCharGroups,
 ZWSP,
-} from '../shared/arabic-text';
-import { LS_KEYS } from '../shared/constants';
+} from '../lib/utils/arabic-text';
+import { LS_KEYS } from '../lib/utils/constants';
 import { getSegRelTime, updateDisplay } from './registry';
 import type { TsAnimCache, TsAnimCacheItem } from './state';
 import { dom,state } from './state';

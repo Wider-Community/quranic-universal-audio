@@ -3,7 +3,7 @@
  * _playRange, and the registration pattern for trim/split modes.
  */
 
-import { safePlay } from '../../shared/audio';
+import { safePlay } from '../../lib/utils/audio';
 import type { Segment } from '../../types/domain';
 import { getSegByChapterIndex } from '../data';
 import { stopSegAnimation } from '../playback/index';

@@ -6,7 +6,7 @@
 import {
     IDGHAM_GHUNNAH_START,
     stripTashkeel,
-} from '../shared/arabic-text';
+} from '../lib/utils/arabic-text';
 import type { PhonemeInterval, TsWord } from '../types/domain';
 import { updateDisplay } from './registry';
 import { dom,state } from './state';

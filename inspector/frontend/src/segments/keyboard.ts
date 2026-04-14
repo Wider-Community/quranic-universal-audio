@@ -3,9 +3,9 @@
  * Uses registerHandler pattern for edit/save functions.
  */
 
-import { getActiveTab } from '../shared/active-tab';
-import { LS_KEYS } from '../shared/constants';
-import { cycleSpeed } from '../shared/speed-control';
+import { getActiveTab } from '../lib/utils/active-tab';
+import { LS_KEYS } from '../lib/utils/constants';
+import { cycleSpeed } from '../lib/utils/speed-control';
 import { _restoreFilterView } from './navigation';
 import { onSegPlayClick,playFromSegment } from './playback/index';
 import type { SegKeyboardHandlerRegistry } from './registry';

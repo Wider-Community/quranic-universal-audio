@@ -24,8 +24,8 @@ import './timestamps/index';
 import './segments/index';
 import './audio/index';
 
-import { getActiveTab, setActiveTab } from './shared/active-tab';
-import { LS_KEYS } from './shared/constants';
+import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
+import { LS_KEYS } from './lib/utils/constants';
 
 function setupTabSwitching(): void {
     const panels = ['timestamps', 'segments', 'audio'];

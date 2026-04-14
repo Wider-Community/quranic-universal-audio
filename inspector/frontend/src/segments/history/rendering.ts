@@ -3,7 +3,7 @@
  * Pure rendering -- no data fetching or filter state mutation.
  */
 
-import { surahOptionText } from '../../shared/surah-info';
+import { surahOptionText } from '../../lib/utils/surah-info';
 import type { EditOp, HistoryBatch, Segment } from '../../types/domain';
 import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../constants';
 import { renderSegCard } from '../rendering';

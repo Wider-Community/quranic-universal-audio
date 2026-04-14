@@ -2,7 +2,7 @@
  * Merge adjacent segments operation.
  */
 
-import { fetchJson } from '../../shared/api';
+import { fetchJson } from '../../lib/api';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { getChapterSegments, syncChapterSegsToAll } from '../data';

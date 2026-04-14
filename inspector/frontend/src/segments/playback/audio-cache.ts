@@ -2,7 +2,7 @@
  * Audio cache UI -- by_surah proxy cache management.
  */
 
-import { fetchJson } from '../../shared/api';
+import { fetchJson } from '../../lib/api';
 import type {
     SegAudioCacheStatusResponse,
     SegDeleteAudioCacheResponse,

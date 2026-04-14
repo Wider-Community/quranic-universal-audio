@@ -2,8 +2,8 @@
  * Timestamps tab — waveform decoding, peak computation, and canvas drawing.
  */
 
-import { fetchArrayBuffer } from '../shared/api';
-import { AUDIO_BUFFER_CACHE_SIZE } from '../shared/constants';
+import { fetchArrayBuffer } from '../lib/api';
+import { AUDIO_BUFFER_CACHE_SIZE } from '../lib/utils/constants';
 import { getSegDuration,getSegRelTime, updateDisplay } from './registry';
 import { dom,state } from './state';
 

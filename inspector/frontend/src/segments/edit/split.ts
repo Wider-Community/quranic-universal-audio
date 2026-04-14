@@ -2,7 +2,7 @@
  * Split edit mode: enter, drag handle, preview, confirm.
  */
 
-import { fetchJsonOrNull } from '../../shared/api';
+import { fetchJsonOrNull } from '../../lib/api';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { getChapterSegments, syncChapterSegsToAll } from '../data';

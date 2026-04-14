@@ -2,8 +2,8 @@
  * Save flow: preview, confirm, execute save to server.
  */
 
-import { fetchJson, fetchJsonOrNull } from '../shared/api';
-import { surahOptionText } from '../shared/surah-info';
+import { fetchJson, fetchJsonOrNull } from '../lib/api';
+import { surahOptionText } from '../lib/utils/surah-info';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
 import type { EditOp, HistoryBatch, Segment } from '../types/domain';
 import { _SEG_NORMAL_IDS } from './constants';

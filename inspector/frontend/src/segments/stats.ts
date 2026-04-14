@@ -4,8 +4,8 @@
 
 import type { ChartConfiguration, TooltipItem } from 'chart.js';
 
-import { fetchJson } from '../shared/api';
-import { Chart } from '../shared/chart';
+import { fetchJson } from '../lib/api';
+import { Chart } from '../lib/utils/chart';
 import type { SegSaveChartResponse, SegStatsResponse } from '../types/api';
 import { dom,state } from './state';
 

@@ -3,7 +3,7 @@
  * Uses canvas callback pattern for edit-mode draws.
  */
 
-import { fetchJson } from '../../shared/api';
+import { fetchJson } from '../../lib/api';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
 import type { Segment, SegmentPeaks } from '../../types/domain';
 import { getAdjacentSegments,getSegByChapterIndex } from '../data';

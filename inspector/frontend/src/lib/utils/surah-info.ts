@@ -2,8 +2,8 @@
  * Shared surah info: fetched once at import time, available across all tabs.
  */
 
-import type { SurahInfoResponse } from '../types/api';
-import { fetchJson } from './api';
+import type { SurahInfoResponse } from '../../types/api';
+import { fetchJson } from '../api';
 
 let _surahInfo: SurahInfoResponse = {};
 

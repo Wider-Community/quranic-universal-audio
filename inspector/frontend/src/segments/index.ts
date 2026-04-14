@@ -8,11 +8,11 @@
 import './validation/index';
 import './stats';
 
-import { fetchJsonOrNull } from '../shared/api';
-import { LS_KEYS } from '../shared/constants';
+import { fetchJsonOrNull } from '../lib/api';
+import { LS_KEYS } from '../lib/utils/constants';
+import { surahInfoReady } from '../lib/utils/surah-info';
 import { mustGet } from '../shared/dom';
 import { SearchableSelect } from '../shared/searchable-select';
-import { surahInfoReady } from '../shared/surah-info';
 import type { SegConfigResponse } from '../types/api';
 import { loadSegReciters, onSegChapterChange,onSegReciterChange } from './data';
 // Edit modules

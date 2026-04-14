@@ -2,7 +2,7 @@
  * Reference editing: startRefEdit, commitRefEdit, _chainSplitRefEdit.
  */
 
-import { fetchJson } from '../../shared/api';
+import { fetchJson } from '../../lib/api';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { stopSegAnimation } from '../playback/index';

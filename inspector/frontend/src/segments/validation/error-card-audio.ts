@@ -3,7 +3,7 @@
  * Manages a dedicated <audio> element for playing segments from validation cards.
  */
 
-import { safePlay } from '../../shared/audio';
+import { safePlay } from '../../lib/utils/audio';
 import type { Segment } from '../../types/domain';
 import { dom,state } from '../state';
 import { _drawSplitHighlight,drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw';

@@ -2,8 +2,8 @@
  * Audio playback, animation, highlight tracking, and play status.
  */
 
-import { createAnimationLoop } from '../../shared/animation';
-import { audioSrcMatches,safePlay } from '../../shared/audio';
+import { createAnimationLoop } from '../../lib/utils/animation';
+import { audioSrcMatches,safePlay } from '../../lib/utils/audio';
 import { getSegByChapterIndex } from '../data';
 import { formatTimeMs } from '../references';
 import { dom,state } from '../state';
