@@ -70,6 +70,7 @@ function initAudioTabDom(): void {
 
 document.addEventListener('DOMContentLoaded', () => {
     initAudioTabDom();
+    initAudioTabEventListeners();
     void loadSources();
 });
 
@@ -138,64 +139,66 @@ function populateReciters(): void {
     }
 }
 
-reciterSelect.addEventListener('change', async () => {
-    const val = reciterSelect.value;
-    if (val) localStorage.setItem(LS_KEYS.AUD_RECITER, val);
-    resetSurahSelect();
-    resetAyahSelect();
-    clearPlayer();
-
-    if (!val) {
-        currentCategory = null;
-        return;
-    }
-
-    // val is "category/source/slug"
-    const parts = val.split('/');
-    currentCategory = parts[0] ?? null;
-    const sourceSlug = parts.slice(1).join('/');  // "source/slug"
-
-    const cacheKey = val;
-
-    try {
-        let urls = urlCache[cacheKey];
-        if (!urls) {
-            const data = await fetchJson<AudioSurahsResponse>(
-                `/api/audio/surahs/${currentCategory}/${sourceSlug}`,
-            );
-            urls = data.surahs || {};
-            urlCache[cacheKey] = urls;
-        }
-
-        if (currentCategory === 'by_ayah') {
-            buildAyahStructure(urls);
-            populateSurahSelect(allSurahNums);
-        } else {
-            const nums = Object.keys(urls).map(Number).sort((a, b) => a - b);
-            populateSurahSelect(nums);
-        }
-    } catch (_e) {
-        surahSelect.innerHTML = '<option value="">Error loading</option>';
-    }
-});
-
-surahSelect.addEventListener('change', () => {
-    if (currentCategory === 'by_ayah') {
-        populateAyahSelect();
+function initAudioTabEventListeners(): void {
+    reciterSelect.addEventListener('change', async () => {
+        const val = reciterSelect.value;
+        if (val) localStorage.setItem(LS_KEYS.AUD_RECITER, val);
+        resetSurahSelect();
+        resetAyahSelect();
         clearPlayer();
-    } else {
+
+        if (!val) {
+            currentCategory = null;
+            return;
+        }
+
+        // val is "category/source/slug"
+        const parts = val.split('/');
+        currentCategory = parts[0] ?? null;
+        const sourceSlug = parts.slice(1).join('/');  // "source/slug"
+
+        const cacheKey = val;
+
+        try {
+            let urls = urlCache[cacheKey];
+            if (!urls) {
+                const data = await fetchJson<AudioSurahsResponse>(
+                    `/api/audio/surahs/${currentCategory}/${sourceSlug}`,
+                );
+                urls = data.surahs || {};
+                urlCache[cacheKey] = urls;
+            }
+
+            if (currentCategory === 'by_ayah') {
+                buildAyahStructure(urls);
+                populateSurahSelect(allSurahNums);
+            } else {
+                const nums = Object.keys(urls).map(Number).sort((a, b) => a - b);
+                populateSurahSelect(nums);
+            }
+        } catch (_e) {
+            surahSelect.innerHTML = '<option value="">Error loading</option>';
+        }
+    });
+
+    surahSelect.addEventListener('change', () => {
+        if (currentCategory === 'by_ayah') {
+            populateAyahSelect();
+            clearPlayer();
+        } else {
+            playCurrentSelection();
+        }
+        updateNavButtons();
+    });
+
+    ayahSelect.addEventListener('change', () => {
         playCurrentSelection();
-    }
-    updateNavButtons();
-});
+        updateNavButtons();
+    });
 
-ayahSelect.addEventListener('change', () => {
-    playCurrentSelection();
-    updateNavButtons();
-});
-
-prevBtn.addEventListener('click', () => navigate(-1));
-nextBtn.addEventListener('click', () => navigate(+1));
+    prevBtn.addEventListener('click', () => navigate(-1));
+    nextBtn.addEventListener('click', () => navigate(+1));
+}
 
 // -- Helpers --
 
