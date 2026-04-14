@@ -3,14 +3,14 @@
 **Date**: 2026-04-14
 **Branch**: `worktree-refactor+inspector-modularize` (WSL worktree)
 **Working directory**: `/mnt/c/Users/ahmed/Documents/Uni/Thesis/Code/quranic-universal-audio/.claude/worktrees/refactor+inspector-modularize/`
-**Current HEAD**: `9ed6def` (orchestrator doc catch-up after 2 S2-B07 fix commits)
+**Current HEAD**: `29a80e6` (Wave 9 — drop state.segStatsData + bridge)
 **Project CLAUDE.md**: `inspector/CLAUDE.md` (gitignored — locally edited by prior agents; frontend tree section may drift slightly)
 
 ## TL;DR for the incoming orchestrator
 
-You are taking over a multi-wave refactor driven by the `/refactor` skill. Stage 2 migrates the inspector frontend from vanilla-TS-imperative-DOM to Svelte 4, plus backend polish + Docker distribution. Waves 0.5, 1, 2, 3, 3-followup, and 4 are complete. You are currently at **STOP-POINT 1** — the user's first declared pause — which the user was smoking when a Wave-3 regression (S2-B07) surfaced. The bug is fixed (SHA `015556b`); user has not yet confirmed the post-fix smoke. Resume there.
+You are taking over a multi-wave refactor driven by the `/refactor` skill. Stage 2 migrates the inspector frontend from vanilla-TS-imperative-DOM to Svelte 4, plus backend polish + Docker distribution. **Waves 0.5 through 9 are complete.** You are approaching **STOP-POINT 2** — before Wave 10 (history/rendering.ts rewrite, the most complex remaining Svelte migration). Confirm with the user before firing Wave 10.
 
-Next waves queued: **5 → 6 → 7 → [stop-point 2] → 10 → 11**. Waves 8 and 9 were missing in the quick recap; they go between 7 and the stop-point. Full order: **5, 6, 7, 8, 9, [stop 2], 10, 11**.
+Remaining waves: **10, 11**. Wave 10 owns history view full migration; Wave 11 owns final cleanup, cycle re-promote, dead-code sweep.
 
 ## State snapshot
 
@@ -29,23 +29,29 @@ Next waves queued: **5 → 6 → 7 → [stop-point 2] → 10 → 11**. Waves 8 a
 | 4 | Timestamps tab Svelte conversion (stores + 5 components) + 9 `timestamps/*.ts` deleted | `66f62d6` | 10 commits |
 | 4-review | Sonnet + Opus reviews (both APPROVE) | `dd4c5c9` | follow-up commit only |
 | stop-point-1 hotfix | Fix S2-B07 (audio/index.ts module-top-level DOM access) | `015556b` | 2 commits + 1 bug-log commit + 1 plan catch-up |
+| 5 | Segments tab shell + filters + SegmentsList + navigation | (see wave-5 handoff) | ~10 commits |
+| 6a | segAllData/segData store + chapter loading | (see wave-6a handoff) | ~6 commits |
+| 6b | Filter stores + waveform-cache normalization (S2-B04) | (see wave-6b handoff) | ~6 commits |
+| 7a | Edit modes (trim/split/merge/delete/reference) + EditOverlay | (see wave-7a handoff) | ~8 commits |
+| 7b | History panel + undo — imperative retained | (see wave-7b handoff) | — |
+| 8a.1 | ValidationPanel (store + Svelte component) | (see wave-8a.1 handoff) | — |
+| 8a.2 | ValidationPanel review follow-ups + B1 DOM-clobber fixes | `970fa29` | — |
+| 8b | StatsPanel + ChartFullscreen + StatsChart (store + 3 components) | `413b2d1` | 5 commits |
+| 8b-review | Wave 8b review follow-ups (B1 chart double-fire + NB cleanup) | `2acf8ac` | 1 commit |
+| 9 | S2-B05 fix + clearSegDisplay store-desync + save store + SavePreview.svelte + showPreview wiring + segStatsData deletion | `29a80e6` | 6 commits |
 
 ### What's IN PROGRESS
 
-**STOP-POINT 1 — user smoke** is live but incomplete:
-- User ran `npm run build && python3 app.py`, loaded the app, saw blank page.
-- Diagnosed + fixed S2-B07: `audio/index.ts` had 8 module-top-level `mustGet<T>()` calls + 5 module-top-level `<elem>.addEventListener(...)` calls. Both Wave-3 reviewers missed them (focused on DOMContentLoaded handler timing, not module-top access). Fix in 2 commits (`0d2a4c6` + `015556b`); now zero module-top-level DOM access in `audio/index.ts`.
-- Orchestrator told user to reload. **User has not confirmed post-fix smoke passes.** That's where the previous session ended.
+**STOP-POINT 2** — before Wave 10 (history/rendering.ts). Confirm with user before firing.
 
 ### What's NEXT
 
-- **Confirm post-fix smoke** with user (they reload the built app and walk the 10-point smoke checklist in `stage2-wave-4-handoff.md` §8 or similar).
-- On green smoke → **fire Wave 5** (Segments tab shell + filters + rendering + SegmentRow).
-- Wave 5 prework: generate `.refactor/stage2-store-bindings.md` (component↔store subscription matrix — per plan §4 Wave 5 and Opus review of Wave 4).
+- Confirm with user: smoke Wave 9 changes (save preview visibility, undo no longer fires stale splitChainRef).
+- Then fire **Wave 10**: full history view Svelte migration (`renderHistoryBatches`, `renderHistorySummaryStats`, `drawHistoryArrows`, `renderEditHistoryPanel`). This is the highest-risk remaining wave.
 
 ## User preferences discovered this session
 
-1. **Sonnet for impl agents by default**, even on intense waves. Already saved as user memory (`feedback_sonnet_impl_agents.md`). User may pre-emptively override to Opus per wave — did so for Wave 4 (first Svelte tab conversion) and explicitly said "opus" when I asked about Wave 4. Memory says "if Sonnet struggles, escalate to Opus" — user's Wave-4 override extends that to "preemptive Opus for intense frontend work at user's call."
+1. **Sonnet OR OPUS for impl agents not always Opus by default**, depending on intensity of waves. User may pre-emptively override to Opus per wave — did so for Wave 4 (first Svelte tab conversion) and explicitly said "opus" when I asked about Wave 4. user's Wave-4 override extends that to "preemptive Opus for intense frontend work at user's call."
 2. **Reviewers stay per plan** (Opus for judgment, Sonnet for pattern, Haiku for mechanical). Not a token-cost target.
 3. **User approves each wave before firing.** Minimal replies ("confirm", "approve", "opus", "yes") — take them at face value. When you ask a yes/no, expect one-word replies.
 4. **No testing (pytest / Vitest / Playwright)** — user declined upfront (S2-D07). Re-check before adding any test infrastructure.
@@ -104,7 +110,7 @@ Minimum to be operational:
 1. `.refactor/stage2-plan.md` — full plan (v3, post 3-model review). **Read in full.** Especially §2 invariants, §4 scope per wave, §5 target structure, §6 wave ordering, §9 stop-points, §10 decisions.
 2. `.refactor/stage2-wave-4-handoff.md` — **the pattern-setter**. Top-of-document pattern notes are load-bearing for Waves 5-10.
 3. `.refactor/stage2-decisions.md` — 33 decisions (S2-D01 through S2-D33); scan the full list.
-4. `.refactor/stage2-bugs.md` — 4 OPEN (B01/B04/B05 Stage-1 carry-overs + S2-B06 deferred cycles); S2-B02 and S2-B07 CLOSED.
+4. `.refactor/stage2-bugs.md` — 1 OPEN (S2-B06 deferred cycles); S2-B01/B02/B04/B05/B07 all CLOSED. See wave handoffs for details.
 5. `.refactor/stage2-orchestration-log.md` — per-agent budget + verdicts history.
 
 Skim:
@@ -122,23 +128,25 @@ The skill is at `~/.claude/skills/refactor/`. Key mechanics:
 - **Shared docs**: orchestrator maintains 3 append-only `.refactor/stage2-*.md` files (bugs, decisions, orchestration-log) — agents append, never rewrite history
 - **Plan-vs-delivery reconciliation** at every wave boundary via the handoff §6.3 template (11 sections, Wave 3 briefly drifted, Wave 4 restored conformity)
 - **Pre-flight gate** `bash .refactor/stage2-checks.sh` runs 7 checks; must pass at every wave boundary
-- **Cycle ceiling 23** (S2-B06 deferral): `CYCLE_CEILING` env var in `stage2-checks.sh`. Decrements per wave as segments cycles dissolve; set to 0 at Wave 11 re-promote.
+- **Cycle ceiling 16** (updated from 23 at Wave 1 start; now 14 actual + 2 buffer post-Wave 8b): `CYCLE_CEILING` env var in `stage2-checks.sh`. Decrements per wave as segments cycles dissolve; target 0 at Wave 11 re-promote.
 
 ## Immediate next actions for the fresh orchestrator
 
-1. **Read** the 5 files listed above (plan, wave-4 handoff, decisions, bugs, orchestration log).
-2. **Do NOT re-fire Waves 0.5/1/2/3/4** — they're done.
-3. **Confirm with user** whether post-fix smoke is now green (they may respond "ok" / "works" / "broken again"). If silent, prompt them explicitly.
-4. If smoke is green: **fire Wave 5** (Segments tab shell + filters + rendering + SegmentRow with history-mode props per S2-D23). First sub-task: generate `.refactor/stage2-store-bindings.md` component↔store subscription matrix. Brief the impl agent with scope from plan §4 Wave 5 + pattern notes from Wave 4 handoff + carry-forward items from S2-D33. Use Sonnet by default; user may say "opus" for this wave too (it's store-design foundation).
-5. If smoke surfaces a new regression: diagnose like S2-B07 was — browser console first, grep for module-top-level DOM access, minimal file edit + rebuild + commit under `fix(inspector):`. Log as S2-B08 etc. in `stage2-bugs.md` Section 4/5.
+1. **Read** `.refactor/stage2-wave-9-handoff.md` (the freshest) + `stage2-plan.md` §4 Wave 10-11 + `stage2-decisions.md`.
+2. **Do NOT re-fire Waves 0.5-9** — they're done.
+3. **Confirm with user**: smoke Wave 9 (save preview visibility via store, S2-B05 undo regression test per wave-9 handoff §5). Wave 9 changes are low-risk (visibility store + null-outs) but confirm before Wave 10.
+4. **STOP-POINT 2**: Wait for user to explicitly approve Wave 10 before firing. Wave 10 is the history view full Svelte migration — highest complexity remaining. Brief agent with wave-9 handoff §7 prerequisites + plan §4 Wave 10 scope.
+5. If smoke surfaces a regression: diagnose via browser console, check for B1-class DOM clobbers or store-desync bugs. Log in `stage2-bugs.md` Section 3/4.
 
 ## Known clean state
 
-- 7/7 pre-flight gates green at HEAD `9ed6def`
-- Cycle count 23 (= ceiling)
+- 7/7 pre-flight gates green at HEAD `29a80e6`
+- Cycle count **14** (ceiling 16, 2-buffer)
 - Zero `// NOTE: circular dependency` comments
 - Zero `global` keyword outside `services/cache.py`
 - Zero orphan `_URL_AUDIO_META` / `_phonemizer` references
+- S2-B05 CLOSED (Wave 9)
+- `state.segStatsData` field deleted (Wave 9 CF)
 - Build: 480KB JS, 31KB CSS
 - Timestamps tab: pure Svelte (5 components + 3 stores + 1 util)
 - Segments + Audio tabs: unchanged Stage-1 imperative (still work via App.svelte hidden-div mount pattern)
