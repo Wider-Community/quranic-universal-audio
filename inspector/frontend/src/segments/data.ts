@@ -264,6 +264,10 @@ export function clearSegDisplay(): void {
     state._splitChains = null;
     state._chainedOpIds = null;
     state._segSavedChains = null;
+    // S2-B05: clear split-chain UID triple so no stale _chainSplitRefEdit fires.
+    state._splitChainUid = null;
+    state._splitChainWrapper = null;
+    state._splitChainCategory = null;
     dom.segHistoryBtn.hidden = true;
     dom.segHistoryView.hidden = true;
     dom.segHistoryStats.innerHTML = '';

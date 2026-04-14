@@ -22,6 +22,12 @@ import { drawHistoryArrows,renderHistoryBatches, renderHistorySummaryStats } fro
 // ---------------------------------------------------------------------------
 
 export async function _afterUndoSuccess(reciter: string, opsReversed: number): Promise<void> {
+    // S2-B05: null split-chain fields so a pending _chainSplitRefEdit setTimeout
+    // does not attempt to start ref editing on a segment that no longer exists.
+    state._splitChainUid = null;
+    state._splitChainWrapper = null;
+    state._splitChainCategory = null;
+
     try {
         const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
             `/api/seg/edit-history/${reciter}`,
@@ -188,6 +194,11 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     void btn;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
     if (!confirm(`Discard pending edits${chLabel}?`)) return;
+
+    // S2-B05: discard clears any in-flight split chain.
+    state._splitChainUid = null;
+    state._splitChainWrapper = null;
+    state._splitChainCategory = null;
 
     state.segDirtyMap.delete(chapter);
     // Legacy dual-key delete: state may have both numeric and string keys.
