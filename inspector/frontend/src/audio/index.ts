@@ -19,14 +19,17 @@ interface AudioReciter {
 type AudioCategorySources = Record<string, AudioReciter[]>;
 
 
-const categoryToggle = mustGet<HTMLElement>('aud-category-toggle');
-const reciterSelect = mustGet<HTMLSelectElement>('aud-reciter-select');
-const surahSelect = mustGet<HTMLSelectElement>('aud-surah-select');
-const ayahSelect = mustGet<HTMLSelectElement>('aud-ayah-select');
-const ayahLabel = mustGet<HTMLElement>('aud-ayah-label');
-const player = mustGet<HTMLAudioElement>('aud-player');
-const prevBtn = mustGet<HTMLButtonElement>('aud-prev-btn');
-const nextBtn = mustGet<HTMLButtonElement>('aud-next-btn');
+// DOM refs — populated in DOMContentLoaded after App.svelte mounts the audio-panel markup.
+// (Wave 3 moved tab markup from index.html into App.svelte, so `mustGet` at module
+// top-level would fire BEFORE mount and throw. `!` assertion: assigned before first read.)
+let categoryToggle!: HTMLElement;
+let reciterSelect!: HTMLSelectElement;
+let surahSelect!: HTMLSelectElement;
+let ayahSelect!: HTMLSelectElement;
+let ayahLabel!: HTMLElement;
+let player!: HTMLAudioElement;
+let prevBtn!: HTMLButtonElement;
+let nextBtn!: HTMLButtonElement;
 
 // State
 let selectedCategory: 'by_surah' | 'by_ayah' = 'by_surah';
@@ -41,20 +44,34 @@ let allSurahNums: number[] = [];
 let audReciterSS: SearchableSelect | null = null;
 let audSurahSS: SearchableSelect | null = null;
 
-categoryToggle.addEventListener('click', (e: MouseEvent) => {
-    const target = e.target as Element | null;
-    const btn = target?.closest<HTMLElement>('[data-cat]');
-    if (!btn) return;
-    const cat = btn.dataset.cat;
-    if (!cat || cat === selectedCategory) return;
-    if (cat !== 'by_surah' && cat !== 'by_ayah') return;
-    selectedCategory = cat;
-    categoryToggle.querySelectorAll<HTMLElement>('.ts-view-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
-    ayahLabel.hidden = (selectedCategory !== 'by_ayah');
-    populateReciters();
-});
+function initAudioTabDom(): void {
+    categoryToggle = mustGet<HTMLElement>('aud-category-toggle');
+    reciterSelect = mustGet<HTMLSelectElement>('aud-reciter-select');
+    surahSelect = mustGet<HTMLSelectElement>('aud-surah-select');
+    ayahSelect = mustGet<HTMLSelectElement>('aud-ayah-select');
+    ayahLabel = mustGet<HTMLElement>('aud-ayah-label');
+    player = mustGet<HTMLAudioElement>('aud-player');
+    prevBtn = mustGet<HTMLButtonElement>('aud-prev-btn');
+    nextBtn = mustGet<HTMLButtonElement>('aud-next-btn');
 
-document.addEventListener('DOMContentLoaded', loadSources);
+    categoryToggle.addEventListener('click', (e: MouseEvent) => {
+        const target = e.target as Element | null;
+        const btn = target?.closest<HTMLElement>('[data-cat]');
+        if (!btn) return;
+        const cat = btn.dataset.cat;
+        if (!cat || cat === selectedCategory) return;
+        if (cat !== 'by_surah' && cat !== 'by_ayah') return;
+        selectedCategory = cat;
+        categoryToggle.querySelectorAll<HTMLElement>('.ts-view-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+        ayahLabel.hidden = (selectedCategory !== 'by_ayah');
+        populateReciters();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initAudioTabDom();
+    void loadSources();
+});
 
 async function loadSources(): Promise<void> {
     try {
