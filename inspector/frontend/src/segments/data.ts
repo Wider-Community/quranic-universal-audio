@@ -3,6 +3,7 @@
  */
 
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
+import { segAllData, segData } from '../lib/stores/segments/chapter';
 import { clearEdit } from '../lib/stores/segments/edit';
 import { clearStats, setStats } from '../lib/stores/segments/stats';
 import { clearValidation, setValidation } from '../lib/stores/segments/validation';
@@ -161,6 +162,7 @@ export async function onSegReciterChange(): Promise<void> {
 
     if (allResult.status === 'fulfilled') {
         state.segAllData = allResult.value;
+        segAllData.set(allResult.value); // mirror to store so Svelte components see new data
         _rewriteAudioUrls();
         computeSilenceAfter();
         if (dom.segFilterBarEl) dom.segFilterBarEl.hidden = false;
@@ -241,6 +243,7 @@ export function clearSegDisplay(): void {
     if (state._waveformObserver) { state._waveformObserver.disconnect(); state._waveformObserver = null; }
     state._segIndexMap = null;
     state.segAllData = null;
+    segAllData.set(null); // mirror to store so Svelte components see the reset
     state.segActiveFilters = [];
     if (dom.segFilterBarEl) { dom.segFilterBarEl.hidden = true; dom.segFilterRowsEl.innerHTML = ''; }
     const cacheBar = document.getElementById('seg-cache-bar');
@@ -250,6 +253,7 @@ export function clearSegDisplay(): void {
     if (dom.segFilterClearBtn) dom.segFilterClearBtn.hidden = true;
     if (dom.segFilterStatusEl) dom.segFilterStatusEl.textContent = '';
     state.segData = null;
+    segData.set(null); // mirror to store
     state.segDisplayedSegments = null;
     state.segCurrentIdx = -1;
     state.segDirtyMap.clear();
