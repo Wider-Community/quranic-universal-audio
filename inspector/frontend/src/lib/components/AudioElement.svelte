@@ -21,6 +21,8 @@
     export let crossorigin: string | null = null;
     /** Optional DOM id forwarded to the underlying <audio> element. */
     export let id: string | undefined = undefined;
+    /** Show native browser controls (play/pause/scrubber). */
+    export let controls = false;
 
     /** The raw HTMLAudioElement — use `bind:this={audio}` at call site. */
     let audio: HTMLAudioElement;
@@ -47,6 +49,13 @@
     export function pause(): void {
         audio.pause();
     }
+
+    /** Returns the underlying HTMLAudioElement. May be null during initial
+     *  render; safe to call inside onMount of the parent or after the
+     *  component dispatches any event. */
+    export function element(): HTMLAudioElement {
+        return audio;
+    }
 </script>
 
 <audio
@@ -55,6 +64,7 @@
     {preload}
     crossorigin={crossorigin ?? null}
     {id}
+    {controls}
     on:play={e => dispatch('play', { audio, event: e })}
     on:pause={e => dispatch('pause', { audio, event: e })}
     on:ended={e => dispatch('ended', { audio, event: e })}

@@ -18,6 +18,11 @@
         applySpeed(selected);
     });
 
+    // Re-apply the persisted speed when the audio element becomes available
+    // (parent binds lazily in onMount, so `audioElement` may be null at our
+    // own onMount firing — Svelte 4 mounts children first).
+    $: if (audioElement) audioElement.playbackRate = selected;
+
     function applySpeed(speed: number): void {
         selected = speed;
         if (audioElement) audioElement.playbackRate = speed;
