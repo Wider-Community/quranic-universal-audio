@@ -305,14 +305,15 @@ inspector/
         │   │   └── audio/
         │   │       └── index.ts        # added in Wave 11 audio-tab conversion
         │   ├── types/                  # migrated from Stage 1 types/
-        │   ├── utils/                  # pure TS (arabic-text, references, formatting, peaks math, svg-arrow-geometry, waveform-cache)
+        │   ├── utils/                  # pure TS (arabic-text, references, formatting, peaks math, svg-arrow-geometry, waveform-cache, keyboard-guard)
         │   └── components/             # shared UI primitives
         │       ├── Button.svelte
         │       ├── SearchableSelect.svelte
         │       ├── SpeedControl.svelte
         │       ├── AccordionPanel.svelte
         │       ├── ValidationBadge.svelte
-        │       └── WaveformCanvas.svelte
+        │       ├── WaveformCanvas.svelte   # supports startMs/endMs/totalDurationMs sub-ranging (S2-D32)
+        │       └── AudioElement.svelte     # minimal <audio> wrapper; safePlay + std event forwarding (S2-D30)
         │
         ├── tabs/
         │   ├── audio/
