@@ -3,14 +3,12 @@
 **Date**: 2026-04-14
 **Branch**: `worktree-refactor+inspector-modularize` (WSL worktree)
 **Working directory**: `/mnt/c/Users/ahmed/Documents/Uni/Thesis/Code/quranic-universal-audio/.claude/worktrees/refactor+inspector-modularize/`
-**Current HEAD**: `29a80e6` (Wave 9 — drop state.segStatsData + bridge)
+**Current HEAD**: `a9831f1` (Wave 11c — stage2 retro + doc sync)
 **Project CLAUDE.md**: `inspector/CLAUDE.md` (gitignored — locally edited by prior agents; frontend tree section may drift slightly)
 
 ## TL;DR for the incoming orchestrator
 
-You are taking over a multi-wave refactor driven by the `/refactor` skill. Stage 2 migrates the inspector frontend from vanilla-TS-imperative-DOM to Svelte 4, plus backend polish + Docker distribution. **Waves 0.5 through 9 are complete.** You are approaching **STOP-POINT 2** — before Wave 10 (history/rendering.ts rewrite, the most complex remaining Svelte migration). Confirm with the user before firing Wave 10.
-
-Remaining waves: **10, 11**. Wave 10 owns history view full migration; Wave 11 owns final cleanup, cycle re-promote, dead-code sweep.
+**Stage 2 is COMPLETE.** All 22 waves (0.5 through 11c) are done. The frontend has been fully migrated from vanilla-TS-imperative-DOM to Svelte 4. The pre-flight script passes 7/7 gates. There is no Wave 12 scope formally planned — any continuation is discretionary cleanup.
 
 ## State snapshot
 
@@ -39,32 +37,41 @@ Remaining waves: **10, 11**. Wave 10 owns history view full migration; Wave 11 o
 | 8b | StatsPanel + ChartFullscreen + StatsChart (store + 3 components) | `413b2d1` | 5 commits |
 | 8b-review | Wave 8b review follow-ups (B1 chart double-fire + NB cleanup) | `2acf8ac` | 1 commit |
 | 9 | S2-B05 fix + clearSegDisplay store-desync + save store + SavePreview.svelte + showPreview wiring + segStatsData deletion | `29a80e6` | 6 commits |
+| 10 | History panel full Svelte migration; `segments/history/rendering.ts` (695 LOC) substantially replaced | (see wave-10 handoff) | — |
+| 11a | Cycle ceiling decremented → 0; `import/no-cycle` re-promoted `warn` → `error`; all 7 pre-flight gates green | `4f2e534` | — |
+| 11b | Audio tab Svelte conversion (AudioTab.svelte, 310 LOC); `audio/index.ts` deleted; `audio-tab.css` scoped; NB-3 fixed | `e48a091` | — |
+| 11c | Stage 2 retro + decisions log (W11b-D1–D4) + doc sync (docker-distribution.md, refactor-notes.md) + orchestrator handoff update | `a9831f1` | — |
 
 ### What's IN PROGRESS
 
-**STOP-POINT 2** — before Wave 10 (history/rendering.ts). Confirm with user before firing.
+Nothing. Stage 2 is complete.
 
-### What's NEXT
+### What remains (Wave 12+ discretionary)
 
-- Confirm with user: smoke Wave 9 changes (save preview visibility, undo no longer fires stale splitChainRef).
-- Then fire **Wave 10**: full history view Svelte migration (`renderHistoryBatches`, `renderHistorySummaryStats`, `drawHistoryArrows`, `renderEditHistoryPanel`). This is the highest-risk remaining wave.
+These items were deferred but are NOT blocking:
 
-## User preferences discovered this session
+- **CSS migration** (7 of 8 CSS files still global in `styles/`): blocked by imperative `classList.add/remove` for 60fps and class-as-query-selector usage. Path forward per Wave 11b handoff §3.
+- **NB-1**: `_applyHistoryData` / `renderEditHistoryPanel` duplication in `segments/data.ts:53-61`. Requires cycle-break structure evaluation.
+- **NB-2**: `undo.ts:228` self-round-trip `setHistoryData(storeGet(historyData))`. Functional, not blocking.
+- **S2-D28**: `_apply_full_replace` missing return annotation. Cosmetic.
+- **S2-D29**: `get_verse_data._error` discriminant convention. Revisit if REST refactor lands.
+- **Docker CI**: `.github/workflows/docker-publish.yml` not yet written. See `docs/inspector-docker-distribution.md` §CI.
+- **Mode B flock**: `inspector/services/save.py` flock wrapper for shared-dataset hosting. Optional.
 
-1. **Sonnet OR OPUS for impl agents not always Opus by default**, depending on intensity of waves. User may pre-emptively override to Opus per wave — did so for Wave 4 (first Svelte tab conversion) and explicitly said "opus" when I asked about Wave 4. user's Wave-4 override extends that to "preemptive Opus for intense frontend work at user's call."
-2. **Reviewers stay per plan** (Opus for judgment, Sonnet for pattern, Haiku for mechanical). Not a token-cost target.
-3. **User approves each wave before firing.** Minimal replies ("confirm", "approve", "opus", "yes") — take them at face value. When you ask a yes/no, expect one-word replies.
-4. **No testing (pytest / Vitest / Playwright)** — user declined upfront (S2-D07). Re-check before adding any test infrastructure.
+## User preferences (carried forward)
+
+1. **Sonnet OR Opus for impl agents** — user may pre-emptively override to Opus for intense waves.
+2. **Reviewers stay per plan** (Opus for judgment, Sonnet for pattern, Haiku for mechanical).
+3. **User approves each wave before firing.** Minimal replies ("confirm", "approve", "yes") — take at face value.
+4. **No testing** — deferred (S2-D07). Never add test infrastructure without explicit user request.
 5. **No bundle-size tracking** (S2-D14).
-6. **User's declared stop-points**: end of Wave 4 (DONE, in progress) and before Wave 10 (`history/rendering.ts` rewrite). Nowhere else unless user explicitly requests.
-7. **User's escalation**: "pause only before highest-risk phases" — between Waves 5-9 run autonomously through review gates.
-8. **Commit style**: no Co-Authored-By trailers in inspector commits. Match existing `refactor(inspector):`/`feat(inspector):`/`fix(inspector):`/`chore(inspector):`/`docs(inspector):` conventions. Use HEREDOC for commit messages.
-9. **User does smoke tests themselves** (not agents) — reviewers rely on manual-smoke reasoning only; agents never start the dev server.
-10. **Data files in working tree** (untracked `data/recitation_segments/*/` dirs, modified `inspector/README.md`, `inspector/frontend/src/styles/validation.css`) — leave alone; they're the user's ongoing reciter data work, not refactor scope.
+6. **Commit style**: no Co-Authored-By trailers. Match existing `refactor(inspector):`/`feat(inspector):`/`fix(inspector):`/`chore(inspector):`/`docs(inspector):` conventions. HEREDOC for commit messages.
+7. **User does smoke tests themselves** — agents never start the dev server.
+8. **Data files in working tree** (untracked `data/recitation_segments/*/` dirs) — leave alone; user's ongoing work.
 
-## Pattern decisions locked for Waves 5-10
+## Pattern notes (locked for any Wave 12 work)
 
-Read them verbatim in `.refactor/stage2-wave-4-handoff.md` (top-of-document "Pattern notes for Waves 5-10" section). 8 patterns, one-liners:
+8 patterns from Wave 4 handoff, verbatim:
 
 1. Plain `writable<T>()` / `derived` — no factory wrappers
 2. Shallow derivation; `$:` for single-component computed values
@@ -73,15 +80,22 @@ Read them verbatim in `.refactor/stage2-wave-4-handoff.md` (top-of-document "Pat
 5. Module-scope `Map` for WebAudio-style caches (non-reactive, S2-D12)
 6. CSS vars as `style:` directives on tab root div (NOT `:root` via JS)
 7. Keyboard via `<svelte:window on:keydown>` inside each tab + `shouldHandleKey(e, tab)` guard
-8. **Hybrid 60fps**: Svelte for structure + imperative `updateHighlights()` method via `bind:this` for per-frame class toggles (new in Wave 4)
+8. **Hybrid 60fps**: Svelte for structure + imperative `updateHighlights()` method via `bind:this` for per-frame class toggles
 
-**S2-D33 carry-forwards** (from Wave-4 reviewers, in decisions log): Wave 5 cleanup of 3 orphan derived stores in `verse.ts`; factor `createPlaybackStore()` if patterns collide; **before Wave 7** replace `document.getElementById('audio-player'|'seg-audio-player')` DOM-lookups with refs/callbacks; **before Wave 8** use `{#each}` over 11 categories with open-state persistence.
+## Known clean state at HEAD `a9831f1`
 
-## Pitfalls + reviewer-prompt refinements (learned from S2-B07)
-
-- **Wave-3 regression missed by reviewers**: both Wave-3 Sonnet and Opus reviewers audited mount timing but only inside `DOMContentLoaded` handler bodies — they did NOT grep for module-top-level `mustGet` / `element.addEventListener` calls. When auditing future tab conversions (Waves 5, 11), **add to reviewer prompts**: `grep -n "^[a-zA-Z].*\\.addEventListener\\|^[a-zA-Z].*mustGet" src/<tab>/index.ts` — any hits mean module-top-level DOM access that'll run before `new App()` mounts. Same root cause will bite segments/index.ts or audio/index.ts if either gets touched again before being deleted in Waves 5/11.
-- **`segments/index.ts` has its mustGet inside DOMContentLoaded handler** (correct). But when Wave 5 starts converting segments, the interim state may have some new Svelte component + the old `segments/index.ts` both active — watch for the mount-before-access invariant.
-- **`timestamps/*.ts` is fully deleted** — zero risk there.
+- 7/7 pre-flight gates green
+- Cycle count **0** (ceiling: 0; `import/no-cycle` severity: error)
+- Zero `// NOTE: circular dependency` comments
+- Zero `global` keyword outside `services/cache.py`
+- Zero orphan `_URL_AUDIO_META` / `_phonemizer` references
+- svelte-check: 0 errors, 0 warnings
+- Build: 144 modules, 535 kB JS, 31.5 kB CSS
+- All 3 tabs: pure Svelte (TimestampsTab, SegmentsTab, AudioTab)
+- Timestamps tab: 5 components + 3 stores + `lib/utils/webaudio-peaks.ts`
+- Segments tab: 29 components across shell/filters/edit/history/save/validation/stats + 9 stores
+- Audio tab: 1 component (AudioTab.svelte, 310 LOC), no store
+- Backend: Docker-ready, structured logging, thin routes, `save_seg_data` decomposed
 
 ## Useful commands
 
@@ -99,55 +113,14 @@ bash .refactor/stage2-checks.sh
 # Build for smoke test
 cd inspector/frontend && npm run build && cd ..
 python3 app.py  # serves at localhost:5000
-
-# Inspector production-mode uses debug=False by default; FLASK_ENV=development re-enables it
 ```
 
-## File reading order (fresh orchestrator)
+## Key documents
 
-Minimum to be operational:
-
-1. `.refactor/stage2-plan.md` — full plan (v3, post 3-model review). **Read in full.** Especially §2 invariants, §4 scope per wave, §5 target structure, §6 wave ordering, §9 stop-points, §10 decisions.
-2. `.refactor/stage2-wave-4-handoff.md` — **the pattern-setter**. Top-of-document pattern notes are load-bearing for Waves 5-10.
-3. `.refactor/stage2-decisions.md` — 33 decisions (S2-D01 through S2-D33); scan the full list.
-4. `.refactor/stage2-bugs.md` — 1 OPEN (S2-B06 deferred cycles); S2-B01/B02/B04/B05/B07 all CLOSED. See wave handoffs for details.
-5. `.refactor/stage2-orchestration-log.md` — per-agent budget + verdicts history.
-
-Skim:
-- `.refactor/stage2-css-migration-map.md` (load-bearing for Wave 11 cleanup)
-- `.refactor/stage2-wave-{0.5, 1, 2, 3}-handoff.md` (later waves can look up as needed)
-- `inspector/CLAUDE.md` (architecture principles — gitignored; frontend tree section may lag)
-
-## Brief on the `/refactor` skill
-
-The skill is at `~/.claude/skills/refactor/`. Key mechanics:
-
-- **One implementation agent per wave** (max 3 sub-waves if a wave is genuinely large)
-- **Reviewers at wave boundaries**: Sonnet always, Opus for heavy waves (per plan §6.2 table), Haiku for mechanical (Wave 2/3/11 primarily)
-- **Stop-points**: declared in plan §9 (2 user-declared + systemic triggers like context ≥75%)
-- **Shared docs**: orchestrator maintains 3 append-only `.refactor/stage2-*.md` files (bugs, decisions, orchestration-log) — agents append, never rewrite history
-- **Plan-vs-delivery reconciliation** at every wave boundary via the handoff §6.3 template (11 sections, Wave 3 briefly drifted, Wave 4 restored conformity)
-- **Pre-flight gate** `bash .refactor/stage2-checks.sh` runs 7 checks; must pass at every wave boundary
-- **Cycle ceiling 16** (updated from 23 at Wave 1 start; now 14 actual + 2 buffer post-Wave 8b): `CYCLE_CEILING` env var in `stage2-checks.sh`. Decrements per wave as segments cycles dissolve; target 0 at Wave 11 re-promote.
-
-## Immediate next actions for the fresh orchestrator
-
-1. **Read** `.refactor/stage2-wave-9-handoff.md` (the freshest) + `stage2-plan.md` §4 Wave 10-11 + `stage2-decisions.md`.
-2. **Do NOT re-fire Waves 0.5-9** — they're done.
-3. **Confirm with user**: smoke Wave 9 (save preview visibility via store, S2-B05 undo regression test per wave-9 handoff §5). Wave 9 changes are low-risk (visibility store + null-outs) but confirm before Wave 10.
-4. **STOP-POINT 2**: Wait for user to explicitly approve Wave 10 before firing. Wave 10 is the history view full Svelte migration — highest complexity remaining. Brief agent with wave-9 handoff §7 prerequisites + plan §4 Wave 10 scope.
-5. If smoke surfaces a regression: diagnose via browser console, check for B1-class DOM clobbers or store-desync bugs. Log in `stage2-bugs.md` Section 3/4.
-
-## Known clean state
-
-- 7/7 pre-flight gates green at HEAD `29a80e6`
-- Cycle count **14** (ceiling 16, 2-buffer)
-- Zero `// NOTE: circular dependency` comments
-- Zero `global` keyword outside `services/cache.py`
-- Zero orphan `_URL_AUDIO_META` / `_phonemizer` references
-- S2-B05 CLOSED (Wave 9)
-- `state.segStatsData` field deleted (Wave 9 CF)
-- Build: 480KB JS, 31KB CSS
-- Timestamps tab: pure Svelte (5 components + 3 stores + 1 util)
-- Segments + Audio tabs: unchanged Stage-1 imperative (still work via App.svelte hidden-div mount pattern)
-- Backend: Docker-ready, structured logging, thin routes, `save_seg_data` decomposed
+- `.refactor/stage2-retro.md` — full Stage 2 retrospective (written Wave 11c)
+- `.refactor/stage2-decisions.md` — all decisions S2-D01 through W11b-D4
+- `.refactor/stage2-bugs.md` — all bugs; S2-B01/02/04/05/07 CLOSED; S2-B06 deferred (cycles, now moot)
+- `.refactor/stage2-wave-11b-handoff.md` — most recent implementation handoff
+- `docs/inspector-docker-distribution.md` — Docker distribution plan + implementation status
+- `docs/inspector-refactor-notes.md` — stage 2 completion status + open items for Wave 12
+- `inspector/CLAUDE.md` (gitignored) — updated locally with full lib/ and tabs/ tree

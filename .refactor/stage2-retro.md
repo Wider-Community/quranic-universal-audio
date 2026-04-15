@@ -185,7 +185,7 @@ Build: 144 modules, 535 kB JS, 31.5 kB CSS.
 
 | Category | Before Stage 2 | After Stage 2 | Delta |
 |----------|---------------|--------------|-------|
-| Frontend TS imperative | ~12,265 LOC | ~3,500 LOC (segments only) | −8,765 |
+| Frontend TS imperative | ~12,265 LOC | ~6,400 LOC (segments only) | −5,865 |
 | Frontend Svelte components | 0 | ~5,800 LOC | +5,800 |
 | Frontend stores | 0 | ~600 LOC | +600 |
 | Frontend lib/utils | ~800 LOC | ~1,400 LOC | +600 |
