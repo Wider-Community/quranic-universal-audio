@@ -1,12 +1,32 @@
-# Keep the build context lean — exclude everything that isn't needed to build
-# or run the inspector inside the container. Paths are relative to the build
-# context, which is `inspector/` (this directory).
+# Build context is the repo root (one level above inspector/).
+# Exclude everything not needed to build or run the inspector.
+# Paths are relative to the repo root.
 
-# Agents / IDEs
-.vscode
-CLAUDE.md
+# --- Repo-root components not needed in the image ---
+mfa_aligner/
+quranic_universal_aligner/
+reciter_requests/
+scripts/
+extract_timestamps.py
 
-# Python build artifacts
+# --- Data (mounted at runtime, not baked in) ---
+data/
+
+# --- Docs and repo metadata ---
+docs/
+.git/
+.claude/
+.github/
+*.md
+!inspector/requirements.txt
+CONTRIBUTING.md
+LICENSE
+
+# --- Agents / IDEs ---
+.vscode/
+inspector/CLAUDE.md
+
+# --- Python build artifacts ---
 **/__pycache__
 **/*.pyc
 **/*.pyo
@@ -14,26 +34,26 @@ CLAUDE.md
 .pytest_cache
 .mypy_cache
 
-# Node / frontend caches — Stage 1 rebuilds from package.json
-frontend/node_modules
-frontend/dist
-frontend/.vite
+# --- Node / frontend caches — Stage 1 rebuilds from package.json ---
+inspector/frontend/node_modules
+inspector/frontend/dist
+inspector/frontend/.vite
 
-# Local caches and backups
+# --- Local caches and backups ---
 .cache
 captures
 **/.cache
 *.bak
 
-# Python virtualenvs
+# --- Python virtualenvs ---
 .venv
 .env
 env
 venv
 
-# macOS / Windows cruft
+# --- macOS / Windows cruft ---
 .DS_Store
 Thumbs.db
 
-# Dev-only dependency file (prod image stays lean)
-requirements-dev.txt
+# --- Dev-only dependency file (prod image stays lean) ---
+inspector/requirements-dev.txt

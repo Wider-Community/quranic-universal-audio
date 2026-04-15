@@ -3,11 +3,12 @@
 # Stage 2 is a lean Python runtime that copies the built dist/ across and
 # ships the Flask app. Reviewers run `docker compose up` and visit :5000.
 #
-# Build context is `inspector/` (this directory). `inspector/validators/` is
-# vendored into the inspector tree (Wave 2a), so no sibling access is needed.
+# Build context is the REPO ROOT (one level above inspector/).
+# `validators/` lives at repo root as a sibling of `inspector/`; both are
+# copied into the image. This is the canonical layout post-S2-D36 (reverted
+# S2-D03 vendoring).
 #
-# Build:    docker build -t inspector:dev inspector/      # from repo root
-#        or cd inspector && docker build -t inspector:dev .
+# Build:    docker build -t inspector:dev -f inspector/Dockerfile .   # from repo root
 # Run dev:  docker run --rm -p 5000:5000 -v "$PWD/data:/data" inspector:dev
 
 # --- Stage 1: build frontend ---
@@ -16,9 +17,9 @@ WORKDIR /app
 # npm install (not `ci`) — matches the "no package-lock.json committed" reality
 # that CLAUDE.md's run instructions already assume. Switch to `npm ci` once a
 # lockfile lands.
-COPY frontend/package.json ./
+COPY inspector/frontend/package.json ./
 RUN npm install
-COPY frontend ./
+COPY inspector/frontend ./
 RUN npm run build
 
 
@@ -33,14 +34,15 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Python deps first so the layer caches across code-only changes.
-COPY requirements.txt ./
+COPY inspector/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App code. `inspector/validators/` is vendored into the build context (S2-D03),
-# so a single COPY of the whole context is sufficient — no separate validators/
-# step. We place the tree under ./inspector/ inside the image to preserve the
-# `python3 inspector/app.py` entrypoint and any `inspector.*`-rooted imports.
-COPY . ./inspector
+# App code. Place the inspector tree under ./inspector/ and the validators
+# package at ./validators/ so that `from validators.X import Y` resolves
+# correctly when `python3 inspector/app.py` is run from WORKDIR /app.
+# app.py inserts /app (repo root) onto sys.path[0] at startup.
+COPY inspector/ ./inspector/
+COPY validators/ ./validators/
 
 # Built frontend from stage 1.
 COPY --from=frontend-build /app/dist ./inspector/frontend/dist

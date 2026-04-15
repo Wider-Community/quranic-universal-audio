@@ -4,6 +4,12 @@
 #   docker compose up
 #   → http://localhost:5000
 #
+# Or from repo root:
+#   docker compose -f inspector/docker-compose.yml up
+#
+# The build context is the repo root (`..` relative to this file) so that
+# both `inspector/` and `validators/` are available to the Dockerfile (S2-D36).
+#
 # The host `data/` directory sits one level up (repo root), so the volume
 # mount reaches back out of the inspector/ folder. Reviewers consuming a
 # published image can copy just this file into any folder alongside a
@@ -16,7 +22,9 @@
 
 services:
   inspector:
-    build: .
+    build:
+      context: ..
+      dockerfile: inspector/Dockerfile
     image: inspector:dev
     container_name: inspector
     ports:

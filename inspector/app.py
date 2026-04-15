@@ -10,7 +10,17 @@ import concurrent.futures
 import json
 import logging
 import os
+import sys
 from pathlib import Path
+
+# Ensure the repo root (parent of inspector/) is on sys.path so that
+# `from validators.X import Y` resolves to the sibling `validators/` package
+# when the app is launched via `python3 inspector/app.py` from the repo root.
+# Inside Docker the WORKDIR is /app and both /app/inspector/ and /app/validators/
+# are present at that level, so this insert is also correct there.
+_REPO_ROOT = Path(__file__).parent.parent.resolve()
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from flask import Flask, jsonify, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
