@@ -10,6 +10,7 @@ import {
     setSplitChains,
     type SplitChain,
 } from '../../lib/stores/segments/history';
+import { setSavePreviewData } from '../../lib/stores/segments/save';
 import { surahOptionText } from '../../lib/utils/surah-info';
 import type {
     SegEditHistoryResponse,
@@ -19,9 +20,7 @@ import type {
 import type { HistoryBatch } from '../../types/domain';
 import { buildSavePreviewData, hideSavePreview } from '../save';
 import { dom, isDirty, state } from '../state';
-import { _ensureWaveformObserver } from '../waveform/index';
 import { renderEditHistoryPanel } from './index';
-import { drawHistoryArrows, renderHistoryBatches, renderHistorySummaryStats } from './rendering';
 
 // ---------------------------------------------------------------------------
 // _afterUndoSuccess -- shared post-undo refresh
@@ -221,29 +220,12 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as HistoryBatch[])];
     const splitLineage = buildSplitLineage(allBatches);
     const built = buildSplitChains(allBatches, splitLineage);
-    // Mirror to legacy state fields (still read by some imperative helpers)
-    // AND push into the history store so HistoryPanel reflects the rebuild.
+    // Keep legacy state fields in sync AND push into the history store.
     state._splitChains = built.chains;
     state._chainedOpIds = built.chainedOpIds;
     setSplitChains(built.chains, built.chainedOpIds);
-    // Ensure HistoryPanel summary/batches sees the pending data too.
+    // Ensure HistoryPanel sees the pending data.
     setHistoryData(state.segHistoryData);
-    renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
-    if (data.warningChapters.length > 0) {
-        const warn = document.createElement('div');
-        warn.className = 'seg-save-preview-warning';
-        warn.textContent = `${data.warningChapters.length} chapter(s) marked as changed `
-            + `but have no detailed operations recorded: `
-            + data.warningChapters.map(c => surahOptionText(c)).join(', ');
-        dom.segSavePreviewStats.prepend(warn);
-    }
-    renderHistoryBatches(data.batches as HistoryBatch[], dom.segSavePreviewBatches);
-    dom.segSavePreviewBatches.querySelectorAll<HTMLElement>('.seg-history-batch-time').forEach(el => {
-        if (el.textContent === 'Pending') el.style.color = '#f0a500';
-    });
-    const observer = _ensureWaveformObserver();
-    dom.segSavePreview.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-    requestAnimationFrame(() => {
-        dom.segSavePreview.querySelectorAll<HTMLElement>('.seg-history-diff').forEach(d => drawHistoryArrows(d));
-    });
+    // Publish updated preview data to store — SavePreview.svelte renders reactively.
+    setSavePreviewData(data);
 }

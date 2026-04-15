@@ -2,41 +2,35 @@
  * Save flow: preview, confirm, execute save to server.
  */
 
+import { get as storeGet } from 'svelte/store';
+
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
-import { buildSplitChains, buildSplitLineage } from '../lib/stores/segments/history';
-import { hidePreview, showPreview } from '../lib/stores/segments/save';
-import { surahOptionText } from '../lib/utils/surah-info';
+import {
+    buildSplitChains,
+    buildSplitLineage,
+    countVersesFromBatches,
+    historyData,
+    restoreSplitChains,
+    setSplitChains,
+    snapshotSplitChains,
+} from '../lib/stores/segments/history';
+import {
+    clearSavePreviewData,
+    hidePreview,
+    type SavePreviewBatch,
+    type SavePreviewData,
+    setSavePreviewData,
+    showPreview,
+} from '../lib/stores/segments/save';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
 import type { EditOp, HistoryBatch, Segment } from '../types/domain';
 import { _SEG_NORMAL_IDS } from './constants';
 import { getChapterSegments, onSegReciterChange } from './data';
 import { renderEditHistoryPanel } from './history/index';
-import { _countVersesFromBatches,drawHistoryArrows, renderHistoryBatches, renderHistorySummaryStats } from './history/rendering';
-import { dom, isDirty,state } from './state';
+import { dom, isDirty, state } from './state';
 import { stopErrorCardAudio } from './validation/error-card-audio';
 import { refreshValidation } from './validation/index';
-import { _ensureWaveformObserver } from './waveform/index';
 
-interface SavePreviewBatch {
-    batch_id: null;
-    saved_at_utc: null;
-    chapter: number;
-    save_mode: 'full_replace' | 'patch';
-    operations: EditOp[];
-}
-
-interface SavePreviewData {
-    batches: SavePreviewBatch[];
-    summary: {
-        total_operations: number;
-        total_batches: number;
-        chapters_edited: number;
-        verses_edited: number;
-        op_counts: Record<string, number>;
-        fix_kind_counts: Record<string, number>;
-    };
-    warningChapters: number[];
-}
 
 // ---------------------------------------------------------------------------
 // onSegSaveClick -- entry point from Save button
@@ -82,7 +76,7 @@ export function buildSavePreviewData(): SavePreviewData {
         total_operations: totalOps,
         total_batches: batches.length + warningChapters.length,
         chapters_edited: batches.length + warningChapters.length,
-        verses_edited: _countVersesFromBatches(batches as HistoryBatch[]) ?? 0,
+        verses_edited: countVersesFromBatches(batches as HistoryBatch[]),
         op_counts: opCounts,
         fix_kind_counts: fixKindCounts,
     };
@@ -98,29 +92,25 @@ export function showSavePreview(): void {
     state._segSavedPreviewState = { scrollTop: dom.segListEl.scrollTop };
     const data = buildSavePreviewData();
 
-    state._segSavedChains = { splitChains: state._splitChains, chainedOpIds: state._chainedOpIds };
-    const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as HistoryBatch[])];
+    // Snapshot current split-chain state so hideSavePreview can restore it.
+    // snapshotSplitChains() returns { chains, chainedOpIds }; map to the
+    // legacy SavedChainsSnapshot shape { splitChains, chainedOpIds }.
+    const snap = snapshotSplitChains();
+    state._segSavedChains = { splitChains: snap.chains, chainedOpIds: snap.chainedOpIds };
+
+    // Rebuild split chains to include pending batches, push to store so
+    // SavePreview.svelte (and HistoryPanel) see the augmented chain map.
+    const allBatches = [...(storeGet(historyData)?.batches || []), ...(data.batches as HistoryBatch[])];
     const splitLineage = buildSplitLineage(allBatches);
     const built = buildSplitChains(allBatches, splitLineage);
+    // Keep legacy state fields in sync (consumed by imperative history/rendering.ts
+    // code that remains until P3 orphan deletion).
     state._splitChains = built.chains;
     state._chainedOpIds = built.chainedOpIds;
+    setSplitChains(built.chains, built.chainedOpIds);
 
-    renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
-
-    if (data.warningChapters.length > 0) {
-        const warn = document.createElement('div');
-        warn.className = 'seg-save-preview-warning';
-        warn.textContent = `${data.warningChapters.length} chapter(s) marked as changed `
-            + `but have no detailed operations recorded: `
-            + data.warningChapters.map(c => surahOptionText(c)).join(', ');
-        dom.segSavePreviewStats.prepend(warn);
-    }
-
-    renderHistoryBatches(data.batches as HistoryBatch[], dom.segSavePreviewBatches);
-
-    dom.segSavePreviewBatches.querySelectorAll<HTMLElement>('.seg-history-batch-time').forEach(el => {
-        if (el.textContent === 'Pending') el.style.color = '#f0a500';
-    });
+    // Publish preview data to store — SavePreview.svelte renders reactively.
+    setSavePreviewData(data);
 
     for (const id of _SEG_NORMAL_IDS) {
         const el = document.getElementById(id);
@@ -134,13 +124,7 @@ export function showSavePreview(): void {
     dom.segHistoryView.hidden = true;
 
     dom.segSavePreview.hidden = false;
-    showPreview(); // Wave 9: notify $savePreviewVisible store (SavePreview.svelte hidden binding)
-
-    const observer = _ensureWaveformObserver();
-    dom.segSavePreview.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-    requestAnimationFrame(() => {
-        dom.segSavePreview.querySelectorAll<HTMLElement>('.seg-history-diff').forEach(d => drawHistoryArrows(d));
-    });
+    showPreview(); // notify $savePreviewVisible store (SavePreview.svelte hidden binding)
 }
 
 // ---------------------------------------------------------------------------
@@ -150,11 +134,14 @@ export function showSavePreview(): void {
 export function hideSavePreview(restoreScroll = true): void {
     stopErrorCardAudio();
     dom.segSavePreview.hidden = true;
-    hidePreview(); // Wave 9: notify $savePreviewVisible store (SavePreview.svelte hidden binding)
-    dom.segSavePreviewStats.innerHTML = '';
-    dom.segSavePreviewBatches.innerHTML = '';
+    hidePreview(); // notify $savePreviewVisible store (SavePreview.svelte hidden binding)
+    clearSavePreviewData(); // clear store — SavePreview.svelte empties reactively
 
     if (state._segSavedChains) {
+        // Restore split chains to their pre-preview state via the store.
+        // Map legacy { splitChains, chainedOpIds } to store's { chains, chainedOpIds }.
+        restoreSplitChains({ chains: state._segSavedChains.splitChains, chainedOpIds: state._segSavedChains.chainedOpIds });
+        // Keep legacy state fields in sync.
         state._splitChains = state._segSavedChains.splitChains;
         state._chainedOpIds = state._segSavedChains.chainedOpIds;
         state._segSavedChains = null;
