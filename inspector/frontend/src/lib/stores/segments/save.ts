@@ -1,31 +1,77 @@
 /**
- * Segments tab — save-preview visibility store.
+ * Segments tab — save-preview store.
  *
- * Tracks whether the save-preview panel (#seg-save-preview) is visible.
- * Imperative code in segments/save.ts calls showPreview() / hidePreview()
- * alongside its existing DOM manipulation so SavePreview.svelte can bind
- * the `hidden` attribute reactively.
- *
- * Store granularity provisional through Wave 9 (S2-D11). Preview content
- * (batches, summary stats) continues to be rendered imperatively by
- * segments/history/rendering.ts; Wave 10 will migrate that.
- *
- * Write sites (Wave 9, 2026-04-14):
- *   - segments/save.ts (showSavePreview) → showPreview()
- *   - segments/save.ts (hideSavePreview) → hidePreview()
+ * Wave 9: `savePreviewVisible` writable + show/hide helpers.
+ * Wave 11a: `savePreviewData` writable carries the full preview payload so
+ *   SavePreview.svelte can render summary stats + batch cards reactively
+ *   (resolves Opus F bifurcation — save.ts no longer writes to imperative
+ *   DOM containers; Svelte owns #seg-save-preview-stats / -batches).
  */
 
 import { writable } from 'svelte/store';
 
+import type { EditOp, HistoryBatch } from '../../../types/domain';
+
+// ---------------------------------------------------------------------------
+// SavePreviewData — preview payload shape (mirrors buildSavePreviewData return)
+// ---------------------------------------------------------------------------
+
+export interface SavePreviewBatch {
+    batch_id: null;
+    saved_at_utc: null;
+    chapter: number;
+    save_mode: 'full_replace' | 'patch';
+    operations: EditOp[];
+}
+
+export interface SavePreviewSummary {
+    total_operations: number;
+    total_batches: number;
+    chapters_edited: number;
+    verses_edited: number;
+    op_counts: Record<string, number>;
+    fix_kind_counts: Record<string, number>;
+}
+
+export interface SavePreviewData {
+    batches: SavePreviewBatch[];
+    summary: SavePreviewSummary;
+    warningChapters: number[];
+}
+
+// ---------------------------------------------------------------------------
+// Stores
+// ---------------------------------------------------------------------------
+
 /** True while #seg-save-preview is visible. */
 export const savePreviewVisible = writable<boolean>(false);
 
-/** Show the save-preview panel (call alongside setting dom.segSavePreview.hidden = false). */
+/** Full preview payload. Non-null while preview is showing. */
+export const savePreviewData = writable<SavePreviewData | null>(null);
+
+// ---------------------------------------------------------------------------
+// Mutators
+// ---------------------------------------------------------------------------
+
+/** Show the save-preview panel and publish its data to the store. */
 export function showPreview(): void {
     savePreviewVisible.set(true);
 }
 
-/** Hide the save-preview panel (call alongside setting dom.segSavePreview.hidden = true). */
+/** Hide the save-preview panel. */
 export function hidePreview(): void {
     savePreviewVisible.set(false);
 }
+
+/** Publish preview payload so SavePreview.svelte can render reactively. */
+export function setSavePreviewData(data: SavePreviewData): void {
+    savePreviewData.set(data);
+}
+
+/** Clear preview payload on hide. */
+export function clearSavePreviewData(): void {
+    savePreviewData.set(null);
+}
+
+// Type re-export so callers don't need to import from domain.ts separately.
+export type { HistoryBatch };
