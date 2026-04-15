@@ -3,6 +3,7 @@ import gradio as gr
 
 from config import DEV_TAB_VISIBLE
 from src.core.zero_gpu import QuotaExhaustedError
+from src.core.worker_pool import PoolExhaustedError, PoolQueueFullError
 from src.pipeline import (
     process_audio, resegment_audio,
     _retranscribe_wrapper, save_json_export,
@@ -14,6 +15,10 @@ from src.api.session_api import (
     resegment, retranscribe, realign_from_timestamps,
     timestamps, timestamps_direct,
     debug_process,
+    cpu_exec,
+    pool_status,
+    cpu_pool_status,
+    cpu_pool_kill,
 )
 from src.mfa import compute_mfa_timestamps
 from src.ui.progress_bar import pipeline_progress_bar_html
@@ -27,7 +32,7 @@ _EMPTY_PLACEHOLDER = ""
 
 
 def _on_audio_change(audio_path):
-    """Reset UI state for new audio. Returns 21-tuple of reset values."""
+    """Reset UI state for new audio. Returns 20-tuple of reset values."""
     # Warn early if audio is very long (before user wastes GPU clicking Extract)
     if audio_path and isinstance(audio_path, str):
         try:
@@ -47,9 +52,8 @@ def _on_audio_change(audio_path):
         gr.update(visible=True, interactive=has_audio,                    # extract_btn
                   variant="primary" if has_audio else "secondary"),
         gr.update(visible=False),                                         # pipeline_progress
-        gr.update(visible=False, interactive=False, variant="secondary"), # compute_ts_btn
+        gr.update(visible=False, interactive=False, variant="secondary"), # animate_all_btn
         gr.update(visible=False),                                         # compute_ts_progress
-        gr.update(visible=False),                                         # animate_all_html
         gr.update(visible=False),                                         # resegment_toggle_btn
         gr.update(visible=False),                                         # retranscribe_btn
         gr.update(visible=False),                                         # resegment_panel
@@ -65,7 +69,7 @@ def wire_events(app, c):
     _wire_url_input(c)
     _wire_audio_input(c)
     _wire_extract_chain(c)
-    _wire_mfa_chain(c)
+    _wire_animate_all_chain(c)
     _wire_resegment_chain(c)
     _wire_retranscribe_chain(c)
     _wire_animation_settings(c)
@@ -116,11 +120,11 @@ def _wire_input_mode_toggle(c):
         c.link_panel, c.upload_panel, c.record_panel,
         c.url_input, c.url_download_btn, c.url_audio_player,
         c.audio_upload, c.audio_record, c.audio_input,
-        # _on_audio_change returns 21 values:
+        # _on_audio_change returns 20 values:
         c.output_html, c.output_json, c.export_file,
         c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
         c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
-        c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
+        c.extract_btn, c.pipeline_progress, c.animate_all_btn, c.compute_ts_progress,
         c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
         c.model_accordion, c.seg_accordion,
     ]
@@ -175,7 +179,7 @@ def _wire_url_input(c):
         c.output_html, c.output_json, c.export_file,
         c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
         c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
-        c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
+        c.extract_btn, c.pipeline_progress, c.animate_all_btn, c.compute_ts_progress,
         c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
         c.model_accordion, c.seg_accordion,
     ]
@@ -223,7 +227,7 @@ def _wire_audio_input(c):
         c.output_html, c.output_json, c.export_file,
         c.cached_speech_intervals, c.cached_is_complete, c.cached_audio, c.cached_sample_rate,
         c.cached_intervals, c.cached_model_name, c.cached_segment_dir, c.cached_log_row,
-        c.extract_btn, c.pipeline_progress, c.compute_ts_btn, c.compute_ts_progress, c.animate_all_html,
+        c.extract_btn, c.pipeline_progress, c.animate_all_btn, c.compute_ts_progress,
         c.resegment_toggle_btn, c.retranscribe_btn, c.resegment_panel,
         c.model_accordion, c.seg_accordion,
     ]
@@ -269,7 +273,7 @@ def _wire_extract_chain(c):
             _skip,                                                              # export_file
             gr.update(visible=False),                                           # hide extract_btn
             gr.update(value=bar_html, visible=True),                            # show pipeline_progress
-            _skip,                                                              # compute_ts_btn
+            _skip,                                                              # animate_all_btn
             _skip, _skip,                                                       # resegment/retranscribe btns
             _skip, _skip, _skip, _skip,                                         # rs sliders + model
             _skip, _skip,                                                       # accordions
@@ -279,10 +283,46 @@ def _wire_extract_chain(c):
             result = process_audio(audio_data, silence, speech, pad, model, device,
                                    is_preset=is_preset, request=request)
         except QuotaExhaustedError as e:
-            reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-            gr.Warning(f"GPU quota reached — retrying on CPU (slower).{reset_msg}")
-            result = process_audio(audio_data, silence, speech, pad, model, "CPU",
-                                   is_preset=is_preset, request=request)
+            raw = str(e).lower()
+            if e.reset_time and e.reset_time != "0:00:00":
+                reset_msg = f" Resets in {e.reset_time}."
+            elif e.reset_time == "0:00:00":
+                reset_msg = " Daily limit — resets ~24h after your first GPU use today."
+            else:
+                reset_msg = ""
+            if "unlogged user" in raw or "signup for free" in raw:
+                msg = (f"Anonymous GPU quota exhausted.{reset_msg} "
+                       "Sign in on Hugging Face for more quota, or switch Device to CPU.")
+            else:
+                msg = (f"Your GPU quota is exhausted.{reset_msg} "
+                       "Upgrade to Hugging Face Pro for more quota, or switch Device to CPU.")
+            gr.Warning(msg)
+            yield (
+                _skip, _skip,                                                       # output_html, output_json
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
+                _skip,                                                              # export_file
+                gr.update(visible=True, interactive=True),                          # re-show extract_btn
+                gr.update(visible=False),                                           # hide pipeline_progress
+                _skip,                                                              # animate_all_btn
+                _skip, _skip,                                                       # resegment/retranscribe
+                _skip, _skip, _skip, _skip,                                         # rs sliders + model
+                _skip, _skip,                                                       # accordions
+            )
+            return
+        except (PoolQueueFullError, PoolExhaustedError) as e:
+            gr.Warning(f"CPU workers busy: {e}. Please retry in a minute.")
+            yield (
+                _skip, _skip,
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,
+                _skip,
+                gr.update(visible=True, interactive=True),
+                gr.update(visible=False),
+                _skip,
+                _skip, _skip,
+                _skip, _skip, _skip, _skip,
+                _skip, _skip,
+            )
+            return
         except Exception as e:
             gr.Warning(f"Processing failed: {e}")
             yield (
@@ -291,7 +331,7 @@ def _wire_extract_chain(c):
                 _skip,                                                              # export_file
                 gr.update(visible=True, interactive=True),                          # re-show extract_btn
                 gr.update(visible=False),                                           # hide pipeline_progress
-                _skip,                                                              # compute_ts_btn
+                _skip,                                                              # animate_all_btn
                 _skip, _skip,                                                       # resegment/retranscribe
                 _skip, _skip, _skip, _skip,                                         # rs sliders + model
                 _skip, _skip,                                                       # accordions
@@ -306,7 +346,7 @@ def _wire_extract_chain(c):
             save_json_export(json_data),                                        # export_file
             gr.update(visible=False),                                           # hide extract_btn
             gr.update(visible=False),                                           # hide pipeline_progress
-            gr.update(visible=True, interactive=True, variant="primary"),       # show compute_ts_btn
+            gr.update(visible=True, interactive=True, variant="primary"),       # show animate_all_btn
             gr.update(visible=True),                                            # show resegment_toggle_btn
             gr.update(                                                          # show retranscribe_btn
                 visible=True,
@@ -332,7 +372,7 @@ def _wire_extract_chain(c):
             c.cached_audio, c.cached_sample_rate,
             c.cached_intervals, c.cached_segment_dir,
             c.cached_log_row,
-            c.export_file, c.extract_btn, c.pipeline_progress, c.compute_ts_btn,
+            c.export_file, c.extract_btn, c.pipeline_progress, c.animate_all_btn,
             c.resegment_toggle_btn, c.retranscribe_btn,
             c.rs_silence, c.rs_speech, c.rs_pad, c.cached_model_name,
             c.model_accordion, c.seg_accordion,
@@ -341,12 +381,12 @@ def _wire_extract_chain(c):
     )
 
 
-def _wire_mfa_chain(c):
-    """Compute MFA timestamps -> save JSON export."""
-    c.compute_ts_btn.click(
+def _wire_animate_all_chain(c):
+    """Animate All: run MFA for uncomputed segments then jump into the mega card."""
+    c.animate_all_btn.click(
         fn=compute_mfa_timestamps,
         inputs=[c.output_html, c.output_json, c.cached_segment_dir, c.cached_log_row],
-        outputs=[c.output_html, c.compute_ts_btn, c.animate_all_html, c.compute_ts_progress, c.output_json],
+        outputs=[c.output_html, c.animate_all_btn, c.edit_patch, c.compute_ts_progress, c.output_json],
         api_name=False, show_progress="hidden"
     ).then(
         fn=save_json_export,
@@ -382,9 +422,9 @@ def _wire_resegment_chain(c):
             _skip, _skip,                                                       # resegment_panel, panel_visible
             _skip,                                                              # export_file
             _skip, _skip, _skip, _skip,                                         # sliders + model
-            _skip,                                                              # compute_ts_btn
+            _skip,                                                              # animate_all_btn
             gr.update(value=bar_html, visible=True),                            # show pipeline_progress
-            _skip, _skip,                                                       # animate_all, retranscribe
+            _skip,                                                              # retranscribe_btn
         )
 
         try:
@@ -392,11 +432,44 @@ def _wire_resegment_chain(c):
                                      silence, speech, pad, model, device, log_row,
                                      is_preset=is_preset, request=request)
         except QuotaExhaustedError as e:
-            reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-            gr.Warning(f"GPU quota reached — retrying on CPU (slower).{reset_msg}")
-            result = resegment_audio(speech_intervals, is_complete, audio, sr,
-                                     silence, speech, pad, model, "CPU", log_row,
-                                     is_preset=is_preset, request=request)
+            raw = str(e).lower()
+            if e.reset_time and e.reset_time != "0:00:00":
+                reset_msg = f" Resets in {e.reset_time}."
+            elif e.reset_time == "0:00:00":
+                reset_msg = " Daily limit — resets ~24h after your first GPU use today."
+            else:
+                reset_msg = ""
+            if "unlogged user" in raw or "signup for free" in raw:
+                msg = (f"Anonymous GPU quota exhausted.{reset_msg} "
+                       "Sign in on Hugging Face for more quota, or switch Device to CPU.")
+            else:
+                msg = (f"Your GPU quota is exhausted.{reset_msg} "
+                       "Upgrade to Hugging Face Pro for more quota, or switch Device to CPU.")
+            gr.Warning(msg)
+            yield (
+                _skip, _skip,                                                       # output_html, output_json
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
+                _skip, _skip,                                                       # resegment_panel, panel_visible
+                _skip,                                                              # export_file
+                _skip, _skip, _skip, _skip,                                         # sliders + model
+                _skip,                                                              # animate_all_btn
+                gr.update(visible=False),                                           # hide pipeline_progress
+                _skip,                                                              # retranscribe_btn
+            )
+            return
+        except (PoolQueueFullError, PoolExhaustedError) as e:
+            gr.Warning(f"CPU workers busy: {e}. Please retry in a minute.")
+            yield (
+                _skip, _skip,
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,
+                _skip, _skip,
+                _skip,
+                _skip, _skip, _skip, _skip,
+                _skip,
+                gr.update(visible=False),
+                _skip,
+            )
+            return
         except Exception as e:
             gr.Warning(f"Processing failed: {e}")
             yield (
@@ -405,9 +478,9 @@ def _wire_resegment_chain(c):
                 _skip, _skip,                                                       # resegment_panel, panel_visible
                 _skip,                                                              # export_file
                 _skip, _skip, _skip, _skip,                                         # sliders + model
-                _skip,                                                              # compute_ts_btn
+                _skip,                                                              # animate_all_btn
                 gr.update(visible=False),                                           # hide pipeline_progress
-                _skip, _skip,                                                       # animate_all, retranscribe
+                _skip,                                                              # retranscribe_btn
             )
             return
         json_data = result[1]
@@ -417,9 +490,8 @@ def _wire_resegment_chain(c):
             save_json_export(json_data),                                        # export_file
             silence, speech, pad,                                               # sync sliders back
             model,                                                              # update cached_model_name
-            gr.update(visible=True, interactive=True, variant="primary"),       # re-enable compute_ts_btn
+            gr.update(visible=True, interactive=True, variant="primary"),       # re-enable animate_all_btn
             gr.update(visible=False),                                           # hide pipeline_progress
-            gr.update(visible=False),                                           # hide animate_all_html
             gr.update(                                                          # re-show retranscribe_btn
                 visible=True,
                 value=f"Retranscribe with {'Large' if model == 'Base' else 'Base'} Model"
@@ -445,8 +517,8 @@ def _wire_resegment_chain(c):
             c.resegment_panel, c.resegment_panel_visible,
             c.export_file,
             c.min_silence_slider, c.min_speech_slider, c.pad_slider,
-            c.cached_model_name, c.compute_ts_btn, c.pipeline_progress,
-            c.animate_all_html, c.retranscribe_btn,
+            c.cached_model_name, c.animate_all_btn, c.pipeline_progress,
+            c.retranscribe_btn,
         ],
         api_name=False, show_progress="hidden"
     )
@@ -470,9 +542,9 @@ def _wire_retranscribe_chain(c):
             _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
             _skip,                                                              # export_file
             _skip,                                                              # retranscribe_btn
-            _skip,                                                              # compute_ts_btn
+            _skip,                                                              # animate_all_btn
             gr.update(value=bar_html, visible=True),                            # show pipeline_progress
-            _skip, _skip,                                                       # animate_all, model
+            _skip,                                                              # cached_model_name
         )
 
         try:
@@ -481,12 +553,42 @@ def _wire_retranscribe_chain(c):
                                            silence, speech, pad,
                                            is_preset=is_preset, request=request)
         except QuotaExhaustedError as e:
-            reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-            gr.Warning(f"GPU quota reached — retrying on CPU (slower).{reset_msg}")
-            result = _retranscribe_wrapper(intervals, audio, sr, speech_intervals,
-                                           is_complete, model_name, "CPU", log_row,
-                                           silence, speech, pad,
-                                           is_preset=is_preset, request=request)
+            raw = str(e).lower()
+            if e.reset_time and e.reset_time != "0:00:00":
+                reset_msg = f" Resets in {e.reset_time}."
+            elif e.reset_time == "0:00:00":
+                reset_msg = " Daily limit — resets ~24h after your first GPU use today."
+            else:
+                reset_msg = ""
+            if "unlogged user" in raw or "signup for free" in raw:
+                msg = (f"Anonymous GPU quota exhausted.{reset_msg} "
+                       "Sign in on Hugging Face for more quota, or switch Device to CPU.")
+            else:
+                msg = (f"Your GPU quota is exhausted.{reset_msg} "
+                       "Upgrade to Hugging Face Pro for more quota, or switch Device to CPU.")
+            gr.Warning(msg)
+            yield (
+                _skip, _skip,                                                       # output_html, output_json
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
+                _skip,                                                              # export_file
+                _skip,                                                              # retranscribe_btn
+                _skip,                                                              # animate_all_btn
+                gr.update(visible=False),                                           # hide pipeline_progress
+                _skip,                                                              # cached_model_name
+            )
+            return
+        except (PoolQueueFullError, PoolExhaustedError) as e:
+            gr.Warning(f"CPU workers busy: {e}. Please retry in a minute.")
+            yield (
+                _skip, _skip,
+                _skip, _skip, _skip, _skip, _skip, _skip, _skip,
+                _skip,
+                _skip,
+                _skip,
+                gr.update(visible=False),
+                _skip,
+            )
+            return
         except Exception as e:
             gr.Warning(f"Processing failed: {e}")
             yield (
@@ -494,9 +596,9 @@ def _wire_retranscribe_chain(c):
                 _skip, _skip, _skip, _skip, _skip, _skip, _skip,                   # 7 cached states
                 _skip,                                                              # export_file
                 _skip,                                                              # retranscribe_btn
-                _skip,                                                              # compute_ts_btn
+                _skip,                                                              # animate_all_btn
                 gr.update(visible=False),                                           # hide pipeline_progress
-                _skip, _skip,                                                       # animate_all, model
+                _skip,                                                              # cached_model_name
             )
             return
         json_data = result[1]
@@ -504,9 +606,8 @@ def _wire_retranscribe_chain(c):
             *result,                                                            # 9 pipeline outputs
             save_json_export(json_data),                                        # export_file
             gr.update(visible=False),                                           # hide retranscribe_btn
-            gr.update(visible=True, interactive=True, variant="primary"),       # re-enable compute_ts_btn
+            gr.update(visible=True, interactive=True, variant="primary"),       # re-enable animate_all_btn
             gr.update(visible=False),                                           # hide pipeline_progress
-            gr.update(visible=False),                                           # hide animate_all_html
             "Large" if model_name == "Base" else "Base",                        # flip cached_model_name
         )
 
@@ -526,8 +627,8 @@ def _wire_retranscribe_chain(c):
             c.cached_audio, c.cached_sample_rate,
             c.cached_intervals, c.cached_segment_dir,
             c.cached_log_row,
-            c.export_file, c.retranscribe_btn, c.compute_ts_btn,
-            c.pipeline_progress, c.animate_all_html, c.cached_model_name,
+            c.export_file, c.retranscribe_btn, c.animate_all_btn,
+            c.pipeline_progress, c.cached_model_name,
         ],
         api_name=False, show_progress="hidden"
     )
@@ -819,6 +920,36 @@ def _wire_api_endpoint(c):
                 c.api_model, c.api_device, c.api_debug_token],
         outputs=[c.api_result],
         api_name="debug_process",
+    )
+    # CPU worker exec — invoked by main Space's worker_pool dispatcher.
+    # Only functional when WORKER_MODE=cpu is set on this Space.
+    gr.Button(visible=False).click(
+        fn=cpu_exec,
+        inputs=[c.api_cpu_exec_token, c.api_cpu_exec_module, c.api_cpu_exec_func,
+                c.api_cpu_exec_args, c.api_cpu_exec_kwargs, c.api_cpu_exec_meta],
+        outputs=[c.api_result],
+        api_name="cpu_exec",
+    )
+    # Pool status — HF-token-gated, returns per-worker state + pool config.
+    gr.Button(visible=False).click(
+        fn=pool_status,
+        inputs=[c.api_pool_status_token],
+        outputs=[c.api_result],
+        api_name="pool_status",
+    )
+    # Persistent CPU worker pool status — HF-token-gated.
+    gr.Button(visible=False).click(
+        fn=cpu_pool_status,
+        inputs=[c.api_pool_status_token],
+        outputs=[c.api_result],
+        api_name="cpu_pool_status",
+    )
+    # Kill a persistent worker — crash-recovery test helper, HF-token-gated.
+    gr.Button(visible=False).click(
+        fn=cpu_pool_kill,
+        inputs=[c.api_pool_status_token, c.api_cpu_exec_module],  # reuse token + a string input
+        outputs=[c.api_result],
+        api_name="cpu_pool_kill",
     )
 
 

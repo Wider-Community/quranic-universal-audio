@@ -3,6 +3,7 @@ Utilities for integrating Hugging Face Spaces ZeroGPU without breaking
 local or non-ZeroGPU environments.
 """
 
+import os
 import re
 import threading
 from typing import Callable, TypeVar
@@ -12,6 +13,12 @@ T = TypeVar("T", bound=Callable)
 
 # Default values in case the spaces package is unavailable (e.g., local runs).
 ZERO_GPU_AVAILABLE = False
+
+# WORKER_MODE=cpu marks this process as a pooled CPU worker (see worker_pool.py).
+# Workers always run decorated functions directly on CPU — no GPU allocation,
+# no subprocess isolation, no further worker-pool dispatch.
+WORKER_MODE = os.environ.get("WORKER_MODE", "").lower()
+IS_CPU_WORKER = WORKER_MODE == "cpu"
 
 
 class QuotaExhaustedError(Exception):
@@ -31,6 +38,26 @@ _request_state = threading.local()
 # concurrent threads from moving models mid-inference.
 # ---------------------------------------------------------------------------
 model_device_lock = threading.RLock()
+
+# ---------------------------------------------------------------------------
+# CPU subprocess concurrency gate — limits how many local subprocesses may be
+# running at once. Lazily initialized from config when first used to avoid
+# importing config at module load.
+# ---------------------------------------------------------------------------
+_subprocess_semaphore = None
+_subprocess_semaphore_lock = threading.Lock()
+
+
+def _get_subprocess_semaphore():
+    global _subprocess_semaphore
+    if _subprocess_semaphore is None:
+        with _subprocess_semaphore_lock:
+            if _subprocess_semaphore is None:
+                from config import CPU_SUBPROCESS_CONCURRENCY
+                _subprocess_semaphore = threading.BoundedSemaphore(
+                    max(1, CPU_SUBPROCESS_CONCURRENCY)
+                )
+    return _subprocess_semaphore
 
 # ---------------------------------------------------------------------------
 # GPU lease tracking — lets code know if ANY thread currently holds a lease.
@@ -225,21 +252,78 @@ def gpu_with_fallback(duration=60):
         @wraps(func)
         def wrapper(*args, **kwargs):
             global _models_stale
-            # If user explicitly chose CPU mode, skip GPU entirely.
-            # On ZeroGPU, run in an isolated subprocess to prevent CUDA
-            # state poisoning — torch ops in the main process corrupt the
-            # C-level CUDA runtime, making all future forked workers fail.
+            # CPU worker Spaces run the decorated function directly on CPU.
+            # No GPU allocation, no subprocess isolation, no onward worker dispatch.
+            if IS_CPU_WORKER:
+                return func(*args, **kwargs)
+
+            # If user explicitly chose CPU mode, route based on CPU_STRATEGY.
+            # On local dev (no ZeroGPU), strategy is a no-op — running torch in
+            # the main process is fine because there's no GPU lease state to poison.
             if is_user_forced_cpu():
-                if ZERO_GPU_AVAILABLE:
-                    _check_cuda_fork_state(f"before CPU subprocess ({func.__name__})")
-                    print(f"[CPU] Running {func.__name__} in isolated subprocess")
-                    from .cpu_subprocess import run_in_cpu_subprocess
-                    result = run_in_cpu_subprocess(func, args, kwargs)
-                    _check_cuda_fork_state(f"after CPU subprocess ({func.__name__})")
-                    return result
-                else:
+                if not ZERO_GPU_AVAILABLE:
                     print("[CPU] User selected CPU mode (local dev)")
                     return func(*args, **kwargs)
+
+                from config import CPU_STRATEGY
+
+                if CPU_STRATEGY == "subprocess":
+                    import time as _time
+                    from config import CPU_WORKER_MODE
+                    sem = _get_subprocess_semaphore()
+                    _t_acq = _time.time()
+                    sem.acquire()
+                    _wait = _time.time() - _t_acq
+                    try:
+                        _check_cuda_fork_state(f"before CPU subprocess ({func.__name__})")
+                        if CPU_WORKER_MODE == "persistent":
+                            from .cpu_worker_pool import run_on_persistent_worker, is_started, start_pool
+                            if not is_started():
+                                # Lazy start fallback — slow first request.
+                                from config import CPU_SUBPROCESS_CONCURRENCY, CPU_POOL_PRELOAD_LARGE
+                                print("[CPU] Pool not started — lazy-starting now")
+                                start_pool(CPU_SUBPROCESS_CONCURRENCY, preload_large=CPU_POOL_PRELOAD_LARGE)
+                            print(
+                                f"[CPU] Running {func.__name__} on persistent worker "
+                                f"(CPU_WORKER_MODE=persistent, queue_wait={_wait:.2f}s)"
+                            )
+                            result = run_on_persistent_worker(func, args, kwargs)
+                        else:
+                            print(
+                                f"[CPU] Running {func.__name__} in isolated subprocess "
+                                f"(CPU_STRATEGY=subprocess, queue_wait={_wait:.2f}s)"
+                            )
+                            from .cpu_subprocess import run_in_cpu_subprocess
+                            result = run_in_cpu_subprocess(func, args, kwargs)
+                        _check_cuda_fork_state(f"after CPU subprocess ({func.__name__})")
+                        return result
+                    finally:
+                        sem.release()
+
+                if CPU_STRATEGY == "workers":
+                    from .worker_pool import has_workers, run_on_worker_cpu
+                    if not has_workers():
+                        raise RuntimeError(
+                            "CPU_STRATEGY=workers but no worker pool is configured. "
+                            "Set WORKER_SPACES to a comma-separated list of CPU worker "
+                            "Space slugs, or switch CPU_STRATEGY to 'subprocess'."
+                        )
+                    print(f"[CPU] Dispatching {func.__name__} to worker pool (CPU_STRATEGY=workers)")
+                    # Let PoolQueueFullError / PoolExhaustedError propagate raw —
+                    # both the API and UI layers catch them explicitly and produce
+                    # their own structured responses.
+                    return run_on_worker_cpu(func, args, kwargs)
+
+                if CPU_STRATEGY == "both":
+                    raise NotImplementedError(
+                        "CPU_STRATEGY=both is reserved for future hybrid orchestration "
+                        "(local subprocess primary + remote worker overflow). Use "
+                        "'subprocess' or 'workers' for now."
+                    )
+
+                raise RuntimeError(
+                    f"Unknown CPU_STRATEGY={CPU_STRATEGY!r}. Valid: 'subprocess', 'workers', 'both'."
+                )
 
             # Try GPU
             try:
@@ -255,8 +339,19 @@ def gpu_with_fallback(duration=60):
                     is_quota_error = 'quota' in err_lower and ('exceeded' in err_lower or 'exhausted' in err_lower)
 
                 if is_quota_error:
+                    # spaces.zero wraps the quota message in an HTMLString: str(e)
+                    # returns the plain-text fallback (daily-quota prompt, no timer),
+                    # but the underlying .message holds the HTML that INCLUDES
+                    # "Try again in {timedelta}". Regex against the raw message.
+                    # "0:00:00" means daily cap (no short-term rate limit) — UI
+                    # layer translates that to a "resets at midnight UTC" hint.
+                    haystack = getattr(e, "message", None) or err_str
                     print(f"[GPU] Quota exceeded: {e}")
-                    match = re.search(r'Try again in (\d+:\d{2}:\d{2})', err_str)
+                    # timedelta.__str__ produces "H:MM:SS" or "D day(s), H:MM:SS".
+                    match = re.search(
+                        r'Try again in ((?:\d+\s*days?,\s*)?\d+:\d{2}:\d{2})',
+                        haystack,
+                    )
                     reset_time = match.group(1) if match else None
                     raise QuotaExhaustedError(str(e), reset_time=reset_time) from e
 

@@ -14,6 +14,24 @@ from config import (
     SEGMENT_AUDIO_DIR, RESAMPLE_TYPE,
 )
 from src.core.zero_gpu import gpu_with_fallback
+
+
+def _reset_worker_dispatch_tls():
+    """Clear any stale CPU-worker dispatch info on this thread. Pipeline entry helper."""
+    try:
+        from src.core.worker_pool import clear_last_dispatch_info
+        clear_last_dispatch_info()
+    except Exception:
+        pass
+
+
+def _get_worker_dispatch_info():
+    """Return the current thread's CPU-worker dispatch info, or None."""
+    try:
+        from src.core.worker_pool import get_last_dispatch_info
+        return get_last_dispatch_info()
+    except Exception:
+        return None
 from src.segmenter.segmenter_model import load_segmenter, ensure_models_on_gpu
 from src.segmenter.vad import detect_speech_segments
 from src.segmenter.segmenter_aoti import test_vad_aoti_export
@@ -80,6 +98,28 @@ def _log_gpu_info():
           f"Compute: {props.major}.{props.minor}")
 
 
+def _capture_vram_safely():
+    """Read CUDA peak VRAM stats — returns (0.0, 0.0) when not on GPU.
+
+    Defensive against the CPU-subprocess path where `torch.cuda.is_available()`
+    can deceptively report True (because spaces' patches or stray
+    CUDA_VISIBLE_DEVICES handling let the subprocess see the parent's GPU).
+    Calling `max_memory_allocated()` in that situation can hang because the
+    subprocess has no actual GPU lease — the C-level CUDA query waits forever
+    on a context that will never be granted.
+    """
+    from src.core.zero_gpu import is_user_forced_cpu
+    if is_user_forced_cpu() or not torch.cuda.is_available():
+        return 0.0, 0.0
+    try:
+        peak_vram = torch.cuda.max_memory_allocated() / (1024 * 1024)
+        reserved_vram = torch.cuda.max_memory_reserved() / (1024 * 1024)
+        torch.cuda.reset_peak_memory_stats()
+        return peak_vram, reserved_vram
+    except RuntimeError:
+        return 0.0, 0.0
+
+
 def _combined_duration(audio, sample_rate, *_args, **_kwargs):
     """Lease duration for VAD+ASR: sum of independent estimates, capped at ZeroGPU max."""
     minutes = len(audio) / sample_rate / 60
@@ -129,14 +169,7 @@ def run_vad_and_asr_gpu(audio, sample_rate, min_silence_ms, min_speech_ms, pad_m
     segment_audios = [audio[int(s * sample_rate):int(e * sample_rate)] for s, e in intervals]
     asr_results = _run_asr_core(segment_audios, sample_rate, model_name)
 
-    # Capture VRAM before lease ends (ZeroGPU reclaims GPU after return)
-    try:
-        peak_vram = torch.cuda.max_memory_allocated() / (1024 * 1024)
-        reserved_vram = torch.cuda.max_memory_reserved() / (1024 * 1024)
-        torch.cuda.reset_peak_memory_stats()
-    except RuntimeError:
-        peak_vram = 0.0
-        reserved_vram = 0.0
+    peak_vram, reserved_vram = _capture_vram_safely()
 
     return (intervals, vad_profiling, vad_gpu_time, raw_speech_intervals, raw_is_complete, *asr_results, peak_vram, reserved_vram)
 
@@ -147,14 +180,7 @@ def run_phoneme_asr_gpu(segment_audios, sample_rate, model_name="Base"):
     _log_gpu_info()
     asr_results = _run_asr_core(segment_audios, sample_rate, model_name)
 
-    # Capture VRAM before lease ends (ZeroGPU reclaims GPU after return)
-    try:
-        peak_vram = torch.cuda.max_memory_allocated() / (1024 * 1024)
-        reserved_vram = torch.cuda.max_memory_reserved() / (1024 * 1024)
-        torch.cuda.reset_peak_memory_stats()
-    except RuntimeError:
-        peak_vram = 0.0
-        reserved_vram = 0.0
+    peak_vram, reserved_vram = _capture_vram_safely()
 
     return (*asr_results, peak_vram, reserved_vram)
 
@@ -493,7 +519,8 @@ def _run_post_vad_pipeline(
             print(f"  Batch {b['batch_num']:>2}: {b['size']:>3} segs | "
                   f"{b['time']:.3f}s | "
                   f"{b['min_dur']:.2f}-{b['max_dur']:.2f}s "
-                  f"(A {b['avg_dur']:.2f}s, T {b['total_seconds']:.1f}s, W {b['pad_waste']:.0%})")
+                  f"(A {b['avg_dur']:.2f}s, T {b['total_seconds']:.1f}s, W {b['pad_waste']:.0%}, "
+                  f"QK^T {b['qk_mb_per_head']:.1f} MB/head, {b['qk_mb_all_heads']:.0f} MB total)")
 
     # Store ASR results on debug collector if active
     _dc = _get_dc()
@@ -811,6 +838,7 @@ def _run_post_vad_pipeline(
                     "dp_total": _r(getattr(profiling, "phoneme_dp_total_time", 0.0)),
                     "match_wall": _r(profiling.match_wall_time),
                     "result_build": _r(profiling.result_build_time),
+                    "worker_dispatch": _get_worker_dispatch_info(),
                 },
                 gpu={
                     "peak_vram_mb": _r(profiling.gpu_peak_vram_mb),
@@ -945,6 +973,21 @@ def _run_post_vad_pipeline(
     return html, json_output, str(segment_dir), log_row
 
 
+def _with_cancel_watch(fn):
+    """Decorator: wraps a pipeline entry function so a client disconnect on
+    its `request` kwarg propagates down into the CPU worker dispatcher.
+    """
+    from functools import wraps
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        from src.core.cancel_ctx import watch_disconnect
+        with watch_disconnect(kwargs.get("request")):
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+@_with_cancel_watch
 def process_audio(
     audio_data,
     min_silence_ms,
@@ -966,6 +1009,8 @@ def process_audio(
         (html, json_output, raw_speech_intervals, raw_is_complete, preprocessed_audio, sample_rate, intervals, segment_dir, log_row)
     """
     import time
+
+    _reset_worker_dispatch_tls()
 
     if audio_data is None:
         return "<div>Please upload an audio file</div>", None, None, None, None, None, None, None, None
@@ -1079,6 +1124,7 @@ def process_audio(
     return html, json_output, raw_speech_intervals, raw_is_complete, audio_ref, sample_rate, intervals, seg_dir, log_row
 
 
+@_with_cancel_watch
 def resegment_audio(
     cached_speech_intervals, cached_is_complete,
     cached_audio, cached_sample_rate,
@@ -1098,6 +1144,8 @@ def resegment_audio(
         (html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, cached_sample_rate, intervals, segment_dir, log_row)
     """
     import time
+
+    _reset_worker_dispatch_tls()
 
     if cached_speech_intervals is None or cached_audio is None:
         return "<div>No cached data. Please run Extract Segments first.</div>", None, None, None, None, None, None, None, None
@@ -1169,6 +1217,7 @@ def resegment_audio(
     return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, sr, intervals, seg_dir, log_row
 
 
+@_with_cancel_watch
 def retranscribe_audio(
     cached_intervals,
     cached_audio, cached_sample_rate,
@@ -1190,6 +1239,8 @@ def retranscribe_audio(
          cached_audio, cached_sample_rate, cached_intervals, segment_dir, log_row)
     """
     import time
+
+    _reset_worker_dispatch_tls()
 
     if cached_intervals is None or cached_audio is None:
         return "<div>No cached data. Please run Extract Segments first.</div>", None, None, None, None, None, None, None, None
@@ -1228,6 +1279,7 @@ def retranscribe_audio(
     return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, sr, cached_intervals, seg_dir, log_row
 
 
+@_with_cancel_watch
 def realign_audio(
     intervals,
     cached_audio, cached_sample_rate,
@@ -1247,6 +1299,8 @@ def realign_audio(
          cached_audio, cached_sample_rate, intervals, segment_dir, log_row)
     """
     import time
+
+    _reset_worker_dispatch_tls()
 
     if cached_audio is None:
         return "<div>No cached data.</div>", None, None, None, None, None, None, None, None
@@ -1528,7 +1582,10 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
 
     # Route special actions
     if payload.get("action") == "recompute_mfa":
-        mfa_result = _recompute_single_mfa(payload.get("idx"), segments_state, segment_dir)
+        mfa_result = _recompute_single_mfa(
+            payload.get("idx"), segments_state, segment_dir,
+            auto_start=bool(payload.get("auto_start")),
+        )
         return (*mfa_result, gr.skip())
 
     idx = payload.get("idx")
@@ -1629,10 +1686,12 @@ def apply_ref_edit(edit_payload_str: str, segments_state: list, segment_dir: str
     return segments_state, save_json_export(segments_state), patch, log_row
 
 
-def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir):
+def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir, auto_start: bool = False):
     """Recompute MFA timestamps for a single segment.
 
     Operates directly on List[SegmentInfo]. Returns (segments_state, export, patch).
+    If *auto_start* is true, the JS patch handler will immediately start the
+    per-segment animation after injecting timestamps.
     """
     import os
     from src.mfa import (
@@ -1640,7 +1699,7 @@ def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir):
         _build_timestamp_lookups, _build_crossword_groups,
         _extend_word_timestamps, inject_timestamps_into_html,
     )
-    from src.ui.segments import get_text_with_markers
+    from src.ui.segments import build_segment_text_html
 
     _skip3 = (gr.skip(), gr.skip(), gr.skip())
 
@@ -1687,9 +1746,11 @@ def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir):
     seg_to_result_idx = {seg_idx: 0}
     _extend_word_timestamps(word_ts, seg_dicts, seg_to_result_idx, results, seg_dir_str)
 
-    # Build text HTML with timestamps injected
-    # Wrap text in a fake card div so inject_timestamps_into_html's boundary detection works
-    text_html = get_text_with_markers(mfa_ref.split("+")[-1]) or ""
+    # Build text HTML with timestamps injected. Use the same helper as
+    # render_segments so fused Basmala/Isti'adha prefixes and special-ref
+    # word spans (data-pos) are present — otherwise the patch would replace
+    # .segment-text innerHTML with an empty/partial string.
+    text_html = build_segment_text_html(seg) or ""
     fake_html = (
         f'<div data-segment-idx="{seg_idx}">'
         f'<span class="word" data-pos="BOUNDARY"></span>'
@@ -1720,7 +1781,9 @@ def _recompute_single_mfa(seg_idx, segments_state: list, segment_dir):
     seg.words = words_data
 
     print(f"[MFA-RECOMPUTE] Success for segment {seg_idx + 1}")
-    return (segments_state, save_json_export(segments_state),
-            json.dumps({"status": "mfa_done", "idx": seg_idx, "text_html": enriched_text}))
+    patch = {"status": "mfa_done", "idx": seg_idx, "text_html": enriched_text}
+    if auto_start:
+        patch["auto_start"] = True
+    return (segments_state, save_json_export(segments_state), json.dumps(patch))
 
 

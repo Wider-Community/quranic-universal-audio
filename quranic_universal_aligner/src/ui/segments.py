@@ -296,6 +296,54 @@ def _wrap_word(word_text, pos=None):
     return f'<span class="word"{pos_attr}>{word_text}</span>'
 
 
+_BASMALA_TEXT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم"
+_ISTIATHA_TEXT = "أَعُوذُ بِٱللَّهِ مِنَ الشَّيْطَانِ الرَّجِيم"
+
+
+def build_segment_text_html(seg) -> str:
+    """Return the inner HTML for a segment's .segment-text (word spans w/ data-pos)."""
+    def _wrap_plain(text):
+        return " ".join(_wrap_word(w) for w in text.split())
+
+    if seg.matched_ref:
+        text_html = get_text_with_markers(seg.matched_ref)
+        if text_html and seg.matched_text:
+            for _sp_name, _sp in [("Isti'adha", _ISTIATHA_TEXT),
+                                   ("Basmala", _BASMALA_TEXT)]:
+                if seg.matched_text.startswith(_sp):
+                    mfa_prefix = f"{_sp_name}+{seg.matched_ref}"
+                    words = _sp.replace(" ۝ ", " ").split()
+                    prefix_html = " ".join(
+                        _wrap_word(w, pos=f"{mfa_prefix}:0:0:{i+1}")
+                        for i, w in enumerate(words)
+                    )
+                    text_html = prefix_html + " " + text_html
+                    break
+        elif not text_html:
+            if seg.matched_text:
+                words = seg.matched_text.replace(" \u06dd ", " ").split()
+                text_html = " ".join(
+                    _wrap_word(w, pos=f"{seg.matched_ref}:0:0:{i+1}")
+                    for i, w in enumerate(words)
+                )
+            else:
+                text_html = seg.matched_text or ""
+    elif seg.matched_text:
+        text_html = _wrap_plain(seg.matched_text)
+    else:
+        text_html = ""
+
+    if getattr(seg, "repeated_ranges", None):
+        sections = []
+        for sec_from, sec_to in seg.repeated_ranges:
+            sec = get_text_with_markers(f"{sec_from}-{sec_to}")
+            if sec:
+                sections.append(sec)
+        if sections:
+            text_html = '<div class="repeat-divider"></div>'.join(sections)
+    return text_html
+
+
 def get_text_with_markers(matched_ref: str) -> str | None:
     """
     Generate matched text with verse markers inserted at verse boundaries.
@@ -404,7 +452,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
         animate_btn = ""
         _ANIMATABLE_SPECIALS = {"Basmala", "Isti'adha"}
         if seg.matched_ref and (seg.matched_ref not in ALL_SPECIAL_REFS or seg.matched_ref in _ANIMATABLE_SPECIALS):
-            animate_btn = f'<button class="animate-btn" data-segment="{idx}" disabled>Animate</button>'
+            animate_btn = f'<button class="animate-btn" data-segment="{idx}">Animate</button>'
         audio_html = f'''
         <div class="segment-audio">
             <audio data-src="{audio_src}" preload="none"
@@ -415,57 +463,7 @@ def render_segment_card(seg: SegmentInfo, idx: int, full_audio_url: str = "", re
         </div>
         '''
 
-    # Build matched text with verse markers at all verse boundaries
-    BASMALA_TEXT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم"
-    ISTIATHA_TEXT = "أَعُوذُ بِٱللَّهِ مِنَ الشَّيْطَانِ الرَّجِيم"
-    _SPECIAL_PREFIXES = [ISTIATHA_TEXT, BASMALA_TEXT]
-
-    # Helper to wrap words in spans
-    def wrap_words_in_spans(text):
-        return " ".join(_wrap_word(w) for w in text.split())
-
-    if seg.matched_ref:
-        # Generate text with markers from the index
-        text_html = get_text_with_markers(seg.matched_ref)
-        if text_html and seg.matched_text:
-            # Check for any special prefix (fused or forward-merged)
-            for _sp_name, _sp in [("Isti'adha", ISTIATHA_TEXT),
-                                   ("Basmala", BASMALA_TEXT)]:
-                if seg.matched_text.startswith(_sp):
-                    mfa_prefix = f"{_sp_name}+{seg.matched_ref}"
-                    words = _sp.replace(" ۝ ", " ").split()
-                    prefix_html = " ".join(
-                        _wrap_word(w, pos=f"{mfa_prefix}:0:0:{i+1}")
-                        for i, w in enumerate(words)
-                    )
-                    text_html = prefix_html + " " + text_html
-                    break
-        elif not text_html:
-            # Special ref (Basmala/Isti'adha): wrap words with indexed data-pos
-            # so MFA timestamps can be injected later
-            if seg.matched_ref and seg.matched_text:
-                words = seg.matched_text.replace(" \u06dd ", " ").split()
-                text_html = " ".join(
-                    _wrap_word(w, pos=f"{seg.matched_ref}:0:0:{i+1}")
-                    for i, w in enumerate(words)
-                )
-            else:
-                text_html = seg.matched_text or ""
-    elif seg.matched_text:
-        # Special segments (Basmala/Isti'adha) have text but no ref
-        text_html = wrap_words_in_spans(seg.matched_text)
-    else:
-        text_html = ""
-
-    # Rebuild text as reading-order sections when wraps detected
-    if seg.repeated_ranges:
-        sections = []
-        for sec_from, sec_to in seg.repeated_ranges:
-            sec = get_text_with_markers(f"{sec_from}-{sec_to}")
-            if sec:
-                sections.append(sec)
-        if sections:
-            text_html = '<div class="repeat-divider"></div>'.join(sections)
+    text_html = build_segment_text_html(seg)
 
     if is_special:
         confidence_badge = f'<div class="segment-badge segment-special-badge">{seg.matched_ref}</div>'
