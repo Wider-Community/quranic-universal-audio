@@ -65,7 +65,9 @@
         _isCurrentReciterBySurah,
         _rewriteAudioUrls,
     } from '../../segments/playback/audio-cache';
+    import { setHistoryData, setHistoryVisible } from '../../lib/stores/segments/history';
     import { renderEditHistoryPanel } from '../../segments/history/index';
+    import HistoryPanel from './history/HistoryPanel.svelte';
     import { stopSegAnimation } from '../../segments/playback/index';
     import { computeSilenceAfter } from '../../lib/stores/segments/filters';
     import { state } from '../../segments/state';
@@ -307,16 +309,13 @@
         state._chainedOpIds = null;
         state._segSavedChains = null;
         const histBtn = document.getElementById('seg-history-btn');
-        const histView = document.getElementById('seg-history-view');
-        const histStats = document.getElementById('seg-history-stats');
-        const histBatches = document.getElementById('seg-history-batches');
+        // Wave 10: HistoryPanel is Svelte-owned — clear reactively (Risk #1).
+        setHistoryVisible(false);
+        setHistoryData(null);
         const savePrev = document.getElementById('seg-save-preview');
         const savePrevStats = document.getElementById('seg-save-preview-stats');
         const savePrevBatches = document.getElementById('seg-save-preview-batches');
         if (histBtn) (histBtn as HTMLElement).hidden = true;
-        if (histView) (histView as HTMLElement).hidden = true;
-        if (histStats) histStats.innerHTML = '';
-        if (histBatches) histBatches.innerHTML = '';
         if (savePrev) (savePrev as HTMLElement).hidden = true;
         hidePreview();  // mirror to store so SavePreview.svelte stays consistent on re-render
         if (savePrevStats) savePrevStats.innerHTML = '';
@@ -574,32 +573,10 @@
          consumers remain for seg-stats-panel / seg-stats-charts. -->
     <StatsPanel />
 
-    <div id="seg-history-view" class="seg-history-view" hidden>
-        <div class="seg-history-toolbar">
-            <button id="seg-history-back-btn" class="btn">&larr; Back</button>
-            <span class="seg-history-title">Edit History</span>
-        </div>
-        <div id="seg-history-stats" class="seg-history-stats"></div>
-        <div id="seg-history-filters" class="seg-history-filters" hidden>
-            <div class="seg-history-filter-section">
-                <span class="seg-history-filter-label">Edit type:</span>
-                <div id="seg-history-filter-ops" class="seg-history-filter-pills"></div>
-            </div>
-            <div class="seg-history-filter-section">
-                <span class="seg-history-filter-label">Issue/flag type:</span>
-                <div id="seg-history-filter-cats" class="seg-history-filter-pills"></div>
-            </div>
-            <div class="seg-history-filter-section">
-                <span class="seg-history-filter-label">Sort by:</span>
-                <div class="seg-history-filter-pills">
-                    <button id="seg-history-sort-time" class="seg-history-filter-pill active">Edit time</button>
-                    <button id="seg-history-sort-quran" class="seg-history-filter-pill">Quran order</button>
-                </div>
-            </div>
-            <button id="seg-history-filter-clear" class="btn btn-sm btn-cancel" hidden>Clear Filters</button>
-        </div>
-        <div id="seg-history-batches" class="seg-history-batches"></div>
-    </div>
+    <!-- Wave 10: HistoryPanel.svelte owns #seg-history-view reactively via
+         the history store. IDs preserved inside the component so legacy
+         `dom.segHistoryView` mustGet + delegated click handlers keep working. -->
+    <HistoryPanel />
 
     <!-- Wave 9: SavePreview.svelte — visibility driven by $savePreviewVisible store.
          IDs preserved inside component so mustGet() refs still resolve. -->

@@ -5,6 +5,7 @@
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
 import { segAllData, segData } from '../lib/stores/segments/chapter';
 import { clearEdit } from '../lib/stores/segments/edit';
+import { setHistoryData, setHistoryVisible } from '../lib/stores/segments/history';
 import { hidePreview } from '../lib/stores/segments/save';
 import { clearStats, setStats } from '../lib/stores/segments/stats';
 import { clearValidation, setValidation } from '../lib/stores/segments/validation';
@@ -110,10 +111,11 @@ export async function onSegReciterChange(): Promise<void> {
     // Hide stats and history (validation + stats owned by Svelte via stores)
     clearValidation();
     clearStats();
-    dom.segHistoryView.hidden = true;
+    // Wave 10: history panel is Svelte-owned — clear via store, do NOT
+    // innerHTML the Svelte-owned subtree (Risk #1 B1-class clobber).
+    setHistoryVisible(false);
+    setHistoryData(null);
     dom.segHistoryBtn.hidden = true;
-    dom.segHistoryStats.innerHTML = '';
-    dom.segHistoryBatches.innerHTML = '';
     state.segHistoryData = null;
     state._allHistoryItems = null;
     state._splitChains = null;
@@ -274,9 +276,9 @@ export function clearSegDisplay(): void {
     state._splitChainWrapper = null;
     state._splitChainCategory = null;
     dom.segHistoryBtn.hidden = true;
-    dom.segHistoryView.hidden = true;
-    dom.segHistoryStats.innerHTML = '';
-    dom.segHistoryBatches.innerHTML = '';
+    // Wave 10: history panel is Svelte-owned — clear via store (Risk #1).
+    setHistoryVisible(false);
+    setHistoryData(null);
     dom.segSavePreview.hidden = true;
     hidePreview(); // Wave 9: notify $savePreviewVisible store
     dom.segSavePreviewStats.innerHTML = '';

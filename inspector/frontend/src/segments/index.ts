@@ -25,8 +25,7 @@ import { startRefEdit } from './edit/reference';
 import { confirmSplit, drawSplitWaveform,enterSplitMode } from './edit/split';
 import { confirmTrim, drawTrimWaveform,enterTrimMode } from './edit/trim';
 import { _handleSegCanvasMousedown, handleSegRowClick, registerAllSegEventHandlers } from './event-delegation';
-import { clearHistoryFilters, setHistorySort } from './history/filters';
-import { hideHistoryView,showHistoryView } from './history/index';
+import { showHistoryView } from './history/index';
 import { handleSegKeydown, registerAllSegKeyboardHandlers } from './keyboard';
 import { _deleteAudioCache,_prepareAudio } from './playback/audio-cache';
 import { confirmSaveFromPreview,hideSavePreview, onSegSaveClick } from './save';
@@ -92,15 +91,14 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.segFilterStatusEl = mustGet<HTMLElement>('seg-filter-status');
     dom.segHistoryView = mustGet<HTMLDivElement>('seg-history-view');
     dom.segHistoryBtn = mustGet<HTMLButtonElement>('seg-history-btn');
-    dom.segHistoryBackBtn = mustGet<HTMLButtonElement>('seg-history-back-btn');
-    dom.segHistoryStats = mustGet<HTMLDivElement>('seg-history-stats');
-    dom.segHistoryBatches = mustGet<HTMLDivElement>('seg-history-batches');
-    dom.segHistoryFilters = mustGet<HTMLDivElement>('seg-history-filters');
-    dom.segHistoryFilterOps = mustGet<HTMLDivElement>('seg-history-filter-ops');
-    dom.segHistoryFilterCats = mustGet<HTMLDivElement>('seg-history-filter-cats');
-    dom.segHistoryFilterClear = mustGet<HTMLButtonElement>('seg-history-filter-clear');
-    dom.segHistorySortTime = mustGet<HTMLButtonElement>('seg-history-sort-time');
-    dom.segHistorySortQuran = mustGet<HTMLButtonElement>('seg-history-sort-quran');
+    // Wave 10: HistoryPanel.svelte owns the interior of #seg-history-view
+    // (toolbar, stats, filter pills, batches list). The back button + filter
+    // clear + sort toggles are reactive inside HistoryPanel/HistoryFilters;
+    // their DOM refs are no longer needed by imperative code. segHistoryStats
+    // / segHistoryBatches are left typed on `dom` for now (reading sites are
+    // either orphan modules — history/filters.ts, history/rendering.ts
+    // default-arg — or removed). They remain unset and any new reader would
+    // error loudly, which is the correct posture during migration.
     dom.segSavePreview = mustGet<HTMLDivElement>('seg-save-preview');
     dom.segSavePreviewCancel = mustGet<HTMLButtonElement>('seg-save-preview-cancel');
     dom.segSavePreviewConfirm = mustGet<HTMLButtonElement>('seg-save-preview-confirm');
@@ -153,12 +151,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save button
     dom.segSaveBtn.addEventListener('click', onSegSaveClick);
 
-    // History view handlers
+    // History view handlers (Wave 10: HistoryPanel owns back/filter/sort
+    // interactions declaratively via the history store; only the external
+    // "Open History" button stays imperative because it lives outside the
+    // panel and drives the show transition + sibling-hide cross-tab logic).
     dom.segHistoryBtn?.addEventListener('click', showHistoryView);
-    dom.segHistoryBackBtn?.addEventListener('click', hideHistoryView);
-    dom.segHistoryFilterClear?.addEventListener('click', clearHistoryFilters);
-    dom.segHistorySortTime?.addEventListener('click', () => setHistorySort('time'));
-    dom.segHistorySortQuran?.addEventListener('click', () => setHistorySort('quran'));
 
     // Save preview handlers
     dom.segSavePreviewCancel?.addEventListener('click', () => hideSavePreview());

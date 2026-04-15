@@ -3,6 +3,7 @@
  */
 
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
+import { buildSplitChains, buildSplitLineage } from '../lib/stores/segments/history';
 import { hidePreview, showPreview } from '../lib/stores/segments/save';
 import { surahOptionText } from '../lib/utils/surah-info';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
@@ -10,7 +11,6 @@ import type { EditOp, HistoryBatch, Segment } from '../types/domain';
 import { _SEG_NORMAL_IDS } from './constants';
 import { getChapterSegments, onSegReciterChange } from './data';
 import { renderEditHistoryPanel } from './history/index';
-import { _buildSplitChains,_buildSplitLineage } from './history/index';
 import { _countVersesFromBatches,drawHistoryArrows, renderHistoryBatches, renderHistorySummaryStats } from './history/rendering';
 import { dom, isDirty,state } from './state';
 import { stopErrorCardAudio } from './validation/error-card-audio';
@@ -100,8 +100,8 @@ export function showSavePreview(): void {
 
     state._segSavedChains = { splitChains: state._splitChains, chainedOpIds: state._chainedOpIds };
     const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as HistoryBatch[])];
-    const splitLineage = _buildSplitLineage(allBatches);
-    const built = _buildSplitChains(allBatches, splitLineage);
+    const splitLineage = buildSplitLineage(allBatches);
+    const built = buildSplitChains(allBatches, splitLineage);
     state._splitChains = built.chains;
     state._chainedOpIds = built.chainedOpIds;
 

@@ -3,6 +3,13 @@
  */
 
 import { fetchJson, fetchJsonOrNull } from '../../lib/api';
+import {
+    buildSplitChains,
+    buildSplitLineage,
+    setHistoryData,
+    setSplitChains,
+    type SplitChain,
+} from '../../lib/stores/segments/history';
 import { surahOptionText } from '../../lib/utils/surah-info';
 import type {
     SegEditHistoryResponse,
@@ -10,12 +17,11 @@ import type {
     SegUndoOpsResponse,
 } from '../../types/api';
 import type { HistoryBatch } from '../../types/domain';
-import { buildSavePreviewData,hideSavePreview } from '../save';
-import type { SplitChain } from '../state';
-import { dom, isDirty,state } from '../state';
+import { buildSavePreviewData, hideSavePreview } from '../save';
+import { dom, isDirty, state } from '../state';
 import { _ensureWaveformObserver } from '../waveform/index';
-import { _buildSplitChains,_buildSplitLineage, renderEditHistoryPanel } from './index';
-import { drawHistoryArrows,renderHistoryBatches, renderHistorySummaryStats } from './rendering';
+import { renderEditHistoryPanel } from './index';
+import { drawHistoryArrows, renderHistoryBatches, renderHistorySummaryStats } from './rendering';
 
 // ---------------------------------------------------------------------------
 // _afterUndoSuccess -- shared post-undo refresh
@@ -34,12 +40,10 @@ export async function _afterUndoSuccess(reciter: string, opsReversed: number): P
         );
         if (hist) {
             state.segHistoryData = hist;
+            // renderEditHistoryPanel bridges to setHistoryData() which drives
+            // HistoryPanel.svelte reactively; waveform observer is owned by
+            // SegmentRow.onMount and arrows redraw via HistoryArrows afterUpdate.
             renderEditHistoryPanel(state.segHistoryData);
-            const observer = _ensureWaveformObserver();
-            dom.segHistoryView.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => observer.observe(c));
-            requestAnimationFrame(() => {
-                dom.segHistoryView.querySelectorAll<HTMLElement>('.seg-history-diff').forEach(d => drawHistoryArrows(d));
-            });
         }
     } catch (_) { /* non-critical */ }
     state._segDataStale = true;
@@ -215,10 +219,15 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     }
     const data = buildSavePreviewData();
     const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as HistoryBatch[])];
-    const splitLineage = _buildSplitLineage(allBatches);
-    const built = _buildSplitChains(allBatches, splitLineage);
+    const splitLineage = buildSplitLineage(allBatches);
+    const built = buildSplitChains(allBatches, splitLineage);
+    // Mirror to legacy state fields (still read by some imperative helpers)
+    // AND push into the history store so HistoryPanel reflects the rebuild.
     state._splitChains = built.chains;
     state._chainedOpIds = built.chainedOpIds;
+    setSplitChains(built.chains, built.chainedOpIds);
+    // Ensure HistoryPanel summary/batches sees the pending data too.
+    setHistoryData(state.segHistoryData);
     renderHistorySummaryStats(data.summary, dom.segSavePreviewStats);
     if (data.warningChapters.length > 0) {
         const warn = document.createElement('div');
