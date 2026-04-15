@@ -18,7 +18,7 @@ import { refreshOpenAccordionCards } from '../validation/index';
 import { _slicePeaks } from '../waveform/draw';
 import { _fetchChapterPeaksIfNeeded } from '../waveform/index';
 import type { SegCanvas } from '../waveform/types';
-import { _addEditOverlay,_playRange, exitEditMode } from './common';
+import { _playRange, exitEditMode } from './common';
 import { startRefEdit } from './reference';
 
 // ---------------------------------------------------------------------------
@@ -35,8 +35,6 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     setEdit('split', seg.segment_uid ?? null);
 
     row.classList.add('seg-edit-target');
-    _addEditOverlay();
-
     const actions = row.querySelector<HTMLElement>('.seg-actions');
     if (actions) actions.hidden = true;
 

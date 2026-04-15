@@ -11,7 +11,7 @@ import { _getEditCanvas, syncAllCardsForSegment } from '../rendering';
 import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
 import { _slicePeaks } from '../waveform/draw';
 import type { SegCanvas } from '../waveform/types';
-import { _addEditOverlay,_playRange, exitEditMode } from './common';
+import { _playRange, exitEditMode } from './common';
 
 // ---------------------------------------------------------------------------
 // enterTrimMode
@@ -27,8 +27,6 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     setEdit('trim', seg.segment_uid ?? null);
 
     row.classList.add('seg-edit-target');
-    _addEditOverlay();
-
     const actions = row.querySelector<HTMLElement>('.seg-actions');
     if (actions) actions.hidden = true;
 

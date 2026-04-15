@@ -19,18 +19,8 @@ import type { SegCanvas } from '../waveform/types';
 // Registration pattern: trim/split modules register their entry functions
 // ---------------------------------------------------------------------------
 
-// Wave 7a.2: the edit backdrop is now Svelte-owned (EditOverlay.svelte
-// renders `.seg-edit-overlay` reactively from `$editMode`). These helpers
-// are no-ops kept for call-site compatibility — three imperative callers
-// (`enterTrimMode`, `enterSplitMode`, error catch in `enterEditWithBuffer`
-// for add; `exitEditMode` for remove) are folded into Wave 11 cleanup.
-export function _addEditOverlay(): void {
-    /* Svelte owns the overlay now — see tabs/segments/edit/EditOverlay.svelte */
-}
-
-function _removeEditOverlay(): void {
-    /* Svelte owns the overlay now — see tabs/segments/edit/EditOverlay.svelte */
-}
+// EditOverlay.svelte owns the overlay reactively from $editMode (Wave 7a.2).
+// _addEditOverlay / _removeEditOverlay no-op stubs deleted in Wave 11a.
 
 let _enterTrimMode: EnterTrimModeFn | null = null;
 let _enterSplitMode: EnterSplitModeFn | null = null;
@@ -84,7 +74,6 @@ export function enterEditWithBuffer(
         state.segEditMode = null;
         state.segEditIndex = -1;
         clearEdit();
-        _removeEditOverlay();
         const targetRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
         if (targetRow) {
             targetRow.querySelector('.seg-edit-inline')?.remove();
@@ -135,7 +124,6 @@ export function exitEditMode(): void {
         state._previewStopHandler = null;
     }
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
-    _removeEditOverlay();
     editRow?.classList.remove('seg-edit-target');
 }
 
