@@ -296,8 +296,36 @@ Stage 2 is done when:
 
 These don't block starting Stage 2 but should be named decisions before the first `.svelte` commit lands:
 
-- Svelte 5 or Svelte 4? (recommendation: 5)
-- Fix B02 first, or include in Stage 2? (recommendation: fix first — it's a real data bug, not a reactivity pattern)
-- Commit `frontend/dist/` to git for Python-only contributors, or make `npm run build` a hard prereq? (current state: gitignored + hard prereq; same policy probably carries forward)
-- Start Pydantic on the Flask side now, later, or never? (recommendation: now — cheap, orthogonal, prevents a whole drift class)
-- Accept one commit per component, or bundle related components per commit? (recommendation: bundle by sub-tab for readability, keep diffs reviewable)
+- Svelte 5 or Svelte 4? (recommendation: 5) **→ DECIDED: Svelte 4 (S2-D13)**
+- Fix B02 first, or include in Stage 2? (recommendation: fix first — it's a real data bug, not a reactivity pattern) **→ DECIDED: fixed in Wave 1 (S2-B02 CLOSED)**
+- Commit `frontend/dist/` to git for Python-only contributors, or make `npm run build` a hard prereq? (current state: gitignored + hard prereq; same policy probably carries forward) **→ CARRIES FORWARD: gitignored; `npm run build` still required**
+- Start Pydantic on the Flask side now, later, or never? (recommendation: now — cheap, orthogonal, prevents a whole drift class) **→ DECIDED: skipped (S2-D02); TypedDict-only**
+- Accept one commit per component, or bundle related components per commit? (recommendation: bundle by sub-tab for readability, keep diffs reviewable) **→ BUNDLED: one commit per wave (sometimes 2-3 waves merged per commit)**
+
+---
+
+## Stage 2 — Completion status (as of 2026-04-14, Wave 11b)
+
+Stage 2 is **substantially complete**. See `.refactor/stage2-retro.md` for the full retrospective.
+
+### Exit criteria vs actual delivery
+
+| Criterion | Status |
+|-----------|--------|
+| Every `.ts` module with UI concerns → `.svelte` | PARTIAL — Timestamps ✅, Audio ✅, Segments: Svelte components done; imperative sub-modules (`segments/*.ts`) partially retained as hybrid bridge |
+| Pure-logic modules remain `.ts` | ✅ |
+| Per-tab `state.ts` replaced by split-by-concern stores | PARTIAL — Timestamps/Audio ✅; `segments/state.ts` retained as bridge for imperative sub-modules |
+| Registration pattern deleted | PARTIAL — some `register*` calls retained as Svelte↔imperative bridge; will dissolve as remaining segments code migrates |
+| Vitest + testing-library tests | NOT DONE (S2-D07: testing deferred entirely) |
+| Playwright E2E | NOT DONE (S2-D07) |
+| Bundle size ±25% of Stage 1 | ✅ — 535 kB vs Stage 1 436 kB (+23%, within limit; Svelte runtime included) |
+| All 4 OPEN Stage-1 bugs CLOSED or succeeded | ✅ — B01/B04/B05 dissolved by reactivity; B02 fixed in Wave 1 |
+| Stage-2 bug log with closed rows | ✅ — `.refactor/stage2-bugs.md` has 7 entries (B01–B07), all CLOSED |
+
+### What remains (Wave 12+)
+
+- **CSS migration**: 7 of 8 CSS files still global in `styles/`. Migration requires refactoring imperative `classList` calls in remaining segments TS code first.
+- **Segments imperative code**: `segments/*.ts`, `segments/edit/*.ts`, `segments/validation/*.ts`, `segments/waveform/*.ts`, `segments/history/*.ts` retain some imperative DOM manipulation. Each can be migrated as a separate wave.
+- **NB-1**: `_applyHistoryData` / `renderEditHistoryPanel` duplication in `segments/data.ts`.
+- **NB-2**: `undo.ts:228` self-round-trip.
+- **Docker CI**: `.github/workflows/docker-publish.yml` not yet added; Dockerfile is ready.

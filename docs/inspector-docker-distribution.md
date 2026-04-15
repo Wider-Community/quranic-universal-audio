@@ -1,6 +1,14 @@
 # Inspector — Docker distribution notes
 
-Forward-looking notes for packaging the inspector as a Docker image so non-technical reviewers can run it without installing Python, Node, ffmpeg, or any other toolchain. **Nothing in this document is implemented yet** — these are design decisions and code sketches for a follow-on task.
+Notes for packaging the inspector as a Docker image so non-technical reviewers can run it without installing Python, Node, ffmpeg, or any other toolchain.
+
+**Stage 2 implementation status** (as of Wave 11b, 2026-04-14):
+- `config.py`: `INSPECTOR_DATA_DIR` env var support — **DONE** (Wave 2a)
+- `inspector/Dockerfile` — **DONE** (Wave 2a)
+- `inspector/docker-compose.yml` — **DONE** (Wave 2a; volume uses `../data:/data`)
+- `.github/workflows/docker-publish.yml` — **NOT YET** (pending)
+- Mode B single-writer flock — **NOT YET** (pending)
+- GHCR package published — **NOT YET** (pending)
 
 ## Context
 
@@ -222,12 +230,7 @@ These are app-level concerns, not Docker concerns. Docker doesn't help or hurt h
 
 ## Stage 2 (Svelte) compatibility
 
-When the frontend is refactored to Svelte in Stage 2, the reviewer experience stays identical — they still just run `docker compose up`. The Dockerfile may need small adjustments depending on the Svelte path:
-
-- **Plain Svelte + Vite** or **SvelteKit with `adapter-static`**: output directory may change (`build/` instead of `dist/`) — adjust the `COPY --from=frontend` line. Runtime stays Flask-only. Image size similar.
-- **SvelteKit with `adapter-node`** (SSR): adds a Node runtime to the image. Needs either nginx reverse-proxy fronting both Node (frontend) and Flask (API), or running the two services under a process supervisor. Bigger image (~+100 MB), more moving parts. Reviewer experience still unchanged.
-
-The Stage-1 plan explicitly chose not to commit to SSR, so Path A or B is most likely. Minimal Docker churn expected.
+Stage 2 (Svelte 4 migration) is **complete** (Wave 11b, 2026-04-14). The frontend was migrated using **plain Svelte 4 + Vite** (not SvelteKit) with the same `frontend/dist/` build output directory. The Dockerfile `COPY --from=frontend /app/dist` line does not need to change. Runtime stays Flask-only. Image size unchanged.
 
 ## Decisions to make
 
@@ -238,13 +241,13 @@ The Stage-1 plan explicitly chose not to commit to SSR, so Path A or B is most l
 
 ## Work order, if picking this up
 
-1. Refactor `config.py` to read paths from `INSPECTOR_DATA_DIR` env var (default unchanged).
-2. Write the `Dockerfile` under `inspector/` (co-located with the component it deploys).
+1. ~~Refactor `config.py` to read paths from `INSPECTOR_DATA_DIR` env var (default unchanged).~~ **DONE** (Wave 2a)
+2. ~~Write the `Dockerfile` under `inspector/` (co-located with the component it deploys).~~ **DONE** (Wave 2a)
 3. Test locally: `docker build -t inspector inspector/ && docker run -p 5000:5000 -v $PWD/data:/data inspector`.
-4. Write `inspector/docker-compose.yml` as the reviewer-facing artifact.
+4. ~~Write `inspector/docker-compose.yml` as the reviewer-facing artifact.~~ **DONE** (Wave 2a)
 5. Add the `.github/workflows/docker-publish.yml` workflow.
 6. Push; verify CI builds green; make the GHCR package public.
 7. (Mode B only) Add the flock wrapper to save + undo.
 8. Send reviewers the compose file + 5-step install README.
 
-Roughly a day of work in total. None of it blocks Stage 2; Stage 2 just gets auto-published once this pipeline exists.
+Remaining work: steps 3 (validate Docker build + run), 5-6 (CI pipeline), 7 (optional Mode B), 8 (reviewer instructions). Roughly half a day.
