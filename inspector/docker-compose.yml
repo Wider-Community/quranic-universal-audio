@@ -1,14 +1,26 @@
 # Inspector — reviewer-facing compose file.
 #
-# Usage:
-#   1. Put this file next to a `data/` directory containing the recitation data.
-#   2. `docker compose up` → http://localhost:5000
+# Prereq: repo cloned (or PR checked out via `gh pr checkout <N>`) so that
+# `data/` at repo root contains the recitation data to review.
 #
-# No repo clone needed — the image is published to GHCR. Image is
-# auto-rebuilt by .github/workflows/docker-publish.yml on pushes to main.
+# Usage (from repo root):
+#   docker compose -f inspector/docker-compose.yml up
+#   → http://localhost:5000
+#
+# The image is published to GHCR by .github/workflows/docker-publish.yml
+# on pushes to main. No local build needed — startup is just an image pull.
+#
+# To build from source instead (when a PR touches inspector code, not just
+# data), drop a `docker-compose.override.yml` alongside this file:
+#   services:
+#     inspector:
+#       image: !reset null
+#       build:
+#         context: ..
+#         dockerfile: inspector/Dockerfile
 #
 # TEMP: pinned to :inspector-refactor while CI is being validated on that
-# branch. Flip to :latest once the branch merges to main.
+# branch. Flip to :latest once this branch merges to main.
 
 services:
   inspector:
@@ -18,5 +30,5 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./data:/data
+      - ../data:/data
     restart: unless-stopped
