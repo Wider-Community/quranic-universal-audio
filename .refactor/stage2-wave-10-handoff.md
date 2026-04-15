@@ -308,3 +308,62 @@ fd82ee9 chore(inspector): decrement cycle ceiling 14 → 12 (Wave 10 dissolution
 - **Call 2** (pre-commit-8 HistoryPanel / Risk #1): prescribed the full bridge list — `renderEditHistoryPanel` → `setHistoryData`, `showHistoryView` / `hideHistoryView` → `setHistoryVisible`, `_afterUndoSuccess` store-migration, `segments/index.ts` handler removal. Correctly identified that save.ts was separate enough to leave alone for now. Also flagged the `#seg-history-view` id preservation for delegated click handlers (adopted verbatim).
 
 Both calls produced guidance that was followed exactly; no disagreements surfaced.
+
+---
+
+## 12. Review findings + disposition
+
+### Sonnet (pattern review) — **APPROVE**
+
+No blockers. 3 non-blockers (all Wave-11 carry-forwards):
+
+| ID | Item | Wave target |
+|---|---|---|
+| NB-1 | `_appendValDeltas` survives in orphan `rendering.ts:543` (S2-D22 said drop at Wave 10). Zero call sites in new code; effectively dead weight already since Wave 11 deletes the orphan file. | Wave 11 deletion sweep |
+| NB-2 | `undo.ts:246` manual `rAF(drawHistoryArrows)` on `segSavePreview` — documented D8 §4 + S2-D34 deferral. Targets non-Svelte container; no B1-class conflict. | Wave 11 save-preview wire-up |
+| NB-3 | Duplicate `followUp`/`fixKinds` derivation in `HistoryBatch.svelte` + `HistoryOp.svelte` — minor reactive overhead under `{#if !skipLabel}`. | Wave 11 micro-cleanup (optional) |
+
+**Validated:** §6.3 conformity (all 11 sections), all 9 D-decisions adhered, all 6 risks (#1/#3/#4/#5/#6/#7) handled with file:line citations, pattern notes #1/#4/#8, S2-B07 + D2 greps clean, ceiling tighten conservative (1-buffer), 550 LOC store size justified (helpers used at multiple call sites; not over-extracted), commit 9 deferral acceptable, runtime flow traces correctly, orphan file consumers enumerated for Wave 11 deletion sequence.
+
+### Opus (judgment review) — **APPROVE-WITH-CHANGES**
+
+11 judgment calls A-K all validated. No blockers. 4 non-blockers all Wave-11 carry-forwards:
+
+- **A** Single-agent feasibility: CONFIRMED — comparable to 7a.1 budget, no quality tradeoff.
+- **B** 550 LOC: honest absorption (helpers all multi-callsite; ~350 LOC overage = JSDoc + Risk verbatim preservation). NOT over-engineering.
+- **C** Arrow geometry 5 branches: implemented correctly with safe degenerate paths.
+- **D** Risk #1 B1-class: 3/3 sites handled; legacy dual-writes intentionally kept per Wave 9 NB-2 carry-forward (save.ts still reads `state.segHistoryData`).
+- **E** Risk #3 highlight chain: wired correctly for initial paint; **latent constraint** — canvas's IntersectionObserver unobserves after first paint, so post-mount HL prop mutation wouldn't trigger redraw. Acceptable today (Wave 10 mounts new SegmentRow per diff); document.
+- **F** Commit 9 deferral: defensible. **Latent bifurcation surfaced**: `save.ts:101-106` reads raw `state._splitChains` while panel reads store `$splitChains` — momentary divergence during preview. Wave 11 priority.
+- **G** SplitChainRow vs HistoryOp split: justified (distinct responsibilities; unification would double conditionals).
+- **H** HistoryFilters rewrite: faithful to legacy semantics (faceting + sort + clear button + section hiding).
+- **I** Risk #8 event-delegation: clean — no stale handlers; play-button routing preserved via `data-hist-*` attrs.
+- **J** D9 carry-forwards: all 3 dispositions sound.
+- **K** Cycle ceiling 1-buffer: aggressive but defensible given Wave 11 cleanup plan.
+
+**Wave 11 priority order (Opus rec)**:
+1. **Save-preview HistoryPanel reuse / shared-component extraction** — resolves F + bifurcation. **MUST land before #2.**
+2. State.ts sweep (removes legacy dual-writes — verify `save.ts:102` is last reader before removing).
+3. Orphan file deletion (`segments/history/{filters,rendering,index,undo}.ts` once consumers gone).
+4. Cycle ceiling decrement (after orphan deletion).
+5. Audio tab conversion (S2-D06).
+6. CSS port + re-promote `import/no-cycle` to `error`.
+7. Retro at `.refactor/stage2-retro.md`.
+
+**Minor observation (below consolidation threshold)**: `HistoryOp:139-144` and `SplitChainRow:115-118` have near-duplicated `$: arrowsBefore = beforeCardEls.filter(...)` ref-collection pattern. Candidate for tiny `useBoundRefs` helper but not worth Wave 10 follow-up.
+
+### Orchestrator disposition
+
+- Both reviewers APPROVE. No blockers; Wave 10 CLOSED.
+- **6 Wave-11 carry-forwards locked** (Sonnet 3 + Opus 4 minus overlap):
+  1. `_appendValDeltas` deletion (Sonnet NB-1).
+  2. Save-preview wire-up + bifurcation resolution (Sonnet NB-2 + Opus F) — **Wave 11 priority #1**.
+  3. Optional badge derivation cleanup (Sonnet NB-3).
+  4. Canvas HL reactivity constraint documentation (Opus E).
+  5. State.ts sweep (Opus D + carry).
+  6. Cycle ceiling decrement post-orphan-deletion (Opus K).
+- Wave 11 brief MUST follow Opus's priority order (1 → 2 → 3 → 4 → 5 → 6 → 7) — order matters because save-preview reuse must land before state.ts sweep loses its last reader.
+
+---
+
+**END WAVE 10 HANDOFF.**
