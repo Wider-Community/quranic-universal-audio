@@ -2,10 +2,10 @@
 
 Notes for packaging the inspector as a Docker image so non-technical reviewers can run it without installing Python, Node, ffmpeg, or any other toolchain.
 
-**Stage 2 implementation status** (as of Wave 11b, 2026-04-14):
+**Stage 2 implementation status** (as of Wave 11b + S2-D36 revert, 2026-04-15):
 - `config.py`: `INSPECTOR_DATA_DIR` env var support — **DONE** (Wave 2a)
-- `inspector/Dockerfile` — **DONE** (Wave 2a)
-- `inspector/docker-compose.yml` — **DONE** (Wave 2a; volume uses `../data:/data`)
+- `inspector/Dockerfile` — **DONE** (Wave 2a; updated S2-D36 to repo-root context)
+- `inspector/docker-compose.yml` — **DONE** (Wave 2a; updated S2-D36: context `..`)
 - `.github/workflows/docker-publish.yml` — **NOT YET** (pending)
 - Mode B single-writer flock — **NOT YET** (pending)
 - GHCR package published — **NOT YET** (pending)
@@ -54,19 +54,19 @@ Small refactor; one PR. Prerequisite for everything below.
 
 Multi-stage build — Node used only for the frontend build, then discarded. Final image is Python + Flask + ffmpeg + the built `dist/`.
 
-The Dockerfile lives at `inspector/Dockerfile` — build context is the `inspector/` directory. `inspector/validators/` is vendored into the tree (Wave 2a) so no sibling access is needed.
+The Dockerfile lives at `inspector/Dockerfile`. The build context is the **repo root** (S2-D36: reverted S2-D03 vendoring) so that both `inspector/` and the sibling `validators/` package are available inside the image.
 
 ```dockerfile
 # --- Stage 1: build frontend ---
-FROM node:20-alpine AS frontend
+FROM node:20-slim AS frontend-build
 WORKDIR /app
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend ./
+COPY inspector/frontend/package.json ./
+RUN npm install
+COPY inspector/frontend ./
 RUN npm run build
 
 # --- Stage 2: runtime ---
-FROM python:3.11-slim
+FROM python:3.11-slim AS runtime
 WORKDIR /app
 
 # Runtime system deps
@@ -75,14 +75,16 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Python deps
-COPY requirements.txt .
+COPY inspector/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App code (context is inspector/; place under ./inspector/ inside image)
-COPY . ./inspector
+# App code — inspector tree + sibling validators/ package.
+# app.py inserts /app (repo root) onto sys.path[0] so imports resolve correctly.
+COPY inspector/ ./inspector/
+COPY validators/ ./validators/
 
 # Built frontend
-COPY --from=frontend /app/dist ./inspector/frontend/dist
+COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 
 ENV INSPECTOR_DATA_DIR=/data
 EXPOSE 5000
@@ -120,12 +122,22 @@ Contributors running from a source checkout instead of the published image:
 
 ```bash
 cd inspector && docker compose up
-# or, from repo root:
-docker build -t inspector:dev inspector/
+# or, from repo root (build context is . — the repo root):
+docker build -t inspector:dev -f inspector/Dockerfile .
 docker run --rm -p 5000:5000 -v "$PWD/data:/data" inspector:dev
 ```
 
-The in-repo `inspector/docker-compose.yml` uses `../data:/data` so the volume reaches `<repo>/data` from the `inspector/` folder.
+The in-repo `inspector/docker-compose.yml` sets `build.context: ..` (repo root) so both `inspector/` and `validators/` are in scope. The volume `../data:/data` reaches `<repo>/data` from the `inspector/` folder.
+
+### Dev launch (without Docker)
+
+Run from **repo root**:
+
+```bash
+python3 inspector/app.py
+```
+
+`inspector/app.py` adds the repo root to `sys.path[0]` at startup, so `from validators.X import Y` resolves to `validators/` at repo root. No `PYTHONPATH` prefix needed.
 
 Total install footprint on their machine: Docker Desktop. Nothing Python, nothing Node, no ffmpeg.
 
@@ -193,7 +205,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: inspector
+          context: .
+          file: inspector/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/inspector:latest
@@ -242,9 +255,9 @@ Stage 2 (Svelte 4 migration) is **complete** (Wave 11b, 2026-04-14). The fronten
 ## Work order, if picking this up
 
 1. ~~Refactor `config.py` to read paths from `INSPECTOR_DATA_DIR` env var (default unchanged).~~ **DONE** (Wave 2a)
-2. ~~Write the `Dockerfile` under `inspector/` (co-located with the component it deploys).~~ **DONE** (Wave 2a)
-3. Test locally: `docker build -t inspector inspector/ && docker run -p 5000:5000 -v $PWD/data:/data inspector`.
-4. ~~Write `inspector/docker-compose.yml` as the reviewer-facing artifact.~~ **DONE** (Wave 2a)
+2. ~~Write the `Dockerfile` under `inspector/` (co-located with the component it deploys).~~ **DONE** (Wave 2a; updated S2-D36 to repo-root build context)
+3. Test locally: `docker build -t inspector -f inspector/Dockerfile . && docker run -p 5000:5000 -v $PWD/data:/data inspector`.
+4. ~~Write `inspector/docker-compose.yml` as the reviewer-facing artifact.~~ **DONE** (Wave 2a; updated S2-D36: `context: ..`)
 5. Add the `.github/workflows/docker-publish.yml` workflow.
 6. Push; verify CI builds green; make the GHCR package public.
 7. (Mode B only) Add the flock wrapper to save + undo.
