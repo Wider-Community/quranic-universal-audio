@@ -117,12 +117,12 @@ let nextDisabled = true;
 ## 5. Pre-flight gate status at wave exit
 
 ```
-[1/7] Backend: config.py magic-number check   ok
-[2/7] Backend: no Flask imports in services/  ok
-[3/7] Frontend: tsc --noEmit                  ok
+[1/7] npm run typecheck (tsc --noEmit)        ok
+[2/7] npm run lint (ESLint)                   ok: 0 errors, 0 warnings
+[3/7] npm run build (Vite production build)   ok: 144 modules
 [4/7] Backend: no 'global' outside cache.py   ok
-[5/7] Backend: orphan global cache vars       ok
-[6/7] Frontend: zero cycle NOTE comments      ok
+[5/7] Backend: _URL_AUDIO_META and _phonemizer in cache.py only   ok
+[6/7] Frontend: zero '// NOTE: circular dependency' comments      ok
 [7/7] Frontend: import/no-cycle count ≤ 0     ok: 0 cycle warnings (ceiling: 0)
 svelte-check: 0 errors, 0 warnings
 ```
