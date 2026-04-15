@@ -52,14 +52,10 @@ export default [
                 prefer: 'type-imports',
                 fixStyle: 'separate-type-imports',
             }],
-            // Downgraded to `warn` in Wave 1 of Stage 2 after enabling the
-            // TS resolver surfaced ~22 pre-existing segments-tab cycles
-            // (see stage2-bugs.md S2-B06). Those are the same runtime-safe
-            // cycles the segments `register*` pattern was built to handle;
-            // they dissolve in Waves 5-10 as the segments tab migrates to
-            // Svelte. Wave 11 re-promotes this rule to `error` once zero
-            // cycles remain (see stage2-decisions.md S2-D24).
-            'import/no-cycle': 'warn',
+            // Re-promoted to `error` in Wave 11a (S2-B06 closed, S2-D24 actioned).
+            // All 22 pre-existing segments-tab cycles dissolved via the register*
+            // pattern across Waves 5–11a. Ceiling is now 0; any new cycle breaks CI.
+            'import/no-cycle': 'error',
         },
     },
 ];

@@ -24,13 +24,41 @@ import type {
 import type { Segment } from '../types/domain';
 import { computeSilenceAfter } from './filters';
 import { applyFiltersAndRender } from './filters';
-import { renderEditHistoryPanel } from './history/index';
 import { _fetchCacheStatus, _isCurrentReciterBySurah, _rewriteAudioUrls } from './playback/audio-cache';
-import { stopSegAnimation } from './playback/index';
 import { dom,state } from './state';
-// Wave 8a.2: captureValPanelState / renderValidationPanel / restoreValPanelState removed
-// (ValidationPanel.svelte renders reactively; no imperative render calls needed).
-import { _fetchChapterPeaksIfNeeded } from './waveform/index';
+
+// ---------------------------------------------------------------------------
+// Registered callbacks — break data ↔ playback/index and data ↔ history/index
+// circular dependencies (S2-B06 / P4). Wired in segments/index.ts.
+// ---------------------------------------------------------------------------
+
+let _stopSegAnimationFn: (() => void) | null = null;
+export function registerStopSegAnimation(fn: () => void): void { _stopSegAnimationFn = fn; }
+function _stopSegAnimation(): void { _stopSegAnimationFn?.(); }
+
+let _fetchChapterPeaksIfNeededFn: ((reciter: string, chNum: number) => void) | null = null;
+export function registerFetchChapterPeaks(fn: (reciter: string, chNum: number) => void): void {
+    _fetchChapterPeaksIfNeededFn = fn;
+}
+function _fetchChapterPeaksIfNeeded(reciter: string, chNum: number): void {
+    _fetchChapterPeaksIfNeededFn?.(reciter, chNum);
+}
+
+// ---------------------------------------------------------------------------
+// _applyHistoryData — inlined equivalent of history/index.ts:renderEditHistoryPanel
+// (breaks the data ↔ history/index cycle; history/index still imports data for
+// onSegReciterChange which is wired via registerOnSegReciterChange below).
+// ---------------------------------------------------------------------------
+
+function _applyHistoryData(data: SegEditHistoryResponse | null | undefined): void {
+    if (!data || !data.batches || data.batches.length === 0) {
+        dom.segHistoryBtn.hidden = true;
+        setHistoryData(null);
+        return;
+    }
+    dom.segHistoryBtn.hidden = false;
+    setHistoryData(data);
+}
 
 // ---------------------------------------------------------------------------
 // Reciter loading
@@ -172,7 +200,7 @@ export async function onSegReciterChange(): Promise<void> {
     }
 
     if (histResult.status === 'fulfilled' && histResult.value) {
-        renderEditHistoryPanel(histResult.value);
+        _applyHistoryData(histResult.value);
     }
 }
 
@@ -183,7 +211,7 @@ export async function onSegChapterChange(): Promise<void> {
 
     dom.segAudioEl.src = '';
     dom.segPlayBtn.disabled = true;
-    stopSegAnimation();
+    _stopSegAnimation();
     state._segPrefetchCache = {};
 
     // Wave 8a.2: ValidationPanel.svelte re-derives from $selectedChapter reactively.
@@ -289,7 +317,7 @@ export function clearSegDisplay(): void {
     dom.segPlayBtn.disabled = true;
     dom.segSaveBtn.disabled = true;
     dom.segPlayStatus.textContent = '';
-    stopSegAnimation();
+    _stopSegAnimation();
 }
 
 // ---------------------------------------------------------------------------

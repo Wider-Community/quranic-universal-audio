@@ -7,15 +7,49 @@ import { fetchJson } from '../../lib/api';
 import { getWaveformPeaks,setWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
 import type { Segment, SegmentPeaks } from '../../types/domain';
-import { getAdjacentSegments,getSegByChapterIndex } from '../data';
+import type { AdjacentSegments } from '../data';
 import type { DrawWaveformFn } from '../registry';
-import { _getEditCanvas } from '../rendering';
 import { _findCoveringPeaks,dom, state } from '../state';
 import { _drawMergeHighlight,_drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './draw';
 import type { SegCanvas } from './types';
 
 // NOTE: un-used helper for future Phase 7 typing of _findCoveringPeaks
 void _findCoveringPeaks;
+
+// ---------------------------------------------------------------------------
+// Break waveform/index ↔ data circular dependency (S2-B06 / P4).
+// Both directions were causing cycles: waveform imported getAdjacentSegments /
+// getSegByChapterIndex from data; data imported _fetchChapterPeaksIfNeeded from
+// waveform. Both edges are broken with registrations wired in segments/index.ts.
+// ---------------------------------------------------------------------------
+
+let _getAdjacentSegmentsFn: ((chapter: number | string, index: number) => AdjacentSegments) | null = null;
+let _getSegByChapterIndexFn: ((chapter: number | string, index: number) => Segment | null) | null = null;
+
+export function registerDataLookups(
+    getAdjFn: (chapter: number | string, index: number) => AdjacentSegments,
+    getSegFn: (chapter: number | string, index: number) => Segment | null,
+): void {
+    _getAdjacentSegmentsFn = getAdjFn;
+    _getSegByChapterIndexFn = getSegFn;
+}
+
+function getAdjacentSegments(chapter: number | string, index: number): AdjacentSegments {
+    return _getAdjacentSegmentsFn?.(chapter, index) ?? { prev: null, next: null };
+}
+
+function getSegByChapterIndex(chapter: number | string, index: number): Segment | null {
+    return _getSegByChapterIndexFn?.(chapter, index) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Break waveform/index ↔ rendering circular dependency (S2-B06 / P4).
+// `_getEditCanvas` is registered by segments/index.ts after both modules load.
+// ---------------------------------------------------------------------------
+
+let _getEditCanvasFn: (() => HTMLCanvasElement | null) | null = null;
+export function registerGetEditCanvas(fn: () => HTMLCanvasElement | null): void { _getEditCanvasFn = fn; }
+function _getEditCanvas(): HTMLCanvasElement | null { return _getEditCanvasFn?.() ?? null; }
 
 // Forward references for edit-mode draw functions.
 // The observer needs to call drawSplitWaveform/drawTrimWaveform when it encounters

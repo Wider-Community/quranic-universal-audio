@@ -17,6 +17,7 @@ import './validation/index';
 import { selectedChapter } from '../lib/stores/segments/chapter';
 import { LS_KEYS } from '../lib/utils/constants';
 import { mustGet } from '../shared/dom';
+import { getAdjacentSegments, getSegByChapterIndex, onSegReciterChange, registerFetchChapterPeaks, registerStopSegAnimation } from './data';
 // Edit modules
 import { enterEditWithBuffer, exitEditMode, registerEditDrawFns,registerEditModes } from './edit/common';
 import { deleteSegment } from './edit/delete';
@@ -25,15 +26,17 @@ import { startRefEdit } from './edit/reference';
 import { confirmSplit, drawSplitWaveform,enterSplitMode } from './edit/split';
 import { confirmTrim, drawTrimWaveform,enterTrimMode } from './edit/trim';
 import { _handleSegCanvasMousedown, handleSegRowClick, registerAllSegEventHandlers } from './event-delegation';
-import { showHistoryView } from './history/index';
+import { registerOnSegReciterChange, showHistoryView } from './history/index';
 import { handleSegKeydown, registerAllSegKeyboardHandlers } from './keyboard';
 import { _deleteAudioCache,_prepareAudio } from './playback/audio-cache';
+import { stopSegAnimation } from './playback/index';
+import { _getEditCanvas } from './rendering';
 import { confirmSaveFromPreview,hideSavePreview, onSegSaveClick } from './save';
 import { dom, setClassifyFn,state } from './state';
 import { _classifySegCategories } from './validation/categories';
 import { playErrorCardAudio } from './validation/error-card-audio';
 import { _isWrapperContextShown,ensureContextShown } from './validation/error-cards';
-import { registerWaveformHandlers } from './waveform/index';
+import { _fetchChapterPeaksIfNeeded, registerDataLookups, registerGetEditCanvas, registerWaveformHandlers } from './waveform/index';
 
 // ---------------------------------------------------------------------------
 // Inject the classify function to break the state <-> categories cycle
@@ -51,6 +54,20 @@ registerWaveformHandlers({
     drawSplitWaveform,
     drawTrimWaveform,
 });
+
+// ---------------------------------------------------------------------------
+// Break circular dependencies (S2-B06 / P4): register callbacks that were
+// previously imported directly, forming cycles through data.ts / rendering.ts.
+// ---------------------------------------------------------------------------
+// data.ts ↔ playback/index.ts: data.ts called stopSegAnimation; playback imports getSegByChapterIndex.
+registerStopSegAnimation(stopSegAnimation);
+// history/index.ts ↔ data.ts: hideHistoryView calls onSegReciterChange; data imports renderEditHistoryPanel.
+registerOnSegReciterChange(onSegReciterChange);
+// waveform/index.ts ↔ rendering.ts: waveform called _getEditCanvas; rendering imports from data.
+registerGetEditCanvas(_getEditCanvas);
+// data.ts ↔ waveform/index.ts: data imported _fetchChapterPeaksIfNeeded; waveform imported data lookups.
+registerFetchChapterPeaks(_fetchChapterPeaksIfNeeded);
+registerDataLookups(getAdjacentSegments, getSegByChapterIndex);
 
 
 // ---------------------------------------------------------------------------
@@ -91,19 +108,13 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.segFilterStatusEl = mustGet<HTMLElement>('seg-filter-status');
     dom.segHistoryView = mustGet<HTMLDivElement>('seg-history-view');
     dom.segHistoryBtn = mustGet<HTMLButtonElement>('seg-history-btn');
-    // Wave 10: HistoryPanel.svelte owns the interior of #seg-history-view
-    // (toolbar, stats, filter pills, batches list). The back button + filter
-    // clear + sort toggles are reactive inside HistoryPanel/HistoryFilters;
-    // their DOM refs are no longer needed by imperative code. segHistoryStats
-    // / segHistoryBatches are left typed on `dom` for now (reading sites are
-    // either orphan modules — history/filters.ts, history/rendering.ts
-    // default-arg — or removed). They remain unset and any new reader would
-    // error loudly, which is the correct posture during migration.
+    // Wave 10: HistoryPanel.svelte owns the interior of #seg-history-view reactively.
+    // Wave 11a: SavePreview.svelte owns #seg-save-preview-stats / -batches reactively;
+    // dom.segSavePreviewStats and dom.segSavePreviewBatches mustGet calls removed
+    // (Svelte-owned nodes — B1-class violation if imperatively written to).
     dom.segSavePreview = mustGet<HTMLDivElement>('seg-save-preview');
     dom.segSavePreviewCancel = mustGet<HTMLButtonElement>('seg-save-preview-cancel');
     dom.segSavePreviewConfirm = mustGet<HTMLButtonElement>('seg-save-preview-confirm');
-    dom.segSavePreviewStats = mustGet<HTMLDivElement>('seg-save-preview-stats');
-    dom.segSavePreviewBatches = mustGet<HTMLDivElement>('seg-save-preview-batches');
 
     // Restore persisted speed. Autoplay state + button class restored by
     // SegmentsAudioControls.svelte onMount (Wave 6a). Audio event listeners

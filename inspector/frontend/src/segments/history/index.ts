@@ -22,9 +22,16 @@ import {
 } from '../../lib/stores/segments/history';
 import type { SegEditHistoryResponse } from '../../types/api';
 import { _SEG_NORMAL_IDS } from '../constants';
-import { onSegReciterChange } from '../data';
 import { dom, state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
+
+// ---------------------------------------------------------------------------
+// Break history/index ↔ data circular dependency (S2-B06 / P4).
+// `onSegReciterChange` is registered by segments/index.ts after both modules load.
+// ---------------------------------------------------------------------------
+
+let _onSegReciterChangeFn: (() => void) | null = null;
+export function registerOnSegReciterChange(fn: () => void): void { _onSegReciterChangeFn = fn; }
 
 // ---------------------------------------------------------------------------
 // showHistoryView
@@ -62,7 +69,7 @@ export function hideHistoryView(): void {
     if (controls) { if (controls.dataset.hiddenByHistory !== '1') controls.hidden = false; delete controls.dataset.hiddenByHistory; }
     const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
     if (shortcuts) { if (shortcuts.dataset.hiddenByHistory !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByHistory; }
-    if (state._segDataStale) { state._segDataStale = false; onSegReciterChange(); }
+    if (state._segDataStale) { state._segDataStale = false; _onSegReciterChangeFn?.(); }
 }
 
 // ---------------------------------------------------------------------------
