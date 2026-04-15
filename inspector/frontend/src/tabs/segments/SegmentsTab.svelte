@@ -49,7 +49,7 @@
     import { clearStats, segStats, setStats } from '../../lib/stores/segments/stats';
     import { clearValidation, segValidation, setValidation } from '../../lib/stores/segments/validation';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
-    import { hidePreview } from '../../lib/stores/segments/save';
+    import { clearSavePreviewData, hidePreview } from '../../lib/stores/segments/save';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import type { SegReciter } from '../../types/domain';
@@ -274,8 +274,7 @@
         }
 
         if (histResult.status === 'fulfilled' && histResult.value) {
-            state.segHistoryData = histResult.value;
-            renderEditHistoryPanel(state.segHistoryData);
+            renderEditHistoryPanel(histResult.value);
         }
     }
 
@@ -303,23 +302,16 @@
         // Stats panel — Wave 8b: StatsPanel.svelte controls visibility via $segStats store.
         clearStats();
 
-        state.segHistoryData = null;
-        state._allHistoryItems = null;
-        state._splitChains = null;
-        state._chainedOpIds = null;
         state._segSavedChains = null;
         const histBtn = document.getElementById('seg-history-btn');
         // Wave 10: HistoryPanel is Svelte-owned — clear reactively (Risk #1).
         setHistoryVisible(false);
         setHistoryData(null);
         const savePrev = document.getElementById('seg-save-preview');
-        const savePrevStats = document.getElementById('seg-save-preview-stats');
-        const savePrevBatches = document.getElementById('seg-save-preview-batches');
         if (histBtn) (histBtn as HTMLElement).hidden = true;
         if (savePrev) (savePrev as HTMLElement).hidden = true;
-        hidePreview();  // mirror to store so SavePreview.svelte stays consistent on re-render
-        if (savePrevStats) savePrevStats.innerHTML = '';
-        if (savePrevBatches) savePrevBatches.innerHTML = '';
+        hidePreview();   // notify $savePreviewVisible store
+        clearSavePreviewData(); // clear store — SavePreview.svelte empties reactively (Wave 11a)
 
         state._segPrefetchCache = {};
         state._segContinuousPlay = false;

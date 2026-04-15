@@ -6,7 +6,7 @@ import { fetchJson, fetchJsonOrNull } from '../lib/api';
 import { segAllData, segData } from '../lib/stores/segments/chapter';
 import { clearEdit } from '../lib/stores/segments/edit';
 import { setHistoryData, setHistoryVisible } from '../lib/stores/segments/history';
-import { hidePreview } from '../lib/stores/segments/save';
+import { clearSavePreviewData, hidePreview } from '../lib/stores/segments/save';
 import { clearStats, setStats } from '../lib/stores/segments/stats';
 import { clearValidation, setValidation } from '../lib/stores/segments/validation';
 import { LS_KEYS } from '../lib/utils/constants';
@@ -116,10 +116,6 @@ export async function onSegReciterChange(): Promise<void> {
     setHistoryVisible(false);
     setHistoryData(null);
     dom.segHistoryBtn.hidden = true;
-    state.segHistoryData = null;
-    state._allHistoryItems = null;
-    state._splitChains = null;
-    state._chainedOpIds = null;
     state._segSavedChains = null;
     if (!reciter) return;
 
@@ -176,8 +172,7 @@ export async function onSegReciterChange(): Promise<void> {
     }
 
     if (histResult.status === 'fulfilled' && histResult.value) {
-        state.segHistoryData = histResult.value;
-        renderEditHistoryPanel(state.segHistoryData);
+        renderEditHistoryPanel(histResult.value);
     }
 }
 
@@ -266,10 +261,6 @@ export function clearSegDisplay(): void {
     state.segEditIndex = -1;
     clearEdit();
     clearStats(); // Wave 8b: StatsPanel.svelte controls visibility via $segStats store
-    state.segHistoryData = null;
-    state._allHistoryItems = null;
-    state._splitChains = null;
-    state._chainedOpIds = null;
     state._segSavedChains = null;
     // S2-B05: clear split-chain UID triple so no stale _chainSplitRefEdit fires.
     state._splitChainUid = null;
@@ -280,9 +271,8 @@ export function clearSegDisplay(): void {
     setHistoryVisible(false);
     setHistoryData(null);
     dom.segSavePreview.hidden = true;
-    hidePreview(); // Wave 9: notify $savePreviewVisible store
-    dom.segSavePreviewStats.innerHTML = '';
-    dom.segSavePreviewBatches.innerHTML = '';
+    hidePreview(); // notify $savePreviewVisible store
+    clearSavePreviewData(); // clear store — SavePreview.svelte empties reactively
     state._segPrefetchCache = {};
     state._segContinuousPlay = false;
     state._segPlayEndMs = 0;

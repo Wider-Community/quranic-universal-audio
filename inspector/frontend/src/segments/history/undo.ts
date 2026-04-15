@@ -2,10 +2,13 @@
  * Undo operations: batch undo, op undo, chain undo, pending discard.
  */
 
+import { get as storeGet } from 'svelte/store';
+
 import { fetchJson, fetchJsonOrNull } from '../../lib/api';
 import {
     buildSplitChains,
     buildSplitLineage,
+    historyData,
     setHistoryData,
     setSplitChains,
     type SplitChain,
@@ -38,11 +41,10 @@ export async function _afterUndoSuccess(reciter: string, opsReversed: number): P
             `/api/seg/edit-history/${reciter}`,
         );
         if (hist) {
-            state.segHistoryData = hist;
             // renderEditHistoryPanel bridges to setHistoryData() which drives
             // HistoryPanel.svelte reactively; waveform observer is owned by
             // SegmentRow.onMount and arrows redraw via HistoryArrows afterUpdate.
-            renderEditHistoryPanel(state.segHistoryData);
+            renderEditHistoryPanel(hist);
         }
     } catch (_) { /* non-critical */ }
     state._segDataStale = true;
@@ -217,15 +219,12 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
         return;
     }
     const data = buildSavePreviewData();
-    const allBatches = [...(state.segHistoryData?.batches || []), ...(data.batches as HistoryBatch[])];
+    const allBatches = [...(storeGet(historyData)?.batches || []), ...(data.batches as HistoryBatch[])];
     const splitLineage = buildSplitLineage(allBatches);
     const built = buildSplitChains(allBatches, splitLineage);
-    // Keep legacy state fields in sync AND push into the history store.
-    state._splitChains = built.chains;
-    state._chainedOpIds = built.chainedOpIds;
     setSplitChains(built.chains, built.chainedOpIds);
-    // Ensure HistoryPanel sees the pending data.
-    setHistoryData(state.segHistoryData);
+    // Ensure HistoryPanel sees the pending data (reads from historyData store).
+    setHistoryData(storeGet(historyData));
     // Publish updated preview data to store — SavePreview.svelte renders reactively.
     setSavePreviewData(data);
 }

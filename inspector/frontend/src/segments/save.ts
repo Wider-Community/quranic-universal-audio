@@ -103,10 +103,6 @@ export function showSavePreview(): void {
     const allBatches = [...(storeGet(historyData)?.batches || []), ...(data.batches as HistoryBatch[])];
     const splitLineage = buildSplitLineage(allBatches);
     const built = buildSplitChains(allBatches, splitLineage);
-    // Keep legacy state fields in sync (consumed by imperative history/rendering.ts
-    // code that remains until P3 orphan deletion).
-    state._splitChains = built.chains;
-    state._chainedOpIds = built.chainedOpIds;
     setSplitChains(built.chains, built.chainedOpIds);
 
     // Publish preview data to store — SavePreview.svelte renders reactively.
@@ -141,9 +137,6 @@ export function hideSavePreview(restoreScroll = true): void {
         // Restore split chains to their pre-preview state via the store.
         // Map legacy { splitChains, chainedOpIds } to store's { chains, chainedOpIds }.
         restoreSplitChains({ chains: state._segSavedChains.splitChains, chainedOpIds: state._segSavedChains.chainedOpIds });
-        // Keep legacy state fields in sync.
-        state._splitChains = state._segSavedChains.splitChains;
-        state._chainedOpIds = state._segSavedChains.chainedOpIds;
         state._segSavedChains = null;
     }
 
@@ -306,8 +299,7 @@ export async function executeSave(): Promise<void> {
                     `/api/seg/edit-history/${reciter}`,
                 );
                 if (hist) {
-                    state.segHistoryData = hist;
-                    renderEditHistoryPanel(state.segHistoryData);
+                    renderEditHistoryPanel(hist);
                 }
             } catch (_) { /* non-critical */ }
         } else {

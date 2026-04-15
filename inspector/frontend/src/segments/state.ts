@@ -24,7 +24,6 @@ import type { SearchableSelect } from '../shared/searchable-select';
 import type {
     SegAllResponse,
     SegDataResponse,
-    SegEditHistoryResponse,
     SegValidateResponse,
 } from '../types/api';
 import type {
@@ -227,23 +226,21 @@ export interface SegmentsState {
     _splitChainUid: string | null;
     _splitChainCategory: string | null;
 
-    // Edit history viewer state
-    segHistoryData: SegEditHistoryResponse | null;
+    // Edit history viewer: stale-data flag (set true after undo so hideHistoryView
+    // can trigger a full reciter reload). Raw response data moved to historyData
+    // store (lib/stores/segments/history.ts) in Wave 10/11a.
     _segDataStale: boolean;
 
-    // History filter & sort state
-    _histFilterOpTypes: Set<string>;
-    _histFilterErrCats: Set<string>;
-    _histSortMode: 'time' | 'quran';
-    /** Flat list of display items built from batches.
-     *  `group` is an `EditOp[]` grouped by display; extra fields come from the
-     *  enclosing batch. Produced/consumed by history/rendering + history/filters. */
-    _allHistoryItems: OpFlatItem[] | null;
-
-    // Split chain state (Map of chain id -> chain descriptor)
-    _splitChains: Map<string, SplitChain> | null;
-    _chainedOpIds: Set<string> | null;
+    // Split-chain snapshot for save-preview restore (written in save.ts,
+    // read in save.ts hideSavePreview). The chain state itself lives in the
+    // history store (splitChains / chainedOpIds writables).
     _segSavedChains: SavedChainsSnapshot | null;
+
+    // Dead fields removed in Wave 11a (state.ts sweep):
+    // segHistoryData — last reader removed (undo.ts:220 now reads storeGet(historyData))
+    // _histFilterOpTypes, _histFilterErrCats, _histSortMode, _allHistoryItems,
+    // _splitChains, _chainedOpIds — all absorbed by lib/stores/segments/history.ts
+    // (Wave 10). Their write sites were in orphan files deleted in P3.
 
     // Server-provided canonical category list (from /api/seg/config)
     _validationCategories: string[] | null;
@@ -351,18 +348,9 @@ export const state: SegmentsState = {
     _splitChainCategory: null,
 
     // Edit history viewer state
-    segHistoryData: null,
     _segDataStale: false,
 
-    // History filter & sort state
-    _histFilterOpTypes: new Set(),
-    _histFilterErrCats: new Set(),
-    _histSortMode: 'time',
-    _allHistoryItems: null,
-
-    // Split chain state
-    _splitChains: null,
-    _chainedOpIds: null,
+    // Split-chain snapshot for save-preview restore
     _segSavedChains: null,
 
     // Server-provided canonical category list
@@ -448,25 +436,15 @@ export interface DomRefs {
     segFilterCountEl: HTMLElement;
     segFilterStatusEl: HTMLElement;
 
-    // History view
+    // History view (imperative: #seg-history-view container + external open button)
+    // History panel interior is Svelte-owned by HistoryPanel.svelte (Wave 10).
     segHistoryView: HTMLDivElement;
     segHistoryBtn: HTMLButtonElement;
-    segHistoryBackBtn: HTMLButtonElement;
-    segHistoryStats: HTMLDivElement;
-    segHistoryBatches: HTMLDivElement;
-    segHistoryFilters: HTMLDivElement;
-    segHistoryFilterOps: HTMLDivElement;
-    segHistoryFilterCats: HTMLDivElement;
-    segHistoryFilterClear: HTMLButtonElement;
-    segHistorySortTime: HTMLButtonElement;
-    segHistorySortQuran: HTMLButtonElement;
 
-    // Save preview
+    // Save preview (container + action buttons; interior owned by SavePreview.svelte Wave 11a)
     segSavePreview: HTMLDivElement;
     segSavePreviewCancel: HTMLButtonElement;
     segSavePreviewConfirm: HTMLButtonElement;
-    segSavePreviewStats: HTMLDivElement;
-    segSavePreviewBatches: HTMLDivElement;
 }
 
 // Sentinel for DOM ref seeding. `never` is assignable to every field type,
@@ -498,25 +476,14 @@ export const dom: DomRefs = {
     segFilterCountEl: _UNSET,
     segFilterStatusEl: _UNSET,
 
-    // History view
+    // History view (container + external open button; interior owned by HistoryPanel.svelte)
     segHistoryView: _UNSET,
     segHistoryBtn: _UNSET,
-    segHistoryBackBtn: _UNSET,
-    segHistoryStats: _UNSET,
-    segHistoryBatches: _UNSET,
-    segHistoryFilters: _UNSET,
-    segHistoryFilterOps: _UNSET,
-    segHistoryFilterCats: _UNSET,
-    segHistoryFilterClear: _UNSET,
-    segHistorySortTime: _UNSET,
-    segHistorySortQuran: _UNSET,
 
-    // Save preview
+    // Save preview (container + action buttons; interior owned by SavePreview.svelte)
     segSavePreview: _UNSET,
     segSavePreviewCancel: _UNSET,
     segSavePreviewConfirm: _UNSET,
-    segSavePreviewStats: _UNSET,
-    segSavePreviewBatches: _UNSET,
 };
 
 // ---------------------------------------------------------------------------
