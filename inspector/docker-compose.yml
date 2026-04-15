@@ -1,34 +1,22 @@
 # Inspector — reviewer-facing compose file.
 #
-# Usage (from `inspector/` in the repo):
-#   docker compose up
-#   → http://localhost:5000
+# Usage:
+#   1. Put this file next to a `data/` directory containing the recitation data.
+#   2. `docker compose up` → http://localhost:5000
 #
-# Or from repo root:
-#   docker compose -f inspector/docker-compose.yml up
+# No repo clone needed — the image is published to GHCR. Image is
+# auto-rebuilt by .github/workflows/docker-publish.yml on pushes to main.
 #
-# The build context is the repo root (`..` relative to this file) so that
-# both `inspector/` and `validators/` are available to the Dockerfile (S2-D36).
-#
-# The host `data/` directory sits one level up (repo root), so the volume
-# mount reaches back out of the inspector/ folder. Reviewers consuming a
-# published image can copy just this file into any folder alongside a
-# `data/` dir and change `../data` to `./data`.
-#
-# Uses a locally-built image while the GHCR publish workflow is still pending;
-# once `.github/workflows/docker-publish.yml` lands and the package is public,
-# swap the `build:` block for `image: ghcr.io/<owner>/inspector:latest` and add
-# `pull_policy: always`.
+# TEMP: pinned to :inspector-refactor while CI is being validated on that
+# branch. Flip to :latest once the branch merges to main.
 
 services:
   inspector:
-    build:
-      context: ..
-      dockerfile: inspector/Dockerfile
-    image: inspector:dev
+    image: ghcr.io/wider-community/inspector:inspector-refactor
     container_name: inspector
+    pull_policy: always
     ports:
       - "5000:5000"
     volumes:
-      - ../data:/data
+      - ./data:/data
     restart: unless-stopped
