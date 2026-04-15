@@ -172,4 +172,33 @@ Wave 11a was the final planned wave for this stage. The orchestrator should:
 
 4. **S2-D34 softening**: `segments/{data,filters,navigation,rendering}.ts` were candidates for P3 orphan deletion but all had live Svelte-component importers. These are kept and documented.
 
-5. **Stage 2 overall**: All waves 0.5–11a are complete. Backend (Waves 2a–2b), Svelte foundation (Wave 3), Timestamps tab (Wave 4), Segments tab migrations (Waves 5–11a) are done. Docker/CI and final backend polish (Wave 2 remainder) are the only remaining chartered scope.
+5. **Stage 2 overall**: All waves 0.5–11a are complete. Backend (Waves 2a–2b), Svelte foundation (Wave 3), Timestamps tab (Wave 4), Segments tab migrations (Waves 5–11a) are done. Wave 11b (audio tab + CSS port) and 11c (retro + CLAUDE.md + docs) remain.
+
+---
+
+## 8. Review findings + disposition
+
+### Sonnet (pattern review) — **APPROVE**
+
+No blockers. 3 minor non-blockers (all Wave 11b/11c/12):
+
+| ID | Item | Disposition |
+|---|---|---|
+| NB-1 | `_applyHistoryData` in `data.ts:53-61` is a private inline of `history/index.ts:79-87::renderEditHistoryPanel`. The private copy exists to break the cycle (correct), but creates a subtle divergence risk if the canonical version evolves. | Wave 12 cleanup |
+| NB-2 | `undo.ts:227` self-round-trip `setHistoryData(storeGet(historyData))` — functional but semantically odd. Tracked in handoff §4. | Wave 11b/c awareness |
+| NB-3 | `waveform/index.ts:17` dead `void _findCoveringPeaks` line (pre-existing marker, not Wave 11a). | Wave 11b/c absorption |
+
+**Validated:** §6.3 conformity, P1 Opus F bifurcation resolution (zero raw `state._splitChains` reads in `save.ts`; `SavePreview` subscribes via `$savePreviewData` + `$splitChains`; `rAF(drawHistoryArrows)` gone), P2 sweep completeness (7 fields + 11 DomRefs removed; zero live grep hits; 2 B1-class clobbers fixed), P3 orphan deletion (history/{filters,rendering}.ts deleted; `_addEditOverlay`/`_removeEditOverlay` stubs gone; `drawBarChart`/`findBinIndex` extracted to `lib/utils/stats-chart-draw.ts`; `_rebuildAccordionAfterMerge` correctly preserved — has live caller in `edit/merge.ts:142`), P4 cycle dissolution (4 cycle types via 5 register* wirings at `segments/index.ts:63-70`; eslint.config.js promoted to `error`; CYCLE_CEILING=0; S2-B06 in Section 5 with SHA `71a1dc7`), no regressions to S2-B01/B02/B04/B05/B07, pattern notes #1-#8 upheld, runtime flow trace clean.
+
+### Haiku (mechanical review) — **VERIFIED with one structural discrepancy**
+
+All counts confirmed: 7 SegmentsState fields removed; 11 DomRefs removed; 4 cycle types via 5 register* wirings; ceiling 12 → 0; eslint promoted; npm run lint 0/0; vite build 145 modules; 0 tsc errors; net LOC -772.
+
+**STRUCTURAL DISCREPANCY (fixed by orchestrator)**: S2-B06 was added to Section 5 (Closed) but the original Section 2 row was left at `DEFERRED` status with empty Fix-SHA. Orchestrator updated Section 2 row: status `DEFERRED → CLOSED`, populated Fix-SHA `71a1dc7`, added "see Section 5" pointer + cycle-count progression history (23 → 19 → 16 → 14 → 12 → 0).
+
+### Orchestrator disposition
+
+- Both reviewers APPROVE. No blockers.
+- Haiku discrepancy fixed inline (1 edit to `bugs.md` Section 2 row).
+- 3 Sonnet NBs deferred to Wave 11b/c or Wave 12.
+- **Wave 11a CLOSED.** Proceed to Wave 11b (audio tab + CSS port).
