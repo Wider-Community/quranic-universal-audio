@@ -196,4 +196,31 @@ Note: LOC figures are approximate (from wave handoffs); no automated counting wa
 
 ---
 
+## 9. Stage 2 closeout reviews (Wave 11b + 11c combined)
+
+### Sonnet (pattern review) — **APPROVE Stage 2 closeout**
+
+All 12 plan §3 hard gates PASS. Three tabs fully Svelte (TimestampsTab, SegmentsTab, AudioTab). All Stage-1 carry-over bugs CLOSED. Pre-flight 7/7, svelte-check 0/0, cycle count 0. Retro substantive across all 8 sections.
+
+**Validated:** Audio tab conversion (S2-D06): AudioTab.svelte 310 LOC, plain `<audio>` (not `<AudioElement>` primitive — intentional given AudioTab's full state machine), zero module-top-level DOM access (S2-B07 lesson applied), `id="aud-player"` preserved for App.switchTab pause query. CSS deferral reasoning sound: only `audio-tab.css` (1 rule, no imperative callers) was safely portable; 7 deferred files all have active `classList` callers or class-name-as-DOM-query selectors blocking scoped migration. NB absorption: NB-3 dead-void removed; NB-1 + NB-2 deferred to Wave 12 with sound rationale. Wave 11c deliverables (5 items): retro 8 sections, decisions log W11b-D1..D4, refactor-notes status table, docker-distribution Stage-2-status header, orchestrator handoff Stage-2-complete.
+
+**Non-blockers (all Wave 12):** 7 CSS files; NB-1/NB-2; S2-D28/D29 cosmetic backend nits; Docker CI workflow not yet written; `register*` bridge dissolves only when remaining segments imperative migrates; `shared/searchable-select.ts` + `shared/dom.ts` retained for legacy callers; minor doc staleness in orchestrator-handoff (lists `a9831f1` as HEAD vs actual `f2f421b` — orchestrator updates in this closeout commit).
+
+### Haiku (mechanical review) — **VERIFIED**
+
+All counts cross-checked. No discrepancies.
+
+- e48a091 file ops: AudioTab.svelte +393 LOC; audio/index.ts -361 LOC; audio-tab.css -6 LOC; App.svelte/main.ts/waveform-index modified.
+- File counts: 8 CSS files (audio-tab.css gone); 32 tab Svelte components; 12 stores; 29 segments .ts pure-logic.
+- Pre-flight gates 7/7 PASS; lint 0/0; svelte-check 0/0; vite build 6.70s, 523K JS + 31K CSS.
+- All 7 Stage-1 carry-over bugs CLOSED (S2-B01/B02/B04/B05/B06/B07).
+- Plan §3 exit criteria: 12/12 PASS.
+- Stage 2 docs present: 7 root .refactor docs + 13 wave handoffs + 1 store-bindings + 1 css-migration-map + 1 wave-10-locked-approach.
+
+### Orchestrator declaration
+
+**Stage 2 is CLOSED.** All hard gates pass, all carry-overs documented, retro substantive, exit criteria validated by both pattern and mechanical reviewers. Wave 12 (discretionary) inherits 7 deferred CSS files + 2 NB cleanups + S2-D28/D29 backend nits + Docker CI workflow + remaining segments imperative migration as the natural next-cycle work — no Stage 2 hard gate blocks it.
+
+---
+
 **END Stage 2 Retrospective.**
