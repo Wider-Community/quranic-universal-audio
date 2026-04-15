@@ -9,12 +9,9 @@ import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api'
 import type { Segment, SegmentPeaks } from '../../types/domain';
 import type { AdjacentSegments } from '../data';
 import type { DrawWaveformFn } from '../registry';
-import { _findCoveringPeaks,dom, state } from '../state';
+import { _findCoveringPeaks, dom, state } from '../state';
 import { _drawMergeHighlight,_drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './draw';
 import type { SegCanvas } from './types';
-
-// NOTE: un-used helper for future Phase 7 typing of _findCoveringPeaks
-void _findCoveringPeaks;
 
 // ---------------------------------------------------------------------------
 // Break waveform/index ↔ data circular dependency (S2-B06 / P4).

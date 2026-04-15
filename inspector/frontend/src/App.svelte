@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS } from './lib/utils/constants';
+    import AudioTab from './tabs/audio/AudioTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
@@ -63,26 +64,7 @@
 
     <!-- ============ Audio Tab ============ -->
     <div id="audio-panel" hidden={activeTab !== 'audio'}>
-        <div class="info-bar">
-            <div class="ts-view-toggle" id="aud-category-toggle">
-                <button class="ts-view-btn active" data-cat="by_surah">By Surah</button>
-                <button class="ts-view-btn" data-cat="by_ayah">By Ayah</button>
-            </div>
-            <label>Reciter:
-                <select id="aud-reciter-select"><option value="">Loading...</option></select>
-            </label>
-            <label>Surah:
-                <select id="aud-surah-select"><option value="">--</option></select>
-            </label>
-            <label id="aud-ayah-label" hidden>Ayah:
-                <select id="aud-ayah-select"><option value="">--</option></select>
-            </label>
-        </div>
-        <div class="audio-controls">
-            <button id="aud-prev-btn" class="btn btn-nav" disabled title="Previous">&#9664; Prev</button>
-            <audio id="aud-player" controls preload="none"></audio>
-            <button id="aud-next-btn" class="btn btn-nav" disabled title="Next">Next &#9654;</button>
-        </div>
+        <AudioTab />
     </div>
 
 </div>
