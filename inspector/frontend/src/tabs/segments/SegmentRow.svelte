@@ -29,7 +29,7 @@
         formatRef,
         formatTimeMs,
     } from '../../lib/utils/segments/references';
-    import { isIndexDirty } from '../../segments/state';
+    import { isIndexDirty } from '../../lib/stores/segments/dirty';
     import type {
         MergeHighlight,
         SegCanvas,

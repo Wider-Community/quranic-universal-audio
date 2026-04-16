@@ -92,7 +92,19 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 **Retrospective**: ops.ts premature extraction caught by Sonnet — should have left for P3c dirty-store phase. references.ts shim pattern works well for gradual migration. Opus confirmed no logic drift.
 
-### Phase Ph3b — Mid-layer migration (pending dispatch)
+### Phase Ph3b — Mid-layer extraction (commit: ddd1001)
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | sonnet | 90,955 | 16m 29s | 65 | acd1a726f1072af7d | rendering/waveform/audio-cache/validation extracted |
+| Quality review | sonnet | 81,088 | 7m 34s | 97 | a610d8d0a848ec83b | 2 MEDIUM (shim indirection, dead alias), 2 LOW |
+| Verification review | opus | 66,475 | 2m 55s | 33 | a98a5926c0e620d2c | PASS — all logic preserved, all shims complete |
+
+**Phase Ph3b summary**: 3 agents (no fix agent needed — 1 line fix by orchestrator), ~27 min. 18 files (7 modified + 11 new). Build/lint green. Noise 54→51. Net -747 LOC.
+
+**Retrospective**: Clean extraction pass. Opus confirmed zero regressions. Shim-indirection (waveform-utils → draw shim → lib) caught by Sonnet, fixed to direct import.
+
+### Phase Ph4 — Edit modules + cross-cutting UI (pending dispatch)
 
 ---
 

@@ -2,7 +2,7 @@ import { get as storeGet } from 'svelte/store';
 
 import { renderEditHistoryPanel } from '../../../segments/history/index';
 import { buildSavePreviewData, hideSavePreview } from '../../../segments/save';
-import { dom, isDirty, state } from '../../../segments/state';
+import { dom, state } from '../../../segments/state';
 import type {
     SegEditHistoryResponse,
     SegUndoBatchResponse,
@@ -10,6 +10,11 @@ import type {
 } from '../../../types/api';
 import type { HistoryBatch } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
+import {
+    deleteDirtyEntry,
+    deleteOpLogEntry,
+    isDirty,
+} from '../../stores/segments/dirty';
 import {
     buildSplitChains,
     buildSplitLineage,
@@ -195,10 +200,9 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     state._splitChainWrapper = null;
     state._splitChainCategory = null;
 
-    state.segDirtyMap.delete(chapter);
-    state.segDirtyMap.delete(String(chapter) as unknown as number);
-    state.segOpLog.delete(chapter);
-    state.segOpLog.delete(String(chapter) as unknown as number);
+    // Ph4a: use dirty store helpers (number keys only — fixes B01).
+    deleteDirtyEntry(chapter);
+    deleteOpLogEntry(chapter);
 
     state._segDataStale = true;
     dom.segSaveBtn.disabled = !isDirty();

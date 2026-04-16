@@ -4,11 +4,10 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import { fetchJson, fetchJsonOrNull } from '../lib/api';
+import { isDirty } from '../lib/stores/segments/dirty';
 import {
     buildSplitChains,
     buildSplitLineage,
-    countVersesFromBatches,
     historyData,
     restoreSplitChains,
     setSplitChains,
@@ -17,19 +16,16 @@ import {
 import {
     clearSavePreviewData,
     hidePreview,
-    type SavePreviewBatch,
-    type SavePreviewData,
     setSavePreviewData,
     showPreview,
 } from '../lib/stores/segments/save';
-import type { SegEditHistoryResponse, SegSaveResponse } from '../types/api';
-import type { EditOp, HistoryBatch, Segment } from '../types/domain';
+import { executeSave as _executeSave } from '../lib/utils/segments/save-execute';
+import { buildSavePreviewData as _buildSavePreviewData } from '../lib/utils/segments/save-preview';
+import type { HistoryBatch } from '../types/domain';
 import { _SEG_NORMAL_IDS } from './constants';
-import { getChapterSegments, onSegReciterChange } from './data';
-import { renderEditHistoryPanel } from './history/index';
-import { dom, isDirty, state } from './state';
+import { onSegReciterChange } from './data';
+import { dom, state } from './state';
 import { stopErrorCardAudio } from './validation/error-card-audio';
-import { refreshValidation } from './validation/index';
 
 
 // ---------------------------------------------------------------------------
@@ -47,41 +43,8 @@ export async function onSegSaveClick(): Promise<void> {
 // buildSavePreviewData
 // ---------------------------------------------------------------------------
 
-export function buildSavePreviewData(): SavePreviewData {
-    const batches: SavePreviewBatch[] = [];
-    const warningChapters: number[] = [];
-    const opCounts: Record<string, number> = {};
-    const fixKindCounts: Record<string, number> = {};
-    let totalOps = 0;
-
-    for (const [ch, dirtyEntry] of state.segDirtyMap) {
-        const chOps = state.segOpLog.get(ch) || [];
-        if (chOps.length === 0) { warningChapters.push(ch); continue; }
-        for (const op of chOps) {
-            opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
-            const kind = op.fix_kind || 'manual';
-            fixKindCounts[kind] = (fixKindCounts[kind] || 0) + 1;
-            totalOps++;
-        }
-        batches.push({
-            batch_id: null,
-            saved_at_utc: null,
-            chapter: typeof ch === 'string' ? parseInt(ch) : ch,
-            save_mode: dirtyEntry.structural ? 'full_replace' : 'patch',
-            operations: chOps,
-        });
-    }
-
-    const summary = {
-        total_operations: totalOps,
-        total_batches: batches.length + warningChapters.length,
-        chapters_edited: batches.length + warningChapters.length,
-        verses_edited: countVersesFromBatches(batches as HistoryBatch[]),
-        op_counts: opCounts,
-        fix_kind_counts: fixKindCounts,
-    };
-    return { batches, summary, warningChapters };
-}
+// Ph4a: logic moved to lib/utils/segments/save-preview.ts
+export const buildSavePreviewData = _buildSavePreviewData;
 
 // ---------------------------------------------------------------------------
 // showSavePreview
@@ -170,146 +133,5 @@ export async function confirmSaveFromPreview(): Promise<void> {
     await executeSave();
 }
 
-interface SaveSegmentPayloadFull {
-    segment_uid: string;
-    time_start: number;
-    time_end: number;
-    matched_ref: string;
-    matched_text: string;
-    confidence: number;
-    phonemes_asr: string;
-    audio_url: string;
-    wrap_word_ranges?: unknown;
-    has_repeated_words?: boolean;
-    ignored_categories?: string[];
-}
-
-interface SaveSegmentPayloadPatch {
-    index: number;
-    segment_uid: string;
-    matched_ref: string;
-    matched_text: string;
-    confidence: number;
-    ignored_categories?: string[];
-}
-
-interface SavePayloadFull {
-    full_replace: true;
-    segments: SaveSegmentPayloadFull[];
-    operations: EditOp[];
-}
-
-interface SavePayloadPatch {
-    segments: SaveSegmentPayloadPatch[];
-    operations: EditOp[];
-}
-
-export async function executeSave(): Promise<void> {
-    const reciter = dom.segReciterSelect.value;
-    if (!reciter) return;
-
-    dom.segSaveBtn.disabled = true;
-    dom.segSaveBtn.textContent = 'Saving...';
-
-    let savedChanges = 0;
-    let savedChapters = 0;
-    let allOk = true;
-
-    try {
-        for (const [ch, entry] of state.segDirtyMap) {
-            const chSegs: Segment[] = getChapterSegments(ch);
-            let payload: SavePayloadFull | SavePayloadPatch;
-            const chOps = state.segOpLog.get(ch) || [];
-
-            if (entry.structural) {
-                payload = {
-                    full_replace: true,
-                    segments: chSegs.map(s => {
-                        const o: SaveSegmentPayloadFull = {
-                            segment_uid: s.segment_uid || '',
-                            time_start: s.time_start,
-                            time_end: s.time_end,
-                            matched_ref: s.matched_ref,
-                            matched_text: s.matched_text,
-                            confidence: s.confidence,
-                            phonemes_asr: s.phonemes_asr || '',
-                            audio_url: s.audio_url || '',
-                        };
-                        if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
-                        if (s.has_repeated_words) o.has_repeated_words = true;
-                        if (s.ignored_categories?.length) o.ignored_categories = s.ignored_categories;
-                        return o;
-                    }),
-                    operations: chOps,
-                };
-                savedChanges += chOps.length;
-            } else {
-                const updates: SaveSegmentPayloadPatch[] = [];
-                for (const idx of entry.indices) {
-                    const seg = chSegs.find(s => s.index === idx);
-                    if (seg) {
-                        const upd: SaveSegmentPayloadPatch = {
-                            index: seg.index,
-                            segment_uid: seg.segment_uid || '',
-                            matched_ref: seg.matched_ref,
-                            matched_text: seg.matched_text,
-                            confidence: seg.confidence,
-                        };
-                        if (seg.ignored_categories?.length) upd.ignored_categories = seg.ignored_categories;
-                        updates.push(upd);
-                    }
-                }
-                if (updates.length === 0) continue;
-                payload = { segments: updates, operations: chOps };
-                savedChanges += chOps.length;
-            }
-
-            const result = await fetchJson<SegSaveResponse & { error?: string }>(
-                `/api/seg/save/${reciter}/${ch}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                },
-            );
-            if (!result.ok) {
-                dom.segPlayStatus.textContent = `Save error (ch ${ch}): ${result.error}`;
-                allOk = false;
-                break;
-            }
-            state.segDirtyMap.delete(ch);
-            state.segOpLog.delete(ch);
-            savedChapters++;
-        }
-
-        if (allOk) {
-            state.segDirtyMap.clear();
-            state.segOpLog.clear();
-            const msg = savedChapters > 1
-                ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
-                : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
-            dom.segSaveBtn.textContent = msg;
-            document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
-            setTimeout(() => { dom.segSaveBtn.textContent = 'Save'; }, 2500);
-            fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
-                .then(() => refreshValidation())
-                .catch(() => refreshValidation());
-            try {
-                const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
-                    `/api/seg/edit-history/${reciter}`,
-                );
-                if (hist) {
-                    renderEditHistoryPanel(hist);
-                }
-            } catch (_) { /* non-critical */ }
-        } else {
-            dom.segSaveBtn.disabled = !isDirty();
-            dom.segSaveBtn.textContent = 'Save';
-        }
-    } catch (e) {
-        console.error('Save failed:', e);
-        dom.segPlayStatus.textContent = 'Save failed';
-        dom.segSaveBtn.disabled = !isDirty();
-        dom.segSaveBtn.textContent = 'Save';
-    }
-}
+// Ph4a: logic moved to lib/utils/segments/save-execute.ts
+export const executeSave = _executeSave;

@@ -3,13 +3,14 @@
  * Uses registerHandler pattern for edit/save functions.
  */
 
+import { isDirty } from '../lib/stores/segments/dirty';
 import { LS_KEYS } from '../lib/utils/constants';
 import { shouldHandleKey } from '../lib/utils/keyboard-guard';
 import { cycleSpeed } from '../lib/utils/speed-control';
 import { _restoreFilterView } from './navigation';
 import { onSegPlayClick,playFromSegment } from './playback/index';
 import type { SegKeyboardHandlerRegistry } from './registry';
-import { dom, isDirty,state } from './state';
+import { dom, state } from './state';
 
 // Handler registry — populated exactly once from segments/index.ts during
 // DOMContentLoaded, after which every slot is guaranteed non-null.

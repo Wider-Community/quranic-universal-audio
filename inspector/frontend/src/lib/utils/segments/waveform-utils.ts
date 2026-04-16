@@ -1,12 +1,12 @@
 import type { AdjacentSegments } from '../../../segments/data';
 import type { DrawWaveformFn } from '../../../segments/registry';
 import { _findCoveringPeaks, dom, state } from '../../../segments/state';
-import { _drawMergeHighlight, _drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../types/api';
 import type { Segment, SegmentPeaks } from '../../../types/domain';
 import { fetchJson } from '../../api';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks, setWaveformPeaks } from '../waveform-cache';
+import { _drawMergeHighlight, _drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
 // Registered draw functions (wired from segments/index.ts)

@@ -1,7 +1,8 @@
 import { getAdjacentSegments } from '../../../segments/data';
 import { _addVerseMarkers, formatRef, formatTimeMs } from '../../../segments/references';
-import { dom, isIndexDirty } from '../../../segments/state';
+import { dom } from '../../../segments/state';
 import type { Segment } from '../../../types/domain';
+import { isIndexDirty } from '../../stores/segments/dirty';
 import { getConfClass } from './conf-class';
 
 /** Options consumed by `renderSegCard`. */

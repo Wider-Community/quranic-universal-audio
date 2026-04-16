@@ -19,6 +19,21 @@
  *    `unknown` for a narrow shape once the consumer is typed).
  */
 
+import {
+    createOp as _createOp,
+    type CreateOpOptions,
+    finalizeOp as _finalizeOp,
+    getDirtyMap,
+    getOpLog,
+    getPendingOp,
+    isDirty,
+    isIndexDirty,
+    markDirty as _markDirty,
+    type SegSnapshot,
+    setPendingOp,
+    snapshotSeg,
+    unmarkDirty,
+} from '../lib/stores/segments/dirty';
 import { _VAL_SINGLE_INDEX_CATS as _VAL_SINGLE_INDEX_CATS_CONST } from '../lib/utils/segments/constants';
 import { getWaveformPeaks } from '../lib/utils/waveform-cache';
 import type { SearchableSelect } from '../shared/searchable-select';
@@ -35,6 +50,10 @@ import type {
     Segment,
     SegReciter,
 } from '../types/domain';
+
+// Re-export dirty store functions so existing callers continue to work.
+export { _createOp as createOp, _finalizeOp as finalizeOp, isDirty, isIndexDirty, snapshotSeg, unmarkDirty };
+export type { CreateOpOptions, SegSnapshot };
 
 // ---------------------------------------------------------------------------
 // Supporting types (not exported from types/ because they are segments-local)
@@ -300,7 +319,9 @@ export const state: SegmentsState = {
     segAnimId: null,
     segCurrentIdx: -1,
     segDisplayedSegments: null,
-    segDirtyMap: new Map(),
+    // Ph4a: segDirtyMap now delegates to lib/stores/segments/dirty.ts.
+    // Defined via Object.defineProperty below.
+    segDirtyMap: null as unknown as Map<number, DirtyEntry>,
     segEditMode: null,
     segEditIndex: -1,
 
@@ -343,7 +364,9 @@ export const state: SegmentsState = {
     _splitChainWrapper: null,
 
     // Edit history
-    segOpLog: new Map(),
+    // Ph4a: segOpLog + _pendingOp delegate to lib/stores/segments/dirty.ts.
+    // Defined via Object.defineProperty below.
+    segOpLog: null as unknown as Map<number, EditOp[]>,
     _pendingOp: null,
     _splitChainUid: null,
     _splitChainCategory: null,
@@ -402,6 +425,29 @@ export const state: SegmentsState = {
     // Validation index fixup categories
     _VAL_SINGLE_INDEX_CATS: _VAL_SINGLE_INDEX_CATS_CONST,
 };
+
+// ---------------------------------------------------------------------------
+// Ph4a: wire segDirtyMap / segOpLog / _pendingOp to lib/stores/segments/dirty
+// ---------------------------------------------------------------------------
+
+Object.defineProperty(state, 'segDirtyMap', {
+    get: getDirtyMap,
+    enumerable: true,
+    configurable: false,
+});
+
+Object.defineProperty(state, 'segOpLog', {
+    get: getOpLog,
+    enumerable: true,
+    configurable: false,
+});
+
+Object.defineProperty(state, '_pendingOp', {
+    get: getPendingOp,
+    set: (v: EditOp | null) => setPendingOp(v),
+    enumerable: true,
+    configurable: false,
+});
 
 // ---------------------------------------------------------------------------
 // DOM references -- set in index.ts DOMContentLoaded
@@ -488,105 +534,30 @@ export const dom: DomRefs = {
 };
 
 // ---------------------------------------------------------------------------
-// Classify function injection (breaks state <-> categories cycle)
+// Classify function injection — DEPRECATED (Ph4a)
+// snapshotSeg now calls _classifySegCategories directly via dirty store.
+// setClassifyFn kept as a no-op shim so index.ts doesn't break until Ph4b.
 // ---------------------------------------------------------------------------
 
 /** Shape of the classifier injected by `setClassifyFn` at module-top in index.ts. */
 export type ClassifyFn = (seg: Segment) => string[];
 
-let _classifyFn: ClassifyFn = () => [];
-
-export function setClassifyFn(fn: ClassifyFn): void {
-    _classifyFn = fn;
-}
-
-// ---------------------------------------------------------------------------
-// Operation helpers
-// ---------------------------------------------------------------------------
-
-export interface CreateOpOptions {
-    contextCategory?: string | null;
-    fixKind?: string;
-}
-
-export function createOp(opType: string, { contextCategory = null, fixKind = 'manual' }: CreateOpOptions = {}): EditOp {
-    return {
-        op_id: crypto.randomUUID(),
-        op_type: opType,
-        op_context_category: contextCategory,
-        fix_kind: fixKind,
-        started_at_utc: new Date().toISOString(),
-        applied_at_utc: null,
-        ready_at_utc: null,
-        targets_before: [],
-        targets_after: [],
-    };
-}
-
-/** Snapshot of a segment captured at op-start / op-end. Shape mirrors `Segment`
- *  with a few client-added flags (`index_at_save`, `categories`). Loose-typed
- *  so downstream history rendering doesn't have to cast every read. */
-export type SegSnapshot = Record<string, unknown>;
-
-export function snapshotSeg(seg: Segment): SegSnapshot {
-    const snap: SegSnapshot = {
-        segment_uid: seg.segment_uid || null,
-        index_at_save: seg.index,
-        audio_url: seg.audio_url || null,
-        time_start: seg.time_start,
-        time_end: seg.time_end,
-        matched_ref: seg.matched_ref || '',
-        matched_text: seg.matched_text || '',
-        display_text: seg.display_text || '',
-        confidence: seg.confidence ?? 0,
-    };
-    if (seg.has_repeated_words) snap.has_repeated_words = true;
-    if (seg.wrap_word_ranges) snap.wrap_word_ranges = seg.wrap_word_ranges;
-    if (seg.phonemes_asr) snap.phonemes_asr = seg.phonemes_asr;
-    if (seg.entry_ref) snap.entry_ref = seg.entry_ref;
-    if (seg.chapter != null) snap.chapter = seg.chapter;
-    if (seg.ignored_categories?.length) snap.ignored_categories = [...seg.ignored_categories];
-    snap.categories = _classifyFn(seg);
-    return snap;
-}
-
-export function finalizeOp(chapter: number, op: EditOp): void {
-    op.ready_at_utc = new Date().toISOString();
-    if (!state.segOpLog.has(chapter)) state.segOpLog.set(chapter, []);
-    state.segOpLog.get(chapter)!.push(op);
-    state._pendingOp = null;
+/** @deprecated No longer used — snapshotSeg calls _classifySegCategories directly. */
+export function setClassifyFn(_fn: ClassifyFn): void {
+    // no-op — classification now happens directly in dirty.ts
 }
 
 // ---------------------------------------------------------------------------
 // Dirty-state helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * markDirty shim — delegates to the dirty store and also enables the save
+ * button (DOM side effect that the pure store cannot handle).
+ */
 export function markDirty(chapter: number, index?: number, structural = false): void {
-    if (!state.segDirtyMap.has(chapter)) {
-        state.segDirtyMap.set(chapter, { indices: new Set(), structural: false });
-    }
-    const entry = state.segDirtyMap.get(chapter)!;
-    if (index !== undefined) entry.indices.add(index);
-    if (structural) entry.structural = true;
+    _markDirty(chapter, index, structural);
     dom.segSaveBtn.disabled = false;
-}
-
-export function unmarkDirty(chapter: number, index: number): void {
-    const entry = state.segDirtyMap.get(chapter);
-    if (!entry) return;
-    entry.indices.delete(index);
-    if (entry.indices.size === 0 && !entry.structural) {
-        state.segDirtyMap.delete(chapter);
-    }
-}
-
-export function isDirty(): boolean {
-    return state.segDirtyMap.size > 0;
-}
-
-export function isIndexDirty(chapter: number, index: number): boolean {
-    const entry = state.segDirtyMap.get(chapter);
-    return entry ? entry.indices.has(index) : false;
 }
 
 // ---------------------------------------------------------------------------
