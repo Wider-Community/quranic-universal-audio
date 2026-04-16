@@ -7,9 +7,9 @@
  * centralizes the logic in lib/ while preserving behavior.
  */
 
-import { getSegByChapterIndex } from '../../../segments/data';
 import { _getEditCanvas } from '../../../segments/rendering';
 import { dom, state } from '../../../segments/state';
+import { getSegByChapterIndex } from '../../stores/segments/chapter';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { safePlay } from '../audio';
 

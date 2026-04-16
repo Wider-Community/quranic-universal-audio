@@ -5,7 +5,7 @@
         getAdjacentSegments,
         getChapterSegments,
         getSegByChapterIndex,
-    } from '../../../segments/data';
+    } from '../../../lib/stores/segments/chapter';
     import {
         createOp,
         dom,

@@ -3,7 +3,16 @@
  */
 
 import { fetchJson, fetchJsonOrNull } from '../lib/api';
-import { segAllData, segData } from '../lib/stores/segments/chapter';
+import {
+    type AdjacentSegments,
+    getAdjacentSegments,
+    getChapterSegments,
+    getCurrentChapterSegs,
+    getSegByChapterIndex,
+    segAllData,
+    segData,
+    syncChapterSegsToAll,
+} from '../lib/stores/segments/chapter';
 import { clearEdit } from '../lib/stores/segments/edit';
 import { setHistoryData, setHistoryVisible } from '../lib/stores/segments/history';
 import { clearSavePreviewData, hidePreview } from '../lib/stores/segments/save';
@@ -321,88 +330,11 @@ export function clearSegDisplay(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Chapter segment lookups
+// Chapter segment lookups — delegated to lib/stores/segments/chapter.ts (Ph5)
 // ---------------------------------------------------------------------------
 
-/** Build lazily-indexed per-chapter segment lookup from segAllData */
-export function getChapterSegments(chapter: number | string): Segment[] {
-    const all = state.segAllData;
-    if (!all || !all.segments) return [];
-    if (!all._byChapter) {
-        const byChapter: Record<string, Segment[]> = {};
-        const byIndex = new Map<string, Segment>();
-        all.segments.forEach((s) => {
-            const ch: number | undefined = s.chapter;
-            if (ch == null) return;
-            const key = String(ch);
-            if (!byChapter[key]) byChapter[key] = [];
-            byChapter[key].push(s);
-            byIndex.set(`${ch}:${s.index}`, s);
-        });
-        for (const ch of Object.keys(byChapter)) {
-            const list = byChapter[ch];
-            if (list) list.sort((a, b) => a.index - b.index);
-        }
-        all._byChapter = byChapter;
-        all._byChapterIndex = byIndex;
-    }
-    return all._byChapter[String(chapter)] || [];
-}
+export { type AdjacentSegments, getAdjacentSegments, getChapterSegments, getSegByChapterIndex, syncChapterSegsToAll };
 
-export function getSegByChapterIndex(chapter: number | string, index: number): Segment | null {
-    const all = state.segAllData;
-    if (!all || !all.segments) return null;
-    if (!all._byChapterIndex) getChapterSegments(chapter);
-    return all._byChapterIndex?.get(`${chapter}:${index}`) || null;
-}
-
-export interface AdjacentSegments {
-    prev: Segment | null;
-    next: Segment | null;
-}
-
-export function getAdjacentSegments(chapter: number | string, index: number): AdjacentSegments {
-    const segs = getChapterSegments(chapter);
-    const pos = segs.findIndex((s) => s.index === index);
-    return {
-        prev: pos > 0 ? (segs[pos - 1] ?? null) : null,
-        next: pos >= 0 && pos < segs.length - 1 ? (segs[pos + 1] ?? null) : null,
-    };
-}
-
-/**
- * Sync segData.segments (chapter-specific edits) back into segAllData.segments.
- */
-export function syncChapterSegsToAll(): void {
-    if (!state.segAllData || !state.segData || !state.segData.segments) return;
-    const chapter = parseInt(dom.segChapterSelect.value);
-    if (!chapter) return;
-    const other = state.segAllData.segments.filter((s) => s.chapter !== chapter);
-    const updated = state.segData.segments.map((s) => {
-        s.chapter = chapter;
-        return s;
-    });
-    const insertIdx = other.findIndex((s) => (s.chapter ?? 0) > chapter);
-    if (insertIdx === -1) {
-        state.segAllData.segments = [...other, ...updated];
-    } else {
-        state.segAllData.segments = [
-            ...other.slice(0, insertIdx),
-            ...updated,
-            ...other.slice(insertIdx),
-        ];
-    }
-    state.segAllData._byChapter = null;
-    state.segAllData._byChapterIndex = null;
-}
-
-/**
- * Get the current chapter's segments from segData or segAllData.
- */
-export function _getChapterSegs(): Segment[] {
-    if (state.segData?.segments?.length) return state.segData.segments;
-    const ch = parseInt(dom.segChapterSelect.value);
-    if (ch && state.segAllData?.segments) return state.segAllData.segments.filter((s) => s.chapter === ch);
-    return [];
-}
+/** @deprecated Use `getCurrentChapterSegs` from lib/stores/segments/chapter. */
+export const _getChapterSegs = getCurrentChapterSegs;
 

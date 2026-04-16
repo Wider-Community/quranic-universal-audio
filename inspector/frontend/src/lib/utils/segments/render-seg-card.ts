@@ -1,7 +1,7 @@
-import { getAdjacentSegments } from '../../../segments/data';
 import { _addVerseMarkers, formatRef, formatTimeMs } from '../../../segments/references';
 import { dom } from '../../../segments/state';
 import type { Segment } from '../../../types/domain';
+import { getAdjacentSegments } from '../../stores/segments/chapter';
 import { isIndexDirty } from '../../stores/segments/dirty';
 import { getConfClass } from './conf-class';
 

@@ -104,7 +104,19 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 **Retrospective**: Clean extraction pass. Opus confirmed zero regressions. Shim-indirection (waveform-utils → draw shim → lib) caught by Sonnet, fixed to direct import.
 
-### Phase Ph4 — Edit modules + cross-cutting UI (pending dispatch)
+### Phase Ph4a — Dirty store + edit/save/nav extraction (commit: eab43a5)
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 143,459 | 32m 28s | 111 | a0bd90b14fd7e891d | dirty.ts + 7 utils, state.ts bridge, B01 fix |
+| Quality review | sonnet | — | — | 32 | a0f34170c05287773 | API 529 overload — no results |
+| Verification review | opus | 45,841 | 1m 47s | 19 | a18fc3b01dd8bce76 | PASS — zero findings, B01 fix confirmed |
+
+**Phase Ph4a summary**: 2 effective agents (Sonnet review failed on overload), ~34 min. 19 files (12 modified + 7 new). Build/lint green. B01 map-key casts: 2→0 (comment match only). Net +313 LOC (new store + utils).
+
+**Retrospective**: Opus impl handled complex state extraction well. dirty.ts Object.defineProperty bridge to state.ts is elegant interim solution. Sonnet review lost to API 529 — Opus verification sufficient for this phase.
+
+### Phase Ph4b — Svelte absorption + segment deletion (pending dispatch)
 
 ---
 

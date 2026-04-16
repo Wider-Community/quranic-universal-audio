@@ -3,10 +3,10 @@
  */
 
 import { fetchJson } from '../../lib/api';
+import { getChapterSegments, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
 import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
-import { getChapterSegments, syncChapterSegsToAll } from '../data';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
 import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
 import { _rebuildAccordionAfterMerge } from '../validation/error-cards';

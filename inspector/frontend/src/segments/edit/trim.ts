@@ -2,6 +2,7 @@
  * Trim (boundary adjustment) edit mode: enter, drag handles, preview, confirm.
  */
 
+import { getChapterSegments, getCurrentChapterSegs, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
 import { setEdit } from '../../lib/stores/segments/edit';
 import {
     _ensureTrimBaseCache,
@@ -9,7 +10,6 @@ import {
 } from '../../lib/utils/segments/trim-draw';
 import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { Segment } from '../../types/domain';
-import { _getChapterSegs,getChapterSegments, syncChapterSegsToAll } from '../data';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
 import { _getEditCanvas, syncAllCardsForSegment } from '../rendering';
 import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
@@ -71,7 +71,7 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
 
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
     const currentChapter = parseInt(dom.segChapterSelect.value);
-    const chapterSegs = (chapter === currentChapter) ? _getChapterSegs() : getChapterSegments(chapter);
+    const chapterSegs = (chapter === currentChapter) ? getCurrentChapterSegs() : getChapterSegments(chapter);
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
     const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
@@ -205,7 +205,7 @@ export function confirmTrim(seg: Segment): void {
 
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
     const currentChapter = parseInt(dom.segChapterSelect.value);
-    const chapterSegs = chapter === currentChapter ? _getChapterSegs() : getChapterSegments(chapter);
+    const chapterSegs = chapter === currentChapter ? getCurrentChapterSegs() : getChapterSegments(chapter);
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevSeg = segIdx > 0 ? chapterSegs[segIdx - 1] : null;
     const nextSeg = (segIdx >= 0 && segIdx < chapterSegs.length - 1) ? chapterSegs[segIdx + 1] : null;

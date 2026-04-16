@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
 
-    import { getAdjacentSegments, getSegByChapterIndex } from '../../../segments/data';
+    import { getAdjacentSegments, getSegByChapterIndex } from '../../../lib/stores/segments/chapter';
     import { commitRefEdit } from '../../../segments/edit/reference';
     import {
         createOp,

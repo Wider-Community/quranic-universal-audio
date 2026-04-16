@@ -4,10 +4,10 @@
 
 import { get } from 'svelte/store';
 
-import { selectedChapter } from '../../lib/stores/segments/chapter';
+import { getSegByChapterIndex, selectedChapter } from '../../lib/stores/segments/chapter';
 import { createAnimationLoop } from '../../lib/utils/animation';
 import { audioSrcMatches,safePlay } from '../../lib/utils/audio';
-import { getSegByChapterIndex } from '../data';
+import { nextDisplayedSeg, prefetchNextSegAudio } from '../../lib/utils/segments/prefetch';
 import { formatTimeMs } from '../references';
 import { dom,state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
@@ -46,31 +46,16 @@ export function playFromSegment(
     state.segCurrentIdx = segIndex;
     updateSegPlayStatus();
 
-    _prefetchNextSegAudio(segIndex);
+    prefetchNextSegAudio(state.segDisplayedSegments, segIndex, dom.segAudioEl.src || '', state._segPrefetchCache);
 
     // Fetch waveform peaks on-demand via ffmpeg HTTP Range (brief delay expected).
     const chapterForPeaks = chapter ?? parseInt(get(selectedChapter));
     void _fetchPeaksForClick(seg, chapterForPeaks);
 }
 
+/** Thin wrapper binding state to the extracted nextDisplayedSeg. */
 function _nextDisplayedSeg(afterIndex: number) {
-    if (!state.segDisplayedSegments) return null;
-    const pos = state.segDisplayedSegments.findIndex(s => s.index === afterIndex);
-    if (pos >= 0 && pos < state.segDisplayedSegments.length - 1) {
-        return state.segDisplayedSegments[pos + 1] ?? null;
-    }
-    return null;
-}
-
-function _prefetchNextSegAudio(currentIndex: number): void {
-    const next = _nextDisplayedSeg(currentIndex);
-    if (!next) return;
-    const currentUrl = dom.segAudioEl.src || '';
-    if (!next.audio_url || audioSrcMatches(next.audio_url, currentUrl)) return;
-    if (next.audio_url in state._segPrefetchCache) return;
-    state._segPrefetchCache[next.audio_url] = fetch(next.audio_url)
-        .then(r => r.blob())
-        .catch(() => {});
+    return nextDisplayedSeg(state.segDisplayedSegments, afterIndex);
 }
 
 export function onSegPlayClick(): void {
@@ -172,7 +157,7 @@ export function onSegTimeUpdate(): void {
         updateSegHighlight();
         updateSegPlayStatus();
         if (state.segCurrentIdx >= 0) {
-            _prefetchNextSegAudio(state.segCurrentIdx);
+            prefetchNextSegAudio(state.segDisplayedSegments, state.segCurrentIdx, dom.segAudioEl.src || '', state._segPrefetchCache);
             // Trigger on-demand peaks fetch for the segment we just entered during
             // continuous play (auto-advance on same audio file doesn't go through
             // playFromSegment, so peaks would otherwise never load here).

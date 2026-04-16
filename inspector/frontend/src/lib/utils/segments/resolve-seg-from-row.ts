@@ -1,6 +1,6 @@
-import { getSegByChapterIndex } from '../../../segments/data';
 import { state } from '../../../segments/state';
 import type { Segment } from '../../../types/domain';
+import { getSegByChapterIndex } from '../../stores/segments/chapter';
 
 /** Resolve a segment object from a .seg-row element. */
 export function resolveSegFromRow(row: HTMLElement | null | undefined): Segment | null {

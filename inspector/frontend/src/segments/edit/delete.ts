@@ -2,9 +2,9 @@
  * Delete segment operation.
  */
 
+import { getChapterSegments } from '../../lib/stores/segments/chapter';
 import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
 import type { Segment } from '../../types/domain';
-import { getChapterSegments } from '../data';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
 import { formatRef } from '../references';
 import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';

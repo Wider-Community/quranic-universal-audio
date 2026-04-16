@@ -3,6 +3,7 @@
  */
 
 import { fetchJsonOrNull } from '../../lib/api';
+import { getChapterSegments, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
 import { setEdit } from '../../lib/stores/segments/edit';
 import {
     _ensureSplitBaseCache,
@@ -11,7 +12,6 @@ import {
 import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
-import { getChapterSegments, syncChapterSegsToAll } from '../data';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
 import { _suggestSplitRefs } from '../references';
 import { _getEditCanvas } from '../rendering';

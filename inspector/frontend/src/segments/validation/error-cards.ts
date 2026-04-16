@@ -7,8 +7,8 @@
  * _rebuildAccordionAfterSplit/_rebuildAccordionAfterMerge remain (called from edit/).
  */
 
+import { getAdjacentSegments } from '../../lib/stores/segments/chapter';
 import type { Segment } from '../../types/domain';
-import { getAdjacentSegments } from '../data';
 import { renderSegCard, resolveSegFromRow } from '../rendering';
 import { state } from '../state';
 import { _ensureWaveformObserver } from '../waveform/index';

@@ -14,10 +14,10 @@
 // Note: './stats' removed — StatsPanel.svelte now owns stats rendering (Wave 8b).
 import './validation/index';
 
-import { selectedChapter } from '../lib/stores/segments/chapter';
+import { getAdjacentSegments, getSegByChapterIndex, selectedChapter } from '../lib/stores/segments/chapter';
 import { LS_KEYS } from '../lib/utils/constants';
 import { mustGet } from '../shared/dom';
-import { getAdjacentSegments, getSegByChapterIndex, onSegReciterChange, registerFetchChapterPeaks, registerStopSegAnimation } from './data';
+import { onSegReciterChange, registerFetchChapterPeaks, registerStopSegAnimation } from './data';
 // Edit modules
 import { enterEditWithBuffer, exitEditMode, registerEditDrawFns,registerEditModes } from './edit/common';
 import { deleteSegment } from './edit/delete';

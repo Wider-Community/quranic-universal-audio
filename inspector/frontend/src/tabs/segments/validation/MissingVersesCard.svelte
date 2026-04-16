@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
 
-    import { getAdjacentSegments } from '../../../segments/data';
+    import { getAdjacentSegments } from '../../../lib/stores/segments/chapter';
     import { findMissingVerseBoundarySegments } from '../../../segments/navigation';
     import { state } from '../../../segments/state';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
