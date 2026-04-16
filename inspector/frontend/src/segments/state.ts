@@ -19,6 +19,7 @@
  *    `unknown` for a narrow shape once the consumer is typed).
  */
 
+import { _VAL_SINGLE_INDEX_CATS as _VAL_SINGLE_INDEX_CATS_CONST } from '../lib/utils/segments/constants';
 import { getWaveformPeaks } from '../lib/utils/waveform-cache';
 import type { SearchableSelect } from '../shared/searchable-select';
 import type {
@@ -399,7 +400,7 @@ export const state: SegmentsState = {
     _audioCachePollTimer: null,
 
     // Validation index fixup categories
-    _VAL_SINGLE_INDEX_CATS: ['failed', 'low_confidence', 'boundary_adj', 'cross_verse', 'audio_bleeding', 'repetitions', 'muqattaat', 'qalqala'],
+    _VAL_SINGLE_INDEX_CATS: _VAL_SINGLE_INDEX_CATS_CONST,
 };
 
 // ---------------------------------------------------------------------------

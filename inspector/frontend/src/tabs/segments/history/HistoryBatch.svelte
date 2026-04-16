@@ -29,11 +29,11 @@
     import HistoryOp from './HistoryOp.svelte';
     import SegmentRow from '../SegmentRow.svelte';
     import { surahOptionText } from '../../../lib/utils/surah-info';
-    import { EDIT_OP_LABELS } from '../../../segments/constants';
+    import { EDIT_OP_LABELS } from '../../../lib/utils/segments/constants';
     import {
         onOpUndoClick,
         onPendingBatchDiscard,
-    } from '../../../segments/history/undo';
+    } from '../../../lib/utils/segments/undo';
     import {
         formatHistDate,
         SHORT_LABELS,
@@ -41,7 +41,7 @@
         type HistorySnapshot,
         type OpFlatItem,
     } from '../../../lib/stores/segments/history';
-    import { _deriveOpIssueDelta } from '../../../segments/validation/categories';
+    import { _deriveOpIssueDelta } from '../../../lib/utils/segments/classify';
     import type { EditOp } from '../../../types/domain';
 
     // Props ------------------------------------------------------------------

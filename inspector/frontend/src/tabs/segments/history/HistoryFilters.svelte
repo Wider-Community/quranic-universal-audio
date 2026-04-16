@@ -18,7 +18,7 @@
      * only when at least one filter is active.
      */
 
-    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../../segments/constants';
+    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../../lib/utils/segments/constants';
     import {
         clearFilters,
         filterErrCats,
@@ -31,7 +31,7 @@
         splitChains,
         toggleFilter,
     } from '../../../lib/stores/segments/history';
-    import { _deriveOpIssueDelta } from '../../../segments/validation/categories';
+    import { _deriveOpIssueDelta } from '../../../lib/utils/segments/classify';
 
     // Derived pill data ------------------------------------------------------
 

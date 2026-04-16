@@ -36,15 +36,15 @@
 
 import { derived, get, writable } from 'svelte/store';
 
+import type { SegEditHistoryResponse } from '../../../types/api';
+import type { EditOp, HistoryBatch, Segment } from '../../../types/domain';
 import type {
     HistorySnapshot,
     OpFlatItem,
     SplitChain,
     SplitChainOp,
-} from '../../../segments/state';
-import { _deriveOpIssueDelta } from '../../../segments/validation/categories';
-import type { SegEditHistoryResponse } from '../../../types/api';
-import type { EditOp, HistoryBatch, Segment } from '../../../types/domain';
+} from '../../types/segments';
+import { _deriveOpIssueDelta } from '../../utils/segments/classify';
 
 // ---------------------------------------------------------------------------
 // Re-exported helper types

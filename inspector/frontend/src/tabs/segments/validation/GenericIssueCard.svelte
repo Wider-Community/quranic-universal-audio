@@ -15,7 +15,7 @@
         snapshotSeg,
         state,
     } from '../../../segments/state';
-    import { _isIgnoredFor } from '../../../segments/validation/categories';
+    import { _isIgnoredFor } from '../../../lib/utils/segments/classify';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type {
         SegValAnyItem,

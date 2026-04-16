@@ -17,9 +17,9 @@
 
 import { derived, get, writable } from 'svelte/store';
 
-import { SEG_FILTER_FIELDS } from '../../../segments/constants';
-import { countSegWords, parseSegRef } from '../../../segments/references';
 import type { Segment } from '../../../types/domain';
+import { SEG_FILTER_FIELDS } from '../../utils/segments/filter-fields';
+import { countSegWords, parseSegRef } from '../../utils/segments/references';
 import {
     segAllData,
     selectedChapter,
@@ -67,7 +67,8 @@ export const activeFilters = writable<SegActiveFilter[]>([]);
 export function segDerivedProps(seg: SegWithDerived): SegDerivedProps {
     if (seg._derived) return seg._derived;
     const duration_s = (seg.time_end - seg.time_start) / 1000;
-    const num_words = countSegWords(seg.matched_ref);
+    const vwc = get(segAllData)?.verse_word_counts;
+    const num_words = countSegWords(seg.matched_ref, vwc);
     const p = parseSegRef(seg.matched_ref);
     const num_verses = p ? p.ayah_to - p.ayah_from + 1 : 0;
     const confidence_pct = (seg.confidence || 0) * 100;

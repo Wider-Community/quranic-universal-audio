@@ -23,19 +23,19 @@
 
     import { onMount } from 'svelte';
 
-    import { getAdjacentSegments } from '../../lib/stores/segments/chapter';
+    import { getAdjacentSegments, segAllData } from '../../lib/stores/segments/chapter';
     import {
         _addVerseMarkers,
         formatRef,
         formatTimeMs,
-    } from '../../segments/references';
+    } from '../../lib/utils/segments/references';
     import { isIndexDirty } from '../../segments/state';
     import type {
         MergeHighlight,
         SegCanvas,
         SplitHighlight,
         TrimHighlight,
-    } from '../../segments/waveform/types';
+    } from '../../lib/types/segments-waveform';
     import { _ensureWaveformObserver } from '../../segments/waveform/index';
     import type { Segment } from '../../types/domain';
 
@@ -107,7 +107,7 @@
     $: changedDur = !!changedFields?.has('duration');
     $: changedConf = !!changedFields?.has('conf');
     $: changedBody = !!changedFields?.has('body');
-    $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref) || '(alignment failed)';
+    $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
     $: confText = seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL';
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
@@ -192,7 +192,7 @@
             <div class="seg-text-header">
                 <span class="seg-text-index">{indexLabel}</span>
                 <span class="seg-text-sep">|</span>
-                <span class="seg-text-ref" class:seg-history-changed={changedRef}>{formatRef(seg.matched_ref)}</span>
+                <span class="seg-text-ref" class:seg-history-changed={changedRef}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-duration" class:seg-history-changed={changedDur} title={durTitle}>{durSec.toFixed(1)}s</span>
                 {#if showMissingTag}

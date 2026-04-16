@@ -20,13 +20,13 @@
 
     import SegmentRow from '../SegmentRow.svelte';
     import HistoryArrows from './HistoryArrows.svelte';
-    import { EDIT_OP_LABELS } from '../../../segments/constants';
-    import { onOpUndoClick } from '../../../segments/history/undo';
+    import { EDIT_OP_LABELS } from '../../../lib/utils/segments/constants';
+    import { onOpUndoClick } from '../../../lib/utils/segments/undo';
     import {
         snapToSeg,
         type HistorySnapshot,
     } from '../../../lib/stores/segments/history';
-    import type { MergeHighlight, TrimHighlight } from '../../../segments/waveform/types';
+    import type { MergeHighlight, TrimHighlight } from '../../../lib/types/segments-waveform';
     import type { EditOp } from '../../../types/domain';
 
     // Props ------------------------------------------------------------------

@@ -11,7 +11,8 @@
 
     import { createEventDispatcher, onDestroy } from 'svelte';
 
-    import { SEG_FILTER_FIELDS, SEG_FILTER_OPS } from '../../segments/constants';
+    import { SEG_FILTER_FIELDS } from '../../lib/utils/segments/filter-fields';
+    import { SEG_FILTER_OPS } from '../../lib/utils/segments/constants';
     import type { SegActiveFilter } from '../../lib/stores/segments/filters';
 
     export let filter: SegActiveFilter;

@@ -51,7 +51,7 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 (populated when 3-model review fires)
 
-### Phase Ph1 — Foundation + Python backend (commit: pending)
+### Phase Ph1 — Foundation + Python backend (commit: 6cb6c8b)
 
 | Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
 |---|---|---|---|---|---|---|
@@ -66,7 +66,20 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 **Retrospective**: primary impl agent disconnected after 21 min — should have split into P0-only + P1-only dispatches. Opus verification caught 3 regressions that Sonnet didn't — keep Opus for any god-func decomposition phase.
 
-### Phase Ph2 — Shell splits (pending dispatch)
+### Phase Ph2 — Shell splits (commit: eb1790b)
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | sonnet | 93,653 | 14m 00s | 52 | ad833b69b372a4f4b | P2a+P2b+P2c complete |
+| Quality review | sonnet | 86,362 | 2m 35s | 37 | a28477b72e16028f7 | 2 GENUINE + 4 cleanup |
+| Verification review | opus | 81,084 | 9m 15s | 35 | a917020dd74d9d7bf | PASS — 1 MEDIUM (same as Sonnet) |
+| Regression fix | sonnet | 49,019 | 4m 06s | 27 | aa0142bf42ca64498 | Opacity dim + error cleanup + dead imports + stale comment |
+
+**Phase Ph2 summary**: 4 agent invocations (1 impl + 2 review + 1 fix), ~30 min total. 14 files (6 modified + 8 new). Build/lint green. Noise 58→56.
+
+**Retrospective**: Single Sonnet agent handled all 3 sub-tasks in 14 min — no split needed. Both reviewers caught opacity regression; Sonnet found dead imports Opus missed; Opus confirmed full logic preservation. Good model mix.
+
+### Phase Ph3 — segments pure leaves + mid-layer (pending dispatch)
 
 ---
 

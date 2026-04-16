@@ -50,6 +50,7 @@
     import { clearValidation, segValidation, setValidation } from '../../lib/stores/segments/validation';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import { clearSavePreviewData, hidePreview } from '../../lib/stores/segments/save';
+    import { segConfig as segConfigStore } from '../../lib/stores/segments/config';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import type { SegReciter } from '../../types/domain';
@@ -196,6 +197,15 @@
                 );
             if (cfg.standalone_words) state._standaloneWords = new Set(cfg.standalone_words);
             if (cfg.accordion_context) state._accordionContext = cfg.accordion_context;
+            segConfigStore.set({
+                validationCategories: cfg.validation_categories ?? null,
+                muqattaatVerses: cfg.muqattaat_verses ? new Set(cfg.muqattaat_verses.map(([s, a]) => `${s}:${a}`)) : null,
+                qalqalaLetters: cfg.qalqala_letters ? new Set(cfg.qalqala_letters) : null,
+                standaloneRefs: cfg.standalone_refs ? new Set(cfg.standalone_refs.map(([s, a, w]) => `${s}:${a}:${w}`)) : null,
+                standaloneWords: cfg.standalone_words ? new Set(cfg.standalone_words) : null,
+                lcDefaultThreshold: cfg.low_conf_default_threshold ?? 80,
+                showBoundaryPhonemes: cfg.show_boundary_phonemes ?? true,
+            });
         } catch {
             /* use CSS defaults */
         }

@@ -29,9 +29,9 @@
         type HistorySnapshot,
         type SplitChain,
     } from '../../../lib/stores/segments/history';
-    import { onChainUndoClick } from '../../../segments/history/undo';
-    import { _classifySnapIssues } from '../../../segments/validation/categories';
-    import type { SplitHighlight } from '../../../segments/waveform/types';
+    import { onChainUndoClick } from '../../../lib/utils/segments/undo';
+    import { _classifySnapIssues } from '../../../lib/utils/segments/classify';
+    import type { SplitHighlight } from '../../../lib/types/segments-waveform';
     import type { Segment } from '../../../types/domain';
 
     // Props ------------------------------------------------------------------
