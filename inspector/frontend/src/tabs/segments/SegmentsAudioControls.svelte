@@ -1,29 +1,18 @@
 <script lang="ts">
     /**
-     * SegmentsAudioControls — audio element + play/pause + auto-play toggle
-     * for the Segments tab.
+     * SegmentsAudioControls — audio element + speed control + play/pause +
+     * auto-play toggle for the Segments tab.
      *
-     * Extracted from the `.seg-controls` inline markup in SegmentsTab.svelte
-     * and the DOMContentLoaded wiring block in segments/index.ts (lines 118-135).
+     * Uses AudioPlayer which composes AudioElement + SpeedControl and handles
+     * the pending-metadata guard internally. Continuous-play + segment-end
+     * clamping logic stays here.
      *
-     * Owns:
-     *  - <audio id="seg-audio-player"> with all 4 lifecycle listeners
-     *  - Play / Pause button (id="seg-play-btn")
-     *  - Auto-play toggle button (id="seg-autoplay-btn")
-     *  - Play-status span (id="seg-play-status")
+     * Invariant: the speed <select> keeps id="seg-speed-select" so the
+     * imperative modules (playback/index.ts, keyboard.ts, edit/common.ts) that
+     * reference dom.segSpeedSelect continue to resolve via getElementById.
      *
-     * Does NOT own:
-     *  - Speed select (stays in SegmentsTab toolbar; dom.segSpeedSelect ref
-     *    read by playback/index.ts line 39 + index.ts line 125)
-     *  - Audio src management (SegmentsTab.onChapterChange sets audioEl.src)
-     *
-     * Invariant (Rule 7): <audio> keeps id="seg-audio-player" so audio-cache.ts
-     * and keyboard.ts can still reach it via mustGet / document.getElementById.
-     *
-     * Pattern note #8 (hybrid 60fps): audio event listeners fire imperative
-     * playback/index.ts functions (onSegTimeUpdate, startSegAnimation, etc.)
-     * that update DOM classes directly. The `autoPlayEnabled` store drives only
-     * the button class; per-frame highlight state stays on state.*.
+     * The <audio> element's id "seg-audio-player" is preserved inside
+     * AudioElement (via AudioPlayer) for audio-cache.ts and keyboard.ts.
      */
 
     import { onMount } from 'svelte';
@@ -39,13 +28,19 @@
         stopSegAnimation,
     } from '../../segments/playback/index';
     import { stopErrorCardAudio } from '../../segments/validation/error-card-audio';
+    import AudioPlayer from '../../lib/components/AudioPlayer.svelte';
 
-    // Bind:this target — the audio element is assigned to dom.segAudioEl in
-    // onMount so all imperative modules that read dom.segAudioEl keep working.
-    // Also exposed to parent via `bind:audioEl` so EditOverlay / TrimPanel /
-    // SplitPanel can accept an `audioElRef` prop (S2-D33) instead of
-    // `document.getElementById('seg-audio-player')`.
+    // ---- Exported prop: raw HTMLAudioElement exposed to parent via bind:audioEl ----
+    // Populated reactively once AudioPlayer mounts and element() returns non-null.
     export let audioEl: HTMLAudioElement | null = null;
+
+    // ---- Internal refs ----
+    let _player: AudioPlayer;
+
+    // Keep audioEl prop in sync with the underlying HTMLAudioElement.
+    // Svelte 4 bind: on a prop propagates child→parent when the child mutates it.
+    $: audioEl = _player?.element() ?? null;
+
     // Bind:this target for the play button — assigned to dom.segPlayBtn.
     let playBtn: HTMLButtonElement;
     // Bind:this target for the autoplay button — assigned to dom.segAutoPlayBtn.
@@ -57,7 +52,7 @@
     $: autoPlayClass = 'btn ' + ($autoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
 
     // -------------------------------------------------------------------------
-    // Event handlers (moved from segments/index.ts DOMContentLoaded)
+    // Event handlers
     // -------------------------------------------------------------------------
 
     function handlePlayClick(): void {
@@ -77,31 +72,20 @@
     // -------------------------------------------------------------------------
 
     onMount(() => {
-        // `bind:this` assigns before onMount, so audioEl is non-null here.
-        // The `| null` in the export-prop type is only so the parent can
-        // declare the prop holder as `let segAudioEl: HTMLAudioElement | null
-        // = null;` pre-mount; once Svelte resolves the bind it's populated.
-        const el = audioEl!;
-        dom.segAudioEl   = el;
-        dom.segPlayBtn   = playBtn;
+        const el = _player.element()!;
+        dom.segAudioEl    = el;
+        dom.segPlayBtn    = playBtn;
         dom.segAutoPlayBtn = autoPlayBtn;
         dom.segPlayStatus  = playStatusEl;
 
-        // Sync initial state.* field from the store (segments/index.ts used to
-        // read localStorage inline; now the store initialises from localStorage,
-        // and we mirror into state.* here so playback/index.ts sees a consistent
-        // value on first play).
         state._segAutoPlayEnabled = get(autoPlayEnabled);
 
-        // Wire the 4 audio lifecycle listeners (moved from segments/index.ts
-        // lines 132-135).
         el.addEventListener('play', startSegAnimation);
         el.addEventListener('pause', stopSegAnimation);
         el.addEventListener('ended', onSegAudioEnded);
         el.addEventListener('timeupdate', onSegTimeUpdate);
 
         return () => {
-            // Cleanup on component destroy (tab hide / unmount).
             el.removeEventListener('play', startSegAnimation);
             el.removeEventListener('pause', stopSegAnimation);
             el.removeEventListener('ended', onSegAudioEnded);
@@ -112,9 +96,16 @@
 </script>
 
 <div class="seg-controls">
-    <!-- audio id MUST stay "seg-audio-player" — audio-cache.ts and keyboard.ts
-         reach it via document.getElementById / mustGet. -->
-    <audio id="seg-audio-player" bind:this={audioEl}></audio>
+    <!-- audioId preserves id="seg-audio-player" so audio-cache.ts and
+         keyboard.ts resolve it via document.getElementById / mustGet. -->
+    <AudioPlayer
+        bind:this={_player}
+        audioId="seg-audio-player"
+        lsSpeedKey={LS_KEYS.SEG_SPEED}
+        speedSelectId="seg-speed-select"
+        controls={false}
+        showSpeedControl={true}
+    />
     <button
         id="seg-play-btn"
         class="btn"

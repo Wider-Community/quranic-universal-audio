@@ -4,8 +4,7 @@
      *
      * Composes AudioElement (thin <audio> primitive) with SpeedControl and
      * exposes a load(url, atTime?) method that handles the pending-metadata
-     * guard and same-src short-circuit. Not consumed until Ph2 adopts it in
-     * TimestampsTab and SegmentsAudioControls.
+     * guard and same-src short-circuit.
      *
      * Named slots: before | after | extras (for caller-injected controls).
      */
@@ -15,6 +14,8 @@
     import AudioElement from './AudioElement.svelte';
     import SpeedControl from './SpeedControl.svelte';
 
+    /** Optional DOM id forwarded to the underlying <audio> element. */
+    export let audioId: string | undefined = undefined;
     /** Audio source URL. Caller may also use the load() method for precise control. */
     export let src: string | null | undefined = undefined;
     /** Preload hint forwarded to the underlying <audio> element. */
@@ -25,6 +26,8 @@
     export let lsSpeedKey: string = '';
     /** Whether to render the SpeedControl widget below the audio element. */
     export let showSpeedControl: boolean = true;
+    /** Optional DOM id forwarded to the SpeedControl's underlying <select>. */
+    export let speedSelectId: string | undefined = undefined;
 
     // Internal refs
     let _audioEl: AudioElement;
@@ -102,6 +105,10 @@
     // -----------------------------------------------------------------------
 
     function fwd(name: keyof typeof dispatch, detail: { audio: HTMLAudioElement; event: Event }): void {
+        if (name === 'error' && _pendingOnMeta) {
+            detail.audio.removeEventListener('loadedmetadata', _pendingOnMeta);
+            _pendingOnMeta = null;
+        }
         dispatch(name, detail);
     }
 </script>
@@ -110,6 +117,7 @@
 
 <AudioElement
     bind:this={_audioEl}
+    id={audioId}
     src={src ?? undefined}
     {preload}
     {controls}
@@ -127,6 +135,7 @@
         bind:this={_speedCtrl}
         audioElement={element()}
         lsKey={lsSpeedKey}
+        selectId={speedSelectId}
     />
 {/if}
 

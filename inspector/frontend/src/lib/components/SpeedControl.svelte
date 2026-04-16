@@ -5,6 +5,8 @@
     export let audioElement: HTMLAudioElement | null = null;
     /** localStorage key for persisting the chosen speed. */
     export let lsKey: string;
+    /** Optional DOM id placed on the underlying <select> element. */
+    export let selectId: string | undefined = undefined;
 
     const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
     let selected = 1;
@@ -48,7 +50,7 @@
 
 <label class="speed-label">
     Speed:
-    <select class="speed-select" value={selected} on:change={onChange}>
+    <select id={selectId} class="speed-select" value={selected} on:change={onChange}>
         {#each speeds as s}
             <option value={s}>{s}x</option>
         {/each}

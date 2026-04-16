@@ -1,36 +1,22 @@
 <script lang="ts">
     /**
-     * TimestampsTab — top-level Svelte component for the Timestamps tab.
+     * TimestampsTab — composition shell for the Timestamps tab.
      *
-     * Replaces the Stage-1 imperative timestamps/index.ts + state.ts + dom
-     * plumbing. Owns:
-     *   - Reciter/chapter/verse dropdowns (cascaded via the verse store).
-     *   - Audio element + speed control + prev/next nav + random buttons.
-     *   - View toggle (Analysis / Animation) and mode toggle (Letters/Phonemes
-     *     or Words/Characters, context-sensitive).
-     *   - Config fetch → CSS var bindings (9 vars from /api/ts/config).
-     *   - Keyboard shortcut handler via <svelte:window on:keydown>.
-     *   - Analysis view rendering via <UnifiedDisplay>. Animation view and
-     *     waveform land in sub-wave 4b.
-     *
-     * Pattern (for Waves 5-10):
-     *   - Stores for tab-scoped state (lib/stores/timestamps/*).
-     *   - Props for parent→child; events for child→parent.
-     *   - Imperative 60fps highlight updates via bind:this + component methods.
-     *   - CSS vars set as `style:` directives on this root div (scoped,
-     *     reactive if config ever changes) — NOT on :root.
+     * Owns:
+     *   - Reciter/chapter/verse cascade (data fetch + store writes).
+     *   - Config fetch → CSS custom-property bindings on the root div.
+     *   - Delegating to subcomponents: TimestampsControls, TimestampsAudio,
+     *     TimestampsKeyboard, TimestampsShortcutsGuide.
+     *   - Passing display-update callbacks to UnifiedDisplay / AnimationDisplay /
+     *     TimestampsWaveform (imperative 60fps highlight path).
      */
 
     import { get } from 'svelte/store';
+    import { onMount } from 'svelte';
 
-    import AudioElement from '../../lib/components/AudioElement.svelte';
-    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
-    import SpeedControl from '../../lib/components/SpeedControl.svelte';
     import { fetchJson } from '../../lib/api';
     import {
         autoAdvancing,
-        autoMode,
-        currentTime,
     } from '../../lib/stores/timestamps/playback';
     import {
         granularity,
@@ -41,7 +27,6 @@
     } from '../../lib/stores/timestamps/display';
     import {
         chapters,
-        chaptersOptions,
         loadedVerse,
         reciters,
         selectedChapter,
@@ -49,12 +34,8 @@
         selectedVerse,
         validationData,
         verses,
-        versesOptions,
     } from '../../lib/stores/timestamps/verse';
-    import { createAnimationLoop } from '../../lib/utils/animation';
-    import { safePlay } from '../../lib/utils/audio';
     import { LS_KEYS } from '../../lib/utils/constants';
-    import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import type {
         TsChaptersResponse,
@@ -64,36 +45,30 @@
         TsValidateResponse,
         TsVersesResponse,
     } from '../../types/api';
+
     import AnimationDisplay from './AnimationDisplay.svelte';
+    import TimestampsAudio from './TimestampsAudio.svelte';
+    import TimestampsControls from './TimestampsControls.svelte';
+    import TimestampsKeyboard from './TimestampsKeyboard.svelte';
+    import TimestampsShortcutsGuide from './TimestampsShortcutsGuide.svelte';
     import TimestampsValidationPanel from './TimestampsValidationPanel.svelte';
     import TimestampsWaveform from './TimestampsWaveform.svelte';
     import UnifiedDisplay from './UnifiedDisplay.svelte';
 
     // ---- Component refs ----
-    let audioEl: AudioElement;
-    let audioHTMLEl: HTMLAudioElement | null = null;
-    let speedCtrl: SpeedControl;
+    let audioComp: TimestampsAudio;
+    let controlsComp: TimestampsControls;
     let unifiedEl: UnifiedDisplay;
     let animDisplayEl: AnimationDisplay;
     let waveformTabEl: TimestampsWaveform;
-
-    // ---- Pending loadedmetadata handler (for src changes) ----
-    let _pendingOnMeta: ((ev: Event) => void) | null = null;
-
-    // ---- Animation frame loop (drives currentTime + highlights) ----
-    const _animLoop = createAnimationLoop(() => {
-        tick();
-    });
 
     // ---------------------------------------------------------------------
     // Initial load
     // ---------------------------------------------------------------------
 
     async function init(): Promise<void> {
-        // Config → CSS var bindings (reactive via style: on root div)
         fetchJson<TsConfigResponse>('/api/ts/config').then((cfg) => tsConfig.set(cfg));
 
-        // Restore view mode + sub-settings immediately (no dependency on reciters)
         const savedView = localStorage.getItem(LS_KEYS.TS_VIEW_MODE);
         if (savedView === 'analysis' || savedView === 'animation') {
             viewMode.set(savedView);
@@ -111,7 +86,6 @@
         await surahInfoReady;
         await loadReciters();
 
-        // Restore saved reciter
         const savedReciter = localStorage.getItem(LS_KEYS.TS_RECITER);
         if (savedReciter) {
             selectedReciter.set(savedReciter);
@@ -132,19 +106,8 @@
     // Reciter / chapter / verse cascade
     // ---------------------------------------------------------------------
 
-    function onReciterSelectChange(e: Event): void {
-        const target = e.currentTarget as HTMLSelectElement;
-        onReciterChange(target.value);
-    }
-
-    function onVerseSelectChange(e: Event): void {
-        const target = e.currentTarget as HTMLSelectElement;
-        onVerseChange(target.value);
-    }
-
     async function onReciterChange(reciter: string): Promise<void> {
         if (reciter) localStorage.setItem(LS_KEYS.TS_RECITER, reciter);
-        // Clear cascading state
         chapters.set([]);
         selectedChapter.set('');
         verses.set([]);
@@ -192,10 +155,6 @@
         }
     }
 
-    /**
-     * Jump the dropdowns to the given "surah:ayah" verse key, loading the
-     * chapter + verse list if needed.
-     */
     async function jumpToTsVerse(verseKey: string): Promise<void> {
         if (!verseKey || !verseKey.includes(':')) return;
         const chapter = verseKey.split(':')[0] ?? '';
@@ -246,14 +205,11 @@
                 return;
             }
 
-            // Sync reciter if changed (without re-triggering full onReciterChange
-            // — we already have chapter/verse data we'll populate directly).
             const reciterChanged = get(selectedReciter) !== data.reciter;
             if (reciterChanged) {
                 selectedReciter.set(data.reciter);
                 localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
                 validationData.set(null);
-                // Lightweight chapter fetch without the validate call
                 try {
                     const chs = await fetchJson<TsChaptersResponse>(
                         `/api/ts/chapters/${encodeURIComponent(data.reciter)}`,
@@ -297,122 +253,12 @@
         selectedChapter.set(String(data.chapter));
         selectedVerse.set(data.verse_ref);
 
-        loadAudioAndPlay(data.audio_url, tsSegOffset);
+        audioComp?.load(data.audio_url, tsSegOffset);
+        autoAdvancing.set(false);
     }
 
     function clearDisplay(): void {
         loadedVerse.set(null);
-    }
-
-    // ---------------------------------------------------------------------
-    // Audio lifecycle
-    // ---------------------------------------------------------------------
-
-    function loadAudioAndPlay(url: string | null | undefined, segOffset: number): void {
-        if (!audioHTMLEl) return;
-        // Remove stale listener from previous load
-        if (_pendingOnMeta) {
-            audioHTMLEl.removeEventListener('loadedmetadata', _pendingOnMeta);
-            _pendingOnMeta = null;
-        }
-        if (!url) {
-            audioHTMLEl.removeAttribute('src');
-            audioHTMLEl.load();
-            return;
-        }
-        const same =
-            audioHTMLEl.src === url || audioHTMLEl.src === location.origin + url;
-        if (!same) {
-            const onMeta = (): void => {
-                if (!audioHTMLEl) return;
-                audioHTMLEl.removeEventListener('loadedmetadata', onMeta);
-                if (_pendingOnMeta === onMeta) _pendingOnMeta = null;
-                audioHTMLEl.currentTime = segOffset;
-                autoAdvancing.set(false);
-                safePlay(audioHTMLEl);
-            };
-            _pendingOnMeta = onMeta;
-            audioHTMLEl.src = url;
-            audioHTMLEl.addEventListener('loadedmetadata', onMeta);
-        } else {
-            audioHTMLEl.currentTime = segOffset;
-            autoAdvancing.set(false);
-            safePlay(audioHTMLEl);
-        }
-    }
-
-    function onAudioLoadedMetadata(): void {
-        // No-op for now; sub-wave 4b uses this to trigger waveform decode.
-    }
-
-    function onAudioPlay(): void {
-        _animLoop.start();
-    }
-
-    function onAudioPause(): void {
-        _animLoop.stop();
-        tick(); // final frame so display reflects the paused position
-    }
-
-    function onAudioEnded(): void {
-        _animLoop.stop();
-    }
-
-    function onAudioTimeUpdate(): void {
-        if (!audioHTMLEl) return;
-        const lv = get(loadedVerse);
-        if (!lv) return;
-
-        // Auto-stop at segment end + auto-advance
-        if (lv.tsSegEnd > 0 && audioHTMLEl.currentTime >= lv.tsSegEnd) {
-            audioHTMLEl.pause();
-            audioHTMLEl.currentTime = lv.tsSegEnd;
-            if (!get(autoAdvancing)) {
-                const mode = get(autoMode);
-                if (mode === 'next') {
-                    autoAdvancing.set(true);
-                    navigateVerse(+1);
-                } else if (mode === 'random') {
-                    autoAdvancing.set(true);
-                    loadRandomTimestamp();
-                }
-            }
-        }
-        // When paused, the animation loop is stopped; still update on seek.
-        if (audioHTMLEl.paused) tick();
-    }
-
-    function onAudioError(): void {
-        if (!audioHTMLEl) return;
-        const err = audioHTMLEl.error;
-        const code = err ? err.code : 0;
-        const msgs: Record<number, string> = {
-            1: 'aborted',
-            2: 'network error',
-            3: 'decode error',
-            4: 'unsupported format',
-        };
-        console.error('Audio load error:', msgs[code] || `code ${code}`, audioHTMLEl.src);
-        if (_pendingOnMeta) {
-            audioHTMLEl.removeEventListener('loadedmetadata', _pendingOnMeta);
-            _pendingOnMeta = null;
-        }
-        autoAdvancing.set(false);
-    }
-
-    // ---------------------------------------------------------------------
-    // Per-frame update
-    // ---------------------------------------------------------------------
-
-    function tick(): void {
-        if (!audioHTMLEl) return;
-        currentTime.set(audioHTMLEl.currentTime);
-        if (get(viewMode) === 'animation') {
-            if (animDisplayEl) animDisplayEl.updateHighlights();
-        } else {
-            if (unifiedEl) unifiedEl.updateHighlights();
-        }
-        if (waveformTabEl) waveformTabEl.drawOverlays();
     }
 
     // ---------------------------------------------------------------------
@@ -435,158 +281,22 @@
     }
 
     // ---------------------------------------------------------------------
-    // View / mode toggles
+    // Highlight tick — called by TimestampsAudio on each rAF frame
     // ---------------------------------------------------------------------
 
-    function setView(mode: 'analysis' | 'animation'): void {
-        viewMode.set(mode);
-        localStorage.setItem(LS_KEYS.TS_VIEW_MODE, mode);
-        if (mode === 'analysis') {
-            // Reset to analysis defaults: Letters on, Phonemes off
-            showLetters.set(true);
-            showPhonemes.set(false);
+    function onTick(): void {
+        if (get(viewMode) === 'animation') {
+            if (animDisplayEl) animDisplayEl.updateHighlights();
         } else {
-            // Animation defaults: Words only
-            granularity.set('words');
+            if (unifiedEl) unifiedEl.updateHighlights();
         }
-    }
-
-    function toggleModeA(): void {
-        if (get(viewMode) === 'analysis') {
-            const nv = !get(showLetters);
-            showLetters.set(nv);
-            localStorage.setItem(LS_KEYS.TS_SHOW_LETTERS, String(nv));
-        } else {
-            granularity.set('words');
-            localStorage.setItem(LS_KEYS.TS_GRANULARITY, 'words');
-        }
-    }
-
-    function toggleModeB(): void {
-        if (get(viewMode) === 'analysis') {
-            const nv = !get(showPhonemes);
-            showPhonemes.set(nv);
-            localStorage.setItem(LS_KEYS.TS_SHOW_PHONEMES, String(nv));
-        } else {
-            granularity.set('characters');
-            localStorage.setItem(LS_KEYS.TS_GRANULARITY, 'characters');
-        }
-    }
-
-    function toggleAuto(mode: 'next' | 'random'): void {
-        autoMode.update((cur) => (cur === mode ? null : mode));
+        if (waveformTabEl) waveformTabEl.drawOverlays();
     }
 
     // ---------------------------------------------------------------------
-    // Keyboard
+    // Reactive: CSS vars + nav button state
     // ---------------------------------------------------------------------
 
-    function handleKeydown(e: KeyboardEvent): void {
-        if (!shouldHandleKey(e, 'timestamps')) return;
-        const audio = audioHTMLEl;
-        if (!audio) return;
-        const lv = get(loadedVerse);
-        const segOffset = lv?.tsSegOffset ?? 0;
-        const segEnd = lv?.tsSegEnd ?? 0;
-
-        switch (e.code) {
-            case 'Space':
-                e.preventDefault();
-                if (audio.paused) {
-                    if (segEnd > 0 && audio.currentTime >= segEnd) {
-                        audio.currentTime = segOffset;
-                    }
-                    safePlay(audio);
-                } else {
-                    audio.pause();
-                }
-                break;
-            case 'ArrowLeft':
-                e.preventDefault();
-                audio.currentTime = Math.max(segOffset, audio.currentTime - 3);
-                tick();
-                break;
-            case 'ArrowRight':
-                e.preventDefault();
-                audio.currentTime = Math.min(segEnd || audio.duration, audio.currentTime + 3);
-                tick();
-                break;
-            case 'ArrowUp': {
-                e.preventDefault();
-                const t = audio.currentTime - segOffset;
-                const ws = lv?.data.words ?? [];
-                let prevStart: number | null = null;
-                for (let i = ws.length - 1; i >= 0; i--) {
-                    const w = ws[i];
-                    if (w && w.start < t - 0.01) {
-                        prevStart = w.start;
-                        break;
-                    }
-                }
-                audio.currentTime = prevStart !== null ? prevStart + segOffset : segOffset;
-                tick();
-                break;
-            }
-            case 'ArrowDown': {
-                e.preventDefault();
-                const t = audio.currentTime - segOffset;
-                const ws = lv?.data.words ?? [];
-                let nextStart: number | null = null;
-                for (let i = 0; i < ws.length; i++) {
-                    const w = ws[i];
-                    if (w && w.start > t + 0.01) {
-                        nextStart = w.start;
-                        break;
-                    }
-                }
-                audio.currentTime =
-                    nextStart !== null ? nextStart + segOffset : segEnd || audio.duration;
-                tick();
-                break;
-            }
-            case 'Period':
-            case 'Comma':
-                e.preventDefault();
-                speedCtrl?.cycle(e.code === 'Period' ? 'up' : 'down');
-                break;
-            case 'KeyR':
-                if (e.shiftKey) loadRandomTimestamp();
-                else loadRandomTimestamp(get(selectedReciter) || null);
-                break;
-            case 'KeyA':
-                e.preventDefault();
-                setView(get(viewMode) === 'analysis' ? 'animation' : 'analysis');
-                break;
-            case 'KeyL':
-                e.preventDefault();
-                toggleModeA();
-                break;
-            case 'KeyP':
-                e.preventDefault();
-                toggleModeB();
-                break;
-            case 'BracketLeft':
-                navigateVerse(-1);
-                break;
-            case 'BracketRight':
-                navigateVerse(+1);
-                break;
-            case 'KeyJ':
-                e.preventDefault();
-                if (get(viewMode) === 'animation') {
-                    animDisplayEl?.scrollActiveIntoView();
-                } else {
-                    unifiedEl?.scrollActiveIntoView();
-                }
-                break;
-        }
-    }
-
-    // ---------------------------------------------------------------------
-    // Reactive wiring: store changes → side effects
-    // ---------------------------------------------------------------------
-
-    // Derived config → CSS custom properties on the root div
     $: cfg = $tsConfig;
     $: highlightColor = cfg?.anim_highlight_color ?? '#f0a500';
     $: wordDur =
@@ -602,49 +312,33 @@
     $: wordTransition = `opacity ${wordDur} ${easing}`;
     $: charTransition = `opacity ${charDur} ${easing}`;
 
-    // Prev/next disabled state from current selection
     $: segmentSelectedIdx = $verses.findIndex((v) => v.ref === $selectedVerse);
     $: prevDisabled = segmentSelectedIdx <= 0;
     $: nextDisabled = segmentSelectedIdx < 0 || segmentSelectedIdx >= $verses.length - 1;
 
-    // Grouped reciter options (rendered as native <optgroup>)
-    interface GroupedReciters {
-        group: string;
-        items: Array<{ slug: string; name: string }>;
-    }
-    $: groupedReciters = ((): GroupedReciters[] => {
-        const grouped: Record<string, Array<{ slug: string; name: string }>> = {};
-        const uncategorized: Array<{ slug: string; name: string }> = [];
-        for (const r of $reciters) {
-            const src = r.audio_source || '';
-            if (src) {
-                if (!grouped[src]) grouped[src] = [];
-                grouped[src]!.push({ slug: r.slug, name: r.name });
-            } else {
-                uncategorized.push({ slug: r.slug, name: r.name });
-            }
-        }
-        const out: GroupedReciters[] = [];
-        for (const src of Object.keys(grouped).sort()) {
-            out.push({ group: src, items: grouped[src] ?? [] });
-        }
-        if (uncategorized.length > 0) out.push({ group: '(uncategorized)', items: uncategorized });
-        return out;
-    })();
+    // ---------------------------------------------------------------------
+    // Mount
+    // ---------------------------------------------------------------------
 
-    // Initialize on mount
-    import { onMount } from 'svelte';
     onMount(() => {
-        // Grab the raw HTMLAudioElement via the primitive's element() accessor.
-        // Svelte 4 mounts children before parent onMount, so `audioEl` is bound
-        // by this point. Assigning triggers the reactive `audioElement` prop
-        // forward into SpeedControl.
-        audioHTMLEl = audioEl.element();
         init();
     });
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<TimestampsKeyboard
+    {audioComp}
+    on:navigateVerse={(e) => navigateVerse(e.detail)}
+    on:randomAny={() => loadRandomTimestamp()}
+    on:randomCurrent={() => loadRandomTimestamp(get(selectedReciter) || null)}
+    on:setView={(e) => controlsComp?.setView(e.detail)}
+    on:toggleModeA={() => controlsComp?.toggleModeA()}
+    on:toggleModeB={() => controlsComp?.toggleModeB()}
+    on:scrollActive={() => {
+        if (get(viewMode) === 'animation') animDisplayEl?.scrollActiveIntoView();
+        else unifiedEl?.scrollActiveIntoView();
+    }}
+    on:tick={onTick}
+/>
 
 <div
     id="timestamps-panel"
@@ -658,140 +352,30 @@
     style:--analysis-word-font-size={cfg?.analysis_word_font_size ?? ''}
     style:--analysis-letter-font-size={cfg?.analysis_letter_font_size ?? ''}
 >
-    <div class="info-bar">
-        <label>Reciter:
-            <select
-                id="ts-reciter-select"
-                bind:value={$selectedReciter}
-                on:change={onReciterSelectChange}
-            >
-                <option value="">{$reciters.length ? '-- select --' : 'Loading...'}</option>
-                {#each groupedReciters as g}
-                    <optgroup label={g.group}>
-                        {#each g.items as r}
-                            <option value={r.slug}>{r.name}</option>
-                        {/each}
-                    </optgroup>
-                {/each}
-            </select>
-        </label>
-        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
-        <label>Chapter:
-            <SearchableSelect
-                options={$chaptersOptions}
-                bind:value={$selectedChapter}
-                placeholder="--"
-                on:change={(e) => onChapterChange(e.detail)}
-            />
-        </label>
-        <label>Verse:
-            <select
-                id="ts-segment-select"
-                bind:value={$selectedVerse}
-                on:change={onVerseSelectChange}
-            >
-                <option value="">--</option>
-                {#each $versesOptions as v}
-                    <option value={v.value}>{v.label}</option>
-                {/each}
-            </select>
-        </label>
-        <div class="ts-random-group">
-            <button class="btn" title="Random verse from any reciter"
-                on:click={() => loadRandomTimestamp()}>🎲 Any Reciter</button>
-            <button class="btn" title="Random verse from current reciter"
-                on:click={() => loadRandomTimestamp($selectedReciter || null)}>🎲 Current Reciter</button>
-        </div>
-    </div>
+    <TimestampsControls
+        bind:this={controlsComp}
+        on:reciterChange={(e) => onReciterChange(e.detail)}
+        on:chapterChange={(e) => onChapterChange(e.detail)}
+        on:verseChange={(e) => onVerseChange(e.detail)}
+        on:randomAny={() => loadRandomTimestamp()}
+        on:randomCurrent={() => loadRandomTimestamp(get(selectedReciter) || null)}
+    />
 
-    <details class="shortcuts-guide">
-        <summary class="shortcuts-guide-summary">Shortcuts &amp; Guide</summary>
-        <div class="shortcuts-guide-body">
-            <div class="sg-col">
-                <h4>Playback</h4>
-                <dl>
-                    <dt>Space</dt><dd>Play / pause</dd>
-                    <dt>&larr; / &rarr;</dt><dd>Seek &plusmn;3 s</dd>
-                    <dt>&uarr; / &darr;</dt><dd>Jump to prev / next word boundary</dd>
-                    <dt>, / .</dt><dd>Slower / faster playback</dd>
-                </dl>
-            </div>
-            <div class="sg-col">
-                <h4>Navigation</h4>
-                <dl>
-                    <dt>[ / ]</dt><dd>Prev / next verse</dd>
-                    <dt>R</dt><dd>Random verse (current reciter)</dd>
-                    <dt>Shift+R</dt><dd>Random verse (any reciter)</dd>
-                    <dt>J</dt><dd>Scroll active word into view</dd>
-                </dl>
-            </div>
-            <div class="sg-col">
-                <h4>Display</h4>
-                <dl>
-                    <dt>A</dt><dd>Toggle Analysis / Animation view</dd>
-                    <dt>L</dt><dd>Toggle letters (analysis) or words mode (animation)</dd>
-                    <dt>P</dt><dd>Toggle phonemes (analysis) or letters mode (animation)</dd>
-                </dl>
-            </div>
-            <div class="sg-col">
-                <h4>Interactions</h4>
-                <dl>
-                    <dt>Click word</dt><dd>Seek to that word's start time</dd>
-                    <dt>Click waveform</dt><dd>Seek to that position</dd>
-                    <dt>Auto Next / Random</dt><dd>Auto-advance when verse ends</dd>
-                </dl>
-            </div>
-        </div>
-    </details>
+    <TimestampsShortcutsGuide />
 
     <TimestampsValidationPanel onJump={jumpToTsVerse} />
 
     <main>
-        <div class="audio-controls">
-            <button class="btn btn-nav" disabled={prevDisabled}
-                title="Previous verse ([)" on:click={() => navigateVerse(-1)}>&#9664; Prev</button>
-            <AudioElement
-                bind:this={audioEl}
-                id="audio-player"
-                controls
-                on:loadedmetadata={onAudioLoadedMetadata}
-                on:play={onAudioPlay}
-                on:pause={onAudioPause}
-                on:ended={onAudioEnded}
-                on:timeupdate={onAudioTimeUpdate}
-                on:error={onAudioError}
-            />
-            <button class="btn btn-nav" disabled={nextDisabled}
-                title="Next verse (])" on:click={() => navigateVerse(+1)}>Next &#9654;</button>
-            <SpeedControl bind:this={speedCtrl} audioElement={audioHTMLEl} lsKey={LS_KEYS.TS_SPEED} />
-        </div>
-
-        <div class="ts-view-controls">
-            <div class="ts-view-toggle">
-                <button class="ts-view-btn" class:active={$viewMode === 'analysis'}
-                    on:click={() => setView('analysis')}>Analysis</button>
-                <button class="ts-view-btn" class:active={$viewMode === 'animation'}
-                    on:click={() => setView('animation')}>Animation</button>
-            </div>
-            <div class="ts-mode-toggle">
-                <button class="ts-mode-btn"
-                    class:active={$viewMode === 'analysis' ? $showLetters : $granularity === 'words'}
-                    on:click={toggleModeA}>
-                    {$viewMode === 'analysis' ? 'Letters' : 'Words'}
-                </button>
-                <button class="ts-mode-btn"
-                    class:active={$viewMode === 'analysis' ? $showPhonemes : $granularity === 'characters'}
-                    on:click={toggleModeB}>
-                    {$viewMode === 'analysis' ? 'Phonemes' : 'Letters'}
-                </button>
-            </div>
-            <div class="ts-auto-toggles">
-                <button class="ts-auto-btn" class:active={$autoMode === 'next'}
-                    title="Auto-advance to next verse" on:click={() => toggleAuto('next')}>Auto Next</button>
-                <button class="ts-auto-btn" class:active={$autoMode === 'random'}
-                    title="Auto-load random verse (any reciter)" on:click={() => toggleAuto('random')}>Auto Random</button>
-            </div>
-        </div>
+        <TimestampsAudio
+            bind:this={audioComp}
+            {prevDisabled}
+            {nextDisabled}
+            on:prev={() => navigateVerse(-1)}
+            on:next={() => navigateVerse(+1)}
+            on:tick={onTick}
+            on:autoNext={() => navigateVerse(+1)}
+            on:autoRandom={() => loadRandomTimestamp()}
+        />
 
         <div class="waveform-words-row">
             <TimestampsWaveform bind:this={waveformTabEl} />
