@@ -16,10 +16,6 @@ import './styles/timestamps.css';
 import './styles/validation.css';
 // Static imports — module-level code in each tab runs immediately,
 // registering DOMContentLoaded handlers before the event fires.
-// NOTE: timestamps/index is intentionally not imported — the Wave-4
-// Svelte conversion (TimestampsTab.svelte) supersedes it. The .ts files
-// remain on disk for bisect clarity but are deleted in sub-wave 4b.
-// NOTE: audio/index.ts removed — AudioTab.svelte (Wave 11b) supersedes it.
 import './segments/index';
 
 import App from './App.svelte';

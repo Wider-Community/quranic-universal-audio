@@ -1,8 +1,6 @@
 """Query helpers for Timestamps-tab read-only data endpoints.
 
 No Flask imports -- functions accept parameters and return plain dicts/lists.
-Extracted from ``routes/timestamps.py`` in Wave 2b (stage2-plan.md §4) as a
-pure behavior-preserving move.
 """
 
 from services.data_loader import (

@@ -3,23 +3,19 @@
  *
  * Stores chapter-wide AudioPeaks keyed by canonical (non-proxy) audio URL.
  * Uses a plain module-scope Map<string, AudioPeaks> — NOT a Svelte store —
- * because waveform data is write-once-per-chapter and never observed
- * reactively (S2-D12 precedent: same reasoning as webaudio-peaks LRU cache).
+ * because waveform data is write-once-per-chapter and never observed reactively.
  *
- * ## S2-B04 fix — proxy URL normalization
+ * ## Proxy URL normalization
  *
  * The audio-proxy rewrites CDN URLs to `/api/seg/audio-proxy/<reciter>?url=<enc>`.
- * Before this util, segments/waveform/index.ts worked around the cache-miss by
- * storing peaks under BOTH the original and proxy URL (dual-keying band-aid at
- * waveform/index.ts:143-147). This util eliminates that workaround: every URL
- * is normalized to its canonical (CDN/server) form before use as a cache key so
- * reads always hit regardless of which form the caller provides.
+ * Every URL is normalized to its canonical (CDN/server) form before use as a
+ * cache key so reads always hit regardless of which form the caller provides.
  */
 
 import type { AudioPeaks } from '../../types/domain';
 
 // ---------------------------------------------------------------------------
-// URL normalisation (S2-B04)
+// URL normalisation
 // ---------------------------------------------------------------------------
 
 /**

@@ -26,7 +26,7 @@ AUDIO_METADATA_PATH = DATA_DIR / "audio"
 TIMESTAMPS_PATH = DATA_DIR / "timestamps"
 
 # Cache directory — defaults under DATA_DIR so peak/audio/phoneme caches survive
-# container restarts when the data directory is a persistent volume (S2-D04).
+# container restarts when the data directory is a persistent volume.
 # Override via INSPECTOR_CACHE_DIR if a volatile / separate cache location is preferred.
 CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))).resolve()
 

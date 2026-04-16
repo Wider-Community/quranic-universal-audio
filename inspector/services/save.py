@@ -17,6 +17,22 @@ from utils.references import chapter_from_ref, normalize_ref, seg_sort_key
 from utils.uuid7 import uuid7
 
 
+def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> str:
+    """Write detailed.json atomically, rebuild segments.json, return file hash.
+
+    Shared helper consumed by both undo.py and (internally) save_seg_data.
+    Does NOT append history — callers are responsible for that.
+    """
+    detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
+    segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
+    backup_file(detailed_path)
+    backup_file(segments_path)
+    atomic_json_write(detailed_path, {"_meta": meta, "entries": entries})
+    file_hash = file_sha256(detailed_path)
+    rebuild_segments_json(reciter, entries)
+    return file_hash
+
+
 def normalize_ref_with_wc(ref: str) -> str:
     """Normalize a short ref to canonical form (passes cached word counts)."""
     return normalize_ref(ref, get_word_counts())
@@ -76,10 +92,9 @@ def rebuild_segments_json(reciter: str, entries: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# save_seg_data — phase helpers (Wave 2b extract-method, S2-D08)
-# Pure behavior-preserving decomposition: each helper owns one sequential
-# phase of the orchestrator below. `_make_seg` was a closure in the original;
-# promoted to module-level with explicit lookup params.
+# save_seg_data — phase helpers
+# Each helper owns one sequential phase of the orchestrator below.
+# `_make_seg` is promoted to module-level with explicit lookup params.
 # ---------------------------------------------------------------------------
 
 
@@ -193,18 +208,8 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
 def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,
                         val_before: dict, updates: dict) -> dict:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
-    # Backup before writing
-    detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
-    segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
-    backup_file(detailed_path)
-    backup_file(segments_path)
-
-    # Write detailed.json atomically
-    atomic_json_write(detailed_path, {"_meta": meta, "entries": entries})
-    file_hash = file_sha256(detailed_path)
-
-    # Rebuild segments.json
-    rebuild_segments_json(reciter, entries)
+    # Backup, write detailed.json atomically, rebuild segments.json
+    file_hash = persist_detailed(reciter, meta, entries)
 
     # Snapshot validation counts after mutation and write batch record
     val_after = chapter_validation_counts(entries, chapter, meta)

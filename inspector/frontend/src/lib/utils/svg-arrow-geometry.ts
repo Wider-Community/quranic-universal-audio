@@ -1,7 +1,7 @@
 /**
  * Pure geometry helper for edit-history diff arrows.
  *
- * Wave 10: extracted from segments/history/rendering.ts
+ * Extracted from segments/history/rendering.ts
  * (`drawHistoryArrows` + `_drawArrowPath`). Takes numeric inputs only —
  * no DOM or SVG element construction — so `HistoryArrows.svelte` can
  * `bind:` card refs, measure them via `getBoundingClientRect` in

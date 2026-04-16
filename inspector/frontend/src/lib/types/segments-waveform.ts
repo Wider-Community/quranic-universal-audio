@@ -6,9 +6,9 @@
  * Map.  This file documents the expected surface so consumers can use a single
  * typed alias (`SegCanvas`) rather than casting to `any`.
  *
- * Previously lived in segments/waveform/types.ts — moved here in Wave 6b so
- * lib-layer components (SegmentWaveformCanvas.svelte) can reference these
- * types without importing from the segments/ imperative layer.
+ * Canonical waveform extension types for the Segments tab, kept in lib so
+ * lib-layer components (SegmentWaveformCanvas.svelte) can reference them
+ * without importing from the segments/ imperative layer.
  *
  * Keep this type-only — no logic belongs here.
  */

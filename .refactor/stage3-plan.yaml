@@ -1,0 +1,623 @@
+name: inspector-stage3
+branch: inspector-refactor
+worktree: refactor+inspector-modularize
+plan_md: .refactor/stage3-plan.md
+interview_summary: .refactor/stage3-interview.md
+impl_model_default: sonnet
+impl_model_override: mixed  # per-phase (see phases_consolidated), Opus for high-risk/long/logic-dense
+phase_structure: 12_consolidated  # sub-phases in plan.md §2 retained as internal blueprint
+shared_docs:
+  decisions: .refactor/stage3-decisions.md
+  bugs: .refactor/stage3-bugs.md
+
+invariants:
+  must:
+    - behavior_preserved_all_tabs
+    - api_signatures_unchanged
+    - strict_typing_preserved
+    - build_lint_typecheck_green
+    - cache_py_single_owner
+    - comments_why_not_what
+    - prod_no_sourcemaps
+  may:
+    - src_segments_shared_styles_types_paths
+    - refactor_noise_comments
+    - services_internal_decomposition
+    - vite_eslint_svelte_configs
+    - claude_md_obsoleted_sections
+  changing_by_phase: see plan §2
+
+success_criteria:
+  - name: no_src_segments
+    grep: "-d inspector/frontend/src/segments"
+  - name: no_src_shared
+    grep: "-d inspector/frontend/src/shared"
+  - name: no_src_types
+    grep: "-d inspector/frontend/src/types"
+  - name: styles_only_base
+    grep: "inspector/frontend/src/styles/ has only base.css"
+  - name: no_refactor_noise_in_code
+    grep_cmd: "grep -rln -E '(Wave [0-9]|Stage [0-9]|S2-[A-Z]|refactored in|bridge for|\\(Wave|previously lived|moved from.*Wave|moved in Wave)' inspector/ --include='*.ts' --include='*.svelte' --include='*.py' | grep -v node_modules | grep -v '^\\.refactor/' | grep -v '/CLAUDE.md$'"
+    expected: 0
+  - name: no_imperative_dom_in_components
+    grep_cmd: "grep -rn -E '\\.classList\\.|\\.querySelector|\\.querySelectorAll' inspector/frontend/src --include='*.ts' --include='*.svelte' | grep -v 'document.body' | grep -v 'lib/components/SearchableSelect\\.svelte'"
+    expected: 0
+  - name: no_segments_bridge_imports_in_lib_post_ph6
+    grep_cmd: "grep -rn \"from ['\\\"].*segments/\" inspector/frontend/src/lib/"
+    expected: 0
+    applies_from: Ph6
+  - name: b01_mapkey_cast_zero_post_ph4
+    grep_cmd: "grep -rn 'String(.*) as unknown as number' inspector/frontend/src/"
+    expected: 0
+    applies_from: Ph4
+  - name: main_chunk_under_300kb
+    dir: inspector/frontend/dist
+    main_chunk_max_kb: 300
+  - name: animation_cadence_smoke
+    manual_gate: Ph11
+    description: "User verifies timestamps animation at 60fps under waveform scroll (reactive class:active cadence preserved)"
+  - name: vite_sourcemap_gated
+    file: inspector/frontend/vite.config.ts
+    contains: "mode === 'development'"
+  - name: vite_manualChunks_defined
+    file: inspector/frontend/vite.config.ts
+    contains: "manualChunks"
+  - name: eslint_svelte_enabled
+    file: inspector/frontend/eslint.config.js
+    not_contains: "**/*.svelte"
+    contains: "eslint-plugin-svelte"
+  - name: validation_orchestrator_small
+    file: inspector/services/validation/__init__.py
+    max_loc: 200
+  - name: undo_apply_reverse_small
+    file: inspector/services/undo.py
+    max_loc: 300
+  - name: cache_py_factory_shrunk
+    file: inspector/services/cache.py
+    max_loc: 250
+  - name: timestamps_tab_shrunk
+    file: inspector/frontend/src/tabs/timestamps/TimestampsTab.svelte
+    max_loc: 300
+  - name: segments_tab_shrunk
+    file: inspector/frontend/src/tabs/segments/SegmentsTab.svelte
+    max_loc: 250
+  - name: errorcard_dispatcher_small
+    file: inspector/frontend/src/tabs/segments/validation/ErrorCard.svelte
+    max_loc: 80
+  - name: history_store_split
+    alt:
+      - file: inspector/frontend/src/lib/stores/segments/history.ts
+        max_loc: 150
+      - files:
+        - inspector/frontend/src/lib/stores/segments/history-store.ts
+        - inspector/frontend/src/lib/stores/segments/history-chains.ts
+        - inspector/frontend/src/lib/stores/segments/history-items.ts
+        max_loc_each: 280
+  - name: as_unknown_as_casts_minimal
+    grep_cmd: "grep -rn 'as unknown as' inspector/frontend/src/"
+    expected_max: 5
+  - name: bundle_js_under_400kb
+    dir: inspector/frontend/dist
+    main_chunk_max_kb: 400
+
+phases_consolidated:  # 12-phase implementation view (impl agents dispatched per this list)
+
+  - id: Ph1
+    name: Foundation + Python backend
+    rolls_up: [P0, P1a, P1b, P1c, P1d]
+    impl_model: sonnet
+    est_files: 30
+    est_loc: -200
+    est_minutes: 105
+    risk: mixed_low_medium
+    reviewers: [sonnet, haiku, opus]  # opus only for validation package split piece
+    opus_verify_scope: [services/validation/*.py]
+    split_trigger: {projected_minutes_over: 90}
+
+  - id: Ph2
+    name: Shell splits pre-bridge
+    rolls_up: [P2a, P2b, P2c]
+    impl_model: sonnet
+    est_files: 12
+    est_loc: -40
+    est_minutes: 100
+    risk: medium
+    reviewers: [sonnet, opus]
+
+  - id: Ph3
+    name: segments pure leaves + mid-layer
+    rolls_up: [P3a, P3b]
+    impl_model: sonnet
+    est_files: 22
+    est_loc: 0
+    est_minutes: 105
+    risk: medium
+    reviewers: [sonnet, opus, haiku]
+
+  - id: Ph4
+    name: segments edit + cross-cutting UI
+    rolls_up: [P3c]
+    impl_model: opus
+    est_files: 18
+    est_loc: 0
+    est_minutes: 90
+    risk: high
+    reviewers: [sonnet, opus, haiku]
+    split_trigger: {projected_minutes_over: 45, split_into: [Ph4a_edit_subtree, Ph4b_nav_kbd_eventdelegation_save]}
+
+  - id: Ph5
+    name: segments audio + data + history
+    rolls_up: [P3d]
+    impl_model: sonnet
+    est_files: 10
+    est_loc: 0
+    est_minutes: 50
+    risk: high
+    reviewers: [sonnet, opus, haiku]
+
+  - id: Ph6
+    name: accordion + state.ts split + dir delete
+    rolls_up: [P3e]
+    impl_model: opus
+    est_files: 10
+    est_loc: -1000
+    est_minutes: 45
+    risk: high
+    reviewers: [sonnet, opus, haiku]
+
+  - id: Ph7
+    name: legacy dirs + SegmentsTab finalize + store splits
+    rolls_up: [P4, P5]
+    impl_model: sonnet
+    est_files: 35
+    est_loc: -600
+    est_minutes: 90
+    risk: medium
+    reviewers: [sonnet, haiku]
+
+  - id: Ph8
+    name: CSS low-risk batch
+    rolls_up: [P6a, P6b, P6c]
+    impl_model: sonnet
+    est_files: 30
+    est_loc: -730
+    est_minutes: 95
+    risk: low_medium
+    reviewers: [sonnet, haiku]
+
+  - id: Ph9
+    name: CSS validation scoped
+    rolls_up: [P6d]
+    impl_model: opus
+    est_files: 6
+    est_loc: -300
+    est_minutes: 40
+    risk: high
+    reviewers: [sonnet, haiku, opus]
+
+  - id: Ph10
+    name: CSS history + SegmentRow mode prop
+    rolls_up: [P6e]
+    impl_model: opus
+    est_files: 8
+    est_loc: -350
+    est_minutes: 45
+    risk: high
+    reviewers: [sonnet, haiku, opus]
+
+  - id: Ph11
+    name: CSS timestamps + reactive Unified/Animation + segments edit-mode
+    rolls_up: [P6f, P6g]
+    impl_model: opus
+    est_files: 10
+    est_loc: -260
+    est_minutes: 70
+    risk: high
+    reviewers: [sonnet, haiku, opus]
+    split_trigger: {projected_minutes_over: 45, split_into: [Ph11a_unifieddisplay, Ph11b_animationdisplay_plus_segedit]}
+
+  - id: Ph12
+    name: final sweep + CLAUDE.md
+    rolls_up: [P7]
+    impl_model: sonnet
+    est_files: 10
+    est_loc: -100
+    est_minutes: 30
+    risk: low
+    reviewers: [haiku, sonnet]
+
+# Sub-phase blueprint retained below — agent implementations use the consolidated phase scope,
+# but sub-phase structure is the dependency-order-safe internal plan.
+
+phases_blueprint:
+
+  - id: P0
+    name: Foundation
+    scope_files:
+      - inspector/frontend/vite.config.ts
+      - inspector/frontend/eslint.config.js
+      - inspector/frontend/src/main.ts
+      - inspector/frontend/src/lib/components/AudioPlayer.svelte
+      - inspector/frontend/src/lib/utils/grouped-reciters.ts
+      - inspector/frontend/src/lib/utils/word-boundary.ts
+      - inspector/frontend/src/lib/utils/ls.ts
+      - inspector/services/*.py
+      - inspector/config.py
+      - inspector/frontend/src/lib/stores/timestamps/*.ts
+      - inspector/frontend/src/lib/types/*.ts
+      - inspector/frontend/src/lib/utils/*.ts
+      - inspector/Dockerfile
+      - inspector/CLAUDE.md
+    changing:
+      - vite_sourcemap_gate
+      - vite_manualChunks_chart
+      - eslint_svelte_enable
+      - main_ts_ghost_comments_deleted
+      - AudioPlayer_component_created
+      - grouped_reciters_util_created
+      - word_boundary_util_created
+      - ls_util_created
+      - pre_cleanup_comments_survivor_files
+      - claude_md_staleness_fix_partial
+    risk: low
+    reviewers: [sonnet, haiku]
+    est_files: 15
+    est_loc: 0
+    est_minutes: 30
+
+  - id: P1a
+    name: cache.py factory
+    scope_files: [inspector/services/cache.py]
+    changing: [singleton_keyed_factory_generics, global_keyword_removal]
+    risk: low
+    reviewers: [sonnet]
+    est_loc: -100
+    est_minutes: 20
+
+  - id: P1b
+    name: undo.py apply_reverse_op split
+    scope_files: [inspector/services/undo.py, inspector/services/save.py, inspector/services/history_query.py]
+    changing: [six_branch_helpers, find_and_verify_helper, persist_detailed_shared, parse_history_file_shared]
+    risk: medium
+    reviewers: [sonnet, opus]
+    est_minutes: 30
+
+  - id: P1c
+    name: validation.py package split
+    scope_files:
+      - inspector/services/validation.py
+      - inspector/services/validation/__init__.py
+      - inspector/services/validation/_classify.py
+      - inspector/services/validation/_missing.py
+      - inspector/services/validation/_structural.py
+    changing: [validation_package_created, classify_segment_extracted, missing_words_extracted, structural_errors_extracted, dead_imports_dropped]
+    risk: medium
+    reviewers: [sonnet, opus]
+    est_minutes: 40
+    split_trigger:
+      typecheck_errors_over: 400
+
+  - id: P1d
+    name: save.py + data_loader housekeeping
+    scope_files: [inspector/services/save.py, inspector/services/data_loader.py]
+    changing: [persist_detailed_paired, comment_sweep_backend]
+    risk: low
+    reviewers: [sonnet]
+    est_minutes: 15
+
+  - id: P2a
+    name: TimestampsTab AudioPlayer + 4-way split
+    scope_files:
+      - inspector/frontend/src/tabs/timestamps/TimestampsTab.svelte
+      - inspector/frontend/src/tabs/timestamps/TimestampsControls.svelte
+      - inspector/frontend/src/tabs/timestamps/TimestampsAudio.svelte
+      - inspector/frontend/src/tabs/timestamps/TimestampsKeyboard.svelte
+      - inspector/frontend/src/tabs/timestamps/TimestampsShortcutsGuide.svelte
+    changing: [timestamps_tab_shell_split, audioplayer_adoption_timestamps]
+    risk: medium
+    reviewers: [sonnet, opus]
+    est_minutes: 45
+
+  - id: P2b
+    name: ErrorCard 3-way split
+    scope_files:
+      - inspector/frontend/src/tabs/segments/validation/ErrorCard.svelte
+      - inspector/frontend/src/tabs/segments/validation/MissingWordsCard.svelte
+      - inspector/frontend/src/tabs/segments/validation/MissingVersesCard.svelte
+      - inspector/frontend/src/tabs/segments/validation/GenericIssueCard.svelte
+      - inspector/frontend/src/lib/utils/validation-card-inject.ts
+    changing: [errorcard_dispatcher_split, inject_helper_extracted]
+    risk: medium
+    reviewers: [sonnet, opus]
+    est_minutes: 35
+
+  - id: P2c
+    name: SegmentsAudioControls AudioPlayer adoption
+    scope_files:
+      - inspector/frontend/src/tabs/segments/SegmentsAudioControls.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsTab.svelte
+    changing: [audioplayer_adoption_segments, speed_select_duplication_killed]
+    risk: low
+    reviewers: [sonnet]
+    est_minutes: 20
+
+  - id: P3a
+    name: segments pure-leaves → lib/utils
+    scope_files:
+      - inspector/frontend/src/segments/constants.ts
+      - inspector/frontend/src/segments/references.ts
+      - inspector/frontend/src/segments/validation/categories.ts
+      - inspector/frontend/src/segments/waveform/draw.ts
+      - inspector/frontend/src/segments/history/undo.ts
+      - inspector/frontend/src/segments/waveform/types.ts
+      - inspector/frontend/src/segments/registry.ts
+      - inspector/frontend/src/segments/filters.ts
+      - inspector/frontend/src/lib/utils/segments/*.ts
+      - inspector/frontend/src/lib/stores/segments/config.ts
+      - inspector/frontend/src/lib/stores/segments/filter-fields.ts
+    changing: [pure_leaves_migrated, segConfig_store_created, filter_fields_store_created, registration_pattern_dies]
+    risk: medium
+    reviewers: [sonnet, opus, haiku]
+    est_minutes: 45
+
+  - id: P3b
+    name: segments mid-layer migration
+    scope_files:
+      - inspector/frontend/src/segments/rendering.ts
+      - inspector/frontend/src/segments/playback/audio-cache.ts
+      - inspector/frontend/src/segments/validation/index.ts
+      - inspector/frontend/src/segments/waveform/index.ts
+      - inspector/frontend/src/lib/utils/segments/*.ts
+      - inspector/frontend/src/lib/stores/segments/audio-cache.ts
+    changing: [mid_layer_migrated, audio_cache_store_created, observer_fetcher_lib_util]
+    risk: medium
+    reviewers: [sonnet, opus, haiku]
+    est_minutes: 60
+
+  - id: P3c
+    name: segments edit + cross-cutting UI
+    scope_files:
+      - inspector/frontend/src/segments/edit/*.ts
+      - inspector/frontend/src/segments/navigation.ts
+      - inspector/frontend/src/segments/event-delegation.ts
+      - inspector/frontend/src/segments/keyboard.ts
+      - inspector/frontend/src/segments/save.ts
+      - inspector/frontend/src/tabs/segments/edit/*.svelte
+      - inspector/frontend/src/tabs/segments/Navigation.svelte
+      - inspector/frontend/src/tabs/segments/save/SavePreview.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsTab.svelte
+      - inspector/frontend/src/tabs/segments/SegmentRow.svelte
+      - inspector/frontend/src/tabs/segments/SegmentWaveformCanvas.svelte
+      - inspector/frontend/src/lib/stores/segments/dirty.ts
+      - inspector/frontend/src/lib/stores/segments/navigation.ts
+      - inspector/frontend/src/lib/stores/segments/save.ts
+      - inspector/frontend/src/lib/utils/segments/*.ts
+    changing:
+      - edit_panels_svelteified
+      - commit_utils_extracted
+      - navigation_store_driven
+      - event_delegation_dies
+      - keyboard_in_segmentstab
+      - save_flow_svelteified
+      - dirty_store_created
+      - history_undo_mapkey_bug_fixed_via_store
+    risk: high
+    reviewers: [sonnet, opus, haiku]
+    est_minutes: 90
+    split_trigger:
+      projected_minutes_over: 45
+      split_into:
+        - P3c-i (edit/ subtree)
+        - P3c-ii (navigation + keyboard + event-delegation + save)
+
+  - id: P3d
+    name: segments audio + data + history
+    scope_files:
+      - inspector/frontend/src/segments/playback/index.ts
+      - inspector/frontend/src/segments/validation/error-card-audio.ts
+      - inspector/frontend/src/segments/data.ts
+      - inspector/frontend/src/segments/history/index.ts
+      - inspector/frontend/src/tabs/segments/SegmentsAudioControls.svelte
+      - inspector/frontend/src/tabs/segments/validation/*.svelte
+      - inspector/frontend/src/tabs/segments/history/HistoryPanel.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsTab.svelte
+      - inspector/frontend/src/lib/stores/segments/error-audio.ts
+      - inspector/frontend/src/lib/utils/segments/prefetch.ts
+    changing:
+      - playback_svelteified
+      - error_card_audio_migrated
+      - data_flow_reactive
+      - history_panel_store_driven
+    risk: high
+    reviewers: [sonnet, opus, haiku]
+    est_minutes: 50
+
+  - id: P3e
+    name: accordion + state.ts + dir delete
+    scope_files:
+      - inspector/frontend/src/segments/validation/error-cards.ts
+      - inspector/frontend/src/segments/state.ts
+      - inspector/frontend/src/segments/index.ts
+      - inspector/frontend/src/segments/ # entire directory removed
+      - inspector/frontend/src/main.ts
+      - inspector/frontend/src/lib/types/segments.ts
+      - inspector/frontend/src/lib/utils/segments/ops.ts
+      - inspector/frontend/src/lib/utils/segments/peaks-cache.ts
+    changing:
+      - error_cards_dies_reactive_accordion
+      - state_ts_split_types_ops_store
+      - segments_index_deleted
+      - main_ts_side_effect_import_gone
+      - src_segments_directory_removed
+    risk: high
+    reviewers: [sonnet, opus, haiku]
+    est_minutes: 45
+
+  - id: P4
+    name: legacy dirs cleanup + SegmentsTab finalize
+    scope_files:
+      - inspector/frontend/src/shared/*.ts
+      - inspector/frontend/src/types/*.ts
+      - inspector/frontend/src/lib/types/api.ts
+      - inspector/frontend/src/lib/types/domain.ts
+      - inspector/frontend/src/tabs/segments/SegmentsTab.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsSelectorBar.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsShortcutsGuide.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsCacheBar.svelte
+    changing:
+      - src_shared_deleted
+      - src_types_merged_to_lib_types
+      - segmentstab_finalized
+      - selector_bar_extracted
+      - cache_bar_extracted
+    risk: medium
+    reviewers: [sonnet, haiku]
+    est_minutes: 60
+
+  - id: P5
+    name: store splits
+    scope_files:
+      - inspector/frontend/src/lib/stores/segments/history.ts
+      - inspector/frontend/src/lib/stores/segments/history-store.ts
+      - inspector/frontend/src/lib/stores/segments/history-chains.ts
+      - inspector/frontend/src/lib/stores/segments/history-items.ts
+      - inspector/frontend/src/lib/stores/segments/filters.ts
+      - inspector/frontend/src/lib/stores/segments/chapter.ts
+      - inspector/frontend/src/lib/stores/segments/chapter-lookup.ts
+    changing: [history_3way_split, chapter_lookup_extracted]
+    risk: low
+    reviewers: [sonnet]
+    est_minutes: 30
+
+  - id: P6a
+    name: stats.css + filters.css scoped
+    scope_files:
+      - inspector/frontend/src/styles/stats.css
+      - inspector/frontend/src/styles/filters.css
+      - inspector/frontend/src/styles/base.css
+      - inspector/frontend/src/tabs/segments/StatsPanel.svelte
+      - inspector/frontend/src/tabs/segments/StatsChart.svelte
+      - inspector/frontend/src/tabs/segments/FiltersBar.svelte
+      - inspector/frontend/src/tabs/segments/FilterCondition.svelte
+      - inspector/frontend/src/tabs/segments/Navigation.svelte
+      - inspector/frontend/src/main.ts
+    changing: [stats_css_dies, filters_css_dies, toast_keyframe_to_base]
+    risk: low
+    reviewers: [sonnet, haiku]
+    est_minutes: 25
+
+  - id: P6b
+    name: segments.css selector bar + list/rows
+    scope_files:
+      - inspector/frontend/src/styles/segments.css
+      - inspector/frontend/src/tabs/segments/SegmentsTab.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsCacheBar.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsAudioControls.svelte
+      - inspector/frontend/src/tabs/segments/SegmentsList.svelte
+      - inspector/frontend/src/tabs/segments/SegmentRow.svelte
+      - inspector/frontend/src/tabs/segments/edit/EditOverlay.svelte
+    changing: [segments_css_scoped_part1]
+    risk: low
+    reviewers: [sonnet, haiku]
+    est_minutes: 30
+
+  - id: P6c
+    name: components.css + Button extraClass kill
+    scope_files:
+      - inspector/frontend/src/styles/components.css
+      - inspector/frontend/src/styles/base.css
+      - inspector/frontend/src/lib/components/Button.svelte
+      - inspector/frontend/src/lib/components/SearchableSelect.svelte
+      - inspector/frontend/src/tabs/**/*.svelte
+    changing: [components_css_dies, button_variant_extended, extraClass_removed, all_button_callers_migrated]
+    risk: medium
+    reviewers: [sonnet, haiku]
+    est_minutes: 40
+
+  - id: P6d
+    name: validation.css scoped
+    scope_files:
+      - inspector/frontend/src/styles/validation.css
+      - inspector/frontend/src/tabs/segments/validation/*.svelte
+      - inspector/frontend/src/tabs/segments/SegmentRow.svelte
+      - inspector/frontend/src/tabs/timestamps/TimestampsValidationPanel.svelte
+      - inspector/frontend/src/styles/base.css
+    changing: [validation_css_scoped, errorcard_refs_replace_queries, isContext_prop_segmentrow]
+    risk: high
+    reviewers: [sonnet, haiku, opus]
+    est_minutes: 40
+
+  - id: P6e
+    name: history.css + SegmentRow mode prop
+    scope_files:
+      - inspector/frontend/src/styles/history.css
+      - inspector/frontend/src/tabs/segments/history/*.svelte
+      - inspector/frontend/src/tabs/segments/SegmentRow.svelte
+      - inspector/frontend/src/tabs/segments/save/SavePreview.svelte
+    changing: [history_css_scoped, segmentrow_mode_history_prop]
+    risk: high
+    reviewers: [sonnet, haiku, opus]
+    est_minutes: 45
+
+  - id: P6f
+    name: timestamps.css + reactive UnifiedDisplay/AnimationDisplay
+    scope_files:
+      - inspector/frontend/src/styles/timestamps.css
+      - inspector/frontend/src/tabs/timestamps/UnifiedDisplay.svelte
+      - inspector/frontend/src/tabs/timestamps/AnimationDisplay.svelte
+      - inspector/frontend/src/tabs/timestamps/TimestampsWaveform.svelte
+      - inspector/frontend/src/tabs/timestamps/TimestampsTab.svelte
+      - inspector/frontend/src/tabs/audio/AudioTab.svelte
+    changing: [timestamps_css_scoped, unified_animation_reactive_classes, audiotab_view_btn_rename]
+    risk: high
+    reviewers: [sonnet, haiku, opus]
+    est_minutes: 50
+    split_trigger:
+      projected_minutes_over: 45
+      split_into:
+        - P6f-i (UnifiedDisplay reactive + its CSS)
+        - P6f-ii (AnimationDisplay reactive + its CSS)
+
+  - id: P6g
+    name: segments.css edit-mode cleanup
+    scope_files:
+      - inspector/frontend/src/styles/segments.css
+      - inspector/frontend/src/tabs/segments/edit/TrimPanel.svelte
+      - inspector/frontend/src/tabs/segments/edit/SplitPanel.svelte
+      - inspector/frontend/src/tabs/segments/SegmentRow.svelte
+      - inspector/frontend/src/main.ts
+    changing: [segments_css_dies, main_ts_imports_cleanup]
+    risk: low
+    reviewers: [sonnet]
+    est_minutes: 20
+
+  - id: P7
+    name: final cleanup + CLAUDE.md + success gate
+    scope_files:
+      - inspector/frontend/src/**/*.ts
+      - inspector/frontend/src/**/*.svelte
+      - inspector/services/*.py
+      - inspector/services/validation/*.py
+      - inspector/CLAUDE.md
+      - inspector/frontend/src/lib/components/Button.svelte
+      - inspector/frontend/src/lib/utils/waveform-draw.ts
+      - .refactor/orchestration-log.md
+    changing: [residue_noise_zero, claude_md_tree_updated, bundle_chart_split_verified]
+    risk: low
+    reviewers: [haiku, sonnet]
+    est_minutes: 30
+
+stop_points:
+  mode: autonomous_between_phases_with_two_user_gates
+  active:
+    - S2_context_window_75pct
+    - S3_review_disagreement_unresolved
+    - S4_scope_overreach
+    - S7_pre_merge
+  user_declared:
+    - after: Ph6
+      reason: state.ts split + src/segments/ directory deleted — user smokes edit/save/undo/validation/history before CSS phases bury regressions
+    - after: Ph11
+      reason: reactive UnifiedDisplay/AnimationDisplay migration — visual cadence correctness needs manual smoke
+
+preflight_script: .refactor/stage3-checks.sh

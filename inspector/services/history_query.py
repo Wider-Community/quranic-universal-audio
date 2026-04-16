@@ -1,16 +1,34 @@
 """Query helpers for Segments-tab edit-history endpoint.
 
 No Flask imports -- functions accept parameters and return plain dicts/lists.
-Extracted from ``routes/segments_validation.py`` in Wave 2b
-(stage2-plan.md §4) as a pure behavior-preserving move. Undo logic for
-reverse-applying history entries lives in ``services/undo.py``; this module
-is read-only.
+Undo logic for reverse-applying history entries lives in ``services/undo.py``;
+this module is read-only.
 """
 
 import json
 from collections import Counter
+from pathlib import Path
 
 from config import RECITATION_SEGMENTS_PATH
+
+
+def parse_history_file(history_path: Path) -> list[dict]:
+    """Parse an edit_history.jsonl file into a list of records.
+
+    Shared by undo.py (which needs raw records for batch lookup) and
+    load_edit_history (which applies further filtering for the UI).
+    Silently skips blank lines and malformed JSON.
+    """
+    records = []
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
 
 
 def load_edit_history(reciter: str) -> dict:
@@ -24,18 +42,11 @@ def load_edit_history(reciter: str) -> dict:
     if not history_path.exists():
         return {"batches": [], "summary": None}
 
-    # Parse all records
+    raw_records = parse_history_file(history_path)
     all_records = []
     fully_reverted_ids: set[str] = set()
     per_op_reverted: dict[str, set[str]] = {}
-    for line in history_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for record in raw_records:
         if record.get("record_type") == "genesis":
             continue
         all_records.append(record)

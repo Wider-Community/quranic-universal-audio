@@ -1,7 +1,6 @@
 /**
  * Pure waveform drawing helper — no state, no side effects, no imports from
- * tab modules. Used by both the legacy segments/waveform/draw.ts (Stage 1)
- * and the new lib/components/WaveformCanvas.svelte (Stage 2 Wave 3+).
+ * tab modules. Shared by all waveform canvas contexts.
  */
 
 import type { PeakBucket } from '../../types/domain';
@@ -12,8 +11,8 @@ import type { PeakBucket } from '../../types/domain';
  * Sub-ranging: when startMs, endMs, and totalDurationMs are all provided,
  * only the corresponding slice of the peaks array is drawn. This lets
  * consumers pass a full chapter-wide peaks array and render just one
- * segment's time range (used by Wave 6 per-row waveforms + Wave 10 history
- * diff thumbnails). When any of the three are absent, the full array is drawn.
+ * segment's time range (used by per-row waveforms and history diff thumbnails).
+ * When any of the three are absent, the full array is drawn.
  */
 export interface DrawWaveformOptions {
     /** Canvas width in pixels. */

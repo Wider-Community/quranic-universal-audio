@@ -1,10 +1,9 @@
 /**
  * Timestamps tab — verse/reciter/chapter selection + loaded verse data.
  *
- * Wraps the Stage-1 `state.currentData`, `state.intervals`, `state.words`,
- * reciter list, chapter list, verse list, and selection indices. UI
- * components subscribe to `chaptersOptions` and `versesOptions` for the
- * two SearchableSelect / native selects.
+ * Owns reciter list, chapter list, verse list, selection state, and the
+ * loaded verse payload. UI components subscribe to `chaptersOptions` and
+ * `versesOptions` for the two SearchableSelect / native selects.
  */
 
 import { derived, writable } from 'svelte/store';
@@ -53,12 +52,10 @@ export const selectedVerse = writable<string>('');
 /** Currently-loaded verse data (null before first load). */
 export const loadedVerse = writable<TsLoadedVerse | null>(null);
 
-// NOTE: `intervals` and `words` derived stores (pass-through reads of
-// $loadedVerse.data.intervals / .words) were removed in Wave 5 cleanup
-// per S2-D33: components compute these inline via `$loadedVerse` + `$:`
-// reactive statements as needed (UnifiedDisplay / AnimationDisplay).
-// Re-introducing the derived stores without any `$store` consumer would
-// be a tautological pass-through (S2-D33 anti-pattern).
+// `intervals` and `words` derived stores were removed: components compute
+// these inline via `$loadedVerse` + `$:` reactive statements as needed
+// (UnifiedDisplay / AnimationDisplay). Re-introducing them without any
+// `$store` consumer would be a tautological pass-through.
 
 // ---------------------------------------------------------------------------
 // Validation data
@@ -71,9 +68,9 @@ export const validationData = writable<TsValidateResponse | null>(null);
 // Derived dropdown options
 // ---------------------------------------------------------------------------
 
-// NOTE: `recitersOptions` removed in Wave 5 cleanup per S2-D33 — TimestampsTab
-// reads `$reciters` directly to build its grouped-<optgroup> structure; an
-// identity-wrap derived store had zero value.
+// `recitersOptions` was removed — TimestampsTab reads `$reciters` directly
+// to build its grouped-<optgroup> structure; an identity-wrap derived store
+// has zero value.
 
 /** Chapter select options (passed to SearchableSelect). */
 export const chaptersOptions = derived<typeof chapters, SelectOption[]>(chapters, ($cs) =>

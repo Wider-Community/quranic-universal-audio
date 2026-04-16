@@ -3,12 +3,10 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import importPlugin from 'eslint-plugin-import';
+import sveltePlugin from 'eslint-plugin-svelte';
 
 export default [
-    // TODO: wave 11 — enable svelte lint rules via eslint-plugin-svelte once all .svelte
-    // components are stable. For now, ignore .svelte files to avoid import/no-cycle
-    // false-positives from the Svelte template compiler's generated imports.
-    { ignores: ['dist/**', 'node_modules/**', '.vite/**', '**/*.svelte'] },
+    { ignores: ['dist/**', 'node_modules/**', '.vite/**'] },
     js.configs.recommended,
     ...tseslint.configs.recommended,
     prettier,
@@ -23,8 +21,7 @@ export default [
             // setting that maps `.ts` to `@typescript-eslint/parser` so the
             // plugin can parse the import graph. Without BOTH, the
             // `import/no-cycle` rule silently reports zero findings even
-            // when cycles exist. The project-setup discovery happened
-            // during Wave 1's Item 3 end-to-end verification.
+            // when cycles exist.
             'import/resolver': {
                 typescript: {
                     project: './tsconfig.json',
@@ -36,7 +33,7 @@ export default [
             },
         },
         rules: {
-            // Stage 1 migration tolerance — tightened in Phase 7 cleanup.
+            // Migration tolerance — tightened in final cleanup pass.
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-vars': ['warn', {
                 argsIgnorePattern: '^_',
@@ -46,16 +43,25 @@ export default [
             }],
             '@typescript-eslint/ban-ts-comment': 'warn',
             'no-unused-vars': 'off',
-            // Import hygiene rules (added in post-Stage-1 cleanup pass).
+            // Import hygiene rules.
             'simple-import-sort/imports': 'error',
             '@typescript-eslint/consistent-type-imports': ['error', {
                 prefer: 'type-imports',
                 fixStyle: 'separate-type-imports',
             }],
-            // Re-promoted to `error` in Wave 11a (S2-B06 closed, S2-D24 actioned).
-            // All 22 pre-existing segments-tab cycles dissolved via the register*
-            // pattern across Waves 5–11a. Ceiling is now 0; any new cycle breaks CI.
+            // All segments-tab cycles resolved. Ceiling is now 0; any new cycle breaks CI.
             'import/no-cycle': 'error',
+        },
+    },
+    // Svelte-specific config — uses the flat/recommended preset from eslint-plugin-svelte.
+    // Covers .svelte files only; TS rules above apply to .ts files.
+    ...sveltePlugin.configs['flat/recommended'],
+    {
+        files: ['**/*.svelte'],
+        rules: {
+            // Disable import/no-cycle for .svelte — the Svelte compiler generates
+            // synthetic imports that confuse the cycle detector.
+            'import/no-cycle': 'off',
         },
     },
 ];

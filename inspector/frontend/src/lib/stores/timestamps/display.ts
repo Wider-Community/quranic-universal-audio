@@ -1,9 +1,9 @@
 /**
  * Timestamps tab — display / view-mode state.
  *
- * Split from Stage-1 `state.tsViewMode`, `tsGranularity`, `tsShowLetters`,
- * `tsShowPhonemes`. These are purely UI mode flags; they persist to
- * localStorage via a `<svelte:window>` effect in `TimestampsTab.svelte`.
+ * Owns view mode, granularity, show-letters, and show-phonemes flags.
+ * These persist to localStorage via a `<svelte:window>` effect in
+ * `TimestampsTab.svelte`.
  */
 
 import { writable } from 'svelte/store';

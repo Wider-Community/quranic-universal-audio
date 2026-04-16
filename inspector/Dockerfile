@@ -5,8 +5,7 @@
 #
 # Build context is the REPO ROOT (one level above inspector/).
 # `validators/` lives at repo root as a sibling of `inspector/`; both are
-# copied into the image. This is the canonical layout post-S2-D36 (reverted
-# S2-D03 vendoring).
+# copied into the image so `from validators.X import Y` resolves correctly.
 #
 # Build:    docker build -t inspector:dev -f inspector/Dockerfile .   # from repo root
 # Run dev:  docker run --rm -p 5000:5000 -v "$PWD/data:/data" inspector:dev

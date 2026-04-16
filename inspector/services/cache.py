@@ -7,95 +7,124 @@ functions.  No other module uses ``global`` for cache variables.
 import hashlib
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from config import CACHE_DIR
 
-# ---------------------------------------------------------------------------
-# Timestamps caches
-# ---------------------------------------------------------------------------
+_T = TypeVar("_T")
 
-_TS_CACHE: dict[str, dict] = {}  # reciter -> {meta, verses, audio_category}
-_TS_RECITERS_CACHE: list[dict] | None = None
+
+class _SingletonCache(Generic[_T]):
+    """Holds a single nullable value — replaces a bare ``global`` variable."""
+
+    def __init__(self) -> None:
+        self._value: _T | None = None
+
+    def get(self) -> _T | None:
+        return self._value
+
+    def set(self, value: _T) -> None:
+        self._value = value
+
+    def clear(self) -> None:
+        self._value = None
+
+
+class _KeyedCache(Generic[_T]):
+    """Holds a dict keyed by string — replaces a bare ``global`` dict."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, _T] = {}
+
+    def get(self, key: str) -> _T | None:
+        return self._data.get(key)
+
+    def set(self, key: str, value: _T) -> None:
+        self._data[key] = value
+
+    def pop(self, key: str) -> None:
+        self._data.pop(key, None)
+
+    def clear(self) -> None:
+        self._data.clear()
+
+    def all(self) -> dict[str, _T]:
+        return self._data
+
+
+# Timestamps
+_ts: _KeyedCache[dict] = _KeyedCache()
+_ts_reciters: _SingletonCache[list[dict]] = _SingletonCache()
 
 
 def get_ts_cache(reciter: str) -> dict | None:
-    return _TS_CACHE.get(reciter)
+    return _ts.get(reciter)
 
 
 def set_ts_cache(reciter: str, data: dict) -> None:
-    _TS_CACHE[reciter] = data
+    _ts.set(reciter, data)
 
 
 def get_all_ts_cache() -> dict[str, dict]:
-    return _TS_CACHE
+    return _ts.all()
 
 
 def get_ts_reciters_cache() -> list[dict] | None:
-    return _TS_RECITERS_CACHE
+    return _ts_reciters.get()
 
 
 def set_ts_reciters_cache(reciters: list[dict]) -> None:
-    global _TS_RECITERS_CACHE
-    _TS_RECITERS_CACHE = reciters
+    _ts_reciters.set(reciters)
 
 
-# ---------------------------------------------------------------------------
-# Segments caches
-# ---------------------------------------------------------------------------
-
-_SEG_CACHE: dict[str, list[dict]] = {}
-_SEG_META_CACHE: dict[str, dict] = {}
-_SEG_RECITERS_CACHE: list[dict] | None = None
-_SEG_VERSES_CACHE: dict[str, tuple] = {}  # reciter -> (verses_dict, pad_ms)
+# Segments
+_seg: _KeyedCache[list[dict]] = _KeyedCache()
+_seg_meta: _KeyedCache[dict] = _KeyedCache()
+_seg_reciters: _SingletonCache[list[dict]] = _SingletonCache()
+_seg_verses: _KeyedCache[tuple] = _KeyedCache()
 
 
 def get_seg_cache(reciter: str) -> list[dict] | None:
-    return _SEG_CACHE.get(reciter)
+    return _seg.get(reciter)
 
 
 def set_seg_cache(reciter: str, entries: list[dict]) -> None:
-    _SEG_CACHE[reciter] = entries
+    _seg.set(reciter, entries)
 
 
 def get_seg_meta(reciter: str) -> dict:
-    return _SEG_META_CACHE.get(reciter, {})
+    return _seg_meta.get(reciter) or {}
 
 
 def set_seg_meta(reciter: str, meta: dict) -> None:
-    _SEG_META_CACHE[reciter] = meta
+    _seg_meta.set(reciter, meta)
 
 
 def get_seg_reciters_cache() -> list[dict] | None:
-    return _SEG_RECITERS_CACHE
+    return _seg_reciters.get()
 
 
 def set_seg_reciters_cache(reciters: list[dict]) -> None:
-    global _SEG_RECITERS_CACHE
-    _SEG_RECITERS_CACHE = reciters
+    _seg_reciters.set(reciters)
 
 
 def get_seg_verses_cache(reciter: str):
-    return _SEG_VERSES_CACHE.get(reciter)
+    return _seg_verses.get(reciter)
 
 
 def set_seg_verses_cache(reciter: str, data: tuple) -> None:
-    _SEG_VERSES_CACHE[reciter] = data
+    _seg_verses.set(reciter, data)
 
 
 def invalidate_seg_caches(reciter: str) -> None:
     """Remove all segment-related caches for *reciter* and reset reciters list."""
-    global _SEG_RECITERS_CACHE
-    _SEG_CACHE.pop(reciter, None)
-    _SEG_META_CACHE.pop(reciter, None)
-    _SEG_VERSES_CACHE.pop(reciter, None)
-    _SEG_RECITERS_CACHE = None  # MUST reset to None, not just pop
+    _seg.pop(reciter)
+    _seg_meta.pop(reciter)
+    _seg_verses.pop(reciter)
+    _seg_reciters.clear()  # MUST be a full reset — not a per-reciter pop
 
 
-# ---------------------------------------------------------------------------
-# Peaks caches
-# ---------------------------------------------------------------------------
-
+# Peaks (thread-safe — manually coded)
 _PEAKS_CACHE: dict[str, dict[str, dict]] = {}
 _PEAKS_LOCK = threading.Lock()
 _PEAKS_COMPUTING: set[str] = set()
@@ -141,95 +170,67 @@ def discard_peaks_computing(key: str) -> None:
     _PEAKS_COMPUTING.discard(key)
 
 
-# ---------------------------------------------------------------------------
-# Remote audio meta cache (MP3 ID3 probing for HTTP Range segment-peaks)
-# ---------------------------------------------------------------------------
-
-# url -> {id3_offset: int, bytes_per_sec: int}. Absorbed from
-# services/peaks.py in Wave 1 of Stage 2 so the `global` keyword never
-# leaks outside this module.
-_URL_AUDIO_META: dict[str, dict] = {}
+# Remote audio meta (url -> {id3_offset, bytes_per_sec})
+_url_audio_meta: _KeyedCache[dict] = _KeyedCache()
 
 
 def get_url_audio_meta(url: str) -> dict | None:
-    return _URL_AUDIO_META.get(url)
+    return _url_audio_meta.get(url)
 
 
 def set_url_audio_meta(url: str, meta: dict) -> None:
-    _URL_AUDIO_META[url] = meta
+    _url_audio_meta.set(url, meta)
 
 
-# ---------------------------------------------------------------------------
 # Phonemizer singleton
-# ---------------------------------------------------------------------------
-
-# The `quranic_phonemizer.Phonemizer` instance is built lazily on first use
-# and kept here. Typed as ``Any`` because the phonemizer package is an
-# optional dependency — introducing a hard import to this module would
-# regress the graceful-degradation behavior in
-# ``services/phonemizer_service.py``.
-_PHONEMIZER_SINGLETON: Any = None
+_phonemizer: _SingletonCache[Any] = _SingletonCache()
 
 
 def get_phonemizer_singleton() -> Any:
-    return _PHONEMIZER_SINGLETON
+    return _phonemizer.get()
 
 
 def set_phonemizer_singleton(phonemizer: Any) -> None:
-    global _PHONEMIZER_SINGLETON
-    _PHONEMIZER_SINGLETON = phonemizer
+    _phonemizer.set(phonemizer)
 
 
-# ---------------------------------------------------------------------------
-# Canonical phonemes cache
-# ---------------------------------------------------------------------------
-
-_CANONICAL_PHONEMES_CACHE: dict[str, dict[str, list[str]]] = {}
+# Canonical phonemes
+_canonical_phonemes: _KeyedCache[dict[str, list[str]]] = _KeyedCache()
 
 
 def get_canonical_phonemes_cache(reciter: str):
-    return _CANONICAL_PHONEMES_CACHE.get(reciter)
+    return _canonical_phonemes.get(reciter)
 
 
 def set_canonical_phonemes_cache(reciter: str, data: dict) -> None:
-    _CANONICAL_PHONEMES_CACHE[reciter] = data
+    _canonical_phonemes.set(reciter, data)
 
 
-# ---------------------------------------------------------------------------
 # Phoneme substitution pairs (lazy singleton)
-# ---------------------------------------------------------------------------
-
-_PHONEME_SUB_PAIRS: set[frozenset] | None = None
+_phoneme_sub_pairs: _SingletonCache[set[frozenset]] = _SingletonCache()
 
 
 def get_phoneme_sub_pairs_cache():
-    return _PHONEME_SUB_PAIRS
+    return _phoneme_sub_pairs.get()
 
 
 def set_phoneme_sub_pairs_cache(pairs: set[frozenset]) -> None:
-    global _PHONEME_SUB_PAIRS
-    _PHONEME_SUB_PAIRS = pairs
+    _phoneme_sub_pairs.set(pairs)
 
 
-# ---------------------------------------------------------------------------
-# Audio URL cache
-# ---------------------------------------------------------------------------
-
-_AUDIO_URL_CACHE: dict[str, dict] = {}
+# Audio URL
+_audio_url: _KeyedCache[dict] = _KeyedCache()
 
 
 def get_audio_url_cache(key: str) -> dict | None:
-    return _AUDIO_URL_CACHE.get(key)
+    return _audio_url.get(key)
 
 
 def set_audio_url_cache(key: str, urls: dict) -> None:
-    _AUDIO_URL_CACHE[key] = urls
+    _audio_url.set(key, urls)
 
 
-# ---------------------------------------------------------------------------
-# Audio download / cache status
-# ---------------------------------------------------------------------------
-
+# Audio download / cache status (thread-safe)
 _AUDIO_DL_LOCK = threading.Lock()
 _AUDIO_DL_PROGRESS: dict[str, dict] = {}
 _AUDIO_CACHE_STATUS: dict[str, dict] = {}
@@ -263,83 +264,62 @@ def pop_audio_cache_status(reciter: str) -> None:
     _AUDIO_CACHE_STATUS.pop(reciter, None)
 
 
-# ---------------------------------------------------------------------------
-# Word counts cache
-# ---------------------------------------------------------------------------
-
-_WORD_COUNTS_CACHE: dict[tuple[int, int], int] | None = None
+# Word counts
+_word_counts: _SingletonCache[dict[tuple[int, int], int]] = _SingletonCache()
 
 
 def get_word_counts_cache():
-    return _WORD_COUNTS_CACHE
+    return _word_counts.get()
 
 
 def set_word_counts_cache(wc: dict[tuple[int, int], int]) -> None:
-    global _WORD_COUNTS_CACHE
-    _WORD_COUNTS_CACHE = wc
+    _word_counts.set(wc)
 
 
-# ---------------------------------------------------------------------------
-# Audio sources cache (Audio tab)
-# ---------------------------------------------------------------------------
-
-_AUDIO_SOURCES: dict | None = None
+# Audio sources (Audio tab)
+_audio_sources: _SingletonCache[dict] = _SingletonCache()
 
 
 def get_audio_sources_cache():
-    return _AUDIO_SOURCES
+    return _audio_sources.get()
 
 
 def set_audio_sources_cache(sources: dict) -> None:
-    global _AUDIO_SOURCES
-    _AUDIO_SOURCES = sources
+    _audio_sources.set(sources)
 
 
-# ---------------------------------------------------------------------------
-# QPC / DK data caches
-# ---------------------------------------------------------------------------
-
-_QPC: dict[str, dict] | None = None
-_DK: dict[str, dict] | None = None
+# QPC / DK data
+_qpc: _SingletonCache[dict[str, dict]] = _SingletonCache()
+_dk: _SingletonCache[dict[str, dict]] = _SingletonCache()
 
 
 def get_qpc_cache():
-    return _QPC
+    return _qpc.get()
 
 
 def set_qpc_cache(data: dict) -> None:
-    global _QPC
-    _QPC = data
+    _qpc.set(data)
 
 
 def get_dk_cache():
-    return _DK
+    return _dk.get()
 
 
 def set_dk_cache(data: dict) -> None:
-    global _DK
-    _DK = data
+    _dk.set(data)
 
 
-# ---------------------------------------------------------------------------
-# Surah info lite cache
-# ---------------------------------------------------------------------------
-
-_SURAH_INFO_LITE: dict | None = None
+# Surah info lite
+_surah_info_lite: _SingletonCache[dict] = _SingletonCache()
 
 
 def get_surah_info_lite_cache():
-    return _SURAH_INFO_LITE
+    return _surah_info_lite.get()
 
 
 def set_surah_info_lite_cache(data: dict) -> None:
-    global _SURAH_INFO_LITE
-    _SURAH_INFO_LITE = data
+    _surah_info_lite.set(data)
 
-
-# ---------------------------------------------------------------------------
-# Shared path helper (used by both peaks and audio_proxy)
-# ---------------------------------------------------------------------------
 
 def audio_cache_path(reciter: str, url: str) -> Path:
     """Return disk cache path for an audio URL under the reciter's cache dir."""

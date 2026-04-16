@@ -7,7 +7,8 @@
  *
  * This helper is a pure function: no global state, no side effects. The
  * AudioBuffer LRU cache lives in module scope here (not a Svelte store —
- * it's non-reactive per S2-D12 precedent), keyed by audio URL.
+ * non-reactive because waveform data is write-once, never observed reactively),
+ * keyed by audio URL.
  */
 
 import type { PeakBucket } from '../../types/domain';
@@ -40,7 +41,7 @@ function getAudioContext(): AudioContext {
  * Fetch + decode an audio URL into an AudioBuffer. Results are cached in a
  * small LRU keyed by URL (size `AUDIO_BUFFER_CACHE_SIZE`). Re-entrant safe:
  * simultaneous calls for the same URL will both trigger a decode; the
- * newer write wins. (Pre-existing behaviour from Stage 1 — acceptable.)
+ * newer write wins (last-write-wins on race).
  */
 export async function decodeAudioUrl(url: string): Promise<AudioBuffer> {
     const cached = _audioBufferCache.get(url);

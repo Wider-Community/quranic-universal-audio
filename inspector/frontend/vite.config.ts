@@ -5,17 +5,24 @@ import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   root: here,
   publicDir: 'public',
   plugins: [svelte()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: mode === 'development',
     target: 'es2022',
     rollupOptions: {
       input: resolve(here, 'index.html'),
+      output: {
+        manualChunks(id) {
+          if (id.includes('chart.js') || id.includes('chartjs-plugin-annotation')) {
+            return 'charts';
+          }
+        },
+      },
     },
   },
   server: {
@@ -26,4 +33,4 @@ export default defineConfig({
       '/audio': { target: 'http://localhost:5000', changeOrigin: false },
     },
   },
-});
+}));

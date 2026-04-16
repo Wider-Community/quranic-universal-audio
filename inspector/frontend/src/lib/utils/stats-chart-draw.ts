@@ -1,12 +1,9 @@
 /**
  * stats-chart-draw.ts — shared Chart.js bar-chart renderer for stats.
  *
- * Wave 8b O1: extracted from the duplicated `drawBarChart` local functions
- * in StatsChart.svelte and ChartFullscreen.svelte.
- * Both components now import `drawBarChart` + `findBinIndex` from here.
- *
- * This module has no Svelte dependency — it is a pure utility that takes a
- * canvas, distribution data, and chart config and returns a Chart instance.
+ * Shared by StatsChart.svelte and ChartFullscreen.svelte.
+ * No Svelte dependency — takes a canvas, distribution data, and chart config
+ * and returns a Chart instance.
  */
 
 import type { ChartConfiguration, TooltipItem } from 'chart.js';
