@@ -4,15 +4,16 @@
  */
 
 import { clearEdit } from '../../lib/stores/segments/edit';
+import type { DrawWaveformFn, EnterSplitModeFn,EnterTrimModeFn } from '../../lib/types/segments-waveform';
+import type { SegCanvas } from '../../lib/types/segments-waveform';
+import { _getEditCanvas } from '../../lib/utils/segments/get-edit-canvas';
 import { _playRange as _playRangeImpl, registerPlayRangeDrawFns } from '../../lib/utils/segments/play-range';
+import { resolveSegFromRow } from '../../lib/utils/segments/resolve-seg-from-row';
+import { drawWaveformFromPeaksForSeg } from '../../lib/utils/segments/waveform-draw-seg';
 import type { Segment } from '../../types/domain';
 import { stopSegAnimation } from '../playback/index';
-import type { DrawWaveformFn, EnterSplitModeFn,EnterTrimModeFn } from '../registry';
-import { _getEditCanvas,resolveSegFromRow } from '../rendering';
 import { createOp, dom, snapshotSeg,state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
-import { drawWaveformFromPeaksForSeg } from '../waveform/draw';
-import type { SegCanvas } from '../waveform/types';
 
 // ---------------------------------------------------------------------------
 // Registration pattern: trim/split modules register their entry functions

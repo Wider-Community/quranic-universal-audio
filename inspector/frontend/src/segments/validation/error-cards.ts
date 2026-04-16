@@ -8,10 +8,11 @@
  */
 
 import { getAdjacentSegments } from '../../lib/stores/segments/chapter';
+import { renderSegCard } from '../../lib/utils/segments/render-seg-card';
+import { resolveSegFromRow } from '../../lib/utils/segments/resolve-seg-from-row';
+import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
 import type { Segment } from '../../types/domain';
-import { renderSegCard, resolveSegFromRow } from '../rendering';
 import { state } from '../state';
-import { _ensureWaveformObserver } from '../waveform/index';
 
 // ---------------------------------------------------------------------------
 // Local interface types

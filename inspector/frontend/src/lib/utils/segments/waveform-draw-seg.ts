@@ -1,8 +1,9 @@
-import { _findCoveringPeaks, state } from '../../../segments/state';
+import { state } from '../../../segments/state';
 import type { AudioPeaks, PeakBucket, Segment } from '../../../types/domain';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { drawWaveformPeaks } from '../waveform-draw';
+import { _findCoveringPeaks } from './peaks-cache';
 
 type Peaks = PeakBucket[];
 

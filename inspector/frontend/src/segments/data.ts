@@ -19,6 +19,8 @@ import { clearSavePreviewData, hidePreview } from '../lib/stores/segments/save';
 import { clearStats, setStats } from '../lib/stores/segments/stats';
 import { clearValidation, setValidation } from '../lib/stores/segments/validation';
 import { LS_KEYS } from '../lib/utils/constants';
+import { _fetchCacheStatus, _rewriteAudioUrls } from '../lib/utils/segments/audio-cache-ui';
+import { _isCurrentReciterBySurah } from '../lib/utils/segments/reciter';
 import { surahOptionText } from '../lib/utils/surah-info';
 import { clearWaveformCache } from '../lib/utils/waveform-cache';
 import type {
@@ -33,7 +35,6 @@ import type {
 import type { Segment } from '../types/domain';
 import { computeSilenceAfter } from './filters';
 import { applyFiltersAndRender } from './filters';
-import { _fetchCacheStatus, _isCurrentReciterBySurah, _rewriteAudioUrls } from './playback/audio-cache';
 import { dom,state } from './state';
 
 // ---------------------------------------------------------------------------

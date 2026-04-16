@@ -3,12 +3,22 @@
  * Uses registerHandler pattern for edit operations (Phase 7 modules register handlers).
  */
 
+import type { SegCanvas } from '../lib/types/segments-waveform';
+import { resolveSegFromRow } from '../lib/utils/segments/resolve-seg-from-row';
+import type { Segment } from '../types/domain';
 import { jumpToSegment } from './navigation';
 import { playFromSegment } from './playback/index';
-import type { SegEventHandlerRegistry } from './registry';
-import { resolveSegFromRow } from './rendering';
 import { dom,state } from './state';
-import type { SegCanvas } from './waveform/types';
+
+interface SegEventHandlerRegistry {
+    playErrorCardAudio: (seg: Segment, playBtn: HTMLElement, seekToMs?: number) => void;
+    startRefEdit: (refSpan: HTMLElement, seg: Segment, row: HTMLElement, contextCategory?: string | null) => void;
+    enterEditWithBuffer: (seg: Segment, row: HTMLElement, mode: 'trim' | 'split', contextCategory?: string | null) => void;
+    mergeAdjacent: (seg: Segment, direction: 'prev' | 'next', contextCategory?: string | null) => void | Promise<void>;
+    deleteSegment: (seg: Segment, row: HTMLElement, contextCategory?: string | null) => void;
+    ensureContextShown: (row: Element) => void;
+    _isWrapperContextShown: (wrapper: Element | null | undefined) => boolean;
+}
 
 // Handler registry — populated exactly once from segments/index.ts during
 // DOMContentLoaded, after which every slot is guaranteed non-null.

@@ -1,11 +1,12 @@
-import type { AdjacentSegments } from '../../../segments/data';
-import type { DrawWaveformFn } from '../../../segments/registry';
-import { _findCoveringPeaks, dom, state } from '../../../segments/state';
+import { dom, state } from '../../../segments/state';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../types/api';
 import type { Segment, SegmentPeaks } from '../../../types/domain';
 import { fetchJson } from '../../api';
+import type { AdjacentSegments } from '../../stores/segments/chapter';
+import type { DrawWaveformFn } from '../../types/segments-waveform';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks, setWaveformPeaks } from '../waveform-cache';
+import { _findCoveringPeaks } from './peaks-cache';
 import { _drawMergeHighlight, _drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------

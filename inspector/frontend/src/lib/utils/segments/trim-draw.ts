@@ -7,8 +7,8 @@
  */
 
 import { state } from '../../../segments/state';
-import { _slicePeaks } from '../../../segments/waveform/draw';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { _slicePeaks } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
 // _ensureTrimBaseCache

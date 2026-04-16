@@ -1,9 +1,13 @@
-import { _addVerseMarkers, formatRef, formatTimeMs } from '../../../segments/references';
-import { dom } from '../../../segments/state';
+import { dom, state } from '../../../segments/state';
 import type { Segment } from '../../../types/domain';
 import { getAdjacentSegments } from '../../stores/segments/chapter';
 import { isIndexDirty } from '../../stores/segments/dirty';
 import { getConfClass } from './conf-class';
+import { _addVerseMarkers, formatRef, formatTimeMs } from './references';
+
+function _vwc() {
+    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+}
 
 /** Options consumed by `renderSegCard`. */
 export interface RenderSegCardOptions {
@@ -157,7 +161,7 @@ export function renderSegCard(seg: Segment, options: RenderSegCardOptions = {}):
 
     const refSpan = document.createElement('span');
     refSpan.className = 'seg-text-ref';
-    refSpan.textContent = formatRef(seg.matched_ref);
+    refSpan.textContent = formatRef(seg.matched_ref, _vwc());
 
     const sep2 = document.createElement('span');
     sep2.className = 'seg-text-sep';
@@ -194,7 +198,7 @@ export function renderSegCard(seg: Segment, options: RenderSegCardOptions = {}):
 
     const body = document.createElement('div');
     body.className = 'seg-text-body';
-    body.textContent = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref) || '(alignment failed)';
+    body.textContent = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, _vwc()) || '(alignment failed)';
     textBox.appendChild(body);
 
     row.appendChild(textBox);
@@ -219,7 +223,7 @@ export function updateSegCard(row: HTMLElement, seg: Segment): void {
     if (textBox) textBox.className = `seg-text ${confClass}`;
 
     const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
-    if (refSpan) refSpan.textContent = formatRef(seg.matched_ref);
+    if (refSpan) refSpan.textContent = formatRef(seg.matched_ref, _vwc());
 
     const confSpan = row.querySelector<HTMLElement>('.seg-text-conf');
     if (confSpan) {
@@ -228,7 +232,7 @@ export function updateSegCard(row: HTMLElement, seg: Segment): void {
     }
 
     const body = row.querySelector<HTMLElement>('.seg-text-body');
-    if (body) body.textContent = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref) || '(alignment failed)';
+    if (body) body.textContent = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, _vwc()) || '(alignment failed)';
 
     const durSpan = row.querySelector<HTMLElement>('.seg-text-duration');
     if (durSpan) {

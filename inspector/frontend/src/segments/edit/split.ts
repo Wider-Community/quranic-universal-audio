@@ -5,6 +5,8 @@
 import { fetchJsonOrNull } from '../../lib/api';
 import { getChapterSegments, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
 import { setEdit } from '../../lib/stores/segments/edit';
+import { _getEditCanvas } from '../../lib/utils/segments/get-edit-canvas';
+import { _suggestSplitRefs as _suggestSplitRefsLib } from '../../lib/utils/segments/references';
 import {
     _ensureSplitBaseCache,
     drawSplitWaveform,
@@ -13,13 +15,16 @@ import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
-import { _suggestSplitRefs } from '../references';
-import { _getEditCanvas } from '../rendering';
 import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
 import { _rebuildAccordionAfterSplit, _refreshStaleSegIndices } from '../validation/error-cards';
-import { _fixupValIndicesForSplit, refreshOpenAccordionCards } from '../validation/index';
-import { _fetchChapterPeaksIfNeeded } from '../waveform/index';
-import type { SegCanvas } from '../waveform/types';
+
+function _vwc() {
+    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+}
+function _suggestSplitRefs(ref: Parameters<typeof _suggestSplitRefsLib>[0]) { return _suggestSplitRefsLib(ref, _vwc()); }
+import type { SegCanvas } from '../../lib/types/segments-waveform';
+import { _fixupValIndicesForSplit, refreshOpenAccordionCards } from '../../lib/utils/segments/validation-fixups';
+import { _fetchChapterPeaksIfNeeded } from '../../lib/utils/segments/waveform-utils';
 import { _playRange, exitEditMode } from './common';
 import { startRefEdit } from './reference';
 

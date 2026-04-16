@@ -4,11 +4,16 @@
 
 import { getChapterSegments } from '../../lib/stores/segments/chapter';
 import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
+import { formatRef as _formatRefLib } from '../../lib/utils/segments/references';
 import type { Segment } from '../../types/domain';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
-import { formatRef } from '../references';
 import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
-import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from '../validation/index';
+
+function _vwc() {
+    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+}
+function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
+import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from '../../lib/utils/segments/validation-fixups';
 
 // ---------------------------------------------------------------------------
 // deleteSegment -- remove a segment and reindex

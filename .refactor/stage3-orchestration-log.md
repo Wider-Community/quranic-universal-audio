@@ -116,7 +116,17 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 **Retrospective**: Opus impl handled complex state extraction well. dirty.ts Object.defineProperty bridge to state.ts is elegant interim solution. Sonnet review lost to API 529 — Opus verification sufficient for this phase.
 
-### Phase Ph4b — Svelte absorption + segment deletion (pending dispatch)
+### Phase Ph5 — Data lookups + playback prefetch (commit: 563ebff)
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 115,258 | 17m 05s | 70 | abe4eefe6dfac165b | chapter-lookup redirect + prefetch extraction |
+
+**Phase Ph5 summary**: 1 agent (no review — low risk extraction + import redirects), ~17 min. 18 files (17 modified + 1 new). Build/lint green. Net -25 LOC.
+
+**Retrospective**: Opus correctly identified that chapter lookup functions already had canonical implementations in stores — no duplication needed, just caller redirect. History/error-card-audio left in place (too DOM-coupled for clean extraction).
+
+### Phase Ph6 — segments/ directory elimination (pending dispatch)
 
 ---
 

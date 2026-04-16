@@ -9,7 +9,6 @@
 
 import { renderEditHistoryPanel } from '../../../segments/history/index';
 import { dom } from '../../../segments/state';
-import { refreshValidation } from '../../../segments/validation/index';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../../../types/api';
 import type { EditOp, Segment } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
@@ -23,6 +22,7 @@ import {
     getDirtyMap,
     isDirty,
 } from '../../stores/segments/dirty';
+import { refreshValidation } from './validation-refresh';
 
 // ---------------------------------------------------------------------------
 // Payload types

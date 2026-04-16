@@ -7,10 +7,20 @@ import { isDirty } from '../lib/stores/segments/dirty';
 import { LS_KEYS } from '../lib/utils/constants';
 import { shouldHandleKey } from '../lib/utils/keyboard-guard';
 import { cycleSpeed } from '../lib/utils/speed-control';
+import type { Segment } from '../types/domain';
 import { _restoreFilterView } from './navigation';
 import { onSegPlayClick,playFromSegment } from './playback/index';
-import type { SegKeyboardHandlerRegistry } from './registry';
 import { dom, state } from './state';
+
+interface SegKeyboardHandlerRegistry {
+    onSegSaveClick: () => void;
+    hideSavePreview: () => void;
+    confirmSaveFromPreview: () => void;
+    exitEditMode: () => void;
+    confirmTrim: (seg: Segment) => void;
+    confirmSplit: (seg: Segment) => void | Promise<void>;
+    startRefEdit: (refSpan: HTMLElement, seg: Segment, row: HTMLElement, contextCategory?: string | null) => void;
+}
 
 // Handler registry — populated exactly once from segments/index.ts during
 // DOMContentLoaded, after which every slot is guaranteed non-null.

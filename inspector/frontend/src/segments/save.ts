@@ -19,10 +19,10 @@ import {
     setSavePreviewData,
     showPreview,
 } from '../lib/stores/segments/save';
+import { _SEG_NORMAL_IDS } from '../lib/utils/segments/constants';
 import { executeSave as _executeSave } from '../lib/utils/segments/save-execute';
 import { buildSavePreviewData as _buildSavePreviewData } from '../lib/utils/segments/save-preview';
 import type { HistoryBatch } from '../types/domain';
-import { _SEG_NORMAL_IDS } from './constants';
 import { onSegReciterChange } from './data';
 import { dom, state } from './state';
 import { stopErrorCardAudio } from './validation/error-card-audio';

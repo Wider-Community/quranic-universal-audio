@@ -4,6 +4,9 @@
 
 import { getChapterSegments, getCurrentChapterSegs, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
 import { setEdit } from '../../lib/stores/segments/edit';
+import type { SegCanvas } from '../../lib/types/segments-waveform';
+import { _getEditCanvas } from '../../lib/utils/segments/get-edit-canvas';
+import { syncAllCardsForSegment } from '../../lib/utils/segments/render-seg-card';
 import {
     _ensureTrimBaseCache,
     drawTrimWaveform,
@@ -11,9 +14,7 @@ import {
 import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
 import type { Segment } from '../../types/domain';
 import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
-import { _getEditCanvas, syncAllCardsForSegment } from '../rendering';
 import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
-import type { SegCanvas } from '../waveform/types';
 import { _playRange, exitEditMode } from './common';
 
 // Re-export draw functions so registration sites and other callers still work.

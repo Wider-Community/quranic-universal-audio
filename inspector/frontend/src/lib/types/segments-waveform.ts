@@ -69,6 +69,20 @@ export interface SplitEls {
     infoSpan: HTMLElement;
 }
 
+// ---------------------------------------------------------------------------
+// Edit-mode function signatures (moved from segments/registry.ts in Ph6a)
+// ---------------------------------------------------------------------------
+
+export type EnterTrimModeFn = (seg: Segment, row: HTMLElement) => void;
+export type EnterSplitModeFn = (
+    seg: Segment,
+    row: HTMLElement,
+    prePausePlayMs?: number | null,
+) => void;
+
+/** Canvas-specific draw helpers re-invoked from the shared play-range loop. */
+export type DrawWaveformFn = (canvas: SegCanvas) => void;
+
 /** `HTMLCanvasElement` with the ad-hoc fields the segments waveform subsystem attaches. */
 export interface SegCanvas extends HTMLCanvasElement {
     _wfCache?: ImageData | null;

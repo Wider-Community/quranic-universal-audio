@@ -131,9 +131,6 @@ export type PreviewLoopMode = false | 'trim' | 'split-left' | 'split-right';
 // Classification / ops
 // ---------------------------------------------------------------------------
 
-/** Shape of the classifier injected by `setClassifyFn` at module-top in index.ts. */
-export type ClassifyFn = (seg: Segment) => string[];
-
 export interface CreateOpOptions {
     contextCategory?: string | null;
     fixKind?: string;

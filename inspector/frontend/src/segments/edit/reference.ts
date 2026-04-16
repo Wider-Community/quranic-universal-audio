@@ -4,12 +4,18 @@
 
 import { fetchJson } from '../../lib/api';
 import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
+import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from '../../lib/utils/segments/references';
+import { syncAllCardsForSegment } from '../../lib/utils/segments/render-seg-card';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import { stopSegAnimation } from '../playback/index';
-import { _normalizeRef, formatRef } from '../references';
-import { syncAllCardsForSegment } from '../rendering';
 import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
+
+function _vwc() {
+    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+}
+function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]) { return _normalizeRefLib(ref, _vwc()); }
+function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
 
 // ---------------------------------------------------------------------------
 // startRefEdit -- inline ref input on a segment card

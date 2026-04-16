@@ -5,15 +5,15 @@
 import { get } from 'svelte/store';
 
 import { getSegByChapterIndex, selectedChapter } from '../../lib/stores/segments/chapter';
+import type { SegCanvas } from '../../lib/types/segments-waveform';
 import { createAnimationLoop } from '../../lib/utils/animation';
 import { audioSrcMatches,safePlay } from '../../lib/utils/audio';
 import { nextDisplayedSeg, prefetchNextSegAudio } from '../../lib/utils/segments/prefetch';
-import { formatTimeMs } from '../references';
+import { formatTimeMs } from '../../lib/utils/segments/references';
+import { drawSegPlayhead,drawWaveformFromPeaksForSeg } from '../../lib/utils/segments/waveform-draw-seg';
+import { _fetchPeaksForClick } from '../../lib/utils/segments/waveform-utils';
 import { dom,state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
-import { drawSegPlayhead,drawWaveformFromPeaksForSeg } from '../waveform/draw';
-import { _fetchPeaksForClick } from '../waveform/index';
-import type { SegCanvas } from '../waveform/types';
 
 
 export function playFromSegment(

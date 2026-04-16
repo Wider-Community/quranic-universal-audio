@@ -20,8 +20,8 @@ import {
     setHistoryVisible,
     setSortMode,
 } from '../../lib/stores/segments/history';
+import { _SEG_NORMAL_IDS } from '../../lib/utils/segments/constants';
 import type { SegEditHistoryResponse } from '../../types/api';
-import { _SEG_NORMAL_IDS } from '../constants';
 import { dom, state } from '../state';
 import { stopErrorCardAudio } from '../validation/error-card-audio';
 

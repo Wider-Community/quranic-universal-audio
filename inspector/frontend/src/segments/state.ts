@@ -1,6 +1,5 @@
 /**
- * Segments tab -- shared mutable state, DOM references, constants,
- * dirty/op helpers, and the _findCoveringPeaks pure function.
+ * Segments tab -- shared mutable state, DOM references, and dirty/op helpers.
  *
  * Every module in segments/ imports { state, dom } and reads/writes
  * properties directly: state.segData, dom.segListEl, etc.
@@ -35,7 +34,6 @@ import {
     unmarkDirty,
 } from '../lib/stores/segments/dirty';
 import { _VAL_SINGLE_INDEX_CATS as _VAL_SINGLE_INDEX_CATS_CONST } from '../lib/utils/segments/constants';
-import { getWaveformPeaks } from '../lib/utils/waveform-cache';
 import type { SearchableSelect } from '../shared/searchable-select';
 import type {
     SegAllResponse,
@@ -43,7 +41,6 @@ import type {
     SegValidateResponse,
 } from '../types/api';
 import type {
-    AudioPeaks,
     EditOp,
     HistoryBatch,
     PeakBucket,
@@ -534,20 +531,6 @@ export const dom: DomRefs = {
 };
 
 // ---------------------------------------------------------------------------
-// Classify function injection — DEPRECATED (Ph4a)
-// snapshotSeg now calls _classifySegCategories directly via dirty store.
-// setClassifyFn kept as a no-op shim so index.ts doesn't break until Ph4b.
-// ---------------------------------------------------------------------------
-
-/** Shape of the classifier injected by `setClassifyFn` at module-top in index.ts. */
-export type ClassifyFn = (seg: Segment) => string[];
-
-/** @deprecated No longer used — snapshotSeg calls _classifySegCategories directly. */
-export function setClassifyFn(_fn: ClassifyFn): void {
-    // no-op — classification now happens directly in dirty.ts
-}
-
-// ---------------------------------------------------------------------------
 // Dirty-state helpers
 // ---------------------------------------------------------------------------
 
@@ -560,29 +543,3 @@ export function markDirty(chapter: number, index?: number, structural = false): 
     dom.segSaveBtn.disabled = false;
 }
 
-// ---------------------------------------------------------------------------
-// _findCoveringPeaks -- pure function reading state data
-// (resolves waveform <-> waveform-draw circular dependency)
-// ---------------------------------------------------------------------------
-
-export function _findCoveringPeaks(
-    audioUrl: string,
-    startMs?: number | null,
-    endMs?: number | null,
-): AudioPeaks | null {
-    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04).
-    const pe = getWaveformPeaks(audioUrl);
-    if (pe && pe.peaks && pe.peaks.length > 0) return pe;
-    // Then try segment-level peaks covering the requested range
-    if (startMs != null && endMs != null && state._segPeaksByUrl) {
-        const entries = state._segPeaksByUrl[audioUrl];
-        if (entries) {
-            for (const entry of entries) {
-                if (entry.startMs <= startMs && entry.endMs >= endMs) {
-                    return { peaks: entry.peaks, duration_ms: entry.durationMs, start_ms: entry.startMs };
-                }
-            }
-        }
-    }
-    return null;
-}

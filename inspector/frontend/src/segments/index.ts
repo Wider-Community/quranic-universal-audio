@@ -10,12 +10,11 @@
  * addEventListener call lives inside the DOMContentLoaded handler.
  */
 
-// Validation / history modules (imports for side-effect registration)
-// Note: './stats' removed — StatsPanel.svelte now owns stats rendering (Wave 8b).
-import './validation/index';
-
 import { getAdjacentSegments, getSegByChapterIndex, selectedChapter } from '../lib/stores/segments/chapter';
 import { LS_KEYS } from '../lib/utils/constants';
+import { _deleteAudioCache,_prepareAudio } from '../lib/utils/segments/audio-cache-ui';
+import { _getEditCanvas } from '../lib/utils/segments/get-edit-canvas';
+import { _fetchChapterPeaksIfNeeded, registerDataLookups, registerGetEditCanvas, registerWaveformHandlers } from '../lib/utils/segments/waveform-utils';
 import { mustGet } from '../shared/dom';
 import { onSegReciterChange, registerFetchChapterPeaks, registerStopSegAnimation } from './data';
 // Edit modules
@@ -28,20 +27,11 @@ import { confirmTrim, drawTrimWaveform,enterTrimMode } from './edit/trim';
 import { _handleSegCanvasMousedown, handleSegRowClick, registerAllSegEventHandlers } from './event-delegation';
 import { registerOnSegReciterChange, showHistoryView } from './history/index';
 import { handleSegKeydown, registerAllSegKeyboardHandlers } from './keyboard';
-import { _deleteAudioCache,_prepareAudio } from './playback/audio-cache';
 import { stopSegAnimation } from './playback/index';
-import { _getEditCanvas } from './rendering';
 import { confirmSaveFromPreview,hideSavePreview, onSegSaveClick } from './save';
-import { dom, setClassifyFn,state } from './state';
-import { _classifySegCategories } from './validation/categories';
+import { dom, state } from './state';
 import { playErrorCardAudio } from './validation/error-card-audio';
 import { _isWrapperContextShown,ensureContextShown } from './validation/error-cards';
-import { _fetchChapterPeaksIfNeeded, registerDataLookups, registerGetEditCanvas, registerWaveformHandlers } from './waveform/index';
-
-// ---------------------------------------------------------------------------
-// Inject the classify function to break the state <-> categories cycle
-// ---------------------------------------------------------------------------
-setClassifyFn(_classifySegCategories);
 
 // ---------------------------------------------------------------------------
 // Wire up edit mode registrations (breaks edit-common -> edit-trim/split cycle)

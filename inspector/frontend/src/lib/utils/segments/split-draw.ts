@@ -5,8 +5,8 @@
  * Extracted from segments/edit/split.ts (Ph4a).
  */
 
-import { _slicePeaks } from '../../../segments/waveform/draw';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { _slicePeaks } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
 // _ensureSplitBaseCache
