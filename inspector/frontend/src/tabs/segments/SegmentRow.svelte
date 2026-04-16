@@ -36,7 +36,8 @@
         SplitHighlight,
         TrimHighlight,
     } from '../../lib/types/segments-waveform';
-    import { _ensureWaveformObserver } from '../../segments/waveform/index';
+    import { getConfClass } from '../../lib/utils/segments/conf-class';
+    import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
     import type { Segment } from '../../types/domain';
 
     // ---- Required ----
@@ -110,14 +111,6 @@
     $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
     $: confText = seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL';
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
-
-    function getConfClass(s: Segment): string {
-        if (!s.matched_ref) return 'conf-fail';
-        const conf = s.confidence ?? 0;
-        if (conf >= 0.80) return 'conf-high';
-        if (conf >= 0.60) return 'conf-mid';
-        return 'conf-low';
-    }
 
     // ---------------------------------------------------------------------
     // Waveform observer registration

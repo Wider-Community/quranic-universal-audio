@@ -79,7 +79,20 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 **Retrospective**: Single Sonnet agent handled all 3 sub-tasks in 14 min — no split needed. Both reviewers caught opacity regression; Sonnet found dead imports Opus missed; Opus confirmed full logic preservation. Good model mix.
 
-### Phase Ph3 — segments pure leaves + mid-layer (pending dispatch)
+### Phase Ph3a — Pure leaves + types extraction (commit: ab8a135)
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | sonnet | 149,528 | 23m 47s | 135 | a956f8ac07a1de733 | constants/refs/classify/waveform/undo/types/config extracted |
+| Quality review | sonnet | 77,711 | 6m 23s | 69 | ad3385c3219b8cd77 | 1 CRITICAL (ops.ts dead) + 2 MEDIUM (refs not shimmed, HistoryFilters import) |
+| Verification review | opus | 60,559 | 4m 36s | 45 | a7639c38b18513e9f | PASS — all logic preserved |
+| Regression fix | sonnet | 36,917 | 6m 27s | 20 | abe7664586d7e1fbd | Deleted ops.ts, shimmed references.ts, fixed HistoryFilters import |
+
+**Phase Ph3a summary**: 4 agents, ~41 min. 25 files (16 modified + 6 new + 3 shim-conversions). Build/lint green. Noise 56→54.
+
+**Retrospective**: ops.ts premature extraction caught by Sonnet — should have left for P3c dirty-store phase. references.ts shim pattern works well for gradual migration. Opus confirmed no logic drift.
+
+### Phase Ph3b — Mid-layer migration (pending dispatch)
 
 ---
 

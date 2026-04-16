@@ -7,9 +7,9 @@
  * waveforms load lazily as usual.
  */
 
-import { renderSegCard } from '../../segments/rendering';
-import { _ensureWaveformObserver } from '../../segments/waveform/index';
 import type { Segment } from '../../types/domain';
+import { renderSegCard } from './segments/render-seg-card';
+import { _ensureWaveformObserver } from './segments/waveform-utils';
 
 export interface InjectCardOptions {
     showGotoBtn?: boolean;

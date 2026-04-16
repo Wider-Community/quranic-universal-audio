@@ -61,18 +61,15 @@
     // dom.segVerseSelect which Svelte now owns. Wave 6+ rendering
     // (validation / stats / history) stays imperative and is invoked from
     // here.
-    import {
-        _fetchCacheStatus,
-        _isCurrentReciterBySurah,
-        _rewriteAudioUrls,
-    } from '../../segments/playback/audio-cache';
+    import { _fetchCacheStatus, _rewriteAudioUrls } from '../../lib/utils/segments/audio-cache-ui';
+    import { _isCurrentReciterBySurah } from '../../lib/utils/segments/reciter';
     import { setHistoryData, setHistoryVisible } from '../../lib/stores/segments/history';
     import { renderEditHistoryPanel } from '../../segments/history/index';
     import HistoryPanel from './history/HistoryPanel.svelte';
     import { stopSegAnimation } from '../../segments/playback/index';
     import { computeSilenceAfter } from '../../lib/stores/segments/filters';
     import { state } from '../../segments/state';
-    import { _fetchChapterPeaksIfNeeded } from '../../segments/waveform/index';
+    import { _fetchChapterPeaksIfNeeded } from '../../lib/utils/segments/waveform-utils';
     import ValidationPanel from './validation/ValidationPanel.svelte';
     import { clearWaveformCache } from '../../lib/utils/waveform-cache';
     import type {
