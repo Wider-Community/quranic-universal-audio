@@ -136,7 +136,39 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 **Retrospective**: High tool-use count (210) due to many caller redirects. Correctly identified categories.ts as newly dead (sole importer was a deleted shim). state.ts shrunk 588→545 but still carries ~50 fields consumed by remaining 18 files.
 
-### Phase Ph6b — Absorb remaining imperative code + delete segments/ (pending dispatch)
+### Phase Ph6b — segments/ directory elimination (3 commits: 867e999, fec24af, de74411)
+
+First attempt disabled by orchestrator after Opus agent took shortcut (moved `src/segments/` → `src/lib/segments-imperative/` instead of absorbing). Reverted, redispatched with concrete file-by-file plan split across 3 agents.
+
+**Ph6b-1 — Glue layer (commit: 867e999)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 151,734 | 14m 19s | 69 | a1deb47d3f8bb36d6 | Deleted index.ts + event-delegation.ts + keyboard.ts |
+
+Absorbed into SegmentRow on:click handlers, SegmentsTab onMount (init + registrations + `<svelte:window on:keydown>`), new lib/utils/segments/imperative-card-click.ts for accordion delegation. main.ts side-effect import removed.
+
+**Ph6b-2 — Lifecycle layer (commit: fec24af)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 197,503 | 16m 24s | 101 | aa588bb5e895bcf53 | Deleted data.ts + save.ts + navigation.ts + history/index.ts |
+
+7 new lib/utils/segments/ modules: save-actions, history-actions, history-render, navigation-actions, chapter-actions, reciter-actions, clear-per-reciter-state. SegmentsTab delegates to reloadCurrentReciter + loadChapterData.
+
+**Ph6b-3 — Imperative core relocation (commit: de74411)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 358,446 | 25m 16s | 192 | a274148d4934c384c | 11 files relocated to lib/, src/segments/ deleted, comment-noise stripped |
+
+edit/*, playback/index, validation/{error-cards,error-card-audio}, filters.ts → lib/utils/segments/ (flat, renamed edit-*.ts etc.). state.ts → lib/segments-state.ts. 46 caller import sites updated. **Success criterion #1 met**: `inspector/frontend/src/segments/` no longer exists.
+
+**Ph6b summary**: 3 opus agents, ~56 min total, 707k tokens, 362 tools. 20 files deleted from src/segments/, 18 new lib/ files created, ~40 files modified. Noise 51→36.
+
+**Retrospective**: First attempt failed because prompt's "data-loss unacceptable" language spooked the agent into the move-shortcut. Second attempt split into 3 concrete passes with explicit file-by-file targets worked. Pragmatic relocation (Option B1) beats aggressive state.ts elimination — imperative state coordination can be retired incrementally in later phases without blocking directory deletion.
+
+
 
 ---
 
