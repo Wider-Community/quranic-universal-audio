@@ -126,7 +126,17 @@ Sub-phase blueprint retained in `.refactor/stage3-plan.yaml` as `phases_blueprin
 
 **Retrospective**: Opus correctly identified that chapter lookup functions already had canonical implementations in stores — no duplication needed, just caller redirect. History/error-card-audio left in place (too DOM-coupled for clean extraction).
 
-### Phase Ph6 — segments/ directory elimination (pending dispatch)
+### Phase Ph6a — Shim collapse + dead file deletion (commit: 05e75af)
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 212,222 | 31m 19s | 210 | ab750ff99850810b5 | 11 files deleted, 23 callers redirected, peaks-cache extracted |
+
+**Phase Ph6a summary**: 1 agent (no review — mechanical deletion + redirect), ~31 min. 39 files (28 modified + 1 new + 11 deleted — waveform/ dir removed). Build/lint green. Noise 51→49. segments/ 29→18 files.
+
+**Retrospective**: High tool-use count (210) due to many caller redirects. Correctly identified categories.ts as newly dead (sole importer was a deleted shim). state.ts shrunk 588→545 but still carries ~50 fields consumed by remaining 18 files.
+
+### Phase Ph6b — Absorb remaining imperative code + delete segments/ (pending dispatch)
 
 ---
 

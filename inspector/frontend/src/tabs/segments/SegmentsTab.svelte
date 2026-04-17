@@ -2,36 +2,52 @@
     /**
      * SegmentsTab — top-level Svelte component for the Segments tab.
      *
-     * Replaces the Wave-5 portion of segments/index.ts: reciter/chapter/verse
-     * dropdowns, filter bar, segment list, back-to-results banner, and CSS-var
-     * config. KEEPS imperative Wave 6-10 markup inline (validation panels,
-     * stats, history view, save preview, cache bar, audio controls) — those
-     * elements carry preserved IDs so segments/index.ts's `mustGet` DOM refs
-     * still resolve.
+     * Owns reciter/chapter/verse dropdowns, filter bar, navigation banner,
+     * segment list rendering, CSS-var config, and all tab-level event wiring
+     * (keyboard shortcuts, save/history/cache button clicks, delegated card
+     * clicks on imperative containers, speed control). Mounts validation,
+     * history, and save-preview panels as Svelte children.
      *
-     * Bridge: Svelte stores are the source of truth for Wave-5-owned state;
-     * imperative modules (edit / validation / history / save / playback /
-     * waveform) still read the Stage-1 `state.*` fields. This component
-     * subscribes to each store and mirrors into `state.*` so Wave 6+ modules
-     * see consistent values until their own waves rewrite. The bridge also
-     * writes initial values from state.* INTO the stores once (to preserve
-     * prior persisted UI state on hot reloads — today the stores start
-     * empty). The bridge is removed wave-by-wave; last user is Wave 10.
-     *
-     * Event wiring caveat: segments/index.ts's DOMContentLoaded handler still
-     * wires every imperative listener (audio play/pause/ended, save click,
-     * history button, keyboard, event delegation, etc.) EXCEPT the ones
-     * Wave 5 now owns: reciter change, chapter change, verse change, filter
-     * add/clear. SegmentsTab handlers here replace those four.
+     * Imperative edit / validation / history / save / playback / waveform
+     * modules still read the shared `state.*` + `dom.*` objects; SegmentsTab
+     * mirrors Svelte stores into `state.*` below so those modules see
+     * consistent values.
      */
 
     import { get } from 'svelte/store';
     import { onMount, tick } from 'svelte';
 
+    import { isDirty } from '../../lib/stores/segments/dirty';
+    import { mustGet } from '../../shared/dom';
+    import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
+    import { cycleSpeed } from '../../lib/utils/speed-control';
+    import { attachImperativeCardListeners } from '../../lib/utils/segments/imperative-card-click';
+    import { _deleteAudioCache, _prepareAudio } from '../../lib/utils/segments/audio-cache-ui';
+    import { _getEditCanvas } from '../../lib/utils/segments/get-edit-canvas';
+    import {
+        registerDataLookups,
+        registerGetEditCanvas,
+        registerWaveformHandlers,
+    } from '../../lib/utils/segments/waveform-utils';
+    import { onSegReciterChange, registerFetchChapterPeaks, registerStopSegAnimation } from '../../segments/data';
+    import {
+        exitEditMode,
+        registerEditDrawFns,
+        registerEditModes,
+    } from '../../segments/edit/common';
+    import { confirmSplit, drawSplitWaveform, enterSplitMode } from '../../segments/edit/split';
+    import { confirmTrim, drawTrimWaveform, enterTrimMode } from '../../segments/edit/trim';
+    import { startRefEdit } from '../../segments/edit/reference';
+    import { registerOnSegReciterChange, showHistoryView } from '../../segments/history/index';
+    import { onSegPlayClick, playFromSegment } from '../../segments/playback/index';
+    import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from '../../segments/save';
+    import { _restoreFilterView } from '../../segments/navigation';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson, fetchJsonOrNull } from '../../lib/api';
     import {
+        getAdjacentSegments,
         getChapterSegments,
+        getSegByChapterIndex,
         segAllData,
         segAllReciters,
         segData,
@@ -437,15 +453,226 @@
     }
 
     // ---------------------------------------------------------------------
+    // Keyboard shortcuts
+    // ---------------------------------------------------------------------
+
+    function handleSegKeydown(e: KeyboardEvent): void {
+        if (!shouldHandleKey(e, 'segments')) return;
+
+        switch (e.code) {
+            case 'Space':
+                e.preventDefault();
+                onSegPlayClick();
+                break;
+            case 'ArrowLeft': {
+                e.preventDefault();
+                const el = (state._activeAudioSource === 'error' && state.valCardAudio) ? state.valCardAudio : dom.segAudioEl;
+                el.currentTime = Math.max(0, el.currentTime - 3);
+                break;
+            }
+            case 'ArrowRight': {
+                e.preventDefault();
+                const el = (state._activeAudioSource === 'error' && state.valCardAudio) ? state.valCardAudio : dom.segAudioEl;
+                el.currentTime = Math.min(el.duration || 0, el.currentTime + 3);
+                break;
+            }
+            case 'ArrowUp': {
+                e.preventDefault();
+                if (!state.segDisplayedSegments || state.segDisplayedSegments.length === 0) break;
+                const curPos = state.segDisplayedSegments.findIndex(s => s.index === state.segCurrentIdx);
+                const prevPos = curPos > 0 ? curPos - 1 : 0;
+                const prev = state.segDisplayedSegments[prevPos];
+                if (prev) playFromSegment(prev.index, prev.chapter);
+                break;
+            }
+            case 'ArrowDown': {
+                e.preventDefault();
+                if (!state.segDisplayedSegments || state.segDisplayedSegments.length === 0) break;
+                const curPos = state.segDisplayedSegments.findIndex(s => s.index === state.segCurrentIdx);
+                const nextPos = curPos >= 0 && curPos < state.segDisplayedSegments.length - 1 ? curPos + 1 : (curPos === -1 ? 0 : curPos);
+                const nxt = state.segDisplayedSegments[nextPos];
+                if (nxt) playFromSegment(nxt.index, nxt.chapter);
+                break;
+            }
+            case 'Period':
+            case 'Comma': {
+                e.preventDefault();
+                cycleSpeed(dom.segSpeedSelect, dom.segAudioEl, e.code === 'Period' ? 'up' : 'down', LS_KEYS.SEG_SPEED);
+                if (state.valCardAudio) state.valCardAudio.playbackRate = parseFloat(dom.segSpeedSelect.value);
+                break;
+            }
+            case 'KeyJ': {
+                e.preventDefault();
+                const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
+                if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                break;
+            }
+            case 'KeyS': {
+                if (isDirty()) {
+                    e.preventDefault();
+                    onSegSaveClick();
+                }
+                break;
+            }
+            case 'Escape':
+                if (!dom.segSavePreview.hidden) {
+                    e.preventDefault();
+                    hideSavePreview();
+                } else if (state.segEditMode) {
+                    e.preventDefault();
+                    exitEditMode();
+                } else if (state._segSavedFilterView) {
+                    e.preventDefault();
+                    _restoreFilterView();
+                }
+                break;
+
+            case 'Enter':
+                if (!dom.segSavePreview.hidden) {
+                    e.preventDefault();
+                    confirmSaveFromPreview();
+                } else if (state.segEditMode && state.segCurrentIdx >= 0) {
+                    e.preventDefault();
+                    const seg = state.segDisplayedSegments
+                        ? state.segDisplayedSegments.find(s => s.index === state.segCurrentIdx)
+                        : null;
+                    if (seg) {
+                        if (state.segEditMode === 'trim') confirmTrim(seg);
+                        else if (state.segEditMode === 'split') confirmSplit(seg);
+                    }
+                }
+                break;
+
+            case 'KeyE': {
+                if (state.segEditMode || state.segCurrentIdx < 0) break;
+                e.preventDefault();
+                const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
+                const seg = state.segDisplayedSegments
+                    ? state.segDisplayedSegments.find(s => s.index === state.segCurrentIdx)
+                    : null;
+                if (row && seg) {
+                    const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
+                    if (refSpan) startRefEdit(refSpan, seg, row);
+                }
+                break;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Chapter-select shim
+    //
+    // Legacy imperative code reads `dom.segChapterSelect.value` (and rarely
+    // writes it). SearchableSelect (Svelte) owns the real chapter selector
+    // now; this detached <select> element proxies `.value` reads/writes to
+    // the `selectedChapter` store. Writes set the store but do NOT trigger a
+    // reload — callers that want a full reload must also invoke
+    // onChapterChange directly.
+    // ---------------------------------------------------------------------
+    function _makeChapterSelectShim(): HTMLSelectElement {
+        const stub = document.createElement('select');
+        Object.defineProperty(stub, 'value', {
+            get() {
+                return get(selectedChapter);
+            },
+            set(v: string) {
+                selectedChapter.set(v);
+            },
+        });
+        return stub;
+    }
+
+    // ---------------------------------------------------------------------
+    // Registrations + DOM-ref init (run once at mount)
+    // ---------------------------------------------------------------------
+
+    let segmentsInitialized = false;
+
+    function initSegmentRegistrations(): void {
+        if (segmentsInitialized) return;
+        segmentsInitialized = true;
+
+        // Edit-mode wiring (breaks edit-common ↔ edit-trim/split cycle).
+        registerEditModes(enterTrimMode, enterSplitMode);
+        registerEditDrawFns(drawTrimWaveform, drawSplitWaveform);
+        registerWaveformHandlers({ drawSplitWaveform, drawTrimWaveform });
+
+        // Break circular deps: data ↔ playback, history ↔ data, waveform ↔ data/rendering.
+        registerStopSegAnimation(stopSegAnimation);
+        registerOnSegReciterChange(onSegReciterChange);
+        registerGetEditCanvas(_getEditCanvas);
+        registerFetchChapterPeaks(_fetchChapterPeaksIfNeeded);
+        registerDataLookups(getAdjacentSegments, getSegByChapterIndex);
+    }
+
+    // ---------------------------------------------------------------------
     // Mount
     // ---------------------------------------------------------------------
 
     onMount(async () => {
+        initSegmentRegistrations();
+
+        // Initialize DOM references. Svelte has already synchronously
+        // rendered the markup below, so every seg-* id resolves here.
+        dom.segReciterSelect = mustGet<HTMLSelectElement>('seg-reciter-select');
+        dom.segChapterSelect = _makeChapterSelectShim();
+        dom.segVerseSelect = mustGet<HTMLSelectElement>('seg-verse-select');
+        dom.segListEl = mustGet<HTMLDivElement>('seg-list');
+        // dom.segAudioEl, dom.segPlayBtn, dom.segAutoPlayBtn, dom.segPlayStatus
+        // are assigned by SegmentsAudioControls.svelte onMount.
+        dom.segSpeedSelect = mustGet<HTMLSelectElement>('seg-speed-select');
+        dom.segSaveBtn = mustGet<HTMLButtonElement>('seg-save-btn');
+        dom.segValidationGlobalEl = mustGet<HTMLDivElement>('seg-validation-global');
+        dom.segValidationEl = mustGet<HTMLDivElement>('seg-validation');
+        dom.segFilterBarEl = mustGet<HTMLDivElement>('seg-filter-bar');
+        dom.segFilterRowsEl = mustGet<HTMLDivElement>('seg-filter-rows');
+        dom.segFilterAddBtn = mustGet<HTMLButtonElement>('seg-filter-add-btn');
+        dom.segFilterClearBtn = mustGet<HTMLButtonElement>('seg-filter-clear-btn');
+        dom.segFilterCountEl = mustGet<HTMLElement>('seg-filter-count');
+        dom.segFilterStatusEl = mustGet<HTMLElement>('seg-filter-status');
+        dom.segHistoryView = mustGet<HTMLDivElement>('seg-history-view');
+        dom.segHistoryBtn = mustGet<HTMLButtonElement>('seg-history-btn');
+        dom.segSavePreview = mustGet<HTMLDivElement>('seg-save-preview');
+        dom.segSavePreviewCancel = mustGet<HTMLButtonElement>('seg-save-preview-cancel');
+        dom.segSavePreviewConfirm = mustGet<HTMLButtonElement>('seg-save-preview-confirm');
+
+        // Restore persisted speed.
+        const _savedSegSpeed = localStorage.getItem(LS_KEYS.SEG_SPEED);
+        if (_savedSegSpeed) dom.segSpeedSelect.value = _savedSegSpeed;
+
+        dom.segSpeedSelect.addEventListener('change', () => {
+            const rate = parseFloat(dom.segSpeedSelect.value);
+            dom.segAudioEl.playbackRate = rate;
+            if (state.valCardAudio) state.valCardAudio.playbackRate = rate;
+            localStorage.setItem(LS_KEYS.SEG_SPEED, dom.segSpeedSelect.value);
+        });
+
+        // Delegated click + canvas-scrub listeners for imperative card containers.
+        attachImperativeCardListeners();
+
+        // Save button
+        dom.segSaveBtn.addEventListener('click', onSegSaveClick);
+
+        // History open button (panel-local back/filter interactions live in HistoryPanel).
+        dom.segHistoryBtn?.addEventListener('click', showHistoryView);
+
+        // Save preview cancel / confirm
+        dom.segSavePreviewCancel?.addEventListener('click', () => hideSavePreview());
+        dom.segSavePreviewConfirm?.addEventListener('click', confirmSaveFromPreview);
+
+        // Cache panel buttons
+        const prepareBtn = document.getElementById('seg-prepare-btn');
+        const deleteBtn = document.getElementById('seg-delete-cache-btn');
+        prepareBtn?.addEventListener('click', () => _prepareAudio(dom.segReciterSelect.value));
+        deleteBtn?.addEventListener('click', () => _deleteAudioCache(dom.segReciterSelect.value));
+
         await surahInfoReady;
         await loadSegConfig();
         await loadReciters();
     });
 </script>
+
+<svelte:window on:keydown={handleSegKeydown} />
 
 <div
     id="segments-panel-inner"

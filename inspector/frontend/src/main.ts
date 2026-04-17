@@ -1,11 +1,9 @@
 /**
- * Main entry point — mounts App.svelte, imports all tab modules for side-effect
- * registration (DOMContentLoaded handlers), and loads global styles.
+ * Main entry point — mounts App.svelte and loads global styles.
  */
 
 // Stylesheets — Vite injects these into <head> during dev and extracts them to
 // a bundled CSS file in production builds.
-// Note: audio-tab.css is ported to scoped <style> in tabs/audio/AudioTab.svelte (Wave 11b).
 import './styles/base.css';
 import './styles/components.css';
 import './styles/filters.css';
@@ -14,9 +12,6 @@ import './styles/segments.css';
 import './styles/stats.css';
 import './styles/timestamps.css';
 import './styles/validation.css';
-// Static imports — module-level code in each tab runs immediately,
-// registering DOMContentLoaded handlers before the event fires.
-import './segments/index';
 
 import App from './App.svelte';
 

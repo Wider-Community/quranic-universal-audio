@@ -1,31 +1,24 @@
 /**
- * Unified event delegation for segment card clicks.
- * Uses registerHandler pattern for edit operations (Phase 7 modules register handlers).
+ * Delegated click + canvas-scrub handlers for imperatively-rendered segment
+ * cards (renderSegCard) used inside validation accordions, history view, and
+ * save preview. #seg-list itself is Svelte-owned and SegmentRow.svelte wires
+ * per-button on:click handlers directly.
  */
 
-import type { SegCanvas } from '../lib/types/segments-waveform';
-import { resolveSegFromRow } from '../lib/utils/segments/resolve-seg-from-row';
-import type { Segment } from '../types/domain';
-import { jumpToSegment } from './navigation';
-import { playFromSegment } from './playback/index';
-import { dom,state } from './state';
+import { get } from 'svelte/store';
 
-interface SegEventHandlerRegistry {
-    playErrorCardAudio: (seg: Segment, playBtn: HTMLElement, seekToMs?: number) => void;
-    startRefEdit: (refSpan: HTMLElement, seg: Segment, row: HTMLElement, contextCategory?: string | null) => void;
-    enterEditWithBuffer: (seg: Segment, row: HTMLElement, mode: 'trim' | 'split', contextCategory?: string | null) => void;
-    mergeAdjacent: (seg: Segment, direction: 'prev' | 'next', contextCategory?: string | null) => void | Promise<void>;
-    deleteSegment: (seg: Segment, row: HTMLElement, contextCategory?: string | null) => void;
-    ensureContextShown: (row: Element) => void;
-    _isWrapperContextShown: (wrapper: Element | null | undefined) => boolean;
-}
-
-// Handler registry — populated exactly once from segments/index.ts during
-// DOMContentLoaded, after which every slot is guaranteed non-null.
-let _handlers: SegEventHandlerRegistry = null as unknown as SegEventHandlerRegistry;
-export function registerAllSegEventHandlers(handlers: SegEventHandlerRegistry): void {
-    _handlers = handlers;
-}
+import { enterEditWithBuffer } from '../../../segments/edit/common';
+import { deleteSegment } from '../../../segments/edit/delete';
+import { mergeAdjacent } from '../../../segments/edit/merge';
+import { startRefEdit } from '../../../segments/edit/reference';
+import { jumpToSegment } from '../../../segments/navigation';
+import { playFromSegment } from '../../../segments/playback/index';
+import { dom, state } from '../../../segments/state';
+import { playErrorCardAudio } from '../../../segments/validation/error-card-audio';
+import { selectedChapter } from '../../stores/segments/chapter';
+import { savedFilterView } from '../../stores/segments/navigation';
+import type { SegCanvas } from '../../types/segments-waveform';
+import { resolveSegFromRow } from './resolve-seg-from-row';
 
 // ---------------------------------------------------------------------------
 // Canvas click-to-seek / drag-to-scrub
@@ -56,12 +49,12 @@ function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas, row: HTMLElement
         if (state.valCardPlayingBtn === playBtn && state.valCardAudio && !state.valCardAudio.paused) {
             state.valCardAudio.currentTime = timeMs / 1000;
         } else {
-            _handlers.playErrorCardAudio(seg, playBtn, timeMs);
+            playErrorCardAudio(seg, playBtn, timeMs);
         }
     }
 }
 
-export function _handleSegCanvasMousedown(e: MouseEvent): void {
+function _handleSegCanvasMousedown(e: MouseEvent): void {
     const target = e.target as Element | null;
     const canvas = target?.closest<SegCanvas>('canvas');
     if (!canvas) return;
@@ -84,7 +77,7 @@ export function _handleSegCanvasMousedown(e: MouseEvent): void {
     document.addEventListener('mouseup', onUp);
 }
 
-export function handleSegRowClick(e: MouseEvent): void {
+function handleSegRowClick(e: MouseEvent): void {
     const target = e.target as Element | null;
     if (!target) return;
 
@@ -106,7 +99,7 @@ export function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (seg && row) {
             const refCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-            _handlers.startRefEdit(refSpan, seg, row, refCat);
+            startRefEdit(refSpan, seg, row, refCat);
         }
         return;
     }
@@ -126,7 +119,7 @@ export function handleSegRowClick(e: MouseEvent): void {
             }
         } else {
             const seg = resolveSegFromRow(row);
-            if (seg) _handlers.playErrorCardAudio(seg, playBtn);
+            if (seg) playErrorCardAudio(seg, playBtn);
         }
         return;
     }
@@ -139,12 +132,14 @@ export function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (!seg || !row) return;
         if (row.closest('#seg-list') && state.segActiveFilters.some(f => f.value !== null)) {
-            state._segSavedFilterView = {
+            const saved = {
                 filters: JSON.parse(JSON.stringify(state.segActiveFilters)),
-                chapter: dom.segChapterSelect.value,
+                chapter: get(selectedChapter),
                 verse: dom.segVerseSelect.value,
                 scrollTop: dom.segListEl.scrollTop,
             };
+            state._segSavedFilterView = saved;
+            savedFilterView.set(saved);
         }
         jumpToSegment(seg.chapter ?? 0, seg.index);
         return;
@@ -158,7 +153,7 @@ export function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (seg && row) {
             const cat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-            _handlers.enterEditWithBuffer(seg, row, 'trim', cat);
+            enterEditWithBuffer(seg, row, 'trim', cat);
         }
         return;
     }
@@ -174,10 +169,10 @@ export function handleSegRowClick(e: MouseEvent): void {
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) state._accordionOpCtx = { wrapper };
-            _handlers.enterEditWithBuffer(seg, row, 'split', splitCat);
+            enterEditWithBuffer(seg, row, 'split', splitCat);
             return;
         }
-        _handlers.enterEditWithBuffer(seg, row, 'split', splitCat);
+        enterEditWithBuffer(seg, row, 'split', splitCat);
         return;
     }
 
@@ -192,10 +187,10 @@ export function handleSegRowClick(e: MouseEvent): void {
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) state._accordionOpCtx = { wrapper, direction: 'prev' };
-            _handlers.mergeAdjacent(seg, 'prev', mergePrevCat);
+            mergeAdjacent(seg, 'prev', mergePrevCat);
             return;
         }
-        _handlers.mergeAdjacent(seg, 'prev', mergePrevCat);
+        mergeAdjacent(seg, 'prev', mergePrevCat);
         return;
     }
     const mergeNext = target.closest<HTMLElement>('.btn-merge-next');
@@ -208,10 +203,10 @@ export function handleSegRowClick(e: MouseEvent): void {
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) state._accordionOpCtx = { wrapper, direction: 'next' };
-            _handlers.mergeAdjacent(seg, 'next', mergeNextCat);
+            mergeAdjacent(seg, 'next', mergeNextCat);
             return;
         }
-        _handlers.mergeAdjacent(seg, 'next', mergeNextCat);
+        mergeAdjacent(seg, 'next', mergeNextCat);
         return;
     }
 
@@ -223,7 +218,7 @@ export function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (seg && row) {
             const delCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-            _handlers.deleteSegment(seg, row, delCat);
+            deleteSegment(seg, row, delCat);
         }
         return;
     }
@@ -238,7 +233,7 @@ export function handleSegRowClick(e: MouseEvent): void {
             const refSpan2 = row.querySelector<HTMLElement>('.seg-text-ref');
             if (refSpan2) {
                 const editRefCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-                _handlers.startRefEdit(refSpan2, seg, row, editRefCat);
+                startRefEdit(refSpan2, seg, row, editRefCat);
             }
         }
         return;
@@ -254,7 +249,22 @@ export function handleSegRowClick(e: MouseEvent): void {
         } else {
             const seg = resolveSegFromRow(row);
             const playBtn2 = row.querySelector<HTMLElement>('.seg-card-play-btn');
-            if (seg && playBtn2) _handlers.playErrorCardAudio(seg, playBtn2);
+            if (seg && playBtn2) playErrorCardAudio(seg, playBtn2);
         }
+    }
+}
+
+/**
+ * Attach delegated click + mousedown listeners to the 4 containers that host
+ * imperatively-rendered segment cards. Call once from SegmentsTab.onMount
+ * after Svelte has mounted (so the IDs resolve).
+ */
+export function attachImperativeCardListeners(): void {
+    const ids = ['seg-validation', 'seg-validation-global', 'seg-history-view', 'seg-save-preview'];
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.addEventListener('click', handleSegRowClick);
+        el.addEventListener('mousedown', _handleSegCanvasMousedown);
     }
 }
