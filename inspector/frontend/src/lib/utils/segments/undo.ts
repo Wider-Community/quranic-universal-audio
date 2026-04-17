@@ -17,7 +17,6 @@ import {
     buildSplitChains,
     buildSplitLineage,
     historyData,
-    setHistoryData,
     setSplitChains,
     type SplitChain,
 } from '../../stores/segments/history';
@@ -216,6 +215,5 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     const splitLineage = buildSplitLineage(allBatches);
     const built = buildSplitChains(allBatches, splitLineage);
     setSplitChains(built.chains, built.chainedOpIds);
-    setHistoryData(storeGet(historyData));
     setSavePreviewData(data);
 }
