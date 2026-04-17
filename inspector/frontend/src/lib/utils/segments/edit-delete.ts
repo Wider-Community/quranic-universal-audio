@@ -1,33 +1,30 @@
 /**
  * Delete segment operation.
+ *
+ * Both branches (current-chapter display cache AND all-data) go through the
+ * same splice+reindex path against `segAllData.segments`, then
+ * `segData.segments` is refreshed from the re-indexed `segAllData` via
+ * `getChapterSegments(chapter)`. Unifying on `segAllData` as the single
+ * source of truth keeps both caches consistent regardless of which chapter
+ * is currently displayed.
  */
 
-import { getChapterSegments } from '../../lib/stores/segments/chapter';
-import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
-import { formatRef as _formatRefLib } from '../../lib/utils/segments/references';
-import type { Segment } from '../../types/domain';
-import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
-import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
+import type { Segment } from '../../../types/domain';
+import { createOp, dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
+import { getChapterSegments } from '../../stores/segments/chapter';
+import { clearEdit, setEdit } from '../../stores/segments/edit';
+import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
+import { formatRef as _formatRefLib } from './references';
+import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from './validation-fixups';
 
 function _vwc() {
     return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
 }
 function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
-import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from '../../lib/utils/segments/validation-fixups';
 
 // ---------------------------------------------------------------------------
-// deleteSegment -- remove a segment and reindex
+// deleteSegment — remove a segment and reindex
 // ---------------------------------------------------------------------------
-//
-// B02 fix: both branches (current-chapter display cache AND all-data) now go
-// through the same splice+reindex path against `segAllData.segments`, then
-// `segData.segments` is refreshed from the re-indexed `segAllData` via
-// `getChapterSegments(chapter)`. Previously the current-chapter branch
-// re-indexed `segData` and synced back to `segAllData`, while the other
-// branch re-indexed `segAllData` directly — the two paths could persist
-// mismatched chapter indices. Unifying on `segAllData` as the single source
-// of truth keeps both caches consistent regardless of which chapter is
-// currently displayed.
 
 export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: string | null = null): void {
     void row;

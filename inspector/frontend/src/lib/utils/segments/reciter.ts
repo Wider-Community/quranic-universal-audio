@@ -1,4 +1,4 @@
-import { dom, state } from '../../../segments/state';
+import { dom, state } from '../../segments-state';
 
 /** Returns true if the current reciter uses by_surah audio source. */
 export function _isCurrentReciterBySurah(): boolean {

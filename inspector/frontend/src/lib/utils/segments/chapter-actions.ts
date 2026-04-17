@@ -8,11 +8,10 @@
 
 import { get } from 'svelte/store';
 
-import { stopSegAnimation } from '../../../segments/playback/index';
-import { state } from '../../../segments/state';
 import type { SegDataResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
+import { state } from '../../segments-state';
 import {
     segAllData,
     segData,
@@ -20,6 +19,7 @@ import {
     selectedReciter,
     selectedVerse,
 } from '../../stores/segments/chapter';
+import { stopSegAnimation } from './playback';
 import { _isCurrentReciterBySurah } from './reciter';
 import { _fetchChapterPeaksIfNeeded } from './waveform-utils';
 

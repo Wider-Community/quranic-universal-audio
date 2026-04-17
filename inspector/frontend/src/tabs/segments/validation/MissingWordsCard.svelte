@@ -2,7 +2,7 @@
     import { onMount, onDestroy } from 'svelte';
 
     import { getAdjacentSegments, getSegByChapterIndex } from '../../../lib/stores/segments/chapter';
-    import { commitRefEdit } from '../../../segments/edit/reference';
+    import { commitRefEdit } from '../../../lib/utils/segments/edit-reference';
     import {
         createOp,
         dom,
@@ -12,7 +12,7 @@
         snapshotSeg,
         state,
         unmarkDirty,
-    } from '../../../segments/state';
+    } from '../../../lib/segments-state';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type { SegValMissingWordsItem } from '../../../types/domain';
 

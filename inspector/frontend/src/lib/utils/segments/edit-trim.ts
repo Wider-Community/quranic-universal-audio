@@ -2,20 +2,17 @@
  * Trim (boundary adjustment) edit mode: enter, drag handles, preview, confirm.
  */
 
-import { getChapterSegments, getCurrentChapterSegs, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
-import { setEdit } from '../../lib/stores/segments/edit';
-import type { SegCanvas } from '../../lib/types/segments-waveform';
-import { _getEditCanvas } from '../../lib/utils/segments/get-edit-canvas';
-import { syncAllCardsForSegment } from '../../lib/utils/segments/render-seg-card';
-import {
-    _ensureTrimBaseCache,
-    drawTrimWaveform,
-} from '../../lib/utils/segments/trim-draw';
-import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
-import type { Segment } from '../../types/domain';
-import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
-import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
-import { _playRange, exitEditMode } from './common';
+import type { Segment } from '../../../types/domain';
+import { dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
+import { getChapterSegments, getCurrentChapterSegs, syncChapterSegsToAll } from '../../stores/segments/chapter';
+import { setEdit } from '../../stores/segments/edit';
+import type { SegCanvas } from '../../types/segments-waveform';
+import { getWaveformPeaks } from '../waveform-cache';
+import { _playRange, exitEditMode } from './edit-common';
+import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
+import { _getEditCanvas } from './get-edit-canvas';
+import { syncAllCardsForSegment } from './render-seg-card';
+import { _ensureTrimBaseCache, drawTrimWaveform } from './trim-draw';
 
 // Re-export draw functions so registration sites and other callers still work.
 export { _ensureTrimBaseCache, drawTrimWaveform };
@@ -76,7 +73,6 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
     const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
-    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04).
     const peaksDuration = getWaveformPeaks(audioUrl)?.duration_ms;
     const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
         ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + 1000)
@@ -91,11 +87,8 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     setupTrimDragHandles(canvas, seg);
 }
 
-// _ensureTrimBaseCache and drawTrimWaveform moved to
-// lib/utils/segments/trim-draw.ts (Ph4a). Re-exported above.
-
 // ---------------------------------------------------------------------------
-// setupTrimDragHandles -- mouse event handlers for trim handles
+// setupTrimDragHandles — mouse event handlers for trim handles
 // ---------------------------------------------------------------------------
 
 export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
@@ -178,7 +171,7 @@ export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
 }
 
 // ---------------------------------------------------------------------------
-// updateTrimDuration -- update the duration display
+// updateTrimDuration — update the duration display
 // ---------------------------------------------------------------------------
 
 export function updateTrimDuration(canvas?: SegCanvas | null): void {
@@ -190,7 +183,7 @@ export function updateTrimDuration(canvas?: SegCanvas | null): void {
 }
 
 // ---------------------------------------------------------------------------
-// confirmTrim -- apply the trim and finalize
+// confirmTrim — apply the trim and finalize
 // ---------------------------------------------------------------------------
 
 export function confirmTrim(seg: Segment): void {
@@ -257,7 +250,7 @@ export function confirmTrim(seg: Segment): void {
 }
 
 // ---------------------------------------------------------------------------
-// previewTrimAudio -- toggle looping preview of trimmed region
+// previewTrimAudio — toggle looping preview of trimmed region
 // ---------------------------------------------------------------------------
 
 export function previewTrimAudio(): void {

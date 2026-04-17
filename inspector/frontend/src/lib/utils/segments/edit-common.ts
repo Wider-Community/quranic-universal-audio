@@ -3,24 +3,24 @@
  * _playRange, and the registration pattern for trim/split modes.
  */
 
-import { clearEdit } from '../../lib/stores/segments/edit';
-import type { DrawWaveformFn, EnterSplitModeFn,EnterTrimModeFn } from '../../lib/types/segments-waveform';
-import type { SegCanvas } from '../../lib/types/segments-waveform';
-import { _getEditCanvas } from '../../lib/utils/segments/get-edit-canvas';
-import { _playRange as _playRangeImpl, registerPlayRangeDrawFns } from '../../lib/utils/segments/play-range';
-import { resolveSegFromRow } from '../../lib/utils/segments/resolve-seg-from-row';
-import { drawWaveformFromPeaksForSeg } from '../../lib/utils/segments/waveform-draw-seg';
-import type { Segment } from '../../types/domain';
-import { stopSegAnimation } from '../playback/index';
-import { createOp, dom, snapshotSeg,state } from '../state';
-import { stopErrorCardAudio } from '../validation/error-card-audio';
+import type { Segment } from '../../../types/domain';
+import { createOp, dom, snapshotSeg, state } from '../../segments-state';
+import { clearEdit } from '../../stores/segments/edit';
+import type {
+    DrawWaveformFn,
+    EnterSplitModeFn,
+    EnterTrimModeFn,
+    SegCanvas,
+} from '../../types/segments-waveform';
+import { stopErrorCardAudio } from './error-card-audio';
+import { _playRange as _playRangeImpl, registerPlayRangeDrawFns } from './play-range';
+import { stopSegAnimation } from './playback';
+import { resolveSegFromRow } from './resolve-seg-from-row';
+import { drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
 // Registration pattern: trim/split modules register their entry functions
 // ---------------------------------------------------------------------------
-
-// EditOverlay.svelte owns the overlay reactively from $editMode (Wave 7a.2).
-// _addEditOverlay / _removeEditOverlay no-op stubs deleted in Wave 11a.
 
 let _enterTrimMode: EnterTrimModeFn | null = null;
 let _enterSplitMode: EnterSplitModeFn | null = null;
@@ -31,12 +31,12 @@ export function registerEditModes(trim: EnterTrimModeFn, split: EnterSplitModeFn
 }
 
 export function registerEditDrawFns(trimDraw: DrawWaveformFn, splitDraw: DrawWaveformFn): void {
-    // Ph4a: delegate to play-range module (breaks circular import)
+    // Delegate to play-range module (breaks circular import).
     registerPlayRangeDrawFns(trimDraw, splitDraw);
 }
 
 // ---------------------------------------------------------------------------
-// enterEditWithBuffer -- entry point for trim/split from event delegation
+// enterEditWithBuffer — entry point for trim/split from event delegation
 // ---------------------------------------------------------------------------
 
 export function enterEditWithBuffer(
@@ -83,7 +83,7 @@ export function enterEditWithBuffer(
 }
 
 // ---------------------------------------------------------------------------
-// exitEditMode -- shared cleanup for trim/split
+// exitEditMode — shared cleanup for trim/split
 // ---------------------------------------------------------------------------
 
 export function exitEditMode(): void {
@@ -125,9 +125,5 @@ export function exitEditMode(): void {
     editRow?.classList.remove('seg-edit-target');
 }
 
-// ---------------------------------------------------------------------------
-// _playRange -- Ph4a: moved to lib/utils/segments/play-range.ts
-// ---------------------------------------------------------------------------
-
-// Re-export so existing callers (`trim.ts`, `split.ts`) keep working.
+// Re-export play-range implementation so existing callers still work.
 export const _playRange = _playRangeImpl;

@@ -3,20 +3,19 @@
  * Manages a dedicated <audio> element for playing segments from validation cards.
  */
 
-import type { SegCanvas } from '../../lib/types/segments-waveform';
-import { safePlay } from '../../lib/utils/audio';
-import { _drawSplitHighlight,drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../../lib/utils/segments/waveform-draw-seg';
-import { _fetchChapterPeaksIfNeeded,_fetchPeaksForClick } from '../../lib/utils/segments/waveform-utils';
-import type { Segment } from '../../types/domain';
-import { dom,state } from '../state';
+import type { Segment } from '../../../types/domain';
+import { dom, state } from '../../segments-state';
+import type { SegCanvas } from '../../types/segments-waveform';
+import { safePlay } from '../audio';
+import { _drawSplitHighlight, drawSegPlayhead, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
+import { _fetchChapterPeaksIfNeeded, _fetchPeaksForClick } from './waveform-utils';
 
 // Canvas metadata attached by other edit modes; error-card animation
-// re-reads these to decide whether to keep drawing. Use SegCanvas
-// canonical surface from waveform/types.ts.
+// re-reads these to decide whether to keep drawing.
 type ValCanvas = SegCanvas;
 
 // ---------------------------------------------------------------------------
-// getValCardAudio -- lazy-create a dedicated <audio> element for error cards
+// getValCardAudio — lazy-create a dedicated <audio> element for error cards
 // ---------------------------------------------------------------------------
 
 export function getValCardAudio(): HTMLAudioElement {
@@ -87,7 +86,7 @@ export function stopErrorCardAudio(): void {
 }
 
 // ---------------------------------------------------------------------------
-// _startValCardAnimation -- animate playhead on an error card canvas
+// _startValCardAnimation — animate playhead on an error card canvas
 // ---------------------------------------------------------------------------
 
 function _startValCardAnimation(btn: HTMLElement, seg: Segment): void {
@@ -140,7 +139,7 @@ function _startValCardAnimation(btn: HTMLElement, seg: Segment): void {
 }
 
 // ---------------------------------------------------------------------------
-// playErrorCardAudio -- play a segment from a validation error card
+// playErrorCardAudio — play a segment from a validation error card
 // ---------------------------------------------------------------------------
 
 export function playErrorCardAudio(seg: Segment, btn: HTMLElement, seekToMs?: number | null): void {

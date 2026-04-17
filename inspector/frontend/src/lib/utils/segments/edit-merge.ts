@@ -2,18 +2,18 @@
  * Merge adjacent segments operation.
  */
 
-import { fetchJson } from '../../lib/api';
-import { getChapterSegments, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
-import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
-import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from '../../lib/utils/segments/validation-fixups';
-import type { SegResolveRefResponse } from '../../types/api';
-import type { Segment } from '../../types/domain';
-import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
-import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
-import { _rebuildAccordionAfterMerge } from '../validation/error-cards';
+import type { SegResolveRefResponse } from '../../../types/api';
+import type { Segment } from '../../../types/domain';
+import { fetchJson } from '../../api';
+import { createOp, dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
+import { getChapterSegments, syncChapterSegsToAll } from '../../stores/segments/chapter';
+import { clearEdit, setEdit } from '../../stores/segments/edit';
+import { _rebuildAccordionAfterMerge } from './error-cards';
+import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
+import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from './validation-fixups';
 
 // ---------------------------------------------------------------------------
-// mergeAdjacent -- combine two adjacent segments
+// mergeAdjacent — combine two adjacent segments
 // ---------------------------------------------------------------------------
 
 export async function mergeAdjacent(
@@ -42,9 +42,9 @@ export async function mergeAdjacent(
     const first = direction === 'prev' ? other : seg;
     const second = direction === 'prev' ? seg : other;
 
-    // Signal merge mode to EditOverlay (and future MergePanel).
-    // Placed after all pure guard checks so the store only reflects merge
-    // while we're actually committed to executing.
+    // Signal merge mode to EditOverlay (and future MergePanel) only after all
+    // pure guard checks pass, so the store only reflects merge while we're
+    // actually committed to executing.
     setEdit('merge', seg.segment_uid ?? null);
 
     const mergeOp = createOp('merge_segments', contextCategory ? { contextCategory } : undefined);

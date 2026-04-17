@@ -19,15 +19,15 @@
     import { get } from 'svelte/store';
     import { autoPlayEnabled } from '../../lib/stores/segments/playback';
     import { LS_KEYS } from '../../lib/utils/constants';
-    import { dom, state } from '../../segments/state';
+    import { dom, state } from '../../lib/segments-state';
     import {
         onSegAudioEnded,
         onSegPlayClick,
         onSegTimeUpdate,
         startSegAnimation,
         stopSegAnimation,
-    } from '../../segments/playback/index';
-    import { stopErrorCardAudio } from '../../segments/validation/error-card-audio';
+    } from '../../lib/utils/segments/playback';
+    import { stopErrorCardAudio } from '../../lib/utils/segments/error-card-audio';
     import AudioPlayer from '../../lib/components/AudioPlayer.svelte';
 
     // ---- Exported prop: raw HTMLAudioElement exposed to parent via bind:audioEl ----

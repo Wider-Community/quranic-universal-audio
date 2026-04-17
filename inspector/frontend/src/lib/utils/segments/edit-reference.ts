@@ -2,14 +2,14 @@
  * Reference editing: startRefEdit, commitRefEdit, _chainSplitRefEdit.
  */
 
-import { fetchJson } from '../../lib/api';
-import { clearEdit, setEdit } from '../../lib/stores/segments/edit';
-import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from '../../lib/utils/segments/references';
-import { syncAllCardsForSegment } from '../../lib/utils/segments/render-seg-card';
-import type { SegResolveRefResponse } from '../../types/api';
-import type { Segment } from '../../types/domain';
-import { stopSegAnimation } from '../playback/index';
-import { createOp, dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
+import type { SegResolveRefResponse } from '../../../types/api';
+import type { Segment } from '../../../types/domain';
+import { fetchJson } from '../../api';
+import { createOp, dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
+import { clearEdit, setEdit } from '../../stores/segments/edit';
+import { stopSegAnimation } from './playback';
+import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from './references';
+import { syncAllCardsForSegment } from './render-seg-card';
 
 function _vwc() {
     return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
@@ -18,7 +18,7 @@ function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]) { return _no
 function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
 
 // ---------------------------------------------------------------------------
-// startRefEdit -- inline ref input on a segment card
+// startRefEdit — inline ref input on a segment card
 // ---------------------------------------------------------------------------
 
 export function startRefEdit(
@@ -79,7 +79,7 @@ export function startRefEdit(
 }
 
 // ---------------------------------------------------------------------------
-// _chainSplitRefEdit -- after split, auto-chain ref editing to second half
+// _chainSplitRefEdit — after split, auto-chain ref editing to second half
 // ---------------------------------------------------------------------------
 
 export function _chainSplitRefEdit(chapter: number): void {
@@ -108,7 +108,7 @@ export function _chainSplitRefEdit(chapter: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// commitRefEdit -- resolve reference and apply edit
+// commitRefEdit — resolve reference and apply edit
 // ---------------------------------------------------------------------------
 
 export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLElement): Promise<void> {

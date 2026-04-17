@@ -4,8 +4,8 @@
  * the panel contents reactively from the store.
  */
 
-import { dom } from '../../../segments/state';
 import type { SegEditHistoryResponse } from '../../../types/api';
+import { dom } from '../../segments-state';
 import { setHistoryData } from '../../stores/segments/history';
 
 export function renderEditHistoryPanel(data: SegEditHistoryResponse | null | undefined): void {

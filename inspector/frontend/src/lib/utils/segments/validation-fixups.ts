@@ -1,5 +1,5 @@
-import { state } from '../../../segments/state';
 import type { SegValAutoFix } from '../../../types/domain';
+import { state } from '../../segments-state';
 import { segValidation } from '../../stores/segments/validation';
 
 type ValIndexedItem<K extends string> = { [P in K]: number };

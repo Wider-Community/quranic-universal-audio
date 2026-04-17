@@ -1,6 +1,5 @@
 import { get as storeGet } from 'svelte/store';
 
-import { dom, state } from '../../../segments/state';
 import type {
     SegEditHistoryResponse,
     SegUndoBatchResponse,
@@ -8,6 +7,7 @@ import type {
 } from '../../../types/api';
 import type { HistoryBatch } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
+import { dom, state } from '../../segments-state';
 import {
     deleteDirtyEntry,
     deleteOpLogEntry,
@@ -200,7 +200,7 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     state._splitChainWrapper = null;
     state._splitChainCategory = null;
 
-    // Ph4a: use dirty store helpers (number keys only — fixes B01).
+    // Use dirty store helpers (number keys only).
     deleteDirtyEntry(chapter);
     deleteOpLogEntry(chapter);
 

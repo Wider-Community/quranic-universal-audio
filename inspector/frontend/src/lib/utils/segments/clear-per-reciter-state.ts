@@ -7,8 +7,7 @@
  * stale-data reload path in reciter-actions.ts::reloadCurrentReciter().
  */
 
-import { stopSegAnimation } from '../../../segments/playback/index';
-import { state } from '../../../segments/state';
+import { state } from '../../segments-state';
 import { segAllData, segData } from '../../stores/segments/chapter';
 import { clearEdit } from '../../stores/segments/edit';
 import { setHistoryData, setHistoryVisible } from '../../stores/segments/history';
@@ -16,6 +15,7 @@ import { clearSavePreviewData, hidePreview } from '../../stores/segments/save';
 import { clearStats } from '../../stores/segments/stats';
 import { clearValidation } from '../../stores/segments/validation';
 import { clearWaveformCache } from '../waveform-cache';
+import { stopSegAnimation } from './playback';
 
 export function clearPerReciterState(): void {
     if (state._waveformObserver) {

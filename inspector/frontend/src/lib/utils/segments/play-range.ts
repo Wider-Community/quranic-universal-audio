@@ -1,13 +1,12 @@
 /**
  * _playRange — preview playback with animated playhead overlay.
  *
- * Extracted from segments/edit/common.ts (Ph4a). Still reads `state` and
- * `dom` for preview-looping flags and audio element access. A future
- * refactor (Ph4b+) can parameterize these away; for now the extraction
- * centralizes the logic in lib/ while preserving behavior.
+ * Still reads `state` and `dom` for preview-looping flags and audio element
+ * access. A future refactor can parameterize these away; for now the
+ * module centralizes the logic while preserving behavior.
  */
 
-import { dom, state } from '../../../segments/state';
+import { dom, state } from '../../segments-state';
 import { getSegByChapterIndex } from '../../stores/segments/chapter';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { safePlay } from '../audio';

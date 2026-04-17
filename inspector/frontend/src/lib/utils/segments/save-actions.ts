@@ -4,9 +4,8 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import { dom, state } from '../../../segments/state';
-import { stopErrorCardAudio } from '../../../segments/validation/error-card-audio';
 import type { HistoryBatch } from '../../../types/domain';
+import { dom, state } from '../../segments-state';
 import { isDirty } from '../../stores/segments/dirty';
 import {
     buildSplitChains,
@@ -23,6 +22,7 @@ import {
     showPreview,
 } from '../../stores/segments/save';
 import { _SEG_NORMAL_IDS } from './constants';
+import { stopErrorCardAudio } from './error-card-audio';
 import { reloadCurrentReciter } from './reciter-actions';
 import { executeSave } from './save-execute';
 import { buildSavePreviewData } from './save-preview';

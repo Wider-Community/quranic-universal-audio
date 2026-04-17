@@ -40,13 +40,13 @@
     } from '../../lib/types/segments-waveform';
     import { getConfClass } from '../../lib/utils/segments/conf-class';
     import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
-    import { dom, state } from '../../segments/state';
-    import { deleteSegment } from '../../segments/edit/delete';
-    import { enterEditWithBuffer } from '../../segments/edit/common';
-    import { mergeAdjacent } from '../../segments/edit/merge';
-    import { startRefEdit } from '../../segments/edit/reference';
+    import { dom, state } from '../../lib/segments-state';
+    import { deleteSegment } from '../../lib/utils/segments/edit-delete';
+    import { enterEditWithBuffer } from '../../lib/utils/segments/edit-common';
+    import { mergeAdjacent } from '../../lib/utils/segments/edit-merge';
+    import { startRefEdit } from '../../lib/utils/segments/edit-reference';
     import { jumpToSegment } from '../../lib/utils/segments/navigation-actions';
-    import { playFromSegment } from '../../segments/playback/index';
+    import { playFromSegment } from '../../lib/utils/segments/playback';
     import type { Segment } from '../../types/domain';
 
     // ---- Required ----

@@ -11,8 +11,7 @@
 
 import { get } from 'svelte/store';
 
-import { applyFiltersAndRender } from '../../../segments/filters';
-import { dom, state } from '../../../segments/state';
+import { dom, state } from '../../segments-state';
 import {
     selectedChapter,
     selectedReciter,
@@ -21,6 +20,7 @@ import {
 import { activeFilters as activeFiltersStore } from '../../stores/segments/filters';
 import { savedFilterView as savedFilterViewStore } from '../../stores/segments/navigation';
 import { loadChapterData } from './chapter-actions';
+import { applyFiltersAndRender } from './filters-apply';
 import {
     _parseVerseFromKey,
     findMissingVerseBoundarySegments,

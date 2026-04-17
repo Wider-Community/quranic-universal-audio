@@ -1,5 +1,5 @@
-import { state } from '../../../segments/state';
 import type { AudioPeaks, PeakBucket, Segment } from '../../../types/domain';
+import { state } from '../../segments-state';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { drawWaveformPeaks } from '../waveform-draw';

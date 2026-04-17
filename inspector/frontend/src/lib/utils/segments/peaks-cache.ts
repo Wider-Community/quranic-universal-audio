@@ -1,5 +1,5 @@
-import { state } from '../../../segments/state';
 import type { AudioPeaks } from '../../../types/domain';
+import { state } from '../../segments-state';
 import { getWaveformPeaks } from '../waveform-cache';
 
 /**

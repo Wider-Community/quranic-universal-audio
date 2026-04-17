@@ -1,10 +1,10 @@
-import { dom, state } from '../../../segments/state';
 import type {
     SegAudioCacheStatusResponse,
     SegDeleteAudioCacheResponse,
     SegPrepareAudioResponse,
 } from '../../../types/api';
 import { fetchJson } from '../../api';
+import { dom, state } from '../../segments-state';
 import { _formatBytes } from '../formatting';
 
 /** Formerly rewrote audio URLs to proxy paths. No-op: raw CDN URLs must be preserved

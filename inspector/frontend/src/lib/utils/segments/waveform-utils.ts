@@ -1,7 +1,7 @@
-import { dom, state } from '../../../segments/state';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../types/api';
 import type { Segment, SegmentPeaks } from '../../../types/domain';
 import { fetchJson } from '../../api';
+import { dom, state } from '../../segments-state';
 import type { AdjacentSegments } from '../../stores/segments/chapter';
 import type { DrawWaveformFn } from '../../types/segments-waveform';
 import type { SegCanvas } from '../../types/segments-waveform';

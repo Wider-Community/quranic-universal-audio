@@ -4,16 +4,16 @@
 
 import { get } from 'svelte/store';
 
-import { getSegByChapterIndex, selectedChapter } from '../../lib/stores/segments/chapter';
-import type { SegCanvas } from '../../lib/types/segments-waveform';
-import { createAnimationLoop } from '../../lib/utils/animation';
-import { audioSrcMatches,safePlay } from '../../lib/utils/audio';
-import { nextDisplayedSeg, prefetchNextSegAudio } from '../../lib/utils/segments/prefetch';
-import { formatTimeMs } from '../../lib/utils/segments/references';
-import { drawSegPlayhead,drawWaveformFromPeaksForSeg } from '../../lib/utils/segments/waveform-draw-seg';
-import { _fetchPeaksForClick } from '../../lib/utils/segments/waveform-utils';
-import { dom,state } from '../state';
-import { stopErrorCardAudio } from '../validation/error-card-audio';
+import { dom, state } from '../../segments-state';
+import { getSegByChapterIndex, selectedChapter } from '../../stores/segments/chapter';
+import type { SegCanvas } from '../../types/segments-waveform';
+import { createAnimationLoop } from '../animation';
+import { audioSrcMatches, safePlay } from '../audio';
+import { stopErrorCardAudio } from './error-card-audio';
+import { nextDisplayedSeg, prefetchNextSegAudio } from './prefetch';
+import { formatTimeMs } from './references';
+import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
+import { _fetchPeaksForClick } from './waveform-utils';
 
 
 export function playFromSegment(
@@ -24,7 +24,6 @@ export function playFromSegment(
     if (!state.segAllData) return;
     stopErrorCardAudio();
     state._activeAudioSource = 'main';
-    // Wave 5 CF-1: use get(selectedChapter) — O(1) vs shim's O(subscriber-count).
     const _chStr = get(selectedChapter);
     const chapter = chapterOverride ?? (_chStr ? parseInt(_chStr) : null);
     const seg = chapter != null
@@ -171,12 +170,11 @@ export function onSegTimeUpdate(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Animation loop (wraps shared/animation.ts createAnimationLoop)
+// Animation loop
 // ---------------------------------------------------------------------------
-// Behavior preserved verbatim from the old rAF loop: each frame calls
-// updateSegHighlight + drawActivePlayhead, and returns `false` to self-stop
-// when continuous-play has ended. `state.segAnimId` is synced so external
-// checks (truthy means "running") behave identically.
+// Each frame calls updateSegHighlight + drawActivePlayhead, and returns
+// `false` to self-stop when continuous-play has ended. `state.segAnimId` is
+// synced so external checks (truthy means "running") behave identically.
 const _segAnimLoop = createAnimationLoop(() => {
     updateSegHighlight();
     drawActivePlayhead();
@@ -256,7 +254,6 @@ export function updateSegHighlight(): void {
 }
 
 export function drawActivePlayhead(): void {
-    // Wave 5 CF-1: get(selectedChapter) is O(1); shim .value is O(subscriber-count).
     const _chStr = get(selectedChapter);
     if (!state.segAllData || !_chStr) return;
     if (state.segEditMode && state.segCurrentIdx === state.segEditIndex) return;

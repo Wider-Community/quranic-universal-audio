@@ -2,11 +2,10 @@
  * Canvas drawing functions for trim mode — the waveform base cache,
  * dimmed regions, and drag handles.
  *
- * Extracted from segments/edit/trim.ts (Ph4a). Reads `state.TRIM_DIM_ALPHA`
- * for the dimming overlay alpha.
+ * Reads `state.TRIM_DIM_ALPHA` for the dimming overlay alpha.
  */
 
-import { state } from '../../../segments/state';
+import { state } from '../../segments-state';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { _slicePeaks } from './waveform-draw-seg';
 

@@ -11,10 +11,10 @@
  * with `reciter-actions.ts`.
  */
 
-import { state } from '../../../segments/state';
-import { stopErrorCardAudio } from '../../../segments/validation/error-card-audio';
+import { state } from '../../segments-state';
 import { clearFilters, setHistoryVisible, setSortMode } from '../../stores/segments/history';
 import { _SEG_NORMAL_IDS } from './constants';
+import { stopErrorCardAudio } from './error-card-audio';
 import { reloadCurrentReciter } from './reciter-actions';
 
 // ---------------------------------------------------------------------------

@@ -2,15 +2,14 @@
  * Execute the save operation — iterate dirty chapters, POST to server,
  * clean up dirty state on success.
  *
- * Extracted from segments/save.ts (Ph4a). Still has DOM side effects
- * (dom.segSaveBtn, dom.segPlayStatus) — those will move to the Svelte
- * component in Ph4b.
+ * Still has DOM side effects (dom.segSaveBtn, dom.segPlayStatus) — those
+ * will move to the Svelte component later.
  */
 
-import { dom } from '../../../segments/state';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../../../types/api';
 import type { EditOp, Segment } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
+import { dom } from '../../segments-state';
 import { getChapterSegments } from '../../stores/segments/chapter';
 import {
     clearDirtyMap,

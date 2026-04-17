@@ -3,7 +3,7 @@
 
     import { getAdjacentSegments } from '../../../lib/stores/segments/chapter';
     import { findMissingVerseBoundarySegments } from '../../../lib/utils/segments/missing-verse-context';
-    import { state } from '../../../segments/state';
+    import { state } from '../../../lib/segments-state';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type { SegValMissingVerseItem } from '../../../types/domain';
 

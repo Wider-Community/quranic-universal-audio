@@ -1,32 +1,23 @@
 /**
  * Error card rendering for validation accordions.
- * Renders segment cards inside accordion panels with context, auto-fix, ignore.
  *
- * Wave 8a.2: renderCategoryCards / resolveIssueToSegment / addContextToggle removed
- * (ValidationPanel.svelte + ErrorCard.svelte own the imperative rendering now).
- * _rebuildAccordionAfterSplit/_rebuildAccordionAfterMerge remain (called from edit/).
+ * Most category card rendering lives in ValidationPanel.svelte / ErrorCard.svelte;
+ * this file keeps the accordion rebuild helpers that split/merge call to
+ * surgically update the currently-open accordion in place.
  */
 
-import { getAdjacentSegments } from '../../lib/stores/segments/chapter';
-import { renderSegCard } from '../../lib/utils/segments/render-seg-card';
-import { resolveSegFromRow } from '../../lib/utils/segments/resolve-seg-from-row';
-import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
-import type { Segment } from '../../types/domain';
-import { state } from '../state';
-
-// ---------------------------------------------------------------------------
-// Local interface types
-// ---------------------------------------------------------------------------
+import type { Segment } from '../../../types/domain';
+import { state } from '../../segments-state';
+import { getAdjacentSegments } from '../../stores/segments/chapter';
+import { renderSegCard } from './render-seg-card';
+import { resolveSegFromRow } from './resolve-seg-from-row';
+import { _ensureWaveformObserver } from './waveform-utils';
 
 interface ErrorCardOptions {
     isContext?: boolean;
     contextLabel?: string;
     readOnly?: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// renderErrorCard -- wrapper around renderSegCard with error-card defaults
-// ---------------------------------------------------------------------------
 
 function renderErrorCard(seg: Segment, options: ErrorCardOptions = {}): HTMLElement {
     const { isContext = false, contextLabel = '', readOnly = false } = options;
@@ -52,10 +43,6 @@ export function _isWrapperContextShown(wrapper: Element | null | undefined): boo
     const btn = wrapper.querySelector<HTMLButtonElement>('.val-ctx-toggle-btn');
     return btn?.textContent?.trim() === 'Hide Context';
 }
-
-// ---------------------------------------------------------------------------
-// _rebuildAccordionAfterSplit
-// ---------------------------------------------------------------------------
 
 function _buildSegUidMap(segs: Segment[]): Map<string, Segment> {
     const map = new Map<string, Segment>();
@@ -126,12 +113,9 @@ export function _rebuildAccordionAfterSplit(
     }
 }
 
-// ---------------------------------------------------------------------------
-// _refreshSiblingCardIndices -- no-op (indices refreshed in rebuild)
-// ---------------------------------------------------------------------------
-
+/** Indices are refreshed during _rebuildAccordionAfterSplit. */
 export function _refreshSiblingCardIndices(): void {
-    // Indices are refreshed during _rebuildAccordionAfterSplit
+    // No-op — indices refreshed during rebuild.
 }
 
 /** Refresh `data-seg-index` on every open-accordion card by UID, so stale
@@ -150,10 +134,6 @@ export function _refreshStaleSegIndices(skipWrapper?: HTMLElement): void {
         if (seg) card.dataset.segIndex = String(seg.index);
     });
 }
-
-// ---------------------------------------------------------------------------
-// _rebuildAccordionAfterMerge
-// ---------------------------------------------------------------------------
 
 export function _rebuildAccordionAfterMerge(
     wrapper: HTMLElement,

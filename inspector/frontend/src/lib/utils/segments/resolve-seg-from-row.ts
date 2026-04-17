@@ -1,5 +1,5 @@
-import { state } from '../../../segments/state';
 import type { Segment } from '../../../types/domain';
+import { state } from '../../segments-state';
 import { getSegByChapterIndex } from '../../stores/segments/chapter';
 
 /** Resolve a segment object from a .seg-row element. */

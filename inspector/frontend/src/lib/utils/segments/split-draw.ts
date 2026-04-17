@@ -1,8 +1,6 @@
 /**
  * Canvas drawing functions for split mode — the waveform base cache,
  * split line, and right-region tinting.
- *
- * Extracted from segments/edit/split.ts (Ph4a).
  */
 
 import type { SegCanvas } from '../../types/segments-waveform';

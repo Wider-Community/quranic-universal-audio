@@ -7,17 +7,17 @@
 
 import { get } from 'svelte/store';
 
-import { enterEditWithBuffer } from '../../../segments/edit/common';
-import { deleteSegment } from '../../../segments/edit/delete';
-import { mergeAdjacent } from '../../../segments/edit/merge';
-import { startRefEdit } from '../../../segments/edit/reference';
-import { playFromSegment } from '../../../segments/playback/index';
-import { dom, state } from '../../../segments/state';
-import { playErrorCardAudio } from '../../../segments/validation/error-card-audio';
+import { dom, state } from '../../segments-state';
 import { selectedChapter } from '../../stores/segments/chapter';
 import { savedFilterView } from '../../stores/segments/navigation';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { enterEditWithBuffer } from './edit-common';
+import { deleteSegment } from './edit-delete';
+import { mergeAdjacent } from './edit-merge';
+import { startRefEdit } from './edit-reference';
+import { playErrorCardAudio } from './error-card-audio';
 import { jumpToSegment } from './navigation-actions';
+import { playFromSegment } from './playback';
 import { resolveSegFromRow } from './resolve-seg-from-row';
 
 // ---------------------------------------------------------------------------

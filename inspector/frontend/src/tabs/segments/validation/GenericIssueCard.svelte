@@ -14,7 +14,7 @@
         markDirty,
         snapshotSeg,
         state,
-    } from '../../../segments/state';
+    } from '../../../lib/segments-state';
     import { _isIgnoredFor } from '../../../lib/utils/segments/classify';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type {

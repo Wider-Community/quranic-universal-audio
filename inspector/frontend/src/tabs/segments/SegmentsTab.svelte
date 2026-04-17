@@ -33,12 +33,12 @@
         exitEditMode,
         registerEditDrawFns,
         registerEditModes,
-    } from '../../segments/edit/common';
-    import { confirmSplit, drawSplitWaveform, enterSplitMode } from '../../segments/edit/split';
-    import { confirmTrim, drawTrimWaveform, enterTrimMode } from '../../segments/edit/trim';
-    import { startRefEdit } from '../../segments/edit/reference';
+    } from '../../lib/utils/segments/edit-common';
+    import { confirmSplit, drawSplitWaveform, enterSplitMode } from '../../lib/utils/segments/edit-split';
+    import { confirmTrim, drawTrimWaveform, enterTrimMode } from '../../lib/utils/segments/edit-trim';
+    import { startRefEdit } from '../../lib/utils/segments/edit-reference';
     import { showHistoryView } from '../../lib/utils/segments/history-actions';
-    import { onSegPlayClick, playFromSegment } from '../../segments/playback/index';
+    import { onSegPlayClick, playFromSegment } from '../../lib/utils/segments/playback';
     import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from '../../lib/utils/segments/save-actions';
     import { _restoreFilterView } from '../../lib/utils/segments/navigation-actions';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
@@ -78,8 +78,8 @@
     import { reloadCurrentReciter } from '../../lib/utils/segments/reciter-actions';
     import { loadChapterData } from '../../lib/utils/segments/chapter-actions';
     import HistoryPanel from './history/HistoryPanel.svelte';
-    import { stopSegAnimation } from '../../segments/playback/index';
-    import { state } from '../../segments/state';
+    import { stopSegAnimation } from '../../lib/utils/segments/playback';
+    import { dom, state } from '../../lib/segments-state';
     import { _fetchChapterPeaksIfNeeded } from '../../lib/utils/segments/waveform-utils';
     import ValidationPanel from './validation/ValidationPanel.svelte';
     import type { SegDataResponse } from '../../types/api';

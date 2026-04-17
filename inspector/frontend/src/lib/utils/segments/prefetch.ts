@@ -1,9 +1,8 @@
 /**
  * Audio prefetch for the next displayed segment.
  *
- * Extracted from segments/playback/index.ts (Ph5). Reads displayed segments
- * and prefetch cache from the imperative `state` object and uses `audioSrcMatches`
- * from lib/utils/audio to compare URLs.
+ * Reads displayed segments and prefetch cache from the imperative `state`
+ * object and uses `audioSrcMatches` from lib/utils/audio to compare URLs.
  */
 
 import type { Segment } from '../../../types/domain';

@@ -1,23 +1,30 @@
 /**
- * Segments tab -- shared mutable state, DOM references, and dirty/op helpers.
+ * Segments tab — shared mutable state, DOM references, and dirty/op helpers.
  *
- * Every module in segments/ imports { state, dom } and reads/writes
- * properties directly: state.segData, dom.segListEl, etc.
+ * Every imperative segments module imports { state, dom } and reads/writes
+ * properties directly (state.segData, dom.segListEl, etc.). Future work can
+ * eliminate the singletons by migrating consumers to stores + bind:this.
  *
- * Typing conventions (Phase 4):
- *  - DOM refs: fields are typed as the narrow element interface (e.g.
- *    `HTMLSelectElement`) and initialised to `null as unknown as T`. The
- *    DOMContentLoaded handler in `segments/index.ts` assigns real elements
- *    before any call site reads them. Fields that MAY legitimately be null
- *    at call sites (e.g. optional widgets, post-cleanup state) are typed as
- *    `T | null` and the callers null-check.
- *  - `state` helpers (createOp/snapshotSeg/etc) have explicit return types
- *    so signatures are visible in the 28 consumer files (which still have
- *    per-file type checking suppressed until later phases).
- *  - The interfaces are exported so Phase 5+ can refine them (e.g. swap
- *    `unknown` for a narrow shape once the consumer is typed).
+ * DOM refs are typed as the narrow element interface and initialised to
+ * `null as unknown as T`. The SegmentsTab onMount handler populates them
+ * before any consumer runs. Fields that may legitimately be null at call
+ * sites (optional widgets, post-cleanup state) are typed `T | null` and
+ * callers null-check.
  */
 
+import type { SearchableSelect } from '../shared/searchable-select';
+import type {
+    SegAllResponse,
+    SegDataResponse,
+    SegValidateResponse,
+} from '../types/api';
+import type {
+    EditOp,
+    HistoryBatch,
+    PeakBucket,
+    Segment,
+    SegReciter,
+} from '../types/domain';
 import {
     createOp as _createOp,
     type CreateOpOptions,
@@ -32,21 +39,8 @@ import {
     setPendingOp,
     snapshotSeg,
     unmarkDirty,
-} from '../lib/stores/segments/dirty';
-import { _VAL_SINGLE_INDEX_CATS as _VAL_SINGLE_INDEX_CATS_CONST } from '../lib/utils/segments/constants';
-import type { SearchableSelect } from '../shared/searchable-select';
-import type {
-    SegAllResponse,
-    SegDataResponse,
-    SegValidateResponse,
-} from '../types/api';
-import type {
-    EditOp,
-    HistoryBatch,
-    PeakBucket,
-    Segment,
-    SegReciter,
-} from '../types/domain';
+} from './stores/segments/dirty';
+import { _VAL_SINGLE_INDEX_CATS as _VAL_SINGLE_INDEX_CATS_CONST } from './utils/segments/constants';
 
 // Re-export dirty store functions so existing callers continue to work.
 export { _createOp as createOp, _finalizeOp as finalizeOp, isDirty, isIndexDirty, snapshotSeg, unmarkDirty };
@@ -134,7 +128,7 @@ export interface SegPeaksRangeEntry {
 
 /** Queue item for the observer-driven segment-peaks batch fetcher.
  *  Field names match the wire format (`POST /api/seg/segment-peaks/`) so the
- *  queue can be sent straight through as `segments:[]`. See B18. */
+ *  queue can be sent straight through as `segments:[]`. */
 export interface ObserverPeaksQueueItem {
     url: string;
     start_ms: number;
@@ -222,8 +216,8 @@ export interface SegmentsState {
     _segSavedFilterView: SegSavedFilterView | null;
     _segSavedPreviewState: SegSavedPreviewState | null;
 
-    // Peaks (Wave 7: chapter-wide peaks moved to lib/utils/waveform-cache;
-    // _segPeaksByUrl still holds covering-range entries built from segment-peaks API).
+    // Peaks (_segPeaksByUrl holds covering-range entries built from the
+    // segment-peaks API; chapter-wide peaks live in lib/utils/waveform-cache).
     _peaksPollTimer: TimerHandle | null;
     _segPeaksByUrl: Record<string, SegPeaksRangeEntry[]> | null;
     _observerPeaksQueue: ObserverPeaksQueueItem[];
@@ -244,20 +238,14 @@ export interface SegmentsState {
     _splitChainCategory: string | null;
 
     // Edit history viewer: stale-data flag (set true after undo so hideHistoryView
-    // can trigger a full reciter reload). Raw response data moved to historyData
-    // store (lib/stores/segments/history.ts) in Wave 10/11a.
+    // can trigger a full reciter reload). Raw response data lives in the
+    // historyData store (lib/stores/segments/history.ts).
     _segDataStale: boolean;
 
     // Split-chain snapshot for save-preview restore (written in save.ts,
     // read in save.ts hideSavePreview). The chain state itself lives in the
     // history store (splitChains / chainedOpIds writables).
     _segSavedChains: SavedChainsSnapshot | null;
-
-    // Dead fields removed in Wave 11a (state.ts sweep):
-    // segHistoryData — last reader removed (undo.ts:220 now reads storeGet(historyData))
-    // _histFilterOpTypes, _histFilterErrCats, _histSortMode, _allHistoryItems,
-    // _splitChains, _chainedOpIds — all absorbed by lib/stores/segments/history.ts
-    // (Wave 10). Their write sites were in orphan files deleted in P3.
 
     // Server-provided canonical category list (from /api/seg/config)
     _validationCategories: string[] | null;
@@ -316,8 +304,7 @@ export const state: SegmentsState = {
     segAnimId: null,
     segCurrentIdx: -1,
     segDisplayedSegments: null,
-    // Ph4a: segDirtyMap now delegates to lib/stores/segments/dirty.ts.
-    // Defined via Object.defineProperty below.
+    // segDirtyMap delegates to lib/stores/segments/dirty.ts via defineProperty below.
     segDirtyMap: null as unknown as Map<number, DirtyEntry>,
     segEditMode: null,
     segEditIndex: -1,
@@ -361,8 +348,7 @@ export const state: SegmentsState = {
     _splitChainWrapper: null,
 
     // Edit history
-    // Ph4a: segOpLog + _pendingOp delegate to lib/stores/segments/dirty.ts.
-    // Defined via Object.defineProperty below.
+    // segOpLog + _pendingOp delegate to lib/stores/segments/dirty.ts via defineProperty below.
     segOpLog: null as unknown as Map<number, EditOp[]>,
     _pendingOp: null,
     _splitChainUid: null,
@@ -424,7 +410,7 @@ export const state: SegmentsState = {
 };
 
 // ---------------------------------------------------------------------------
-// Ph4a: wire segDirtyMap / segOpLog / _pendingOp to lib/stores/segments/dirty
+// Wire segDirtyMap / segOpLog / _pendingOp to lib/stores/segments/dirty
 // ---------------------------------------------------------------------------
 
 Object.defineProperty(state, 'segDirtyMap', {
@@ -447,18 +433,18 @@ Object.defineProperty(state, '_pendingOp', {
 });
 
 // ---------------------------------------------------------------------------
-// DOM references -- set in index.ts DOMContentLoaded
+// DOM references — set by SegmentsTab.svelte onMount
 // ---------------------------------------------------------------------------
 
 /**
  * Public shape of the segments tab DOM references.
  *
  * All fields are non-nullable and narrowed to their actual element type.
- * They are initialised to `null as unknown as T` below; the DOMContentLoaded
- * handler in `segments/index.ts` populates them before any feature code runs.
- * The alternative would be to type each as `T | null` and null-check at every
- * call site — that would add noise to 28 modules for a guarantee already
- * established by the ordering of import-time registration vs DOMContentLoaded.
+ * They are initialised to `null as unknown as T` below; SegmentsTab.svelte
+ * populates them before any feature code runs. The alternative would be to
+ * type each as `T | null` and null-check at every call site — that would
+ * add noise to many modules for a guarantee already established by the
+ * ordering of import-time registration vs onMount.
  */
 export interface DomRefs {
     segReciterSelect: HTMLSelectElement;
@@ -480,12 +466,12 @@ export interface DomRefs {
     segFilterCountEl: HTMLElement;
     segFilterStatusEl: HTMLElement;
 
-    // History view (imperative: #seg-history-view container + external open button)
-    // History panel interior is Svelte-owned by HistoryPanel.svelte (Wave 10).
+    // History view (imperative: #seg-history-view container + external open button).
+    // Panel interior is Svelte-owned by HistoryPanel.svelte.
     segHistoryView: HTMLDivElement;
     segHistoryBtn: HTMLButtonElement;
 
-    // Save preview (container + action buttons; interior owned by SavePreview.svelte Wave 11a)
+    // Save preview (container + action buttons; interior owned by SavePreview.svelte).
     segSavePreview: HTMLDivElement;
     segSavePreviewCancel: HTMLButtonElement;
     segSavePreviewConfirm: HTMLButtonElement;
@@ -494,10 +480,7 @@ export interface DomRefs {
 // Sentinel for DOM ref seeding. `never` is assignable to every field type,
 // so this satisfies `DomRefs` without writing `null as unknown as HTMLXxx` at
 // every slot. Populated by `document.getElementById(...)` inside the
-// DOMContentLoaded handler in `segments/index.ts` before any consumer runs.
-// Trade-off: a forgotten id (returning null from getElementById) would NPE
-// at first use with no TSC warning. If that becomes a real footgun, flip the
-// fields to `T | null` and accept the call-site ripple.
+// SegmentsTab.svelte onMount handler before any consumer runs.
 const _UNSET = null as unknown as never;
 
 export const dom: DomRefs = {
@@ -520,11 +503,9 @@ export const dom: DomRefs = {
     segFilterCountEl: _UNSET,
     segFilterStatusEl: _UNSET,
 
-    // History view (container + external open button; interior owned by HistoryPanel.svelte)
     segHistoryView: _UNSET,
     segHistoryBtn: _UNSET,
 
-    // Save preview (container + action buttons; interior owned by SavePreview.svelte)
     segSavePreview: _UNSET,
     segSavePreviewCancel: _UNSET,
     segSavePreviewConfirm: _UNSET,
@@ -542,4 +523,3 @@ export function markDirty(chapter: number, index?: number, structural = false): 
     _markDirty(chapter, index, structural);
     dom.segSaveBtn.disabled = false;
 }
-

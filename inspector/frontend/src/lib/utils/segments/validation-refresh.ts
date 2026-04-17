@@ -1,8 +1,8 @@
-import { applyFiltersAndRender } from '../../../segments/filters';
-import { dom, state } from '../../../segments/state';
 import type { SegValidateResponse } from '../../../types/api';
 import { fetchJson } from '../../api';
+import { dom, state } from '../../segments-state';
 import { segValidation } from '../../stores/segments/validation';
+import { applyFiltersAndRender } from './filters-apply';
 
 export async function refreshValidation(): Promise<void> {
     const reciter = dom.segReciterSelect.value;

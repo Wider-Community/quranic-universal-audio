@@ -2,31 +2,28 @@
  * Split edit mode: enter, drag handle, preview, confirm.
  */
 
-import { fetchJsonOrNull } from '../../lib/api';
-import { getChapterSegments, syncChapterSegsToAll } from '../../lib/stores/segments/chapter';
-import { setEdit } from '../../lib/stores/segments/edit';
-import { _getEditCanvas } from '../../lib/utils/segments/get-edit-canvas';
-import { _suggestSplitRefs as _suggestSplitRefsLib } from '../../lib/utils/segments/references';
-import {
-    _ensureSplitBaseCache,
-    drawSplitWaveform,
-} from '../../lib/utils/segments/split-draw';
-import { getWaveformPeaks } from '../../lib/utils/waveform-cache';
-import type { SegResolveRefResponse } from '../../types/api';
-import type { Segment } from '../../types/domain';
-import { applyVerseFilterAndRender,computeSilenceAfter } from '../filters';
-import { dom, finalizeOp, markDirty,snapshotSeg, state } from '../state';
-import { _rebuildAccordionAfterSplit, _refreshStaleSegIndices } from '../validation/error-cards';
+import type { SegResolveRefResponse } from '../../../types/api';
+import type { Segment } from '../../../types/domain';
+import { fetchJsonOrNull } from '../../api';
+import { dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
+import { getChapterSegments, syncChapterSegsToAll } from '../../stores/segments/chapter';
+import { setEdit } from '../../stores/segments/edit';
+import type { SegCanvas } from '../../types/segments-waveform';
+import { getWaveformPeaks } from '../waveform-cache';
+import { _playRange, exitEditMode } from './edit-common';
+import { startRefEdit } from './edit-reference';
+import { _rebuildAccordionAfterSplit, _refreshStaleSegIndices } from './error-cards';
+import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
+import { _getEditCanvas } from './get-edit-canvas';
+import { _suggestSplitRefs as _suggestSplitRefsLib } from './references';
+import { _ensureSplitBaseCache, drawSplitWaveform } from './split-draw';
+import { _fixupValIndicesForSplit, refreshOpenAccordionCards } from './validation-fixups';
+import { _fetchChapterPeaksIfNeeded } from './waveform-utils';
 
 function _vwc() {
     return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
 }
 function _suggestSplitRefs(ref: Parameters<typeof _suggestSplitRefsLib>[0]) { return _suggestSplitRefsLib(ref, _vwc()); }
-import type { SegCanvas } from '../../lib/types/segments-waveform';
-import { _fixupValIndicesForSplit, refreshOpenAccordionCards } from '../../lib/utils/segments/validation-fixups';
-import { _fetchChapterPeaksIfNeeded } from '../../lib/utils/segments/waveform-utils';
-import { _playRange, exitEditMode } from './common';
-import { startRefEdit } from './reference';
 
 // Re-export draw functions for registration sites.
 export { _ensureSplitBaseCache, drawSplitWaveform };
@@ -93,17 +90,13 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     setupSplitDragHandle(canvas, seg);
 
     // Pre-fetch peaks for the segment being split if not available.
-    // Wave 7 CF: read via waveform-cache util (normalized URL key per S2-B04).
     if (splitAudioUrl && !getWaveformPeaks(splitAudioUrl)) {
         _fetchChapterPeaksIfNeeded(dom.segReciterSelect.value, chapter);
     }
 }
 
-// _ensureSplitBaseCache and drawSplitWaveform moved to
-// lib/utils/segments/split-draw.ts (Ph4a). Re-exported above.
-
 // ---------------------------------------------------------------------------
-// setupSplitDragHandle -- mouse event handlers for split line
+// setupSplitDragHandle — mouse event handlers for split line
 // ---------------------------------------------------------------------------
 
 export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
@@ -174,7 +167,7 @@ export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
 }
 
 // ---------------------------------------------------------------------------
-// updateSplitInfo -- update the L/R duration display
+// updateSplitInfo — update the L/R duration display
 // ---------------------------------------------------------------------------
 
 export function updateSplitInfo(canvas: SegCanvas | null | undefined, seg: Segment, splitTime: number): void {
@@ -186,7 +179,7 @@ export function updateSplitInfo(canvas: SegCanvas | null | undefined, seg: Segme
 }
 
 // ---------------------------------------------------------------------------
-// confirmSplit -- apply the split and chain ref editing
+// confirmSplit — apply the split and chain ref editing
 // ---------------------------------------------------------------------------
 
 export async function confirmSplit(seg: Segment): Promise<void> {
@@ -294,7 +287,7 @@ export async function confirmSplit(seg: Segment): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// previewSplitAudio -- toggle looping preview of left/right half
+// previewSplitAudio — toggle looping preview of left/right half
 // ---------------------------------------------------------------------------
 
 export function previewSplitAudio(side: 'left' | 'right'): void {

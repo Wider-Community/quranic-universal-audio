@@ -21,7 +21,7 @@
      */
 
     import { segValidation } from '../../../lib/stores/segments/validation';
-    import { state } from '../../../segments/state';
+    import { state } from '../../../lib/segments-state';
     import {
         jumpToMissingVerseContext,
         jumpToSegment,
