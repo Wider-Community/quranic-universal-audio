@@ -29,7 +29,6 @@
         registerGetEditCanvas,
         registerWaveformHandlers,
     } from '../../lib/utils/segments/waveform-utils';
-    import { onSegReciterChange, registerFetchChapterPeaks, registerStopSegAnimation } from '../../segments/data';
     import {
         exitEditMode,
         registerEditDrawFns,
@@ -38,10 +37,10 @@
     import { confirmSplit, drawSplitWaveform, enterSplitMode } from '../../segments/edit/split';
     import { confirmTrim, drawTrimWaveform, enterTrimMode } from '../../segments/edit/trim';
     import { startRefEdit } from '../../segments/edit/reference';
-    import { registerOnSegReciterChange, showHistoryView } from '../../segments/history/index';
+    import { showHistoryView } from '../../lib/utils/segments/history-actions';
     import { onSegPlayClick, playFromSegment } from '../../segments/playback/index';
-    import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from '../../segments/save';
-    import { _restoreFilterView } from '../../segments/navigation';
+    import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from '../../lib/utils/segments/save-actions';
+    import { _restoreFilterView } from '../../lib/utils/segments/navigation-actions';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson, fetchJsonOrNull } from '../../lib/api';
     import {
@@ -61,11 +60,9 @@
         segIndexMap,
         displayedSegments,
     } from '../../lib/stores/segments/filters';
-    import { clearEdit } from '../../lib/stores/segments/edit';
-    import { clearStats, segStats, setStats } from '../../lib/stores/segments/stats';
-    import { clearValidation, segValidation, setValidation } from '../../lib/stores/segments/validation';
+    import { segStats } from '../../lib/stores/segments/stats';
+    import { segValidation } from '../../lib/stores/segments/validation';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
-    import { clearSavePreviewData, hidePreview } from '../../lib/stores/segments/save';
     import { segConfig as segConfigStore } from '../../lib/stores/segments/config';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
@@ -77,25 +74,15 @@
     // dom.segVerseSelect which Svelte now owns. Wave 6+ rendering
     // (validation / stats / history) stays imperative and is invoked from
     // here.
-    import { _fetchCacheStatus, _rewriteAudioUrls } from '../../lib/utils/segments/audio-cache-ui';
     import { _isCurrentReciterBySurah } from '../../lib/utils/segments/reciter';
-    import { setHistoryData, setHistoryVisible } from '../../lib/stores/segments/history';
-    import { renderEditHistoryPanel } from '../../segments/history/index';
+    import { reloadCurrentReciter } from '../../lib/utils/segments/reciter-actions';
+    import { loadChapterData } from '../../lib/utils/segments/chapter-actions';
     import HistoryPanel from './history/HistoryPanel.svelte';
     import { stopSegAnimation } from '../../segments/playback/index';
-    import { computeSilenceAfter } from '../../lib/stores/segments/filters';
     import { state } from '../../segments/state';
     import { _fetchChapterPeaksIfNeeded } from '../../lib/utils/segments/waveform-utils';
     import ValidationPanel from './validation/ValidationPanel.svelte';
-    import { clearWaveformCache } from '../../lib/utils/waveform-cache';
-    import type {
-        SegAllResponse,
-        SegChaptersResponse,
-        SegDataResponse,
-        SegEditHistoryResponse,
-        SegStatsResponse,
-        SegValidateResponse,
-    } from '../../types/api';
+    import type { SegDataResponse } from '../../types/api';
     import type { Segment } from '../../types/domain';
     import EditOverlay from './edit/EditOverlay.svelte';
     import FiltersBar from './FiltersBar.svelte';
@@ -250,114 +237,7 @@
 
     async function onReciterChange(reciter: string): Promise<void> {
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
-
-        // Reset selection + per-reciter state.
-        selectedChapter.set('');
-        selectedVerse.set('');
-        activeFilters.set([]);
-        savedFilterView.set(null);
-        clearPerReciterState();
-
-        if (!reciter) return;
-
-        // Fetch chapters + validate + stats + all + history in parallel.
-        const [chResult, valResult, statsResult, allResult, histResult] = await Promise.allSettled([
-            fetchJson<SegChaptersResponse>(`/api/seg/chapters/${reciter}`),
-            fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`),
-            fetchJson<SegStatsResponse>(`/api/seg/stats/${reciter}`),
-            fetchJson<SegAllResponse>(`/api/seg/all/${reciter}`),
-            fetchJsonOrNull<SegEditHistoryResponse>(`/api/seg/edit-history/${reciter}`),
-        ]);
-
-        if (get(selectedReciter) !== reciter) return;
-        void chResult; // chapters come from segAllData in Svelte; API response kept to preserve fetch parity
-
-        if (valResult.status === 'fulfilled') {
-            setValidation(valResult.value);
-            // Wave 8a.2: ValidationPanel.svelte subscribes to $segValidation reactively;
-            // no imperative renderValidationPanel call needed.
-        } else {
-            console.error('Error loading validation:', valResult.reason);
-        }
-
-        if (statsResult.status === 'fulfilled') {
-            // Wave 8b: StatsPanel.svelte renders reactively via $segStats store.
-            if (!statsResult.value.error) setStats(statsResult.value);
-        } else {
-            console.error('Error loading stats:', statsResult.reason);
-        }
-
-        if (allResult.status === 'fulfilled') {
-            segAllData.set(allResult.value);
-            _rewriteAudioUrls();
-            computeSilenceAfter();
-            if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
-        } else {
-            console.error('Error loading all segments:', allResult.reason);
-        }
-
-        if (histResult.status === 'fulfilled' && histResult.value) {
-            renderEditHistoryPanel(histResult.value);
-        }
-    }
-
-    /** Clear per-reciter imperative state so validation / stats / history /
-     *  save-preview panels reset when the user switches reciter. */
-    function clearPerReciterState(): void {
-        if (state._waveformObserver) {
-            state._waveformObserver.disconnect();
-            state._waveformObserver = null;
-        }
-        segAllData.set(null);
-        segData.set(null);
-        state.segCurrentIdx = -1;
-        state.segDirtyMap.clear();
-        state.segOpLog.clear();
-        state._pendingOp = null;
-        state.segEditMode = null;
-        state.segEditIndex = -1;
-        clearEdit();
-
-        // Validation panel: Wave 8a.2 — ValidationPanel.svelte reacts to clearValidation()
-        // via $segValidation store; no imperative DOM clearing needed.
-        clearValidation();
-
-        // Stats panel — Wave 8b: StatsPanel.svelte controls visibility via $segStats store.
-        clearStats();
-
-        state._segSavedChains = null;
-        const histBtn = document.getElementById('seg-history-btn');
-        // Wave 10: HistoryPanel is Svelte-owned — clear reactively (Risk #1).
-        setHistoryVisible(false);
-        setHistoryData(null);
-        const savePrev = document.getElementById('seg-save-preview');
-        if (histBtn) (histBtn as HTMLElement).hidden = true;
-        if (savePrev) (savePrev as HTMLElement).hidden = true;
-        hidePreview();   // notify $savePreviewVisible store
-        clearSavePreviewData(); // clear store — SavePreview.svelte empties reactively (Wave 11a)
-
-        state._segPrefetchCache = {};
-        state._segContinuousPlay = false;
-        state._segPlayEndMs = 0;
-        clearWaveformCache();
-        if (state._peaksPollTimer) { clearTimeout(state._peaksPollTimer); state._peaksPollTimer = null; }
-        state._segPeaksByUrl = null;
-        state._observerPeaksQueue = [];
-        if (state._observerPeaksTimer) { clearTimeout(state._observerPeaksTimer); state._observerPeaksTimer = null; }
-        state._observerPeaksRequested = new Set();
-
-        const cacheBar = document.getElementById('seg-cache-bar');
-        if (cacheBar) (cacheBar as HTMLElement).hidden = true;
-        if (state._audioCachePollTimer) { clearInterval(state._audioCachePollTimer); state._audioCachePollTimer = null; }
-
-        const saveBtn = document.getElementById('seg-save-btn') as HTMLButtonElement | null;
-        const playBtn = document.getElementById('seg-play-btn') as HTMLButtonElement | null;
-        const playStatus = document.getElementById('seg-play-status');
-        if (saveBtn) saveBtn.disabled = true;
-        if (playBtn) playBtn.disabled = true;
-        if (playStatus) playStatus.textContent = '';
-
-        stopSegAnimation();
+        await reloadCurrentReciter();
     }
 
     function onChapterSelectChange(e: CustomEvent<string>): void {
@@ -376,47 +256,7 @@
 
     async function onChapterChange(chapter: string): Promise<void> {
         const reciter = get(selectedReciter);
-        selectedVerse.set('');
-
-        const audioEl = document.getElementById('seg-audio-player') as HTMLAudioElement | null;
-        const playBtn = document.getElementById('seg-play-btn') as HTMLButtonElement | null;
-        if (audioEl) audioEl.src = '';
-        if (playBtn) playBtn.disabled = true;
-        stopSegAnimation();
-        state._segPrefetchCache = {};
-
-        // Wave 8a.2: ValidationPanel.svelte re-derives from $selectedChapter reactively.
-        // No imperative renderValidationPanel call needed.
-
-        if (!reciter || !chapter) return;
-        if (playBtn) playBtn.disabled = false;
-
-        try {
-            const chData = await fetchJson<SegDataResponse>(`/api/seg/data/${reciter}/${chapter}`);
-            if (get(selectedReciter) !== reciter || get(selectedChapter) !== chapter) return;
-            if (chData.error) return;
-            if (_isCurrentReciterBySurah() && chData.audio_url && !chData.audio_url.startsWith('/api/')) {
-                chData.audio_url = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(chData.audio_url)}`;
-            }
-
-            const chNum = parseInt(chapter);
-            // Slice segments into the per-chapter list (Stage-1 behaviour;
-            // imperative consumers still read state.segData.segments).
-            const all = get(segAllData);
-            const chapterSegs: Segment[] = all
-                ? all.segments.filter((s) => s.chapter === chNum)
-                : [];
-            chData.segments = chapterSegs;
-            segData.set(chData);
-            _fetchChapterPeaksIfNeeded(reciter, chNum);
-
-            if (chData.audio_url && audioEl) {
-                audioEl.src = chData.audio_url;
-                audioEl.preload = 'metadata';
-            }
-        } catch (e) {
-            console.error('Error loading chapter data:', e);
-        }
+        await loadChapterData(reciter, chapter);
     }
 
     function onVerseSelectChange(e: Event): void {
@@ -597,11 +437,8 @@
         registerEditDrawFns(drawTrimWaveform, drawSplitWaveform);
         registerWaveformHandlers({ drawSplitWaveform, drawTrimWaveform });
 
-        // Break circular deps: data ↔ playback, history ↔ data, waveform ↔ data/rendering.
-        registerStopSegAnimation(stopSegAnimation);
-        registerOnSegReciterChange(onSegReciterChange);
+        // Break circular deps: waveform ↔ data/rendering.
         registerGetEditCanvas(_getEditCanvas);
-        registerFetchChapterPeaks(_fetchChapterPeaksIfNeeded);
         registerDataLookups(getAdjacentSegments, getSegByChapterIndex);
     }
 

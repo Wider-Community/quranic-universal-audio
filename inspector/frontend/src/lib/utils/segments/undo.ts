@@ -1,7 +1,5 @@
 import { get as storeGet } from 'svelte/store';
 
-import { renderEditHistoryPanel } from '../../../segments/history/index';
-import { buildSavePreviewData, hideSavePreview } from '../../../segments/save';
 import { dom, state } from '../../../segments/state';
 import type {
     SegEditHistoryResponse,
@@ -25,6 +23,8 @@ import {
 } from '../../stores/segments/history';
 import { setSavePreviewData } from '../../stores/segments/save';
 import { surahOptionText } from '../surah-info';
+import { renderEditHistoryPanel } from './history-render';
+import { buildSavePreviewData, hideSavePreview } from './save-actions';
 
 // ---------------------------------------------------------------------------
 // _afterUndoSuccess -- shared post-undo refresh

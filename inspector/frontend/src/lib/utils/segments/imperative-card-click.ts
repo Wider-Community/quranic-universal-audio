@@ -11,13 +11,13 @@ import { enterEditWithBuffer } from '../../../segments/edit/common';
 import { deleteSegment } from '../../../segments/edit/delete';
 import { mergeAdjacent } from '../../../segments/edit/merge';
 import { startRefEdit } from '../../../segments/edit/reference';
-import { jumpToSegment } from '../../../segments/navigation';
 import { playFromSegment } from '../../../segments/playback/index';
 import { dom, state } from '../../../segments/state';
 import { playErrorCardAudio } from '../../../segments/validation/error-card-audio';
 import { selectedChapter } from '../../stores/segments/chapter';
 import { savedFilterView } from '../../stores/segments/navigation';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { jumpToSegment } from './navigation-actions';
 import { resolveSegFromRow } from './resolve-seg-from-row';
 
 // ---------------------------------------------------------------------------

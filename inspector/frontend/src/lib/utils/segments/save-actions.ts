@@ -4,7 +4,10 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import { isDirty } from '../lib/stores/segments/dirty';
+import { dom, state } from '../../../segments/state';
+import { stopErrorCardAudio } from '../../../segments/validation/error-card-audio';
+import type { HistoryBatch } from '../../../types/domain';
+import { isDirty } from '../../stores/segments/dirty';
 import {
     buildSplitChains,
     buildSplitLineage,
@@ -12,21 +15,21 @@ import {
     restoreSplitChains,
     setSplitChains,
     snapshotSplitChains,
-} from '../lib/stores/segments/history';
+} from '../../stores/segments/history';
 import {
     clearSavePreviewData,
     hidePreview,
     setSavePreviewData,
     showPreview,
-} from '../lib/stores/segments/save';
-import { _SEG_NORMAL_IDS } from '../lib/utils/segments/constants';
-import { executeSave as _executeSave } from '../lib/utils/segments/save-execute';
-import { buildSavePreviewData as _buildSavePreviewData } from '../lib/utils/segments/save-preview';
-import type { HistoryBatch } from '../types/domain';
-import { onSegReciterChange } from './data';
-import { dom, state } from './state';
-import { stopErrorCardAudio } from './validation/error-card-audio';
+} from '../../stores/segments/save';
+import { _SEG_NORMAL_IDS } from './constants';
+import { reloadCurrentReciter } from './reciter-actions';
+import { executeSave } from './save-execute';
+import { buildSavePreviewData } from './save-preview';
 
+// Re-export pure utils so callers that used to import from segments/save
+// keep one import site.
+export { buildSavePreviewData, executeSave };
 
 // ---------------------------------------------------------------------------
 // onSegSaveClick -- entry point from Save button
@@ -38,13 +41,6 @@ export async function onSegSaveClick(): Promise<void> {
     if (!reciter) return;
     showSavePreview();
 }
-
-// ---------------------------------------------------------------------------
-// buildSavePreviewData
-// ---------------------------------------------------------------------------
-
-// Ph4a: logic moved to lib/utils/segments/save-preview.ts
-export const buildSavePreviewData = _buildSavePreviewData;
 
 // ---------------------------------------------------------------------------
 // showSavePreview
@@ -116,7 +112,7 @@ export function hideSavePreview(restoreScroll = true): void {
     if (state._segDataStale) {
         state._segDataStale = false;
         state._segSavedPreviewState = null;
-        onSegReciterChange();
+        void reloadCurrentReciter();
     } else if (restoreScroll && state._segSavedPreviewState) {
         const saved = state._segSavedPreviewState;
         state._segSavedPreviewState = null;
@@ -125,13 +121,10 @@ export function hideSavePreview(restoreScroll = true): void {
 }
 
 // ---------------------------------------------------------------------------
-// confirmSaveFromPreview / executeSave
+// confirmSaveFromPreview
 // ---------------------------------------------------------------------------
 
 export async function confirmSaveFromPreview(): Promise<void> {
     hideSavePreview(false);
     await executeSave();
 }
-
-// Ph4a: logic moved to lib/utils/segments/save-execute.ts
-export const executeSave = _executeSave;

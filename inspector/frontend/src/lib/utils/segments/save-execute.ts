@@ -7,7 +7,6 @@
  * component in Ph4b.
  */
 
-import { renderEditHistoryPanel } from '../../../segments/history/index';
 import { dom } from '../../../segments/state';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../../../types/api';
 import type { EditOp, Segment } from '../../../types/domain';
@@ -22,6 +21,7 @@ import {
     getDirtyMap,
     isDirty,
 } from '../../stores/segments/dirty';
+import { renderEditHistoryPanel } from './history-render';
 import { refreshValidation } from './validation-refresh';
 
 // ---------------------------------------------------------------------------

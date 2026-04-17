@@ -1,39 +1,54 @@
 /**
- * Jump-to-segment, jump-to-verse, missing verse context, and filter view save/restore.
+ * Jump-to-segment, jump-to-verse, missing verse context, and filter view
+ * save/restore.
  *
- * Wave 7 note: the back-to-results banner is rendered by Navigation.svelte
- * (subscribed to `backBannerVisible` derived from `savedFilterView`). The
- * Stage-1 imperative `_showBackToResultsBanner` still exists so the
- * pre-Wave-5 callers do something, but it now writes to the
- * `savedFilterView` store instead of injecting a parallel DOM banner —
- * Navigation.svelte handles the visual side.
+ * The back-to-results banner is rendered by Navigation.svelte (subscribed
+ * to `backBannerVisible` derived from `savedFilterView`).
+ * `_showBackToResultsBanner` mirrors `state._segSavedFilterView` into the
+ * store so the banner appears; `_restoreFilterView` reverses the flow and
+ * re-applies the saved filters/chapter/verse.
  */
 
-import { activeFilters as activeFiltersStore } from '../lib/stores/segments/filters';
-import { savedFilterView as savedFilterViewStore } from '../lib/stores/segments/navigation';
+import { get } from 'svelte/store';
+
+import { applyFiltersAndRender } from '../../../segments/filters';
+import { dom, state } from '../../../segments/state';
+import {
+    selectedChapter,
+    selectedReciter,
+    selectedVerse,
+} from '../../stores/segments/chapter';
+import { activeFilters as activeFiltersStore } from '../../stores/segments/filters';
+import { savedFilterView as savedFilterViewStore } from '../../stores/segments/navigation';
+import { loadChapterData } from './chapter-actions';
 import {
     _parseVerseFromKey,
     findMissingVerseBoundarySegments,
-} from '../lib/utils/segments/missing-verse-context';
-import { onSegChapterChange } from './data';
-import { applyFiltersAndRender, renderFilterBar, updateFilterBarControls } from './filters';
-import { dom,state } from './state';
+} from './missing-verse-context';
 
-// Re-export for callers that imported from here
+// Re-export for callers that imported these from segments/navigation.
 export { _parseVerseFromKey, findMissingVerseBoundarySegments };
+
+async function _ensureChapter(chapter: number | string): Promise<void> {
+    const chStr = String(chapter);
+    if (get(selectedChapter) !== chStr) {
+        selectedChapter.set(chStr);
+        if (state.segChapterSS) state.segChapterSS.refresh();
+        await loadChapterData(get(selectedReciter), chStr);
+    }
+}
 
 export async function jumpToSegment(chapter: number | string, segIndex: number): Promise<void> {
     const fromFilterView = !!state._segSavedFilterView;
     if (fromFilterView) {
         state.segActiveFilters = [];
-        renderFilterBar();
-        updateFilterBarControls();
+        activeFiltersStore.set([]);
     }
 
-    if (dom.segChapterSelect.value !== String(chapter)) {
-        dom.segChapterSelect.value = String(chapter);
-        if (state.segChapterSS) state.segChapterSS.refresh();
-        await onSegChapterChange();
+    const chStr = String(chapter);
+    const chapterChanged = get(selectedChapter) !== chStr;
+    if (chapterChanged) {
+        await _ensureChapter(chapter);
     } else if (fromFilterView) {
         applyFiltersAndRender();
     }
@@ -50,9 +65,6 @@ export async function jumpToSegment(chapter: number | string, segIndex: number):
     }
 }
 
-// _parseVerseFromKey and findMissingVerseBoundarySegments moved to
-// lib/utils/segments/missing-verse-context.ts (Ph4a). Re-exported above.
-
 export async function jumpToMissingVerseContext(chapter: number | string, verseKey: string): Promise<void> {
     const targetVerse = _parseVerseFromKey(verseKey);
     if (!targetVerse) {
@@ -60,29 +72,24 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
         return;
     }
 
-    const hasFilterView = state.segActiveFilters.some(f => f.value !== null) || !!dom.segVerseSelect.value;
+    const hasFilterView = state.segActiveFilters.some(f => f.value !== null) || !!get(selectedVerse);
     if (hasFilterView) {
         state._segSavedFilterView = {
             filters: JSON.parse(JSON.stringify(state.segActiveFilters)),
-            chapter: dom.segChapterSelect.value,
-            verse: dom.segVerseSelect.value,
+            chapter: get(selectedChapter),
+            verse: get(selectedVerse),
             scrollTop: dom.segListEl.scrollTop,
         };
     }
 
-    if (dom.segChapterSelect.value !== String(chapter)) {
-        dom.segChapterSelect.value = String(chapter);
-        if (state.segChapterSS) state.segChapterSS.refresh();
-        await onSegChapterChange();
-    }
+    await _ensureChapter(chapter);
 
     if (hasFilterView) {
         state.segActiveFilters = [];
-        renderFilterBar();
-        updateFilterBarControls();
+        activeFiltersStore.set([]);
     }
-    if (dom.segVerseSelect.value) {
-        dom.segVerseSelect.value = '';
+    if (get(selectedVerse)) {
+        selectedVerse.set('');
     }
     applyFiltersAndRender();
 
@@ -133,11 +140,7 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
 }
 
 export async function jumpToVerse(chapter: number | string, verseKey: string): Promise<void> {
-    if (dom.segChapterSelect.value !== String(chapter)) {
-        dom.segChapterSelect.value = String(chapter);
-        if (state.segChapterSS) state.segChapterSS.refresh();
-        await onSegChapterChange();
-    }
+    await _ensureChapter(chapter);
     if (!state.segAllData) return;
     const parts = verseKey.split(':');
     const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : verseKey;
@@ -162,17 +165,11 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
 // ---------------------------------------------------------------------------
 
 /**
- * Wave 7: the back-to-results banner is rendered by Navigation.svelte
- * (subscribed to `backBannerVisible` derived from `savedFilterView`). This
- * function used to inject a parallel imperative DOM banner; it now writes
- * to both `state._segSavedFilterView` (for imperative consumers checking
- * `if (state._segSavedFilterView)`) AND the `savedFilterView` store so the
- * Svelte banner appears.
+ * Mirror `state._segSavedFilterView` into the `savedFilterView` store so
+ * Navigation.svelte renders the banner.
  */
 export function _showBackToResultsBanner(): void {
     if (!state._segSavedFilterView) return;
-    // SegmentsTab bridge syncs store → state, but not state → store. Mirror
-    // explicitly so the Svelte Navigation banner appears.
     savedFilterViewStore.set(state._segSavedFilterView);
 }
 
@@ -185,11 +182,11 @@ export function _restoreFilterView(): void {
     state.segActiveFilters = saved.filters;
     activeFiltersStore.set([...saved.filters]);
 
-    if (saved.chapter !== dom.segChapterSelect.value) {
-        dom.segChapterSelect.value = saved.chapter;
+    if (saved.chapter !== get(selectedChapter)) {
+        selectedChapter.set(saved.chapter);
         if (state.segChapterSS) state.segChapterSS.refresh();
     }
-    dom.segVerseSelect.value = saved.verse;
+    selectedVerse.set(saved.verse);
 
     applyFiltersAndRender();
 

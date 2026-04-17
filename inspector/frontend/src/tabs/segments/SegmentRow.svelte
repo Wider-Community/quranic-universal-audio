@@ -45,7 +45,7 @@
     import { enterEditWithBuffer } from '../../segments/edit/common';
     import { mergeAdjacent } from '../../segments/edit/merge';
     import { startRefEdit } from '../../segments/edit/reference';
-    import { jumpToSegment } from '../../segments/navigation';
+    import { jumpToSegment } from '../../lib/utils/segments/navigation-actions';
     import { playFromSegment } from '../../segments/playback/index';
     import type { Segment } from '../../types/domain';
 

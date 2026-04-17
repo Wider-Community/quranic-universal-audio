@@ -26,7 +26,7 @@
         jumpToMissingVerseContext,
         jumpToSegment,
         jumpToVerse,
-    } from '../../../segments/navigation';
+    } from '../../../lib/utils/segments/navigation-actions';
     import ErrorCard from './ErrorCard.svelte';
     import type {
         SegValAnyItem,

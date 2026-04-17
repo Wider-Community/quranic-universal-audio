@@ -28,7 +28,7 @@
     import HistoryBatch from './HistoryBatch.svelte';
     import HistoryFilters from './HistoryFilters.svelte';
     import SplitChainRow from './SplitChainRow.svelte';
-    import { hideHistoryView } from '../../../segments/history/index';
+    import { hideHistoryView } from '../../../lib/utils/segments/history-actions';
     import {
         buildDisplayItems,
         computeFilteredItemSummary,
