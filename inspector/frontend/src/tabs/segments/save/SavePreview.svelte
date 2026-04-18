@@ -2,21 +2,14 @@
     /**
      * SavePreview — reactive save-preview panel.
      *
-     * Wave 11a: migrated from shell-delegation (Wave 9) to full reactive
-     * rendering. The panel now renders summary stats + batch cards via
-     * the same store-driven path as HistoryPanel (Opus F bifurcation
-     * resolved). `segments/save.ts` no longer writes innerHTML to
-     * #seg-save-preview-stats / #seg-save-preview-batches.
+     * Renders summary stats + batch cards via the same store-driven path as
+     * HistoryPanel. Imports HistoryBatch + SplitChainRow directly and feeds
+     * preview data via buildDisplayItems — no HistoryPanel middleman.
      *
-     * Approach (c) Hybrid per Wave 11a advisor:
-     *   SavePreview imports HistoryBatch + SplitChainRow directly and
-     *   feeds preview data via buildDisplayItems — no HistoryPanel middleman.
-     *
-     * Visibility: $savePreviewVisible (unchanged — save.ts calls showPreview/
-     *   hidePreview alongside its imperative show/hide logic until dom refs
-     *   are swept in P2).
-     * Content: $savePreviewData (new in Wave 11a — set by setSavePreviewData
-     *   in showSavePreview; cleared by clearSavePreviewData in hideSavePreview).
+     * Visibility: `$savePreviewVisible` (toggled by showSavePreview /
+     *   hideSavePreview in lib/utils/segments/save-actions.ts).
+     * Content: `$savePreviewData` — set by setSavePreviewData in
+     *   showSavePreview; cleared by clearSavePreviewData in hideSavePreview.
      */
 
     import HistoryBatch from '../history/HistoryBatch.svelte';

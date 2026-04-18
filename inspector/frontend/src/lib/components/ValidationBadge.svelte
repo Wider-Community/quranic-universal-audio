@@ -1,9 +1,6 @@
 <script lang="ts">
     /**
-     * ValidationBadge — stub component for Wave 3 (shell only).
-     * Real consumers land in Wave 8 (ValidationPanel.svelte, ErrorCard.svelte).
-     *
-     * Displays a label + count badge with tonal color coding:
+     * ValidationBadge — label + count badge with tonal color coding.
      *   default  — neutral / info
      *   warning  — yellow (e.g. low confidence)
      *   error    — red (e.g. structural issues, failed alignments)

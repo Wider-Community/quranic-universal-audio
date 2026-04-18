@@ -25,7 +25,7 @@
 <style>
     /* Core .btn styles — scoped to this component. Other Svelte components that
      * render buttons directly (without using Button.svelte) still rely on the
-     * global .btn rules in styles/components.css until Wave 11 cleanup. */
+     * global .btn rules in styles/components.css. */
     .btn {
         padding: 10px 20px;
         background: #4361ee;

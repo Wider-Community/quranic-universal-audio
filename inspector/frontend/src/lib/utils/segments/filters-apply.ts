@@ -1,11 +1,10 @@
 /**
- * Filter application bridge between imperative mutations and Svelte stores.
+ * Filter application helpers: republish segment mutations to Svelte stores.
  *
  * FiltersBar.svelte owns the filter-bar UI and SegmentsList.svelte owns row
- * rendering. Imperative modules (edit/save/undo/validation/navigation) still
- * mutate `segAllData.segments` in place and then call
- * `applyFiltersAndRender()` or `applyVerseFilterAndRender()` to republish
- * their change:
+ * rendering. Edit/save/undo/validation/navigation modules mutate
+ * `segAllData.segments` in place and then call `applyFiltersAndRender()` or
+ * `applyVerseFilterAndRender()` to republish their change:
  *  1. Reset playback highlight DOM refs so the highlight layer does not
  *     point to nodes destroyed by the next {#each} reconciliation.
  *  2. Nudge `activeFilters` store (`update(a => [...a])`) so subscribers see

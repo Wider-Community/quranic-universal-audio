@@ -16,6 +16,7 @@
 
     import WaveformCanvas from '../../lib/components/WaveformCanvas.svelte';
     import { loadedVerse } from '../../lib/stores/timestamps/verse';
+    import { tsAudioElement } from '../../lib/stores/timestamps/playback';
     import { computePeaksForSlice, decodeAudioUrl } from '../../lib/utils/webaudio-peaks';
     import type { PeakBucket } from '../../lib/types/domain';
 
@@ -135,7 +136,7 @@
             ctx.stroke();
         }
 
-        const audio = document.getElementById('audio-player') as HTMLAudioElement | null;
+        const audio = get(tsAudioElement);
         if (!audio) return;
         const time = audio.currentTime - segOffset;
         const progress = duration > 0 ? time / duration : 0;
@@ -186,7 +187,7 @@
         if (!waveformRef) return;
         const canvas = waveformRef.getCanvas();
         if (!canvas) return;
-        const audio = document.getElementById('audio-player') as HTMLAudioElement | null;
+        const audio = get(tsAudioElement);
         if (!audio || !audio.duration) return;
         const lv = get(loadedVerse);
         if (!lv) return;
@@ -197,7 +198,7 @@
         const duration = lv.tsSegEnd - lv.tsSegOffset;
         const targetRelTime = progress * duration;
         audio.currentTime = targetRelTime + lv.tsSegOffset;
-        // Match Stage-1 behavior: seek + force one overlay redraw (no play).
+        // Seek + force one overlay redraw (no play).
         drawOverlays();
     }
 

@@ -8,12 +8,9 @@
      * needs access to chapter loading (SegmentsTab owns the reciter/chapter
      * cascade + applyFiltersAndRender invocation) so it's kept at the parent.
      *
-     * Cross-cutting rule (S2-B01 fix, option (a) from store-bindings matrix):
-     * this component ALSO subscribes to activeFilters — when filters become
-     * non-empty, savedFilterView is cleared. This single ownership point
-     * replaces the scattered Stage-1 writes (filters.applyFiltersAndRender +
-     * data.clearSegDisplay + navigation._restoreFilterView all cleared the
-     * saved view).
+     * This component also subscribes to activeFilters — when filters become
+     * non-empty, savedFilterView is cleared. Single ownership point: avoids
+     * scattered clears across FiltersBar, SegmentsTab, and navigation utils.
      */
 
     import { createEventDispatcher } from 'svelte';
@@ -26,9 +23,8 @@
 
     const dispatch = createEventDispatcher<{ restore: void }>();
 
-    // Rule: when filters become non-empty, clear the saved view (the "back
-    // to results" context becomes stale the moment the user starts filtering
-    // again). This replaces the scattered Stage-1 writes.
+    // When filters become non-empty, clear the saved view — the "back to
+    // results" context becomes stale the moment the user starts filtering again.
     $: if ($activeFilters.some((f) => f.value !== null)) {
         if ($savedFilterView) savedFilterView.set(null);
     }

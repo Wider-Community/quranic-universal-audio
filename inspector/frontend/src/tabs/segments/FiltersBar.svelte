@@ -3,13 +3,10 @@
      * FiltersBar — the segments filter bar (header + condition rows).
      *
      * Subscribes to `activeFilters`, `displayedResult` (for count label), and
-     * `selectedVerse` (for "1/N" display when verse filter active). Writes
-     * to `activeFilters` (add/clear).
-     *
-     * Cross-cutting S2-B01 fix: clearing filters here clears `savedFilterView`
-     * in the navigation store. See Navigation.svelte cross-write rule (option
-     * (a) from the matrix) — that component also subscribes to activeFilters
-     * and clears savedFilterView when filters become non-empty.
+     * `selectedVerse` (for "1/N" display when verse filter active). Writes to
+     * `activeFilters` (add/clear). Clearing filters also clears
+     * `savedFilterView` (see Navigation.svelte for the complementary rule that
+     * clears it when filters become non-empty).
      */
 
     import { tick } from 'svelte';

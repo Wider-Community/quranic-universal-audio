@@ -2,16 +2,13 @@
     /**
      * HistoryFilters — edit-type / issue-category pills + sort toggles.
      *
-     * Wave 10 rewrite of segments/history/filters.ts `renderHistoryFilterBar`
-     * + `toggleHistoryFilter` per locked §D4. Derivations live in the store;
-     * pills are declarative `<button>`s with `class:active` bound to the
-     * store filter sets.
+     * Derivations live in the store; pills are declarative `<button>`s with
+     * `class:active` bound to the store filter sets.
      *
-     * Count semantics (preserved verbatim):
+     * Count semantics:
      *   - Op-type counts are faceted by the active category filter set.
      *   - Category counts are faceted by the active op-type filter set.
-     *   - Chain-type "split_segment" count is total chains + raw ops (the
-     *     imperative impl summed chain entries in state._splitChains).
+     *   - Chain-type "split_segment" count is total chains + raw ops.
      *
      * A section is hidden when it has fewer than two distinct options
      * (there's nothing to filter on). The "Clear Filters" button shows

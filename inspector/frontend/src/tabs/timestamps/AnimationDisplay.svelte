@@ -2,8 +2,7 @@
     /**
      * AnimationDisplay — reveal-mode animation view for the Timestamps tab.
      *
-     * Port of Stage-1 timestamps/animation.ts. Like UnifiedDisplay.svelte,
-     * structure is rendered declaratively via `{#each}` and per-frame highlight
+     * Structure is rendered declaratively via `{#each}` and per-frame highlight
      * updates are applied imperatively via `updateHighlights()` called from the
      * parent's animation loop. The cross-word group-ID merging happens in the
      * pure-function data builder (not a post-render DOM walk).
@@ -14,6 +13,7 @@
 
     import { granularity } from '../../lib/stores/timestamps/display';
     import { loadedVerse } from '../../lib/stores/timestamps/verse';
+    import { tsAudioElement } from '../../lib/stores/timestamps/playback';
     import {
         charsMatch,
         DAGGER_ALEF,
@@ -286,7 +286,7 @@
         if (!rootEl) return;
         const lv = get(loadedVerse);
         if (!lv) return;
-        const audio = document.getElementById('audio-player') as HTMLAudioElement | null;
+        const audio = get(tsAudioElement);
         if (!audio) return;
         const time = audio.currentTime - lv.tsSegOffset;
 
@@ -388,7 +388,7 @@
     function onWordClick(word: TsWord): void {
         const lv = get(loadedVerse);
         if (!lv) return;
-        const audio = document.getElementById('audio-player') as HTMLAudioElement | null;
+        const audio = get(tsAudioElement);
         if (!audio) return;
         audio.currentTime = word.start + lv.tsSegOffset;
         updateHighlights();

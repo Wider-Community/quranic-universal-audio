@@ -145,8 +145,8 @@ export function computeDisplayed(
         segs = segs.filter((s) => s.matched_ref && s.matched_ref.startsWith(prefix));
     }
 
-    // Clear stale neighbour tags (mutates segAllData — consistent with Stage-1
-    // behaviour; full re-index rebuild at save/undo time drops these anyway).
+    // Clear stale neighbour tags (mutates segAllData — full re-index rebuild
+    // at save/undo time drops these anyway).
     all.segments.forEach((s) => { delete s._isNeighbour; });
 
     if (activeValid.length > 0) {

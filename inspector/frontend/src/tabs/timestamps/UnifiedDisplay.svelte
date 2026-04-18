@@ -2,23 +2,22 @@
     /**
      * UnifiedDisplay — the analysis-mode view for the Timestamps tab.
      *
-     * Replaces the imperative DOM building of Stage-1 timestamps/unified-display.ts.
      * Structure is rendered declaratively via `{#each}` from the `$loadedVerse`
      * store. Per-frame highlights (current word / phoneme / letter) are applied
-     * IMPERATIVELY via `updateHighlights()` — the caller invokes this from the
+     * imperatively via `updateHighlights()` — the caller invokes this from the
      * per-frame animation loop, avoiding a reactive re-render at 60fps.
      *
-     * Hybrid pattern (pattern note #8 in Wave-4 handoff):
-     *   - Svelte `{#each}` owns structure — words, letter rows, phoneme rows.
-     *   - `bind:this` gives us the container; `querySelectorAll` pulls elements
-     *     to apply `.active` / `.past` classList imperatively. Scoped styles
-     *     use `:global()` selectors for the dynamic classes.
+     * Hybrid pattern: Svelte `{#each}` owns structure (words, letter rows,
+     * phoneme rows); `bind:this` gives us the container; `querySelectorAll`
+     * pulls elements to apply `.active` / `.past` classList imperatively.
+     * Scoped styles use `:global()` selectors for the dynamic classes.
      */
 
     import { get } from 'svelte/store';
 
     import { loadedVerse } from '../../lib/stores/timestamps/verse';
     import { showLetters, showPhonemes } from '../../lib/stores/timestamps/display';
+    import { tsAudioElement } from '../../lib/stores/timestamps/playback';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../lib/utils/arabic-text';
     import type { PhonemeInterval, TsWord } from '../../lib/types/domain';
 
@@ -62,7 +61,7 @@
     $: rendered, (_prevActiveWordIdx = -1);
     $: rendered, (_prevActivePhonemeIdx = -1);
 
-    // ---- Helpers copied from Stage-1 unified-display.ts (pure, state-free) ----
+    // ---- Pure helpers (state-free) ----
 
     function getLastBaseLetter(word: TsWord): string {
         const bare = stripTashkeel(word.text || '');
@@ -297,7 +296,7 @@
     }
 
     function getSegRelTime(segOffset: number): number {
-        const audio = document.getElementById('audio-player') as HTMLAudioElement | null;
+        const audio = get(tsAudioElement);
         if (!audio) return 0;
         return audio.currentTime - segOffset;
     }
@@ -312,7 +311,7 @@
     // ---- Click handlers: seek audio on click ----
 
     function seekToTime(absTime: number): void {
-        const audio = document.getElementById('audio-player') as HTMLAudioElement | null;
+        const audio = get(tsAudioElement);
         if (!audio) return;
         audio.currentTime = absTime;
         // Force a repaint immediately after user seek (not waiting on timeupdate)

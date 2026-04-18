@@ -2,21 +2,18 @@
     /**
      * HistoryArrows — declarative SVG arrow column for one edit-history diff.
      *
-     * Wave 10 (S2-D21, Risk #7): replaces the imperative `drawHistoryArrows()`
-     * + `_ensureHistArrowDefs()` functions with a Svelte component that:
-     *   - accepts arrays of before/after card element refs (plus optional
-     *     delete-placeholder ref) as props,
-     *   - measures them via `getBoundingClientRect()` inside `afterUpdate`
-     *     (no manual rAF scheduling),
-     *   - pipes numeric Y positions into the pure `computeArrowLayout`
-     *     helper from `lib/utils/svg-arrow-geometry.ts`,
-     *   - renders `<svg>` + inline `<defs>/<marker>` + `{#each paths}` +
-     *     optional red-X `<g>` entirely via markup.
+     * Accepts arrays of before/after card element refs (plus optional
+     * delete-placeholder ref) as props, measures them via
+     * `getBoundingClientRect()` inside `afterUpdate`, pipes numeric Y
+     * positions into the pure `computeArrowLayout` helper from
+     * `lib/utils/svg-arrow-geometry.ts`, and renders `<svg>` + inline
+     * `<defs>/<marker>` + `{#each paths}` + optional red-X `<g>` entirely
+     * via markup.
      *
-     * Per locked §D6 / S2-D21: `<defs>` is inline per instance — a handful
-     * of extra `<marker>` nodes on-screen are cheaper than the global-singleton
-     * lifecycle concern. The marker id is per-instance (`hist-arrow-{uid}`)
-     * so multiple arrows in a single chain row do not share marker identity.
+     * `<defs>` is inline per instance — a handful of extra `<marker>` nodes
+     * on-screen are cheaper than a global-singleton lifecycle. The marker id
+     * is per-instance (`hist-arrow-{uid}`) so multiple arrows in a single
+     * chain row do not share marker identity.
      */
 
     import { afterUpdate, onMount, tick } from 'svelte';

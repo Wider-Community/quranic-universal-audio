@@ -2,12 +2,9 @@
     /**
      * AudioElement — minimal `<audio>` primitive.
      *
-     * Wraps a single HTMLAudioElement, forwards standard lifecycle events, and
-     * exposes a safePlay() wrapper. Provisioned for Waves 4/5/11 consumption.
-     *
-     * CONSUMERS: do NOT swap the legacy #audio-player / #seg-audio-player /
-     * #aud-player elements in existing tab markup yet — that is Wave 4/5/11 work.
-     * This component sits unreferenced until then.
+     * Wraps a single HTMLAudioElement, forwards standard lifecycle events,
+     * and exposes a safePlay() wrapper. Consumed by AudioPlayer.svelte and
+     * the Timestamps / Segments tab audio controls.
      */
 
     import { createEventDispatcher } from 'svelte';

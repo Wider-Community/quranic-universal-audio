@@ -2,10 +2,9 @@
     /**
      * TimestampsValidationPanel — 3-category accordion for /api/ts/validate.
      *
-     * Port of Stage-1 timestamps/validation.ts. Three categories (Failed
-     * Alignments, Missing Words, Boundary Mismatches) each render an
-     * AccordionPanel with a ValidationBadge and a list of issue buttons that
-     * jump to the offending verse via the `onJump` callback prop.
+     * Three categories (Failed Alignments, Missing Words, Boundary Mismatches)
+     * each render an AccordionPanel with a ValidationBadge and a list of issue
+     * buttons that jump to the offending verse via the `onJump` callback prop.
      */
 
     import AccordionPanel from '../../lib/components/AccordionPanel.svelte';
