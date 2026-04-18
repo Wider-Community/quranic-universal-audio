@@ -28,6 +28,7 @@
         type DisplayEntry,
     } from '../../../lib/stores/segments/history';
     import { savePreviewData, savePreviewVisible } from '../../../lib/stores/segments/save';
+    import { confirmSaveFromPreview, hideSavePreview } from '../../../lib/utils/segments/save-actions';
 
     // Derive display entries from the preview data --------------------------
     $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../types/domain').HistoryBatch[];
@@ -68,9 +69,9 @@
 
 <div id="seg-save-preview" class="seg-history-view" hidden={!$savePreviewVisible}>
     <div class="seg-history-toolbar seg-save-preview-toolbar">
-        <button id="seg-save-preview-cancel" class="btn">&larr; Cancel</button>
+        <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>&larr; Cancel</button>
         <span class="seg-history-title">Review Changes</span>
-        <button id="seg-save-preview-confirm" class="btn btn-save">Confirm Save</button>
+        <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
     </div>
 
     <div id="seg-save-preview-stats" class="seg-history-stats">

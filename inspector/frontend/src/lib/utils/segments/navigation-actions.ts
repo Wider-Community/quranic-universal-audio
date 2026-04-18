@@ -18,8 +18,8 @@ import {
     selectedReciter,
     selectedVerse,
 } from '../../stores/segments/chapter';
-import { activeFilters as activeFiltersStore } from '../../stores/segments/filters';
-import { savedFilterView as savedFilterViewStore } from '../../stores/segments/navigation';
+import { activeFilters } from '../../stores/segments/filters';
+import { savedFilterView } from '../../stores/segments/navigation';
 import { playStatusText, segListElement } from '../../stores/segments/playback';
 import { loadChapterData } from './chapter-actions';
 import { applyFiltersAndRender } from './filters-apply';
@@ -42,9 +42,9 @@ async function _ensureChapter(chapter: number | string): Promise<void> {
 }
 
 export async function jumpToSegment(chapter: number | string, segIndex: number): Promise<void> {
-    const fromFilterView = get(savedFilterViewStore) !== null;
+    const fromFilterView = get(savedFilterView) !== null;
     if (fromFilterView) {
-        activeFiltersStore.set([]);
+        activeFilters.set([]);
     }
 
     const chStr = String(chapter);
@@ -75,11 +75,11 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
         return;
     }
 
-    const curFilters = get(activeFiltersStore);
+    const curFilters = get(activeFilters);
     const hasFilterView = curFilters.some(f => f.value !== null) || !!get(selectedVerse);
     if (hasFilterView) {
         const listEl = get(segListElement);
-        savedFilterViewStore.set({
+        savedFilterView.set({
             filters: JSON.parse(JSON.stringify(curFilters)),
             chapter: get(selectedChapter),
             verse: get(selectedVerse),
@@ -90,7 +90,7 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
     await _ensureChapter(chapter);
 
     if (hasFilterView) {
-        activeFiltersStore.set([]);
+        activeFilters.set([]);
     }
     if (get(selectedVerse)) {
         selectedVerse.set('');
@@ -181,11 +181,11 @@ export function _showBackToResultsBanner(): void {
 }
 
 export function _restoreFilterView(): void {
-    const saved = get(savedFilterViewStore);
+    const saved = get(savedFilterView);
     if (!saved) return;
-    savedFilterViewStore.set(null);
+    savedFilterView.set(null);
 
-    activeFiltersStore.set([...saved.filters]);
+    activeFilters.set([...saved.filters]);
 
     if (saved.chapter !== get(selectedChapter)) {
         selectedChapter.set(saved.chapter);

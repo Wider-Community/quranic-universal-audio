@@ -39,10 +39,8 @@
     } from '../../lib/stores/segments/chapter';
     import {
         activeFilters,
-        segIndexMap,
         displayedSegments,
     } from '../../lib/stores/segments/filters';
-    import { segValidation } from '../../lib/stores/segments/validation';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import { segConfig as segConfigStore } from '../../lib/stores/segments/config';
     import { LS_KEYS } from '../../lib/utils/constants';
@@ -115,11 +113,6 @@
 
     // Reactive dependency tracking for derived UI updates.
     $: void $segAllReciters;
-    $: void $activeFilters;
-    $: void $displayedSegments;
-    $: void $segIndexMap;
-    $: void $savedFilterView;
-    $: void $segValidation;
 
     // History button visibility — driven by the raw history payload.
     $: historyBtnHidden = !$historyData || !$historyData.batches || $historyData.batches.length === 0;
@@ -243,9 +236,6 @@
     $: if ($segAllData) {
         void getChapterSegments($selectedChapter || 0);
     }
-
-    // Keep the audio element's playback rate in sync with the store.
-    $: if (segAudioEl) segAudioEl.playbackRate = $playbackSpeed;
 
     // ---------------------------------------------------------------------
     // Keyboard shortcuts

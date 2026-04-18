@@ -26,7 +26,7 @@
         startSegAnimation,
         stopSegAnimation,
     } from '../../lib/utils/segments/playback';
-    import { stopErrorCardAudio } from '../../lib/utils/segments/error-card-audio';
+    import { getValCardAudioOrNull, stopErrorCardAudio } from '../../lib/utils/segments/error-card-audio';
     import AudioPlayer from '../../lib/components/AudioPlayer.svelte';
 
     // ---- Exported prop: raw HTMLAudioElement exposed to parent via bind:audioEl ----
@@ -64,6 +64,8 @@
         if (!isNaN(v)) {
             playbackSpeed.set(v);
             localStorage.setItem(LS_KEYS.SEG_SPEED, String(v));
+            const valAudio = getValCardAudioOrNull();
+            if (valAudio) valAudio.playbackRate = v;
         }
     }
 

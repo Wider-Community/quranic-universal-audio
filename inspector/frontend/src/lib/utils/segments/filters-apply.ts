@@ -14,8 +14,8 @@
  *     `displayedSegments` re-fires and {#each} re-reconciles.
  */
 
-import { segAllData as segAllDataStore } from '../../stores/segments/chapter';
-import { activeFilters as activeFiltersStore } from '../../stores/segments/filters';
+import { segAllData } from '../../stores/segments/chapter';
+import { activeFilters } from '../../stores/segments/filters';
 import { savedFilterView } from '../../stores/segments/navigation';
 import { resetHighlightRefs } from './playback';
 
@@ -35,11 +35,11 @@ export function applyFiltersAndRender(): void {
 
     // Spread so subscribers see a fresh array reference even when the
     // content matches; otherwise `derived` may short-circuit.
-    activeFiltersStore.update((list) => [...list]);
+    activeFilters.update((list) => [...list]);
 
     // The derived `displayedSegments` recomputes from the current (in-place
     // mutated) segments array.
-    segAllDataStore.update((a) => a);
+    segAllData.update((a) => a);
 }
 
 /** Verse-filter alias preserved for compat — today both paths are identical. */
@@ -56,9 +56,8 @@ export function applyVerseFilterAndRender(): void {
 // continue to compile. Each one writes through the store so FiltersBar re-renders.
 
 export function renderFilterBar(): void {
-    // Nudge subscribers so the filter bar re-renders; the array itself is
-    // the source of truth now (no mirror in segments-state).
-    activeFiltersStore.update((list) => [...list]);
+    // Nudge subscribers so the filter bar re-renders.
+    activeFilters.update((list) => [...list]);
 }
 
 export function updateFilterBarControls(): void {
@@ -67,14 +66,14 @@ export function updateFilterBarControls(): void {
 }
 
 export function addSegFilterCondition(): void {
-    activeFiltersStore.update((list) => [
+    activeFilters.update((list) => [
         ...list,
         { field: 'duration_s', op: '>', value: null },
     ]);
 }
 
 export function clearAllSegFilters(): void {
-    activeFiltersStore.set([]);
+    activeFilters.set([]);
     savedFilterView.set(null);
     applyFiltersAndRender();
 }
