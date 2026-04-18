@@ -15,6 +15,7 @@ import {
     clearFilters,
     historyDataStale,
     setHistoryVisible,
+    setSortMode,
 } from '../../stores/segments/history';
 import { stopErrorCardAudio } from './error-card-audio';
 import { reloadCurrentReciter } from './reciter-actions';
@@ -24,6 +25,8 @@ import { reloadCurrentReciter } from './reciter-actions';
 // ---------------------------------------------------------------------------
 
 export function showHistoryView(): void {
+    clearFilters();
+    setSortMode('time');
     setHistoryVisible(true);
 }
 
