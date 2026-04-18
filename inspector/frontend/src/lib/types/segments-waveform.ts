@@ -58,17 +58,6 @@ export interface SplitData {
     audioUrl: string;
 }
 
-/** DOM-ref holder attached to an active trim-mode canvas. */
-export interface TrimEls {
-    durationSpan: HTMLElement;
-    statusSpan: HTMLElement;
-}
-
-/** DOM-ref holder attached to an active split-mode canvas. */
-export interface SplitEls {
-    infoSpan: HTMLElement;
-}
-
 // ---------------------------------------------------------------------------
 // Edit-mode function signatures (moved from segments/registry.ts in Ph6a)
 // ---------------------------------------------------------------------------
@@ -92,8 +81,6 @@ export interface SegCanvas extends HTMLCanvasElement {
     _mergeHL?: MergeHighlight;
     _trimWindow?: TrimWindow;
     _splitData?: SplitData;
-    _trimEls?: TrimEls;
-    _splitEls?: SplitEls;
     _trimBaseCache?: ImageData | null;
     _splitBaseCache?: ImageData | null;
     _editCleanup?: () => void;

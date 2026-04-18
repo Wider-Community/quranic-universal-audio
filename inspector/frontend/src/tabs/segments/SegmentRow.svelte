@@ -66,6 +66,9 @@
     import { playFromSegment } from '../../lib/utils/segments/playback';
     import type { Segment } from '../../types/domain';
 
+    import SplitPanel from './edit/SplitPanel.svelte';
+    import TrimPanel from './edit/TrimPanel.svelte';
+
     // ---- Required ----
     export let seg: Segment;
     // ---- Optional rendering flags ----
@@ -112,6 +115,13 @@
             editCanvas.set(canvasEl as SegCanvas);
         }
     }
+
+    // True only for the one live row being trimmed / split. Drives the
+    // conditional mount of TrimPanel / SplitPanel in `.seg-left` (replaces
+    // the imperative `seg-actions.hidden = true` + `seg-edit-inline` inject
+    // that `edit-trim.ts` / `edit-split.ts` used to do).
+    $: isEditingThisRow = !readOnly && !!seg.segment_uid && $editingSegUid === seg.segment_uid && $editMode !== null;
+    $: editSegCanvas = canvasEl as SegCanvas | undefined;
 
     // Derived values. Seg-derived reactives also subscribe to $segAllData via
     // `segStoreTick` so they re-fire when refreshSegInStore bumps the store —
@@ -336,7 +346,11 @@
             data-needs-waveform
             on:mousedown={onCanvasMousedown}
         ></canvas>
-        {#if !isContext && !readOnly}
+        {#if isEditingThisRow && $editMode === 'trim' && editSegCanvas}
+            <TrimPanel {seg} canvas={editSegCanvas} />
+        {:else if isEditingThisRow && $editMode === 'split' && editSegCanvas}
+            <SplitPanel {seg} canvas={editSegCanvas} />
+        {:else if !isContext && !readOnly}
             <div class="seg-actions">
                 <button class="btn btn-sm btn-adjust" on:click={onAdjustClick}>Adjust</button>
                 <button class="btn btn-sm btn-merge-prev"

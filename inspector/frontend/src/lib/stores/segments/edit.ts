@@ -40,7 +40,7 @@
 import { writable } from 'svelte/store';
 
 import type { AccordionOpCtx } from '../../types/segments';
-import type { SegCanvas } from '../../types/segments-waveform';
+import type { SegCanvas, SplitData, TrimWindow } from '../../types/segments-waveform';
 
 /** Edit modes supported by the Segments tab. Wave 7b added 'merge' |
  *  'delete' | 'reference'. Note: merge + delete are one-shot (no backdrop);
@@ -80,6 +80,20 @@ export const accordionOpCtx = writable<AccordionOpCtx | null>(null);
  *  without a document-wide lookup. */
 export const editCanvas = writable<SegCanvas | null>(null);
 
+/** Trim-mode window state — mirror of `canvas._trimWindow` so TrimPanel.svelte
+ *  can render the duration/handles reactively. Drag handlers write to both the
+ *  canvas field (for the draw pipeline) and this store (for Svelte). `null` =
+ *  not in trim mode. */
+export const trimWindow = writable<TrimWindow | null>(null);
+
+/** Split-mode state — mirror of `canvas._splitData` so SplitPanel.svelte can
+ *  render the L/R duration reactively. `null` = not in split mode. */
+export const splitState = writable<SplitData | null>(null);
+
+/** Short status text shown in trim/split panels (e.g. 'Invalid time range',
+ *  'Start overlaps with previous segment'). Cleared on panel mount. */
+export const trimStatusText = writable<string>('');
+
 /** Reset the edit store to the "no edit in progress" baseline. Called by
  *  exitEditMode() / cancel paths. `editCanvas` is cleared separately by the
  *  row publishing it (reactive) — or proactively here as a safety net so a
@@ -89,6 +103,9 @@ export function clearEdit(): void {
     editingSegUid.set(null);
     editingSegIndex.set(-1);
     editCanvas.set(null);
+    trimWindow.set(null);
+    splitState.set(null);
+    trimStatusText.set('');
 }
 
 /** Convenience setter — call when entering any edit mode. */

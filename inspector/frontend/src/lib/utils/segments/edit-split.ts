@@ -30,6 +30,8 @@ import {
     setEdit,
     splitChainCategory,
     splitChainUid,
+    splitState,
+    trimStatusText,
 } from '../../stores/segments/edit';
 import {
     playStatusText,
@@ -71,51 +73,24 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     }
     setEdit('split', seg.segment_uid ?? null);
     editingSegIndex.set(seg.index);
+    trimStatusText.set('');
 
     row.classList.add('seg-edit-target');
-    const actions = row.querySelector<HTMLElement>('.seg-actions');
-    if (actions) actions.hidden = true;
 
     const canvas = row.querySelector<SegCanvas>('canvas');
-    const segLeft = row.querySelector<HTMLElement>('.seg-left');
-    if (!canvas || !segLeft) return;
+    if (!canvas) return;
 
     const mid = Math.round((seg.time_start + seg.time_end) / 2);
     const defaultSplit = (prePausePlayMs !== null && prePausePlayMs > seg.time_start && prePausePlayMs < seg.time_end)
         ? Math.round(prePausePlayMs)
         : mid;
 
-    const inline = document.createElement('div');
-    inline.className = 'seg-edit-inline';
-
-    const infoSpan = document.createElement('span');
-    infoSpan.className = 'seg-edit-info';
-    infoSpan.textContent = `L ${((defaultSplit - seg.time_start) / 1000).toFixed(2)}s | R ${((seg.time_end - defaultSplit) / 1000).toFixed(2)}s`;
-
-    const btnRow = document.createElement('div');
-    btnRow.className = 'seg-edit-buttons';
-    const mkBtn = (text: string, cls: string, fn: () => void): HTMLButtonElement => {
-        const b = document.createElement('button');
-        b.className = `btn btn-sm ${cls}`;
-        b.textContent = text;
-        b.addEventListener('click', fn);
-        return b;
-    };
-    btnRow.appendChild(mkBtn('Cancel', 'btn-cancel', exitEditMode));
-    btnRow.appendChild(mkBtn('Play Left', 'btn-preview', () => previewSplitAudio('left')));
-    btnRow.appendChild(mkBtn('Play Right', 'btn-preview', () => previewSplitAudio('right')));
-    btnRow.appendChild(mkBtn('Split', 'btn-confirm', () => confirmSplit(seg)));
-    btnRow.appendChild(infoSpan);
-    inline.appendChild(btnRow);
-
-    segLeft.appendChild(inline);
-
-    canvas._splitEls = { infoSpan };
     canvas._wfCache = null;
 
     const chapter = seg.chapter || parseInt(get(selectedChapter));
     const splitAudioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
     canvas._splitData = { seg, currentSplit: defaultSplit, audioUrl: splitAudioUrl };
+    splitState.set({ ...canvas._splitData });
     canvas._splitBaseCache = null;
     drawSplitWaveform(canvas);
     setupSplitDragHandle(canvas, seg);
@@ -162,7 +137,7 @@ export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
         const timeAtX = seg.time_start + (x / canvas.width) * (seg.time_end - seg.time_start);
         const snapped = Math.round(timeAtX / 10) * 10;
         sd.currentSplit = Math.max(seg.time_start + 50, Math.min(snapped, seg.time_end - 50));
-        updateSplitInfo(canvas, seg, sd.currentSplit);
+        splitState.update(s => s ? { ...s, currentSplit: sd.currentSplit } : s);
         drawSplitWaveform(canvas);
     }
 
@@ -195,18 +170,6 @@ export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
         canvas.removeEventListener('mouseup', onMouseup);
         canvas.removeEventListener('mouseleave', onMouseleave);
     };
-}
-
-// ---------------------------------------------------------------------------
-// updateSplitInfo — update the L/R duration display
-// ---------------------------------------------------------------------------
-
-export function updateSplitInfo(canvas: SegCanvas | null | undefined, seg: Segment, splitTime: number): void {
-    const c = canvas ?? get(editCanvas);
-    const el = c?._splitEls?.infoSpan;
-    if (el) {
-        el.textContent = `L ${((splitTime - seg.time_start) / 1000).toFixed(2)}s | R ${((seg.time_end - splitTime) / 1000).toFixed(2)}s`;
-    }
 }
 
 // ---------------------------------------------------------------------------

@@ -39,16 +39,12 @@ export function exitEditMode(): void {
     const canvas = get(editCanvas);
     const editRow = canvas?.closest<HTMLElement>('.seg-row') ?? null;
     if (editRow) {
-        editRow.querySelector('.seg-edit-inline')?.remove();
-        const actions = editRow.querySelector<HTMLElement>('.seg-actions');
-        if (actions) actions.hidden = false;
         const playCol = editRow.querySelector<HTMLElement>('.seg-play-col');
         if (playCol) playCol.hidden = false;
     }
     if (canvas) {
         canvas._editCleanup?.();
         delete canvas._trimWindow; delete canvas._splitData;
-        delete canvas._trimEls; delete canvas._splitEls;
         delete canvas._editCleanup;
         canvas._wfCache = null;
         canvas.style.cursor = '';

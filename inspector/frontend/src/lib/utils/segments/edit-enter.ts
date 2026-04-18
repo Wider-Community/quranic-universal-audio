@@ -57,9 +57,6 @@ export function enterEditWithBuffer(
         clearEdit();
         const targetRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
         if (targetRow) {
-            targetRow.querySelector('.seg-edit-inline')?.remove();
-            const acts = targetRow.querySelector<HTMLElement>('.seg-actions');
-            if (acts) acts.hidden = false;
             targetRow.classList.remove('seg-edit-target');
         }
     }

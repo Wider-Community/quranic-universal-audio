@@ -22,7 +22,14 @@ import {
     setPendingOp,
     snapshotSeg,
 } from '../../stores/segments/dirty';
-import { editCanvas, editingSegIndex, editMode, setEdit } from '../../stores/segments/edit';
+import {
+    editCanvas,
+    editingSegIndex,
+    editMode,
+    setEdit,
+    trimStatusText,
+    trimWindow,
+} from '../../stores/segments/edit';
 import {
     playStatusText,
     segAudioElement,
@@ -53,43 +60,12 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     }
     setEdit('trim', seg.segment_uid ?? null);
     editingSegIndex.set(seg.index);
+    trimStatusText.set('');
 
     row.classList.add('seg-edit-target');
-    const actions = row.querySelector<HTMLElement>('.seg-actions');
-    if (actions) actions.hidden = true;
 
     const canvas = row.querySelector<SegCanvas>('canvas');
-    const segLeft = row.querySelector<HTMLElement>('.seg-left');
-    if (!canvas || !segLeft) return;
-
-    const inline = document.createElement('div');
-    inline.className = 'seg-edit-inline';
-
-    const durationSpan = document.createElement('span');
-    durationSpan.className = 'seg-edit-duration';
-    durationSpan.textContent = `${((seg.time_end - seg.time_start) / 1000).toFixed(2)}s`;
-
-    const statusSpan = document.createElement('span');
-    statusSpan.className = 'seg-edit-status';
-    const btnRow = document.createElement('div');
-    btnRow.className = 'seg-edit-buttons';
-    const mkBtn = (text: string, cls: string, fn: () => void): HTMLButtonElement => {
-        const b = document.createElement('button');
-        b.className = `btn btn-sm ${cls}`;
-        b.textContent = text;
-        b.addEventListener('click', fn);
-        return b;
-    };
-    btnRow.appendChild(mkBtn('Cancel', 'btn-cancel', exitEditMode));
-    btnRow.appendChild(mkBtn('Preview', 'btn-preview', previewTrimAudio));
-    btnRow.appendChild(mkBtn('Apply', 'btn-confirm', () => confirmTrim(seg)));
-    btnRow.appendChild(durationSpan);
-    btnRow.appendChild(statusSpan);
-    inline.appendChild(btnRow);
-
-    segLeft.appendChild(inline);
-
-    canvas._trimEls = { durationSpan, statusSpan };
+    if (!canvas) return;
 
     const chStr = get(selectedChapter);
     const chapter = seg.chapter || parseInt(chStr);
@@ -106,6 +82,7 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     const windowStart = Math.max(prevEnd, seg.time_start - cfg.trimPadLeft);
     const windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
     canvas._trimWindow = { windowStart, windowEnd, currentStart: seg.time_start, currentEnd: seg.time_end, audioUrl };
+    trimWindow.set({ ...canvas._trimWindow });
     canvas._wfCache = null;
     canvas._trimBaseCache = null;
 
@@ -164,7 +141,7 @@ export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
         } else {
             tw.currentEnd = Math.max(tw.currentStart + 50, Math.min(snapped, tw.windowEnd));
         }
-        updateTrimDuration(canvas);
+        trimWindow.update(w => w ? { ...w, currentStart: tw.currentStart, currentEnd: tw.currentEnd } : w);
         drawTrimWaveform(canvas);
     }
 
@@ -197,29 +174,16 @@ export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
 }
 
 // ---------------------------------------------------------------------------
-// updateTrimDuration — update the duration display
-// ---------------------------------------------------------------------------
-
-export function updateTrimDuration(canvas?: SegCanvas | null): void {
-    const c = canvas ?? get(editCanvas);
-    const tw = c?._trimWindow;
-    const el = c?._trimEls?.durationSpan;
-    if (!tw || !el) return;
-    el.textContent = `${((tw.currentEnd - tw.currentStart) / 1000).toFixed(2)}s`;
-}
-
-// ---------------------------------------------------------------------------
 // confirmTrim — apply the trim and finalize
 // ---------------------------------------------------------------------------
 
 export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     const c = canvas ?? get(editCanvas);
     const tw = c?._trimWindow;
-    const trimStatus = c?._trimEls?.statusSpan || null;
     const newStart = tw?.currentStart;
     const newEnd = tw?.currentEnd;
     if (newStart == null || newEnd == null || newStart >= newEnd) {
-        if (trimStatus) trimStatus.textContent = 'Invalid time range';
+        trimStatusText.set('Invalid time range');
         return;
     }
 
@@ -232,11 +196,11 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     const nextSeg = (segIdx >= 0 && segIdx < chapterSegs.length - 1) ? chapterSegs[segIdx + 1] : null;
 
     if (prevSeg && prevSeg.audio_url === seg.audio_url && newStart < prevSeg.time_end) {
-        if (trimStatus) trimStatus.textContent = 'Start overlaps with previous segment';
+        trimStatusText.set('Start overlaps with previous segment');
         return;
     }
     if (nextSeg && nextSeg.audio_url === seg.audio_url && newEnd > nextSeg.time_start) {
-        if (trimStatus) trimStatus.textContent = 'End overlaps with next segment';
+        trimStatusText.set('End overlaps with next segment');
         return;
     }
 
