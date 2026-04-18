@@ -8,7 +8,7 @@
 
 import type { ChartConfiguration, TooltipItem } from 'chart.js';
 
-import type { ChartCfg, Distribution } from '../../tabs/segments/stats-types';
+import type { ChartCfg, Distribution } from '../types/stats';
 import { Chart } from './chart';
 
 // ---------------------------------------------------------------------------

@@ -12,7 +12,7 @@
      */
     import { segStats } from '../../lib/stores/segments/stats';
     import { selectedReciter } from '../../lib/stores/segments/chapter';
-    import type { Distribution, ChartCfg } from './stats-types';
+    import type { Distribution, ChartCfg } from '../../lib/types/stats';
     import StatsChart from './StatsChart.svelte';
     import ChartFullscreen from './ChartFullscreen.svelte';
 

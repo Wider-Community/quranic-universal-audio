@@ -107,7 +107,6 @@ inspector/
         │   │   ├── AccordionPanel.svelte #  Shared <details> accordion wrapper
         │   │   ├── AudioElement.svelte   #  Thin <audio> wrapper (safePlay, events)
         │   │   ├── AudioPlayer.svelte    #  Full audio player UI (source + controls)
-        │   │   ├── Button.svelte         #  Styled button primitive
         │   │   ├── SearchableSelect.svelte # Dropdown with text search + grouped options
         │   │   ├── SpeedControl.svelte   #  Playback speed selector
         │   │   ├── ValidationBadge.svelte #  Color-coded count badge (default/warning/error)
@@ -136,6 +135,7 @@ inspector/
         │   │   ├── domain.ts       #   Segment, Ref, PhonemeInterval, SegmentPeaks, SurahInfo, ...
         │   │   ├── segments-waveform.ts #  SegCanvas extension types, highlight descriptors
         │   │   ├── segments.ts     #   SplitChain, HistorySnapshot, OpFlatItem and related types
+        │   │   ├── stats.ts        #   ChartCfg, Distribution — shared stats chart types
         │   │   └── ui.ts           #   SelectOption, common UI types
         │   └── utils/
         │       ├── active-tab.ts   #   Active-tab state (getActiveTab/setActiveTab)
@@ -214,7 +214,6 @@ inspector/
             ├── StatsPanel.svelte   #   Statistics panel accordion shell
             ├── StatsChart.svelte   #   Chart.js histogram component
             ├── ChartFullscreen.svelte #  Fullscreen overlay for charts
-            ├── stats-types.ts      #   StatsData / StatsConfig types (local to segments)
             ├── edit/               # Editing mode overlays
             │   ├── EditOverlay.svelte #  Active edit mode container
             │   ├── TrimPanel.svelte   #  Trim handles + confirm
@@ -315,7 +314,7 @@ Each tab's Svelte components import from `lib/stores/` (reactive state) and `lib
 | **Merge** | 1.0 | `lib/utils/segments/edit-merge.ts` |
 | **Edit Reference** | 1.0 | `lib/utils/segments/edit-reference.ts` |
 | **Delete** | N/A | `lib/utils/segments/edit-delete.ts` |
-| **Auto-fix** | 1.0 | `lib/utils/segments/edit-reference.ts` (via commitRefEdit) |
+| **Auto-fill** | 1.0 | `lib/utils/segments/edit-reference.ts` (via commitRefEdit) |
 | **Ignore** | Unchanged | `lib/utils/segments/save-actions.ts` (adds to ignored_categories) |
 
 ## Segments Validation Categories
@@ -349,6 +348,7 @@ Append-only JSONL at `data/recitation_segments/<reciter>/edit_history.jsonl`. Ba
 ## Dependencies
 
 - **Python:** Flask (see `requirements.txt`)
+- ffmpeg
 - **Client (npm):** `chart.js`, `chartjs-plugin-annotation`; devDeps: `typescript`, `vite`, `@types/*`, `eslint` + `@typescript-eslint/*`. See `inspector/frontend/package.json`.
 - **Client (platform):** Web Audio API, Fetch, IntersectionObserver
 - **Optional:** `quranic_phonemizer` (for reference text resolution)
