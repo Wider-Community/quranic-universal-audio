@@ -16,8 +16,6 @@
      *
      * LC-slider: reactive `lcThreshold` drives Low Confidence item filtering.
      * Qalqala filter: reactive `activeQalqalaLetter` + `qalqalaEndOfVerse`.
-     *
-     * Batch RAF: skipped — plain `{#each}` is sufficient for typical item counts.
      */
 
     import { segValidation } from '../../../lib/stores/segments/validation';
@@ -135,7 +133,12 @@
         return all.filter((c) => c.items.length > 0);
     }
 
-    $: categories = buildCategories($segValidation, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
+    $: {
+        categories = buildCategories($segValidation, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
+        for (const cat of categories) {
+            if (!cardRefs[cat.type]) cardRefs[cat.type] = [];
+        }
+    }
     $: hasAny = categories.length > 0;
 
     // ---- Item navigation button helpers ----
@@ -206,16 +209,18 @@
         }
     }
 
-    // ---- "Show All Context" ----
-    function handleShowAllContext(containerEl: Element | null): void {
-        if (!containerEl) return;
-        const btns = [...containerEl.querySelectorAll<HTMLButtonElement>('.val-ctx-toggle-btn')];
-        const anyShown = btns.some((b) => b.textContent?.trim() === 'Hide Context');
-        btns.forEach((b) => {
-            const isShown = b.textContent?.trim() === 'Hide Context';
-            if (anyShown && isShown) b.click();
-            else if (!anyShown && !isShown) b.click();
-        });
+    // ---- ErrorCard refs keyed by category type ----
+    const cardRefs: Record<string, ErrorCard[]> = {};
+
+    // ---- "Show/Hide All Context" per category ----
+    function handleShowAllContext(type: string): void {
+        const cards = cardRefs[type] ?? [];
+        const anyShown = cards.some((c) => c?.getIsContextShown());
+        for (const c of cards) {
+            if (!c) continue;
+            if (anyShown) { if (c.getIsContextShown()) c.hideContextForced(); }
+            else { if (!c.getIsContextShown()) c.showContextForced(); }
+        }
     }
 
     // ---- Accordion toggle handler (factored out to avoid TS cast in template) ----
@@ -223,14 +228,6 @@
         const detailsEl = e.currentTarget as HTMLDetailsElement;
         const isOpen = detailsEl.open;
         openCategory = isOpen ? type : (openCategory === type ? null : openCategory);
-    }
-
-    // ---- Show All Context: click handler ----
-    function handleShowAllContextClick(e: Event): void {
-        const btn = e.currentTarget as HTMLButtonElement;
-        const detailsEl = btn.closest('details');
-        const container = detailsEl?.querySelector('.val-cards-container');
-        if (container) handleShowAllContext(container);
     }
 </script>
 
@@ -313,13 +310,17 @@
                 <div class="val-ctx-all-row">
                     <button
                         class="val-action-btn val-action-btn-muted"
-                        on:click={handleShowAllContextClick}
+                        on:click={() => handleShowAllContext(cat.type)}
                     >Show/Hide All Context</button>
                 </div>
 
                 <div class="val-cards-container">
-                    {#each cat.visibleItems as issue (issue)}
-                        <ErrorCard category={cat.type} item={issue} />
+                    {#each cat.visibleItems as issue, i (issue)}
+                        <ErrorCard
+                            bind:this={cardRefs[cat.type][i]}
+                            category={cat.type}
+                            item={issue}
+                        />
                     {/each}
                 </div>
             </details>

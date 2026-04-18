@@ -10,9 +10,6 @@
      *
      * Escape or backdrop click closes the overlay.
      * A separate Chart.js instance is used (not the inline card canvas).
-     *
-     * Wave 11a: drawBarChart extracted to lib/utils/stats-chart-draw.ts
-     * (Wave 8b O1 dedup with StatsChart.svelte).
      */
     import { onDestroy } from 'svelte';
 
@@ -30,6 +27,7 @@
 
     let canvasEl: HTMLCanvasElement | null = null;
     let chartInstance: Chart | null = null;
+    let showSavedTip = false;
 
     // Rebuild chart whenever the overlay is shown (dist+cfg become non-null)
     // or canvas ref is ready.
@@ -62,6 +60,11 @@
         if (e.key === 'Escape') onClose();
     }
 
+    function flashSavedTip(): void {
+        showSavedTip = true;
+        setTimeout(() => { showSavedTip = false; }, 1200);
+    }
+
     function handleSave(): void {
         if (!canvasEl || !reciter || !cfg) return;
         canvasEl.toBlob((blob) => {
@@ -73,13 +76,7 @@
                 `/api/seg/stats/${encodeURIComponent(reciter)}/save-chart`,
                 { method: 'POST', body: fd },
             ).then((data) => {
-                if (data.ok) {
-                    const tip = document.createElement('span');
-                    tip.className = 'seg-stats-saved-tip';
-                    tip.textContent = 'Saved';
-                    document.body.appendChild(tip);
-                    setTimeout(() => tip.remove(), 1200);
-                }
+                if (data.ok) flashSavedTip();
             });
         }, 'image/png');
     }
@@ -95,6 +92,7 @@
         class="seg-stats-fullscreen"
         on:click={handleBackdropClick}
     >
+        {#if showSavedTip}<span class="seg-stats-saved-tip">Saved</span>{/if}
         <div class="seg-stats-fs-inner">
             <div class="seg-stats-fs-bar">
                 <span class="seg-stats-fs-title">{cfg.title}</span>

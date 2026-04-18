@@ -2,10 +2,6 @@
     /**
      * SegmentsAudioControls — audio element + speed <select> + play/pause +
      * auto-play toggle for the Segments tab.
-     *
-     * Uses AudioPlayer for the underlying <audio> element; the speed <select>
-     * is rendered inline and writes to the `playbackSpeed` store. A reactive
-     * subscriber mirrors the store onto the audio element's playbackRate.
      */
 
     import { onMount } from 'svelte';
@@ -117,11 +113,8 @@
 </script>
 
 <div class="seg-controls">
-    <!-- id="seg-audio-player" preserved so App.svelte's tab-switch guard
-         can pause() it when leaving the Segments tab. -->
     <AudioPlayer
         bind:this={_player}
-        audioId="seg-audio-player"
         controls={false}
         showSpeedControl={false}
     />

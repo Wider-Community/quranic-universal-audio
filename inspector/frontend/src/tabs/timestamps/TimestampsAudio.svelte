@@ -1,6 +1,6 @@
 <script lang="ts">
     import { get } from 'svelte/store';
-    import { createEventDispatcher } from 'svelte';
+    import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
     import AudioPlayer from '../../lib/components/AudioPlayer.svelte';
     import { createAnimationLoop } from '../../lib/utils/animation';
@@ -9,6 +9,7 @@
         autoAdvancing,
         autoMode,
         currentTime,
+        tsAudioElement,
     } from '../../lib/stores/timestamps/playback';
     import { viewMode } from '../../lib/stores/timestamps/display';
     import { loadedVerse } from '../../lib/stores/timestamps/verse';
@@ -113,6 +114,14 @@
         autoAdvancing.set(false);
         dispatch('error');
     }
+
+    onMount(() => {
+        tsAudioElement.set(_player?.element() ?? null);
+    });
+
+    onDestroy(() => {
+        tsAudioElement.set(null);
+    });
 </script>
 
 <div class="audio-controls">

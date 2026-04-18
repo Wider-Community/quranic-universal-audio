@@ -1,11 +1,5 @@
 /**
  * Timestamps tab — playback control state.
- *
- * Split from Stage-1 `state.tsAutoMode`, `state.tsAutoAdvancing`, and
- * per-frame playhead position. `currentTime` is updated by the animation
- * loop in `TimestampsTab.svelte`; consumers (UnifiedDisplay, AnimationDisplay,
- * TimestampsWaveform) use it imperatively via `get($currentTime)` for 60fps
- * work — stores themselves are not the hot path, the value they hold is.
  */
 
 import { writable } from 'svelte/store';
@@ -22,3 +16,7 @@ export const autoAdvancing = writable<boolean>(false);
 
 /** Audio element current time (seconds, absolute). Updated per animation frame. */
 export const currentTime = writable<number>(0);
+
+/** The <audio> element driving timestamps-tab playback. Set by TimestampsAudio
+ *  on mount; cleared to null on destroy. Consumers null-check before use. */
+export const tsAudioElement = writable<HTMLAudioElement | null>(null);

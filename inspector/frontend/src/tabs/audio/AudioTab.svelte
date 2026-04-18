@@ -1,24 +1,18 @@
 <script lang="ts">
     /**
-     * AudioTab — Svelte component for the Audio tab (S2-D06).
-     *
-     * Replaces the Stage-1 imperative audio/index.ts. Owns:
-     *   - Category toggle (By Surah / By Ayah).
-     *   - Reciter, surah, and ayah dropdowns (via SearchableSelect).
-     *   - Audio player with prev/next navigation.
-     *   - Source loading from /api/audio/sources + /api/audio/surahs/*.
-     *   - localStorage restore of last selected reciter.
-     *
-     * No store needed — all state is component-local (no cross-tab sharing).
-     * Pattern notes #1-#8 from Wave 4 apply.
+     * AudioTab — audio browser with By Surah / By Ayah toggle, reciter/surah/ayah
+     * dropdowns (via SearchableSelect), audio player, and prev/next navigation.
+     * Source loading from /api/audio/sources + /api/audio/surahs/*.
+     * State is component-local except for audAudioElement store used by App.svelte.
      */
 
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
 
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson } from '../../lib/api';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
+    import { audAudioElement } from '../../lib/stores/audio';
     import type { SelectOption } from '../../lib/types/ui';
     import type { AudioSourcesResponse, AudioSurahsResponse } from '../../lib/types/api';
 
@@ -61,6 +55,11 @@
     // ---- Lifecycle ----
     onMount(() => {
         void loadSources();
+        audAudioElement.set(playerEl);
+    });
+
+    onDestroy(() => {
+        audAudioElement.set(null);
     });
 
     // ---- Source loading ----
@@ -373,8 +372,7 @@
         title="Previous"
         on:click={() => navigate(-1)}
     >&#9664; Prev</button>
-    <!-- id="aud-player" preserved: App.svelte switchTab() queries it to pause -->
-    <audio id="aud-player" bind:this={playerEl} controls preload="none"></audio>
+    <audio bind:this={playerEl} controls preload="none"></audio>
     <button
         class="btn btn-nav"
         disabled={nextDisabled}
@@ -384,8 +382,7 @@
 </div>
 
 <style>
-    /* Audio player sizing — scoped from styles/audio-tab.css */
-    #aud-player {
+    audio {
         width: 500px;
         flex-shrink: 1;
         min-width: 200px;

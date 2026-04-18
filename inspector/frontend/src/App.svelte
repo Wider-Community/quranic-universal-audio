@@ -1,7 +1,12 @@
 <script lang="ts">
+    import { get } from 'svelte/store';
     import { onMount } from 'svelte';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS } from './lib/utils/constants';
+    import { tsAudioElement } from './lib/stores/timestamps/playback';
+    import { segAudioElement } from './lib/stores/segments/playback';
+    import { audAudioElement } from './lib/stores/audio';
+    import { stopErrorCardAudio } from './lib/utils/segments/error-card-audio';
     import AudioTab from './tabs/audio/AudioTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
@@ -12,24 +17,15 @@
         setActiveTab(tab);
         activeTab = tab;
         localStorage.setItem(LS_KEYS.ACTIVE_TAB, tab);
-        // Pause audio from other tabs to avoid multiple streams playing
         if (tab !== 'timestamps') {
-            const tsAudio = document.getElementById('audio-player') as HTMLAudioElement | null;
-            if (tsAudio) tsAudio.pause();
+            get(tsAudioElement)?.pause();
         }
         if (tab !== 'segments') {
-            const segAudio = document.getElementById('seg-audio-player') as HTMLAudioElement | null;
-            if (segAudio) segAudio.pause();
-            const segPanel = document.getElementById('segments-panel');
-            if (segPanel) {
-                segPanel.querySelectorAll<HTMLAudioElement>('audio').forEach(a => {
-                    if (a.id !== 'seg-audio-player') a.pause();
-                });
-            }
+            get(segAudioElement)?.pause();
+            stopErrorCardAudio();
         }
         if (tab !== 'audio') {
-            const audPlayer = document.getElementById('aud-player') as HTMLAudioElement | null;
-            if (audPlayer) audPlayer.pause();
+            get(audAudioElement)?.pause();
         }
     }
 
@@ -58,12 +54,12 @@
     </div>
 
     <!-- ============ Segments Tab ============ -->
-    <div id="segments-panel" hidden={activeTab !== 'segments'}>
+    <div hidden={activeTab !== 'segments'}>
         <SegmentsTab />
     </div>
 
     <!-- ============ Audio Tab ============ -->
-    <div id="audio-panel" hidden={activeTab !== 'audio'}>
+    <div hidden={activeTab !== 'audio'}>
         <AudioTab />
     </div>
 

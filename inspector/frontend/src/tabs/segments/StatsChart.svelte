@@ -8,11 +8,8 @@
      *  - cfg: chart configuration (colors, format, refLine, etc.)
      *  - reciter: currently-loaded reciter slug (for save-chart API)
      *
-     * Chart lifecycle: full destroy+rebuild on data change (mirrors Stage-1
-     * behaviour). onDestroy cleans up the Chart instance.
-     *
-     * Wave 11a: drawBarChart extracted to lib/utils/stats-chart-draw.ts
-     * (Wave 8b O1 dedup with ChartFullscreen.svelte).
+     * Chart lifecycle: full destroy+rebuild on data change.
+     * onDestroy cleans up the Chart instance.
      */
     import { onDestroy } from 'svelte';
 
@@ -33,6 +30,7 @@
 
     let canvasEl: HTMLCanvasElement | null = null;
     let chartInstance: Chart | null = null;
+    let showSavedTip = false;
 
     // ---------------------------------------------------------------------------
     // Build chart whenever canvas is available and dist data changes.
@@ -58,6 +56,11 @@
     // Save chart PNG to server.
     // ---------------------------------------------------------------------------
 
+    function flashSavedTip(): void {
+        showSavedTip = true;
+        setTimeout(() => { showSavedTip = false; }, 1200);
+    }
+
     function handleSave(): void {
         if (!canvasEl || !reciter) return;
         canvasEl.toBlob((blob) => {
@@ -69,19 +72,14 @@
                 `/api/seg/stats/${encodeURIComponent(reciter)}/save-chart`,
                 { method: 'POST', body: fd },
             ).then((data) => {
-                if (data.ok) {
-                    const tip = document.createElement('span');
-                    tip.className = 'seg-stats-saved-tip';
-                    tip.textContent = 'Saved';
-                    document.body.appendChild(tip);
-                    setTimeout(() => tip.remove(), 1200);
-                }
+                if (data.ok) flashSavedTip();
             });
         }, 'image/png');
     }
 </script>
 
 <div class="seg-stats-chart-wrap">
+    {#if showSavedTip}<span class="seg-stats-saved-tip">Saved</span>{/if}
     <div class="seg-stats-chart-header">
         <h4>{title}</h4>
         <span class="seg-stats-chart-btns">
