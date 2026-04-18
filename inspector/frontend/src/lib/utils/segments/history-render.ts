@@ -4,8 +4,8 @@
  * reactively from `$historyData`.
  */
 
-import type { SegEditHistoryResponse } from '../../../types/api';
 import { setHistoryData } from '../../stores/segments/history';
+import type { SegEditHistoryResponse } from '../../types/api';
 
 export function renderEditHistoryPanel(data: SegEditHistoryResponse | null | undefined): void {
     if (!data || !data.batches || data.batches.length === 0) {

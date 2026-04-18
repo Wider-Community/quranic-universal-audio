@@ -12,7 +12,7 @@
  * cache key so reads always hit regardless of which form the caller provides.
  */
 
-import type { AudioPeaks } from '../../types/domain';
+import type { AudioPeaks } from '../types/domain';
 
 // ---------------------------------------------------------------------------
 // URL normalisation

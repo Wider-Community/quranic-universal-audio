@@ -18,7 +18,7 @@
 
     import { fetchJson } from '../../lib/api';
     import { drawBarChart } from '../../lib/utils/stats-chart-draw';
-    import type { SegSaveChartResponse } from '../../types/api';
+    import type { SegSaveChartResponse } from '../../lib/types/api';
     import type { ChartCfg, Distribution } from './stats-types';
 
     import type { Chart } from '../../lib/utils/chart';

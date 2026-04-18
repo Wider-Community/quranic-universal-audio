@@ -1,16 +1,13 @@
 /**
  * Segments tab — save-preview store.
  *
- * Wave 9: `savePreviewVisible` writable + show/hide helpers.
- * Wave 11a: `savePreviewData` writable carries the full preview payload so
- *   SavePreview.svelte can render summary stats + batch cards reactively
- *   (resolves Opus F bifurcation — save.ts no longer writes to imperative
- *   DOM containers; Svelte owns #seg-save-preview-stats / -batches).
+ * `savePreviewData` writable carries the full preview payload so
+ * SavePreview.svelte can render summary stats + batch cards reactively.
  */
 
 import { writable } from 'svelte/store';
 
-import type { EditOp, HistoryBatch } from '../../../types/domain';
+import type { EditOp, HistoryBatch } from '../../types/domain';
 import type { SavedChainsSnapshot } from '../../types/segments';
 
 // ---------------------------------------------------------------------------

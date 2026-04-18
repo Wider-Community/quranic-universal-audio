@@ -21,7 +21,7 @@
     } from '../../lib/stores/timestamps/verse';
     import { buildGroupedReciters } from '../../lib/utils/grouped-reciters';
     import { LS_KEYS } from '../../lib/utils/constants';
-    import type { TsReciter } from '../../types/domain';
+    import type { TsReciter } from '../../lib/types/domain';
 
     const dispatch = createEventDispatcher<{
         reciterChange: string;

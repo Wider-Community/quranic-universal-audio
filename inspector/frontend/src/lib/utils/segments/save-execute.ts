@@ -5,8 +5,6 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import type { SegEditHistoryResponse, SegSaveResponse } from '../../../types/api';
-import type { EditOp, Segment } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
 import {
     getChapterSegments,
@@ -22,6 +20,8 @@ import {
 } from '../../stores/segments/dirty';
 import { playStatusText } from '../../stores/segments/playback';
 import { saveButtonLabel } from '../../stores/segments/save';
+import type { SegEditHistoryResponse, SegSaveResponse } from '../../types/api';
+import type { EditOp, Segment } from '../../types/domain';
 import { renderEditHistoryPanel } from './history-render';
 import { refreshValidation } from './validation-refresh';
 

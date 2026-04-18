@@ -15,7 +15,7 @@
         TsBoundaryMismatch,
         TsMfaFailure,
         TsMissingWords,
-    } from '../../types/domain';
+    } from '../../lib/types/domain';
 
     /** Parent-supplied handler: jump the verse dropdown to the clicked issue. */
     export let onJump: (verseKey: string) => void;

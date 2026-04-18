@@ -1,11 +1,5 @@
 import { get as storeGet } from 'svelte/store';
 
-import type {
-    SegEditHistoryResponse,
-    SegUndoBatchResponse,
-    SegUndoOpsResponse,
-} from '../../../types/api';
-import type { HistoryBatch } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
 import { selectedReciter } from '../../stores/segments/chapter';
 import {
@@ -27,6 +21,12 @@ import {
 } from '../../stores/segments/history';
 import { playStatusText } from '../../stores/segments/playback';
 import { setSavePreviewData } from '../../stores/segments/save';
+import type {
+    SegEditHistoryResponse,
+    SegUndoBatchResponse,
+    SegUndoOpsResponse,
+} from '../../types/api';
+import type { HistoryBatch } from '../../types/domain';
 import { surahOptionText } from '../surah-info';
 import { renderEditHistoryPanel } from './history-render';
 import { buildSavePreviewData, hideSavePreview } from './save-actions';

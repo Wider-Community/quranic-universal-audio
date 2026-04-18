@@ -20,7 +20,7 @@
     import { loadedVerse } from '../../lib/stores/timestamps/verse';
     import { showLetters, showPhonemes } from '../../lib/stores/timestamps/display';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../lib/utils/arabic-text';
-    import type { PhonemeInterval, TsWord } from '../../types/domain';
+    import type { PhonemeInterval, TsWord } from '../../lib/types/domain';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 

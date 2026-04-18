@@ -21,7 +21,7 @@
         SegValAnyItem,
         SegValBoundaryAdjItem,
         Segment,
-    } from '../../../types/domain';
+    } from '../../../lib/types/domain';
     import SegmentRow from '../SegmentRow.svelte';
 
     // ---- Props ----

@@ -1,14 +1,9 @@
 /**
  * Segments tab — edit-history view store + pure helpers.
  *
- * Wave 10: single writable owning all history-panel UI state (raw response,
+ * Single writable owning all history-panel UI state (raw response,
  * derived split chains, filter sets, sort mode, panel visibility) plus the
- * pure helpers absorbed from the pre-Wave-10 imperative modules
- * (`segments/history/index.ts`, `segments/history/filters.ts`,
- * `segments/history/rendering.ts`).
- *
- * Per locked-approach §D3: ONE store for all history state. Per-batch
- * "expanded" state stays as local component `let` inside HistoryBatch.svelte.
+ * pure helpers.
  *
  * ## Helpers exported
  * - Pure data shapers: `flattenBatchesToItems`, `groupRelatedOps`,
@@ -20,24 +15,16 @@
  * - Derived display ordering: `buildDisplayItems(items, batches, sortMode,
  *   splitChains, filterErrCats, filterOpTypes)`.
  *
- * ## Risks preserved per locked spec
- * - Risk #4: `histItemChapter` returns `Infinity` sentinel for missing
- *   chapters — preserved verbatim.
- * - Risk #5: `groupRelatedOps` union-find lineage — preserved verbatim.
- * - Risk #6: split chain filter interaction — preserved verbatim in
- *   `buildDisplayItems`.
- *
- * ## Status (commit 1)
- * Additive only — no behavioral change. The legacy `segments/history/*.ts`
- * imperative modules continue to run; the store is consumed by Wave 10's
- * Svelte components in subsequent commits (HistoryArrows, HistoryOp,
- * SplitChainRow, HistoryBatch, HistoryFilters, HistoryPanel).
+ * ## Notes
+ * - `histItemChapter` returns `Infinity` sentinel for missing chapters.
+ * - `groupRelatedOps` uses union-find lineage.
+ * - Split chain filter interaction is in `buildDisplayItems`.
  */
 
 import { derived, get, writable } from 'svelte/store';
 
-import type { SegEditHistoryResponse } from '../../../types/api';
-import type { EditOp, HistoryBatch, Segment } from '../../../types/domain';
+import type { SegEditHistoryResponse } from '../../types/api';
+import type { EditOp, HistoryBatch, Segment } from '../../types/domain';
 import type {
     HistorySnapshot,
     OpFlatItem,

@@ -43,7 +43,7 @@
     import { segConfig as segConfigStore } from '../../lib/stores/segments/config';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
-    import type { SegReciter } from '../../types/domain';
+    import type { SegReciter } from '../../lib/types/domain';
 
     import { reloadCurrentReciter } from '../../lib/utils/segments/reciter-actions';
     import { loadChapterData } from '../../lib/utils/segments/chapter-actions';

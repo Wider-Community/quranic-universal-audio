@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 
-import type { SegValAutoFix } from '../../../types/domain';
 import { segValidation } from '../../stores/segments/validation';
+import type { SegValAutoFix } from '../../types/domain';
 import { _VAL_SINGLE_INDEX_CATS } from './constants';
 
 type ValIndexedItem<K extends string> = { [P in K]: number };

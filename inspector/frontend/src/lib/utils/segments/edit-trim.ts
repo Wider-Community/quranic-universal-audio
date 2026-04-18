@@ -4,7 +4,6 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../types/domain';
 import {
     getChapterSegments,
     getCurrentChapterSegs,
@@ -34,6 +33,7 @@ import {
     playStatusText,
     segAudioElement,
 } from '../../stores/segments/playback';
+import type { Segment } from '../../types/domain';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';

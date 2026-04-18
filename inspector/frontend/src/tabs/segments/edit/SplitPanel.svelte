@@ -14,7 +14,7 @@
      * `enterSplitMode`.
      */
 
-    import type { Segment } from '../../../types/domain';
+    import type { Segment } from '../../../lib/types/domain';
     import { splitState, trimStatusText } from '../../../lib/stores/segments/edit';
     import type { SegCanvas } from '../../../lib/types/segments-waveform';
     import { exitEditMode } from '../../../lib/utils/segments/edit-common';

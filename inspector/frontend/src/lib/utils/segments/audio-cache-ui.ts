@@ -1,10 +1,5 @@
 import { get } from 'svelte/store';
 
-import type {
-    SegAudioCacheStatusResponse,
-    SegDeleteAudioCacheResponse,
-    SegPrepareAudioResponse,
-} from '../../../types/api';
 import { fetchJson } from '../../api';
 import {
     cacheDeleteButton,
@@ -14,6 +9,11 @@ import {
     cacheStatusText,
 } from '../../stores/segments/audio-cache';
 import { selectedReciter } from '../../stores/segments/chapter';
+import type {
+    SegAudioCacheStatusResponse,
+    SegDeleteAudioCacheResponse,
+    SegPrepareAudioResponse,
+} from '../../types/api';
 import type { TimerHandle } from '../../types/segments';
 import { _formatBytes } from '../formatting';
 

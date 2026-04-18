@@ -44,7 +44,7 @@
         TsRecitersResponse,
         TsValidateResponse,
         TsVersesResponse,
-    } from '../../types/api';
+    } from '../../lib/types/api';
 
     import AnimationDisplay from './AnimationDisplay.svelte';
     import TimestampsAudio from './TimestampsAudio.svelte';

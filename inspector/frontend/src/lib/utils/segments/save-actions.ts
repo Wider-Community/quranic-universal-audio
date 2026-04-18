@@ -4,7 +4,6 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import type { HistoryBatch } from '../../../types/domain';
 import { selectedReciter } from '../../stores/segments/chapter';
 import { isDirty } from '../../stores/segments/dirty';
 import {
@@ -28,6 +27,7 @@ import {
     setSavePreviewData,
     showPreview,
 } from '../../stores/segments/save';
+import type { HistoryBatch } from '../../types/domain';
 import { stopErrorCardAudio } from './error-card-audio';
 import { reloadCurrentReciter } from './reciter-actions';
 import { executeSave } from './save-execute';

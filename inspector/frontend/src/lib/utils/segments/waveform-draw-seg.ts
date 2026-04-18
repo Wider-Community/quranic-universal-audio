@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 
-import type { AudioPeaks, PeakBucket, Segment } from '../../../types/domain';
 import { segAllData } from '../../stores/segments/chapter';
+import type { AudioPeaks, PeakBucket, Segment } from '../../types/domain';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { drawWaveformPeaks } from '../waveform-draw';

@@ -9,8 +9,6 @@
 
 import { get } from 'svelte/store';
 
-import type { SegResolveRefResponse } from '../../../types/api';
-import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
 import {
     refreshSegInStore,
@@ -31,6 +29,8 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/segments/playback';
+import type { SegResolveRefResponse } from '../../types/api';
+import type { Segment } from '../../types/domain';
 import { stopSegAnimation } from './playback';
 import { _normalizeRef as _normalizeRefLib } from './references';
 

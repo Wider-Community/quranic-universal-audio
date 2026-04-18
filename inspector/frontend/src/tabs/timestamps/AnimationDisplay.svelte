@@ -21,7 +21,7 @@
         splitIntoCharGroups,
         ZWSP,
     } from '../../lib/utils/arabic-text';
-    import type { TsWord } from '../../types/domain';
+    import type { TsWord } from '../../lib/types/domain';
 
     // ---- Data model (produced by buildStructure) ----
 

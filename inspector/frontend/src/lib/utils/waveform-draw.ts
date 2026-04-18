@@ -3,7 +3,7 @@
  * tab modules. Shared by all waveform canvas contexts.
  */
 
-import type { PeakBucket } from '../../types/domain';
+import type { PeakBucket } from '../types/domain';
 
 /**
  * Options for drawWaveformPeaks().

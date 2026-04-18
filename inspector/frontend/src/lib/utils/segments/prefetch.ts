@@ -5,7 +5,7 @@
  * object and uses `audioSrcMatches` from lib/utils/audio to compare URLs.
  */
 
-import type { Segment } from '../../../types/domain';
+import type { Segment } from '../../types/domain';
 import { audioSrcMatches } from '../audio';
 
 /**

@@ -1,8 +1,8 @@
 import { get } from 'svelte/store';
 
-import type { EditOp, Segment } from '../../../types/domain';
 import { segAllData } from '../../stores/segments/chapter';
 import { segConfig } from '../../stores/segments/config';
+import type { EditOp, Segment } from '../../types/domain';
 import { _LETTER_RE, _MN_RE, _STRIP_CHARS } from './constants';
 
 // A segment-like record that `_classifySegCategories` / `_isIgnoredFor` can

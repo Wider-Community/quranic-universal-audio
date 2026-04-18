@@ -9,13 +9,6 @@
 
 import { get } from 'svelte/store';
 
-import type {
-    SegAllResponse,
-    SegChaptersResponse,
-    SegEditHistoryResponse,
-    SegStatsResponse,
-    SegValidateResponse,
-} from '../../../types/api';
 import { fetchJson, fetchJsonOrNull } from '../../api';
 import {
     segAllData,
@@ -27,6 +20,13 @@ import { activeFilters, computeSilenceAfter } from '../../stores/segments/filter
 import { savedFilterView } from '../../stores/segments/navigation';
 import { setStats } from '../../stores/segments/stats';
 import { setValidation } from '../../stores/segments/validation';
+import type {
+    SegAllResponse,
+    SegChaptersResponse,
+    SegEditHistoryResponse,
+    SegStatsResponse,
+    SegValidateResponse,
+} from '../../types/api';
 import { _fetchCacheStatus, _rewriteAudioUrls } from './audio-cache-ui';
 import { clearPerReciterState } from './clear-per-reciter-state';
 import { renderEditHistoryPanel } from './history-render';

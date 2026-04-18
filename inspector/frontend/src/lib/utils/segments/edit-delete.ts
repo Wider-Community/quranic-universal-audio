@@ -11,7 +11,6 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../types/domain';
 import {
     getChapterSegments,
     segAllData,
@@ -26,6 +25,7 @@ import {
 } from '../../stores/segments/dirty';
 import { clearEdit, setEdit } from '../../stores/segments/edit';
 import { playStatusText } from '../../stores/segments/playback';
+import type { Segment } from '../../types/domain';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { formatRef as _formatRefLib } from './references';
 import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from './validation-fixups';

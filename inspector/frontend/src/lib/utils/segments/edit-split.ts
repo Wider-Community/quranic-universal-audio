@@ -4,8 +4,6 @@
 
 import { get } from 'svelte/store';
 
-import type { SegResolveRefResponse } from '../../../types/api';
-import type { Segment } from '../../../types/domain';
 import { fetchJsonOrNull } from '../../api';
 import {
     getChapterSegments,
@@ -38,6 +36,8 @@ import {
     segAudioElement,
     segListElement,
 } from '../../stores/segments/playback';
+import type { SegResolveRefResponse } from '../../types/api';
+import type { Segment } from '../../types/domain';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';

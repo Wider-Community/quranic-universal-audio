@@ -34,7 +34,7 @@
     import { pendingScrollTop } from '../../lib/stores/segments/navigation';
     import { segListElement } from '../../lib/stores/segments/playback';
     import { segValidation } from '../../lib/stores/segments/validation';
-    import type { Segment } from '../../types/domain';
+    import type { Segment } from '../../lib/types/domain';
     import Navigation from './Navigation.svelte';
     import SegmentRow from './SegmentRow.svelte';
 

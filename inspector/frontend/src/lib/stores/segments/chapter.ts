@@ -5,12 +5,11 @@
 
 import { derived, get,writable } from 'svelte/store';
 
-import type { SearchableSelect } from '../../../shared/searchable-select';
 import type {
     SegAllResponse,
     SegDataResponse,
-} from '../../../types/api';
-import type { Segment,SegReciter } from '../../../types/domain';
+} from '../../types/api';
+import type { Segment,SegReciter } from '../../types/domain';
 
 /** `SegAllResponse` + lazily-built per-chapter indices (mutable cache fields). */
 export interface SegAllDataState extends SegAllResponse {
@@ -45,9 +44,6 @@ export const segData = writable<SegDataState | null>(null);
 
 /** Currently-playing segment index (shared across playback + row/card UI). */
 export const segCurrentIdx = writable<number>(-1);
-
-/** SearchableSelect instance for the chapter dropdown (set by SegmentsTab). */
-export const segChapterSS = writable<SearchableSelect | null>(null);
 
 // ---------------------------------------------------------------------------
 // Helpers — lazy per-chapter index building on segAllData
@@ -137,8 +133,7 @@ export function refreshSegInStore(seg: Segment): void {
 
 /**
  * Sync segData.segments (chapter-specific edits) back into segAllData.segments.
- * Used by the legacy save flow (Wave 9 owns rewrite); reads current chapter
- * from `selectedChapter` to know which chapter block to replace.
+ * Reads current chapter from `selectedChapter` to know which chapter block to replace.
  */
 export function syncChapterSegsToAll(): void {
     const all = get(segAllData);

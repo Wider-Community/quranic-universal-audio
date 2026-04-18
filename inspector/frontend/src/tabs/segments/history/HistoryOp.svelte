@@ -27,7 +27,7 @@
         type HistorySnapshot,
     } from '../../../lib/stores/segments/history';
     import type { MergeHighlight, TrimHighlight } from '../../../lib/types/segments-waveform';
-    import type { EditOp } from '../../../types/domain';
+    import type { EditOp } from '../../../lib/types/domain';
 
     // Props ------------------------------------------------------------------
 

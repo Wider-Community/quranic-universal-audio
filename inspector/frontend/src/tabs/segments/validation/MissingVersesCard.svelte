@@ -1,7 +1,7 @@
 <script lang="ts">
     import { getAdjacentSegments, segAllData } from '../../../lib/stores/segments/chapter';
     import { findMissingVerseBoundarySegments } from '../../../lib/utils/segments/missing-verse-context';
-    import type { SegValMissingVerseItem, Segment } from '../../../types/domain';
+    import type { SegValMissingVerseItem, Segment } from '../../../lib/types/domain';
     import SegmentRow from '../SegmentRow.svelte';
 
     // ---- Props ----

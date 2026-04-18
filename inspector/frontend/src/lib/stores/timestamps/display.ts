@@ -8,7 +8,7 @@
 
 import { writable } from 'svelte/store';
 
-import type { TsConfigResponse } from '../../../types/api';
+import type { TsConfigResponse } from '../../types/api';
 
 /** "analysis" = mega-blocks; "animation" = reveal-mode per-word fade-in. */
 export type TsViewMode = 'analysis' | 'animation';

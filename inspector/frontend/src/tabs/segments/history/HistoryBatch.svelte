@@ -42,7 +42,7 @@
         type OpFlatItem,
     } from '../../../lib/stores/segments/history';
     import { _deriveOpIssueDelta } from '../../../lib/utils/segments/classify';
-    import type { EditOp } from '../../../types/domain';
+    import type { EditOp } from '../../../lib/types/domain';
 
     // Props ------------------------------------------------------------------
 

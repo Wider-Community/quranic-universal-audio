@@ -8,7 +8,6 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../types/domain';
 import { createOp, setPendingOp, snapshotSeg } from '../../stores/segments/dirty';
 import { clearEdit, editMode } from '../../stores/segments/edit';
 import {
@@ -16,6 +15,7 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/segments/playback';
+import type { Segment } from '../../types/domain';
 import { enterSplitMode } from './edit-split';
 import { enterTrimMode } from './edit-trim';
 import { getValCardAudioOrNull, stopErrorCardAudio } from './error-card-audio';

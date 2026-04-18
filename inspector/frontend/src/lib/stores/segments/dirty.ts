@@ -9,14 +9,13 @@
  * Key design decision: all Map keys are `number` — fixes bug B01 where
  * `String(chapter) as unknown as number` casts were no-ops on Map<number,...>.
  *
- * `snapshotSeg` calls `_classifySegCategories` directly from
- * `lib/utils/segments/classify.ts` (not via the old `_classifyFn`
- * registration pattern in state.ts).
+ * `snapshotSeg` calls `_classifySegCategories` from
+ * `lib/utils/segments/classify.ts`.
  */
 
 import { derived, writable } from 'svelte/store';
 
-import type { EditOp, Segment } from '../../../types/domain';
+import type { EditOp, Segment } from '../../types/domain';
 import { _classifySegCategories } from '../../utils/segments/classify';
 
 // ---------------------------------------------------------------------------

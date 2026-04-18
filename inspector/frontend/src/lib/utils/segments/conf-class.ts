@@ -1,4 +1,4 @@
-import type { Segment } from '../../../types/domain';
+import type { Segment } from '../../types/domain';
 
 export function getConfClass(seg: Segment | { matched_ref?: string; confidence?: number }): string {
     if (!seg.matched_ref) return 'conf-fail';

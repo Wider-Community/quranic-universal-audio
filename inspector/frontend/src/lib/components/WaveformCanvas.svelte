@@ -4,15 +4,13 @@
      *
      * Renders a peaks-based waveform using drawWaveformPeaks() from
      * lib/utils/waveform-draw.ts. Overlays (trim handles, split line, merge
-     * highlight, playhead) are added by extension components in Waves 6+.
+     * highlight, playhead) are added by extension components.
      *
-     * The legacy segments/waveform/draw.ts continues to use its own copy of
-     * the draw algorithm (bound to SegCanvas + state imports) during Stage 2;
-     * lib/utils/waveform-draw.ts is the portable pure helper both call.
+     * lib/utils/waveform-draw.ts is the portable pure helper.
      */
 
     import { onMount } from 'svelte';
-    import type { PeakBucket } from '../../types/domain';
+    import type { PeakBucket } from '../types/domain';
     import { drawWaveformPeaks } from '../utils/waveform-draw';
 
     /** Peak data to render. null = show empty (black) canvas. */
@@ -27,7 +25,7 @@
     /**
      * Sub-range start in milliseconds. When startMs, endMs, and
      * totalDurationMs are all provided, only that time slice of peaks
-     * is rendered. Omit all three to draw the full array (Wave 3 behaviour).
+     * is rendered. Omit all three to draw the full array.
      */
     export let startMs: number | undefined = undefined;
     /** Sub-range end in milliseconds. See startMs. */

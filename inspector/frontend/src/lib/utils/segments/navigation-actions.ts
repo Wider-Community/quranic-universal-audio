@@ -4,16 +4,13 @@
  *
  * The back-to-results banner is rendered by Navigation.svelte (subscribed
  * to `backBannerVisible` derived from `savedFilterView`).
- * `_showBackToResultsBanner` is kept as a no-op compatibility shim (stored
- * filter view is already in the store); `_restoreFilterView` re-applies the
- * saved filters/chapter/verse.
+ * `_restoreFilterView` re-applies the saved filters/chapter/verse.
  */
 
 import { get } from 'svelte/store';
 
 import {
     segAllData,
-    segChapterSS,
     selectedChapter,
     selectedReciter,
     selectedVerse,
@@ -40,8 +37,6 @@ async function _ensureChapter(chapter: number | string): Promise<void> {
     const chStr = String(chapter);
     if (get(selectedChapter) !== chStr) {
         selectedChapter.set(chStr);
-        const ss = get(segChapterSS);
-        if (ss) ss.refresh();
         await loadChapterData(get(selectedReciter), chStr);
     }
 }
@@ -199,12 +194,11 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
 // ---------------------------------------------------------------------------
 
 /**
- * No-op compatibility shim — the banner reacts directly to `savedFilterView`
- * changes via Navigation.svelte's `backBannerVisible` derived store. Kept as
- * an exported symbol so existing callers compile.
+ * No-op — the banner reacts directly to `savedFilterView` changes via
+ * Navigation.svelte's `backBannerVisible` derived store.
  */
 export function _showBackToResultsBanner(): void {
-    // Intentional no-op — see module docstring.
+    // Intentional no-op.
 }
 
 export function _restoreFilterView(): void {
@@ -216,8 +210,6 @@ export function _restoreFilterView(): void {
 
     if (saved.chapter !== get(selectedChapter)) {
         selectedChapter.set(saved.chapter);
-        const ss = get(segChapterSS);
-        if (ss) ss.refresh();
     }
     selectedVerse.set(saved.verse);
 

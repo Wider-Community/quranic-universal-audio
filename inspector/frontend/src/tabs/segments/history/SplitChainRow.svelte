@@ -32,7 +32,7 @@
     import { onChainUndoClick } from '../../../lib/utils/segments/undo';
     import { _classifySnapIssues } from '../../../lib/utils/segments/classify';
     import type { SplitHighlight } from '../../../lib/types/segments-waveform';
-    import type { Segment } from '../../../types/domain';
+    import type { Segment } from '../../../lib/types/domain';
 
     // Props ------------------------------------------------------------------
 

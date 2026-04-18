@@ -1,23 +1,19 @@
 /**
  * Segments tab — active filter rows + derived displayed segments.
  *
- * Replaces the Stage-1 `state.segActiveFilters`, `state.segDisplayedSegments`,
- * `state._segIndexMap` fields. The `displayedSegments` derived store reads
- * both the filters store AND the chapter store (selectedChapter/selectedVerse/
- * segAllData) — derivation lives here but is fed by `lib/stores/segments/
- * chapter.ts` inputs.
+ * The `displayedSegments` derived store reads both the filters store AND the
+ * chapter store (selectedChapter/selectedVerse/segAllData) — derivation lives
+ * here but is fed by `lib/stores/segments/chapter.ts` inputs.
  *
- * S2-B01 fix: when `activeFilters` is empty AND no chapter is selected AND no
- * verse filter is active, `displayedSegments` falls back to an empty array
- * (with a placeholder message rendered by SegmentsList). When a chapter is
- * selected OR filters/verses are active, segments are computed normally. The
- * reactive derivation eliminates the Stage-1 wedge where saved-filter-view
- * restoration left `segAllData.segments` populated with no displayed rows.
+ * When `activeFilters` is empty AND no chapter is selected AND no verse filter
+ * is active, `displayedSegments` falls back to an empty array (with a
+ * placeholder message rendered by SegmentsList). When a chapter is selected
+ * OR filters/verses are active, segments are computed normally.
  */
 
 import { derived, get, writable } from 'svelte/store';
 
-import type { Segment } from '../../../types/domain';
+import type { Segment } from '../../types/domain';
 import { SEG_FILTER_FIELDS } from '../../utils/segments/filter-fields';
 import { countSegWords, parseSegRef } from '../../utils/segments/references';
 import {
@@ -61,7 +57,7 @@ interface SegWithDerived extends Segment {
 export const activeFilters = writable<SegActiveFilter[]>([]);
 
 // ---------------------------------------------------------------------------
-// Pure helpers (exported for imperative callers still living in Wave 6+)
+// Pure helpers
 // ---------------------------------------------------------------------------
 
 export function segDerivedProps(seg: SegWithDerived): SegDerivedProps {
@@ -122,8 +118,7 @@ interface DisplayedResult {
     indexMap: Map<string, Segment>;
 }
 
-/** Core filter computation. Exported so the legacy `applyFiltersAndRender`
- *  shim and imperative consumers can re-use it. */
+/** Core filter computation. */
 export function computeDisplayed(
     all: { segments: Segment[] } | null,
     chapterStr: string,

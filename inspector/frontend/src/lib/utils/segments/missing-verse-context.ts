@@ -3,8 +3,8 @@
  * has zero coverage (used by navigation's jumpToMissingVerseContext).
  */
 
-import type { Segment } from '../../../types/domain';
 import { getChapterSegments } from '../../stores/segments/chapter';
+import type { Segment } from '../../types/domain';
 import { parseSegRef } from './references';
 
 export interface MissingVerseContext {

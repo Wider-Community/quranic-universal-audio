@@ -1,15 +1,8 @@
 <script lang="ts">
     /**
-     * SearchableSelect — Svelte port of shared/searchable-select.ts::SearchableSelect.
-     *
-     * Provides a filterable dropdown with keyboard navigation (arrows, Enter,
-     * Escape) and Arabic text normalization. Emits a 'change' Svelte event with
-     * the selected value.
-     *
-     * Consumers (tab index.ts files) continue to use the legacy class API from
-     * shared/searchable-select.ts until their Svelte conversion in Waves 4-5.
-     * The .ts file has a deprecation comment noting this Svelte component as
-     * its replacement.
+     * SearchableSelect — filterable dropdown with keyboard navigation (arrows,
+     * Enter, Escape) and Arabic text normalization. Emits a 'change' Svelte
+     * event with the selected value.
      */
 
     import { createEventDispatcher, onMount } from 'svelte';

@@ -1,11 +1,11 @@
 import { get } from 'svelte/store';
 
-import type { SegValidateResponse } from '../../../types/api';
 import { fetchJson } from '../../api';
 import { selectedReciter } from '../../stores/segments/chapter';
 import { segListElement } from '../../stores/segments/playback';
 import { savedPreviewScroll } from '../../stores/segments/save';
 import { segValidation } from '../../stores/segments/validation';
+import type { SegValidateResponse } from '../../types/api';
 import { applyFiltersAndRender } from './filters-apply';
 
 export async function refreshValidation(): Promise<void> {

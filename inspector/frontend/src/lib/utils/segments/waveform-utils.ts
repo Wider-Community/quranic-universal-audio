@@ -1,7 +1,5 @@
 import { get } from 'svelte/store';
 
-import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../types/api';
-import type { Segment, SegmentPeaks } from '../../../types/domain';
 import { fetchJson } from '../../api';
 import {
     getAdjacentSegments,
@@ -12,6 +10,8 @@ import {
 import { segConfig } from '../../stores/segments/config';
 import { editCanvas } from '../../stores/segments/edit';
 import { segIndexMap } from '../../stores/segments/filters';
+import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
+import type { Segment, SegmentPeaks } from '../../types/domain';
 import type {
     ObserverPeaksQueueItem,
     TimerHandle,

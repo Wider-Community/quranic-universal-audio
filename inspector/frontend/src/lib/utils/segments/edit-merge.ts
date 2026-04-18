@@ -4,8 +4,6 @@
 
 import { get } from 'svelte/store';
 
-import type { SegResolveRefResponse } from '../../../types/api';
-import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
 import {
     getChapterSegments,
@@ -26,6 +24,8 @@ import {
     setEdit,
 } from '../../stores/segments/edit';
 import { playStatusText } from '../../stores/segments/playback';
+import type { SegResolveRefResponse } from '../../types/api';
+import type { Segment } from '../../types/domain';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from './validation-fixups';
 

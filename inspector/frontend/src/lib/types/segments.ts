@@ -1,5 +1,5 @@
-import type { SegAllResponse, SegDataResponse } from '../../types/api';
-import type { EditOp, HistoryBatch, PeakBucket, Segment } from '../../types/domain';
+import type { SegAllResponse, SegDataResponse } from './api';
+import type { EditOp, HistoryBatch, PeakBucket, Segment } from './domain';
 
 // ---------------------------------------------------------------------------
 // Split chain + history types

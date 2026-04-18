@@ -21,7 +21,7 @@
     } from '../../../lib/stores/segments/edit';
     import { commitRefEdit } from '../../../lib/utils/segments/edit-reference';
     import { formatRef } from '../../../lib/utils/segments/references';
-    import type { Segment } from '../../../types/domain';
+    import type { Segment } from '../../../lib/types/domain';
 
     export let seg: Segment;
 

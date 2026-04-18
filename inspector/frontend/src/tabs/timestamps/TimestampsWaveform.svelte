@@ -17,7 +17,7 @@
     import WaveformCanvas from '../../lib/components/WaveformCanvas.svelte';
     import { loadedVerse } from '../../lib/stores/timestamps/verse';
     import { computePeaksForSlice, decodeAudioUrl } from '../../lib/utils/webaudio-peaks';
-    import type { PeakBucket } from '../../types/domain';
+    import type { PeakBucket } from '../../lib/types/domain';
 
     // ---- Sizing ----
 

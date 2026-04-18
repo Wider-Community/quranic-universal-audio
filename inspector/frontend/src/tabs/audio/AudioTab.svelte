@@ -20,7 +20,7 @@
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import type { SelectOption } from '../../lib/types/ui';
-    import type { AudioSourcesResponse, AudioSurahsResponse } from '../../types/api';
+    import type { AudioSourcesResponse, AudioSurahsResponse } from '../../lib/types/api';
 
     // ---- Types ----
     interface AudioReciter {

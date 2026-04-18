@@ -70,7 +70,7 @@
     import { beginRefEdit } from '../../lib/utils/segments/edit-reference';
     import { jumpToSegment } from '../../lib/utils/segments/navigation-actions';
     import { playFromSegment } from '../../lib/utils/segments/playback';
-    import type { Segment } from '../../types/domain';
+    import type { Segment } from '../../lib/types/domain';
 
     import ReferenceEditor from './edit/ReferenceEditor.svelte';
     import SplitPanel from './edit/SplitPanel.svelte';

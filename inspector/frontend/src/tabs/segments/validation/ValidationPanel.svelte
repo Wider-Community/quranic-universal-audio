@@ -3,7 +3,7 @@
      * ValidationPanel — Svelte accordion panel for all 11 validation categories.
      *
      * Subscribes to `$segValidation`. Renders one <details> per non-empty
-     * category using `{#each}` over a typed descriptor list (S2-D33).
+     * category using `{#each}` over a typed descriptor list.
      * Empty categories are hidden.
      *
      * Category order (per CLAUDE.md):
@@ -36,8 +36,8 @@
         SegValMissingWordsItem,
         SegValQalqalaItem,
         SegValRepetitionItem,
-    } from '../../../types/domain';
-    import type { SegValidateResponse } from '../../../types/api';
+    } from '../../../lib/types/domain';
+    import type { SegValidateResponse } from '../../../lib/types/api';
 
     // ---- Props ----
     /** Filter results to this chapter number. null = all chapters. */

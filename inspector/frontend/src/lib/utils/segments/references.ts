@@ -1,4 +1,4 @@
-import type { Ref, VerseRef } from '../../../types/domain';
+import type { Ref, VerseRef } from '../../types/domain';
 import { _ARABIC_DIGITS } from './constants';
 
 /** Parsed canonical segment ref. */

@@ -11,8 +11,8 @@
  * keyed by audio URL.
  */
 
-import type { PeakBucket } from '../../types/domain';
 import { fetchArrayBuffer } from '../api';
+import type { PeakBucket } from '../types/domain';
 import { AUDIO_BUFFER_CACHE_SIZE } from './constants';
 
 // ---------------------------------------------------------------------------

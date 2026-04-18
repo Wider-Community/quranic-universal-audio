@@ -5,7 +5,6 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../types/domain';
 import {
     segAllData,
     selectedChapter,
@@ -18,6 +17,7 @@ import {
     playButtonLabel,
     segAudioElement,
 } from '../../stores/segments/playback';
+import type { Segment } from '../../types/domain';
 import type { RafHandle } from '../../types/segments';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { safePlay } from '../audio';

@@ -2,11 +2,6 @@
     /**
      * AccordionPanel — a <details> wrapper with data-category support and
      * two-way open binding.
-     *
-     * The existing shared/accordion.ts helpers (collapseSiblingDetails,
-     * capturePanelOpenState, restorePanelOpenState) stay in shared/ for now
-     * and continue to be used by the imperative validation panel code.
-     * Wave 8 decides whether to absorb them here or keep them as pure utilities.
      */
 
     /** Human-readable label for the accordion header. */

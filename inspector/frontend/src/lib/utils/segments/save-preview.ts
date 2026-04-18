@@ -3,7 +3,6 @@
  * Pure function — no DOM side effects.
  */
 
-import type { HistoryBatch } from '../../../types/domain';
 import {
     getChapterOps,
     getDirtyMap,
@@ -15,6 +14,7 @@ import type {
     SavePreviewBatch,
     SavePreviewData,
 } from '../../stores/segments/save';
+import type { HistoryBatch } from '../../types/domain';
 
 export function buildSavePreviewData(): SavePreviewData {
     const batches: SavePreviewBatch[] = [];
