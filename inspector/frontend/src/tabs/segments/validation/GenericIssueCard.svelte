@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
 
     import {
@@ -17,30 +16,29 @@
         snapshotSeg,
     } from '../../../lib/stores/segments/dirty';
     import { _isIgnoredFor } from '../../../lib/utils/segments/classify';
-    import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type {
         SegValAnyItem,
         SegValBoundaryAdjItem,
         Segment,
     } from '../../../types/domain';
+    import SegmentRow from '../SegmentRow.svelte';
 
     // ---- Props ----
     export let category: string;
     export let item: SegValAnyItem;
 
     // ---- DOM refs ----
-    let cardsContainerEl: HTMLElement;
     let wrapperEl: HTMLElement;
 
     // ---- State ----
     let showContext = false;
-    let contextEls: HTMLElement[] = [];
-    let resolvedSeg: Segment | null = null;
     let isAlreadyIgnored = false;
 
     // ---- Derived ----
     $: boundaryItem = category === 'boundary_adj' ? (item as SegValBoundaryAdjItem) : null;
     $: issueMsg = (item as { msg?: string }).msg;
+
+    $: resolvedSeg = _resolveIssue(item, category);
 
     $: canIgnore =
         resolvedSeg != null &&
@@ -49,7 +47,7 @@
             category === 'audio_bleeding' ||
             category === 'repetitions' ||
             category === 'qalqala' ||
-            (category === 'low_confidence' && (resolvedSeg?.confidence ?? 1) < 1.0));
+            (category === 'low_confidence' && (resolvedSeg.confidence ?? 1) < 1.0));
 
     $: segChapterForBtn =
         resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(get(selectedChapter))) : 0;
@@ -68,47 +66,42 @@
         $segConfig.showBoundaryPhonemes &&
         !!(boundaryItem?.gt_tail || boundaryItem?.asr_tail);
 
+    $: prevSeg =
+        showContext && !ctxNextOnly && resolvedSeg != null && resolvedSeg.chapter != null
+            ? getAdjacentSegments(resolvedSeg.chapter, resolvedSeg.index).prev
+            : null;
+    $: nextSeg =
+        showContext && resolvedSeg != null && resolvedSeg.chapter != null
+            ? getAdjacentSegments(resolvedSeg.chapter, resolvedSeg.index).next
+            : null;
+
+    // Open default context once resolvedSeg becomes available.
+    let _didAutoOpen = false;
+    $: if (resolvedSeg && ctxDefaultOpen && !_didAutoOpen) {
+        showContext = true;
+        _didAutoOpen = true;
+    }
+
+    // Track ignored state reactively.
+    $: if (resolvedSeg) {
+        isAlreadyIgnored = _isIgnoredFor(resolvedSeg, category);
+    }
+
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }
-    export function showContextForced(): void {
-        if (!showContext) { _doShowContext(); showContext = true; }
-    }
-    export function hideContextForced(): void {
-        if (showContext) { _hideContext(); showContext = false; }
-    }
+    export function showContextForced(): void { showContext = true; }
+    export function hideContextForced(): void { showContext = false; }
 
-    // ---- Context toggle ----
     function toggleContext(): void {
-        if (showContext) { _hideContext(); showContext = false; }
-        else { _doShowContext(); showContext = true; }
-    }
-
-    function _doShowContext(): void {
-        if (!cardsContainerEl || !resolvedSeg || resolvedSeg.chapter == null) return;
-        const mainCard = cardsContainerEl.querySelector<HTMLElement>('.seg-row:not(.seg-row-context)');
-        if (!ctxNextOnly) {
-            const { prev } = getAdjacentSegments(resolvedSeg.chapter, resolvedSeg.index);
-            if (prev) {
-                contextEls.push(injectCard(cardsContainerEl, prev, { isContext: true, contextLabel: 'Previous' }, mainCard ?? null));
-            }
-        }
-        const { next } = getAdjacentSegments(resolvedSeg.chapter, resolvedSeg.index);
-        if (next) {
-            contextEls.push(injectCard(cardsContainerEl, next, { isContext: true, contextLabel: 'Next' }));
-        }
-    }
-
-    function _hideContext(): void {
-        contextEls.forEach((el) => el.remove());
-        contextEls = [];
+        showContext = !showContext;
     }
 
     // ---- Segment resolution ----
-    function _resolveIssue(): Segment | null {
-        const anyItem = item as { seg_index?: number; chapter: number; ref?: string };
+    function _resolveIssue(it: SegValAnyItem, cat: string): Segment | null {
+        const anyItem = it as { seg_index?: number; chapter: number; ref?: string };
         if (anyItem.seg_index != null && anyItem.seg_index < 0) return null;
-        if (category === 'errors') {
-            const vk = (item as { verse_key?: string }).verse_key || '';
+        if (cat === 'errors') {
+            const vk = (it as { verse_key?: string }).verse_key || '';
             const parts = vk.split(':');
             const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : vk;
             const chSegs = getChapterSegments(anyItem.chapter);
@@ -148,47 +141,47 @@
             }
         }
         isAlreadyIgnored = true;
-        wrapperEl?.style.setProperty('opacity', '0.5');
     }
-
-    // ---- Mount ----
-    onMount(() => {
-        if (!cardsContainerEl) return;
-        resolvedSeg = _resolveIssue();
-        if (!resolvedSeg) return;
-        isAlreadyIgnored = _isIgnoredFor(resolvedSeg, category);
-        if (isAlreadyIgnored) wrapperEl?.style.setProperty('opacity', '0.5');
-        injectCard(cardsContainerEl, resolvedSeg, { showGotoBtn: true });
-
-        // boundary_adj phoneme tail
-        if (showPhonemes && boundaryItem) {
-            const textBox = cardsContainerEl.querySelector('.seg-text');
-            if (textBox) {
-                const tailEl = document.createElement('div');
-                tailEl.className = 'val-phoneme-tail';
-                const gt = boundaryItem.gt_tail || '';
-                const asr = boundaryItem.asr_tail || '';
-                tailEl.innerHTML =
-                    `<span class="val-tail-label">GT:</span> <span class="val-tail-phonemes">${gt}</span>\n` +
-                    `<span class="val-tail-label">ASR:</span> <span class="val-tail-phonemes">${asr}</span>`;
-                textBox.appendChild(tailEl);
-            }
-        }
-
-        if (ctxDefaultOpen) {
-            _doShowContext();
-            showContext = true;
-        }
-    });
-
-    onDestroy(() => { _hideContext(); });
 </script>
 
-<div bind:this={wrapperEl}>
+<div bind:this={wrapperEl} style:opacity={isAlreadyIgnored ? 0.5 : null}>
     {#if issueMsg}
         <div class="val-card-issue-label">{issueMsg}</div>
     {/if}
-    <div bind:this={cardsContainerEl}></div>
+    {#if resolvedSeg}
+        {#if prevSeg}
+            <SegmentRow
+                seg={prevSeg}
+                isContext={true}
+                contextLabel="Previous"
+                showPlayBtn={true}
+                showChapter={true}
+            />
+        {/if}
+        <SegmentRow
+            seg={resolvedSeg}
+            showGotoBtn={true}
+            showPlayBtn={true}
+            showChapter={true}
+        />
+        {#if showPhonemes && boundaryItem}
+            <div class="val-phoneme-tail">
+                <span class="val-tail-label">GT:</span>
+                <span class="val-tail-phonemes">{boundaryItem.gt_tail || ''}</span>
+                <span class="val-tail-label">ASR:</span>
+                <span class="val-tail-phonemes">{boundaryItem.asr_tail || ''}</span>
+            </div>
+        {/if}
+        {#if nextSeg}
+            <SegmentRow
+                seg={nextSeg}
+                isContext={true}
+                contextLabel="Next"
+                showPlayBtn={true}
+                showChapter={true}
+            />
+        {/if}
+    {/if}
     <div class="val-card-actions">
         {#if canIgnore}
             <button

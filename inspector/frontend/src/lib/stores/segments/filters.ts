@@ -222,5 +222,6 @@ export const displayedResult = derived(
 /** Just the segment list for `{#each}` in SegmentsList. */
 export const displayedSegments = derived(displayedResult, ($r) => $r.segments);
 
-/** Map for resolveSegFromRow lookups. */
+/** (chapter:index) → Segment map used by the waveform IntersectionObserver
+ *  callback to resolve segments from `.seg-row` dataset attributes. */
 export const segIndexMap = derived(displayedResult, ($r) => $r.indexMap);

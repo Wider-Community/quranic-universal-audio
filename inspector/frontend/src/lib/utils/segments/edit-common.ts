@@ -9,6 +9,7 @@
 
 import { get } from 'svelte/store';
 
+import { getSegByChapterIndex } from '../../stores/segments/chapter';
 import { setPendingOp } from '../../stores/segments/dirty';
 import {
     accordionOpCtx,
@@ -25,7 +26,6 @@ import {
     setPreviewStopHandler,
 } from './play-range';
 import { stopSegAnimation } from './playback';
-import { resolveSegFromRow } from './resolve-seg-from-row';
 import { drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
@@ -52,7 +52,9 @@ export function exitEditMode(): void {
             delete canvas._editCleanup;
             canvas._wfCache = null;
             canvas.style.cursor = '';
-            const seg = resolveSegFromRow(editRow);
+            const idx = parseInt(editRow.dataset.segIndex ?? '-1');
+            const chapter = parseInt(editRow.dataset.segChapter ?? '-1');
+            const seg = chapter >= 0 ? getSegByChapterIndex(chapter, idx) : null;
             if (seg) drawWaveformFromPeaksForSeg(canvas, seg, seg.chapter ?? 0);
         }
     }

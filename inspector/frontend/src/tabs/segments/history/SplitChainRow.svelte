@@ -84,10 +84,9 @@
     }
 
     // Leaf cards need a wider seg range when expanded so the canvas
-    // renders against the chain's union. Match the pre-Wave-10 pattern
-    // where renderSegCard() still draws the full chapter waveform but
-    // the IntersectionObserver callback uses splitHL.wfStart/wfEnd to
-    // substitute the sub-range (see waveform/index.ts:86-88).
+    // renders against the chain's union. The IntersectionObserver callback
+    // uses splitHL.wfStart/wfEnd to substitute the sub-range
+    // (see waveform/index.ts).
     function rootSegForCard(s: HistorySnapshot): Segment {
         return snapToSeg(s, chapter);
     }

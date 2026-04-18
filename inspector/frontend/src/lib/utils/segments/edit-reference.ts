@@ -8,6 +8,7 @@ import type { SegResolveRefResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
 import {
+    refreshSegInStore,
     segAllData,
     segData,
     selectedChapter,
@@ -35,7 +36,6 @@ import {
 } from '../../stores/segments/playback';
 import { stopSegAnimation } from './playback';
 import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from './references';
-import { syncAllCardsForSegment } from './render-seg-card';
 
 function _vwc() {
     return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
@@ -164,7 +164,7 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
             }
             delete seg._derived;
             markDirty(chapter, seg.index);
-            syncAllCardsForSegment(seg);
+            refreshSegInStore(seg);
             if (pending) {
                 pending.applied_at_utc = new Date().toISOString();
                 pending.targets_after = [snapshotSeg(seg)];
@@ -217,7 +217,7 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
 
     delete seg._derived;
     markDirty(chapter, seg.index);
-    syncAllCardsForSegment(seg);
+    refreshSegInStore(seg);
 
     if (pending) {
         pending.applied_at_utc = new Date().toISOString();

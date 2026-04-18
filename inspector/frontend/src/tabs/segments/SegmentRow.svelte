@@ -2,14 +2,15 @@
     /**
      * SegmentRow — one .seg-row card in the segments list.
      *
-     * Per-button on:click handlers replace the container-level delegated
-     * click router. SegmentRow is mounted via {#each} in SegmentsList.svelte
-     * for the primary list (#seg-list) — imperatively rendered cards used
-     * inside validation accordions, history view, and save preview still use
-     * the delegated listeners wired in lib/utils/segments/imperative-card-click.ts.
+     * Used from every SegmentRow site: the primary list (#seg-list) via
+     * SegmentsList.svelte, the validation accordion subcomponents
+     * (GenericIssueCard / MissingWordsCard / MissingVersesCard), history
+     * view (SplitChainRow / HistoryOp), and the save preview. Per-button
+     * on:click handlers are wired directly here so no delegated container
+     * listeners are needed.
      *
-     * History-mode props accepted from day one. Highlight props (splitHL /
-     * trimHL / mergeHL / changedFields) drive visual overlays in history mode.
+     * History-mode props. Highlight props (splitHL / trimHL / mergeHL /
+     * changedFields) drive visual overlays in history mode.
      *
      * Layout: normal mode = horizontal (play-col | left-col | text-box).
      * History mode = vertical (waveform above text) — scoped via `class:mode-history`.

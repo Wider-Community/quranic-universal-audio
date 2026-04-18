@@ -325,7 +325,7 @@ export function groupRelatedOps(operations: EditOp[]): EditOp[][] {
 
 // ---------------------------------------------------------------------------
 // snapToSeg — convert a HistorySnapshot to a Segment-shaped object so the
-// existing renderSegCard / SegmentRow rendering pipeline can use it.
+// SegmentRow rendering pipeline can use it.
 // ---------------------------------------------------------------------------
 
 export function snapToSeg(snap: HistorySnapshot, chapter: number | null): Segment {

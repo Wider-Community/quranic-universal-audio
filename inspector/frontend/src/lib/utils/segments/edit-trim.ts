@@ -8,6 +8,7 @@ import type { Segment } from '../../../types/domain';
 import {
     getChapterSegments,
     getCurrentChapterSegs,
+    refreshSegInStore,
     segAllData,
     segData,
     selectedChapter,
@@ -37,7 +38,6 @@ import {
     setPreviewJustSeeked,
     setPreviewLooping,
 } from './play-range';
-import { syncAllCardsForSegment } from './render-seg-card';
 import { _ensureTrimBaseCache, drawTrimWaveform } from './trim-draw';
 
 // Re-export draw functions so registration sites and other callers still work.
@@ -273,7 +273,7 @@ export function confirmTrim(seg: Segment): void {
     computeSilenceAfter();
     exitEditMode();
     applyVerseFilterAndRender();
-    syncAllCardsForSegment(seg);
+    refreshSegInStore(seg);
 
     if (trimOp) finalizeOp(chapter, trimOp);
 

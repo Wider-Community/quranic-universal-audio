@@ -26,7 +26,6 @@ import {
     setEdit,
 } from '../../stores/segments/edit';
 import { playStatusText } from '../../stores/segments/playback';
-import { _rebuildAccordionAfterMerge } from './error-cards';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from './validation-fixups';
 
@@ -149,20 +148,8 @@ export async function mergeAdjacent(
     computeSilenceAfter();
     applyVerseFilterAndRender();
 
-    const accCtx = get(accordionOpCtx);
     accordionOpCtx.set(null);
-    const accCategory = accCtx?.wrapper?.closest<HTMLElement>('details[data-category]')?.dataset?.category;
-
     refreshOpenAccordionCards();
-
-    if (accCtx && accCategory) {
-        const freshDetails = document.querySelector(`details[data-category="${accCategory}"]`);
-        const mergedCard = freshDetails?.querySelector<HTMLElement>(`.seg-row[data-seg-uid="${merged.segment_uid}"]`);
-        const freshWrapper = mergedCard?.closest<HTMLElement>('.val-card-wrapper');
-        if (freshWrapper) {
-            _rebuildAccordionAfterMerge(freshWrapper, chapter, merged, accCtx.direction);
-        }
-    }
 
     finalizeOp(chapter, mergeOp);
     clearEdit();

@@ -1,76 +1,81 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-
     import { getAdjacentSegments } from '../../../lib/stores/segments/chapter';
-    import { segConfig } from '../../../lib/stores/segments/config';
     import { findMissingVerseBoundarySegments } from '../../../lib/utils/segments/missing-verse-context';
-    import { injectCard } from '../../../lib/utils/validation-card-inject';
-    import type { SegValMissingVerseItem } from '../../../types/domain';
+    import type { SegValMissingVerseItem, Segment } from '../../../types/domain';
+    import SegmentRow from '../SegmentRow.svelte';
 
     // ---- Props ----
     export let item: SegValMissingVerseItem;
 
-    // ---- DOM refs ----
-    let cardsContainerEl: HTMLElement;
-
     // ---- State ----
     let showContext = false;
-    let contextEls: HTMLElement[] = [];
-    let hasBoundarySegs = false;
 
-    $: ctxMode = $segConfig.accordionContext?.['missing_verses'] ?? 'hidden';
+    // ---- Derived ----
+    $: boundary = findMissingVerseBoundarySegments(item.chapter, item.verse_key);
+    $: prev = boundary.prev;
+    $: next = boundary.next;
+    $: nextDifferent = next != null && (!prev || next.index !== prev.index);
+    $: hasBoundarySegs = prev != null || nextDifferent;
+
+    $: beforeCtx = ((): Segment | null => {
+        if (!showContext || !prev || prev.chapter == null) return null;
+        return getAdjacentSegments(prev.chapter, prev.index).prev;
+    })();
+
+    $: afterCtx = ((): Segment | null => {
+        if (!showContext || !next || next.chapter == null) return null;
+        return getAdjacentSegments(next.chapter, next.index).next;
+    })();
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }
-    export function showContextForced(): void {
-        if (!showContext) { _doShowContext(); showContext = true; }
-    }
-    export function hideContextForced(): void {
-        if (showContext) { _hideContext(); showContext = false; }
-    }
+    export function showContextForced(): void { showContext = true; }
+    export function hideContextForced(): void { showContext = false; }
 
-    // ---- Context toggle ----
     function toggleContext(): void {
-        if (showContext) { _hideContext(); showContext = false; }
-        else { _doShowContext(); showContext = true; }
+        showContext = !showContext;
     }
-
-    function _doShowContext(): void {
-        if (!cardsContainerEl) return;
-        const { prev, next } = findMissingVerseBoundarySegments(item.chapter, item.verse_key);
-        if (prev && prev.chapter != null) {
-            const { prev: pp } = getAdjacentSegments(prev.chapter, prev.index);
-            const firstCard = cardsContainerEl.querySelector<HTMLElement>('.seg-row');
-            if (pp) contextEls.push(injectCard(cardsContainerEl, pp, { isContext: true, contextLabel: 'Before' }, firstCard ?? null));
-        }
-        if (next && next.chapter != null) {
-            const { next: nn } = getAdjacentSegments(next.chapter, next.index);
-            if (nn) contextEls.push(injectCard(cardsContainerEl, nn, { isContext: true, contextLabel: 'After' }));
-        }
-    }
-
-    function _hideContext(): void {
-        contextEls.forEach((el) => el.remove());
-        contextEls = [];
-    }
-
-    // ---- Mount ----
-    onMount(() => {
-        if (!cardsContainerEl) return;
-        const { prev, next } = findMissingVerseBoundarySegments(item.chapter, item.verse_key);
-        const nextDifferent = next != null && (!prev || next.index !== prev.index);
-        hasBoundarySegs = prev != null || nextDifferent;
-        if (prev) injectCard(cardsContainerEl, prev, { contextLabel: 'Previous verse boundary', readOnly: true });
-        if (nextDifferent && next) injectCard(cardsContainerEl, next, { contextLabel: 'Next verse boundary', readOnly: true });
-    });
-
-    onDestroy(() => { _hideContext(); });
 </script>
 
 <div class="val-card-issue-label">
     {item.msg ? `${item.verse_key} \u2014 ${item.msg}` : item.verse_key}
 </div>
-<div bind:this={cardsContainerEl}></div>
+{#if beforeCtx}
+    <SegmentRow
+        seg={beforeCtx}
+        isContext={true}
+        contextLabel="Before"
+        showPlayBtn={true}
+        showChapter={true}
+    />
+{/if}
+{#if prev}
+    <SegmentRow
+        seg={prev}
+        readOnly={true}
+        contextLabel="Previous verse boundary"
+        showPlayBtn={true}
+        showChapter={true}
+    />
+{/if}
+{#if nextDifferent && next}
+    <SegmentRow
+        seg={next}
+        readOnly={true}
+        contextLabel="Next verse boundary"
+        showPlayBtn={true}
+        showChapter={true}
+    />
+{/if}
+{#if afterCtx}
+    <SegmentRow
+        seg={afterCtx}
+        isContext={true}
+        contextLabel="After"
+        showPlayBtn={true}
+        showChapter={true}
+    />
+{/if}
 {#if !hasBoundarySegs}
     <div class="seg-loading">No boundary segments found for this missing verse.</div>
 {:else}

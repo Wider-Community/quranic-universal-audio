@@ -117,6 +117,24 @@ export function invalidateChapterIndex(): void {
     all._byChapterIndex = null;
 }
 
+/** Refresh a segment in segAllData.segments by replacing its object ref,
+ *  triggering Svelte reactivity for all SegmentRow instances rendering
+ *  this seg. */
+export function refreshSegInStore(seg: Segment): void {
+    const all = get(segAllData);
+    if (!all?.segments) return;
+    const uid = seg.segment_uid;
+    const idx = all.segments.findIndex((s) =>
+        (uid && s.segment_uid === uid) ||
+        (s.chapter === seg.chapter && s.index === seg.index),
+    );
+    if (idx < 0) return;
+    all.segments[idx] = { ...seg };
+    all._byChapter = null;
+    all._byChapterIndex = null;
+    segAllData.update((d) => d);
+}
+
 /**
  * Sync segData.segments (chapter-specific edits) back into segAllData.segments.
  * Used by the legacy save flow (Wave 9 owns rewrite); reads current chapter

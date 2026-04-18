@@ -40,7 +40,6 @@ import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
 import { startRefEdit } from './edit-reference';
-import { _rebuildAccordionAfterSplit, _refreshStaleSegIndices } from './error-cards';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { _getEditCanvas } from './get-edit-canvas';
 import {
@@ -289,22 +288,12 @@ export async function confirmSplit(seg: Segment): Promise<void> {
     markDirty(chapter, undefined, true);
     _fixupValIndicesForSplit(chapter, seg.index);
 
-    const accCtx = get(accordionOpCtx);
     accordionOpCtx.set(null);
 
     computeSilenceAfter();
     exitEditMode();
     applyVerseFilterAndRender();
-
-    if (accCtx) {
-        _rebuildAccordionAfterSplit(accCtx.wrapper, chapter, seg, firstHalf, secondHalf);
-        // Other open accordion wrappers keep stale data-seg-index values after
-        // the reindex; without this sweep, resolveSegFromRow on their play
-        // buttons maps stale index → wrong segment → wrong time.
-        _refreshStaleSegIndices(accCtx.wrapper);
-    } else {
-        refreshOpenAccordionCards();
-    }
+    refreshOpenAccordionCards();
 
     if (splitOp) finalizeOp(chapter, splitOp);
 
@@ -313,9 +302,9 @@ export async function confirmSplit(seg: Segment): Promise<void> {
     splitChainUid.set(secondHalf.segment_uid ?? null);
     const chainCat = splitOp?.op_context_category || null;
     splitChainCategory.set(chainCat);
-    splitChainWrapper.set(accCtx ? accCtx.wrapper : null);
+    splitChainWrapper.set(null);
     const listEl = get(segListElement);
-    const searchRoot: ParentNode = accCtx ? accCtx.wrapper : (listEl ?? document);
+    const searchRoot: ParentNode = listEl ?? document;
     const firstRow = searchRoot.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
     if (firstRow) {
         firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });

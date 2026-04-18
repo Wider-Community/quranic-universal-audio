@@ -5,8 +5,8 @@
      * Responsibilities:
      *   - Visibility gate via `$historyVisible` → `hidden` attribute on the
      *     outer `#seg-history-view` div. The ID is preserved so the
-     *     delegated click handler in `imperative-card-click.ts` continues
-     *     to fire on SegmentRow play-buttons inside history cards.
+     *     waveform IntersectionObserver (see waveform-utils.ts) can scope
+     *     canvas redraws to this container.
      *   - Summary stat cards from `$historyData.summary` (with verses count
      *     patched from `countVersesFromBatches`) OR filtered summary when
      *     any filter is active.

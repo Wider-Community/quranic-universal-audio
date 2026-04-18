@@ -13,7 +13,6 @@
     import { isDirty, isDirtyStore } from '../../lib/stores/segments/dirty';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { cycleSpeedStore } from '../../lib/utils/speed-control';
-    import { attachImperativeCardListeners } from '../../lib/utils/segments/imperative-card-click';
     import { _deleteAudioCache, _prepareAudio } from '../../lib/utils/segments/audio-cache-ui';
     import {
         exitEditMode,
@@ -369,9 +368,6 @@
     // ---------------------------------------------------------------------
 
     onMount(async () => {
-        // Delegated click + canvas-scrub listeners for imperative card containers.
-        attachImperativeCardListeners();
-
         await surahInfoReady;
         await loadSegConfig();
         await loadReciters();

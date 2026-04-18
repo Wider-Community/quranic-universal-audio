@@ -1,6 +1,4 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-
     import { getAdjacentSegments, getSegByChapterIndex } from '../../../lib/stores/segments/chapter';
     import { commitRefEdit } from '../../../lib/utils/segments/edit-reference';
     import { segConfig } from '../../../lib/stores/segments/config';
@@ -12,19 +10,17 @@
         snapshotSeg,
         unmarkDirty,
     } from '../../../lib/stores/segments/dirty';
-    import { injectCard } from '../../../lib/utils/validation-card-inject';
-    import type { SegValMissingWordsItem } from '../../../types/domain';
+    import type { SegValMissingWordsItem, Segment } from '../../../types/domain';
+    import SegmentRow from '../SegmentRow.svelte';
 
     // ---- Props ----
     export let item: SegValMissingWordsItem;
 
     // ---- DOM refs ----
-    let cardsContainerEl: HTMLElement;
     let wrapperEl: HTMLElement;
 
     // ---- State ----
     let showContext = false;
-    let contextEls: HTMLElement[] = [];
     let autoFixApplied = false;
     let autoFixOpId: string | null = null;
     let autoFixOldState: {
@@ -39,47 +35,41 @@
     $: ctxMode = $segConfig.accordionContext?.['missing_words'] ?? 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
 
+    // Missing-word segment tag set for SegmentRow display.
+    $: missingWordSegIndices = new Set<number>(item.seg_indices ?? []);
+
+    // Segments in the gap range.
+    $: segmentsInRange = ((): Segment[] => {
+        const out: Segment[] = [];
+        for (const idx of item.seg_indices ?? []) {
+            const s = getSegByChapterIndex(item.chapter, idx);
+            if (s) out.push(s);
+        }
+        return out;
+    })();
+
+    // Context neighbours: prev of first / next of last.
+    $: prevSeg = ((): Segment | null => {
+        if (!showContext || ctxNextOnly) return null;
+        const first = segmentsInRange[0];
+        if (!first || first.chapter == null) return null;
+        return getAdjacentSegments(first.chapter, first.index).prev;
+    })();
+
+    $: nextSeg = ((): Segment | null => {
+        if (!showContext) return null;
+        const last = segmentsInRange[segmentsInRange.length - 1];
+        if (!last || last.chapter == null) return null;
+        return getAdjacentSegments(last.chapter, last.index).next;
+    })();
+
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }
-    export function showContextForced(): void {
-        if (!showContext) { _doShowContext(); showContext = true; }
-    }
-    export function hideContextForced(): void {
-        if (showContext) { _hideContext(); showContext = false; }
-    }
+    export function showContextForced(): void { showContext = true; }
+    export function hideContextForced(): void { showContext = false; }
 
-    // ---- Context toggle ----
     function toggleContext(): void {
-        if (showContext) { _hideContext(); showContext = false; }
-        else { _doShowContext(); showContext = true; }
-    }
-
-    function _doShowContext(): void {
-        if (!cardsContainerEl) return;
-        const indices = item.seg_indices || [];
-        if (indices.length === 0) return;
-        const firstIdx = indices[0];
-        const lastIdx = indices[indices.length - 1];
-        if (firstIdx == null || lastIdx == null) return;
-        const firstSeg = getSegByChapterIndex(item.chapter, firstIdx);
-        const lastSeg = getSegByChapterIndex(item.chapter, lastIdx);
-        if (!firstSeg || !lastSeg || firstSeg.chapter == null || lastSeg.chapter == null) return;
-        const firstCard = cardsContainerEl.querySelector<HTMLElement>('.seg-row:not(.seg-row-context)');
-        if (!ctxNextOnly) {
-            const { prev } = getAdjacentSegments(firstSeg.chapter, firstSeg.index);
-            if (prev) {
-                contextEls.push(injectCard(cardsContainerEl, prev, { isContext: true, contextLabel: 'Previous' }, firstCard ?? null));
-            }
-        }
-        const { next } = getAdjacentSegments(lastSeg.chapter, lastSeg.index);
-        if (next) {
-            contextEls.push(injectCard(cardsContainerEl, next, { isContext: true, contextLabel: 'Next' }));
-        }
-    }
-
-    function _hideContext(): void {
-        contextEls.forEach((el) => el.remove());
-        contextEls = [];
+        showContext = !showContext;
     }
 
     // ---- Auto-fix handler ----
@@ -107,12 +97,11 @@
         };
         const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
         const card =
-            cardsContainerEl?.querySelector<HTMLElement>(
+            wrapperEl?.querySelector<HTMLElement>(
                 `.seg-row[data-seg-chapter="${segChapter}"][data-seg-index="${targetSeg.index}"]`,
-            ) ?? cardsContainerEl;
+            ) ?? wrapperEl;
         await commitRefEdit(targetSeg, newRef, card);
         autoFixApplied = true;
-        wrapperEl?.style.setProperty('opacity', '0.5');
     }
 
     function handleAutoFixUndo(): void {
@@ -137,25 +126,38 @@
         autoFixApplied = false;
         autoFixOldState = null;
         autoFixOpId = null;
-        wrapperEl?.style.removeProperty('opacity');
     }
-
-    // ---- Mount ----
-    onMount(() => {
-        if (!cardsContainerEl) return;
-        const indices = item.seg_indices || [];
-        indices.forEach((idx) => {
-            const s = getSegByChapterIndex(item.chapter, idx);
-            if (s) injectCard(cardsContainerEl, s, { showGotoBtn: true });
-        });
-    });
-
-    onDestroy(() => { _hideContext(); });
 </script>
 
-<div bind:this={wrapperEl}>
+<div bind:this={wrapperEl} style:opacity={autoFixApplied ? 0.5 : null}>
     <div class="val-card-gap-label">{item.msg || 'Missing words between segments'}</div>
-    <div bind:this={cardsContainerEl}></div>
+    {#if prevSeg}
+        <SegmentRow
+            seg={prevSeg}
+            isContext={true}
+            contextLabel="Previous"
+            showPlayBtn={true}
+            showChapter={true}
+        />
+    {/if}
+    {#each segmentsInRange as s (s.segment_uid ?? `${s.chapter}:${s.index}`)}
+        <SegmentRow
+            seg={s}
+            showGotoBtn={true}
+            showPlayBtn={true}
+            showChapter={true}
+            missingWordSegIndices={missingWordSegIndices}
+        />
+    {/each}
+    {#if nextSeg}
+        <SegmentRow
+            seg={nextSeg}
+            isContext={true}
+            contextLabel="Next"
+            showPlayBtn={true}
+            showChapter={true}
+        />
+    {/if}
     <div class="val-card-actions">
         {#if item.auto_fix}
             {#if !autoFixApplied}
