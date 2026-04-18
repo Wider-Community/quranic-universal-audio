@@ -40,6 +40,7 @@
 import { writable } from 'svelte/store';
 
 import type { AccordionOpCtx } from '../../types/segments';
+import type { SegCanvas } from '../../types/segments-waveform';
 
 /** Edit modes supported by the Segments tab. Wave 7b added 'merge' |
  *  'delete' | 'reference'. Note: merge + delete are one-shot (no backdrop);
@@ -71,12 +72,23 @@ export const splitChainCategory = writable<string | null>(null);
  *  accordion edit trigger). */
 export const accordionOpCtx = writable<AccordionOpCtx | null>(null);
 
+/** Canvas element of the segment row currently in edit mode. Published by
+ *  SegmentRow.svelte when `$editingSegUid === seg.segment_uid`, cleared when
+ *  the row stops being the edit target. Replaces the legacy `_getEditCanvas`
+ *  DOM query (`document.querySelector('.seg-row.seg-edit-target canvas')`).
+ *  Edit utilities (trim/split/play-range) read this to locate the canvas
+ *  without a document-wide lookup. */
+export const editCanvas = writable<SegCanvas | null>(null);
+
 /** Reset the edit store to the "no edit in progress" baseline. Called by
- *  exitEditMode() / cancel paths. */
+ *  exitEditMode() / cancel paths. `editCanvas` is cleared separately by the
+ *  row publishing it (reactive) — or proactively here as a safety net so a
+ *  stale canvas ref never lingers after an exit. */
 export function clearEdit(): void {
     editMode.set(null);
     editingSegUid.set(null);
     editingSegIndex.set(-1);
+    editCanvas.set(null);
 }
 
 /** Convenience setter — call when entering any edit mode. */

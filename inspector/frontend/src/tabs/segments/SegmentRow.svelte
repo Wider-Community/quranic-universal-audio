@@ -37,7 +37,7 @@
         formatTimeMs,
     } from '../../lib/utils/segments/references';
     import { dirtyTick, isIndexDirty } from '../../lib/stores/segments/dirty';
-    import { editMode } from '../../lib/stores/segments/edit';
+    import { editCanvas, editMode, editingSegUid } from '../../lib/stores/segments/edit';
     import { activeFilters } from '../../lib/stores/segments/filters';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import type {
@@ -100,6 +100,17 @@
         c._splitHL = splitHL ?? undefined;
         c._trimHL = trimHL ?? undefined;
         c._mergeHL = mergeHL ?? undefined;
+    }
+
+    // Publish canvas to `editCanvas` store whenever this row is the active
+    // edit target. Replaces the legacy `_getEditCanvas()` document-wide
+    // DOM query. readOnly sites (history view, validation accordions, save
+    // preview) share seg.index / uid with the main list — skip them so a
+    // readOnly row doesn't shadow the real editing row's canvas.
+    $: {
+        if (!readOnly && canvasEl && seg.segment_uid && $editingSegUid === seg.segment_uid) {
+            editCanvas.set(canvasEl as SegCanvas);
+        }
     }
 
     // Derived values. Seg-derived reactives also subscribe to $segAllData via

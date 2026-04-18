@@ -14,9 +14,9 @@ import { setPendingOp } from '../../stores/segments/dirty';
 import {
     accordionOpCtx,
     clearEdit,
+    editCanvas,
 } from '../../stores/segments/edit';
 import { segAudioElement } from '../../stores/segments/playback';
-import type { SegCanvas } from '../../types/segments-waveform';
 import {
     _playRange as _playRangeImpl,
     clearPlayRangeRAF,
@@ -36,22 +36,23 @@ export function exitEditMode(): void {
     setPendingOp(null);
     accordionOpCtx.set(null);
 
-    const editRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
+    const canvas = get(editCanvas);
+    const editRow = canvas?.closest<HTMLElement>('.seg-row') ?? null;
     if (editRow) {
         editRow.querySelector('.seg-edit-inline')?.remove();
         const actions = editRow.querySelector<HTMLElement>('.seg-actions');
         if (actions) actions.hidden = false;
         const playCol = editRow.querySelector<HTMLElement>('.seg-play-col');
         if (playCol) playCol.hidden = false;
-
-        const canvas = editRow.querySelector<SegCanvas>('canvas');
-        if (canvas) {
-            canvas._editCleanup?.();
-            delete canvas._trimWindow; delete canvas._splitData;
-            delete canvas._trimEls; delete canvas._splitEls;
-            delete canvas._editCleanup;
-            canvas._wfCache = null;
-            canvas.style.cursor = '';
+    }
+    if (canvas) {
+        canvas._editCleanup?.();
+        delete canvas._trimWindow; delete canvas._splitData;
+        delete canvas._trimEls; delete canvas._splitEls;
+        delete canvas._editCleanup;
+        canvas._wfCache = null;
+        canvas.style.cursor = '';
+        if (editRow) {
             const idx = parseInt(editRow.dataset.segIndex ?? '-1');
             const chapter = parseInt(editRow.dataset.segChapter ?? '-1');
             const seg = chapter >= 0 ? getSegByChapterIndex(chapter, idx) : null;

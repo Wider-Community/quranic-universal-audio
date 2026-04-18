@@ -10,6 +10,7 @@ import {
     selectedReciter,
 } from '../../stores/segments/chapter';
 import { segConfig } from '../../stores/segments/config';
+import { editCanvas } from '../../stores/segments/edit';
 import { segIndexMap } from '../../stores/segments/filters';
 import type {
     ObserverPeaksQueueItem,
@@ -17,7 +18,6 @@ import type {
 } from '../../types/segments';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks, setWaveformPeaks } from '../waveform-cache';
-import { _getEditCanvas } from './get-edit-canvas';
 import { _findCoveringPeaks, clearSegPeaksCache, pushSegPeaksEntry } from './peaks-cache';
 import { drawSplitWaveform } from './split-draw';
 import { drawTrimWaveform } from './trim-draw';
@@ -76,22 +76,22 @@ const _CONTAINER_IDS = ['seg-list', 'seg-validation', 'seg-validation-global', '
 
 export function redrawPeaksWaveforms(): void {
     const observer = _ensureWaveformObserver();
-    const editCanvas = _getEditCanvas() as SegCanvas | null;
+    const activeEdit = get(editCanvas);
     for (const id of _CONTAINER_IDS) {
         const container = document.getElementById(id);
         if (!container) continue;
         container.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => {
-            if (c === editCanvas) return;
+            if (c === activeEdit) return;
             observer.unobserve(c);
             observer.observe(c);
         });
     }
-    if (editCanvas?._splitData) {
-        editCanvas._splitBaseCache = null;
-        drawSplitWaveform(editCanvas);
-    } else if (editCanvas?._trimWindow) {
-        editCanvas._wfCache = null;
-        drawTrimWaveform(editCanvas);
+    if (activeEdit?._splitData) {
+        activeEdit._splitBaseCache = null;
+        drawSplitWaveform(activeEdit);
+    } else if (activeEdit?._trimWindow) {
+        activeEdit._wfCache = null;
+        drawTrimWaveform(activeEdit);
     }
 }
 

@@ -24,6 +24,7 @@ import {
 } from '../../stores/segments/dirty';
 import {
     accordionOpCtx,
+    editCanvas,
     editingSegIndex,
     editMode,
     setEdit,
@@ -40,7 +41,6 @@ import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
 import { startRefEdit } from './edit-reference';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
-import { _getEditCanvas } from './get-edit-canvas';
 import {
     clearPlayRangeRAF,
     getPreviewLooping,
@@ -202,7 +202,7 @@ export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
 // ---------------------------------------------------------------------------
 
 export function updateSplitInfo(canvas: SegCanvas | null | undefined, seg: Segment, splitTime: number): void {
-    const c = (canvas ?? (_getEditCanvas() as SegCanvas | null)) ?? null;
+    const c = canvas ?? get(editCanvas);
     const el = c?._splitEls?.infoSpan;
     if (el) {
         el.textContent = `L ${((splitTime - seg.time_start) / 1000).toFixed(2)}s | R ${((seg.time_end - splitTime) / 1000).toFixed(2)}s`;
@@ -213,9 +213,9 @@ export function updateSplitInfo(canvas: SegCanvas | null | undefined, seg: Segme
 // confirmSplit — apply the split and chain ref editing
 // ---------------------------------------------------------------------------
 
-export async function confirmSplit(seg: Segment): Promise<void> {
-    const canvas = _getEditCanvas() as SegCanvas | null;
-    const splitTime = canvas?._splitData?.currentSplit;
+export async function confirmSplit(seg: Segment, canvas?: SegCanvas | null): Promise<void> {
+    const c = canvas ?? get(editCanvas);
+    const splitTime = c?._splitData?.currentSplit;
     if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
         playStatusText.set('Invalid split point');
         return;
@@ -317,10 +317,10 @@ export async function confirmSplit(seg: Segment): Promise<void> {
 // previewSplitAudio — toggle looping preview of left/right half
 // ---------------------------------------------------------------------------
 
-export function previewSplitAudio(side: 'left' | 'right'): void {
-    const canvas = _getEditCanvas() as SegCanvas | null;
-    const sd = canvas?._splitData;
-    if (!sd || !canvas) return;
+export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | null): void {
+    const c = canvas ?? get(editCanvas);
+    const sd = c?._splitData;
+    if (!sd || !c) return;
     const loopKey = `split-${side}` as const;
     const audioEl = get(segAudioElement);
     if (getPreviewLooping() === loopKey && audioEl && !audioEl.paused) {
@@ -328,7 +328,7 @@ export function previewSplitAudio(side: 'left' | 'right'): void {
         setPreviewJustSeeked(false);
         audioEl.pause();
         clearPlayRangeRAF();
-        if (canvas._splitData) drawSplitWaveform(canvas);
+        if (c._splitData) drawSplitWaveform(c);
         return;
     }
     setPreviewLooping(loopKey);

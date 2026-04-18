@@ -22,7 +22,7 @@ import {
     setPendingOp,
     snapshotSeg,
 } from '../../stores/segments/dirty';
-import { editingSegIndex, editMode, setEdit } from '../../stores/segments/edit';
+import { editCanvas, editingSegIndex, editMode, setEdit } from '../../stores/segments/edit';
 import {
     playStatusText,
     segAudioElement,
@@ -31,7 +31,6 @@ import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
-import { _getEditCanvas } from './get-edit-canvas';
 import {
     clearPlayRangeRAF,
     getPreviewLooping,
@@ -202,7 +201,7 @@ export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
 // ---------------------------------------------------------------------------
 
 export function updateTrimDuration(canvas?: SegCanvas | null): void {
-    const c = (canvas ?? (_getEditCanvas() as SegCanvas | null)) ?? null;
+    const c = canvas ?? get(editCanvas);
     const tw = c?._trimWindow;
     const el = c?._trimEls?.durationSpan;
     if (!tw || !el) return;
@@ -213,10 +212,10 @@ export function updateTrimDuration(canvas?: SegCanvas | null): void {
 // confirmTrim — apply the trim and finalize
 // ---------------------------------------------------------------------------
 
-export function confirmTrim(seg: Segment): void {
-    const canvas = _getEditCanvas() as SegCanvas | null;
-    const tw = canvas?._trimWindow;
-    const trimStatus = canvas?._trimEls?.statusSpan || null;
+export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
+    const c = canvas ?? get(editCanvas);
+    const tw = c?._trimWindow;
+    const trimStatus = c?._trimEls?.statusSpan || null;
     const newStart = tw?.currentStart;
     const newEnd = tw?.currentEnd;
     if (newStart == null || newEnd == null || newStart >= newEnd) {
@@ -284,17 +283,17 @@ export function confirmTrim(seg: Segment): void {
 // previewTrimAudio — toggle looping preview of trimmed region
 // ---------------------------------------------------------------------------
 
-export function previewTrimAudio(): void {
-    const canvas = _getEditCanvas() as SegCanvas | null;
-    const tw = canvas?._trimWindow;
-    if (!tw || !canvas) return;
+export function previewTrimAudio(canvas?: SegCanvas | null): void {
+    const c = canvas ?? get(editCanvas);
+    const tw = c?._trimWindow;
+    if (!tw || !c) return;
     const audioEl = get(segAudioElement);
     if (getPreviewLooping() && audioEl && !audioEl.paused) {
         setPreviewLooping(false);
         setPreviewJustSeeked(false);
         audioEl.pause();
         clearPlayRangeRAF();
-        if (canvas._trimWindow) drawTrimWaveform(canvas);
+        if (c._trimWindow) drawTrimWaveform(c);
         return;
     }
     setPreviewLooping('trim');

@@ -5,15 +5,13 @@
 import { get } from 'svelte/store';
 
 import { getSegByChapterIndex, selectedChapter } from '../../stores/segments/chapter';
-import { editingSegIndex } from '../../stores/segments/edit';
+import { editCanvas, editingSegIndex } from '../../stores/segments/edit';
 import {
     playbackSpeed,
     segAudioElement,
 } from '../../stores/segments/playback';
 import type { PreviewLoopMode, RafHandle } from '../../types/segments';
-import type { SegCanvas } from '../../types/segments-waveform';
 import { safePlay } from '../audio';
-import { _getEditCanvas } from './get-edit-canvas';
 import { drawSplitWaveform } from './split-draw';
 import { drawTrimWaveform } from './trim-draw';
 
@@ -52,7 +50,7 @@ export function _playRange(startMs: number, endMs: number): void {
     }
     if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
     const start = startMs / 1000;
-    const canvas = _getEditCanvas() as SegCanvas | null;
+    const canvas = get(editCanvas);
 
     let wfStart: number, wfEnd: number;
     if (canvas?._trimWindow) { wfStart = canvas._trimWindow.windowStart; wfEnd = canvas._trimWindow.windowEnd; }
