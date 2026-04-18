@@ -1,14 +1,6 @@
 /**
  * Segments tab — chapter/reciter/verse selection + loaded chapter data.
- *
- * Replaces the Stage-1 `state.segData`, `state.segAllData`,
- * `state.segAllReciters` + dom.segReciterSelect/segChapterSelect/segVerseSelect
- * triplet. Derived stores expose per-chapter segment slices and verse options.
- *
- * Store granularity provisional through Wave 9 (S2-D11). Wave-6+ imperative
- * modules continue to read `state.segData` / `state.segAllData` directly; the
- * segments tab shell (SegmentsTab.svelte) syncs these Svelte stores back to
- * `state.*` via subscribe() bridges so the old call sites keep working.
+ * Derived stores expose per-chapter segment slices and verse options.
  */
 
 import { derived, get,writable } from 'svelte/store';

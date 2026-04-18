@@ -3,9 +3,8 @@
  * handler and the stale-data reload paths in history/save.
  *
  * Fetches chapters + validate + stats + all + edit-history in parallel and
- * mirrors the responses to Svelte stores + state.*. The chapter-select
- * options come from `segAllData` reactively; this function does not touch
- * `dom.segChapterSelect` directly.
+ * mirrors the responses to Svelte stores. Chapter-select options come from
+ * `segAllData` reactively.
  */
 
 import { get } from 'svelte/store';

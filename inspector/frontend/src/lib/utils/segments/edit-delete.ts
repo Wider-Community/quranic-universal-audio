@@ -12,18 +12,20 @@
 import { get } from 'svelte/store';
 
 import type { Segment } from '../../../types/domain';
-import { dom, markDirty } from '../../segments-state';
 import {
     getChapterSegments,
     segAllData,
     segData,
+    selectedChapter,
 } from '../../stores/segments/chapter';
 import {
     createOp,
     finalizeOp,
+    markDirty,
     snapshotSeg,
 } from '../../stores/segments/dirty';
 import { clearEdit, setEdit } from '../../stores/segments/edit';
+import { playStatusText } from '../../stores/segments/playback';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { formatRef as _formatRefLib } from './references';
 import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from './validation-fixups';
@@ -39,8 +41,9 @@ function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRef
 
 export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: string | null = null): void {
     void row;
-    const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
-    const currentChapter = parseInt(dom.segChapterSelect.value);
+    const chStr = get(selectedChapter);
+    const chapter = seg.chapter || parseInt(chStr);
+    const currentChapter = parseInt(chStr);
     const label = seg.chapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
     const deleteOp = createOp('delete_segment', contextCategory ? { contextCategory } : undefined);
@@ -81,5 +84,5 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
 
     finalizeOp(chapter, deleteOp);
     clearEdit();
-    dom.segPlayStatus.textContent = 'Segment deleted (unsaved)';
+    playStatusText.set('Segment deleted (unsaved)');
 }

@@ -28,6 +28,7 @@
         segAllData,
         segCurrentIdx,
         selectedChapter,
+        selectedVerse,
     } from '../../lib/stores/segments/chapter';
     import {
         _addVerseMarkers,
@@ -46,9 +47,12 @@
     } from '../../lib/types/segments-waveform';
     import { getConfClass } from '../../lib/utils/segments/conf-class';
     import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
-    import { dom } from '../../lib/segments-state';
+    import {
+        segAudioElement,
+        segListElement,
+    } from '../../lib/stores/segments/playback';
     import { deleteSegment } from '../../lib/utils/segments/edit-delete';
-    import { enterEditWithBuffer } from '../../lib/utils/segments/edit-common';
+    import { enterEditWithBuffer } from '../../lib/utils/segments/edit-enter';
     import { mergeAdjacent } from '../../lib/utils/segments/edit-merge';
     import { startRefEdit } from '../../lib/utils/segments/edit-reference';
     import { jumpToSegment } from '../../lib/utils/segments/navigation-actions';
@@ -151,8 +155,9 @@
         if (readOnly) return;
         const idx = seg.index;
         const chapter = seg.chapter ?? 0;
-        if (idx === get(segCurrentIdx) && !dom.segAudioEl.paused) {
-            dom.segAudioEl.pause();
+        const audioEl = get(segAudioElement);
+        if (audioEl && idx === get(segCurrentIdx) && !audioEl.paused) {
+            audioEl.pause();
         } else {
             playFromSegment(idx, chapter);
         }
@@ -162,11 +167,12 @@
         e.stopPropagation();
         const filters = get(activeFilters);
         if (filters.some(f => f.value !== null)) {
+            const listEl = get(segListElement);
             savedFilterView.set({
                 filters: JSON.parse(JSON.stringify(filters)),
                 chapter: get(selectedChapter),
-                verse: dom.segVerseSelect.value,
-                scrollTop: dom.segListEl.scrollTop,
+                verse: get(selectedVerse),
+                scrollTop: listEl?.scrollTop ?? 0,
             });
         }
         jumpToSegment(seg.chapter ?? 0, seg.index);
@@ -225,8 +231,9 @@
         const tEnd = hl ? hl.wfEnd : seg.time_end;
         const timeMs = tStart + progress * (tEnd - tStart);
 
-        if (seg.index === get(segCurrentIdx) && !dom.segAudioEl.paused) {
-            dom.segAudioEl.currentTime = timeMs / 1000;
+        const audioEl = get(segAudioElement);
+        if (audioEl && seg.index === get(segCurrentIdx) && !audioEl.paused) {
+            audioEl.currentTime = timeMs / 1000;
         } else {
             playFromSegment(seg.index, seg.chapter ?? 0, timeMs);
         }

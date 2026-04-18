@@ -7,14 +7,14 @@
 
 import { get } from 'svelte/store';
 
-import { dom } from '../../segments-state';
-import { segCurrentIdx, selectedChapter } from '../../stores/segments/chapter';
+import { segCurrentIdx, selectedChapter, selectedVerse } from '../../stores/segments/chapter';
 import { accordionOpCtx, editMode } from '../../stores/segments/edit';
 import { activeFilters } from '../../stores/segments/filters';
 import { savedFilterView } from '../../stores/segments/navigation';
+import { segAudioElement, segListElement } from '../../stores/segments/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { enterEditWithBuffer } from './edit-common';
 import { deleteSegment } from './edit-delete';
+import { enterEditWithBuffer } from './edit-enter';
 import { mergeAdjacent } from './edit-merge';
 import { startRefEdit } from './edit-reference';
 import {
@@ -27,7 +27,7 @@ import { playFromSegment } from './playback';
 import { resolveSegFromRow } from './resolve-seg-from-row';
 
 // ---------------------------------------------------------------------------
-// Module-local state (was state._segScrubActive)
+// Module-local state
 // ---------------------------------------------------------------------------
 
 let _segScrubActive = false;
@@ -48,11 +48,13 @@ function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas, row: HTMLElement
     const tEnd   = splitHL ? splitHL.wfEnd   : seg.time_end;
     const timeMs = tStart + progress * (tEnd - tStart);
 
-    if (dom.segListEl.contains(row)) {
+    const listEl = get(segListElement);
+    const audioEl = get(segAudioElement);
+    if (listEl && listEl.contains(row)) {
         const idx = parseInt(row.dataset.segIndex ?? '');
         const chapter = parseInt(row.dataset.segChapter ?? '');
-        if (idx === get(segCurrentIdx) && !dom.segAudioEl.paused) {
-            dom.segAudioEl.currentTime = timeMs / 1000;
+        if (audioEl && idx === get(segCurrentIdx) && !audioEl.paused) {
+            audioEl.currentTime = timeMs / 1000;
         } else {
             playFromSegment(idx, chapter, timeMs);
         }
@@ -124,10 +126,12 @@ function handleSegRowClick(e: MouseEvent): void {
         e.stopPropagation();
         const row = playBtn.closest<HTMLElement>('.seg-row');
         if (!row) return;
-        if (dom.segListEl.contains(row)) {
+        const listEl = get(segListElement);
+        const audioEl = get(segAudioElement);
+        if (listEl && listEl.contains(row)) {
             const idx = parseInt(row.dataset.segIndex ?? '');
-            if (idx === get(segCurrentIdx) && !dom.segAudioEl.paused) {
-                dom.segAudioEl.pause();
+            if (audioEl && idx === get(segCurrentIdx) && !audioEl.paused) {
+                audioEl.pause();
             } else {
                 playFromSegment(idx, parseInt(row.dataset.segChapter ?? ''));
             }
@@ -147,11 +151,12 @@ function handleSegRowClick(e: MouseEvent): void {
         if (!seg || !row) return;
         const filters = get(activeFilters);
         if (row.closest('#seg-list') && filters.some(f => f.value !== null)) {
+            const listEl = get(segListElement);
             const saved = {
                 filters: JSON.parse(JSON.stringify(filters)),
                 chapter: get(selectedChapter),
-                verse: dom.segVerseSelect.value,
-                scrollTop: dom.segListEl.scrollTop,
+                verse: get(selectedVerse),
+                scrollTop: listEl?.scrollTop ?? 0,
             };
             savedFilterView.set(saved);
         }
@@ -180,7 +185,8 @@ function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (!seg || !row) return;
         const splitCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-        if (!dom.segListEl.contains(row)) {
+        const listEl2 = get(segListElement);
+        if (!listEl2 || !listEl2.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) accordionOpCtx.set({ wrapper });
             enterEditWithBuffer(seg, row, 'split', splitCat);
@@ -198,7 +204,8 @@ function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (!seg || !row) return;
         const mergePrevCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-        if (!dom.segListEl.contains(row)) {
+        const listEl2 = get(segListElement);
+        if (!listEl2 || !listEl2.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) accordionOpCtx.set({ wrapper, direction: 'prev' });
             mergeAdjacent(seg, 'prev', mergePrevCat);
@@ -214,7 +221,8 @@ function handleSegRowClick(e: MouseEvent): void {
         const seg = resolveSegFromRow(row);
         if (!seg || !row) return;
         const mergeNextCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
-        if (!dom.segListEl.contains(row)) {
+        const listEl2 = get(segListElement);
+        if (!listEl2 || !listEl2.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
             if (wrapper) accordionOpCtx.set({ wrapper, direction: 'next' });
             mergeAdjacent(seg, 'next', mergeNextCat);
@@ -257,7 +265,8 @@ function handleSegRowClick(e: MouseEvent): void {
     const row = target.closest<HTMLElement>('.seg-row');
     if (row && !target.closest('.seg-play-col') && !target.closest('.seg-actions')) {
         if (get(editMode)) return;
-        if (dom.segListEl.contains(row)) {
+        const listEl3 = get(segListElement);
+        if (listEl3 && listEl3.contains(row)) {
             const idx = parseInt(row.dataset.segIndex ?? '');
             playFromSegment(idx, parseInt(row.dataset.segChapter ?? ''));
         } else {

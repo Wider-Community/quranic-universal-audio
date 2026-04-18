@@ -1,16 +1,17 @@
 /**
  * Execute the save operation — iterate dirty chapters, POST to server,
  * clean up dirty state on success.
- *
- * Still has DOM side effects (dom.segSaveBtn, dom.segPlayStatus) — those
- * will move to the Svelte component later.
  */
+
+import { get as storeGet } from 'svelte/store';
 
 import type { SegEditHistoryResponse, SegSaveResponse } from '../../../types/api';
 import type { EditOp, Segment } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
-import { dom } from '../../segments-state';
-import { getChapterSegments } from '../../stores/segments/chapter';
+import {
+    getChapterSegments,
+    selectedReciter,
+} from '../../stores/segments/chapter';
 import {
     clearDirtyMap,
     clearOpLog,
@@ -18,8 +19,9 @@ import {
     deleteOpLogEntry,
     getChapterOps,
     getDirtyMap,
-    isDirty,
 } from '../../stores/segments/dirty';
+import { playStatusText } from '../../stores/segments/playback';
+import { saveButtonLabel } from '../../stores/segments/save';
 import { renderEditHistoryPanel } from './history-render';
 import { refreshValidation } from './validation-refresh';
 
@@ -66,11 +68,10 @@ interface SavePayloadPatch {
 // ---------------------------------------------------------------------------
 
 export async function executeSave(): Promise<void> {
-    const reciter = dom.segReciterSelect.value;
+    const reciter = storeGet(selectedReciter);
     if (!reciter) return;
 
-    dom.segSaveBtn.disabled = true;
-    dom.segSaveBtn.textContent = 'Saving...';
+    saveButtonLabel.set('Saving...');
 
     let savedChanges = 0;
     let savedChapters = 0;
@@ -134,7 +135,7 @@ export async function executeSave(): Promise<void> {
                 },
             );
             if (!result.ok) {
-                dom.segPlayStatus.textContent = `Save error (ch ${ch}): ${result.error}`;
+                playStatusText.set(`Save error (ch ${ch}): ${result.error}`);
                 allOk = false;
                 break;
             }
@@ -149,9 +150,9 @@ export async function executeSave(): Promise<void> {
             const msg = savedChapters > 1
                 ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
                 : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
-            dom.segSaveBtn.textContent = msg;
+            saveButtonLabel.set(msg);
             document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
-            setTimeout(() => { dom.segSaveBtn.textContent = 'Save'; }, 2500);
+            setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
             fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
                 .then(() => refreshValidation())
                 .catch(() => refreshValidation());
@@ -164,13 +165,11 @@ export async function executeSave(): Promise<void> {
                 }
             } catch (_) { /* non-critical */ }
         } else {
-            dom.segSaveBtn.disabled = !isDirty();
-            dom.segSaveBtn.textContent = 'Save';
+            saveButtonLabel.set('Save');
         }
     } catch (e) {
         console.error('Save failed:', e);
-        dom.segPlayStatus.textContent = 'Save failed';
-        dom.segSaveBtn.disabled = !isDirty();
-        dom.segSaveBtn.textContent = 'Save';
+        playStatusText.set('Save failed');
+        saveButtonLabel.set('Save');
     }
 }

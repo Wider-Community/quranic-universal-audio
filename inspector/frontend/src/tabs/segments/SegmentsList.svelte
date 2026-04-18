@@ -28,12 +28,16 @@
 
     import { displayedSegments } from '../../lib/stores/segments/filters';
     import { selectedChapter } from '../../lib/stores/segments/chapter';
+    import { segListElement } from '../../lib/stores/segments/playback';
     import { segValidation } from '../../lib/stores/segments/validation';
     import type { Segment } from '../../types/domain';
     import Navigation from './Navigation.svelte';
     import SegmentRow from './SegmentRow.svelte';
 
     export let onRestore: (() => void) | null = null;
+
+    let listEl: HTMLDivElement | undefined;
+    $: segListElement.set(listEl ?? null);
 
     /** Compute missing-word seg-indices for the current chapter from
      *  $segValidation. Now that segValidation is a proper writable store
@@ -86,7 +90,7 @@
     }
 </script>
 
-<div id="seg-list" class="seg-list">
+<div id="seg-list" class="seg-list" bind:this={listEl}>
     <!-- Navigation banner stays inside #seg-list so `.seg-back-banner`'s
          `position: sticky` scopes to the list's scroll container. -->
     <Navigation on:restore={() => onRestore && onRestore()} />

@@ -11,7 +11,6 @@
 
 import { get } from 'svelte/store';
 
-import { dom } from '../../segments-state';
 import {
     segAllData,
     segChapterSS,
@@ -21,6 +20,7 @@ import {
 } from '../../stores/segments/chapter';
 import { activeFilters as activeFiltersStore } from '../../stores/segments/filters';
 import { savedFilterView as savedFilterViewStore } from '../../stores/segments/navigation';
+import { playStatusText, segListElement } from '../../stores/segments/playback';
 import { loadChapterData } from './chapter-actions';
 import { applyFiltersAndRender } from './filters-apply';
 import {
@@ -55,7 +55,8 @@ export async function jumpToSegment(chapter: number | string, segIndex: number):
         applyFiltersAndRender();
     }
 
-    const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${segIndex}"]`);
+    const listEl = get(segListElement);
+    const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${segIndex}"]`) ?? null;
     if (row) {
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.classList.add('playing');
@@ -77,11 +78,12 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
     const curFilters = get(activeFiltersStore);
     const hasFilterView = curFilters.some(f => f.value !== null) || !!get(selectedVerse);
     if (hasFilterView) {
+        const listEl = get(segListElement);
         savedFilterViewStore.set({
             filters: JSON.parse(JSON.stringify(curFilters)),
             chapter: get(selectedChapter),
             verse: get(selectedVerse),
-            scrollTop: dom.segListEl.scrollTop,
+            scrollTop: listEl?.scrollTop ?? 0,
         });
     }
 
@@ -101,39 +103,40 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
         return;
     }
 
+    const listEl = get(segListElement);
     const rows: HTMLElement[] = [];
-    if (prev) {
-        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${prev.index}"]`);
+    if (prev && listEl) {
+        const row = listEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${prev.index}"]`);
         if (row) rows.push(row);
     }
-    if (next && (!prev || next.index !== prev.index)) {
-        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${next.index}"]`);
+    if (next && listEl && (!prev || next.index !== prev.index)) {
+        const row = listEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${next.index}"]`);
         if (row) rows.push(row);
     }
 
     if (rows.length === 0) {
-        dom.segPlayStatus.textContent = `Could not locate boundary segments for missing verse ${verseKey}.`;
+        playStatusText.set(`Could not locate boundary segments for missing verse ${verseKey}.`);
         return;
     }
 
     if (rows.length === 1) {
         rows[0]!.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else {
+    } else if (listEl) {
         const top = Math.min(...rows.map(r => r.offsetTop));
         const bottom = Math.max(...rows.map(r => r.offsetTop + r.offsetHeight));
-        const targetTop = Math.max(0, ((top + bottom) / 2) - (dom.segListEl.clientHeight / 2));
-        dom.segListEl.scrollTo({ top: targetTop, behavior: 'smooth' });
+        const targetTop = Math.max(0, ((top + bottom) / 2) - (listEl.clientHeight / 2));
+        listEl.scrollTo({ top: targetTop, behavior: 'smooth' });
     }
 
     rows.forEach(r => r.classList.add('playing'));
     setTimeout(() => rows.forEach(r => r.classList.remove('playing')), 2000);
 
     if (prev && next) {
-        dom.segPlayStatus.textContent = `Missing verse ${verseKey} is between #${prev.index} and #${next.index}.`;
+        playStatusText.set(`Missing verse ${verseKey} is between #${prev.index} and #${next.index}.`);
     } else if (prev) {
-        dom.segPlayStatus.textContent = `Missing verse ${verseKey} is after #${prev.index}.`;
+        playStatusText.set(`Missing verse ${verseKey} is after #${prev.index}.`);
     } else if (next) {
-        dom.segPlayStatus.textContent = `Missing verse ${verseKey} is before #${next.index}.`;
+        playStatusText.set(`Missing verse ${verseKey} is before #${next.index}.`);
     }
 
     if (hasFilterView) {
@@ -152,7 +155,8 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
         s.chapter === chapterNum && s.matched_ref && s.matched_ref.startsWith(prefix)
     );
     if (seg) {
-        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${seg.index}"]`);
+        const listEl = get(segListElement);
+        const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${seg.index}"]`) ?? null;
         if (row) {
             row.scrollIntoView({ behavior: 'smooth', block: 'center' });
             row.classList.add('playing');
@@ -160,7 +164,7 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
         }
         return;
     }
-    dom.segPlayStatus.textContent = `No segment found for verse ${verseKey}.`;
+    playStatusText.set(`No segment found for verse ${verseKey}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +197,7 @@ export function _restoreFilterView(): void {
     applyFiltersAndRender();
 
     requestAnimationFrame(() => {
-        dom.segListEl.scrollTop = saved.scrollTop;
+        const listEl = get(segListElement);
+        if (listEl) listEl.scrollTop = saved.scrollTop;
     });
 }

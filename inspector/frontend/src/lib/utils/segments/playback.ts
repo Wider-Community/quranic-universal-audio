@@ -4,7 +4,6 @@
 
 import { get } from 'svelte/store';
 
-import { dom } from '../../segments-state';
 import {
     getSegByChapterIndex,
     segAllData,
@@ -17,7 +16,12 @@ import {
     activeAudioSource,
     autoPlayEnabled,
     continuousPlay,
+    playbackSpeed,
+    playButtonLabel,
     playEndMs,
+    playStatusText,
+    segAudioElement,
+    segListElement,
 } from '../../stores/segments/playback';
 import type { RafHandle } from '../../types/segments';
 import type { SegCanvas } from '../../types/segments-waveform';
@@ -30,7 +34,7 @@ import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from './waveform-draw-se
 import { _fetchPeaksForClick } from './waveform-utils';
 
 // ---------------------------------------------------------------------------
-// Module-local state (was state.segAnimId / _segPrefetchCache / highlight refs)
+// Module-local state
 // ---------------------------------------------------------------------------
 
 let _segAnimId: RafHandle | null = null;
@@ -62,6 +66,8 @@ export function playFromSegment(
 ): void {
     const allData = get(segAllData);
     if (!allData) return;
+    const audioEl = get(segAudioElement);
+    if (!audioEl) return;
     stopErrorCardAudio();
     activeAudioSource.set('main');
     const _chStr = get(selectedChapter);
@@ -76,17 +82,17 @@ export function playFromSegment(
     playEndMs.set(seg.time_end);
 
     const segAudioUrl = seg.audio_url || '';
-    if (segAudioUrl && !dom.segAudioEl.src.endsWith(segAudioUrl)) {
-        dom.segAudioEl.src = segAudioUrl;
+    if (segAudioUrl && !audioEl.src.endsWith(segAudioUrl)) {
+        audioEl.src = segAudioUrl;
     }
 
-    dom.segAudioEl.playbackRate = parseFloat(dom.segSpeedSelect.value);
-    dom.segAudioEl.currentTime = (seekToMs != null ? seekToMs : seg.time_start) / 1000;
-    safePlay(dom.segAudioEl);
+    audioEl.playbackRate = get(playbackSpeed);
+    audioEl.currentTime = (seekToMs != null ? seekToMs : seg.time_start) / 1000;
+    safePlay(audioEl);
     segCurrentIdx.set(segIndex);
     updateSegPlayStatus();
 
-    prefetchNextSegAudio(displayed, segIndex, dom.segAudioEl.src || '', _segPrefetchCache);
+    prefetchNextSegAudio(displayed, segIndex, audioEl.src || '', _segPrefetchCache);
 
     // Fetch waveform peaks on-demand via ffmpeg HTTP Range (brief delay expected).
     const chapterForPeaks = chapter ?? parseInt(get(selectedChapter));
@@ -99,6 +105,8 @@ function _nextDisplayedSeg(afterIndex: number) {
 }
 
 export function onSegPlayClick(): void {
+    const audioEl = get(segAudioElement);
+    if (!audioEl) return;
     const valAudio = getValCardAudioOrNull();
     if (valAudio && !valAudio.paused) {
         stopErrorCardAudio();
@@ -106,7 +114,7 @@ export function onSegPlayClick(): void {
     }
     const displayed = get(displayedSegments);
     const curIdx = get(segCurrentIdx);
-    if (dom.segAudioEl.paused) {
+    if (audioEl.paused) {
         if (displayed && displayed.length > 0 && curIdx < 0) {
             const first = displayed[0];
             if (first) playFromSegment(first.index, first.chapter);
@@ -117,18 +125,20 @@ export function onSegPlayClick(): void {
                 const curSeg = displayed.find(s => s.index === curIdx);
                 if (curSeg) playEndMs.set(curSeg.time_end);
             }
-            dom.segAudioEl.playbackRate = parseFloat(dom.segSpeedSelect.value);
-            safePlay(dom.segAudioEl);
+            audioEl.playbackRate = get(playbackSpeed);
+            safePlay(audioEl);
         }
     } else {
         continuousPlay.set(false);
-        dom.segAudioEl.pause();
+        audioEl.pause();
     }
 }
 
 export function onSegTimeUpdate(): void {
-    const timeMs = dom.segAudioEl.currentTime * 1000;
-    const currentSrc = dom.segAudioEl.src || '';
+    const audioEl = get(segAudioElement);
+    if (!audioEl) return;
+    const timeMs = audioEl.currentTime * 1000;
+    const currentSrc = audioEl.src || '';
     const displayed = get(displayedSegments);
 
     let lastSegOnAudio = null;
@@ -150,7 +160,7 @@ export function onSegTimeUpdate(): void {
             playFromSegment(nextSeg.index, nextSeg.chapter);
             return;
         }
-        dom.segAudioEl.pause();
+        audioEl.pause();
         stopSegAnimation();
         continuousPlay.set(false);
         playEndMs.set(0);
@@ -182,7 +192,7 @@ export function onSegTimeUpdate(): void {
                 }
             }
         }
-        dom.segAudioEl.pause();
+        audioEl.pause();
         stopSegAnimation();
         continuousPlay.set(false);
         playEndMs.set(0);
@@ -191,7 +201,7 @@ export function onSegTimeUpdate(): void {
 
     if (nextCurrentIdx !== prevIdx) {
         if (!get(continuousPlay) && prevIdx >= 0 && nextCurrentIdx >= 0) {
-            dom.segAudioEl.pause();
+            audioEl.pause();
             stopSegAnimation();
             playEndMs.set(0);
             return;
@@ -203,7 +213,7 @@ export function onSegTimeUpdate(): void {
         updateSegHighlight();
         updateSegPlayStatus();
         if (nextCurrentIdx >= 0) {
-            prefetchNextSegAudio(displayed, nextCurrentIdx, dom.segAudioEl.src || '', _segPrefetchCache);
+            prefetchNextSegAudio(displayed, nextCurrentIdx, audioEl.src || '', _segPrefetchCache);
             // Trigger on-demand peaks fetch for the segment we just entered during
             // continuous play (auto-advance on same audio file doesn't go through
             // playFromSegment, so peaks would otherwise never load here).
@@ -225,10 +235,11 @@ export function onSegTimeUpdate(): void {
 const _segAnimLoop = createAnimationLoop(() => {
     updateSegHighlight();
     drawActivePlayhead();
+    const audioEl = get(segAudioElement);
     const curPlayEnd = get(playEndMs);
-    if (!get(continuousPlay) && curPlayEnd > 0 && !dom.segAudioEl.paused
-            && dom.segAudioEl.currentTime * 1000 >= curPlayEnd) {
-        dom.segAudioEl.pause();
+    if (!get(continuousPlay) && curPlayEnd > 0 && audioEl && !audioEl.paused
+            && audioEl.currentTime * 1000 >= curPlayEnd) {
+        audioEl.pause();
         // stopSegAnimation will set _segAnimId=null and update UI; return false
         // so the loop itself cancels cleanly.
         stopSegAnimation();
@@ -239,7 +250,7 @@ const _segAnimLoop = createAnimationLoop(() => {
 });
 
 export function startSegAnimation(): void {
-    dom.segPlayBtn.textContent = 'Pause';
+    playButtonLabel.set('Pause');
     activeAudioSource.set('main');
     if (_prevHighlightedRow) {
         const btn = _prevHighlightedRow.querySelector('.seg-card-play-btn');
@@ -252,7 +263,7 @@ export function startSegAnimation(): void {
 export function stopSegAnimation(): void {
     const valAudio = getValCardAudioOrNull();
     if (!valAudio || valAudio.paused) {
-        dom.segPlayBtn.textContent = 'Play';
+        playButtonLabel.set('Play');
     }
     if (get(activeAudioSource) === 'main') activeAudioSource.set(null);
     _segAnimLoop.stop();
@@ -297,11 +308,13 @@ export function updateSegHighlight(): void {
     _prevHighlightedRow = null;
     _prevHighlightedIdx = curIdx;
     if (curIdx >= 0) {
-        const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${curIdx}"]`);
+        const listEl = get(segListElement);
+        const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${curIdx}"]`) ?? null;
         if (row) {
             row.classList.add('playing');
             _prevHighlightedRow = row;
-            if (!dom.segAudioEl.paused) {
+            const audioEl = get(segAudioElement);
+            if (audioEl && !audioEl.paused) {
                 const btn = row.querySelector('.seg-card-play-btn');
                 if (btn) btn.textContent = '\u25A0';
             }
@@ -316,7 +329,10 @@ export function drawActivePlayhead(): void {
     if (!allData || !_chStr) return;
     if (get(editMode) && curIdx === get(editingSegIndex)) return;
     const chapter = parseInt(_chStr);
-    const time = dom.segAudioEl.currentTime * 1000;
+    const audioEl = get(segAudioElement);
+    if (!audioEl) return;
+    const time = audioEl.currentTime * 1000;
+    const listEl = get(segListElement);
 
     const indexChanged = _prevPlayheadIdx !== curIdx;
 
@@ -324,7 +340,9 @@ export function drawActivePlayhead(): void {
     // redrawing its waveform. _currentPlayheadRow at frame start still points
     // to last frame's current row -- which IS this frame's previous row.
     if (_prevPlayheadIdx >= 0 && indexChanged) {
-        const prevRow = _currentPlayheadRow || dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${_prevPlayheadIdx}"]`);
+        const prevRow = _currentPlayheadRow
+            || listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${_prevPlayheadIdx}"]`)
+            || null;
         if (prevRow) {
             const canvas = prevRow.querySelector<SegCanvas>('canvas');
             const seg = getSegByChapterIndex(chapter, _prevPlayheadIdx);
@@ -336,7 +354,7 @@ export function drawActivePlayhead(): void {
 
     if (indexChanged) {
         _currentPlayheadRow = curIdx >= 0
-            ? dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${curIdx}"]`)
+            ? (listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${curIdx}"]`) ?? null)
             : null;
     }
     _prevPlayheadIdx = curIdx;
@@ -358,13 +376,14 @@ export function updateSegPlayStatus(): void {
     const _chStr = get(selectedChapter);
     const curIdx = get(segCurrentIdx);
     const allData = get(segAllData);
-    if (curIdx >= 0 && allData && _chStr) {
+    const audioEl = get(segAudioElement);
+    if (curIdx >= 0 && allData && _chStr && audioEl) {
         const chapter = parseInt(_chStr);
         const seg = getSegByChapterIndex(chapter, curIdx);
         if (seg) {
-            dom.segPlayStatus.textContent = `Segment #${seg.index} -- ${formatTimeMs(dom.segAudioEl.currentTime * 1000)}`;
+            playStatusText.set(`Segment #${seg.index} -- ${formatTimeMs(audioEl.currentTime * 1000)}`);
         }
     } else {
-        dom.segPlayStatus.textContent = '';
+        playStatusText.set('');
     }
 }

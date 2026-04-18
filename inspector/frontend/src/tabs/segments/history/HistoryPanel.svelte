@@ -2,27 +2,22 @@
     /**
      * HistoryPanel — top-level edit-history view.
      *
-     * Wave 10 mount point (locked §D8 #6). Replaces the imperative markup
-     * inside `#seg-history-view` with a Svelte tree subscribed to the
-     * history store.
-     *
      * Responsibilities:
-     *   - Visibility gate via `$historyVisible` → `hidden` attribute on
-     *     the outer `#seg-history-view` div. The ID is preserved so
-     *     `dom.segHistoryView` mustGet still resolves and the delegated
-     *     click handler on `segments/index.ts:127` continues to fire on
-     *     SegmentRow play-buttons inside history cards.
-     *   - Summary stat cards from `$historyData.summary` (with verses
-     *     count patched from `countVersesFromBatches`) OR filtered
-     *     summary when any filter is active.
+     *   - Visibility gate via `$historyVisible` → `hidden` attribute on the
+     *     outer `#seg-history-view` div. The ID is preserved so the
+     *     delegated click handler in `imperative-card-click.ts` continues
+     *     to fire on SegmentRow play-buttons inside history cards.
+     *   - Summary stat cards from `$historyData.summary` (with verses count
+     *     patched from `countVersesFromBatches`) OR filtered summary when
+     *     any filter is active.
      *   - `<HistoryFilters>` section.
      *   - Batches list: applies filter + sort via `buildDisplayItems`
      *     → `{#each}` dispatch to `<SplitChainRow>` / `<HistoryBatch>`.
      *
-     * What lives OUTSIDE this component (unchanged):
+     * What lives outside this component:
      *   - `#seg-history-btn` (in SegmentsTab toolbar) — opens the view.
-     *   - `_SEG_NORMAL_IDS` sibling-hide inside showHistoryView/hideHistoryView
-     *     (cross-tab concern per locked Risk #2).
+     *   - `_SEG_NORMAL_IDS` sibling-hide inside showHistoryView /
+     *     hideHistoryView (cross-tab concern).
      */
 
     import HistoryBatch from './HistoryBatch.svelte';

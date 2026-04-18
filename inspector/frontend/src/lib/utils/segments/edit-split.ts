@@ -7,16 +7,18 @@ import { get } from 'svelte/store';
 import type { SegResolveRefResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJsonOrNull } from '../../api';
-import { dom, markDirty } from '../../segments-state';
 import {
     getChapterSegments,
     segAllData,
     segData,
+    selectedChapter,
+    selectedReciter,
     syncChapterSegsToAll,
 } from '../../stores/segments/chapter';
 import {
     finalizeOp,
     getPendingOp,
+    markDirty,
     setPendingOp,
     snapshotSeg,
 } from '../../stores/segments/dirty';
@@ -29,6 +31,11 @@ import {
     splitChainUid,
     splitChainWrapper,
 } from '../../stores/segments/edit';
+import {
+    playStatusText,
+    segAudioElement,
+    segListElement,
+} from '../../stores/segments/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
@@ -108,7 +115,7 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     canvas._splitEls = { infoSpan };
     canvas._wfCache = null;
 
-    const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
+    const chapter = seg.chapter || parseInt(get(selectedChapter));
     const splitAudioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
     canvas._splitData = { seg, currentSplit: defaultSplit, audioUrl: splitAudioUrl };
     canvas._splitBaseCache = null;
@@ -117,7 +124,7 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
 
     // Pre-fetch peaks for the segment being split if not available.
     if (splitAudioUrl && !getWaveformPeaks(splitAudioUrl)) {
-        _fetchChapterPeaksIfNeeded(dom.segReciterSelect.value, chapter);
+        _fetchChapterPeaksIfNeeded(get(selectedReciter), chapter);
     }
 }
 
@@ -212,12 +219,13 @@ export async function confirmSplit(seg: Segment): Promise<void> {
     const canvas = _getEditCanvas() as SegCanvas | null;
     const splitTime = canvas?._splitData?.currentSplit;
     if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
-        dom.segPlayStatus.textContent = 'Invalid split point';
+        playStatusText.set('Invalid split point');
         return;
     }
 
-    const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
-    const currentChapter = parseInt(dom.segChapterSelect.value);
+    const chStr = get(selectedChapter);
+    const chapter = seg.chapter || parseInt(chStr);
+    const currentChapter = parseInt(chStr);
     const curData = get(segData);
     const useSegData = chapter === currentChapter && curData?.segments;
 
@@ -300,13 +308,14 @@ export async function confirmSplit(seg: Segment): Promise<void> {
 
     if (splitOp) finalizeOp(chapter, splitOp);
 
-    dom.segPlayStatus.textContent = 'Split \u2014 edit first half reference, then second';
+    playStatusText.set('Split \u2014 edit first half reference, then second');
 
     splitChainUid.set(secondHalf.segment_uid ?? null);
     const chainCat = splitOp?.op_context_category || null;
     splitChainCategory.set(chainCat);
     splitChainWrapper.set(accCtx ? accCtx.wrapper : null);
-    const searchRoot: ParentNode = accCtx ? accCtx.wrapper : dom.segListEl;
+    const listEl = get(segListElement);
+    const searchRoot: ParentNode = accCtx ? accCtx.wrapper : (listEl ?? document);
     const firstRow = searchRoot.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
     if (firstRow) {
         firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -326,10 +335,11 @@ export function previewSplitAudio(side: 'left' | 'right'): void {
     const sd = canvas?._splitData;
     if (!sd || !canvas) return;
     const loopKey = `split-${side}` as const;
-    if (getPreviewLooping() === loopKey && !dom.segAudioEl.paused) {
+    const audioEl = get(segAudioElement);
+    if (getPreviewLooping() === loopKey && audioEl && !audioEl.paused) {
         setPreviewLooping(false);
         setPreviewJustSeeked(false);
-        dom.segAudioEl.pause();
+        audioEl.pause();
         clearPlayRangeRAF();
         if (canvas._splitData) drawSplitWaveform(canvas);
         return;

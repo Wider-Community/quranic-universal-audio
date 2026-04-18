@@ -7,16 +7,17 @@ import { get } from 'svelte/store';
 import type { SegResolveRefResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
-import { dom, markDirty } from '../../segments-state';
 import {
     getChapterSegments,
     segAllData,
     segData,
+    selectedChapter,
     syncChapterSegsToAll,
 } from '../../stores/segments/chapter';
 import {
     createOp,
     finalizeOp,
+    markDirty,
     snapshotSeg,
 } from '../../stores/segments/dirty';
 import {
@@ -24,6 +25,7 @@ import {
     clearEdit,
     setEdit,
 } from '../../stores/segments/edit';
+import { playStatusText } from '../../stores/segments/playback';
 import { _rebuildAccordionAfterMerge } from './error-cards';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from './validation-fixups';
@@ -37,8 +39,9 @@ export async function mergeAdjacent(
     direction: 'prev' | 'next',
     contextCategory: string | null = null,
 ): Promise<void> {
-    const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
-    const currentChapter = parseInt(dom.segChapterSelect.value);
+    const chStr = get(selectedChapter);
+    const chapter = seg.chapter || parseInt(chStr);
+    const currentChapter = parseInt(chStr);
     const curData = get(segData);
     const allData = get(segAllData);
 
@@ -163,5 +166,5 @@ export async function mergeAdjacent(
 
     finalizeOp(chapter, mergeOp);
     clearEdit();
-    dom.segPlayStatus.textContent = 'Segments merged (unsaved)';
+    playStatusText.set('Segments merged (unsaved)');
 }

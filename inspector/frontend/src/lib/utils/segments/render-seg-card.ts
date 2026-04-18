@@ -1,11 +1,11 @@
 import { get } from 'svelte/store';
 
 import type { Segment } from '../../../types/domain';
-import { dom } from '../../segments-state';
 import {
     getAdjacentSegments,
     segAllData,
     segData,
+    selectedChapter,
 } from '../../stores/segments/chapter';
 import { isIndexDirty } from '../../stores/segments/dirty';
 import { getConfClass } from './conf-class';
@@ -40,7 +40,7 @@ export function renderSegCard(seg: Segment, options: RenderSegCardOptions = {}):
         readOnly = false,
     } = options;
 
-    const chapterForDirty = seg.chapter ?? parseInt(dom.segChapterSelect.value);
+    const chapterForDirty = seg.chapter ?? parseInt(get(selectedChapter));
     const row = document.createElement('div');
     row.className = 'seg-row' + (!readOnly && isIndexDirty(chapterForDirty, seg.index) ? ' dirty' : '') + (isContext ? ' seg-row-context' : '');
     row.dataset.segIndex = String(seg.index);

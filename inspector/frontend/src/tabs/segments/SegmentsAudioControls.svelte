@@ -1,25 +1,24 @@
 <script lang="ts">
     /**
-     * SegmentsAudioControls — audio element + speed control + play/pause +
+     * SegmentsAudioControls — audio element + speed <select> + play/pause +
      * auto-play toggle for the Segments tab.
      *
-     * Uses AudioPlayer which composes AudioElement + SpeedControl and handles
-     * the pending-metadata guard internally. Continuous-play + segment-end
-     * clamping logic stays here.
-     *
-     * Invariant: the speed <select> keeps id="seg-speed-select" so the
-     * imperative modules (playback/index.ts, keyboard.ts, edit/common.ts) that
-     * reference dom.segSpeedSelect continue to resolve via getElementById.
-     *
-     * The <audio> element's id "seg-audio-player" is preserved inside
-     * AudioElement (via AudioPlayer) for audio-cache.ts and keyboard.ts.
+     * Uses AudioPlayer for the underlying <audio> element; the speed <select>
+     * is rendered inline and writes to the `playbackSpeed` store. A reactive
+     * subscriber mirrors the store onto the audio element's playbackRate.
      */
 
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { autoPlayEnabled, continuousPlay } from '../../lib/stores/segments/playback';
+    import {
+        autoPlayEnabled,
+        continuousPlay,
+        playbackSpeed,
+        playButtonLabel,
+        playStatusText,
+        segAudioElement,
+    } from '../../lib/stores/segments/playback';
     import { LS_KEYS } from '../../lib/utils/constants';
-    import { dom } from '../../lib/segments-state';
     import {
         onSegAudioEnded,
         onSegPlayClick,
@@ -37,16 +36,10 @@
     // ---- Internal refs ----
     let _player: AudioPlayer;
 
-    // Keep audioEl prop in sync with the underlying HTMLAudioElement.
-    // Svelte 4 bind: on a prop propagates child→parent when the child mutates it.
+    // Keep audioEl prop in sync with the underlying HTMLAudioElement, and
+    // publish it to the segAudioElement store.
     $: audioEl = _player?.element() ?? null;
-
-    // Bind:this target for the play button — assigned to dom.segPlayBtn.
-    let playBtn: HTMLButtonElement;
-    // Bind:this target for the autoplay button — assigned to dom.segAutoPlayBtn.
-    let autoPlayBtn: HTMLButtonElement;
-    // Bind:this target for the play status span — assigned to dom.segPlayStatus.
-    let playStatusEl: HTMLElement;
+    $: segAudioElement.set(audioEl);
 
     // Reactive button class driven by the `autoPlayEnabled` store.
     $: autoPlayClass = 'btn ' + ($autoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
@@ -66,16 +59,30 @@
         localStorage.setItem(LS_KEYS.SEG_AUTOPLAY, String(next));
     }
 
+    function onSpeedSelectChange(e: Event): void {
+        const v = parseFloat((e.currentTarget as HTMLSelectElement).value);
+        if (!isNaN(v)) {
+            playbackSpeed.set(v);
+            localStorage.setItem(LS_KEYS.SEG_SPEED, String(v));
+        }
+    }
+
+    // Mirror the playbackSpeed store onto the audio element when either changes.
+    $: if (audioEl) audioEl.playbackRate = $playbackSpeed;
+
     // -------------------------------------------------------------------------
-    // Mount: assign dom refs + wire audio listeners
+    // Mount: wire audio listeners
     // -------------------------------------------------------------------------
 
     onMount(() => {
         const el = _player.element()!;
-        dom.segAudioEl    = el;
-        dom.segPlayBtn    = playBtn;
-        dom.segAutoPlayBtn = autoPlayBtn;
-        dom.segPlayStatus  = playStatusEl;
+
+        // Seed playbackSpeed from localStorage.
+        const stored = localStorage.getItem(LS_KEYS.SEG_SPEED);
+        if (stored) {
+            const v = parseFloat(stored);
+            if (!isNaN(v)) playbackSpeed.set(v);
+        }
 
         el.addEventListener('play', startSegAnimation);
         el.addEventListener('pause', stopSegAnimation);
@@ -94,28 +101,56 @@
 
 <div class="seg-controls">
     <!-- audioId preserves id="seg-audio-player" so audio-cache.ts and
-         keyboard.ts resolve it via document.getElementById / mustGet. -->
+         keyboard.ts resolve it via document.getElementById. -->
     <AudioPlayer
         bind:this={_player}
         audioId="seg-audio-player"
-        lsSpeedKey={LS_KEYS.SEG_SPEED}
-        speedSelectId="seg-speed-select"
         controls={false}
-        showSpeedControl={true}
+        showSpeedControl={false}
     />
+    <label class="speed-label">
+        Speed:
+        <select
+            id="seg-speed-select"
+            class="speed-select"
+            value={$playbackSpeed}
+            on:change={onSpeedSelectChange}
+        >
+            {#each [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5] as s}
+                <option value={s}>{s}x</option>
+            {/each}
+        </select>
+    </label>
     <button
         id="seg-play-btn"
         class="btn"
-        disabled
-        bind:this={playBtn}
+        disabled={!audioEl}
         on:click={handlePlayClick}
-    >Play</button>
+    >{$playButtonLabel}</button>
     <button
         id="seg-autoplay-btn"
         class={autoPlayClass}
         title="Auto-play consecutive segments"
-        bind:this={autoPlayBtn}
         on:click={handleAutoPlayToggle}
     >Auto-play</button>
-    <span id="seg-play-status" class="seg-play-status" bind:this={playStatusEl}></span>
+    <span id="seg-play-status" class="seg-play-status">{$playStatusText}</span>
 </div>
+
+<style>
+    .speed-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.9rem;
+        color: #ccc;
+    }
+    .speed-select {
+        background: #16213e;
+        color: #eee;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }
+</style>

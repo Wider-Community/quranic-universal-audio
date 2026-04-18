@@ -1,15 +1,17 @@
+import { get } from 'svelte/store';
+
 import type {
     SegAudioCacheStatusResponse,
     SegDeleteAudioCacheResponse,
     SegPrepareAudioResponse,
 } from '../../../types/api';
 import { fetchJson } from '../../api';
-import { dom } from '../../segments-state';
+import { selectedReciter } from '../../stores/segments/chapter';
 import type { TimerHandle } from '../../types/segments';
 import { _formatBytes } from '../formatting';
 
 // ---------------------------------------------------------------------------
-// Module-local state (was state._audioCachePollTimer)
+// Module-local state
 // ---------------------------------------------------------------------------
 
 let _audioCachePollTimer: TimerHandle | null = null;
@@ -81,7 +83,7 @@ export async function _prepareAudio(reciter: string): Promise<void> {
     } catch { /* poll will handle */ }
     if (_audioCachePollTimer) clearInterval(_audioCachePollTimer);
     _audioCachePollTimer = setInterval(async () => {
-        if (dom.segReciterSelect.value !== reciter) {
+        if (get(selectedReciter) !== reciter) {
             if (_audioCachePollTimer) { clearInterval(_audioCachePollTimer); _audioCachePollTimer = null; }
             return;
         }

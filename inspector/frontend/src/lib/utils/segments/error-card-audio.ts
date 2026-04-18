@@ -6,9 +6,18 @@
 import { get } from 'svelte/store';
 
 import type { Segment } from '../../../types/domain';
-import { dom } from '../../segments-state';
-import { segAllData } from '../../stores/segments/chapter';
-import { activeAudioSource, continuousPlay } from '../../stores/segments/playback';
+import {
+    segAllData,
+    selectedChapter,
+    selectedReciter,
+} from '../../stores/segments/chapter';
+import {
+    activeAudioSource,
+    continuousPlay,
+    playbackSpeed,
+    playButtonLabel,
+    segAudioElement,
+} from '../../stores/segments/playback';
 import type { RafHandle } from '../../types/segments';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { safePlay } from '../audio';
@@ -20,7 +29,7 @@ import { _fetchChapterPeaksIfNeeded, _fetchPeaksForClick } from './waveform-util
 type ValCanvas = SegCanvas;
 
 // ---------------------------------------------------------------------------
-// Module-local state (was state.valCardAudio / valCardPlayingBtn / ...)
+// Module-local state
 // ---------------------------------------------------------------------------
 
 let valCardAudio: HTMLAudioElement | null = null;
@@ -56,11 +65,12 @@ export function getValCardAudio(): HTMLAudioElement {
         });
         audio.addEventListener('ended', () => { stopErrorCardAudio(); });
         audio.addEventListener('play', () => {
-            dom.segPlayBtn.textContent = 'Pause';
+            playButtonLabel.set('Pause');
             activeAudioSource.set('error');
         });
         audio.addEventListener('pause', () => {
-            if (dom.segAudioEl.paused) dom.segPlayBtn.textContent = 'Play';
+            const main = get(segAudioElement);
+            if (!main || main.paused) playButtonLabel.set('Play');
             if (get(activeAudioSource) === 'error') activeAudioSource.set(null);
         });
     }
@@ -181,9 +191,10 @@ export function playErrorCardAudio(seg: Segment, btn: HTMLElement, seekToMs?: nu
     if (valCardPlayingBtn && valCardPlayingBtn !== btn) {
         stopErrorCardAudio();
     }
-    if (!dom.segAudioEl.paused) {
+    const mainAudio = get(segAudioElement);
+    if (mainAudio && !mainAudio.paused) {
         continuousPlay.set(false);
-        dom.segAudioEl.pause();
+        mainAudio.pause();
     }
     activeAudioSource.set('error');
     const chapterKey = seg.chapter != null ? String(seg.chapter) : '';
@@ -201,13 +212,13 @@ export function playErrorCardAudio(seg: Segment, btn: HTMLElement, seekToMs?: nu
             audio.removeEventListener('loadedmetadata', onLoad);
             audio.currentTime = seekSec;
             valCardStopTime = endSec;
-            audio.playbackRate = parseFloat(dom.segSpeedSelect.value);
+            audio.playbackRate = get(playbackSpeed);
             safePlay(audio);
         });
     } else {
         audio.currentTime = seekSec;
         valCardStopTime = endSec;
-        audio.playbackRate = parseFloat(dom.segSpeedSelect.value);
+        audio.playbackRate = get(playbackSpeed);
         safePlay(audio);
     }
     btn.textContent = '\u23F9';
@@ -221,9 +232,10 @@ export function playErrorCardAudio(seg: Segment, btn: HTMLElement, seekToMs?: nu
     // can't serve local URLs (HTTP Range via urllib fails), so call both:
     // chapter peaks covers by_chapter local files, segment peaks covers
     // by_surah CDN audio.
-    const chapterForPeaks = seg.chapter ?? (dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : 0);
+    const chStr = get(selectedChapter);
+    const chapterForPeaks = seg.chapter ?? (chStr ? parseInt(chStr) : 0);
     if (chapterForPeaks) {
-        _fetchChapterPeaksIfNeeded(dom.segReciterSelect.value, chapterForPeaks);
+        _fetchChapterPeaksIfNeeded(get(selectedReciter), chapterForPeaks);
         void _fetchPeaksForClick(seg, chapterForPeaks);
     }
 }

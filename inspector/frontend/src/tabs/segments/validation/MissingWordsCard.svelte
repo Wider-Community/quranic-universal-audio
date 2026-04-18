@@ -3,13 +3,11 @@
 
     import { getAdjacentSegments, getSegByChapterIndex } from '../../../lib/stores/segments/chapter';
     import { commitRefEdit } from '../../../lib/utils/segments/edit-reference';
-    import { dom } from '../../../lib/segments-state';
     import { segConfig } from '../../../lib/stores/segments/config';
     import {
         createOp,
         getDirtyMap,
         getOpLog,
-        isDirty,
         setPendingOp,
         snapshotSeg,
         unmarkDirty,
@@ -131,7 +129,6 @@
         if (ignoredCats) targetSeg.ignored_categories = ignoredCats;
         else delete targetSeg.ignored_categories;
         if (!wasDirty) unmarkDirty(segChapter, targetSeg.index);
-        dom.segSaveBtn.disabled = !isDirty();
         const ops = getOpLog().get(segChapter);
         if (ops && autoFixOpId) {
             const idx = ops.findIndex((o) => o.op_id === autoFixOpId);

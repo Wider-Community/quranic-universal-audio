@@ -3,7 +3,7 @@ import type { SegPeaksRangeEntry } from '../../types/segments';
 import { getWaveformPeaks } from '../waveform-cache';
 
 // ---------------------------------------------------------------------------
-// Module-local peaks-by-url store (was state._segPeaksByUrl)
+// Module-local peaks-by-url store
 // ---------------------------------------------------------------------------
 
 let _segPeaksByUrl: Record<string, SegPeaksRangeEntry[]> | null = null;

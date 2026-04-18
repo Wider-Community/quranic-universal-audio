@@ -5,7 +5,7 @@
 import { get as storeGet } from 'svelte/store';
 
 import type { HistoryBatch } from '../../../types/domain';
-import { dom } from '../../segments-state';
+import { selectedReciter } from '../../stores/segments/chapter';
 import { isDirty } from '../../stores/segments/dirty';
 import {
     buildSplitChains,
@@ -13,14 +13,17 @@ import {
     historyData,
     historyDataStale,
     restoreSplitChains,
+    setHistoryVisible,
     setSplitChains,
     snapshotSplitChains,
 } from '../../stores/segments/history';
+import { segListElement } from '../../stores/segments/playback';
 import {
     clearSavePreviewData,
     hidePreview,
     savedChains,
     savedPreviewScroll,
+    savePreviewVisible,
     setSavePreviewData,
     showPreview,
 } from '../../stores/segments/save';
@@ -40,7 +43,7 @@ export { buildSavePreviewData, executeSave };
 
 export async function onSegSaveClick(): Promise<void> {
     if (!isDirty()) return;
-    const reciter = dom.segReciterSelect.value;
+    const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     showSavePreview();
 }
@@ -50,8 +53,9 @@ export async function onSegSaveClick(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export function showSavePreview(): void {
-    if (!dom.segSavePreview.hidden) return;
-    savedPreviewScroll.set(dom.segListEl.scrollTop);
+    if (storeGet(savePreviewVisible)) return;
+    const listEl = storeGet(segListElement);
+    savedPreviewScroll.set(listEl?.scrollTop ?? 0);
     const data = buildSavePreviewData();
 
     // Snapshot current split-chain state so hideSavePreview can restore it.
@@ -79,10 +83,9 @@ export function showSavePreview(): void {
     if (controls) { controls.dataset.hiddenByPreview = controls.hidden ? '1' : ''; controls.hidden = true; }
     const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
     if (shortcuts) { shortcuts.dataset.hiddenByPreview = shortcuts.hidden ? '1' : ''; shortcuts.hidden = true; }
-    dom.segHistoryView.hidden = true;
+    setHistoryVisible(false);
 
-    dom.segSavePreview.hidden = false;
-    showPreview(); // notify $savePreviewVisible store (SavePreview.svelte hidden binding)
+    showPreview();
 }
 
 // ---------------------------------------------------------------------------
@@ -91,9 +94,8 @@ export function showSavePreview(): void {
 
 export function hideSavePreview(restoreScroll = true): void {
     stopErrorCardAudio();
-    dom.segSavePreview.hidden = true;
-    hidePreview(); // notify $savePreviewVisible store (SavePreview.svelte hidden binding)
-    clearSavePreviewData(); // clear store — SavePreview.svelte empties reactively
+    hidePreview();
+    clearSavePreviewData();
 
     const snap = storeGet(savedChains);
     if (snap) {
@@ -119,7 +121,10 @@ export function hideSavePreview(restoreScroll = true): void {
         const scrollTop = storeGet(savedPreviewScroll);
         if (scrollTop !== null) {
             savedPreviewScroll.set(null);
-            requestAnimationFrame(() => { dom.segListEl.scrollTop = scrollTop; });
+            requestAnimationFrame(() => {
+                const listEl = storeGet(segListElement);
+                if (listEl) listEl.scrollTop = scrollTop;
+            });
         }
     }
 }

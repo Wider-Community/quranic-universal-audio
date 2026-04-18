@@ -5,22 +5,27 @@
 import { get } from 'svelte/store';
 
 import type { Segment } from '../../../types/domain';
-import { dom, markDirty } from '../../segments-state';
 import {
     getChapterSegments,
     getCurrentChapterSegs,
     segAllData,
     segData,
+    selectedChapter,
     syncChapterSegsToAll,
 } from '../../stores/segments/chapter';
 import { segConfig } from '../../stores/segments/config';
 import {
     finalizeOp,
     getPendingOp,
+    markDirty,
     setPendingOp,
     snapshotSeg,
 } from '../../stores/segments/dirty';
 import { editingSegIndex, editMode, setEdit } from '../../stores/segments/edit';
+import {
+    playStatusText,
+    segAudioElement,
+} from '../../stores/segments/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
@@ -87,8 +92,9 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
 
     canvas._trimEls = { durationSpan, statusSpan };
 
-    const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
-    const currentChapter = parseInt(dom.segChapterSelect.value);
+    const chStr = get(selectedChapter);
+    const chapter = seg.chapter || parseInt(chStr);
+    const currentChapter = parseInt(chStr);
     const chapterSegs = (chapter === currentChapter) ? getCurrentChapterSegs() : getChapterSegments(chapter);
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
@@ -218,8 +224,9 @@ export function confirmTrim(seg: Segment): void {
         return;
     }
 
-    const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
-    const currentChapter = parseInt(dom.segChapterSelect.value);
+    const chStr = get(selectedChapter);
+    const chapter = seg.chapter || parseInt(chStr);
+    const currentChapter = parseInt(chStr);
     const chapterSegs = chapter === currentChapter ? getCurrentChapterSegs() : getChapterSegments(chapter);
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevSeg = segIdx > 0 ? chapterSegs[segIdx - 1] : null;
@@ -270,7 +277,7 @@ export function confirmTrim(seg: Segment): void {
 
     if (trimOp) finalizeOp(chapter, trimOp);
 
-    dom.segPlayStatus.textContent = 'Adjusted (unsaved)';
+    playStatusText.set('Adjusted (unsaved)');
 }
 
 // ---------------------------------------------------------------------------
@@ -281,10 +288,11 @@ export function previewTrimAudio(): void {
     const canvas = _getEditCanvas() as SegCanvas | null;
     const tw = canvas?._trimWindow;
     if (!tw || !canvas) return;
-    if (getPreviewLooping() && !dom.segAudioEl.paused) {
+    const audioEl = get(segAudioElement);
+    if (getPreviewLooping() && audioEl && !audioEl.paused) {
         setPreviewLooping(false);
         setPreviewJustSeeked(false);
-        dom.segAudioEl.pause();
+        audioEl.pause();
         clearPlayRangeRAF();
         if (canvas._trimWindow) drawTrimWaveform(canvas);
         return;

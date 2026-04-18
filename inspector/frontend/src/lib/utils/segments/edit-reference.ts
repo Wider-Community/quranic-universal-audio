@@ -7,15 +7,16 @@ import { get } from 'svelte/store';
 import type { SegResolveRefResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
-import { dom, markDirty } from '../../segments-state';
 import {
     segAllData,
     segData,
+    selectedChapter,
 } from '../../stores/segments/chapter';
 import {
     createOp,
     finalizeOp,
     getPendingOp,
+    markDirty,
     setPendingOp,
     snapshotSeg,
 } from '../../stores/segments/dirty';
@@ -26,7 +27,12 @@ import {
     splitChainUid,
     splitChainWrapper,
 } from '../../stores/segments/edit';
-import { continuousPlay } from '../../stores/segments/playback';
+import {
+    continuousPlay,
+    playStatusText,
+    segAudioElement,
+    segListElement,
+} from '../../stores/segments/playback';
 import { stopSegAnimation } from './playback';
 import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from './references';
 import { syncAllCardsForSegment } from './render-seg-card';
@@ -49,7 +55,8 @@ export function startRefEdit(
 ): void {
     if (refSpan.querySelector('input')) return;
 
-    if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
+    const audioEl = get(segAudioElement);
+    if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
 
     // Signal reference-edit mode so EditOverlay knows an inline edit is
@@ -118,14 +125,15 @@ export function _chainSplitRefEdit(chapter: number): void {
     const secondSeg = allSegs.find(s => s.segment_uid === chainUid);
     if (!secondSeg) return;
     const selector = `.seg-row[data-seg-chapter="${secondSeg.chapter}"][data-seg-index="${secondSeg.index}"]`;
+    const listEl = get(segListElement);
     const secondRow = (chainWrapper && chainWrapper.querySelector<HTMLElement>(selector))
-        || dom.segListEl.querySelector<HTMLElement>(selector)
+        || (listEl && listEl.querySelector<HTMLElement>(selector))
         || document.querySelector<HTMLElement>(selector);
     if (!secondRow) return;
     secondRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
     const refSpan = secondRow.querySelector<HTMLElement>('.seg-text-ref');
     if (refSpan) {
-        dom.segPlayStatus.textContent = 'Now edit second half reference';
+        playStatusText.set('Now edit second half reference');
         setTimeout(() => startRefEdit(refSpan, secondSeg, secondRow, chainCat), 100);
     }
 }
@@ -136,7 +144,7 @@ export function _chainSplitRefEdit(chapter: number): void {
 
 export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLElement): Promise<void> {
     const oldRef = seg.matched_ref || '';
-    const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
+    const chapter = seg.chapter || parseInt(get(selectedChapter));
     const newRef = _normalizeRef(newRefIn) ?? '';
     if (newRef === oldRef) {
         if ((seg.confidence ?? 0) < 1.0) {

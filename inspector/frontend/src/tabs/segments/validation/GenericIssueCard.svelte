@@ -1,20 +1,21 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
+    import { get } from 'svelte/store';
 
     import {
         getAdjacentSegments,
         getChapterSegments,
         getSegByChapterIndex,
+        selectedChapter,
     } from '../../../lib/stores/segments/chapter';
     import { segConfig } from '../../../lib/stores/segments/config';
     import {
         createOp,
         finalizeOp,
         getDirtyMap,
-        isDirty,
+        markDirty,
         snapshotSeg,
     } from '../../../lib/stores/segments/dirty';
-    import { dom, markDirty } from '../../../lib/segments-state';
     import { _isIgnoredFor } from '../../../lib/utils/segments/classify';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type {
@@ -51,7 +52,7 @@
             (category === 'low_confidence' && (resolvedSeg?.confidence ?? 1) < 1.0));
 
     $: segChapterForBtn =
-        resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(dom.segChapterSelect.value)) : 0;
+        resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(get(selectedChapter))) : 0;
 
     $: isDirtySegment =
         resolvedSeg != null
@@ -125,7 +126,7 @@
     // ---- Ignore handler ----
     function handleIgnore(): void {
         if (!resolvedSeg || _isIgnoredFor(resolvedSeg, category)) return;
-        const segChapter = resolvedSeg.chapter ?? parseInt(dom.segChapterSelect.value);
+        const segChapter = resolvedSeg.chapter ?? parseInt(get(selectedChapter));
         let ignoreOp;
         try {
             ignoreOp = createOp('ignore_issue', { contextCategory: category, fixKind: 'ignore' });
@@ -146,7 +147,6 @@
                 console.warn('Ignore: edit history finalize failed:', err);
             }
         }
-        dom.segSaveBtn.disabled = !isDirty();
         isAlreadyIgnored = true;
         wrapperEl?.style.setProperty('opacity', '0.5');
     }

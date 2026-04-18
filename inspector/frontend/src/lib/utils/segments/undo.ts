@@ -7,7 +7,7 @@ import type {
 } from '../../../types/api';
 import type { HistoryBatch } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
-import { dom } from '../../segments-state';
+import { selectedReciter } from '../../stores/segments/chapter';
 import {
     deleteDirtyEntry,
     deleteOpLogEntry,
@@ -26,6 +26,7 @@ import {
     setSplitChains,
     type SplitChain,
 } from '../../stores/segments/history';
+import { playStatusText } from '../../stores/segments/playback';
 import { setSavePreviewData } from '../../stores/segments/save';
 import { surahOptionText } from '../surah-info';
 import { renderEditHistoryPanel } from './history-render';
@@ -50,7 +51,7 @@ export async function _afterUndoSuccess(reciter: string, opsReversed: number): P
     } catch (_) { /* non-critical */ }
     historyDataStale.set(true);
     fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
-    dom.segPlayStatus.textContent = `Undo successful \u2014 ${opsReversed} op${opsReversed !== 1 ? 's' : ''} reversed`;
+    playStatusText.set(`Undo successful \u2014 ${opsReversed} op${opsReversed !== 1 ? 's' : ''} reversed`);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +59,7 @@ export async function _afterUndoSuccess(reciter: string, opsReversed: number): P
 // ---------------------------------------------------------------------------
 
 export async function onBatchUndoClick(batchId: string, chapter: number | null, btn: HTMLButtonElement): Promise<void> {
-    const reciter = dom.segReciterSelect.value;
+    const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
     if (!confirm(`Undo this save${chLabel}? The operations will be reversed.`)) return;
@@ -95,7 +96,7 @@ export async function onBatchUndoClick(batchId: string, chapter: number | null, 
 // ---------------------------------------------------------------------------
 
 export async function onOpUndoClick(batchId: string, opIds: string[], btn: HTMLButtonElement): Promise<void> {
-    const reciter = dom.segReciterSelect.value;
+    const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     if (!confirm('Undo this operation?')) return;
 
@@ -148,7 +149,7 @@ export function _getChainBatchIds(chain: SplitChain): string[] {
 // ---------------------------------------------------------------------------
 
 export async function onChainUndoClick(batchIds: string[], chapter: number | null, btn: HTMLButtonElement): Promise<void> {
-    const reciter = dom.segReciterSelect.value;
+    const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
     if (!confirm(`Undo this entire split chain${chLabel}? ${batchIds.length} save(s) will be reversed in order.`)) return;
@@ -185,7 +186,7 @@ export async function onChainUndoClick(batchIds: string[], chapter: number | nul
 
     await _afterUndoSuccess(reciter, totalReversed);
     if (!failed) {
-        dom.segPlayStatus.textContent = `Undo successful \u2014 ${totalReversed} op${totalReversed !== 1 ? 's' : ''} reversed across ${batchIds.length} save(s)`;
+        playStatusText.set(`Undo successful \u2014 ${totalReversed} op${totalReversed !== 1 ? 's' : ''} reversed across ${batchIds.length} save(s)`);
     } else {
         btn.disabled = false;
         btn.textContent = 'Undo';
@@ -210,7 +211,6 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     deleteOpLogEntry(chapter);
 
     historyDataStale.set(true);
-    dom.segSaveBtn.disabled = !isDirty();
 
     if (!isDirty()) {
         hideSavePreview();

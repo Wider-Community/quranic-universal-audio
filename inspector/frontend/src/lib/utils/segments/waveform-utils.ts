@@ -3,24 +3,28 @@ import { get } from 'svelte/store';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../types/api';
 import type { Segment, SegmentPeaks } from '../../../types/domain';
 import { fetchJson } from '../../api';
-import { dom } from '../../segments-state';
-import type { AdjacentSegments } from '../../stores/segments/chapter';
-import { segAllData } from '../../stores/segments/chapter';
+import {
+    getAdjacentSegments,
+    getSegByChapterIndex,
+    segAllData,
+    selectedReciter,
+} from '../../stores/segments/chapter';
 import { segConfig } from '../../stores/segments/config';
 import { segIndexMap } from '../../stores/segments/filters';
 import type {
     ObserverPeaksQueueItem,
     TimerHandle,
 } from '../../types/segments';
-import type { DrawWaveformFn } from '../../types/segments-waveform';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks, setWaveformPeaks } from '../waveform-cache';
+import { _getEditCanvas } from './get-edit-canvas';
 import { _findCoveringPeaks, clearSegPeaksCache, pushSegPeaksEntry } from './peaks-cache';
+import { drawSplitWaveform } from './split-draw';
+import { drawTrimWaveform } from './trim-draw';
 import { _drawMergeHighlight, _drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
-// Module-local state (was state._waveformObserver / _observerPeaksQueue /
-// _observerPeaksTimer / _observerPeaksRequested / _peaksPollTimer)
+// Module-local state
 // ---------------------------------------------------------------------------
 
 let _waveformObserver: IntersectionObserver | null = null;
@@ -42,56 +46,6 @@ export function resetWaveformState(): void {
     if (_observerPeaksTimer) { clearTimeout(_observerPeaksTimer); _observerPeaksTimer = null; }
     _observerPeaksRequested = new Set();
 }
-
-// ---------------------------------------------------------------------------
-// Registered draw functions (wired from segments/index.ts)
-// ---------------------------------------------------------------------------
-
-let _drawSplitWaveformFn: DrawWaveformFn | null = null;
-let _drawTrimWaveformFn: DrawWaveformFn | null = null;
-
-export interface WaveformHandlers {
-    drawSplitWaveform?: DrawWaveformFn;
-    drawTrimWaveform?: DrawWaveformFn;
-}
-
-export function registerWaveformHandlers(handlers: WaveformHandlers): void {
-    if (handlers.drawSplitWaveform) _drawSplitWaveformFn = handlers.drawSplitWaveform;
-    if (handlers.drawTrimWaveform) _drawTrimWaveformFn = handlers.drawTrimWaveform;
-}
-
-// ---------------------------------------------------------------------------
-// Registered data lookup functions (wired from segments/index.ts to break
-// waveform ↔ data circular dependency)
-// ---------------------------------------------------------------------------
-
-let _getAdjacentSegmentsFn: ((chapter: number | string, index: number) => AdjacentSegments) | null = null;
-let _getSegByChapterIndexFn: ((chapter: number | string, index: number) => Segment | null) | null = null;
-
-export function registerDataLookups(
-    getAdjFn: (chapter: number | string, index: number) => AdjacentSegments,
-    getSegFn: (chapter: number | string, index: number) => Segment | null,
-): void {
-    _getAdjacentSegmentsFn = getAdjFn;
-    _getSegByChapterIndexFn = getSegFn;
-}
-
-function _getAdjacentSegments(chapter: number | string, index: number): AdjacentSegments {
-    return _getAdjacentSegmentsFn?.(chapter, index) ?? { prev: null, next: null };
-}
-
-function _getSegByChapterIndex(chapter: number | string, index: number): Segment | null {
-    return _getSegByChapterIndexFn?.(chapter, index) ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// Registered _getEditCanvas (wired from segments/index.ts to break
-// waveform ↔ rendering circular dependency)
-// ---------------------------------------------------------------------------
-
-let _getEditCanvasFn: (() => HTMLCanvasElement | null) | null = null;
-export function registerGetEditCanvas(fn: () => HTMLCanvasElement | null): void { _getEditCanvasFn = fn; }
-function _getEditCanvasViaRegistry(): HTMLCanvasElement | null { return _getEditCanvasFn?.() ?? null; }
 
 // ---------------------------------------------------------------------------
 // Peaks: bulk indexing of segment-level peaks
@@ -117,19 +71,28 @@ export function indexSegPeaksBulk(peaksMap: Record<string, SegPeaksEntry> | null
 // Redraw all pending waveform canvases
 // ---------------------------------------------------------------------------
 
+/** The 4 imperatively-rendered container IDs that may host seg-row canvases. */
+const _CONTAINER_IDS = ['seg-list', 'seg-validation', 'seg-validation-global', 'seg-history-view', 'seg-save-preview'];
+
 export function redrawPeaksWaveforms(): void {
     const observer = _ensureWaveformObserver();
-    const editCanvas = _getEditCanvasViaRegistry() as SegCanvas | null;
-    [dom.segListEl, dom.segValidationEl, dom.segValidationGlobalEl, dom.segHistoryView, dom.segSavePreview].forEach(container => {
-        if (!container) return;
+    const editCanvas = _getEditCanvas() as SegCanvas | null;
+    for (const id of _CONTAINER_IDS) {
+        const container = document.getElementById(id);
+        if (!container) continue;
         container.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => {
             if (c === editCanvas) return;
             observer.unobserve(c);
             observer.observe(c);
         });
-    });
-    if (editCanvas?._splitData) { editCanvas._splitBaseCache = null; _drawSplitWaveformFn?.(editCanvas); }
-    else if (editCanvas?._trimWindow) { editCanvas._wfCache = null; _drawTrimWaveformFn?.(editCanvas); }
+    }
+    if (editCanvas?._splitData) {
+        editCanvas._splitBaseCache = null;
+        drawSplitWaveform(editCanvas);
+    } else if (editCanvas?._trimWindow) {
+        editCanvas._wfCache = null;
+        drawTrimWaveform(editCanvas);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +115,7 @@ function _flushObserverPeaksQueue(): void {
     _observerPeaksTimer = null;
     const queue = _observerPeaksQueue.splice(0);
     if (queue.length === 0) return;
-    const reciter = dom.segReciterSelect.value;
+    const reciter = get(selectedReciter);
     if (!reciter) return;
 
     fetchJson<SegSegmentPeaksResponse>(`/api/seg/segment-peaks/${reciter}`, {
@@ -161,7 +124,7 @@ function _flushObserverPeaksQueue(): void {
         body: JSON.stringify({ segments: queue, cached_only: true }),
     })
         .then(data => {
-            if (!get(segAllData) || dom.segReciterSelect.value !== reciter) return;
+            if (!get(segAllData) || get(selectedReciter) !== reciter) return;
             const newPeaks = data.peaks || {};
             if (Object.keys(newPeaks).length === 0) return;
             indexSegPeaksBulk(newPeaks as unknown as Record<string, SegPeaksEntry>);
@@ -196,7 +159,7 @@ export function _ensureWaveformObserver(): IntersectionObserver {
             } else {
                 const idxMap = get(segIndexMap);
                 seg = idxMap.get(`${chapter}:${idx}`)
-                    ?? (chapter ? _getSegByChapterIndex(chapter, idx) : null);
+                    ?? (chapter ? getSegByChapterIndex(chapter, idx) : null);
             }
             if (!seg) return;
 
@@ -206,14 +169,14 @@ export function _ensureWaveformObserver(): IntersectionObserver {
 
             if (canvas._splitData) {
                 canvas._splitBaseCache = null;
-                _drawSplitWaveformFn?.(canvas);
+                drawSplitWaveform(canvas);
                 _waveformObserver?.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
                 return;
             }
             if (canvas._trimWindow) {
                 canvas._wfCache = null;
-                _drawTrimWaveformFn?.(canvas);
+                drawTrimWaveform(canvas);
                 _waveformObserver?.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
                 return;
@@ -243,7 +206,7 @@ export function _fetchPeaks(reciter: string, chapters: Array<number | string>): 
     if (!chapters || chapters.length === 0) return;
     const url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
     fetchJson<SegPeaksResponse>(url).then(data => {
-        if (!get(segAllData) || dom.segReciterSelect.value !== reciter) return;
+        if (!get(segAllData) || get(selectedReciter) !== reciter) return;
         for (const [audioUrl, pe] of Object.entries(data.peaks || {})) {
             if (audioUrl) setWaveformPeaks(audioUrl, pe);
         }
@@ -264,7 +227,7 @@ export function _fetchChapterPeaksIfNeeded(reciter: string, chapter: number | st
 }
 
 export async function _fetchPeaksForClick(seg: Segment, chapter: number | string): Promise<void> {
-    const reciter = dom.segReciterSelect.value;
+    const reciter = get(selectedReciter);
     const allData = get(segAllData);
     if (!reciter || !allData) return;
     const audioUrl = seg.audio_url || allData.audio_by_chapter?.[String(chapter)] || '';
@@ -272,7 +235,7 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
     if (getWaveformPeaks(audioUrl)?.peaks?.length) return;
     if (_findCoveringPeaks(audioUrl, seg.time_start, seg.time_end)) return;
 
-    const { prev, next } = _getAdjacentSegments(chapter, seg.index);
+    const { prev, next } = getAdjacentSegments(chapter, seg.index);
     const prevEnd = prev?.time_end ?? 0;
     const nextStart = next?.time_start ?? Number.POSITIVE_INFINITY;
     const cfg = get(segConfig);
@@ -288,7 +251,7 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ segments: [entry] }),
         });
-        if (!get(segAllData) || dom.segReciterSelect.value !== reciter) return;
+        if (!get(segAllData) || get(selectedReciter) !== reciter) return;
         const newPeaks = data.peaks || {};
         if (Object.keys(newPeaks).length === 0) return;
         indexSegPeaksBulk(newPeaks as unknown as Record<string, SegPeaksEntry>);

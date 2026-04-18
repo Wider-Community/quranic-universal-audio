@@ -14,6 +14,8 @@
  * registration pattern in state.ts).
  */
 
+import { derived, writable } from 'svelte/store';
+
 import type { EditOp, Segment } from '../../../types/domain';
 import { _classifySegCategories } from '../../utils/segments/classify';
 
@@ -49,6 +51,16 @@ const _opLog = new Map<number, EditOp[]>();
 
 /** Current in-progress operation (between createOp and finalizeOp). */
 let _pendingOp: EditOp | null = null;
+
+/** Reactive tick that bumps on every dirty-state mutation so Svelte
+ *  components can derive reactive views (e.g. save-button enabled). */
+const _dirtyTick = writable<number>(0);
+function _bump(): void {
+    _dirtyTick.update((n) => n + 1);
+}
+
+/** Derived store: true while any chapter has unsaved edits. */
+export const isDirtyStore = derived(_dirtyTick, () => _dirtyMap.size > 0);
 
 // ---------------------------------------------------------------------------
 // Operation helpers
@@ -114,6 +126,7 @@ export function markDirty(chapter: number, index?: number, structural = false): 
     const entry = _dirtyMap.get(chapter)!;
     if (index !== undefined) entry.indices.add(index);
     if (structural) entry.structural = true;
+    _bump();
 }
 
 export function unmarkDirty(chapter: number, index: number): void {
@@ -123,6 +136,7 @@ export function unmarkDirty(chapter: number, index: number): void {
     if (entry.indices.size === 0 && !entry.structural) {
         _dirtyMap.delete(chapter);
     }
+    _bump();
 }
 
 export function isDirty(): boolean {
@@ -169,6 +183,7 @@ export function getChapterOps(chapter: number): EditOp[] {
 /** Delete dirty entry for a chapter. */
 export function deleteDirtyEntry(chapter: number): void {
     _dirtyMap.delete(chapter);
+    _bump();
 }
 
 /** Delete op log for a chapter. */
@@ -179,6 +194,7 @@ export function deleteOpLogEntry(chapter: number): void {
 /** Clear all dirty state (after successful save). */
 export function clearDirtyMap(): void {
     _dirtyMap.clear();
+    _bump();
 }
 
 /** Clear all op log entries (after successful save). */

@@ -47,6 +47,10 @@ export interface SavePreviewData {
 /** True while #seg-save-preview is visible. */
 export const savePreviewVisible = writable<boolean>(false);
 
+/** Label on the main Save button. Typically 'Save' or a transient message
+ *  like 'Saving...' / 'Saved N changes'. */
+export const saveButtonLabel = writable<string>('Save');
+
 /** Full preview payload. Non-null while preview is showing. */
 export const savePreviewData = writable<SavePreviewData | null>(null);
 
