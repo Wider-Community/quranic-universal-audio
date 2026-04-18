@@ -6,8 +6,7 @@
  * (`pendingOp`). Provides helper functions for creating, snapshotting,
  * finalizing ops and marking/querying dirty state.
  *
- * Key design decision: all Map keys are `number` — fixes bug B01 where
- * `String(chapter) as unknown as number` casts were no-ops on Map<number,...>.
+ * Map keys are always `number` (never string-cast).
  *
  * `snapshotSeg` calls `_classifySegCategories` from
  * `lib/utils/segments/classify.ts`.

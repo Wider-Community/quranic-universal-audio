@@ -9,8 +9,6 @@
      * clears it when filters become non-empty).
      */
 
-    import { tick } from 'svelte';
-
     import { activeFilters, displayedResult } from '../../lib/stores/segments/filters';
     import { selectedVerse } from '../../lib/stores/segments/chapter';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
@@ -18,23 +16,22 @@
 
     export let hidden: boolean = true;
 
-    let rowsEl: HTMLDivElement | undefined;
-
     $: count = $activeFilters.length;
     $: countLabel = count > 0 ? `(${count})` : '';
     $: statusText = ($activeFilters.some((f) => f.value !== null) || $selectedVerse)
         ? `${$displayedResult.segments.length} / ${$displayedResult.total}`
         : '';
 
-    async function addCondition(): Promise<void> {
+    let justAdded = false;
+
+    function addCondition(): void {
+        justAdded = true;
         activeFilters.update((list) => [
             ...list,
             { field: 'duration_s', op: '>', value: null },
         ]);
-        await tick();
-        // Focus the newly-added input so the user can type immediately.
-        const inputs = rowsEl?.querySelectorAll<HTMLInputElement>('.seg-filter-value');
-        if (inputs && inputs.length) inputs[inputs.length - 1]?.focus();
+        // Reset justAdded after one tick so autoFocus only fires for this condition.
+        setTimeout(() => { justAdded = false; }, 0);
     }
 
     function clearAll(): void {
@@ -69,10 +66,11 @@
             on:click={clearAll}>Clear All</button>
         <span id="seg-filter-status" class="seg-filter-status">{statusText}</span>
     </div>
-    <div id="seg-filter-rows" class="seg-filter-rows" bind:this={rowsEl}>
+    <div id="seg-filter-rows" class="seg-filter-rows">
         {#each $activeFilters as f, i (i)}
             <FilterCondition
                 filter={f}
+                autoFocus={justAdded && i === $activeFilters.length - 1}
                 on:change={onConditionChange}
                 on:remove={() => onConditionRemove(i)}
             />

@@ -5,7 +5,7 @@
      * Mounted by SegmentRow inside `.seg-left` when that row is the active
      * edit target (see SegmentRow `isEditingThisRow && $editMode === 'trim'`).
      * Renders Cancel / Preview / Apply buttons plus a reactive duration /
-     * status readout driven by the `trimWindow` + `trimStatusText` stores
+     * status readout driven by the `trimWindow` + `editStatusText` stores
      * that `edit-trim.ts` mirrors from the canvas drag handlers.
      *
      * The imperative parts — waveform draw, drag math, pointer cursor — stay
@@ -15,7 +15,7 @@
      */
 
     import type { Segment } from '../../../lib/types/domain';
-    import { trimStatusText, trimWindow } from '../../../lib/stores/segments/edit';
+    import { editStatusText, trimWindow } from '../../../lib/stores/segments/edit';
     import type { SegCanvas } from '../../../lib/types/segments-waveform';
     import { exitEditMode } from '../../../lib/utils/segments/edit-common';
     import { confirmTrim, previewTrimAudio } from '../../../lib/utils/segments/edit-trim';
@@ -34,6 +34,6 @@
         <button class="btn btn-sm btn-preview" on:click={() => previewTrimAudio(canvas)}>Preview</button>
         <button class="btn btn-sm btn-confirm" on:click={() => confirmTrim(seg, canvas)}>Apply</button>
         <span class="seg-edit-duration">{durText}</span>
-        <span class="seg-edit-status">{$trimStatusText}</span>
+        <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>

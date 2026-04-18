@@ -73,10 +73,3 @@ export function clearWaveformCache(): void {
     _cache.clear();
 }
 
-/**
- * Return the number of URLs currently cached.
- * Primarily for debugging / smoke assertions.
- */
-export function waveformCacheSize(): number {
-    return _cache.size;
-}

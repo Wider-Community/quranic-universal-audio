@@ -72,7 +72,7 @@ export const splitState = writable<SplitData | null>(null);
 
 /** Short status text shown in trim/split panels (e.g. 'Invalid time range',
  *  'Start overlaps with previous segment'). Cleared on panel mount. */
-export const trimStatusText = writable<string>('');
+export const editStatusText = writable<string>('');
 
 /** Reset the edit store to the "no edit in progress" baseline. Called by
  *  exitEditMode() / cancel paths. `editCanvas` is cleared separately by the
@@ -85,7 +85,7 @@ export function clearEdit(): void {
     editCanvas.set(null);
     trimWindow.set(null);
     splitState.set(null);
-    trimStatusText.set('');
+    editStatusText.set('');
 }
 
 /** Convenience setter — call when entering any edit mode. */

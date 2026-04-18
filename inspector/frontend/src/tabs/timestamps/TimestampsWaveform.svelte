@@ -19,6 +19,7 @@
     import { tsAudioElement } from '../../lib/stores/timestamps/playback';
     import { computePeaksForSlice, decodeAudioUrl } from '../../lib/utils/webaudio-peaks';
     import type { PeakBucket } from '../../lib/types/domain';
+    import { PREVIEW_PLAYHEAD_COLOR } from '../../lib/utils/constants';
 
     // ---- Sizing ----
 
@@ -165,14 +166,14 @@
 
         // Playhead
         const px = progress * width;
-        ctx.strokeStyle = '#f72585';
+        ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(px, 0);
         ctx.lineTo(px, height);
         ctx.stroke();
         // Triangle marker
-        ctx.fillStyle = '#f72585';
+        ctx.fillStyle = PREVIEW_PLAYHEAD_COLOR;
         ctx.beginPath();
         ctx.moveTo(px - 6, 0);
         ctx.lineTo(px + 6, 0);

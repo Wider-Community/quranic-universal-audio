@@ -25,8 +25,8 @@ import {
     editCanvas,
     editingSegIndex,
     editMode,
+    editStatusText,
     setEdit,
-    trimStatusText,
     trimWindow,
 } from '../../stores/segments/edit';
 import {
@@ -60,7 +60,7 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     }
     setEdit('trim', seg.segment_uid ?? null);
     editingSegIndex.set(seg.index);
-    trimStatusText.set('');
+    editStatusText.set('');
 
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
@@ -181,7 +181,7 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     const newStart = tw?.currentStart;
     const newEnd = tw?.currentEnd;
     if (newStart == null || newEnd == null || newStart >= newEnd) {
-        trimStatusText.set('Invalid time range');
+        editStatusText.set('Invalid time range');
         return;
     }
 
@@ -194,11 +194,11 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     const nextSeg = (segIdx >= 0 && segIdx < chapterSegs.length - 1) ? chapterSegs[segIdx + 1] : null;
 
     if (prevSeg && prevSeg.audio_url === seg.audio_url && newStart < prevSeg.time_end) {
-        trimStatusText.set('Start overlaps with previous segment');
+        editStatusText.set('Start overlaps with previous segment');
         return;
     }
     if (nextSeg && nextSeg.audio_url === seg.audio_url && newEnd > nextSeg.time_start) {
-        trimStatusText.set('End overlaps with next segment');
+        editStatusText.set('End overlaps with next segment');
         return;
     }
 

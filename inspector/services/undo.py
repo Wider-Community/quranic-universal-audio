@@ -334,7 +334,6 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
         for op in reversed(operations):
             apply_reverse_op(entries, op, affected_chapters)
     except ValueError as e:
-        cache.invalidate_seg_caches(reciter)
         return {"error": str(e)}, 409
 
     file_hash = persist_detailed(reciter, meta, entries)
@@ -411,7 +410,6 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
         for op in reversed(ops_to_undo):
             apply_reverse_op(entries, op, affected_chapters)
     except ValueError as e:
-        cache.invalidate_seg_caches(reciter)
         return {"error": str(e)}, 409
 
     file_hash = persist_detailed(reciter, meta, entries)

@@ -75,7 +75,7 @@
                 { method: 'POST', body: fd },
             ).then((data) => {
                 if (data.ok) flashSavedTip();
-            });
+            }).catch((err: unknown) => { console.warn('Stats save failed:', err); });
         }, 'image/png');
     }
 </script>

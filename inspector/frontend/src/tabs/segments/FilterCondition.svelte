@@ -9,13 +9,20 @@
      * op change; emits 'remove' on the X button.
      */
 
-    import { createEventDispatcher, onDestroy } from 'svelte';
+    import { createEventDispatcher, onDestroy, onMount } from 'svelte';
 
     import { SEG_FILTER_FIELDS } from '../../lib/utils/segments/filter-fields';
     import { SEG_FILTER_OPS } from '../../lib/utils/segments/constants';
     import type { SegActiveFilter } from '../../lib/stores/segments/filters';
 
     export let filter: SegActiveFilter;
+    export let autoFocus: boolean = false;
+
+    let inputEl: HTMLInputElement | null = null;
+
+    onMount(() => {
+        if (autoFocus && inputEl) inputEl.focus();
+    });
 
     const dispatch = createEventDispatcher<{ change: void; remove: void }>();
 
@@ -67,6 +74,7 @@
         {/each}
     </select>
     <input
+        bind:this={inputEl}
         class="seg-filter-value"
         type="number"
         step="any"

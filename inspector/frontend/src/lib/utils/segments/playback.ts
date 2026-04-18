@@ -281,16 +281,6 @@ export function onSegAudioEnded(): void {
     stopSegAnimation();
 }
 
-/** Exposed for legacy callers; equivalent to startSegAnimation(). */
-export function animateSeg(): void {
-    startSegAnimation();
-}
-
-/** Check whether the segments animation loop is currently running. */
-export function isSegAnimRunning(): boolean {
-    return _segAnimId !== null;
-}
-
 export function updateSegHighlight(): void {
     // Svelte's safe_not_equal check makes same-value sets a no-op — safe to
     // call every rAF frame. SegmentRow subscribes via class:playing and

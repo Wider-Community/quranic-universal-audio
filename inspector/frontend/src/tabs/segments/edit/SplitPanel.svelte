@@ -15,7 +15,7 @@
      */
 
     import type { Segment } from '../../../lib/types/domain';
-    import { splitState, trimStatusText } from '../../../lib/stores/segments/edit';
+    import { splitState, editStatusText } from '../../../lib/stores/segments/edit';
     import type { SegCanvas } from '../../../lib/types/segments-waveform';
     import { exitEditMode } from '../../../lib/utils/segments/edit-common';
     import { confirmSplit, previewSplitAudio } from '../../../lib/utils/segments/edit-split';
@@ -35,6 +35,6 @@
         <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('right', canvas)}>Play Right</button>
         <button class="btn btn-sm btn-confirm" on:click={() => confirmSplit(seg, canvas)}>Split</button>
         <span class="seg-edit-info">{infoText}</span>
-        <span class="seg-edit-status">{$trimStatusText}</span>
+        <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>

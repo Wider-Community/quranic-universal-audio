@@ -22,3 +22,6 @@ export const PLACEHOLDER_RECITER = '-- Select reciter --';
 
 // Audio buffer cache eviction limit
 export const AUDIO_BUFFER_CACHE_SIZE = 5;
+
+// Playhead color used in the edit-mode preview overlay (trim / split / play-range)
+export const PREVIEW_PLAYHEAD_COLOR = '#f72585';

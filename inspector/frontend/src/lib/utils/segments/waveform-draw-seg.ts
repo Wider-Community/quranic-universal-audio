@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { segAllData } from '../../stores/segments/chapter';
 import type { AudioPeaks, PeakBucket, Segment } from '../../types/domain';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { PREVIEW_PLAYHEAD_COLOR } from '../constants';
 import { getWaveformPeaks } from '../waveform-cache';
 import { drawWaveformPeaks } from '../waveform-draw';
 import { _findCoveringPeaks } from './peaks-cache';
@@ -82,14 +83,14 @@ export function drawSegPlayhead(
     const progress = (currentTimeMs - startMs) / (endMs - startMs);
     const x = progress * width;
 
-    ctx.strokeStyle = '#f72585';
+    ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
     ctx.stroke();
 
-    ctx.fillStyle = '#f72585';
+    ctx.fillStyle = PREVIEW_PLAYHEAD_COLOR;
     ctx.beginPath();
     ctx.moveTo(x - 4, 0);
     ctx.lineTo(x + 4, 0);

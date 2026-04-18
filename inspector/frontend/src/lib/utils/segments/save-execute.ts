@@ -154,7 +154,7 @@ export async function executeSave(): Promise<void> {
             setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
             fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
                 .then(() => refreshValidation())
-                .catch(() => refreshValidation());
+                .catch((err: unknown) => { console.warn('trigger-validation failed:', err); });
             try {
                 const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
                     `/api/seg/edit-history/${reciter}`,

@@ -100,7 +100,3 @@ export function computePeaksForSlice(
     return peaks;
 }
 
-/** Clear the LRU cache (testing / reset hook). */
-export function _clearAudioBufferCache(): void {
-    _audioBufferCache.clear();
-}

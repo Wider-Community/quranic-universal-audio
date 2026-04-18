@@ -147,6 +147,7 @@ export function _ensureWaveformObserver(): IntersectionObserver {
             if (!row) return;
             const idx = parseInt(row.dataset.segIndex ?? '');
             const chapter = parseInt(row.dataset.segChapter ?? '');
+            if (isNaN(idx) || isNaN(chapter)) return;
 
             let seg: Segment | null = null;
             if (row.dataset.histTimeStart) {

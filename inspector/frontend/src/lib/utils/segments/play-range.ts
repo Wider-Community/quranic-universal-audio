@@ -12,6 +12,7 @@ import {
 } from '../../stores/segments/playback';
 import type { PreviewLoopMode, RafHandle } from '../../types/segments';
 import { safePlay } from '../audio';
+import { PREVIEW_PLAYHEAD_COLOR } from '../constants';
 import { drawSplitWaveform } from './split-draw';
 import { drawTrimWaveform } from './trim-draw';
 
@@ -23,6 +24,7 @@ let _previewLooping: PreviewLoopMode = false;
 let _previewJustSeeked = false;
 let _playRangeRAF: RafHandle | null = null;
 let _previewStopHandler: ((ev: Event) => void) | null = null;
+let _previewCanplayHandler: (() => void) | null = null;
 
 export function getPreviewLooping(): PreviewLoopMode { return _previewLooping; }
 export function setPreviewLooping(v: PreviewLoopMode): void { _previewLooping = v; }
@@ -112,15 +114,16 @@ export function _playRange(startMs: number, endMs: number): void {
             if (!ctx) { _playRangeRAF = requestAnimationFrame(animatePlayhead); return; }
             const w = canvas.width, h = canvas.height;
             const x = ((curMs - wfStart) / (wfEnd - wfStart)) * w;
-            ctx.strokeStyle = '#f72585'; ctx.lineWidth = 2;
+            ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-            ctx.fillStyle = '#f72585';
+            ctx.fillStyle = PREVIEW_PLAYHEAD_COLOR;
             ctx.beginPath(); ctx.moveTo(x - 4, 0); ctx.lineTo(x + 4, 0); ctx.lineTo(x, 6); ctx.closePath(); ctx.fill();
         }
         _playRangeRAF = requestAnimationFrame(animatePlayhead);
     }
 
     const doPlay = (): void => {
+        _previewCanplayHandler = null;
         audioEl.currentTime = start;
         audioEl.playbackRate = get(playbackSpeed);
         safePlay(audioEl);
@@ -135,12 +138,22 @@ export function _playRange(startMs: number, endMs: number): void {
                      const s = ch != null ? getSegByChapterIndex(ch, editIdx) : null;
                      return s && s.audio_url; })();
     if (targetUrl && !audioEl.src.endsWith(targetUrl)) {
+        if (_previewCanplayHandler) {
+            audioEl.removeEventListener('canplay', _previewCanplayHandler);
+            _previewCanplayHandler = null;
+        }
+        _previewCanplayHandler = doPlay;
         audioEl.src = targetUrl;
         audioEl.addEventListener('canplay', doPlay, { once: true });
         audioEl.load();
     } else if (audioEl.src && audioEl.readyState >= 1) {
         doPlay();
     } else if (targetUrl) {
+        if (_previewCanplayHandler) {
+            audioEl.removeEventListener('canplay', _previewCanplayHandler);
+            _previewCanplayHandler = null;
+        }
+        _previewCanplayHandler = doPlay;
         audioEl.src = targetUrl;
         audioEl.addEventListener('canplay', doPlay, { once: true });
         audioEl.load();

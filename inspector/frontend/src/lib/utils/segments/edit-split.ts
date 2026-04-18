@@ -25,11 +25,11 @@ import {
     editCanvas,
     editingSegIndex,
     editMode,
+    editStatusText,
     setEdit,
     splitChainCategory,
     splitChainUid,
     splitState,
-    trimStatusText,
 } from '../../stores/segments/edit';
 import {
     playStatusText,
@@ -73,7 +73,7 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     }
     setEdit('split', seg.segment_uid ?? null);
     editingSegIndex.set(seg.index);
-    trimStatusText.set('');
+    editStatusText.set('');
 
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
