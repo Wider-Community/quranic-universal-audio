@@ -60,9 +60,11 @@
         if (e.key === 'Escape') onClose();
     }
 
+    let savedTipTimer: ReturnType<typeof setTimeout> | null = null;
     function flashSavedTip(): void {
         showSavedTip = true;
-        setTimeout(() => { showSavedTip = false; }, 1200);
+        if (savedTipTimer !== null) clearTimeout(savedTipTimer);
+        savedTipTimer = setTimeout(() => { showSavedTip = false; savedTipTimer = null; }, 1200);
     }
 
     function handleSave(): void {
