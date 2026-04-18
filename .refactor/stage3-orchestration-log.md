@@ -207,6 +207,96 @@ New stores: segAudioElement, segListElement, playStatusText, playButtonLabel, pl
 
 ---
 
+### Phase Ph6d — Imperative card pipeline deletion (2 commits: 766c325, 2886739)
+
+Convert 3 validation subcomponents to Svelte SegmentRow. Delete renderSegCard, validation-card-inject, imperative-card-click, resolve-seg-from-row, error-cards.
+
+**Implementation (commit: 766c325)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 170,109 | 17m 40s | 74 | afee230c81c8c084a | 5 files deleted (~800 LOC), 3 validation subcomponents rewritten, refreshSegInStore helper added |
+| Quality review | sonnet | 84,201 | 20m 20s | 81 | adeb21c8d25bb3e8d | 1 MEDIUM (readOnly dead play button), 1 LOW (showPlayBtn ignored on isContext) |
+| Verification | opus | 146,064 | 20m 55s | 61 | a14d5dcc1c2c3b33c | 3 MEDIUMs + 2 LOWs: stale seg fields, stale resolvedSeg post-split, split-chain wrapper, phoneme tail placement, exit-edit lookup path |
+| Regression fix (bg) | opus | 124,140 | 12m 45s | 76 | aa099426245b4195d | All 6 findings fixed with `void segStoreTick` pattern + isContext switch |
+
+**Ph6d summary**: 4 agents, ~71 min, imperative-DOM 129→94 (-35). Svelte-native card rendering throughout.
+
+### Phase Ph6e — Reactive DOM purge (4 commits: d9f4683, 7e91928, 8a15b9d, 64c4a4a)
+
+Planned as 3 sequential sub-agents per 4-agent exploration phase.
+
+**Exploration (4 parallel bg agents)**
+
+| Scope | Model | Tokens | Agent ID | Output |
+|---|---|---|---|---|
+| Playback hot path | opus | 52,893 | a1184d34f4cba407e | 31→10 plan, playingSegmentIndex store design |
+| Navigation scroll | sonnet | 33,720 | a7e24bed85cd9dd4c | 14→5 plan, targetSegmentIndex + flashSet + pendingScrollTop |
+| Edit canvas queries | opus | 85,598 | ae73c5380be32b853 | Deferred to Ph6f (4 sub-phases) |
+| Full inventory | sonnet | 78,228 | af2e388f694d2ad12 | 255 calls classified: 70 Ph6e-purgeable, 39 deferred, 146 permanent |
+
+**Ph6e-1 — Cache bar reactive (commit: d9f4683)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | sonnet | 43,863 | 6m | 22 | abfceca81131b4568 | 18 getElementById/textContent/style calls purged. New AudioCacheBar.svelte + 5 stores |
+
+**Ph6e-2 — Playback + navigation hot path (commit: 7e91928)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 109,932 | 13m 17s | 56 | a0ffc27176bce215a | 29 purged. playingSegmentIndex + isMainAudioPlaying + targetSegmentIndex + flashSegmentIndices + pendingScrollTop. SegmentRow reactive highlight + scroll |
+
+**Ph6e-3 — Panel show/hide + misc (commit: 8a15b9d)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 160,822 | 18m 11s | 91 | a468c733f6b963d6b | _SEG_NORMAL_IDS cluster gone. SegmentsTab reactive wrap. dirtyTick exported for post-save class clear |
+
+**Ph6e reviews**
+
+| Role | Model | Tokens | Agent ID | Findings |
+|---|---|---|---|---|
+| Verification (bg) | opus | 113,269 | a5e0646776d638e41 | 7/8 PASS + 1 MEDIUM (showHistoryView dropped clearFilters + setSortMode) |
+| Quality (bg) | sonnet | 64,340 | a3fb9e077a0bd5aca | Clean PASS, 1 LOW pre-existing double get(segAudioElement) |
+
+**Ph6e fix** (commit: 64c4a4a): 1 MEDIUM fixed by orchestrator directly (3-line restore).
+
+**Ph6e summary**: 7 agents (4 explore + 3 impl + 2 review), ~80 min impl, imperative-DOM 94→66 (-28). ~70 calls purged, ~150 when including gate-invisible patterns.
+
+### Phase Ph6f — Edit module chrome → Svelte panels (3 commits: 0ab1ff6, fa6ed4a, 4aa4fd8)
+
+Plan from Ph6e exploration: 4 sub-phases, collapsed to 3.
+
+**Ph6f-1 — Canvas param threading (commit: 0ab1ff6)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 115,152 | 10m 37s | 56 | a595ed060261ca3bf | _getEditCanvas deleted. editCanvas store. Optional canvas param with fallback |
+
+**Ph6f-2 — Trim/split chrome → Svelte panels (commit: fa6ed4a)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 135,080 | 10m 50s | 59 | ae09dde687aa25449 | TrimPanel + SplitPanel full rewrites. trimWindow + splitState + trimStatusText stores. document.createElement purged from edit-trim + edit-split |
+
+**Ph6f-3 — ReferenceEditor + reactive class + chain handoff (commit: 4aa4fd8)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 143,238 | 17m 12s | 95 | a85e4c8ddce8ac059 | ReferenceEditor.svelte owns input. class:seg-edit-target reactive. Split-chain handoff via SegmentRow effect on $splitChainUid |
+
+**Ph6f reviews**
+
+| Role | Model | Tokens | Agent ID | Findings |
+|---|---|---|---|---|
+| Verification (bg) | opus | 95,111 | ac6cfddc0e2b8cb43 | PASS — zero findings. Split-chain race analyzed under Svelte 4 microtask batching, gate correct |
+| Quality (bg) | sonnet | 77,105 | ac3d86656ca6f51a8 | Clean PASS. 1 LOW (informational commit msg imprecision) |
+
+**Ph6f summary**: 5 agents, ~39 min impl, imperative-DOM 66→39 (-27). Edit mode fully Svelte-native.
+
+---
+
 ## Cumulative (end of refactor)
 
 | Metric | Total |
