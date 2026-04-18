@@ -89,11 +89,11 @@
     $: valDelta = (() => {
         const beforeIssues = new Set<string>();
         if (rootSnap) {
-            for (const i of _classifySnapIssues(rootSnap as unknown as Segment)) beforeIssues.add(i);
+            for (const i of _classifySnapIssues(rootSnap)) beforeIssues.add(i);
         }
         const afterIssues = new Set<string>();
         for (const ls of leafSnaps) {
-            for (const i of _classifySnapIssues(ls as unknown as Segment)) afterIssues.add(i);
+            for (const i of _classifySnapIssues(ls)) afterIssues.add(i);
         }
         const improved = [...beforeIssues].filter((i) => !afterIssues.has(i));
         const regressed = [...afterIssues].filter((i) => !beforeIssues.has(i));

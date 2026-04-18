@@ -11,21 +11,11 @@ import type {
     EditOp,
     HistoryBatch,
     HistorySummary,
+    Ref,
     Segment,
     SegmentPeaks,
     SegmentsChapterSummary,
     SegReciter,
-    SegValAudioBleedingItem,
-    SegValBoundaryAdjItem,
-    SegValCrossVerseItem,
-    SegValFailedItem,
-    SegValLowConfidenceItem,
-    SegValMissingVerseItem,
-    SegValMissingWordsItem,
-    SegValMuqattaatItem,
-    SegValQalqalaItem,
-    SegValRepetitionItem,
-    SegValStructuralErrorItem,
     SurahInfoMap,
     TsBoundaryMismatch,
     TsMfaFailure,
@@ -83,6 +73,8 @@ export interface TsValidateResponse {
         has_segments: boolean;
         tolerance_ms: number;
     };
+    /** Present when the endpoint returns an error (e.g. reciter not found). */
+    error?: string;
 }
 
 // ===========================================================================
@@ -183,7 +175,116 @@ export interface SegTriggerValidationResponse {
     ok: true;
 }
 
-/** GET /api/seg/validate/:reciter — array shapes tracked per-category in types/domain.ts. */
+// ---------------------------------------------------------------------------
+// /api/seg/validate — per-category item shapes
+// ---------------------------------------------------------------------------
+
+/**
+ * Auto-fix descriptor attached to some `missing_words` entries.
+ * `target_seg_index` is re-indexed client-side on split/merge/delete via
+ * `_forEachValItem` / `_fixupValIndicesFor*`.
+ */
+export interface SegValAutoFix {
+    target_seg_index: number;
+    new_ref_start: string;
+    new_ref_end: string;
+}
+
+/** Common fields present on every validation item row. */
+export interface SegValItemBase {
+    chapter: number;
+    /** Server-emitted; client mutates during index-fixup after split/merge/delete. */
+    seg_index?: number;
+}
+
+export interface SegValFailedItem extends SegValItemBase {
+    seg_index: number;
+    time: string;
+}
+
+export interface SegValMissingVerseItem extends SegValItemBase {
+    verse_key: VerseRef;
+    msg: string;
+}
+
+export interface SegValMissingWordsItem extends SegValItemBase {
+    verse_key: VerseRef;
+    msg?: string;
+    /** Client mutates entries during index-fixup. */
+    seg_indices?: number[];
+    auto_fix?: SegValAutoFix;
+}
+
+export interface SegValStructuralErrorItem extends SegValItemBase {
+    verse_key: VerseRef;
+    msg: string;
+}
+
+export interface SegValLowConfidenceItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+    confidence: number; // 0..1
+}
+
+export interface SegValBoundaryAdjItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+    verse_key: VerseRef;
+    gt_tail?: string;
+    asr_tail?: string;
+}
+
+export interface SegValCrossVerseItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+}
+
+export interface SegValAudioBleedingItem extends SegValItemBase {
+    seg_index: number;
+    entry_ref: string;
+    matched_verse: string;
+    ref: Ref;
+    confidence: number;
+    time: string;
+    msg: string;
+}
+
+export interface SegValRepetitionItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+    display_ref?: Ref;
+    confidence: number;
+    time: string;
+    text: string;
+}
+
+export interface SegValMuqattaatItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+}
+
+export interface SegValQalqalaItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+    qalqala_letter: string;
+    end_of_verse: boolean;
+}
+
+/** Union of every validation item variant the panel renders. */
+export type SegValAnyItem =
+    | SegValFailedItem
+    | SegValMissingVerseItem
+    | SegValMissingWordsItem
+    | SegValStructuralErrorItem
+    | SegValLowConfidenceItem
+    | SegValBoundaryAdjItem
+    | SegValCrossVerseItem
+    | SegValAudioBleedingItem
+    | SegValRepetitionItem
+    | SegValMuqattaatItem
+    | SegValQalqalaItem;
+
+/** GET /api/seg/validate/:reciter */
 export interface SegValidateResponse {
     /** Structural validation issues — the server actually emits this key. */
     errors?: SegValStructuralErrorItem[];

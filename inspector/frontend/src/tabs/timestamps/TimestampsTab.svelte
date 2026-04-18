@@ -126,7 +126,7 @@
             }
             if (
                 valResult.status === 'fulfilled' &&
-                !(valResult.value as unknown as { error?: string }).error
+                !valResult.value.error
             ) {
                 validationData.set(valResult.value);
             }

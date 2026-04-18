@@ -51,9 +51,7 @@ export function resetWaveformState(): void {
 // Peaks: bulk indexing of segment-level peaks
 // ---------------------------------------------------------------------------
 
-type SegPeaksEntry = Partial<SegmentPeaks>;
-
-export function indexSegPeaksBulk(peaksMap: Record<string, SegPeaksEntry> | null | undefined): void {
+export function indexSegPeaksBulk(peaksMap: Record<string, SegmentPeaks> | null | undefined): void {
     if (!peaksMap) return;
     for (const [key, data] of Object.entries(peaksMap)) {
         if (!data?.peaks?.length || data.start_ms == null || data.end_ms == null || data.duration_ms == null) continue;
@@ -127,7 +125,7 @@ function _flushObserverPeaksQueue(): void {
             if (!get(segAllData) || get(selectedReciter) !== reciter) return;
             const newPeaks = data.peaks || {};
             if (Object.keys(newPeaks).length === 0) return;
-            indexSegPeaksBulk(newPeaks as unknown as Record<string, SegPeaksEntry>);
+            indexSegPeaksBulk(newPeaks);
             redrawPeaksWaveforms();
         })
         .catch(() => {});
@@ -255,7 +253,7 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
         if (!get(segAllData) || get(selectedReciter) !== reciter) return;
         const newPeaks = data.peaks || {};
         if (Object.keys(newPeaks).length === 0) return;
-        indexSegPeaksBulk(newPeaks as unknown as Record<string, SegPeaksEntry>);
+        indexSegPeaksBulk(newPeaks);
         redrawPeaksWaveforms();
     } catch { /* ignore */ }
 }

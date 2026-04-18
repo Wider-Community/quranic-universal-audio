@@ -15,7 +15,7 @@
         SegValAnyItem,
         SegValMissingVerseItem,
         SegValMissingWordsItem,
-    } from '../../../lib/types/domain';
+    } from '../../../lib/types/api';
 
     // ---- Props ----
     export let category: string;

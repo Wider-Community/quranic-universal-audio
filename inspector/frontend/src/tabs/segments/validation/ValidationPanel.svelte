@@ -34,8 +34,8 @@
         SegValMissingWordsItem,
         SegValQalqalaItem,
         SegValRepetitionItem,
-    } from '../../../lib/types/domain';
-    import type { SegValidateResponse } from '../../../lib/types/api';
+        SegValidateResponse,
+    } from '../../../lib/types/api';
 
     // ---- Props ----
     /** Filter results to this chapter number. null = all chapters. */

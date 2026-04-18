@@ -17,11 +17,8 @@
         snapshotSeg,
     } from '../../../lib/stores/segments/dirty';
     import { _isIgnoredFor } from '../../../lib/utils/segments/classify';
-    import type {
-        SegValAnyItem,
-        SegValBoundaryAdjItem,
-        Segment,
-    } from '../../../lib/types/domain';
+    import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../lib/types/api';
+    import type { Segment } from '../../../lib/types/domain';
     import SegmentRow from '../SegmentRow.svelte';
 
     // ---- Props ----

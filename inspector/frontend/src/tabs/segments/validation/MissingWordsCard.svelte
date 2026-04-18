@@ -10,7 +10,8 @@
         snapshotSeg,
         unmarkDirty,
     } from '../../../lib/stores/segments/dirty';
-    import type { SegValMissingWordsItem, Segment } from '../../../lib/types/domain';
+    import type { SegValMissingWordsItem } from '../../../lib/types/api';
+    import type { Segment } from '../../../lib/types/domain';
     import SegmentRow from '../SegmentRow.svelte';
 
     // ---- Props ----
