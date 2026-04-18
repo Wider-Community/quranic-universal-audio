@@ -6,6 +6,13 @@ import type {
     SegPrepareAudioResponse,
 } from '../../../types/api';
 import { fetchJson } from '../../api';
+import {
+    cacheDeleteButton,
+    cachePrepareButton,
+    cacheProgress,
+    cacheStatus,
+    cacheStatusText,
+} from '../../stores/segments/audio-cache';
 import { selectedReciter } from '../../stores/segments/chapter';
 import type { TimerHandle } from '../../types/segments';
 import { _formatBytes } from '../formatting';
@@ -26,37 +33,31 @@ export function clearAudioCachePollTimer(): void {
 export function _rewriteAudioUrls(): void {}
 
 export function _updateCacheStatusUI(data: SegAudioCacheStatusResponse | null | undefined): void {
-    const statusEl = document.getElementById('seg-cache-status');
-    const progressEl = document.getElementById('seg-cache-progress');
-    const progressFill = document.getElementById('seg-cache-progress-fill');
-    const progressText = document.getElementById('seg-cache-progress-text');
-    const prepBtn = document.getElementById('seg-prepare-btn') as HTMLButtonElement | null;
-    const delBtn = document.getElementById('seg-delete-cache-btn') as HTMLButtonElement | null;
-    if (!statusEl) return;
     if (!data || (data as { error?: string }).error) {
-        statusEl.textContent = '';
-        if (progressEl) progressEl.hidden = true;
+        cacheStatusText.set('');
+        cacheProgress.set(null);
         return;
     }
 
     const allCached = data.cached_count >= data.total;
-    if (prepBtn) prepBtn.hidden = allCached;
-    if (delBtn) delBtn.hidden = data.cached_count === 0;
+    cachePrepareButton.update(b => ({ ...b, hidden: allCached }));
+    cacheDeleteButton.update(b => ({ ...b, hidden: data.cached_count === 0 }));
 
     if (data.downloading && data.download_progress) {
         const dp = data.download_progress;
         const pct = dp.total > 0 ? Math.round(dp.downloaded / dp.total * 100) : 0;
-        if (progressEl) progressEl.hidden = false;
-        if (progressFill) progressFill.style.width = pct + '%';
-        if (progressText) progressText.textContent = `Downloading ${dp.downloaded} / ${dp.total} chapters (${_formatBytes(data.cached_bytes)})`;
-        statusEl.textContent = '';
-        if (prepBtn) prepBtn.hidden = true;
+        cacheProgress.set({
+            pct,
+            text: `Downloading ${dp.downloaded} / ${dp.total} chapters (${_formatBytes(data.cached_bytes)})`,
+        });
+        cacheStatusText.set('');
+        cachePrepareButton.update(b => ({ ...b, hidden: true }));
     } else {
-        if (progressEl) progressEl.hidden = true;
+        cacheProgress.set(null);
         if (allCached) {
-            statusEl.textContent = `All cached (${_formatBytes(data.cached_bytes)})`;
+            cacheStatusText.set(`All cached (${_formatBytes(data.cached_bytes)})`);
         } else {
-            statusEl.textContent = 'Download audio for faster playback while editing';
+            cacheStatusText.set('Download audio for faster playback while editing');
         }
     }
 }
@@ -66,16 +67,14 @@ export async function _fetchCacheStatus(reciter: string): Promise<SegAudioCacheS
         const data = await fetchJson<SegAudioCacheStatusResponse>(
             `/api/seg/audio-cache-status/${reciter}`,
         );
-        const bar = document.getElementById('seg-cache-bar');
-        if (bar) bar.hidden = false;
+        cacheStatus.set('idle');
         _updateCacheStatusUI(data);
         return data;
     } catch { return null; }
 }
 
 export async function _prepareAudio(reciter: string): Promise<void> {
-    const prepBtn = document.getElementById('seg-prepare-btn') as HTMLButtonElement | null;
-    if (prepBtn) { prepBtn.disabled = true; prepBtn.hidden = true; }
+    cachePrepareButton.update(b => ({ ...b, disabled: true, hidden: true }));
     try {
         await fetchJson<SegPrepareAudioResponse>(`/api/seg/prepare-audio/${reciter}`, {
             method: 'POST',
@@ -90,7 +89,7 @@ export async function _prepareAudio(reciter: string): Promise<void> {
         const data = await _fetchCacheStatus(reciter);
         if (data && (!data.downloading || data.cached_count >= data.total)) {
             if (_audioCachePollTimer) { clearInterval(_audioCachePollTimer); _audioCachePollTimer = null; }
-            if (prepBtn) { prepBtn.disabled = false; prepBtn.textContent = 'Download All Audio'; }
+            cachePrepareButton.update(b => ({ ...b, disabled: false, label: 'Download All Audio' }));
             _updateCacheStatusUI(data);
         }
     }, 2000);
@@ -98,13 +97,12 @@ export async function _prepareAudio(reciter: string): Promise<void> {
 
 export async function _deleteAudioCache(reciter: string): Promise<void> {
     if (!confirm('Delete cached audio for this reciter?\nOnly delete once you are finished editing.')) return;
-    const delBtn = document.getElementById('seg-delete-cache-btn') as HTMLButtonElement | null;
-    if (delBtn) { delBtn.disabled = true; delBtn.textContent = 'Deleting...'; }
+    cacheDeleteButton.update(b => ({ ...b, disabled: true, label: 'Deleting...' }));
     try {
         await fetchJson<SegDeleteAudioCacheResponse>(`/api/seg/delete-audio-cache/${reciter}`, {
             method: 'DELETE',
         });
     } catch { /* ignore */ }
-    if (delBtn) { delBtn.disabled = false; delBtn.textContent = 'Delete Cache'; }
+    cacheDeleteButton.update(b => ({ ...b, disabled: false, label: 'Delete Cache' }));
     await _fetchCacheStatus(reciter);
 }

@@ -7,6 +7,7 @@
  * stale-data reload path in reciter-actions.ts::reloadCurrentReciter().
  */
 
+import { cacheStatus } from '../../stores/segments/audio-cache';
 import {
     segAllData,
     segCurrentIdx,
@@ -63,8 +64,7 @@ export function clearPerReciterState(): void {
     playEndMs.set(0);
     clearWaveformCache();
 
-    const cacheBar = document.getElementById('seg-cache-bar');
-    if (cacheBar) (cacheBar as HTMLElement).hidden = true;
+    cacheStatus.set('hidden');
     clearAudioCachePollTimer();
 
     const saveBtn = document.getElementById('seg-save-btn') as HTMLButtonElement | null;

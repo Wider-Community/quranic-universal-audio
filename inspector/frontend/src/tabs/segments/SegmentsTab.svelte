@@ -13,7 +13,6 @@
     import { isDirty, isDirtyStore } from '../../lib/stores/segments/dirty';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { cycleSpeedStore } from '../../lib/utils/speed-control';
-    import { _deleteAudioCache, _prepareAudio } from '../../lib/utils/segments/audio-cache-ui';
     import {
         exitEditMode,
     } from '../../lib/utils/segments/edit-common';
@@ -66,6 +65,7 @@
     import SegmentsAudioControls from './SegmentsAudioControls.svelte';
     import StatsPanel from './StatsPanel.svelte';
     import SavePreview from './save/SavePreview.svelte';
+    import AudioCacheBar from './AudioCacheBar.svelte';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
     let segAudioEl: HTMLAudioElement | null = null;
@@ -435,29 +435,7 @@
         </div>
     </div>
 
-    <div class="seg-cache-panel" id="seg-cache-bar" hidden>
-        <div class="seg-cache-actions">
-            <button
-                id="seg-prepare-btn"
-                class="btn seg-cache-download-btn"
-                hidden
-                on:click={() => _prepareAudio($selectedReciter)}
-            >Download All Audio</button>
-            <button
-                id="seg-delete-cache-btn"
-                class="btn seg-cache-delete-btn"
-                hidden
-                on:click={() => _deleteAudioCache($selectedReciter)}
-            >Delete Cache</button>
-        </div>
-        <div id="seg-cache-progress" class="seg-cache-progress" hidden>
-            <div class="seg-cache-progress-bar">
-                <div id="seg-cache-progress-fill" class="seg-cache-progress-fill"></div>
-            </div>
-            <span id="seg-cache-progress-text" class="seg-cache-progress-text"></span>
-        </div>
-        <span id="seg-cache-status" class="seg-cache-status"></span>
-    </div>
+    <AudioCacheBar />
 
     <details class="shortcuts-guide">
         <summary class="shortcuts-guide-summary">Shortcuts &amp; Guide</summary>
