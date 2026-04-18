@@ -15,11 +15,11 @@
 
     import { createEventDispatcher } from 'svelte';
 
-    import { activeFilters } from '../../lib/stores/segments/filters';
+    import { activeFilters } from '../../../lib/stores/segments/filters';
     import {
         backBannerVisible,
         savedFilterView,
-    } from '../../lib/stores/segments/navigation';
+    } from '../../../lib/stores/segments/navigation';
 
     const dispatch = createEventDispatcher<{ restore: void }>();
 

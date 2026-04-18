@@ -20,7 +20,7 @@
     import { _isIgnoredFor } from '../../../lib/utils/segments/classify';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../lib/types/api';
     import type { Segment } from '../../../lib/types/domain';
-    import SegmentRow from '../SegmentRow.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
 
     // ---- Props ----
     export let category: string;

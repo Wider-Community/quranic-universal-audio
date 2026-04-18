@@ -6,7 +6,7 @@
 
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { segData } from '../../lib/stores/segments/chapter';
+    import { segData } from '../../../lib/stores/segments/chapter';
     import {
         autoPlayEnabled,
         continuousPlay,
@@ -14,17 +14,17 @@
         playButtonLabel,
         playStatusText,
         segAudioElement,
-    } from '../../lib/stores/segments/playback';
-    import { LS_KEYS } from '../../lib/utils/constants';
+    } from '../../../lib/stores/segments/playback';
+    import { LS_KEYS } from '../../../lib/utils/constants';
     import {
         onSegAudioEnded,
         onSegPlayClick,
         onSegTimeUpdate,
         startSegAnimation,
         stopSegAnimation,
-    } from '../../lib/utils/segments/playback';
-    import { getValCardAudioOrNull, stopErrorCardAudio } from '../../lib/utils/segments/error-card-audio';
-    import AudioPlayer from '../../lib/components/AudioPlayer.svelte';
+    } from '../../../lib/utils/segments/playback';
+    import { getValCardAudioOrNull, stopErrorCardAudio } from '../../../lib/utils/segments/error-card-audio';
+    import AudioPlayer from '../../../lib/components/AudioPlayer.svelte';
 
     // ---- Exported prop: raw HTMLAudioElement exposed to parent via bind:audioEl ----
     // Populated reactively once AudioPlayer mounts and element() returns non-null.

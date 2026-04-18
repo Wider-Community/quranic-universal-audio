@@ -41,12 +41,12 @@
     import { savePreviewVisible, saveButtonLabel } from '../../lib/stores/segments/save';
     import ValidationPanel from './validation/ValidationPanel.svelte';
     import EditOverlay from './edit/EditOverlay.svelte';
-    import FiltersBar from './FiltersBar.svelte';
-    import SegmentsList from './SegmentsList.svelte';
-    import SegmentsAudioControls from './SegmentsAudioControls.svelte';
-    import StatsPanel from './StatsPanel.svelte';
+    import FiltersBar from './filters/FiltersBar.svelte';
+    import SegmentsList from './list/SegmentsList.svelte';
+    import SegmentsAudioControls from './audio/SegmentsAudioControls.svelte';
+    import StatsPanel from './stats/StatsPanel.svelte';
     import SavePreview from './save/SavePreview.svelte';
-    import AudioCacheBar from './AudioCacheBar.svelte';
+    import AudioCacheBar from './audio/AudioCacheBar.svelte';
     import ShortcutsGuide from './ShortcutsGuide.svelte';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.

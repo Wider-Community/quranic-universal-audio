@@ -7,9 +7,9 @@
         cacheProgress,
         cachePrepareButton,
         cacheDeleteButton,
-    } from '../../lib/stores/segments/audio-cache';
-    import { _prepareAudio, _deleteAudioCache } from '../../lib/utils/segments/audio-cache-ui';
-    import { selectedReciter } from '../../lib/stores/segments/chapter';
+    } from '../../../lib/stores/segments/audio-cache';
+    import { _prepareAudio, _deleteAudioCache } from '../../../lib/utils/segments/audio-cache-ui';
+    import { selectedReciter } from '../../../lib/stores/segments/chapter';
 
     function onPrepareClick(): void { _prepareAudio(get(selectedReciter)); }
     function onDeleteClick(): void { _deleteAudioCache(get(selectedReciter)); }

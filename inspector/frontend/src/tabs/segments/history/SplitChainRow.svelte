@@ -12,7 +12,7 @@
      * (passed through SegmentRow's reactive splitHL prop).
      */
 
-    import SegmentRow from '../SegmentRow.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryArrows from './HistoryArrows.svelte';
     import { surahOptionText } from '../../../lib/utils/surah-info';
     import {

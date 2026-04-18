@@ -17,7 +17,7 @@
      */
 
     import HistoryOp from './HistoryOp.svelte';
-    import SegmentRow from '../SegmentRow.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
     import { surahOptionText } from '../../../lib/utils/surah-info';
     import { EDIT_OP_LABELS } from '../../../lib/utils/segments/constants';
     import {

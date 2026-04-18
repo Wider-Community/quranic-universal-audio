@@ -15,12 +15,12 @@
     import { afterUpdate } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { displayedSegments } from '../../lib/stores/segments/filters';
-    import { selectedChapter } from '../../lib/stores/segments/chapter';
-    import { pendingScrollTop } from '../../lib/stores/segments/navigation';
-    import { segListElement, waveformContainer } from '../../lib/stores/segments/playback';
-    import { segValidation } from '../../lib/stores/segments/validation';
-    import type { Segment } from '../../lib/types/domain';
+    import { displayedSegments } from '../../../lib/stores/segments/filters';
+    import { selectedChapter } from '../../../lib/stores/segments/chapter';
+    import { pendingScrollTop } from '../../../lib/stores/segments/navigation';
+    import { segListElement, waveformContainer } from '../../../lib/stores/segments/playback';
+    import { segValidation } from '../../../lib/stores/segments/validation';
+    import type { Segment } from '../../../lib/types/domain';
     import Navigation from './Navigation.svelte';
     import SegmentRow from './SegmentRow.svelte';
 

@@ -9,9 +9,9 @@
      * clears it when filters become non-empty).
      */
 
-    import { activeFilters, displayedResult } from '../../lib/stores/segments/filters';
-    import { selectedVerse } from '../../lib/stores/segments/chapter';
-    import { savedFilterView } from '../../lib/stores/segments/navigation';
+    import { activeFilters, displayedResult } from '../../../lib/stores/segments/filters';
+    import { selectedVerse } from '../../../lib/stores/segments/chapter';
+    import { savedFilterView } from '../../../lib/stores/segments/navigation';
     import FilterCondition from './FilterCondition.svelte';
 
     export let hidden: boolean = true;

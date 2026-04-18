@@ -12,7 +12,7 @@
     } from '../../../lib/stores/segments/dirty';
     import type { SegValMissingWordsItem } from '../../../lib/types/api';
     import type { Segment } from '../../../lib/types/domain';
-    import SegmentRow from '../SegmentRow.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
 
     // ---- Props ----
     export let item: SegValMissingWordsItem;

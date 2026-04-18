@@ -13,12 +13,12 @@
      */
     import { onDestroy } from 'svelte';
 
-    import { fetchJson } from '../../lib/api';
-    import { drawBarChart } from '../../lib/utils/stats-chart-draw';
-    import type { SegSaveChartResponse } from '../../lib/types/api';
-    import type { ChartCfg, Distribution } from '../../lib/types/stats';
+    import { fetchJson } from '../../../lib/api';
+    import { drawBarChart } from '../../../lib/utils/stats-chart-draw';
+    import type { SegSaveChartResponse } from '../../../lib/types/api';
+    import type { ChartCfg, Distribution } from '../../../lib/types/stats';
 
-    import type { Chart } from '../../lib/utils/chart';
+    import type { Chart } from '../../../lib/utils/chart';
 
     export let dist: Distribution | null = null;
     export let cfg: ChartCfg | null = null;

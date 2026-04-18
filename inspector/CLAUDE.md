@@ -203,17 +203,22 @@ inspector/
         │
         └── tabs/segments/          # Segments tab — Svelte 4 components
             ├── SegmentsTab.svelte  #   Tab shell + reciter/chapter selectors
-            ├── SegmentsList.svelte #   Virtualized segment list
-            ├── SegmentRow.svelte   #   Individual segment card (read + edit-mode props)
-            ├── SegmentWaveformCanvas.svelte # Waveform canvas wrapper for segment rows
-            ├── FiltersBar.svelte   #   Filter bar + active filter pills
-            ├── FilterCondition.svelte #   Single filter condition input
-            ├── Navigation.svelte   #   Back-to-results banner
-            ├── SegmentsAudioControls.svelte # Audio player + continuous-play controls
-            ├── AudioCacheBar.svelte #  by_surah cache status + download/delete controls
-            ├── StatsPanel.svelte   #   Statistics panel accordion shell
-            ├── StatsChart.svelte   #   Chart.js histogram component
-            ├── ChartFullscreen.svelte #  Fullscreen overlay for charts
+            ├── ShortcutsGuide.svelte #  Keyboard shortcut reference overlay
+            ├── list/               # Segment list rendering
+            │   ├── SegmentsList.svelte        #  Virtualized segment list container
+            │   ├── SegmentRow.svelte          #  Individual segment card (read + edit-mode props)
+            │   ├── SegmentWaveformCanvas.svelte # Waveform canvas wrapper for segment rows
+            │   └── Navigation.svelte          #  Back-to-results banner
+            ├── filters/            # Filter bar
+            │   ├── FiltersBar.svelte          #  Filter bar + active filter pills
+            │   └── FilterCondition.svelte     #  Single filter condition input
+            ├── stats/              # Statistics panel
+            │   ├── StatsPanel.svelte          #  Statistics panel accordion shell
+            │   ├── StatsChart.svelte          #  Chart.js histogram component
+            │   └── ChartFullscreen.svelte     #  Fullscreen overlay for charts
+            ├── audio/              # Audio controls
+            │   ├── SegmentsAudioControls.svelte # Audio player + continuous-play controls
+            │   └── AudioCacheBar.svelte       #  by_surah cache status + download/delete controls
             ├── edit/               # Editing mode overlays
             │   ├── EditOverlay.svelte #  Active edit mode container
             │   ├── TrimPanel.svelte   #  Trim handles + confirm

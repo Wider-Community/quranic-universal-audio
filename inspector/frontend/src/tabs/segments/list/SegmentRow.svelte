@@ -30,51 +30,51 @@
         segCurrentIdx,
         selectedChapter,
         selectedVerse,
-    } from '../../lib/stores/segments/chapter';
+    } from '../../../lib/stores/segments/chapter';
     import {
         _addVerseMarkers,
         formatRef,
         formatTimeMs,
-    } from '../../lib/utils/segments/references';
-    import { dirtyTick, isIndexDirty } from '../../lib/stores/segments/dirty';
+    } from '../../../lib/utils/segments/references';
+    import { dirtyTick, isIndexDirty } from '../../../lib/stores/segments/dirty';
     import {
         editCanvas,
         editMode,
         editingSegUid,
         splitChainCategory,
         splitChainUid,
-    } from '../../lib/stores/segments/edit';
-    import { activeFilters } from '../../lib/stores/segments/filters';
-    import { savedFilterView } from '../../lib/stores/segments/navigation';
+    } from '../../../lib/stores/segments/edit';
+    import { activeFilters } from '../../../lib/stores/segments/filters';
+    import { savedFilterView } from '../../../lib/stores/segments/navigation';
     import type {
         MergeHighlight,
         SegCanvas,
         SplitHighlight,
         TrimHighlight,
-    } from '../../lib/types/segments-waveform';
-    import { getConfClass } from '../../lib/utils/segments/conf-class';
-    import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
+    } from '../../../lib/types/segments-waveform';
+    import { getConfClass } from '../../../lib/utils/segments/conf-class';
+    import { _ensureWaveformObserver } from '../../../lib/utils/segments/waveform-utils';
     import {
         isMainAudioPlaying,
         playingSegmentIndex,
         segAudioElement,
         segListElement,
-    } from '../../lib/stores/segments/playback';
+    } from '../../../lib/stores/segments/playback';
     import {
         flashSegmentIndices,
         targetSegmentIndex,
-    } from '../../lib/stores/segments/navigation';
-    import { deleteSegment } from '../../lib/utils/segments/edit-delete';
-    import { enterEditWithBuffer } from '../../lib/utils/segments/edit-enter';
-    import { mergeAdjacent } from '../../lib/utils/segments/edit-merge';
-    import { beginRefEdit } from '../../lib/utils/segments/edit-reference';
-    import { jumpToSegment } from '../../lib/utils/segments/navigation-actions';
-    import { playFromSegment } from '../../lib/utils/segments/playback';
-    import type { Segment } from '../../lib/types/domain';
+    } from '../../../lib/stores/segments/navigation';
+    import { deleteSegment } from '../../../lib/utils/segments/edit-delete';
+    import { enterEditWithBuffer } from '../../../lib/utils/segments/edit-enter';
+    import { mergeAdjacent } from '../../../lib/utils/segments/edit-merge';
+    import { beginRefEdit } from '../../../lib/utils/segments/edit-reference';
+    import { jumpToSegment } from '../../../lib/utils/segments/navigation-actions';
+    import { playFromSegment } from '../../../lib/utils/segments/playback';
+    import type { Segment } from '../../../lib/types/domain';
 
-    import ReferenceEditor from './edit/ReferenceEditor.svelte';
-    import SplitPanel from './edit/SplitPanel.svelte';
-    import TrimPanel from './edit/TrimPanel.svelte';
+    import ReferenceEditor from '../edit/ReferenceEditor.svelte';
+    import SplitPanel from '../edit/SplitPanel.svelte';
+    import TrimPanel from '../edit/TrimPanel.svelte';
 
     // ---- Required ----
     export let seg: Segment;

@@ -3,7 +3,7 @@
     import { findMissingVerseBoundarySegments } from '../../../lib/utils/segments/missing-verse-context';
     import type { SegValMissingVerseItem } from '../../../lib/types/api';
     import type { Segment } from '../../../lib/types/domain';
-    import SegmentRow from '../SegmentRow.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
 
     // ---- Props ----
     export let item: SegValMissingVerseItem;

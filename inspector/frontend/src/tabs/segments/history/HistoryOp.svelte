@@ -11,7 +11,7 @@
 
     import { tick } from 'svelte';
 
-    import SegmentRow from '../SegmentRow.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryArrows from './HistoryArrows.svelte';
     import { EDIT_OP_LABELS } from '../../../lib/utils/segments/constants';
     import { onOpUndoClick } from '../../../lib/utils/segments/undo';

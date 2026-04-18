@@ -10,9 +10,9 @@
      * `fullscreenDist` + `fullscreenCfg`; ChartFullscreen.svelte renders
      * the overlay.
      */
-    import { segStats } from '../../lib/stores/segments/stats';
-    import { selectedReciter } from '../../lib/stores/segments/chapter';
-    import type { Distribution, ChartCfg } from '../../lib/types/stats';
+    import { segStats } from '../../../lib/stores/segments/stats';
+    import { selectedReciter } from '../../../lib/stores/segments/chapter';
+    import type { Distribution, ChartCfg } from '../../../lib/types/stats';
     import StatsChart from './StatsChart.svelte';
     import ChartFullscreen from './ChartFullscreen.svelte';
 
