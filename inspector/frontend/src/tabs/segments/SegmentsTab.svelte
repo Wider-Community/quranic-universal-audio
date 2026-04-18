@@ -79,7 +79,11 @@
     import { loadChapterData } from '../../lib/utils/segments/chapter-actions';
     import HistoryPanel from './history/HistoryPanel.svelte';
     import { stopSegAnimation } from '../../lib/utils/segments/playback';
-    import { dom, state } from '../../lib/segments-state';
+    import { dom } from '../../lib/segments-state';
+    import { segCurrentIdx } from '../../lib/stores/segments/chapter';
+    import { editMode } from '../../lib/stores/segments/edit';
+    import { activeAudioSource } from '../../lib/stores/segments/playback';
+    import { getValCardAudioOrNull } from '../../lib/utils/segments/error-card-audio';
     import { _fetchChapterPeaksIfNeeded } from '../../lib/utils/segments/waveform-utils';
     import ValidationPanel from './validation/ValidationPanel.svelte';
     import type { SegDataResponse } from '../../types/api';
@@ -136,22 +140,15 @@
 
     $: filterBarHidden = $segAllData === null;
 
-    $: segConfig = state; // alias to read TRIM_PAD_LEFT etc. reactively (state is a plain object)
-    void segConfig; // silence unused-var
-
-    // ---------------------------------------------------------------------
-    // Bridge: sync Svelte stores → state.* for Wave 6+ imperative consumers
-    // ---------------------------------------------------------------------
-
-    $: state.segAllData = $segAllData;
-    $: state.segData = $segData;
-    $: state.segAllReciters = $segAllReciters;
-    $: state.segActiveFilters = $activeFilters;
-    $: state.segDisplayedSegments = $displayedSegments;
-    $: state._segIndexMap = $segIndexMap;
-    $: state._segSavedFilterView = $savedFilterView;
-    $: state.segValidation = $segValidation; // Wave 8a: store → state bridge for imperative consumers
-    // Wave 8b CF (Wave 9): state.segStatsData field deleted — StatsPanel.svelte reads $segStats directly.
+    // Imperative consumers read the stores directly now; no bridge needed.
+    // Store reads are kept here for Svelte's reactive dependency tracking so
+    // derived UI updates (chapter list, filter-bar visibility) still fire.
+    $: void $segAllReciters;
+    $: void $activeFilters;
+    $: void $displayedSegments;
+    $: void $segIndexMap;
+    $: void $savedFilterView;
+    $: void $segValidation;
 
     // ---------------------------------------------------------------------
     // Config (CSS vars + edit-mode constants)
@@ -180,23 +177,6 @@
             if (!cfg) return;
             if (cfg.seg_font_size) cssFontSize = String(cfg.seg_font_size);
             if (cfg.seg_word_spacing) cssWordSpacing = String(cfg.seg_word_spacing);
-            if (cfg.trim_pad_left != null) state.TRIM_PAD_LEFT = cfg.trim_pad_left;
-            if (cfg.trim_pad_right != null) state.TRIM_PAD_RIGHT = cfg.trim_pad_right;
-            if (cfg.trim_dim_alpha != null) state.TRIM_DIM_ALPHA = cfg.trim_dim_alpha;
-            if (cfg.show_boundary_phonemes != null)
-                state.SHOW_BOUNDARY_PHONEMES = cfg.show_boundary_phonemes;
-            if (cfg.validation_categories) state._validationCategories = cfg.validation_categories;
-            if (cfg.low_conf_default_threshold != null)
-                state._lcDefaultThreshold = cfg.low_conf_default_threshold;
-            if (cfg.muqattaat_verses)
-                state._muqattaatVerses = new Set(cfg.muqattaat_verses.map(([s, a]) => `${s}:${a}`));
-            if (cfg.qalqala_letters) state._qalqalaLetters = new Set(cfg.qalqala_letters);
-            if (cfg.standalone_refs)
-                state._standaloneRefs = new Set(
-                    cfg.standalone_refs.map(([s, a, w]) => `${s}:${a}:${w}`),
-                );
-            if (cfg.standalone_words) state._standaloneWords = new Set(cfg.standalone_words);
-            if (cfg.accordion_context) state._accordionContext = cfg.accordion_context;
             segConfigStore.set({
                 validationCategories: cfg.validation_categories ?? null,
                 muqattaatVerses: cfg.muqattaat_verses ? new Set(cfg.muqattaat_verses.map(([s, a]) => `${s}:${a}`)) : null,
@@ -205,6 +185,10 @@
                 standaloneWords: cfg.standalone_words ? new Set(cfg.standalone_words) : null,
                 lcDefaultThreshold: cfg.low_conf_default_threshold ?? 80,
                 showBoundaryPhonemes: cfg.show_boundary_phonemes ?? true,
+                accordionContext: cfg.accordion_context ?? null,
+                trimPadLeft: cfg.trim_pad_left ?? 500,
+                trimPadRight: cfg.trim_pad_right ?? 500,
+                trimDimAlpha: cfg.trim_dim_alpha ?? 0.45,
             });
         } catch {
             /* use CSS defaults */
@@ -306,31 +290,37 @@
                 break;
             case 'ArrowLeft': {
                 e.preventDefault();
-                const el = (state._activeAudioSource === 'error' && state.valCardAudio) ? state.valCardAudio : dom.segAudioEl;
+                const valAudio = getValCardAudioOrNull();
+                const el = (get(activeAudioSource) === 'error' && valAudio) ? valAudio : dom.segAudioEl;
                 el.currentTime = Math.max(0, el.currentTime - 3);
                 break;
             }
             case 'ArrowRight': {
                 e.preventDefault();
-                const el = (state._activeAudioSource === 'error' && state.valCardAudio) ? state.valCardAudio : dom.segAudioEl;
+                const valAudio = getValCardAudioOrNull();
+                const el = (get(activeAudioSource) === 'error' && valAudio) ? valAudio : dom.segAudioEl;
                 el.currentTime = Math.min(el.duration || 0, el.currentTime + 3);
                 break;
             }
             case 'ArrowUp': {
                 e.preventDefault();
-                if (!state.segDisplayedSegments || state.segDisplayedSegments.length === 0) break;
-                const curPos = state.segDisplayedSegments.findIndex(s => s.index === state.segCurrentIdx);
+                const displayed = get(displayedSegments);
+                if (!displayed || displayed.length === 0) break;
+                const curIdx = get(segCurrentIdx);
+                const curPos = displayed.findIndex(s => s.index === curIdx);
                 const prevPos = curPos > 0 ? curPos - 1 : 0;
-                const prev = state.segDisplayedSegments[prevPos];
+                const prev = displayed[prevPos];
                 if (prev) playFromSegment(prev.index, prev.chapter);
                 break;
             }
             case 'ArrowDown': {
                 e.preventDefault();
-                if (!state.segDisplayedSegments || state.segDisplayedSegments.length === 0) break;
-                const curPos = state.segDisplayedSegments.findIndex(s => s.index === state.segCurrentIdx);
-                const nextPos = curPos >= 0 && curPos < state.segDisplayedSegments.length - 1 ? curPos + 1 : (curPos === -1 ? 0 : curPos);
-                const nxt = state.segDisplayedSegments[nextPos];
+                const displayed = get(displayedSegments);
+                if (!displayed || displayed.length === 0) break;
+                const curIdx = get(segCurrentIdx);
+                const curPos = displayed.findIndex(s => s.index === curIdx);
+                const nextPos = curPos >= 0 && curPos < displayed.length - 1 ? curPos + 1 : (curPos === -1 ? 0 : curPos);
+                const nxt = displayed[nextPos];
                 if (nxt) playFromSegment(nxt.index, nxt.chapter);
                 break;
             }
@@ -338,12 +328,13 @@
             case 'Comma': {
                 e.preventDefault();
                 cycleSpeed(dom.segSpeedSelect, dom.segAudioEl, e.code === 'Period' ? 'up' : 'down', LS_KEYS.SEG_SPEED);
-                if (state.valCardAudio) state.valCardAudio.playbackRate = parseFloat(dom.segSpeedSelect.value);
+                const valAudio = getValCardAudioOrNull();
+                if (valAudio) valAudio.playbackRate = parseFloat(dom.segSpeedSelect.value);
                 break;
             }
             case 'KeyJ': {
                 e.preventDefault();
-                const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
+                const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${get(segCurrentIdx)}"]`);
                 if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 break;
             }
@@ -358,10 +349,10 @@
                 if (!dom.segSavePreview.hidden) {
                     e.preventDefault();
                     hideSavePreview();
-                } else if (state.segEditMode) {
+                } else if (get(editMode)) {
                     e.preventDefault();
                     exitEditMode();
-                } else if (state._segSavedFilterView) {
+                } else if (get(savedFilterView)) {
                     e.preventDefault();
                     _restoreFilterView();
                 }
@@ -371,24 +362,31 @@
                 if (!dom.segSavePreview.hidden) {
                     e.preventDefault();
                     confirmSaveFromPreview();
-                } else if (state.segEditMode && state.segCurrentIdx >= 0) {
-                    e.preventDefault();
-                    const seg = state.segDisplayedSegments
-                        ? state.segDisplayedSegments.find(s => s.index === state.segCurrentIdx)
-                        : null;
-                    if (seg) {
-                        if (state.segEditMode === 'trim') confirmTrim(seg);
-                        else if (state.segEditMode === 'split') confirmSplit(seg);
+                } else {
+                    const mode = get(editMode);
+                    const curIdx = get(segCurrentIdx);
+                    if (mode && curIdx >= 0) {
+                        e.preventDefault();
+                        const displayed = get(displayedSegments);
+                        const seg = displayed
+                            ? displayed.find(s => s.index === curIdx)
+                            : null;
+                        if (seg) {
+                            if (mode === 'trim') confirmTrim(seg);
+                            else if (mode === 'split') confirmSplit(seg);
+                        }
                     }
                 }
                 break;
 
             case 'KeyE': {
-                if (state.segEditMode || state.segCurrentIdx < 0) break;
+                const curIdx = get(segCurrentIdx);
+                if (get(editMode) || curIdx < 0) break;
                 e.preventDefault();
-                const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${state.segCurrentIdx}"]`);
-                const seg = state.segDisplayedSegments
-                    ? state.segDisplayedSegments.find(s => s.index === state.segCurrentIdx)
+                const row = dom.segListEl.querySelector<HTMLElement>(`.seg-row[data-seg-index="${curIdx}"]`);
+                const displayed = get(displayedSegments);
+                const seg = displayed
+                    ? displayed.find(s => s.index === curIdx)
                     : null;
                 if (row && seg) {
                     const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
@@ -480,7 +478,8 @@
         dom.segSpeedSelect.addEventListener('change', () => {
             const rate = parseFloat(dom.segSpeedSelect.value);
             dom.segAudioEl.playbackRate = rate;
-            if (state.valCardAudio) state.valCardAudio.playbackRate = rate;
+            const valAudio = getValCardAudioOrNull();
+            if (valAudio) valAudio.playbackRate = rate;
             localStorage.setItem(LS_KEYS.SEG_SPEED, dom.segSpeedSelect.value);
         });
 

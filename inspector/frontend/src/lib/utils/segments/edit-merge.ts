@@ -2,12 +2,28 @@
  * Merge adjacent segments operation.
  */
 
+import { get } from 'svelte/store';
+
 import type { SegResolveRefResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
-import { createOp, dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
-import { getChapterSegments, syncChapterSegsToAll } from '../../stores/segments/chapter';
-import { clearEdit, setEdit } from '../../stores/segments/edit';
+import { dom, markDirty } from '../../segments-state';
+import {
+    getChapterSegments,
+    segAllData,
+    segData,
+    syncChapterSegsToAll,
+} from '../../stores/segments/chapter';
+import {
+    createOp,
+    finalizeOp,
+    snapshotSeg,
+} from '../../stores/segments/dirty';
+import {
+    accordionOpCtx,
+    clearEdit,
+    setEdit,
+} from '../../stores/segments/edit';
 import { _rebuildAccordionAfterMerge } from './error-cards';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from './validation-fixups';
@@ -23,11 +39,13 @@ export async function mergeAdjacent(
 ): Promise<void> {
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
     const currentChapter = parseInt(dom.segChapterSelect.value);
+    const curData = get(segData);
+    const allData = get(segAllData);
 
     let chapterSegs: Segment[] | undefined;
-    if (chapter === currentChapter && state.segData?.segments) {
-        chapterSegs = state.segData.segments;
-    } else if (state.segAllData?.segments) {
+    if (chapter === currentChapter && curData?.segments) {
+        chapterSegs = curData.segments;
+    } else if (allData?.segments) {
         chapterSegs = getChapterSegments(chapter);
     }
     if (!chapterSegs) return;
@@ -105,31 +123,31 @@ export async function mergeAdjacent(
     const keptOldIdx = first.index;
     const consumedOldIdx = second.index;
 
-    if (chapter === currentChapter && state.segData?.segments) {
+    if (chapter === currentChapter && curData?.segments) {
         const spliceIdx = Math.min(idx, otherIdx);
-        state.segData.segments.splice(spliceIdx, 2, merged);
-        state.segData.segments.forEach((s, i) => { s.index = i; });
+        curData.segments.splice(spliceIdx, 2, merged);
+        curData.segments.forEach((s, i) => { s.index = i; });
         syncChapterSegsToAll();
-    } else if (state.segAllData?.segments) {
-        const globalFirst = state.segAllData.segments.indexOf(first);
-        const globalSecond = state.segAllData.segments.indexOf(second);
+    } else if (allData?.segments) {
+        const globalFirst = allData.segments.indexOf(first);
+        const globalSecond = allData.segments.indexOf(second);
         const spliceStart = Math.min(globalFirst, globalSecond);
-        state.segAllData.segments.splice(spliceStart, 2, merged);
+        allData.segments.splice(spliceStart, 2, merged);
         let reIdx = 0;
-        state.segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
-        state.segAllData._byChapter = null; state.segAllData._byChapterIndex = null;
+        allData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
+        allData._byChapter = null; allData._byChapterIndex = null;
     }
 
     markDirty(chapter, undefined, true);
     _fixupValIndicesForMerge(chapter, keptOldIdx, consumedOldIdx);
-    if (chapter === currentChapter && state.segData) {
-        state.segData.segments = getChapterSegments(chapter);
+    if (chapter === currentChapter && curData) {
+        curData.segments = getChapterSegments(chapter);
     }
     computeSilenceAfter();
     applyVerseFilterAndRender();
 
-    const accCtx = state._accordionOpCtx;
-    state._accordionOpCtx = null;
+    const accCtx = get(accordionOpCtx);
+    accordionOpCtx.set(null);
     const accCategory = accCtx?.wrapper?.closest<HTMLElement>('details[data-category]')?.dataset?.category;
 
     refreshOpenAccordionCards();

@@ -8,6 +8,10 @@ export interface SegConfig {
     standaloneWords: Set<string> | null;
     lcDefaultThreshold: number;
     showBoundaryPhonemes: boolean;
+    accordionContext: Record<string, string> | null;
+    trimPadLeft: number;
+    trimPadRight: number;
+    trimDimAlpha: number;
 }
 
 const _defaults: SegConfig = {
@@ -18,6 +22,10 @@ const _defaults: SegConfig = {
     standaloneWords: null,
     lcDefaultThreshold: 80,
     showBoundaryPhonemes: true,
+    accordionContext: null,
+    trimPadLeft: 500,
+    trimPadRight: 500,
+    trimDimAlpha: 0.45,
 };
 
 export const segConfig = writable<SegConfig>({ ..._defaults });

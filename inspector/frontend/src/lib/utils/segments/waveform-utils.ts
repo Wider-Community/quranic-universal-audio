@@ -1,13 +1,47 @@
+import { get } from 'svelte/store';
+
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../types/api';
 import type { Segment, SegmentPeaks } from '../../../types/domain';
 import { fetchJson } from '../../api';
-import { dom, state } from '../../segments-state';
+import { dom } from '../../segments-state';
 import type { AdjacentSegments } from '../../stores/segments/chapter';
+import { segAllData } from '../../stores/segments/chapter';
+import { segConfig } from '../../stores/segments/config';
+import { segIndexMap } from '../../stores/segments/filters';
+import type {
+    ObserverPeaksQueueItem,
+    TimerHandle,
+} from '../../types/segments';
 import type { DrawWaveformFn } from '../../types/segments-waveform';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks, setWaveformPeaks } from '../waveform-cache';
-import { _findCoveringPeaks } from './peaks-cache';
+import { _findCoveringPeaks, clearSegPeaksCache, pushSegPeaksEntry } from './peaks-cache';
 import { _drawMergeHighlight, _drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
+
+// ---------------------------------------------------------------------------
+// Module-local state (was state._waveformObserver / _observerPeaksQueue /
+// _observerPeaksTimer / _observerPeaksRequested / _peaksPollTimer)
+// ---------------------------------------------------------------------------
+
+let _waveformObserver: IntersectionObserver | null = null;
+let _observerPeaksQueue: ObserverPeaksQueueItem[] = [];
+let _observerPeaksTimer: TimerHandle | null = null;
+let _observerPeaksRequested = new Set<string>();
+let _peaksPollTimer: TimerHandle | null = null;
+
+/** Reset all per-reciter waveform caches / observer. Called from
+ *  clearPerReciterState. */
+export function resetWaveformState(): void {
+    if (_waveformObserver) {
+        _waveformObserver.disconnect();
+        _waveformObserver = null;
+    }
+    if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
+    clearSegPeaksCache();
+    _observerPeaksQueue = [];
+    if (_observerPeaksTimer) { clearTimeout(_observerPeaksTimer); _observerPeaksTimer = null; }
+    _observerPeaksRequested = new Set();
+}
 
 // ---------------------------------------------------------------------------
 // Registered draw functions (wired from segments/index.ts)
@@ -70,9 +104,7 @@ export function indexSegPeaksBulk(peaksMap: Record<string, SegPeaksEntry> | null
     for (const [key, data] of Object.entries(peaksMap)) {
         if (!data?.peaks?.length || data.start_ms == null || data.end_ms == null || data.duration_ms == null) continue;
         const url = key.split(':').slice(0, -2).join(':');  // strip ":startMs:endMs"
-        if (!state._segPeaksByUrl) state._segPeaksByUrl = {};
-        if (!state._segPeaksByUrl[url]) state._segPeaksByUrl[url] = [];
-        state._segPeaksByUrl[url]!.push({
+        pushSegPeaksEntry(url, {
             startMs: data.start_ms,
             endMs: data.end_ms,
             peaks: data.peaks,
@@ -105,20 +137,20 @@ export function redrawPeaksWaveforms(): void {
 // ---------------------------------------------------------------------------
 
 function _queueObserverPeaksFetch(seg: Segment, chapter: number | string): void {
-    const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
     if (!audioUrl) return;
     const key = `${audioUrl}:${seg.time_start}:${seg.time_end}`;
-    if (state._observerPeaksRequested.has(key)) return;
-    state._observerPeaksRequested.add(key);
-    state._observerPeaksQueue.push({ url: audioUrl, start_ms: seg.time_start, end_ms: seg.time_end });
+    if (_observerPeaksRequested.has(key)) return;
+    _observerPeaksRequested.add(key);
+    _observerPeaksQueue.push({ url: audioUrl, start_ms: seg.time_start, end_ms: seg.time_end });
 
-    if (state._observerPeaksTimer) clearTimeout(state._observerPeaksTimer);
-    state._observerPeaksTimer = setTimeout(_flushObserverPeaksQueue, 150);
+    if (_observerPeaksTimer) clearTimeout(_observerPeaksTimer);
+    _observerPeaksTimer = setTimeout(_flushObserverPeaksQueue, 150);
 }
 
 function _flushObserverPeaksQueue(): void {
-    state._observerPeaksTimer = null;
-    const queue = state._observerPeaksQueue.splice(0);
+    _observerPeaksTimer = null;
+    const queue = _observerPeaksQueue.splice(0);
     if (queue.length === 0) return;
     const reciter = dom.segReciterSelect.value;
     if (!reciter) return;
@@ -129,7 +161,7 @@ function _flushObserverPeaksQueue(): void {
         body: JSON.stringify({ segments: queue, cached_only: true }),
     })
         .then(data => {
-            if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
+            if (!get(segAllData) || dom.segReciterSelect.value !== reciter) return;
             const newPeaks = data.peaks || {};
             if (Object.keys(newPeaks).length === 0) return;
             indexSegPeaksBulk(newPeaks as unknown as Record<string, SegPeaksEntry>);
@@ -143,7 +175,7 @@ function _flushObserverPeaksQueue(): void {
 // ---------------------------------------------------------------------------
 
 export function _ensureWaveformObserver(): IntersectionObserver {
-    if (state._waveformObserver) return state._waveformObserver;
+    if (_waveformObserver) return _waveformObserver;
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (!entry.isIntersecting) return;
@@ -162,8 +194,9 @@ export function _ensureWaveformObserver(): IntersectionObserver {
                     chapter,
                 } as Segment;
             } else {
-                seg = (state._segIndexMap ? state._segIndexMap.get(`${chapter}:${idx}`) ?? null : null)
-                    || (chapter ? _getSegByChapterIndex(chapter, idx) : null);
+                const idxMap = get(segIndexMap);
+                seg = idxMap.get(`${chapter}:${idx}`)
+                    ?? (chapter ? _getSegByChapterIndex(chapter, idx) : null);
             }
             if (!seg) return;
 
@@ -174,14 +207,14 @@ export function _ensureWaveformObserver(): IntersectionObserver {
             if (canvas._splitData) {
                 canvas._splitBaseCache = null;
                 _drawSplitWaveformFn?.(canvas);
-                state._waveformObserver?.unobserve(canvas);
+                _waveformObserver?.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
                 return;
             }
             if (canvas._trimWindow) {
                 canvas._wfCache = null;
                 _drawTrimWaveformFn?.(canvas);
-                state._waveformObserver?.unobserve(canvas);
+                _waveformObserver?.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
                 return;
             }
@@ -190,14 +223,14 @@ export function _ensureWaveformObserver(): IntersectionObserver {
                 _drawSplitHighlight(canvas, wfSeg);
                 _drawTrimHighlight(canvas, seg);
                 _drawMergeHighlight(canvas, seg);
-                state._waveformObserver?.unobserve(canvas);
+                _waveformObserver?.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
             } else {
                 _queueObserverPeaksFetch(seg, chapter);
             }
         });
     }, { rootMargin: '200px' });
-    state._waveformObserver = observer;
+    _waveformObserver = observer;
     return observer;
 }
 
@@ -206,24 +239,25 @@ export function _ensureWaveformObserver(): IntersectionObserver {
 // ---------------------------------------------------------------------------
 
 export function _fetchPeaks(reciter: string, chapters: Array<number | string>): void {
-    if (state._peaksPollTimer) { clearTimeout(state._peaksPollTimer); state._peaksPollTimer = null; }
+    if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
     if (!chapters || chapters.length === 0) return;
     const url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
     fetchJson<SegPeaksResponse>(url).then(data => {
-        if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
+        if (!get(segAllData) || dom.segReciterSelect.value !== reciter) return;
         for (const [audioUrl, pe] of Object.entries(data.peaks || {})) {
             if (audioUrl) setWaveformPeaks(audioUrl, pe);
         }
         redrawPeaksWaveforms();
         if (!data.complete && Object.keys(data.peaks || {}).length > 0) {
-            state._peaksPollTimer = setTimeout(() => _fetchPeaks(reciter, chapters), 3000);
+            _peaksPollTimer = setTimeout(() => _fetchPeaks(reciter, chapters), 3000);
         }
     }).catch(() => {});
 }
 
 export function _fetchChapterPeaksIfNeeded(reciter: string, chapter: number | string): void {
-    if (!state.segAllData) return;
-    const audioUrl = state.segAllData.audio_by_chapter?.[String(chapter)] || '';
+    const allData = get(segAllData);
+    if (!allData) return;
+    const audioUrl = allData.audio_by_chapter?.[String(chapter)] || '';
     if (!audioUrl) return;
     if (getWaveformPeaks(audioUrl)) return;
     _fetchPeaks(reciter, [chapter]);
@@ -231,8 +265,9 @@ export function _fetchChapterPeaksIfNeeded(reciter: string, chapter: number | st
 
 export async function _fetchPeaksForClick(seg: Segment, chapter: number | string): Promise<void> {
     const reciter = dom.segReciterSelect.value;
-    if (!reciter || !state.segAllData) return;
-    const audioUrl = seg.audio_url || state.segAllData.audio_by_chapter?.[String(chapter)] || '';
+    const allData = get(segAllData);
+    if (!reciter || !allData) return;
+    const audioUrl = seg.audio_url || allData.audio_by_chapter?.[String(chapter)] || '';
     if (!audioUrl) return;
     if (getWaveformPeaks(audioUrl)?.peaks?.length) return;
     if (_findCoveringPeaks(audioUrl, seg.time_start, seg.time_end)) return;
@@ -240,10 +275,11 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
     const { prev, next } = _getAdjacentSegments(chapter, seg.index);
     const prevEnd = prev?.time_end ?? 0;
     const nextStart = next?.time_start ?? Number.POSITIVE_INFINITY;
+    const cfg = get(segConfig);
     const entry = {
         url: audioUrl,
-        start_ms: Math.max(prevEnd, seg.time_start - state.TRIM_PAD_LEFT, 0),
-        end_ms: Math.min(nextStart, seg.time_end + state.TRIM_PAD_RIGHT),
+        start_ms: Math.max(prevEnd, seg.time_start - cfg.trimPadLeft, 0),
+        end_ms: Math.min(nextStart, seg.time_end + cfg.trimPadRight),
     };
 
     try {
@@ -252,7 +288,7 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ segments: [entry] }),
         });
-        if (!state.segAllData || dom.segReciterSelect.value !== reciter) return;
+        if (!get(segAllData) || dom.segReciterSelect.value !== reciter) return;
         const newPeaks = data.peaks || {};
         if (Object.keys(newPeaks).length === 0) return;
         indexSegPeaksBulk(newPeaks as unknown as Record<string, SegPeaksEntry>);

@@ -2,17 +2,37 @@
  * Reference editing: startRefEdit, commitRefEdit, _chainSplitRefEdit.
  */
 
+import { get } from 'svelte/store';
+
 import type { SegResolveRefResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
-import { createOp, dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
-import { clearEdit, setEdit } from '../../stores/segments/edit';
+import { dom, markDirty } from '../../segments-state';
+import {
+    segAllData,
+    segData,
+} from '../../stores/segments/chapter';
+import {
+    createOp,
+    finalizeOp,
+    getPendingOp,
+    setPendingOp,
+    snapshotSeg,
+} from '../../stores/segments/dirty';
+import {
+    clearEdit,
+    setEdit,
+    splitChainCategory,
+    splitChainUid,
+    splitChainWrapper,
+} from '../../stores/segments/edit';
+import { continuousPlay } from '../../stores/segments/playback';
 import { stopSegAnimation } from './playback';
 import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from './references';
 import { syncAllCardsForSegment } from './render-seg-card';
 
 function _vwc() {
-    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
 }
 function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]) { return _normalizeRefLib(ref, _vwc()); }
 function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
@@ -30,14 +50,15 @@ export function startRefEdit(
     if (refSpan.querySelector('input')) return;
 
     if (!dom.segAudioEl.paused) { dom.segAudioEl.pause(); stopSegAnimation(); }
-    state._segContinuousPlay = false;
+    continuousPlay.set(false);
 
     // Signal reference-edit mode so EditOverlay knows an inline edit is
     // in progress. No backdrop shown for reference mode (see EditOverlay).
     setEdit('reference', seg.segment_uid ?? null);
 
-    state._pendingOp = createOp('edit_reference', contextCategory ? { contextCategory } : undefined);
-    state._pendingOp.targets_before = [snapshotSeg(seg)];
+    const pending = createOp('edit_reference', contextCategory ? { contextCategory } : undefined);
+    pending.targets_before = [snapshotSeg(seg)];
+    setPendingOp(pending);
 
     const originalRef = seg.matched_ref || '';
     const input = document.createElement('input');
@@ -67,8 +88,10 @@ export function startRefEdit(
         } else if (e.key === 'Escape') {
             e.preventDefault();
             committed = true;
-            state._pendingOp = null;
-            state._splitChainUid = null; state._splitChainWrapper = null; state._splitChainCategory = null;
+            setPendingOp(null);
+            splitChainUid.set(null);
+            splitChainWrapper.set(null);
+            splitChainCategory.set(null);
             clearEdit();
             refSpan.textContent = formatRef(originalRef);
         }
@@ -84,14 +107,14 @@ export function startRefEdit(
 
 export function _chainSplitRefEdit(chapter: number): void {
     void chapter;
-    if (!state._splitChainUid) return;
-    const chainUid = state._splitChainUid;
-    const chainWrapper = state._splitChainWrapper;
-    const chainCat = state._splitChainCategory;
-    state._splitChainUid = null;
-    state._splitChainWrapper = null;
-    state._splitChainCategory = null;
-    const allSegs = state.segAllData?.segments || state.segData?.segments || [];
+    const chainUid = get(splitChainUid);
+    if (!chainUid) return;
+    const chainWrapper = get(splitChainWrapper);
+    const chainCat = get(splitChainCategory);
+    splitChainUid.set(null);
+    splitChainWrapper.set(null);
+    splitChainCategory.set(null);
+    const allSegs = get(segAllData)?.segments || get(segData)?.segments || [];
     const secondSeg = allSegs.find(s => s.segment_uid === chainUid);
     if (!secondSeg) return;
     const selector = `.seg-row[data-seg-chapter="${secondSeg.chapter}"][data-seg-index="${secondSeg.index}"]`;
@@ -117,29 +140,30 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
     const newRef = _normalizeRef(newRefIn) ?? '';
     if (newRef === oldRef) {
         if ((seg.confidence ?? 0) < 1.0) {
-            if (state._pendingOp) {
-                state._pendingOp.op_type = 'confirm_reference';
-                state._pendingOp.fix_kind = 'audit';
+            const pending = getPendingOp();
+            if (pending) {
+                pending.op_type = 'confirm_reference';
+                pending.fix_kind = 'audit';
             }
             seg.confidence = 1.0;
-            if (state._pendingOp?.op_context_category) {
-                const _cat = state._pendingOp.op_context_category;
-                if (_cat !== 'muqattaat') {
+            const ctxCat = pending?.op_context_category;
+            if (ctxCat) {
+                if (ctxCat !== 'muqattaat') {
                     if (!seg.ignored_categories) seg.ignored_categories = [];
-                    if (!seg.ignored_categories.includes(_cat))
-                        seg.ignored_categories.push(_cat);
+                    if (!seg.ignored_categories.includes(ctxCat))
+                        seg.ignored_categories.push(ctxCat);
                 }
             }
             delete seg._derived;
             markDirty(chapter, seg.index);
             syncAllCardsForSegment(seg);
-            if (state._pendingOp) {
-                state._pendingOp.applied_at_utc = new Date().toISOString();
-                state._pendingOp.targets_after = [snapshotSeg(seg)];
-                finalizeOp(chapter, state._pendingOp);
+            if (pending) {
+                pending.applied_at_utc = new Date().toISOString();
+                pending.targets_after = [snapshotSeg(seg)];
+                finalizeOp(chapter, pending);
             }
         } else {
-            state._pendingOp = null;
+            setPendingOp(null);
             const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
             if (refSpan) refSpan.textContent = formatRef(oldRef);
         }
@@ -150,12 +174,13 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
 
     seg.matched_ref = newRef;
     seg.confidence = 1.0;
-    if (state._pendingOp?.op_context_category) {
-        const _cat = state._pendingOp.op_context_category;
-        if (_cat !== 'muqattaat') {
+    const pending = getPendingOp();
+    const ctxCat = pending?.op_context_category;
+    if (ctxCat) {
+        if (ctxCat !== 'muqattaat') {
             if (!seg.ignored_categories) seg.ignored_categories = [];
-            if (!seg.ignored_categories.includes(_cat))
-                seg.ignored_categories.push(_cat);
+            if (!seg.ignored_categories.includes(ctxCat))
+                seg.ignored_categories.push(ctxCat);
         }
     }
 
@@ -186,10 +211,10 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
     markDirty(chapter, seg.index);
     syncAllCardsForSegment(seg);
 
-    if (state._pendingOp) {
-        state._pendingOp.applied_at_utc = new Date().toISOString();
-        state._pendingOp.targets_after = [snapshotSeg(seg)];
-        finalizeOp(chapter, state._pendingOp);
+    if (pending) {
+        pending.applied_at_utc = new Date().toISOString();
+        pending.targets_after = [snapshotSeg(seg)];
+        finalizeOp(chapter, pending);
     }
 
     _chainSplitRefEdit(chapter);

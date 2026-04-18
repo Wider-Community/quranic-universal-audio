@@ -3,8 +3,13 @@
  * Manages a dedicated <audio> element for playing segments from validation cards.
  */
 
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../types/domain';
-import { dom, state } from '../../segments-state';
+import { dom } from '../../segments-state';
+import { segAllData } from '../../stores/segments/chapter';
+import { activeAudioSource, continuousPlay } from '../../stores/segments/playback';
+import type { RafHandle } from '../../types/segments';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { safePlay } from '../audio';
 import { _drawSplitHighlight, drawSegPlayhead, drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
@@ -15,29 +20,51 @@ import { _fetchChapterPeaksIfNeeded, _fetchPeaksForClick } from './waveform-util
 type ValCanvas = SegCanvas;
 
 // ---------------------------------------------------------------------------
+// Module-local state (was state.valCardAudio / valCardPlayingBtn / ...)
+// ---------------------------------------------------------------------------
+
+let valCardAudio: HTMLAudioElement | null = null;
+let valCardPlayingBtn: HTMLElement | null = null;
+let valCardStopTime: number | null = null;
+let valCardAnimId: RafHandle | null = null;
+let valCardAnimSeg: Segment | null = null;
+
+/** Read-only accessor for callers that need to check playback state (e.g.
+ *  onSegPlayClick checking whether the error-card audio is playing). */
+export function getValCardAudioOrNull(): HTMLAudioElement | null {
+    return valCardAudio;
+}
+
+/** Read-only accessor for the currently-playing error-card button (used by
+ *  canvas-scrub to seek the error-card audio when scrubbing its canvas). */
+export function getValCardPlayingBtn(): HTMLElement | null {
+    return valCardPlayingBtn;
+}
+
+// ---------------------------------------------------------------------------
 // getValCardAudio — lazy-create a dedicated <audio> element for error cards
 // ---------------------------------------------------------------------------
 
 export function getValCardAudio(): HTMLAudioElement {
-    if (!state.valCardAudio) {
+    if (!valCardAudio) {
         const audio = document.createElement('audio');
-        state.valCardAudio = audio;
+        valCardAudio = audio;
         audio.addEventListener('timeupdate', () => {
-            if (state.valCardStopTime !== null && audio.currentTime >= state.valCardStopTime) {
+            if (valCardStopTime !== null && audio.currentTime >= valCardStopTime) {
                 stopErrorCardAudio();
             }
         });
         audio.addEventListener('ended', () => { stopErrorCardAudio(); });
         audio.addEventListener('play', () => {
             dom.segPlayBtn.textContent = 'Pause';
-            state._activeAudioSource = 'error';
+            activeAudioSource.set('error');
         });
         audio.addEventListener('pause', () => {
             if (dom.segAudioEl.paused) dom.segPlayBtn.textContent = 'Play';
-            if (state._activeAudioSource === 'error') state._activeAudioSource = null;
+            if (get(activeAudioSource) === 'error') activeAudioSource.set(null);
         });
     }
-    return state.valCardAudio;
+    return valCardAudio;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,17 +72,17 @@ export function getValCardAudio(): HTMLAudioElement {
 // ---------------------------------------------------------------------------
 
 export function stopErrorCardAudio(): void {
-    if (!state.valCardAudio) return;
-    state.valCardAudio.pause();
-    state.valCardStopTime = null;
+    if (!valCardAudio) return;
+    valCardAudio.pause();
+    valCardStopTime = null;
     // Redraw the active canvas so the playhead doesn't linger after stop. The
     // running animation's cleanup frame won't run once we cancel it below, so
     // we do the same redraw it would have done.
-    if (state.valCardPlayingBtn && state.valCardAnimSeg) {
-        const row = state.valCardPlayingBtn.closest('.seg-row');
+    if (valCardPlayingBtn && valCardAnimSeg) {
+        const row = valCardPlayingBtn.closest('.seg-row');
         const canvas = row ? row.querySelector<ValCanvas>('canvas') : null;
         if (canvas && !canvas._splitData && !canvas._trimWindow) {
-            const seg = state.valCardAnimSeg;
+            const seg = valCardAnimSeg;
             const chapter = seg.chapter ?? 0;
             const splitHL = canvas._splitHL;
             const wfSeg: Segment = splitHL
@@ -73,16 +100,16 @@ export function stopErrorCardAudio(): void {
             if (splitHL) _drawSplitHighlight(canvas, wfSeg);
         }
     }
-    if (state.valCardAnimId) {
-        cancelAnimationFrame(state.valCardAnimId);
-        state.valCardAnimId = null;
+    if (valCardAnimId) {
+        cancelAnimationFrame(valCardAnimId);
+        valCardAnimId = null;
     }
-    state.valCardAnimSeg = null;
-    if (state.valCardPlayingBtn) {
-        state.valCardPlayingBtn.textContent = '\u25B6';
-        state.valCardPlayingBtn = null;
+    valCardAnimSeg = null;
+    if (valCardPlayingBtn) {
+        valCardPlayingBtn.textContent = '\u25B6';
+        valCardPlayingBtn = null;
     }
-    if (state._activeAudioSource === 'error') state._activeAudioSource = null;
+    if (get(activeAudioSource) === 'error') activeAudioSource.set(null);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,37 +117,38 @@ export function stopErrorCardAudio(): void {
 // ---------------------------------------------------------------------------
 
 function _startValCardAnimation(btn: HTMLElement, seg: Segment): void {
-    if (state.valCardAnimId) cancelAnimationFrame(state.valCardAnimId);
-    state.valCardAnimSeg = seg;
+    if (valCardAnimId) cancelAnimationFrame(valCardAnimId);
+    valCardAnimSeg = seg;
     const row = btn.closest('.seg-row');
     const canvas = row ? row.querySelector<ValCanvas>('canvas') : null;
     if (!canvas) return;
     const chapter = seg.chapter ?? 0;
-    const segAudioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const allData = get(segAllData);
+    const segAudioUrl = seg.audio_url || allData?.audio_by_chapter?.[String(chapter)] || '';
     const splitHL = canvas._splitHL;
     const wfStart = splitHL ? splitHL.wfStart : seg.time_start;
     const wfEnd   = splitHL ? splitHL.wfEnd   : seg.time_end;
 
     function frame(): void {
         if (!canvas) return;
-        if (state.valCardPlayingBtn !== btn) {
+        if (valCardPlayingBtn !== btn) {
             if (!canvas._splitData && !canvas._trimWindow) {
                 const wfSeg: Segment = splitHL ? { ...seg, time_start: wfStart, time_end: wfEnd } : seg;
                 drawWaveformFromPeaksForSeg(canvas, wfSeg, chapter);
                 if (splitHL) _drawSplitHighlight(canvas, wfSeg);
             }
-            state.valCardAnimId = null;
-            state.valCardAnimSeg = null;
+            valCardAnimId = null;
+            valCardAnimSeg = null;
             return;
         }
         if (canvas._splitData || canvas._trimWindow) {
-            state.valCardAnimId = null;
-            state.valCardAnimSeg = null;
+            valCardAnimId = null;
+            valCardAnimSeg = null;
             return;
         }
         const audio = getValCardAudio();
         const timeMs = audio.currentTime * 1000;
-        if (state.valCardStopTime !== null && audio.currentTime >= state.valCardStopTime) {
+        if (valCardStopTime !== null && audio.currentTime >= valCardStopTime) {
             stopErrorCardAudio();
             return;
         }
@@ -133,9 +161,9 @@ function _startValCardAnimation(btn: HTMLElement, seg: Segment): void {
             }
         }
         drawSegPlayhead(canvas, wfStart, wfEnd, timeMs, segAudioUrl);
-        state.valCardAnimId = requestAnimationFrame(frame);
+        valCardAnimId = requestAnimationFrame(frame);
     }
-    state.valCardAnimId = requestAnimationFrame(frame);
+    valCardAnimId = requestAnimationFrame(frame);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,23 +172,24 @@ function _startValCardAnimation(btn: HTMLElement, seg: Segment): void {
 
 export function playErrorCardAudio(seg: Segment, btn: HTMLElement, seekToMs?: number | null): void {
     const audio = getValCardAudio();
-    if (state.valCardPlayingBtn === btn && !audio.paused && seekToMs == null) {
+    if (valCardPlayingBtn === btn && !audio.paused && seekToMs == null) {
         stopErrorCardAudio();
         return;
     }
     // Switching to a different error card: stop prior playback so the old
     // canvas's playhead is cleared before the new animation takes over.
-    if (state.valCardPlayingBtn && state.valCardPlayingBtn !== btn) {
+    if (valCardPlayingBtn && valCardPlayingBtn !== btn) {
         stopErrorCardAudio();
     }
     if (!dom.segAudioEl.paused) {
-        state._segContinuousPlay = false;
+        continuousPlay.set(false);
         dom.segAudioEl.pause();
     }
-    state._activeAudioSource = 'error';
+    activeAudioSource.set('error');
     const chapterKey = seg.chapter != null ? String(seg.chapter) : '';
+    const allData = get(segAllData);
     const audioUrl = seg.audio_url
-        || (state.segAllData && chapterKey && state.segAllData.audio_by_chapter?.[chapterKey])
+        || (allData && chapterKey && allData.audio_by_chapter?.[chapterKey])
         || '';
     if (!audioUrl) return;
     const seekSec = seekToMs != null ? seekToMs / 1000 : (seg.time_start || 0) / 1000;
@@ -171,18 +200,18 @@ export function playErrorCardAudio(seg: Segment, btn: HTMLElement, seekToMs?: nu
         audio.addEventListener('loadedmetadata', function onLoad() {
             audio.removeEventListener('loadedmetadata', onLoad);
             audio.currentTime = seekSec;
-            state.valCardStopTime = endSec;
+            valCardStopTime = endSec;
             audio.playbackRate = parseFloat(dom.segSpeedSelect.value);
             safePlay(audio);
         });
     } else {
         audio.currentTime = seekSec;
-        state.valCardStopTime = endSec;
+        valCardStopTime = endSec;
         audio.playbackRate = parseFloat(dom.segSpeedSelect.value);
         safePlay(audio);
     }
     btn.textContent = '\u23F9';
-    state.valCardPlayingBtn = btn;
+    valCardPlayingBtn = btn;
     _startValCardAnimation(btn, seg);
 
     // Trigger on-demand ffmpeg peaks fetch so the waveform renders in error

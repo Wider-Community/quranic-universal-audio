@@ -1,5 +1,5 @@
 import type { SegAllResponse, SegDataResponse } from '../../types/api';
-import type { EditOp, HistoryBatch, Segment } from '../../types/domain';
+import type { EditOp, HistoryBatch, PeakBucket, Segment } from '../../types/domain';
 
 // ---------------------------------------------------------------------------
 // Split chain + history types
@@ -111,6 +111,27 @@ export interface SavedChainsSnapshot {
 /** Saved scroll position snapshot around showSavePreview. */
 export interface SegSavedPreviewState {
     scrollTop: number;
+}
+
+// ---------------------------------------------------------------------------
+// Peaks (covering-range + observer queue)
+// ---------------------------------------------------------------------------
+
+/** Segment-level peaks entry keyed by URL (covering-range cache). */
+export interface SegPeaksRangeEntry {
+    startMs: number;
+    endMs: number;
+    peaks: PeakBucket[];
+    durationMs: number;
+}
+
+/** Queue item for the observer-driven segment-peaks batch fetcher. Field
+ *  names match the wire format (`POST /api/seg/segment-peaks/`) so the
+ *  queue can be sent straight through as `segments:[]`. */
+export interface ObserverPeaksQueueItem {
+    url: string;
+    start_ms: number;
+    end_ms: number;
 }
 
 // ---------------------------------------------------------------------------

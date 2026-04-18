@@ -3,20 +3,21 @@
  *
  * FiltersBar.svelte owns the filter-bar UI and SegmentsList.svelte owns row
  * rendering. Imperative modules (edit/save/undo/validation/navigation) still
- * mutate `state.segAllData.segments` in place and then call
+ * mutate `segAllData.segments` in place and then call
  * `applyFiltersAndRender()` or `applyVerseFilterAndRender()` to republish
  * their change:
  *  1. Reset playback highlight DOM refs so the highlight layer does not
  *     point to nodes destroyed by the next {#each} reconciliation.
- *  2. Sync `state.segActiveFilters` → `activeFilters` store (callers that
- *     mutate state directly need their changes reflected).
+ *  2. Nudge `activeFilters` store (`update(a => [...a])`) so subscribers see
+ *     the new data even when filter list is unchanged.
  *  3. Notify `segAllData` subscribers via `update(a => a)` so the derived
  *     `displayedSegments` re-fires and {#each} re-reconciles.
  */
 
-import { state } from '../../segments-state';
 import { segAllData as segAllDataStore } from '../../stores/segments/chapter';
 import { activeFilters as activeFiltersStore } from '../../stores/segments/filters';
+import { savedFilterView } from '../../stores/segments/navigation';
+import { resetHighlightRefs } from './playback';
 
 // Re-export shared helpers so existing import sites keep working.
 export {
@@ -30,14 +31,11 @@ export type { SegDerivedProps } from '../../stores/segments/filters';
  * the SegmentsList {#each} re-renders.
  */
 export function applyFiltersAndRender(): void {
-    state._prevHighlightedRow = null;
-    state._prevHighlightedIdx = -1;
-    state._currentPlayheadRow = null;
-    state._prevPlayheadIdx = -1;
+    resetHighlightRefs();
 
-    // Spread so the store sees a fresh array reference even when content
-    // matches; otherwise `derived` may short-circuit.
-    activeFiltersStore.set([...state.segActiveFilters]);
+    // Spread so subscribers see a fresh array reference even when the
+    // content matches; otherwise `derived` may short-circuit.
+    activeFiltersStore.update((list) => [...list]);
 
     // The derived `displayedSegments` recomputes from the current (in-place
     // mutated) segments array.
@@ -58,8 +56,9 @@ export function applyVerseFilterAndRender(): void {
 // continue to compile. Each one writes through the store so FiltersBar re-renders.
 
 export function renderFilterBar(): void {
-    // Sync state → store in case the caller mutated state.segActiveFilters directly.
-    activeFiltersStore.set([...state.segActiveFilters]);
+    // Nudge subscribers so the filter bar re-renders; the array itself is
+    // the source of truth now (no mirror in segments-state).
+    activeFiltersStore.update((list) => [...list]);
 }
 
 export function updateFilterBarControls(): void {
@@ -75,8 +74,7 @@ export function addSegFilterCondition(): void {
 }
 
 export function clearAllSegFilters(): void {
-    state.segActiveFilters = [];
-    state._segSavedFilterView = null;
     activeFiltersStore.set([]);
+    savedFilterView.set(null);
     applyFiltersAndRender();
 }

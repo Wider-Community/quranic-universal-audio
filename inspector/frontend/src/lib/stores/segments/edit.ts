@@ -39,6 +39,8 @@
 
 import { writable } from 'svelte/store';
 
+import type { AccordionOpCtx } from '../../types/segments';
+
 /** Edit modes supported by the Segments tab. Wave 7b added 'merge' |
  *  'delete' | 'reference'. Note: merge + delete are one-shot (no backdrop);
  *  reference editing is inline (no backdrop). Only trim + split show the
@@ -53,11 +55,31 @@ export const editMode = writable<SegEditMode>(null);
  *  reindexing doesn't lose track of the row mid-flow. */
 export const editingSegUid = writable<string | null>(null);
 
+/** Primary index (position in the displayed list) of the segment currently
+ *  being edited. Written alongside `editingSegUid` in enter-edit flows. */
+export const editingSegIndex = writable<number>(-1);
+
+/** Active split chain UID — the parent segment UID a split chain points back
+ *  to. Cleared when split completes / chain collapses. */
+export const splitChainUid = writable<string | null>(null);
+
+/** Active split chain category — error category context carried from the
+ *  triggering error card. */
+export const splitChainCategory = writable<string | null>(null);
+
+/** Context captured at the row / prev / next button click site (error card
+ *  accordion edit trigger). */
+export const accordionOpCtx = writable<AccordionOpCtx | null>(null);
+
+/** Wrapper element for the active split-chain error-card context. */
+export const splitChainWrapper = writable<HTMLElement | null>(null);
+
 /** Reset the edit store to the "no edit in progress" baseline. Called by
  *  exitEditMode() / cancel paths. */
 export function clearEdit(): void {
     editMode.set(null);
     editingSegUid.set(null);
+    editingSegIndex.set(-1);
 }
 
 /** Convenience setter — call when entering any edit mode. */

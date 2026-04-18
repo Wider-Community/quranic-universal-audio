@@ -2,15 +2,36 @@
  * Trim (boundary adjustment) edit mode: enter, drag handles, preview, confirm.
  */
 
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../types/domain';
-import { dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
-import { getChapterSegments, getCurrentChapterSegs, syncChapterSegsToAll } from '../../stores/segments/chapter';
-import { setEdit } from '../../stores/segments/edit';
+import { dom, markDirty } from '../../segments-state';
+import {
+    getChapterSegments,
+    getCurrentChapterSegs,
+    segAllData,
+    segData,
+    syncChapterSegsToAll,
+} from '../../stores/segments/chapter';
+import { segConfig } from '../../stores/segments/config';
+import {
+    finalizeOp,
+    getPendingOp,
+    setPendingOp,
+    snapshotSeg,
+} from '../../stores/segments/dirty';
+import { editingSegIndex, editMode, setEdit } from '../../stores/segments/edit';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { _getEditCanvas } from './get-edit-canvas';
+import {
+    clearPlayRangeRAF,
+    getPreviewLooping,
+    setPreviewJustSeeked,
+    setPreviewLooping,
+} from './play-range';
 import { syncAllCardsForSegment } from './render-seg-card';
 import { _ensureTrimBaseCache, drawTrimWaveform } from './trim-draw';
 
@@ -22,13 +43,12 @@ export { _ensureTrimBaseCache, drawTrimWaveform };
 // ---------------------------------------------------------------------------
 
 export function enterTrimMode(seg: Segment, row: HTMLElement): void {
-    if (state.segEditMode) {
-        console.warn('[trim] blocked: already in edit mode:', state.segEditMode);
+    if (get(editMode)) {
+        console.warn('[trim] blocked: already in edit mode:', get(editMode));
         return;
     }
-    state.segEditMode = 'trim';
-    state.segEditIndex = seg.index;
     setEdit('trim', seg.segment_uid ?? null);
+    editingSegIndex.set(seg.index);
 
     row.classList.add('seg-edit-target');
     const actions = row.querySelector<HTMLElement>('.seg-actions');
@@ -72,13 +92,14 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     const chapterSegs = (chapter === currentChapter) ? getCurrentChapterSegs() : getChapterSegments(chapter);
     const segIdx = chapterSegs.findIndex(s => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
-    const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
     const peaksDuration = getWaveformPeaks(audioUrl)?.duration_ms;
     const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
         ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + 1000)
         : (peaksDuration || seg.time_end + 1000);
-    const windowStart = Math.max(prevEnd, seg.time_start - state.TRIM_PAD_LEFT);
-    const windowEnd = Math.min(nextStart, seg.time_end + state.TRIM_PAD_RIGHT);
+    const cfg = get(segConfig);
+    const windowStart = Math.max(prevEnd, seg.time_start - cfg.trimPadLeft);
+    const windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
     canvas._trimWindow = { windowStart, windowEnd, currentStart: seg.time_start, currentEnd: seg.time_end, audioUrl };
     canvas._wfCache = null;
     canvas._trimBaseCache = null;
@@ -216,24 +237,27 @@ export function confirmTrim(seg: Segment): void {
     seg.time_start = newStart;
     seg.time_end = newEnd;
     seg.confidence = 1.0;
-    if (state._pendingOp?.op_context_category) {
+    const pending = getPendingOp();
+    if (pending?.op_context_category) {
         if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(state._pendingOp.op_context_category))
-            seg.ignored_categories.push(state._pendingOp.op_context_category);
+        if (!seg.ignored_categories.includes(pending.op_context_category))
+            seg.ignored_categories.push(pending.op_context_category);
     }
     markDirty(chapter, undefined, true);
 
-    const trimOp = state._pendingOp;
-    state._pendingOp = null;
+    const trimOp = pending;
+    setPendingOp(null);
     if (trimOp) {
         trimOp.applied_at_utc = new Date().toISOString();
         trimOp.targets_after = [snapshotSeg(seg)];
     }
 
-    if (chapter !== currentChapter || !state.segData?.segments) {
-        if (state.segAllData) {
-            state.segAllData._byChapter = null;
-            state.segAllData._byChapterIndex = null;
+    const curData = get(segData);
+    if (chapter !== currentChapter || !curData?.segments) {
+        const allData = get(segAllData);
+        if (allData) {
+            allData._byChapter = null;
+            allData._byChapterIndex = null;
         }
     } else {
         syncChapterSegsToAll();
@@ -257,14 +281,14 @@ export function previewTrimAudio(): void {
     const canvas = _getEditCanvas() as SegCanvas | null;
     const tw = canvas?._trimWindow;
     if (!tw || !canvas) return;
-    if (state._previewLooping && !dom.segAudioEl.paused) {
-        state._previewLooping = false;
-        state._previewJustSeeked = false;
+    if (getPreviewLooping() && !dom.segAudioEl.paused) {
+        setPreviewLooping(false);
+        setPreviewJustSeeked(false);
         dom.segAudioEl.pause();
-        if (state._playRangeRAF) { cancelAnimationFrame(state._playRangeRAF); state._playRangeRAF = null; }
+        clearPlayRangeRAF();
         if (canvas._trimWindow) drawTrimWaveform(canvas);
         return;
     }
-    state._previewLooping = 'trim';
+    setPreviewLooping('trim');
     _playRange(tw.currentStart, tw.currentEnd);
 }

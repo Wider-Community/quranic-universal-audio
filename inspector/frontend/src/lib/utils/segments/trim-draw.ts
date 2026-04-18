@@ -2,10 +2,12 @@
  * Canvas drawing functions for trim mode — the waveform base cache,
  * dimmed regions, and drag handles.
  *
- * Reads `state.TRIM_DIM_ALPHA` for the dimming overlay alpha.
+ * Reads `segConfig.trimDimAlpha` for the dimming overlay alpha.
  */
 
-import { state } from '../../segments-state';
+import { get } from 'svelte/store';
+
+import { segConfig } from '../../stores/segments/config';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { _slicePeaks } from './waveform-draw-seg';
 
@@ -70,7 +72,7 @@ export function drawTrimWaveform(canvas: SegCanvas): void {
     const startX = ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
     const endX = ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
 
-    ctx.fillStyle = `rgba(0, 0, 0, ${state.TRIM_DIM_ALPHA})`;
+    ctx.fillStyle = `rgba(0, 0, 0, ${get(segConfig).trimDimAlpha})`;
     ctx.fillRect(0, 0, startX, height);
     ctx.fillRect(endX, 0, width - endX, height);
 

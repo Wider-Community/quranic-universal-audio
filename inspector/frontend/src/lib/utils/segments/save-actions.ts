@@ -5,12 +5,13 @@
 import { get as storeGet } from 'svelte/store';
 
 import type { HistoryBatch } from '../../../types/domain';
-import { dom, state } from '../../segments-state';
+import { dom } from '../../segments-state';
 import { isDirty } from '../../stores/segments/dirty';
 import {
     buildSplitChains,
     buildSplitLineage,
     historyData,
+    historyDataStale,
     restoreSplitChains,
     setSplitChains,
     snapshotSplitChains,
@@ -18,6 +19,8 @@ import {
 import {
     clearSavePreviewData,
     hidePreview,
+    savedChains,
+    savedPreviewScroll,
     setSavePreviewData,
     showPreview,
 } from '../../stores/segments/save';
@@ -48,14 +51,14 @@ export async function onSegSaveClick(): Promise<void> {
 
 export function showSavePreview(): void {
     if (!dom.segSavePreview.hidden) return;
-    state._segSavedPreviewState = { scrollTop: dom.segListEl.scrollTop };
+    savedPreviewScroll.set(dom.segListEl.scrollTop);
     const data = buildSavePreviewData();
 
     // Snapshot current split-chain state so hideSavePreview can restore it.
     // snapshotSplitChains() returns { chains, chainedOpIds }; map to the
-    // legacy SavedChainsSnapshot shape { splitChains, chainedOpIds }.
+    // SavedChainsSnapshot shape { splitChains, chainedOpIds }.
     const snap = snapshotSplitChains();
-    state._segSavedChains = { splitChains: snap.chains, chainedOpIds: snap.chainedOpIds };
+    savedChains.set({ splitChains: snap.chains, chainedOpIds: snap.chainedOpIds });
 
     // Rebuild split chains to include pending batches, push to store so
     // SavePreview.svelte (and HistoryPanel) see the augmented chain map.
@@ -92,11 +95,10 @@ export function hideSavePreview(restoreScroll = true): void {
     hidePreview(); // notify $savePreviewVisible store (SavePreview.svelte hidden binding)
     clearSavePreviewData(); // clear store — SavePreview.svelte empties reactively
 
-    if (state._segSavedChains) {
-        // Restore split chains to their pre-preview state via the store.
-        // Map legacy { splitChains, chainedOpIds } to store's { chains, chainedOpIds }.
-        restoreSplitChains({ chains: state._segSavedChains.splitChains, chainedOpIds: state._segSavedChains.chainedOpIds });
-        state._segSavedChains = null;
+    const snap = storeGet(savedChains);
+    if (snap) {
+        restoreSplitChains({ chains: snap.splitChains, chainedOpIds: snap.chainedOpIds });
+        savedChains.set(null);
     }
 
     for (const id of _SEG_NORMAL_IDS) {
@@ -109,14 +111,16 @@ export function hideSavePreview(restoreScroll = true): void {
     const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
     if (shortcuts) { if (shortcuts.dataset.hiddenByPreview !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByPreview; }
 
-    if (state._segDataStale) {
-        state._segDataStale = false;
-        state._segSavedPreviewState = null;
+    if (storeGet(historyDataStale)) {
+        historyDataStale.set(false);
+        savedPreviewScroll.set(null);
         void reloadCurrentReciter();
-    } else if (restoreScroll && state._segSavedPreviewState) {
-        const saved = state._segSavedPreviewState;
-        state._segSavedPreviewState = null;
-        requestAnimationFrame(() => { dom.segListEl.scrollTop = saved.scrollTop; });
+    } else if (restoreScroll) {
+        const scrollTop = storeGet(savedPreviewScroll);
+        if (scrollTop !== null) {
+            savedPreviewScroll.set(null);
+            requestAnimationFrame(() => { dom.segListEl.scrollTop = scrollTop; });
+        }
     }
 }
 

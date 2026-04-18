@@ -1,14 +1,17 @@
+import { get } from 'svelte/store';
+
 import type { SegValAutoFix } from '../../../types/domain';
-import { state } from '../../segments-state';
 import { segValidation } from '../../stores/segments/validation';
+import { _VAL_SINGLE_INDEX_CATS } from './constants';
 
 type ValIndexedItem<K extends string> = { [P in K]: number };
 type ValFixupFn = <K extends string>(item: ValIndexedItem<K>, key: K) => void;
 
 function _forEachValItem(chapter: number, fn: ValFixupFn): void {
-    if (!state.segValidation) return;
-    for (const cat of state._VAL_SINGLE_INDEX_CATS) {
-        const arr = state.segValidation[cat];
+    const val = get(segValidation);
+    if (!val) return;
+    for (const cat of _VAL_SINGLE_INDEX_CATS) {
+        const arr = val[cat];
         if (!Array.isArray(arr)) continue;
         for (const item of arr as Array<{ chapter: number; seg_index?: number }>) {
             if (item.chapter === chapter && typeof item.seg_index === 'number') {
@@ -16,7 +19,7 @@ function _forEachValItem(chapter: number, fn: ValFixupFn): void {
             }
         }
     }
-    const mw = state.segValidation.missing_words;
+    const mw = val.missing_words;
     if (mw) {
         for (const item of mw) {
             if (item.chapter !== chapter) continue;

@@ -23,13 +23,19 @@
     import { get } from 'svelte/store';
     import { onMount } from 'svelte';
 
-    import { getAdjacentSegments, segAllData, selectedChapter } from '../../lib/stores/segments/chapter';
+    import {
+        getAdjacentSegments,
+        segAllData,
+        segCurrentIdx,
+        selectedChapter,
+    } from '../../lib/stores/segments/chapter';
     import {
         _addVerseMarkers,
         formatRef,
         formatTimeMs,
     } from '../../lib/utils/segments/references';
     import { isIndexDirty } from '../../lib/stores/segments/dirty';
+    import { editMode } from '../../lib/stores/segments/edit';
     import { activeFilters } from '../../lib/stores/segments/filters';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import type {
@@ -40,7 +46,7 @@
     } from '../../lib/types/segments-waveform';
     import { getConfClass } from '../../lib/utils/segments/conf-class';
     import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
-    import { dom, state } from '../../lib/segments-state';
+    import { dom } from '../../lib/segments-state';
     import { deleteSegment } from '../../lib/utils/segments/edit-delete';
     import { enterEditWithBuffer } from '../../lib/utils/segments/edit-common';
     import { mergeAdjacent } from '../../lib/utils/segments/edit-merge';
@@ -145,7 +151,7 @@
         if (readOnly) return;
         const idx = seg.index;
         const chapter = seg.chapter ?? 0;
-        if (idx === state.segCurrentIdx && !dom.segAudioEl.paused) {
+        if (idx === get(segCurrentIdx) && !dom.segAudioEl.paused) {
             dom.segAudioEl.pause();
         } else {
             playFromSegment(idx, chapter);
@@ -156,14 +162,12 @@
         e.stopPropagation();
         const filters = get(activeFilters);
         if (filters.some(f => f.value !== null)) {
-            const saved = {
+            savedFilterView.set({
                 filters: JSON.parse(JSON.stringify(filters)),
                 chapter: get(selectedChapter),
                 verse: dom.segVerseSelect.value,
                 scrollTop: dom.segListEl.scrollTop,
-            };
-            state._segSavedFilterView = saved;
-            savedFilterView.set(saved);
+            });
         }
         jumpToSegment(seg.chapter ?? 0, seg.index);
     }
@@ -207,7 +211,7 @@
     }
 
     function onRowClick(e: MouseEvent): void {
-        if (state.segEditMode || readOnly) return;
+        if (get(editMode) || readOnly) return;
         const t = e.target as Element;
         if (t.closest('.seg-play-col') || t.closest('.seg-actions') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
         playFromSegment(seg.index, seg.chapter ?? 0);
@@ -221,7 +225,7 @@
         const tEnd = hl ? hl.wfEnd : seg.time_end;
         const timeMs = tStart + progress * (tEnd - tStart);
 
-        if (seg.index === state.segCurrentIdx && !dom.segAudioEl.paused) {
+        if (seg.index === get(segCurrentIdx) && !dom.segAudioEl.paused) {
             dom.segAudioEl.currentTime = timeMs / 1000;
         } else {
             playFromSegment(seg.index, seg.chapter ?? 0, timeMs);
@@ -229,18 +233,16 @@
     }
 
     function onCanvasMousedown(e: MouseEvent): void {
-        if (readOnly || state.segEditMode) return;
+        if (readOnly || get(editMode)) return;
         const canvas = e.currentTarget as SegCanvas;
 
         e.preventDefault();
-        state._segScrubActive = true;
         _seekFromCanvasEvent(e, canvas);
 
         function onMove(ev: MouseEvent): void {
             _seekFromCanvasEvent(ev, canvas);
         }
         function onUp(): void {
-            state._segScrubActive = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
         }

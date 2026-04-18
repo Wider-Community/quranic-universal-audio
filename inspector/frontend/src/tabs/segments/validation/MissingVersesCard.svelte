@@ -2,8 +2,8 @@
     import { onMount, onDestroy } from 'svelte';
 
     import { getAdjacentSegments } from '../../../lib/stores/segments/chapter';
+    import { segConfig } from '../../../lib/stores/segments/config';
     import { findMissingVerseBoundarySegments } from '../../../lib/utils/segments/missing-verse-context';
-    import { state } from '../../../lib/segments-state';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type { SegValMissingVerseItem } from '../../../types/domain';
 
@@ -18,7 +18,7 @@
     let contextEls: HTMLElement[] = [];
     let hasBoundarySegs = false;
 
-    $: ctxMode = state._accordionContext?.['missing_verses'] ?? 'hidden';
+    $: ctxMode = $segConfig.accordionContext?.['missing_verses'] ?? 'hidden';
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }

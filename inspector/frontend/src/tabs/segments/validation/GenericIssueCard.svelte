@@ -6,15 +6,15 @@
         getChapterSegments,
         getSegByChapterIndex,
     } from '../../../lib/stores/segments/chapter';
+    import { segConfig } from '../../../lib/stores/segments/config';
     import {
         createOp,
-        dom,
         finalizeOp,
+        getDirtyMap,
         isDirty,
-        markDirty,
         snapshotSeg,
-        state,
-    } from '../../../lib/segments-state';
+    } from '../../../lib/stores/segments/dirty';
+    import { dom, markDirty } from '../../../lib/segments-state';
     import { _isIgnoredFor } from '../../../lib/utils/segments/classify';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type {
@@ -55,16 +55,16 @@
 
     $: isDirtySegment =
         resolvedSeg != null
-            ? !!(state.segDirtyMap.get(segChapterForBtn)?.indices?.has(resolvedSeg.index))
+            ? !!(getDirtyMap().get(segChapterForBtn)?.indices?.has(resolvedSeg.index))
             : false;
 
-    $: ctxMode = state._accordionContext?.[category] ?? 'hidden';
+    $: ctxMode = $segConfig.accordionContext?.[category] ?? 'hidden';
     $: ctxDefaultOpen = ctxMode !== 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
 
     $: showPhonemes =
         category === 'boundary_adj' &&
-        state.SHOW_BOUNDARY_PHONEMES &&
+        $segConfig.showBoundaryPhonemes &&
         !!(boundaryItem?.gt_tail || boundaryItem?.asr_tail);
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----

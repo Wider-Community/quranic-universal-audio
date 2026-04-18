@@ -1,6 +1,8 @@
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../types/domain';
-import { state } from '../../segments-state';
 import { getSegByChapterIndex } from '../../stores/segments/chapter';
+import { segIndexMap } from '../../stores/segments/filters';
 
 /** Resolve a segment object from a .seg-row element. */
 export function resolveSegFromRow(row: HTMLElement | null | undefined): Segment | null {
@@ -24,7 +26,7 @@ export function resolveSegFromRow(row: HTMLElement | null | undefined): Segment 
         };
         return synth;
     }
-    const fromMap = state._segIndexMap?.get(`${chapter}:${idx}`);
+    const fromMap = get(segIndexMap).get(`${chapter}:${idx}`);
     if (fromMap) return fromMap;
     if (chapter) return getSegByChapterIndex(chapter, idx);
     return null;

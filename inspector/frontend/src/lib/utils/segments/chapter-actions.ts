@@ -11,7 +11,6 @@ import { get } from 'svelte/store';
 import type { SegDataResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJson } from '../../api';
-import { state } from '../../segments-state';
 import {
     segAllData,
     segData,
@@ -19,7 +18,7 @@ import {
     selectedReciter,
     selectedVerse,
 } from '../../stores/segments/chapter';
-import { stopSegAnimation } from './playback';
+import { clearSegPrefetchCache, stopSegAnimation } from './playback';
 import { _isCurrentReciterBySurah } from './reciter';
 import { _fetchChapterPeaksIfNeeded } from './waveform-utils';
 
@@ -37,7 +36,7 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
     if (audioEl) audioEl.src = '';
     if (playBtn) playBtn.disabled = true;
     stopSegAnimation();
-    state._segPrefetchCache = {};
+    clearSegPrefetchCache();
 
     if (!reciter || !chapter) return;
     if (playBtn) playBtn.disabled = false;

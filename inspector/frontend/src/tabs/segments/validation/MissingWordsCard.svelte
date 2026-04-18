@@ -3,16 +3,17 @@
 
     import { getAdjacentSegments, getSegByChapterIndex } from '../../../lib/stores/segments/chapter';
     import { commitRefEdit } from '../../../lib/utils/segments/edit-reference';
+    import { dom } from '../../../lib/segments-state';
+    import { segConfig } from '../../../lib/stores/segments/config';
     import {
         createOp,
-        dom,
-        finalizeOp,
+        getDirtyMap,
+        getOpLog,
         isDirty,
-        markDirty,
+        setPendingOp,
         snapshotSeg,
-        state,
         unmarkDirty,
-    } from '../../../lib/segments-state';
+    } from '../../../lib/stores/segments/dirty';
     import { injectCard } from '../../../lib/utils/validation-card-inject';
     import type { SegValMissingWordsItem } from '../../../types/domain';
 
@@ -37,7 +38,7 @@
         wasDirty: boolean;
     } | null = null;
 
-    $: ctxMode = state._accordionContext?.['missing_words'] ?? 'hidden';
+    $: ctxMode = $segConfig.accordionContext?.['missing_words'] ?? 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
@@ -90,13 +91,14 @@
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const segChapter = targetSeg.chapter ?? item.chapter;
-        const wasDirty = !!(state.segDirtyMap.get(segChapter)?.indices?.has(targetSeg.index));
-        state._pendingOp = createOp('auto_fix_missing_word', {
+        const wasDirty = !!(getDirtyMap().get(segChapter)?.indices?.has(targetSeg.index));
+        const pending = createOp('auto_fix_missing_word', {
             contextCategory: 'missing_words',
             fixKind: 'auto_fix',
         });
-        state._pendingOp.targets_before = [snapshotSeg(targetSeg)];
-        autoFixOpId = state._pendingOp.op_id;
+        pending.targets_before = [snapshotSeg(targetSeg)];
+        setPendingOp(pending);
+        autoFixOpId = pending.op_id;
         autoFixOldState = {
             ref: targetSeg.matched_ref || '',
             text: targetSeg.matched_text || '',
@@ -130,7 +132,7 @@
         else delete targetSeg.ignored_categories;
         if (!wasDirty) unmarkDirty(segChapter, targetSeg.index);
         dom.segSaveBtn.disabled = !isDirty();
-        const ops = state.segOpLog.get(segChapter);
+        const ops = getOpLog().get(segChapter);
         if (ops && autoFixOpId) {
             const idx = ops.findIndex((o) => o.op_id === autoFixOpId);
             if (idx !== -1) ops.splice(idx, 1);

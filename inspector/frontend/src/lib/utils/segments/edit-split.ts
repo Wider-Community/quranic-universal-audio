@@ -2,12 +2,33 @@
  * Split edit mode: enter, drag handle, preview, confirm.
  */
 
+import { get } from 'svelte/store';
+
 import type { SegResolveRefResponse } from '../../../types/api';
 import type { Segment } from '../../../types/domain';
 import { fetchJsonOrNull } from '../../api';
-import { dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
-import { getChapterSegments, syncChapterSegsToAll } from '../../stores/segments/chapter';
-import { setEdit } from '../../stores/segments/edit';
+import { dom, markDirty } from '../../segments-state';
+import {
+    getChapterSegments,
+    segAllData,
+    segData,
+    syncChapterSegsToAll,
+} from '../../stores/segments/chapter';
+import {
+    finalizeOp,
+    getPendingOp,
+    setPendingOp,
+    snapshotSeg,
+} from '../../stores/segments/dirty';
+import {
+    accordionOpCtx,
+    editingSegIndex,
+    editMode,
+    setEdit,
+    splitChainCategory,
+    splitChainUid,
+    splitChainWrapper,
+} from '../../stores/segments/edit';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
@@ -15,13 +36,19 @@ import { startRefEdit } from './edit-reference';
 import { _rebuildAccordionAfterSplit, _refreshStaleSegIndices } from './error-cards';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { _getEditCanvas } from './get-edit-canvas';
+import {
+    clearPlayRangeRAF,
+    getPreviewLooping,
+    setPreviewJustSeeked,
+    setPreviewLooping,
+} from './play-range';
 import { _suggestSplitRefs as _suggestSplitRefsLib } from './references';
 import { _ensureSplitBaseCache, drawSplitWaveform } from './split-draw';
 import { _fixupValIndicesForSplit, refreshOpenAccordionCards } from './validation-fixups';
 import { _fetchChapterPeaksIfNeeded } from './waveform-utils';
 
 function _vwc() {
-    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
 }
 function _suggestSplitRefs(ref: Parameters<typeof _suggestSplitRefsLib>[0]) { return _suggestSplitRefsLib(ref, _vwc()); }
 
@@ -33,13 +60,12 @@ export { _ensureSplitBaseCache, drawSplitWaveform };
 // ---------------------------------------------------------------------------
 
 export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: number | null = null): void {
-    if (state.segEditMode) {
-        console.warn('[split] blocked: already in edit mode:', state.segEditMode);
+    if (get(editMode)) {
+        console.warn('[split] blocked: already in edit mode:', get(editMode));
         return;
     }
-    state.segEditMode = 'split';
-    state.segEditIndex = seg.index;
     setEdit('split', seg.segment_uid ?? null);
+    editingSegIndex.set(seg.index);
 
     row.classList.add('seg-edit-target');
     const actions = row.querySelector<HTMLElement>('.seg-actions');
@@ -83,7 +109,7 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     canvas._wfCache = null;
 
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
-    const splitAudioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const splitAudioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
     canvas._splitData = { seg, currentSplit: defaultSplit, audioUrl: splitAudioUrl };
     canvas._splitBaseCache = null;
     drawSplitWaveform(canvas);
@@ -192,7 +218,8 @@ export async function confirmSplit(seg: Segment): Promise<void> {
 
     const chapter = seg.chapter || parseInt(dom.segChapterSelect.value);
     const currentChapter = parseInt(dom.segChapterSelect.value);
-    const useSegData = chapter === currentChapter && state.segData?.segments;
+    const curData = get(segData);
+    const useSegData = chapter === currentChapter && curData?.segments;
 
     const firstHalf: Segment = {
         ...seg,
@@ -225,34 +252,37 @@ export async function confirmSplit(seg: Segment): Promise<void> {
         }
     }
 
-    const splitOp = state._pendingOp;
-    state._pendingOp = null;
+    const splitOp = getPendingOp();
+    setPendingOp(null);
     if (splitOp) {
         splitOp.applied_at_utc = new Date().toISOString();
         splitOp.targets_after = [snapshotSeg(firstHalf), snapshotSeg(secondHalf)];
     }
 
-    if (useSegData && state.segData) {
-        const segIdx = state.segData.segments.findIndex(s => s.index === seg.index);
-        state.segData.segments.splice(segIdx, 1, firstHalf, secondHalf);
-        state.segData.segments.forEach((s, i) => { s.index = i; });
+    if (useSegData && curData) {
+        const segIdx = curData.segments.findIndex(s => s.index === seg.index);
+        curData.segments.splice(segIdx, 1, firstHalf, secondHalf);
+        curData.segments.forEach((s, i) => { s.index = i; });
         syncChapterSegsToAll();
-        state.segData.segments = getChapterSegments(chapter);
-    } else if (state.segAllData) {
-        const globalIdx = state.segAllData.segments.indexOf(seg);
-        if (globalIdx !== -1) {
-            state.segAllData.segments.splice(globalIdx, 1, firstHalf, secondHalf);
+        curData.segments = getChapterSegments(chapter);
+    } else {
+        const allData = get(segAllData);
+        if (allData) {
+            const globalIdx = allData.segments.indexOf(seg);
+            if (globalIdx !== -1) {
+                allData.segments.splice(globalIdx, 1, firstHalf, secondHalf);
+            }
+            let reIdx = 0;
+            allData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
+            allData._byChapter = null; allData._byChapterIndex = null;
         }
-        let reIdx = 0;
-        state.segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
-        state.segAllData._byChapter = null; state.segAllData._byChapterIndex = null;
     }
 
     markDirty(chapter, undefined, true);
     _fixupValIndicesForSplit(chapter, seg.index);
 
-    const accCtx = state._accordionOpCtx;
-    state._accordionOpCtx = null;
+    const accCtx = get(accordionOpCtx);
+    accordionOpCtx.set(null);
 
     computeSilenceAfter();
     exitEditMode();
@@ -272,16 +302,17 @@ export async function confirmSplit(seg: Segment): Promise<void> {
 
     dom.segPlayStatus.textContent = 'Split \u2014 edit first half reference, then second';
 
-    state._splitChainUid = secondHalf.segment_uid ?? null;
-    state._splitChainCategory = splitOp?.op_context_category || null;
-    state._splitChainWrapper = accCtx ? accCtx.wrapper : null;
+    splitChainUid.set(secondHalf.segment_uid ?? null);
+    const chainCat = splitOp?.op_context_category || null;
+    splitChainCategory.set(chainCat);
+    splitChainWrapper.set(accCtx ? accCtx.wrapper : null);
     const searchRoot: ParentNode = accCtx ? accCtx.wrapper : dom.segListEl;
     const firstRow = searchRoot.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
     if (firstRow) {
         firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
         const refSpan = firstRow.querySelector<HTMLElement>('.seg-text-ref');
         if (refSpan) {
-            startRefEdit(refSpan, firstHalf, firstRow, state._splitChainCategory);
+            startRefEdit(refSpan, firstHalf, firstRow, chainCat);
         }
     }
 }
@@ -295,15 +326,15 @@ export function previewSplitAudio(side: 'left' | 'right'): void {
     const sd = canvas?._splitData;
     if (!sd || !canvas) return;
     const loopKey = `split-${side}` as const;
-    if (state._previewLooping === loopKey && !dom.segAudioEl.paused) {
-        state._previewLooping = false;
-        state._previewJustSeeked = false;
+    if (getPreviewLooping() === loopKey && !dom.segAudioEl.paused) {
+        setPreviewLooping(false);
+        setPreviewJustSeeked(false);
         dom.segAudioEl.pause();
-        if (state._playRangeRAF) { cancelAnimationFrame(state._playRangeRAF); state._playRangeRAF = null; }
+        clearPlayRangeRAF();
         if (canvas._splitData) drawSplitWaveform(canvas);
         return;
     }
-    state._previewLooping = loopKey;
+    setPreviewLooping(loopKey);
     const splitTime = sd.currentSplit;
     _playRange(
         side === 'left' ? sd.seg.time_start : splitTime,

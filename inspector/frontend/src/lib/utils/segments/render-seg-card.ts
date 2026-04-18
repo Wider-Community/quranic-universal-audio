@@ -1,12 +1,18 @@
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../types/domain';
-import { dom, state } from '../../segments-state';
-import { getAdjacentSegments } from '../../stores/segments/chapter';
+import { dom } from '../../segments-state';
+import {
+    getAdjacentSegments,
+    segAllData,
+    segData,
+} from '../../stores/segments/chapter';
 import { isIndexDirty } from '../../stores/segments/dirty';
 import { getConfClass } from './conf-class';
 import { _addVerseMarkers, formatRef, formatTimeMs } from './references';
 
 function _vwc() {
-    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
 }
 
 /** Options consumed by `renderSegCard`. */

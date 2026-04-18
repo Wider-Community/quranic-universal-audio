@@ -1,5 +1,7 @@
+import { get } from 'svelte/store';
+
 import type { AudioPeaks, PeakBucket, Segment } from '../../../types/domain';
-import { state } from '../../segments-state';
+import { segAllData } from '../../stores/segments/chapter';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { drawWaveformPeaks } from '../waveform-draw';
@@ -34,7 +36,7 @@ export function drawSegmentWaveformFromPeaks(
 
 /** Draw waveform from peaks for a segment, resolving its audio URL. Returns true if drawn. */
 export function drawWaveformFromPeaksForSeg(canvas: SegCanvas, seg: Segment, chapter: number | string): boolean {
-    const audioUrl = seg.audio_url || state.segAllData?.audio_by_chapter?.[String(chapter)] || '';
+    const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
     const pe = getWaveformPeaks(audioUrl);
     if (pe?.peaks?.length) {
         drawSegmentWaveformFromPeaks(canvas, seg.time_start, seg.time_end, pe.peaks, pe.duration_ms);

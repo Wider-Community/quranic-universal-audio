@@ -4,15 +4,17 @@
  *
  * The back-to-results banner is rendered by Navigation.svelte (subscribed
  * to `backBannerVisible` derived from `savedFilterView`).
- * `_showBackToResultsBanner` mirrors `state._segSavedFilterView` into the
- * store so the banner appears; `_restoreFilterView` reverses the flow and
- * re-applies the saved filters/chapter/verse.
+ * `_showBackToResultsBanner` is kept as a no-op compatibility shim (stored
+ * filter view is already in the store); `_restoreFilterView` re-applies the
+ * saved filters/chapter/verse.
  */
 
 import { get } from 'svelte/store';
 
-import { dom, state } from '../../segments-state';
+import { dom } from '../../segments-state';
 import {
+    segAllData,
+    segChapterSS,
     selectedChapter,
     selectedReciter,
     selectedVerse,
@@ -33,15 +35,15 @@ async function _ensureChapter(chapter: number | string): Promise<void> {
     const chStr = String(chapter);
     if (get(selectedChapter) !== chStr) {
         selectedChapter.set(chStr);
-        if (state.segChapterSS) state.segChapterSS.refresh();
+        const ss = get(segChapterSS);
+        if (ss) ss.refresh();
         await loadChapterData(get(selectedReciter), chStr);
     }
 }
 
 export async function jumpToSegment(chapter: number | string, segIndex: number): Promise<void> {
-    const fromFilterView = !!state._segSavedFilterView;
+    const fromFilterView = get(savedFilterViewStore) !== null;
     if (fromFilterView) {
-        state.segActiveFilters = [];
         activeFiltersStore.set([]);
     }
 
@@ -72,20 +74,20 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
         return;
     }
 
-    const hasFilterView = state.segActiveFilters.some(f => f.value !== null) || !!get(selectedVerse);
+    const curFilters = get(activeFiltersStore);
+    const hasFilterView = curFilters.some(f => f.value !== null) || !!get(selectedVerse);
     if (hasFilterView) {
-        state._segSavedFilterView = {
-            filters: JSON.parse(JSON.stringify(state.segActiveFilters)),
+        savedFilterViewStore.set({
+            filters: JSON.parse(JSON.stringify(curFilters)),
             chapter: get(selectedChapter),
             verse: get(selectedVerse),
             scrollTop: dom.segListEl.scrollTop,
-        };
+        });
     }
 
     await _ensureChapter(chapter);
 
     if (hasFilterView) {
-        state.segActiveFilters = [];
         activeFiltersStore.set([]);
     }
     if (get(selectedVerse)) {
@@ -141,11 +143,12 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
 
 export async function jumpToVerse(chapter: number | string, verseKey: string): Promise<void> {
     await _ensureChapter(chapter);
-    if (!state.segAllData) return;
+    const allData = get(segAllData);
+    if (!allData) return;
     const parts = verseKey.split(':');
     const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : verseKey;
     const chapterNum = typeof chapter === 'string' ? parseInt(chapter) : chapter;
-    const seg = state.segAllData.segments.find(s =>
+    const seg = allData.segments.find(s =>
         s.chapter === chapterNum && s.matched_ref && s.matched_ref.startsWith(prefix)
     );
     if (seg) {
@@ -165,26 +168,25 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
 // ---------------------------------------------------------------------------
 
 /**
- * Mirror `state._segSavedFilterView` into the `savedFilterView` store so
- * Navigation.svelte renders the banner.
+ * No-op compatibility shim — the banner reacts directly to `savedFilterView`
+ * changes via Navigation.svelte's `backBannerVisible` derived store. Kept as
+ * an exported symbol so existing callers compile.
  */
 export function _showBackToResultsBanner(): void {
-    if (!state._segSavedFilterView) return;
-    savedFilterViewStore.set(state._segSavedFilterView);
+    // Intentional no-op — see module docstring.
 }
 
 export function _restoreFilterView(): void {
-    if (!state._segSavedFilterView) return;
-    const saved = state._segSavedFilterView;
-    state._segSavedFilterView = null;
+    const saved = get(savedFilterViewStore);
+    if (!saved) return;
     savedFilterViewStore.set(null);
 
-    state.segActiveFilters = saved.filters;
     activeFiltersStore.set([...saved.filters]);
 
     if (saved.chapter !== get(selectedChapter)) {
         selectedChapter.set(saved.chapter);
-        if (state.segChapterSS) state.segChapterSS.refresh();
+        const ss = get(segChapterSS);
+        if (ss) ss.refresh();
     }
     selectedVerse.set(saved.verse);
 

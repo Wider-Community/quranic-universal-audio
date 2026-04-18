@@ -17,9 +17,9 @@
 
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { autoPlayEnabled } from '../../lib/stores/segments/playback';
+    import { autoPlayEnabled, continuousPlay } from '../../lib/stores/segments/playback';
     import { LS_KEYS } from '../../lib/utils/constants';
-    import { dom, state } from '../../lib/segments-state';
+    import { dom } from '../../lib/segments-state';
     import {
         onSegAudioEnded,
         onSegPlayClick,
@@ -62,8 +62,7 @@
     function handleAutoPlayToggle(): void {
         const next = !get(autoPlayEnabled);
         autoPlayEnabled.set(next);
-        state._segAutoPlayEnabled = next;
-        state._segContinuousPlay = next;
+        continuousPlay.set(next);
         localStorage.setItem(LS_KEYS.SEG_AUTOPLAY, String(next));
     }
 
@@ -77,8 +76,6 @@
         dom.segPlayBtn    = playBtn;
         dom.segAutoPlayBtn = autoPlayBtn;
         dom.segPlayStatus  = playStatusEl;
-
-        state._segAutoPlayEnabled = get(autoPlayEnabled);
 
         el.addEventListener('play', startSegAnimation);
         el.addEventListener('pause', stopSegAnimation);

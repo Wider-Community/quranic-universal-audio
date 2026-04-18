@@ -11,8 +11,14 @@
  * with `reciter-actions.ts`.
  */
 
-import { state } from '../../segments-state';
-import { clearFilters, setHistoryVisible, setSortMode } from '../../stores/segments/history';
+import { get } from 'svelte/store';
+
+import {
+    clearFilters,
+    historyDataStale,
+    setHistoryVisible,
+    setSortMode,
+} from '../../stores/segments/history';
 import { _SEG_NORMAL_IDS } from './constants';
 import { stopErrorCardAudio } from './error-card-audio';
 import { reloadCurrentReciter } from './reciter-actions';
@@ -53,5 +59,5 @@ export function hideHistoryView(): void {
     if (controls) { if (controls.dataset.hiddenByHistory !== '1') controls.hidden = false; delete controls.dataset.hiddenByHistory; }
     const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
     if (shortcuts) { if (shortcuts.dataset.hiddenByHistory !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByHistory; }
-    if (state._segDataStale) { state._segDataStale = false; void reloadCurrentReciter(); }
+    if (get(historyDataStale)) { historyDataStale.set(false); void reloadCurrentReciter(); }
 }

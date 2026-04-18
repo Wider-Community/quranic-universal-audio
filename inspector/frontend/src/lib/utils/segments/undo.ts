@@ -7,16 +7,22 @@ import type {
 } from '../../../types/api';
 import type { HistoryBatch } from '../../../types/domain';
 import { fetchJson, fetchJsonOrNull } from '../../api';
-import { dom, state } from '../../segments-state';
+import { dom } from '../../segments-state';
 import {
     deleteDirtyEntry,
     deleteOpLogEntry,
     isDirty,
 } from '../../stores/segments/dirty';
 import {
+    splitChainCategory,
+    splitChainUid,
+    splitChainWrapper,
+} from '../../stores/segments/edit';
+import {
     buildSplitChains,
     buildSplitLineage,
     historyData,
+    historyDataStale,
     setSplitChains,
     type SplitChain,
 } from '../../stores/segments/history';
@@ -30,9 +36,9 @@ import { buildSavePreviewData, hideSavePreview } from './save-actions';
 // ---------------------------------------------------------------------------
 
 export async function _afterUndoSuccess(reciter: string, opsReversed: number): Promise<void> {
-    state._splitChainUid = null;
-    state._splitChainWrapper = null;
-    state._splitChainCategory = null;
+    splitChainUid.set(null);
+    splitChainWrapper.set(null);
+    splitChainCategory.set(null);
 
     try {
         const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
@@ -42,7 +48,7 @@ export async function _afterUndoSuccess(reciter: string, opsReversed: number): P
             renderEditHistoryPanel(hist);
         }
     } catch (_) { /* non-critical */ }
-    state._segDataStale = true;
+    historyDataStale.set(true);
     fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
     dom.segPlayStatus.textContent = `Undo successful \u2014 ${opsReversed} op${opsReversed !== 1 ? 's' : ''} reversed`;
 }
@@ -195,15 +201,15 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
     if (!confirm(`Discard pending edits${chLabel}?`)) return;
 
-    state._splitChainUid = null;
-    state._splitChainWrapper = null;
-    state._splitChainCategory = null;
+    splitChainUid.set(null);
+    splitChainWrapper.set(null);
+    splitChainCategory.set(null);
 
     // Use dirty store helpers (number keys only).
     deleteDirtyEntry(chapter);
     deleteOpLogEntry(chapter);
 
-    state._segDataStale = true;
+    historyDataStale.set(true);
     dom.segSaveBtn.disabled = !isDirty();
 
     if (!isDirty()) {

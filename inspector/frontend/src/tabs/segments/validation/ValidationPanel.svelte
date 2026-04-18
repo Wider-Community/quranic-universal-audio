@@ -21,7 +21,8 @@
      */
 
     import { segValidation } from '../../../lib/stores/segments/validation';
-    import { state } from '../../../lib/segments-state';
+    import { get } from 'svelte/store';
+    import { segConfig } from '../../../lib/stores/segments/config';
     import {
         jumpToMissingVerseContext,
         jumpToSegment,
@@ -54,7 +55,7 @@
     }
 
     // ---- LC slider ----
-    let lcThreshold: number = state._lcDefaultThreshold;
+    let lcThreshold: number = get(segConfig).lcDefaultThreshold;
 
     // ---- Qalqala filter ----
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
@@ -105,7 +106,7 @@
         const qal = matchChapter(data.qalqala) as SegValQalqalaItem[];
 
         // Low confidence
-        const LC_DEFAULT = state._lcDefaultThreshold;
+        const LC_DEFAULT = get(segConfig).lcDefaultThreshold;
         const lcVisible = lowConf
             .filter((i) => (i.confidence * 100) < _lcThreshold)
             .sort((a, b) => a.confidence - b.confidence);

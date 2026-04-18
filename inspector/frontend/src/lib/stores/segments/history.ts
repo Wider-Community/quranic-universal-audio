@@ -110,6 +110,10 @@ export const sortMode = writable<'time' | 'quran'>('time');
 /** Whether the edit-history view is currently shown. */
 export const historyVisible = writable<boolean>(false);
 
+/** True after an undo (in-view) so hideHistoryView can trigger a full reciter
+ *  reload. Raw response data remains in `historyData` until the reload. */
+export const historyDataStale = writable<boolean>(false);
+
 /** Cached flat items list (rebuilt when historyData / chainedOpIds change). */
 export const flatItems = derived(
     [historyData, chainedOpIds],

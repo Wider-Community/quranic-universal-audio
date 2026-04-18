@@ -11,10 +11,10 @@
      * SegmentRow.onMount registers each canvas with the IntersectionObserver
      * directly).
      *
-     * Edit/save/undo flows that mutate state.segAllData.segments in place call
-     * `applyFiltersAndRender()` (now a shim — segments/filters.ts) which does
-     *   activeFilters.set([...state.segActiveFilters])  // sync state → store
-     *   segAllData.update(a => a)                       // notify subscribers
+     * Edit/save/undo flows that mutate `segAllData`'s segments array in place
+     * call `applyFiltersAndRender()` which does
+     *   activeFilters.update(l => [...l])   // nudge filter subscribers
+     *   segAllData.update(a => a)           // notify subscribers
      * triggering the derived `displayedSegments` to re-fire and the {#each}
      * to reconcile. Keyed by `segment_uid` (with chapter:index fallback) so
      * stable rows survive reindexing across split/merge.

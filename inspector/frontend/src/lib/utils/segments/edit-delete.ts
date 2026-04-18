@@ -9,16 +9,27 @@
  * is currently displayed.
  */
 
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../types/domain';
-import { createOp, dom, finalizeOp, markDirty, snapshotSeg, state } from '../../segments-state';
-import { getChapterSegments } from '../../stores/segments/chapter';
+import { dom, markDirty } from '../../segments-state';
+import {
+    getChapterSegments,
+    segAllData,
+    segData,
+} from '../../stores/segments/chapter';
+import {
+    createOp,
+    finalizeOp,
+    snapshotSeg,
+} from '../../stores/segments/dirty';
 import { clearEdit, setEdit } from '../../stores/segments/edit';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import { formatRef as _formatRefLib } from './references';
 import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from './validation-fixups';
 
 function _vwc() {
-    return state.segAllData?.verse_word_counts ?? state.segData?.verse_word_counts;
+    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
 }
 function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
 
@@ -44,19 +55,21 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
     deleteOp.targets_after = [];
 
     // Unified splice+reindex against segAllData (single source of truth).
-    if (!state.segAllData?.segments) { clearEdit(); return; }
-    const globalIdx = state.segAllData.segments.findIndex(s => s.chapter === chapter && s.index === seg.index);
+    const allData = get(segAllData);
+    if (!allData?.segments) { clearEdit(); return; }
+    const globalIdx = allData.segments.findIndex(s => s.chapter === chapter && s.index === seg.index);
     if (globalIdx === -1) { clearEdit(); return; }
-    state.segAllData.segments.splice(globalIdx, 1);
+    allData.segments.splice(globalIdx, 1);
     let idx = 0;
-    state.segAllData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
-    state.segAllData._byChapter = null;
-    state.segAllData._byChapterIndex = null;
+    allData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
+    allData._byChapter = null;
+    allData._byChapterIndex = null;
 
     // Refresh segData.segments from the re-indexed segAllData whenever the
     // delete happened in the currently-displayed chapter.
-    if (chapter === currentChapter && state.segData) {
-        state.segData.segments = getChapterSegments(chapter);
+    const curData = get(segData);
+    if (chapter === currentChapter && curData) {
+        curData.segments = getChapterSegments(chapter);
     }
 
     markDirty(chapter, undefined, true);

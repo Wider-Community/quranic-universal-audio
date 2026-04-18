@@ -11,6 +11,7 @@
 import { writable } from 'svelte/store';
 
 import type { EditOp, HistoryBatch } from '../../../types/domain';
+import type { SavedChainsSnapshot } from '../../types/segments';
 
 // ---------------------------------------------------------------------------
 // SavePreviewData — preview payload shape (mirrors buildSavePreviewData return)
@@ -48,6 +49,14 @@ export const savePreviewVisible = writable<boolean>(false);
 
 /** Full preview payload. Non-null while preview is showing. */
 export const savePreviewData = writable<SavePreviewData | null>(null);
+
+/** Snapshot of the split-chain state captured around showSavePreview so
+ *  hideSavePreview can restore it exactly. `null` when no preview is active. */
+export const savedChains = writable<SavedChainsSnapshot | null>(null);
+
+/** Saved scroll position of the segments list around showSavePreview. `null`
+ *  when no preview is active. */
+export const savedPreviewScroll = writable<number | null>(null);
 
 // ---------------------------------------------------------------------------
 // Mutators

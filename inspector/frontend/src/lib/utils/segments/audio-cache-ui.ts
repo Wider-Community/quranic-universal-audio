@@ -4,8 +4,20 @@ import type {
     SegPrepareAudioResponse,
 } from '../../../types/api';
 import { fetchJson } from '../../api';
-import { dom, state } from '../../segments-state';
+import { dom } from '../../segments-state';
+import type { TimerHandle } from '../../types/segments';
 import { _formatBytes } from '../formatting';
+
+// ---------------------------------------------------------------------------
+// Module-local state (was state._audioCachePollTimer)
+// ---------------------------------------------------------------------------
+
+let _audioCachePollTimer: TimerHandle | null = null;
+
+/** Clear the running cache-status polling timer (called on reciter change). */
+export function clearAudioCachePollTimer(): void {
+    if (_audioCachePollTimer) { clearInterval(_audioCachePollTimer); _audioCachePollTimer = null; }
+}
 
 /** Formerly rewrote audio URLs to proxy paths. No-op: raw CDN URLs must be preserved
  *  so that the server's HTTP Range peak computation can reach CDN directly. */
@@ -67,15 +79,15 @@ export async function _prepareAudio(reciter: string): Promise<void> {
             method: 'POST',
         });
     } catch { /* poll will handle */ }
-    if (state._audioCachePollTimer) clearInterval(state._audioCachePollTimer);
-    state._audioCachePollTimer = setInterval(async () => {
+    if (_audioCachePollTimer) clearInterval(_audioCachePollTimer);
+    _audioCachePollTimer = setInterval(async () => {
         if (dom.segReciterSelect.value !== reciter) {
-            if (state._audioCachePollTimer) { clearInterval(state._audioCachePollTimer); state._audioCachePollTimer = null; }
+            if (_audioCachePollTimer) { clearInterval(_audioCachePollTimer); _audioCachePollTimer = null; }
             return;
         }
         const data = await _fetchCacheStatus(reciter);
         if (data && (!data.downloading || data.cached_count >= data.total)) {
-            if (state._audioCachePollTimer) { clearInterval(state._audioCachePollTimer); state._audioCachePollTimer = null; }
+            if (_audioCachePollTimer) { clearInterval(_audioCachePollTimer); _audioCachePollTimer = null; }
             if (prepBtn) { prepBtn.disabled = false; prepBtn.textContent = 'Download All Audio'; }
             _updateCacheStatusUI(data);
         }

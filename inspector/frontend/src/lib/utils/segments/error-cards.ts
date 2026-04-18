@@ -6,9 +6,14 @@
  * surgically update the currently-open accordion in place.
  */
 
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../types/domain';
-import { state } from '../../segments-state';
-import { getAdjacentSegments } from '../../stores/segments/chapter';
+import {
+    getAdjacentSegments,
+    segAllData,
+    segData,
+} from '../../stores/segments/chapter';
 import { renderSegCard } from './render-seg-card';
 import { resolveSegFromRow } from './resolve-seg-from-row';
 import { _ensureWaveformObserver } from './waveform-utils';
@@ -60,7 +65,7 @@ export function _rebuildAccordionAfterSplit(
     secondHalf: Segment,
 ): void {
     const observer = _ensureWaveformObserver();
-    const allSegs: Segment[] = state.segAllData?.segments || state.segData?.segments || [];
+    const allSegs: Segment[] = get(segAllData)?.segments || get(segData)?.segments || [];
     const uidMap = _buildSegUidMap(allSegs);
     wrapper.querySelectorAll('.seg-row-context').forEach((c) => c.remove());
     const mainCards = [...wrapper.querySelectorAll<HTMLElement>('.seg-row:not(.seg-row-context)')];
@@ -123,7 +128,7 @@ export function _refreshSiblingCardIndices(): void {
  *  resolveSegFromRow → _segIndexMap. `skipWrapper` excludes a wrapper that
  *  was just rebuilt in-place. */
 export function _refreshStaleSegIndices(skipWrapper?: HTMLElement): void {
-    const allSegs: Segment[] = state.segAllData?.segments || state.segData?.segments || [];
+    const allSegs: Segment[] = get(segAllData)?.segments || get(segData)?.segments || [];
     if (!allSegs.length) return;
     const uidMap = _buildSegUidMap(allSegs);
     document.querySelectorAll<HTMLElement>('details[data-category] .seg-row[data-seg-uid]').forEach((card) => {

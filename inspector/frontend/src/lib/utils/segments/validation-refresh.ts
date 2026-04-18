@@ -1,6 +1,9 @@
+import { get } from 'svelte/store';
+
 import type { SegValidateResponse } from '../../../types/api';
 import { fetchJson } from '../../api';
-import { dom, state } from '../../segments-state';
+import { dom } from '../../segments-state';
+import { savedPreviewScroll } from '../../stores/segments/save';
 import { segValidation } from '../../stores/segments/validation';
 import { applyFiltersAndRender } from './filters-apply';
 
@@ -10,12 +13,11 @@ export async function refreshValidation(): Promise<void> {
     try {
         const valData = await fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`);
         segValidation.set(valData);
-        state.segValidation = valData;
         applyFiltersAndRender();
-        if (state._segSavedPreviewState) {
-            const saved = state._segSavedPreviewState;
-            state._segSavedPreviewState = null;
-            requestAnimationFrame(() => { dom.segListEl.scrollTop = saved.scrollTop; });
+        const scrollTop = get(savedPreviewScroll);
+        if (scrollTop !== null) {
+            savedPreviewScroll.set(null);
+            requestAnimationFrame(() => { dom.segListEl.scrollTop = scrollTop; });
         }
     } catch (e) {
         console.error('Error refreshing validation:', e);

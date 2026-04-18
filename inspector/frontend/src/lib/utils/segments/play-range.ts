@@ -1,16 +1,42 @@
 /**
  * _playRange — preview playback with animated playhead overlay.
  *
- * Still reads `state` and `dom` for preview-looping flags and audio element
- * access. A future refactor can parameterize these away; for now the
- * module centralizes the logic while preserving behavior.
+ * Still reads `dom` for audio element access. Preview-looping / seeked /
+ * rAF / stop-handler flags are module-local (were on `state`).
  */
 
-import { dom, state } from '../../segments-state';
+import { get } from 'svelte/store';
+
+import { dom } from '../../segments-state';
 import { getSegByChapterIndex } from '../../stores/segments/chapter';
+import { editingSegIndex } from '../../stores/segments/edit';
+import type { PreviewLoopMode, RafHandle } from '../../types/segments';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { safePlay } from '../audio';
 import { _getEditCanvas } from './get-edit-canvas';
+
+// ---------------------------------------------------------------------------
+// Module-local state (was state._previewLooping / _previewJustSeeked /
+// _playRangeRAF / _previewStopHandler)
+// ---------------------------------------------------------------------------
+
+let _previewLooping: PreviewLoopMode = false;
+let _previewJustSeeked = false;
+let _playRangeRAF: RafHandle | null = null;
+let _previewStopHandler: ((ev: Event) => void) | null = null;
+
+export function getPreviewLooping(): PreviewLoopMode { return _previewLooping; }
+export function setPreviewLooping(v: PreviewLoopMode): void { _previewLooping = v; }
+
+export function setPreviewJustSeeked(v: boolean): void { _previewJustSeeked = v; }
+
+export function getPlayRangeRAF(): RafHandle | null { return _playRangeRAF; }
+export function clearPlayRangeRAF(): void {
+    if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
+}
+
+export function getPreviewStopHandler(): ((ev: Event) => void) | null { return _previewStopHandler; }
+export function setPreviewStopHandler(h: ((ev: Event) => void) | null): void { _previewStopHandler = h; }
 
 // ---------------------------------------------------------------------------
 // Draw function registration (breaks circular imports)
@@ -31,11 +57,11 @@ export function registerPlayRangeDrawFns(trimDraw: DrawWaveformFn, splitDraw: Dr
 // ---------------------------------------------------------------------------
 
 export function _playRange(startMs: number, endMs: number): void {
-    if (state._previewStopHandler) {
-        dom.segAudioEl.removeEventListener('timeupdate', state._previewStopHandler);
-        state._previewStopHandler = null;
+    if (_previewStopHandler) {
+        dom.segAudioEl.removeEventListener('timeupdate', _previewStopHandler);
+        _previewStopHandler = null;
     }
-    if (state._playRangeRAF) { cancelAnimationFrame(state._playRangeRAF); state._playRangeRAF = null; }
+    if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
     const start = startMs / 1000;
     const canvas = _getEditCanvas() as SegCanvas | null;
 
@@ -45,7 +71,7 @@ export function _playRange(startMs: number, endMs: number): void {
     else { wfStart = startMs; wfEnd = endMs; }
 
     const cleanup = (): void => {
-        if (state._playRangeRAF) { cancelAnimationFrame(state._playRangeRAF); state._playRangeRAF = null; }
+        if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
         if (canvas?._splitData) _drawSplitWaveformFn?.(canvas);
         else if (canvas?._trimWindow) _drawTrimWaveformFn?.(canvas);
     };
@@ -62,26 +88,26 @@ export function _playRange(startMs: number, endMs: number): void {
         const curMs = dom.segAudioEl.currentTime * 1000;
         let effectiveEnd = endMs;
         let loopStart: number | null = null;
-        if (state._previewLooping === 'trim' && canvas?._trimWindow) {
+        if (_previewLooping === 'trim' && canvas?._trimWindow) {
             effectiveEnd = canvas._trimWindow.currentEnd;
             loopStart = canvas._trimWindow.currentStart;
-        } else if (state._previewLooping === 'split-left' && canvas?._splitData) {
+        } else if (_previewLooping === 'split-left' && canvas?._splitData) {
             effectiveEnd = canvas._splitData.currentSplit;
             loopStart = canvas._splitData.seg.time_start;
-        } else if (state._previewLooping === 'split-right' && canvas?._splitData) {
+        } else if (_previewLooping === 'split-right' && canvas?._splitData) {
             effectiveEnd = canvas._splitData.seg.time_end;
             loopStart = canvas._splitData.currentSplit;
         } else if (canvas?._splitData && endMs !== canvas._splitData.seg.time_end) {
             effectiveEnd = canvas._splitData.currentSplit;
         }
-        if (state._previewJustSeeked && curMs < effectiveEnd) {
-            state._previewJustSeeked = false;
+        if (_previewJustSeeked && curMs < effectiveEnd) {
+            _previewJustSeeked = false;
         }
-        if (curMs >= effectiveEnd && !state._previewJustSeeked) {
-            if (state._previewLooping && loopStart !== null) {
+        if (curMs >= effectiveEnd && !_previewJustSeeked) {
+            if (_previewLooping && loopStart !== null) {
                 dom.segAudioEl.currentTime = loopStart / 1000;
-                state._previewJustSeeked = true;
-                state._playRangeRAF = requestAnimationFrame(animatePlayhead);
+                _previewJustSeeked = true;
+                _playRangeRAF = requestAnimationFrame(animatePlayhead);
                 return;
             }
             dom.segAudioEl.pause();
@@ -96,7 +122,7 @@ export function _playRange(startMs: number, endMs: number): void {
         }
         if (curMs >= wfStart && curMs <= wfEnd) {
             const ctx = canvas.getContext('2d');
-            if (!ctx) { state._playRangeRAF = requestAnimationFrame(animatePlayhead); return; }
+            if (!ctx) { _playRangeRAF = requestAnimationFrame(animatePlayhead); return; }
             const w = canvas.width, h = canvas.height;
             const x = ((curMs - wfStart) / (wfEnd - wfStart)) * w;
             ctx.strokeStyle = '#f72585'; ctx.lineWidth = 2;
@@ -104,20 +130,21 @@ export function _playRange(startMs: number, endMs: number): void {
             ctx.fillStyle = '#f72585';
             ctx.beginPath(); ctx.moveTo(x - 4, 0); ctx.lineTo(x + 4, 0); ctx.lineTo(x, 6); ctx.closePath(); ctx.fill();
         }
-        state._playRangeRAF = requestAnimationFrame(animatePlayhead);
+        _playRangeRAF = requestAnimationFrame(animatePlayhead);
     }
 
     const doPlay = (): void => {
         dom.segAudioEl.currentTime = start;
         dom.segAudioEl.playbackRate = parseFloat(dom.segSpeedSelect.value);
         safePlay(dom.segAudioEl);
-        state._playRangeRAF = requestAnimationFrame(animatePlayhead);
+        _playRangeRAF = requestAnimationFrame(animatePlayhead);
     };
 
     const targetUrl = canvas?._splitData?.audioUrl
         || canvas?._trimWindow?.audioUrl
         || (() => { const ch = dom.segChapterSelect.value ? parseInt(dom.segChapterSelect.value) : null;
-                     const s = ch != null ? getSegByChapterIndex(ch, state.segEditIndex) : null;
+                     const editIdx = get(editingSegIndex);
+                     const s = ch != null ? getSegByChapterIndex(ch, editIdx) : null;
                      return s && s.audio_url; })();
     if (targetUrl && !dom.segAudioEl.src.endsWith(targetUrl)) {
         dom.segAudioEl.src = targetUrl;

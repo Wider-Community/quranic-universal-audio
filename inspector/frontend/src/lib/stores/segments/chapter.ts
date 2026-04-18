@@ -13,6 +13,7 @@
 
 import { derived, get,writable } from 'svelte/store';
 
+import type { SearchableSelect } from '../../../shared/searchable-select';
 import type {
     SegAllResponse,
     SegDataResponse,
@@ -49,6 +50,12 @@ export const segAllData = writable<SegAllDataState | null>(null);
 
 /** Per-chapter loaded data (audio_url, pad_ms, segments). */
 export const segData = writable<SegDataState | null>(null);
+
+/** Currently-playing segment index (shared across playback + row/card UI). */
+export const segCurrentIdx = writable<number>(-1);
+
+/** SearchableSelect instance for the chapter dropdown (set by SegmentsTab). */
+export const segChapterSS = writable<SearchableSelect | null>(null);
 
 // ---------------------------------------------------------------------------
 // Helpers — lazy per-chapter index building on segAllData

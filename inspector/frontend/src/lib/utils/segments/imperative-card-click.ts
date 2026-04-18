@@ -7,18 +7,31 @@
 
 import { get } from 'svelte/store';
 
-import { dom, state } from '../../segments-state';
-import { selectedChapter } from '../../stores/segments/chapter';
+import { dom } from '../../segments-state';
+import { segCurrentIdx, selectedChapter } from '../../stores/segments/chapter';
+import { accordionOpCtx, editMode } from '../../stores/segments/edit';
+import { activeFilters } from '../../stores/segments/filters';
 import { savedFilterView } from '../../stores/segments/navigation';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { enterEditWithBuffer } from './edit-common';
 import { deleteSegment } from './edit-delete';
 import { mergeAdjacent } from './edit-merge';
 import { startRefEdit } from './edit-reference';
-import { playErrorCardAudio } from './error-card-audio';
+import {
+    getValCardAudioOrNull,
+    getValCardPlayingBtn,
+    playErrorCardAudio,
+} from './error-card-audio';
 import { jumpToSegment } from './navigation-actions';
 import { playFromSegment } from './playback';
 import { resolveSegFromRow } from './resolve-seg-from-row';
+
+// ---------------------------------------------------------------------------
+// Module-local state (was state._segScrubActive)
+// ---------------------------------------------------------------------------
+
+let _segScrubActive = false;
+void _segScrubActive;
 
 // ---------------------------------------------------------------------------
 // Canvas click-to-seek / drag-to-scrub
@@ -38,7 +51,7 @@ function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas, row: HTMLElement
     if (dom.segListEl.contains(row)) {
         const idx = parseInt(row.dataset.segIndex ?? '');
         const chapter = parseInt(row.dataset.segChapter ?? '');
-        if (idx === state.segCurrentIdx && !dom.segAudioEl.paused) {
+        if (idx === get(segCurrentIdx) && !dom.segAudioEl.paused) {
             dom.segAudioEl.currentTime = timeMs / 1000;
         } else {
             playFromSegment(idx, chapter, timeMs);
@@ -46,8 +59,9 @@ function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas, row: HTMLElement
     } else {
         const playBtn = row.querySelector<HTMLElement>('.seg-card-play-btn');
         if (!playBtn) return;
-        if (state.valCardPlayingBtn === playBtn && state.valCardAudio && !state.valCardAudio.paused) {
-            state.valCardAudio.currentTime = timeMs / 1000;
+        const valAudio = getValCardAudioOrNull();
+        if (getValCardPlayingBtn() === playBtn && valAudio && !valAudio.paused) {
+            valAudio.currentTime = timeMs / 1000;
         } else {
             playErrorCardAudio(seg, playBtn, timeMs);
         }
@@ -59,17 +73,17 @@ function _handleSegCanvasMousedown(e: MouseEvent): void {
     const canvas = target?.closest<SegCanvas>('canvas');
     if (!canvas) return;
     const row = canvas.closest<HTMLElement>('.seg-row');
-    if (!row || state.segEditMode) return;
+    if (!row || get(editMode)) return;
 
     e.preventDefault();
-    state._segScrubActive = true;
+    _segScrubActive = true;
     _seekFromCanvasEvent(e, canvas, row);
 
     function onMove(ev: MouseEvent): void {
         _seekFromCanvasEvent(ev, canvas!, row!);
     }
     function onUp(): void {
-        state._segScrubActive = false;
+        _segScrubActive = false;
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
     }
@@ -86,7 +100,7 @@ function handleSegRowClick(e: MouseEvent): void {
     if (clickedCanvas) {
         e.stopPropagation();
         const row = clickedCanvas.closest<HTMLElement>('.seg-row');
-        if (row && !state.segEditMode) _seekFromCanvasEvent(e, clickedCanvas, row);
+        if (row && !get(editMode)) _seekFromCanvasEvent(e, clickedCanvas, row);
         return;
     }
 
@@ -112,7 +126,7 @@ function handleSegRowClick(e: MouseEvent): void {
         if (!row) return;
         if (dom.segListEl.contains(row)) {
             const idx = parseInt(row.dataset.segIndex ?? '');
-            if (idx === state.segCurrentIdx && !dom.segAudioEl.paused) {
+            if (idx === get(segCurrentIdx) && !dom.segAudioEl.paused) {
                 dom.segAudioEl.pause();
             } else {
                 playFromSegment(idx, parseInt(row.dataset.segChapter ?? ''));
@@ -131,14 +145,14 @@ function handleSegRowClick(e: MouseEvent): void {
         const row = gotoBtn.closest<HTMLElement>('.seg-row');
         const seg = resolveSegFromRow(row);
         if (!seg || !row) return;
-        if (row.closest('#seg-list') && state.segActiveFilters.some(f => f.value !== null)) {
+        const filters = get(activeFilters);
+        if (row.closest('#seg-list') && filters.some(f => f.value !== null)) {
             const saved = {
-                filters: JSON.parse(JSON.stringify(state.segActiveFilters)),
+                filters: JSON.parse(JSON.stringify(filters)),
                 chapter: get(selectedChapter),
                 verse: dom.segVerseSelect.value,
                 scrollTop: dom.segListEl.scrollTop,
             };
-            state._segSavedFilterView = saved;
             savedFilterView.set(saved);
         }
         jumpToSegment(seg.chapter ?? 0, seg.index);
@@ -168,7 +182,7 @@ function handleSegRowClick(e: MouseEvent): void {
         const splitCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
-            if (wrapper) state._accordionOpCtx = { wrapper };
+            if (wrapper) accordionOpCtx.set({ wrapper });
             enterEditWithBuffer(seg, row, 'split', splitCat);
             return;
         }
@@ -186,7 +200,7 @@ function handleSegRowClick(e: MouseEvent): void {
         const mergePrevCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
-            if (wrapper) state._accordionOpCtx = { wrapper, direction: 'prev' };
+            if (wrapper) accordionOpCtx.set({ wrapper, direction: 'prev' });
             mergeAdjacent(seg, 'prev', mergePrevCat);
             return;
         }
@@ -202,7 +216,7 @@ function handleSegRowClick(e: MouseEvent): void {
         const mergeNextCat = row.closest<HTMLElement>('details[data-category]')?.dataset?.category || null;
         if (!dom.segListEl.contains(row)) {
             const wrapper = row.closest<HTMLElement>('.val-card-wrapper');
-            if (wrapper) state._accordionOpCtx = { wrapper, direction: 'next' };
+            if (wrapper) accordionOpCtx.set({ wrapper, direction: 'next' });
             mergeAdjacent(seg, 'next', mergeNextCat);
             return;
         }
@@ -242,7 +256,7 @@ function handleSegRowClick(e: MouseEvent): void {
     // Row click to play
     const row = target.closest<HTMLElement>('.seg-row');
     if (row && !target.closest('.seg-play-col') && !target.closest('.seg-actions')) {
-        if (state.segEditMode) return;
+        if (get(editMode)) return;
         if (dom.segListEl.contains(row)) {
             const idx = parseInt(row.dataset.segIndex ?? '');
             playFromSegment(idx, parseInt(row.dataset.segChapter ?? ''));
