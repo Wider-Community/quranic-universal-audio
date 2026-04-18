@@ -168,7 +168,42 @@ edit/*, playback/index, validation/{error-cards,error-card-audio}, filters.ts �
 
 **Retrospective**: First attempt failed because prompt's "data-loss unacceptable" language spooked the agent into the move-shortcut. Second attempt split into 3 concrete passes with explicit file-by-file targets worked. Pragmatic relocation (Option B1) beats aggressive state.ts elimination — imperative state coordination can be retired incrementally in later phases without blocking directory deletion.
 
+### Phase Ph6c — state.ts + dom singleton elimination (3 commits: 3cd106f, 64d9df4, 63c8076)
 
+Scope: kill `lib/segments-state.ts` god-object. 55 state fields + 24 dom fields across 37 consumer files. Planned as 2 sequential Opus agents.
+
+**Ph6c-1 — state.* → stores + module-locals (commit: 3cd106f)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 334,125 | 30m 59s | 178 | a4921f8eac0f28dd5 | Extended 6 stores. 55 fields migrated. state object deleted. |
+
+lib/segments-state.ts 526 → 128 LOC. SegmentsState interface + state singleton deleted. Extended stores: chapter (segCurrentIdx, segChapterSS), edit (splitChain*, accordionOpCtx, splitChainWrapper), playback (continuousPlay, playEndMs, activeAudioSource), history (historyDataStale), save (savedChains, savedPreviewScroll), config (accordionContext, trimPad*, trimDimAlpha). Module-locals for per-file state (waveform observer, preview flags, prefetch cache, etc.).
+
+**Ph6c-2 — dom.* → stores + reactive markup. File deleted (commit: 64d9df4)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Implementation | opus | 357,167 | 39m 50s | 198 | a5a92885cbcb3ce51 | 238 dom.X sites migrated. File deleted. Registration pattern closures deleted. |
+
+New stores: segAudioElement, segListElement, playStatusText, playButtonLabel, playbackSpeed, saveButtonLabel, isDirtyStore (derived from _dirtyTick bumped on dirty writes). Reactive markup replaces disabled/hidden/textContent writes. SegmentsTab.onMount shrunk: no mustGet block, no register* calls, no button addEventListener. Registration closures deleted (registerEditModes, registerEditDrawFns, registerPlayRangeDrawFns, registerWaveformHandlers, registerDataLookups, registerGetEditCanvas, _makeChapterSelectShim). New lib/utils/segments/edit-enter.ts to satisfy import/no-cycle. Refactor-noise comments stripped (36 → 29 files).
+
+**Ph6c reviews** (parallel)
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Findings |
+|---|---|---|---|---|---|---|
+| Verification | opus | 86,245 | 3m 33s | 32 | a29a98705dea49545 | 1 CRITICAL (SavePreview dead buttons), 1 MEDIUM (speed→valCard), all else PASS |
+| Quality | sonnet | 99,561 | 6m 46s | 87 | abb64990350630e97 | 1 MEDIUM (duplicate playbackRate sync), 3 LOW (dead `$: void`, aliased imports, stale comment) |
+
+**Review fix (commit: 63c8076)**
+
+| Role | Model | Tokens | Duration | Tool uses | Agent ID | Notes |
+|---|---|---|---|---|---|---|
+| Regression fix | sonnet | 50,421 | 3m 20s | 29 | af09b03b37a98aeba | All 6 findings fixed |
+
+**Ph6c summary**: 4 agents (2 impl + 2 reviews + 1 fix), ~84 min total, ~927k tokens, 524 tool uses. 40+ consumer files modified. `lib/segments-state.ts` deleted. as-unknown-as casts 14 → 8. Noise 36 → 29.
+
+**Retrospective**: 2-agent split correct call. Ph6c-1 was 30 min + 178 tools (top of Opus budget); would have been too dense with dom work also. CRITICAL SavePreview regression caught by Opus review — pattern-specific check (Svelte markup vs old addEventListener path) that would be easy to miss in self-verification. Keep Opus verification on structural-migration phases. _dirtyTick tick-store pattern for derived isDirtyStore is clean — reusable for other "map-changed" reactivity.
 
 ---
 
