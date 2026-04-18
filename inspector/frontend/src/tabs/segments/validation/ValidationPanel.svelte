@@ -133,6 +133,7 @@
         return all.filter((c) => c.items.length > 0);
     }
 
+    let categories: CategoryDescriptor[] = [];
     $: {
         categories = buildCategories($segValidation, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
         for (const cat of categories) {
