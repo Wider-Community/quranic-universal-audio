@@ -2,18 +2,11 @@
     /**
      * HistoryOp — unified single + grouped operation diff row.
      *
-     * Wave 10 (S2-D20): consolidates the pre-Wave-10
-     * `renderHistoryOp` + `renderHistoryGroupedOp` DOM builders into a
-     * single Svelte component. Length-1 groups degrade cleanly.
-     *
-     * Responsibilities:
-     *   - Optional op-type label row with fix-kind badges + Undo button
-     *     (imperative `onOpUndoClick` via `on:click` per locked §D8 #3).
-     *   - Two-column diff (`.seg-history-before` + `.seg-history-arrows`
-     *     + `.seg-history-after`) with `<SegmentRow mode="history">` cards.
-     *   - Reactive highlight prop wiring (S2-D23): `trimHL`, `mergeHL`,
-     *     `changedFields` → `<SegmentRow>` → canvas.
-     *   - `<HistoryArrows>` column driven by bound card refs.
+     * Renders an op-type label row with fix-kind badges + Undo button, a
+     * two-column diff (`.seg-history-before` / `.seg-history-arrows` /
+     * `.seg-history-after`) with `<SegmentRow mode="history">` cards, and
+     * the `<HistoryArrows>` column driven by bound card refs. Length-1
+     * groups degrade cleanly to a single pair of cards.
      */
 
     import { tick } from 'svelte';

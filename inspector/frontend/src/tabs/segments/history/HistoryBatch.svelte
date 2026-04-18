@@ -2,28 +2,18 @@
     /**
      * HistoryBatch — one card for a single OpFlatItem in the history list.
      *
-     * Wave 10 dispatcher replacing `_renderOpCard` in history/rendering.ts.
-     * Four item shapes flow through this component:
+     * Dispatches across four item shapes:
      *   1. `strip-specials-card`  → "Deletion ×N" card with a single before
      *      snapshot + `(×N deleted)` placeholder.
-     *   2. `multi-chapter-card`   → summary card listing the chapters
-     *      touched (no diff view).
+     *   2. `multi-chapter-card`   → summary card listing touched chapters
+     *      (no diff view).
      *   3. `revert-card`          → header-only badge marking the batch
      *      as Reverted.
      *   4. `op-card` (default)    → delegates to <HistoryOp> (handles both
-     *      single and grouped ops per S2-D20).
+     *      single and grouped ops).
      *
-     * Header responsibilities:
-     *   - Op-type badge + follow-up badges (length-N groups).
-     *   - Fix-kind chips (non-manual, de-duped).
-     *   - Issue-delta badges (resolved / introduced categories).
-     *   - "Reverted" badge when batch is_revert.
-     *   - Chapter name via surahOptionText.
-     *   - Formatted date + Undo/Discard button.
-     *
-     * Undo wires to imperative `onOpUndoClick`; discard (pending batches)
-     * wires to imperative `onPendingBatchDiscard` — undo.ts unchanged
-     * (locked §D8 #3).
+     * Header: op-type badge + follow-up badges, fix-kind chips, issue-delta
+     * badges, "Reverted" badge, chapter name, formatted date, Undo/Discard.
      */
 
     import HistoryOp from './HistoryOp.svelte';

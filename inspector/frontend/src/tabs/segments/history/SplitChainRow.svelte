@@ -2,19 +2,14 @@
     /**
      * SplitChainRow — collapsed split-chain card (root → N leaves).
      *
-     * Wave 10 replacement for the imperative `renderSplitChainRow`
-     * (segments/history/rendering.ts). Lays out a single before card (the
-     * original segment) on the left and N after cards (the final leaves)
-     * on the right, with the shared HistoryArrows column in between.
+     * Lays out a single before card (the original segment) on the left and
+     * N after cards (the final leaves) on the right, with the shared
+     * HistoryArrows column between them.
      *
-     * The waveform sub-range is computed from the union of root ± leaf
-     * boundaries — when a leaf exceeds the root range the chain is
-     * "expanded" and the canvas is told to render against the wider
-     * range with `_splitHL.wfStart / wfEnd`. The highlight descriptor
-     * reaches the canvas via SegmentRow's reactive splitHL prop.
-     *
-     * Undo button wires to imperative `onChainUndoClick`. Validation
-     * delta badges follow the verbatim pre-Wave-10 logic.
+     * The waveform sub-range is the union of root ± leaf boundaries. When
+     * any leaf exceeds the root range the chain is "expanded" and the
+     * canvas renders against the wider range via `_splitHL.wfStart/wfEnd`
+     * (passed through SegmentRow's reactive splitHL prop).
      */
 
     import SegmentRow from '../SegmentRow.svelte';
@@ -71,8 +66,7 @@
         return hl;
     })();
 
-    // Each leaf card gets a splitHL pointing to its own range within
-    // wfRange — matches the pre-Wave-10 behavior verbatim.
+    // Each leaf card gets a splitHL pointing to its own range within wfRange.
     function leafSplitHL(leaf: HistorySnapshot): SplitHighlight | null {
         if (!rootSnap) return null;
         return {
