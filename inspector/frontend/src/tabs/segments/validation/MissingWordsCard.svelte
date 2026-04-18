@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { getAdjacentSegments, getSegByChapterIndex } from '../../../lib/stores/segments/chapter';
+    import { getAdjacentSegments, getSegByChapterIndex, segAllData } from '../../../lib/stores/segments/chapter';
     import { commitRefEdit } from '../../../lib/utils/segments/edit-reference';
     import { segConfig } from '../../../lib/stores/segments/config';
     import {
@@ -38,15 +38,17 @@
     // Missing-word segment tag set for SegmentRow display.
     $: missingWordSegIndices = new Set<number>(item.seg_indices ?? []);
 
-    // Segments in the gap range.
-    $: segmentsInRange = ((): Segment[] => {
+    // Segments in the gap range. Subscribes to segAllData so the list
+    // re-derives after split/merge mutates indices in place.
+    $: segStoreTick = $segAllData;
+    $: segmentsInRange = (void segStoreTick, ((): Segment[] => {
         const out: Segment[] = [];
         for (const idx of item.seg_indices ?? []) {
             const s = getSegByChapterIndex(item.chapter, idx);
             if (s) out.push(s);
         }
         return out;
-    })();
+    })());
 
     // Context neighbours: prev of first / next of last.
     $: prevSeg = ((): Segment | null => {

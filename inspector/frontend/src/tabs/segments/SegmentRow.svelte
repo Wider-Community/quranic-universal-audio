@@ -96,12 +96,16 @@
         c._mergeHL = mergeHL ?? undefined;
     }
 
-    // Derived values
+    // Derived values. Seg-derived reactives also subscribe to $segAllData via
+    // `segStoreTick` so they re-fire when refreshSegInStore bumps the store —
+    // validation-card sites derive resolvedSeg from the store, so their seg
+    // prop points to the refreshed object only after the store tick.
+    $: segStoreTick = $segAllData;
     $: chapterForDirty = seg.chapter ?? fallbackChapter;
     $: dirty = !readOnly && isIndexDirty(chapterForDirty, seg.index);
-    $: confClass = getConfClass(seg);
-    $: durSec = (seg.time_end - seg.time_start) / 1000;
-    $: durTitle = `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`;
+    $: confClass = (void segStoreTick, getConfClass(seg));
+    $: durSec = (void segStoreTick, (seg.time_end - seg.time_start) / 1000);
+    $: durTitle = (void segStoreTick, `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`);
     $: adj = !readOnly && !isContext && !showGotoBtn
         ? getAdjacentSegments(seg.chapter ?? 0, seg.index)
         : { prev: null, next: null };
@@ -126,7 +130,7 @@
     $: changedConf = !!changedFields?.has('conf');
     $: changedBody = !!changedFields?.has('body');
     $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
-    $: confText = seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL';
+    $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
     // ---------------------------------------------------------------------

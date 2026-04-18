@@ -5,6 +5,7 @@
         getAdjacentSegments,
         getChapterSegments,
         getSegByChapterIndex,
+        segAllData,
         selectedChapter,
     } from '../../../lib/stores/segments/chapter';
     import { segConfig } from '../../../lib/stores/segments/config';
@@ -27,9 +28,6 @@
     export let category: string;
     export let item: SegValAnyItem;
 
-    // ---- DOM refs ----
-    let wrapperEl: HTMLElement;
-
     // ---- State ----
     let showContext = false;
     let isAlreadyIgnored = false;
@@ -38,7 +36,12 @@
     $: boundaryItem = category === 'boundary_adj' ? (item as SegValBoundaryAdjItem) : null;
     $: issueMsg = (item as { msg?: string }).msg;
 
-    $: resolvedSeg = _resolveIssue(item, category);
+    // Subscribe to segAllData so resolvedSeg re-derives after split/merge
+    // mutates item.seg_index in place. _resolveIssue reads segAllData via
+    // getSegByChapterIndex / getChapterSegments; the extra reference here
+    // forces the reactive statement to register the dependency.
+    $: segStoreTick = $segAllData;
+    $: resolvedSeg = (void segStoreTick, _resolveIssue(item, category));
 
     $: canIgnore =
         resolvedSeg != null &&
@@ -144,7 +147,7 @@
     }
 </script>
 
-<div bind:this={wrapperEl} style:opacity={isAlreadyIgnored ? 0.5 : null}>
+<div style:opacity={isAlreadyIgnored ? 0.5 : null}>
     {#if issueMsg}
         <div class="val-card-issue-label">{issueMsg}</div>
     {/if}

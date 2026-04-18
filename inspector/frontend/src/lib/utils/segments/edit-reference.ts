@@ -26,13 +26,11 @@ import {
     setEdit,
     splitChainCategory,
     splitChainUid,
-    splitChainWrapper,
 } from '../../stores/segments/edit';
 import {
     continuousPlay,
     playStatusText,
     segAudioElement,
-    segListElement,
 } from '../../stores/segments/playback';
 import { stopSegAnimation } from './playback';
 import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from './references';
@@ -97,7 +95,6 @@ export function startRefEdit(
             committed = true;
             setPendingOp(null);
             splitChainUid.set(null);
-            splitChainWrapper.set(null);
             splitChainCategory.set(null);
             clearEdit();
             refSpan.textContent = formatRef(originalRef);
@@ -116,19 +113,18 @@ export function _chainSplitRefEdit(chapter: number): void {
     void chapter;
     const chainUid = get(splitChainUid);
     if (!chainUid) return;
-    const chainWrapper = get(splitChainWrapper);
     const chainCat = get(splitChainCategory);
     splitChainUid.set(null);
-    splitChainWrapper.set(null);
     splitChainCategory.set(null);
     const allSegs = get(segAllData)?.segments || get(segData)?.segments || [];
     const secondSeg = allSegs.find(s => s.segment_uid === chainUid);
     if (!secondSeg) return;
+    // Broad document lookup — the second half's row may live in the main
+    // list, a validation accordion card, or both. First match wins; all
+    // SegmentRow sites reactively re-render from segAllData so any present
+    // DOM occurrence is addressable by chapter+index.
     const selector = `.seg-row[data-seg-chapter="${secondSeg.chapter}"][data-seg-index="${secondSeg.index}"]`;
-    const listEl = get(segListElement);
-    const secondRow = (chainWrapper && chainWrapper.querySelector<HTMLElement>(selector))
-        || (listEl && listEl.querySelector<HTMLElement>(selector))
-        || document.querySelector<HTMLElement>(selector);
+    const secondRow = document.querySelector<HTMLElement>(selector);
     if (!secondRow) return;
     secondRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
     const refSpan = secondRow.querySelector<HTMLElement>('.seg-text-ref');

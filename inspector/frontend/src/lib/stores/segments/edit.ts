@@ -71,9 +71,6 @@ export const splitChainCategory = writable<string | null>(null);
  *  accordion edit trigger). */
 export const accordionOpCtx = writable<AccordionOpCtx | null>(null);
 
-/** Wrapper element for the active split-chain error-card context. */
-export const splitChainWrapper = writable<HTMLElement | null>(null);
-
 /** Reset the edit store to the "no edit in progress" baseline. Called by
  *  exitEditMode() / cancel paths. */
 export function clearEdit(): void {

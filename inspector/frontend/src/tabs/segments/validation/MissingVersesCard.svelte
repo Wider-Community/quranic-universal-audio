@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { getAdjacentSegments } from '../../../lib/stores/segments/chapter';
+    import { getAdjacentSegments, segAllData } from '../../../lib/stores/segments/chapter';
     import { findMissingVerseBoundarySegments } from '../../../lib/utils/segments/missing-verse-context';
     import type { SegValMissingVerseItem, Segment } from '../../../types/domain';
     import SegmentRow from '../SegmentRow.svelte';
@@ -11,7 +11,10 @@
     let showContext = false;
 
     // ---- Derived ----
-    $: boundary = findMissingVerseBoundarySegments(item.chapter, item.verse_key);
+    // Subscribes to segAllData so boundary re-derives after split/merge
+    // mutates seg indices in the chapter.
+    $: segStoreTick = $segAllData;
+    $: boundary = (void segStoreTick, findMissingVerseBoundarySegments(item.chapter, item.verse_key));
     $: prev = boundary.prev;
     $: next = boundary.next;
     $: nextDifferent = next != null && (!prev || next.index !== prev.index);
@@ -52,7 +55,7 @@
 {#if prev}
     <SegmentRow
         seg={prev}
-        readOnly={true}
+        isContext={true}
         contextLabel="Previous verse boundary"
         showPlayBtn={true}
         showChapter={true}
@@ -61,7 +64,7 @@
 {#if nextDifferent && next}
     <SegmentRow
         seg={next}
-        readOnly={true}
+        isContext={true}
         contextLabel="Next verse boundary"
         showPlayBtn={true}
         showChapter={true}

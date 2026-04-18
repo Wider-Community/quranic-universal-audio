@@ -29,7 +29,6 @@ import {
     setEdit,
     splitChainCategory,
     splitChainUid,
-    splitChainWrapper,
 } from '../../stores/segments/edit';
 import {
     playStatusText,
@@ -302,7 +301,6 @@ export async function confirmSplit(seg: Segment): Promise<void> {
     splitChainUid.set(secondHalf.segment_uid ?? null);
     const chainCat = splitOp?.op_context_category || null;
     splitChainCategory.set(chainCat);
-    splitChainWrapper.set(null);
     const listEl = get(segListElement);
     const searchRoot: ParentNode = listEl ?? document;
     const firstRow = searchRoot.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);

@@ -16,7 +16,6 @@ import {
 import {
     splitChainCategory,
     splitChainUid,
-    splitChainWrapper,
 } from '../../stores/segments/edit';
 import {
     buildSplitChains,
@@ -38,7 +37,6 @@ import { buildSavePreviewData, hideSavePreview } from './save-actions';
 
 export async function _afterUndoSuccess(reciter: string, opsReversed: number): Promise<void> {
     splitChainUid.set(null);
-    splitChainWrapper.set(null);
     splitChainCategory.set(null);
 
     try {
@@ -203,7 +201,6 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     if (!confirm(`Discard pending edits${chLabel}?`)) return;
 
     splitChainUid.set(null);
-    splitChainWrapper.set(null);
     splitChainCategory.set(null);
 
     // Use dirty store helpers (number keys only).
