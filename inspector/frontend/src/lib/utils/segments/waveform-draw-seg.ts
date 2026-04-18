@@ -99,9 +99,56 @@ export function drawSegPlayhead(
     ctx.fill();
 }
 
-interface SlicedPeaks {
+export interface SlicedPeaks {
     maxVals: Float32Array;
     minVals: Float32Array;
+}
+
+/**
+ * Draw the shared blue peak-fill base used by trim and split edit modes:
+ *   1. fill the canvas with the dark editor background
+ *   2. slice peaks for [startMs, endMs] and draw a closed max/min polygon
+ *      filled with translucent blue
+ *
+ * Returns the sliced peak data so the caller can layer its own stroke on
+ * top (trim strokes the full outline; split strokes only the top), or null
+ * if no peak data is available. Callers that need a "no data" fallback
+ * (e.g. split) render it themselves when null is returned.
+ */
+export function drawEditPeakBase(
+    canvas: SegCanvas,
+    audioUrl: string,
+    startMs: number,
+    endMs: number,
+): SlicedPeaks | null {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, width, height);
+
+    const data = _slicePeaks(audioUrl, startMs, endMs, width);
+    if (!data) return null;
+
+    const scale = (height / 2) * 0.9;
+
+    ctx.beginPath();
+    for (let i = 0; i < width; i++) {
+        const y = centerY - (data.maxVals[i] ?? 0) * scale;
+        if (i === 0) ctx.moveTo(i, y);
+        else ctx.lineTo(i, y);
+    }
+    for (let i = width - 1; i >= 0; i--) {
+        ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+    ctx.fill();
+
+    return data;
 }
 
 /** Slice peaks for a time range and resample to `buckets` bins. */

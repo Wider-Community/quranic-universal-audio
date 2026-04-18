@@ -9,7 +9,7 @@ import { get } from 'svelte/store';
 
 import { segConfig } from '../../stores/segments/config';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { _slicePeaks } from './waveform-draw-seg';
+import { drawEditPeakBase } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
 // _ensureTrimBaseCache
@@ -19,21 +19,18 @@ export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
     if (canvas._trimBaseCache) return true;
     const ctx = canvas.getContext('2d');
     if (!ctx) return false;
-    const width = canvas.width;
-    const height = canvas.height;
-    const centerY = height / 2;
     const tw = canvas._trimWindow;
     if (!tw) return false;
 
-    ctx.fillStyle = '#0f0f23';
-    ctx.fillRect(0, 0, width, height);
-
-    const audioUrl = tw.audioUrl || '';
-    const data = _slicePeaks(audioUrl, tw.windowStart, tw.windowEnd, width);
+    const data = drawEditPeakBase(canvas, tw.audioUrl || '', tw.windowStart, tw.windowEnd);
     if (!data) return false;
 
-    const scale = height / 2 * 0.9;
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+    const scale = (height / 2) * 0.9;
 
+    // Trim strokes the full max+min outline (top and bottom) for a closed look.
     ctx.beginPath();
     for (let i = 0; i < width; i++) {
         const y = centerY - (data.maxVals[i] ?? 0) * scale;
@@ -43,8 +40,6 @@ export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
         ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
-    ctx.fill();
     ctx.strokeStyle = '#4361ee';
     ctx.lineWidth = 1;
     ctx.stroke();

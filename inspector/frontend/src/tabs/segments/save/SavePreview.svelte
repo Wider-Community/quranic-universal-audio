@@ -20,6 +20,7 @@
         splitChains,
         type DisplayEntry,
     } from '../../../lib/stores/segments/history';
+    import { waveformContainer } from '../../../lib/stores/segments/playback';
     import { savePreviewData, savePreviewVisible } from '../../../lib/stores/segments/save';
     import { confirmSaveFromPreview, hideSavePreview } from '../../../lib/utils/segments/save-actions';
 
@@ -60,7 +61,7 @@
     }
 </script>
 
-<div id="seg-save-preview" class="seg-history-view" hidden={!$savePreviewVisible}>
+<div id="seg-save-preview" class="seg-history-view" hidden={!$savePreviewVisible} use:waveformContainer>
     <div class="seg-history-toolbar seg-save-preview-toolbar">
         <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>&larr; Cancel</button>
         <span class="seg-history-title">Review Changes</span>

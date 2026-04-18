@@ -15,11 +15,9 @@ import {
 } from '../../stores/segments/chapter';
 import { segConfig } from '../../stores/segments/config';
 import {
-    finalizeOp,
     getPendingOp,
     markDirty,
     setPendingOp,
-    snapshotSeg,
 } from '../../stores/segments/dirty';
 import {
     editCanvas,
@@ -29,15 +27,11 @@ import {
     setEdit,
     trimWindow,
 } from '../../stores/segments/edit';
-import {
-    playStatusText,
-    segAudioElement,
-} from '../../stores/segments/playback';
+import { playStatusText, segAudioElement } from '../../stores/segments/playback';
 import type { Segment } from '../../types/domain';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
-import { _playRange, exitEditMode } from './edit-common';
-import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
+import { _playRange, exitEditMode, finalizeEdit } from './edit-common';
 import {
     clearPlayRangeRAF,
     getPreviewLooping,
@@ -215,10 +209,6 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 
     const trimOp = pending;
     setPendingOp(null);
-    if (trimOp) {
-        trimOp.applied_at_utc = new Date().toISOString();
-        trimOp.targets_after = [snapshotSeg(seg)];
-    }
 
     const curData = get(segData);
     if (chapter !== currentChapter || !curData?.segments) {
@@ -231,14 +221,13 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
         syncChapterSegsToAll();
     }
 
-    computeSilenceAfter();
     exitEditMode();
-    applyVerseFilterAndRender();
     refreshSegInStore(seg);
-
-    if (trimOp) finalizeOp(chapter, trimOp);
-
-    playStatusText.set('Adjusted (unsaved)');
+    if (trimOp) {
+        finalizeEdit(trimOp, chapter, [seg], 'Adjusted (unsaved)', { skipAccordion: true });
+    } else {
+        playStatusText.set('Adjusted (unsaved)');
+    }
 }
 
 // ---------------------------------------------------------------------------

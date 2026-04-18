@@ -12,13 +12,10 @@ import { get } from 'svelte/store';
 import { fetchJson } from '../../api';
 import {
     refreshSegInStore,
-    segAllData,
-    segData,
     selectedChapter,
 } from '../../stores/segments/chapter';
 import {
     createOp,
-    finalizeOp,
     getPendingOp,
     markDirty,
     setPendingOp,
@@ -30,14 +27,14 @@ import {
     segAudioElement,
 } from '../../stores/segments/playback';
 import type { SegResolveRefResponse } from '../../types/api';
-import type { Segment } from '../../types/domain';
+import type { EditOp, Segment } from '../../types/domain';
+import { finalizeEdit } from './edit-common';
 import { stopSegAnimation } from './playback';
-import { _normalizeRef as _normalizeRefLib } from './references';
+import { _normalizeRef as _normalizeRefLib, getVerseWordCounts } from './references';
 
-function _vwc() {
-    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
+function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]): ReturnType<typeof _normalizeRefLib> {
+    return _normalizeRefLib(ref, getVerseWordCounts());
 }
-function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]) { return _normalizeRefLib(ref, _vwc()); }
 
 // ---------------------------------------------------------------------------
 // beginRefEdit — enter reference-edit mode for a segment
@@ -64,6 +61,32 @@ export function beginRefEdit(seg: Segment, contextCategory: string | null = null
 // commitRefEdit — resolve reference and apply edit
 // ---------------------------------------------------------------------------
 
+/**
+ * Shared tail for both commitRefEdit branches: append the op-context category
+ * to ignored_categories (except muqattaat which tracks confidence instead),
+ * clear derived cache, mark dirty, re-publish the seg to the store, and
+ * finalize the pending op.
+ */
+function _applyRefChange(seg: Segment, pending: EditOp | null, chapter: number): void {
+    const ctxCat = pending?.op_context_category;
+    if (ctxCat && ctxCat !== 'muqattaat') {
+        if (!seg.ignored_categories) seg.ignored_categories = [];
+        if (!seg.ignored_categories.includes(ctxCat))
+            seg.ignored_categories.push(ctxCat);
+    }
+    delete seg._derived;
+    markDirty(chapter, seg.index);
+    refreshSegInStore(seg);
+    if (pending) {
+        finalizeEdit(pending, chapter, [seg], '', {
+            skipSilence: true,
+            skipFilterRender: true,
+            skipAccordion: true,
+            skipStatus: true,
+        });
+    }
+}
+
 export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<void> {
     const oldRef = seg.matched_ref || '';
     const chapter = seg.chapter || parseInt(get(selectedChapter));
@@ -76,22 +99,7 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<voi
                 pending.fix_kind = 'audit';
             }
             seg.confidence = 1.0;
-            const ctxCat = pending?.op_context_category;
-            if (ctxCat) {
-                if (ctxCat !== 'muqattaat') {
-                    if (!seg.ignored_categories) seg.ignored_categories = [];
-                    if (!seg.ignored_categories.includes(ctxCat))
-                        seg.ignored_categories.push(ctxCat);
-                }
-            }
-            delete seg._derived;
-            markDirty(chapter, seg.index);
-            refreshSegInStore(seg);
-            if (pending) {
-                pending.applied_at_utc = new Date().toISOString();
-                pending.targets_after = [snapshotSeg(seg)];
-                finalizeOp(chapter, pending);
-            }
+            _applyRefChange(seg, pending, chapter);
         } else {
             setPendingOp(null);
         }
@@ -102,14 +110,6 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<voi
     seg.matched_ref = newRef;
     seg.confidence = 1.0;
     const pending = getPendingOp();
-    const ctxCat = pending?.op_context_category;
-    if (ctxCat) {
-        if (ctxCat !== 'muqattaat') {
-            if (!seg.ignored_categories) seg.ignored_categories = [];
-            if (!seg.ignored_categories.includes(ctxCat))
-                seg.ignored_categories.push(ctxCat);
-        }
-    }
 
     if (newRef) {
         try {
@@ -134,15 +134,6 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<voi
         seg.display_text = '';
     }
 
-    delete seg._derived;
-    markDirty(chapter, seg.index);
-    refreshSegInStore(seg);
-
-    if (pending) {
-        pending.applied_at_utc = new Date().toISOString();
-        pending.targets_after = [snapshotSeg(seg)];
-        finalizeOp(chapter, pending);
-    }
-
+    _applyRefChange(seg, pending, chapter);
     clearEdit();
 }

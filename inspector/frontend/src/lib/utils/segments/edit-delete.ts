@@ -19,21 +19,18 @@ import {
 } from '../../stores/segments/chapter';
 import {
     createOp,
-    finalizeOp,
     markDirty,
     snapshotSeg,
 } from '../../stores/segments/dirty';
 import { clearEdit, setEdit } from '../../stores/segments/edit';
-import { playStatusText } from '../../stores/segments/playback';
 import type { Segment } from '../../types/domain';
-import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
-import { formatRef as _formatRefLib } from './references';
-import { _fixupValIndicesForDelete, refreshOpenAccordionCards } from './validation-fixups';
+import { finalizeEdit } from './edit-common';
+import { formatRef as _formatRefLib, getVerseWordCounts } from './references';
+import { _fixupValIndicesForDelete } from './validation-fixups';
 
-function _vwc() {
-    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
+function formatRef(ref: Parameters<typeof _formatRefLib>[0]): string {
+    return _formatRefLib(ref, getVerseWordCounts());
 }
-function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
 
 // ---------------------------------------------------------------------------
 // deleteSegment — remove a segment and reindex
@@ -53,9 +50,6 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
 
     // Signal delete mode to EditOverlay (confirmed — committed to executing).
     setEdit('delete', seg.segment_uid ?? null);
-
-    deleteOp.applied_at_utc = new Date().toISOString();
-    deleteOp.targets_after = [];
 
     // Unified splice+reindex against segAllData (single source of truth).
     const allData = get(segAllData);
@@ -78,11 +72,6 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
     markDirty(chapter, undefined, true);
     _fixupValIndicesForDelete(chapter, seg.index);
 
-    computeSilenceAfter();
-    applyVerseFilterAndRender();
-    refreshOpenAccordionCards();
-
-    finalizeOp(chapter, deleteOp);
+    finalizeEdit(deleteOp, chapter, [], 'Segment deleted (unsaved)');
     clearEdit();
-    playStatusText.set('Segment deleted (unsaved)');
 }

@@ -148,6 +148,19 @@ export function isIndexDirty(chapter: number, index: number): boolean {
     return entry ? entry.indices.has(index) : false;
 }
 
+/** Whether the given segment (chapter, index) currently has unsaved edits.
+ *  Pair with `$dirtyTick` in reactive `$:` blocks so the derivation fires
+ *  after mutations. */
+export function isSegmentDirty(chapter: number, index: number): boolean {
+    return isIndexDirty(chapter, index);
+}
+
+/** Readonly snapshot of a chapter's op log for display/inspection callers that
+ *  must not mutate the underlying array. Internal writers use getChapterOps. */
+export function getChapterOpsSnapshot(chapter: number): readonly EditOp[] {
+    return _opLog.get(chapter) ?? [];
+}
+
 // ---------------------------------------------------------------------------
 // Pending op accessors
 // ---------------------------------------------------------------------------

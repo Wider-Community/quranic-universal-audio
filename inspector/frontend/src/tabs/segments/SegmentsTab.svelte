@@ -36,7 +36,7 @@
     import { reloadCurrentReciter } from '../../lib/utils/segments/reciter-actions';
     import { loadChapterData } from '../../lib/utils/segments/chapter-actions';
     import HistoryPanel from './history/HistoryPanel.svelte';
-    import { segListElement } from '../../lib/stores/segments/playback';
+    import { segListElement, waveformContainer } from '../../lib/stores/segments/playback';
     import { historyData, historyVisible } from '../../lib/stores/segments/history';
     import { savePreviewVisible, saveButtonLabel } from '../../lib/stores/segments/save';
     import ValidationPanel from './validation/ValidationPanel.svelte';
@@ -194,12 +194,12 @@
 
         <StatsPanel />
 
-        <div id="seg-validation-global" class="seg-validation">
+        <div id="seg-validation-global" class="seg-validation" use:waveformContainer>
             {#if $selectedChapter}
                 <ValidationPanel chapter={null} label="All Chapters" />
             {/if}
         </div>
-        <div id="seg-validation" class="seg-validation">
+        <div id="seg-validation" class="seg-validation" use:waveformContainer>
             {#if $selectedChapter}
                 <ValidationPanel chapter={parseInt($selectedChapter)} label="Chapter {$selectedChapter}" />
             {:else}

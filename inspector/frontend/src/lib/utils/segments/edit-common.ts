@@ -10,13 +10,19 @@
 import { get } from 'svelte/store';
 
 import { getSegByChapterIndex } from '../../stores/segments/chapter';
-import { setPendingOp } from '../../stores/segments/dirty';
+import {
+    finalizeOp,
+    setPendingOp,
+    snapshotSeg,
+} from '../../stores/segments/dirty';
 import {
     accordionOpCtx,
     clearEdit,
     editCanvas,
 } from '../../stores/segments/edit';
-import { segAudioElement } from '../../stores/segments/playback';
+import { playStatusText, segAudioElement } from '../../stores/segments/playback';
+import type { EditOp, Segment } from '../../types/domain';
+import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import {
     _playRange as _playRangeImpl,
     clearPlayRangeRAF,
@@ -26,6 +32,7 @@ import {
     setPreviewStopHandler,
 } from './play-range';
 import { stopSegAnimation } from './playback';
+import { refreshOpenAccordionCards } from './validation-fixups';
 import { drawWaveformFromPeaksForSeg } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
@@ -68,3 +75,41 @@ export function exitEditMode(): void {
 
 // Re-export play-range implementation so existing callers still work.
 export const _playRange = _playRangeImpl;
+
+// ---------------------------------------------------------------------------
+// finalizeEdit — post-mutation scaffolding shared by edit-merge/split/delete/trim
+// ---------------------------------------------------------------------------
+
+/**
+ * Finalize an edit op and refresh the UI after a segment mutation.
+ *
+ * Stamps the op (applied_at + targets_after), appends it to the chapter op
+ * log via `finalizeOp` (which also clears the pending-op ref), recomputes
+ * silence gaps, re-renders the filtered list, refreshes open accordion
+ * cards, and publishes the completion status message.
+ *
+ * Callers still own `markDirty` (timing varies) and whichever exit path
+ * they need (`clearEdit` for merge/delete, `exitEditMode` for trim/split
+ * which also has canvas-level cleanup). Each step is skippable via `opts`
+ * so the helper also fits the few sites that don't need the full refresh.
+ */
+export function finalizeEdit(
+    op: EditOp,
+    chapter: number,
+    targetsAfter: Segment[],
+    statusMsg: string,
+    opts?: {
+        skipSilence?: boolean;
+        skipFilterRender?: boolean;
+        skipAccordion?: boolean;
+        skipStatus?: boolean;
+    },
+): void {
+    op.applied_at_utc = new Date().toISOString();
+    op.targets_after = targetsAfter.map(snapshotSeg);
+    if (!opts?.skipSilence) computeSilenceAfter();
+    if (!opts?.skipFilterRender) applyVerseFilterAndRender();
+    if (!opts?.skipAccordion) refreshOpenAccordionCards();
+    finalizeOp(chapter, op);
+    if (!opts?.skipStatus) playStatusText.set(statusMsg);
+}

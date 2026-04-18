@@ -4,8 +4,8 @@
     import { segConfig } from '../../../lib/stores/segments/config';
     import {
         createOp,
-        getDirtyMap,
         getOpLog,
+        isSegmentDirty,
         setPendingOp,
         snapshotSeg,
         unmarkDirty,
@@ -79,7 +79,7 @@
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const segChapter = targetSeg.chapter ?? item.chapter;
-        const wasDirty = !!(getDirtyMap().get(segChapter)?.indices?.has(targetSeg.index));
+        const wasDirty = isSegmentDirty(segChapter, targetSeg.index);
         const pending = createOp('auto_fix_missing_word', {
             contextCategory: 'missing_words',
             fixKind: 'auto_fix',

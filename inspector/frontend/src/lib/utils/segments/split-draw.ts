@@ -4,28 +4,23 @@
  */
 
 import type { SegCanvas } from '../../types/segments-waveform';
-import { _slicePeaks } from './waveform-draw-seg';
+import { drawEditPeakBase } from './waveform-draw-seg';
 
 // ---------------------------------------------------------------------------
 // _ensureSplitBaseCache
 // ---------------------------------------------------------------------------
 
 export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
-    if (canvas._splitBaseCache) return true;
     const ctx = canvas.getContext('2d');
     if (!ctx) return false;
-    const width = canvas.width;
-    const height = canvas.height;
-    const centerY = height / 2;
+    if (canvas._splitBaseCache) return true;
     const sd = canvas._splitData;
     if (!sd) return false;
     const seg = sd.seg;
+    const width = canvas.width;
+    const height = canvas.height;
 
-    ctx.fillStyle = '#0f0f23';
-    ctx.fillRect(0, 0, width, height);
-
-    const audioUrl = sd.audioUrl || '';
-    const data = _slicePeaks(audioUrl, seg.time_start, seg.time_end, width);
+    const data = drawEditPeakBase(canvas, sd.audioUrl || '', seg.time_start, seg.time_end);
     if (!data) {
         ctx.fillStyle = '#888';
         ctx.font = '14px monospace';
@@ -34,20 +29,10 @@ export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
         return false;
     }
 
-    const scale = height / 2 * 0.9;
+    const centerY = height / 2;
+    const scale = (height / 2) * 0.9;
 
-    ctx.beginPath();
-    for (let i = 0; i < width; i++) {
-        const y = centerY - (data.maxVals[i] ?? 0) * scale;
-        if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
-    }
-    for (let i = width - 1; i >= 0; i--) {
-        ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
-    ctx.fill();
-
+    // Split strokes only the top (max) outline for a thinner visual.
     ctx.strokeStyle = '#4361ee';
     ctx.lineWidth = 1;
     ctx.beginPath();

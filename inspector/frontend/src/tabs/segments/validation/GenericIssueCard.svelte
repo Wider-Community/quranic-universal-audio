@@ -11,8 +11,9 @@
     import { segConfig } from '../../../lib/stores/segments/config';
     import {
         createOp,
+        dirtyTick,
         finalizeOp,
-        getDirtyMap,
+        isSegmentDirty,
         markDirty,
         snapshotSeg,
     } from '../../../lib/stores/segments/dirty';
@@ -52,10 +53,12 @@
     $: segChapterForBtn =
         resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(get(selectedChapter))) : 0;
 
-    $: isDirtySegment =
+    $: isDirtySegment = (
+        $dirtyTick,
         resolvedSeg != null
-            ? !!(getDirtyMap().get(segChapterForBtn)?.indices?.has(resolvedSeg.index))
-            : false;
+            ? isSegmentDirty(segChapterForBtn, resolvedSeg.index)
+            : false
+    );
 
     $: ctxMode = $segConfig.accordionContext?.[category] ?? 'hidden';
     $: ctxDefaultOpen = ctxMode !== 'hidden';

@@ -14,11 +14,9 @@ import {
     syncChapterSegsToAll,
 } from '../../stores/segments/chapter';
 import {
-    finalizeOp,
     getPendingOp,
     markDirty,
     setPendingOp,
-    snapshotSeg,
 } from '../../stores/segments/dirty';
 import {
     accordionOpCtx,
@@ -40,24 +38,22 @@ import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
-import { _playRange, exitEditMode } from './edit-common';
+import { _playRange, exitEditMode, finalizeEdit } from './edit-common';
 import { beginRefEdit } from './edit-reference';
-import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import {
     clearPlayRangeRAF,
     getPreviewLooping,
     setPreviewJustSeeked,
     setPreviewLooping,
 } from './play-range';
-import { _suggestSplitRefs as _suggestSplitRefsLib } from './references';
+import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts } from './references';
 import { _ensureSplitBaseCache, drawSplitWaveform } from './split-draw';
-import { _fixupValIndicesForSplit, refreshOpenAccordionCards } from './validation-fixups';
+import { _fixupValIndicesForSplit } from './validation-fixups';
 import { _fetchChapterPeaksIfNeeded } from './waveform-utils';
 
-function _vwc() {
-    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
+function _suggestSplitRefs(ref: Parameters<typeof _suggestSplitRefsLib>[0]): ReturnType<typeof _suggestSplitRefsLib> {
+    return _suggestSplitRefsLib(ref, getVerseWordCounts());
 }
-function _suggestSplitRefs(ref: Parameters<typeof _suggestSplitRefsLib>[0]) { return _suggestSplitRefsLib(ref, _vwc()); }
 
 // Re-export draw functions for registration sites.
 export { _ensureSplitBaseCache, drawSplitWaveform };
@@ -221,10 +217,6 @@ export async function confirmSplit(seg: Segment, canvas?: SegCanvas | null): Pro
 
     const splitOp = getPendingOp();
     setPendingOp(null);
-    if (splitOp) {
-        splitOp.applied_at_utc = new Date().toISOString();
-        splitOp.targets_after = [snapshotSeg(firstHalf), snapshotSeg(secondHalf)];
-    }
 
     if (useSegData && curData) {
         const segIdx = curData.segments.findIndex(s => s.index === seg.index);
@@ -249,15 +241,12 @@ export async function confirmSplit(seg: Segment, canvas?: SegCanvas | null): Pro
     _fixupValIndicesForSplit(chapter, seg.index);
 
     accordionOpCtx.set(null);
-
-    computeSilenceAfter();
     exitEditMode();
-    applyVerseFilterAndRender();
-    refreshOpenAccordionCards();
-
-    if (splitOp) finalizeOp(chapter, splitOp);
-
-    playStatusText.set('Split \u2014 edit first half reference, then second');
+    if (splitOp) {
+        finalizeEdit(splitOp, chapter, [firstHalf, secondHalf], 'Split \u2014 edit first half reference, then second');
+    } else {
+        playStatusText.set('Split \u2014 edit first half reference, then second');
+    }
 
     // Chain the second-half ref edit. Setting `splitChainCategory` first and
     // then `splitChainUid` is deliberate: SegmentRow's reactive effect reads

@@ -14,7 +14,6 @@ import {
 } from '../../stores/segments/chapter';
 import {
     createOp,
-    finalizeOp,
     markDirty,
     snapshotSeg,
 } from '../../stores/segments/dirty';
@@ -23,11 +22,10 @@ import {
     clearEdit,
     setEdit,
 } from '../../stores/segments/edit';
-import { playStatusText } from '../../stores/segments/playback';
 import type { SegResolveRefResponse } from '../../types/api';
 import type { Segment } from '../../types/domain';
-import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
-import { _fixupValIndicesForMerge, refreshOpenAccordionCards } from './validation-fixups';
+import { finalizeEdit } from './edit-common';
+import { _fixupValIndicesForMerge } from './validation-fixups';
 
 // ---------------------------------------------------------------------------
 // mergeAdjacent — combine two adjacent segments
@@ -119,9 +117,6 @@ export async function mergeAdjacent(
     if (contextCategory) mergedIc.add(contextCategory);
     if (mergedIc.size) merged.ignored_categories = [...mergedIc];
 
-    mergeOp.applied_at_utc = new Date().toISOString();
-    mergeOp.targets_after = [snapshotSeg(merged)];
-
     const keptOldIdx = first.index;
     const consumedOldIdx = second.index;
 
@@ -145,13 +140,7 @@ export async function mergeAdjacent(
     if (chapter === currentChapter && curData) {
         curData.segments = getChapterSegments(chapter);
     }
-    computeSilenceAfter();
-    applyVerseFilterAndRender();
-
     accordionOpCtx.set(null);
-    refreshOpenAccordionCards();
-
-    finalizeOp(chapter, mergeOp);
+    finalizeEdit(mergeOp, chapter, [merged], 'Segments merged (unsaved)');
     clearEdit();
-    playStatusText.set('Segments merged (unsaved)');
 }

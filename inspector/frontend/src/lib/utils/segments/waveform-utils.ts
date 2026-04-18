@@ -10,6 +10,7 @@ import {
 import { segConfig } from '../../stores/segments/config';
 import { editCanvas } from '../../stores/segments/edit';
 import { segIndexMap } from '../../stores/segments/filters';
+import { waveformContainers } from '../../stores/segments/playback';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../types/api';
 import type { Segment, SegmentPeaks } from '../../types/domain';
 import type {
@@ -69,15 +70,10 @@ export function indexSegPeaksBulk(peaksMap: Record<string, SegmentPeaks> | null 
 // Redraw all pending waveform canvases
 // ---------------------------------------------------------------------------
 
-/** The 4 imperatively-rendered container IDs that may host seg-row canvases. */
-const _CONTAINER_IDS = ['seg-list', 'seg-validation', 'seg-validation-global', 'seg-history-view', 'seg-save-preview'];
-
 export function redrawPeaksWaveforms(): void {
     const observer = _ensureWaveformObserver();
     const activeEdit = get(editCanvas);
-    for (const id of _CONTAINER_IDS) {
-        const container = document.getElementById(id);
-        if (!container) continue;
+    for (const container of get(waveformContainers)) {
         container.querySelectorAll<HTMLCanvasElement>('canvas[data-needs-waveform]').forEach(c => {
             if (c === activeEdit) return;
             observer.unobserve(c);

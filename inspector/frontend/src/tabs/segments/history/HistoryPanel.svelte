@@ -23,6 +23,7 @@
     import HistoryBatch from './HistoryBatch.svelte';
     import HistoryFilters from './HistoryFilters.svelte';
     import SplitChainRow from './SplitChainRow.svelte';
+    import { waveformContainer } from '../../../lib/stores/segments/playback';
     import { hideHistoryView } from '../../../lib/utils/segments/history-actions';
     import {
         buildDisplayItems,
@@ -106,6 +107,7 @@
     id="seg-history-view"
     class="seg-history-view"
     hidden={!$historyVisible}
+    use:waveformContainer
 >
     <div class="seg-history-toolbar">
         <button id="seg-history-back-btn" class="btn" on:click={() => hideHistoryView()}>

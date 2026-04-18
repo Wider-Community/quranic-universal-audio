@@ -35,6 +35,36 @@ export const segAudioElement = writable<HTMLAudioElement | null>(null);
  *  bind:this. Consumers read via get(segListElement) and null-check. */
 export const segListElement = writable<HTMLDivElement | null>(null);
 
+/** Set of mounted container elements that host seg-row canvases. Populated
+ *  by each consuming component's onMount via registerWaveformContainer.
+ *  `redrawPeaksWaveforms` iterates this set to find canvases needing redraw
+ *  without hardcoding DOM IDs. */
+export const waveformContainers = writable<Set<HTMLElement>>(new Set());
+
+/** Register a container element that hosts seg-row canvases. Returns a
+ *  cleanup function to call from the component's onMount teardown. */
+export function registerWaveformContainer(el: HTMLElement): () => void {
+    waveformContainers.update((s) => {
+        s.add(el);
+        return s;
+    });
+    return () => {
+        waveformContainers.update((s) => {
+            s.delete(el);
+            return s;
+        });
+    };
+}
+
+/** Svelte action: registers the element as a waveform container for its
+ *  lifetime in the DOM. Use as `<div use:waveformContainer>...</div>`.
+ *  Re-runs correctly when the element is destroyed and recreated by an
+ *  `{#if}` block. */
+export function waveformContainer(node: HTMLElement): { destroy(): void } {
+    const cleanup = registerWaveformContainer(node);
+    return { destroy: cleanup };
+}
+
 /** Current playback speed multiplier. Persisted to localStorage via
  *  LS_KEYS.SEG_SPEED. SegmentsAudioControls' speed <select> writes to it;
  *  hot paths that need to set audioEl.playbackRate read via

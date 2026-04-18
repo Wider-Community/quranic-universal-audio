@@ -18,7 +18,7 @@
     import { displayedSegments } from '../../lib/stores/segments/filters';
     import { selectedChapter } from '../../lib/stores/segments/chapter';
     import { pendingScrollTop } from '../../lib/stores/segments/navigation';
-    import { segListElement } from '../../lib/stores/segments/playback';
+    import { segListElement, waveformContainer } from '../../lib/stores/segments/playback';
     import { segValidation } from '../../lib/stores/segments/validation';
     import type { Segment } from '../../lib/types/domain';
     import Navigation from './Navigation.svelte';
@@ -82,7 +82,7 @@
     }
 </script>
 
-<div id="seg-list" class="seg-list" bind:this={listEl}>
+<div id="seg-list" class="seg-list" bind:this={listEl} use:waveformContainer>
     <!-- Navigation banner stays inside #seg-list so `.seg-back-banner`'s
          `position: sticky` scopes to the list's scroll container. -->
     <Navigation on:restore={() => onRestore && onRestore()} />

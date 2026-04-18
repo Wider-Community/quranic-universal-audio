@@ -1,3 +1,6 @@
+import { get } from 'svelte/store';
+
+import { segAllData, segData } from '../../stores/segments/chapter';
 import type { Ref, VerseRef } from '../../types/domain';
 import { _ARABIC_DIGITS } from './constants';
 
@@ -11,6 +14,11 @@ export interface ParsedSegRef {
 }
 
 type VerseWordCounts = Record<VerseRef, number>;
+
+/** Read verse-word-counts from segAllData first, falling back to segData. */
+export function getVerseWordCounts(): VerseWordCounts | undefined {
+    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
+}
 
 export function isCrossVerse(ref: Ref | null | undefined): boolean {
     if (!ref) return false;
