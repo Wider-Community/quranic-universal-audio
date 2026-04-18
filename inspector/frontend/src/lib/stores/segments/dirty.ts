@@ -53,14 +53,16 @@ const _opLog = new Map<number, EditOp[]>();
 let _pendingOp: EditOp | null = null;
 
 /** Reactive tick that bumps on every dirty-state mutation so Svelte
- *  components can derive reactive views (e.g. save-button enabled). */
-const _dirtyTick = writable<number>(0);
+ *  components can derive reactive views (e.g. save-button enabled,
+ *  per-row .dirty class). Subscribing components will re-run reactive
+ *  blocks that read the dirty map after any mutation. */
+export const dirtyTick = writable<number>(0);
 function _bump(): void {
-    _dirtyTick.update((n) => n + 1);
+    dirtyTick.update((n) => n + 1);
 }
 
 /** Derived store: true while any chapter has unsaved edits. */
-export const isDirtyStore = derived(_dirtyTick, () => _dirtyMap.size > 0);
+export const isDirtyStore = derived(dirtyTick, () => _dirtyMap.size > 0);
 
 // ---------------------------------------------------------------------------
 // Operation helpers

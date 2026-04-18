@@ -151,7 +151,6 @@ export async function executeSave(): Promise<void> {
                 ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
                 : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
             saveButtonLabel.set(msg);
-            document.querySelectorAll('.seg-row.dirty').forEach(r => r.classList.remove('dirty'));
             setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
             fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
                 .then(() => refreshValidation())

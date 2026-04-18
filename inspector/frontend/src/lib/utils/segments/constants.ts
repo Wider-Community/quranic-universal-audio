@@ -20,9 +20,6 @@ export const SEG_FILTER_OPS: readonly string[] = ['>', '>=', '<', '<=', '='];
 
 export const SEG_SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
 
-export const _SEG_NORMAL_IDS: readonly string[] = ['seg-stats-panel', 'seg-validation-global', 'seg-validation',
-    'seg-filter-bar', 'seg-list'];
-
 export const _VAL_SINGLE_INDEX_CATS: readonly string[] = [
     'failed', 'low_confidence', 'boundary_adj', 'cross_verse',
     'audio_bleeding', 'repetitions', 'muqattaat', 'qalqala',

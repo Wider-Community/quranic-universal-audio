@@ -10,6 +10,7 @@
 
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
+    import { segData } from '../../lib/stores/segments/chapter';
     import {
         autoPlayEnabled,
         continuousPlay,
@@ -72,6 +73,20 @@
     // Mirror the playbackSpeed store onto the audio element when either changes.
     $: if (audioEl) audioEl.playbackRate = $playbackSpeed;
 
+    // Ensure the audio element's src reflects the current chapter's audio_url
+    // after the normal-content block re-mounts (e.g. leaving history/save
+    // preview with a chapter already loaded). Only fires when audioEl is
+    // unset, empty, or missing the expected URL; avoids resetting playback
+    // on every reactive re-run.
+    $: if (audioEl && $segData?.audio_url) {
+        const want = $segData.audio_url;
+        const cur = audioEl.src;
+        if (!cur || (cur !== want && cur !== location.origin + want)) {
+            audioEl.src = want;
+            audioEl.preload = 'metadata';
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Mount: wire audio listeners
     // -------------------------------------------------------------------------
@@ -102,8 +117,8 @@
 </script>
 
 <div class="seg-controls">
-    <!-- audioId preserves id="seg-audio-player" so audio-cache.ts and
-         keyboard.ts resolve it via document.getElementById. -->
+    <!-- id="seg-audio-player" preserved so App.svelte's tab-switch guard
+         can pause() it when leaving the Segments tab. -->
     <AudioPlayer
         bind:this={_player}
         audioId="seg-audio-player"
@@ -126,7 +141,7 @@
     <button
         id="seg-play-btn"
         class="btn"
-        disabled={!audioEl}
+        disabled={!audioEl || !$segData?.audio_url}
         on:click={handlePlayClick}
     >{$playButtonLabel}</button>
     <button

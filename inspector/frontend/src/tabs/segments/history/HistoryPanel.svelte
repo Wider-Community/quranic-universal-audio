@@ -16,8 +16,8 @@
      *
      * What lives outside this component:
      *   - `#seg-history-btn` (in SegmentsTab toolbar) — opens the view.
-     *   - `_SEG_NORMAL_IDS` sibling-hide inside showHistoryView /
-     *     hideHistoryView (cross-tab concern).
+     *   - Normal-content hide when `$historyVisible` is true — SegmentsTab
+     *     gates the normal-content block with `{#if !$historyVisible && ...}`.
      */
 
     import HistoryBatch from './HistoryBatch.svelte';

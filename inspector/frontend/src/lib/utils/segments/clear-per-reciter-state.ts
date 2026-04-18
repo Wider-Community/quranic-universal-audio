@@ -24,6 +24,7 @@ import {
     continuousPlay,
     playEndMs,
     playingSegmentIndex,
+    playStatusText,
 } from '../../stores/segments/playback';
 import {
     clearSavePreviewData,
@@ -51,12 +52,8 @@ export function clearPerReciterState(): void {
     clearStats();
 
     savedChains.set(null);
-    const histBtn = document.getElementById('seg-history-btn');
     setHistoryVisible(false);
     setHistoryData(null);
-    const savePrev = document.getElementById('seg-save-preview');
-    if (histBtn) (histBtn as HTMLElement).hidden = true;
-    if (savePrev) (savePrev as HTMLElement).hidden = true;
     hidePreview();
     clearSavePreviewData();
 
@@ -69,12 +66,7 @@ export function clearPerReciterState(): void {
     cacheStatus.set('hidden');
     clearAudioCachePollTimer();
 
-    const saveBtn = document.getElementById('seg-save-btn') as HTMLButtonElement | null;
-    const playBtn = document.getElementById('seg-play-btn') as HTMLButtonElement | null;
-    const playStatus = document.getElementById('seg-play-status');
-    if (saveBtn) saveBtn.disabled = true;
-    if (playBtn) playBtn.disabled = true;
-    if (playStatus) playStatus.textContent = '';
+    playStatusText.set('');
 
     stopSegAnimation();
 }

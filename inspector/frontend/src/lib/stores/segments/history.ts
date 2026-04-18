@@ -167,8 +167,8 @@ export function setSortMode(mode: 'time' | 'quran'): void {
     sortMode.set(mode);
 }
 
-/** Show/hide the history view. Imperative `_SEG_NORMAL_IDS` sibling
- *  hide/restore stays in legacy code (locked Risk #2). */
+/** Show/hide the history view. SegmentsTab hides the normal-content block
+ *  reactively via `$historyVisible`. */
 export function setHistoryVisible(v: boolean): void {
     historyVisible.set(v);
 }

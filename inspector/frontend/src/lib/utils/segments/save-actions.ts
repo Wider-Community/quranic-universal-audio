@@ -17,6 +17,7 @@ import {
     setSplitChains,
     snapshotSplitChains,
 } from '../../stores/segments/history';
+import { pendingScrollTop } from '../../stores/segments/navigation';
 import { segListElement } from '../../stores/segments/playback';
 import {
     clearSavePreviewData,
@@ -27,7 +28,6 @@ import {
     setSavePreviewData,
     showPreview,
 } from '../../stores/segments/save';
-import { _SEG_NORMAL_IDS } from './constants';
 import { stopErrorCardAudio } from './error-card-audio';
 import { reloadCurrentReciter } from './reciter-actions';
 import { executeSave } from './save-execute';
@@ -74,15 +74,6 @@ export function showSavePreview(): void {
     // Publish preview data to store — SavePreview.svelte renders reactively.
     setSavePreviewData(data);
 
-    for (const id of _SEG_NORMAL_IDS) {
-        const el = document.getElementById(id);
-        if (el) { el.dataset.hiddenByPreview = el.hidden ? '1' : ''; el.hidden = true; }
-    }
-    const panel = document.getElementById('segments-panel');
-    const controls = panel?.querySelector<HTMLElement>('.seg-controls');
-    if (controls) { controls.dataset.hiddenByPreview = controls.hidden ? '1' : ''; controls.hidden = true; }
-    const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
-    if (shortcuts) { shortcuts.dataset.hiddenByPreview = shortcuts.hidden ? '1' : ''; shortcuts.hidden = true; }
     setHistoryVisible(false);
 
     showPreview();
@@ -103,16 +94,6 @@ export function hideSavePreview(restoreScroll = true): void {
         savedChains.set(null);
     }
 
-    for (const id of _SEG_NORMAL_IDS) {
-        const el = document.getElementById(id);
-        if (el) { if (el.dataset.hiddenByPreview !== '1') el.hidden = false; delete el.dataset.hiddenByPreview; }
-    }
-    const panel = document.getElementById('segments-panel');
-    const controls = panel?.querySelector<HTMLElement>('.seg-controls');
-    if (controls) { if (controls.dataset.hiddenByPreview !== '1') controls.hidden = false; delete controls.dataset.hiddenByPreview; }
-    const shortcuts = panel?.querySelector<HTMLElement>('.shortcuts-guide');
-    if (shortcuts) { if (shortcuts.dataset.hiddenByPreview !== '1') shortcuts.hidden = false; delete shortcuts.dataset.hiddenByPreview; }
-
     if (storeGet(historyDataStale)) {
         historyDataStale.set(false);
         savedPreviewScroll.set(null);
@@ -121,10 +102,10 @@ export function hideSavePreview(restoreScroll = true): void {
         const scrollTop = storeGet(savedPreviewScroll);
         if (scrollTop !== null) {
             savedPreviewScroll.set(null);
-            requestAnimationFrame(() => {
-                const listEl = storeGet(segListElement);
-                if (listEl) listEl.scrollTop = scrollTop;
-            });
+            // SegmentsList.afterUpdate consumes pendingScrollTop after the
+            // {#each} reconciles, so the scroll lands once the remounted
+            // list has its rows in place.
+            pendingScrollTop.set(scrollTop);
         }
     }
 }

@@ -18,6 +18,7 @@ import {
     selectedReciter,
     selectedVerse,
 } from '../../stores/segments/chapter';
+import { segAudioElement } from '../../stores/segments/playback';
 import { clearSegPrefetchCache, stopSegAnimation } from './playback';
 import { _isCurrentReciterBySurah } from './reciter';
 import { _fetchChapterPeaksIfNeeded } from './waveform-utils';
@@ -31,15 +32,12 @@ import { _fetchChapterPeaksIfNeeded } from './waveform-utils';
 export async function loadChapterData(reciter: string, chapter: string): Promise<void> {
     selectedVerse.set('');
 
-    const audioEl = document.getElementById('seg-audio-player') as HTMLAudioElement | null;
-    const playBtn = document.getElementById('seg-play-btn') as HTMLButtonElement | null;
+    const audioEl = get(segAudioElement);
     if (audioEl) audioEl.src = '';
-    if (playBtn) playBtn.disabled = true;
     stopSegAnimation();
     clearSegPrefetchCache();
 
     if (!reciter || !chapter) return;
-    if (playBtn) playBtn.disabled = false;
 
     try {
         const chData = await fetchJson<SegDataResponse>(`/api/seg/data/${reciter}/${chapter}`);

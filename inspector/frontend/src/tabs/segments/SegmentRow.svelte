@@ -36,7 +36,7 @@
         formatRef,
         formatTimeMs,
     } from '../../lib/utils/segments/references';
-    import { isIndexDirty } from '../../lib/stores/segments/dirty';
+    import { dirtyTick, isIndexDirty } from '../../lib/stores/segments/dirty';
     import { editMode } from '../../lib/stores/segments/edit';
     import { activeFilters } from '../../lib/stores/segments/filters';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
@@ -108,7 +108,7 @@
     // prop points to the refreshed object only after the store tick.
     $: segStoreTick = $segAllData;
     $: chapterForDirty = seg.chapter ?? fallbackChapter;
-    $: dirty = !readOnly && isIndexDirty(chapterForDirty, seg.index);
+    $: dirty = (void $dirtyTick, !readOnly && isIndexDirty(chapterForDirty, seg.index));
     $: confClass = (void segStoreTick, getConfClass(seg));
     $: durSec = (void segStoreTick, (seg.time_end - seg.time_start) / 1000);
     $: durTitle = (void segStoreTick, `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`);
