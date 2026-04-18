@@ -33,3 +33,17 @@ export const backBannerVisible = derived(
     savedFilterView,
     ($s) => $s !== null,
 );
+
+/** The displayed-segment index that should be scrolled into view. Cleared
+ *  to null by SegmentRow after it observes the match and calls
+ *  scrollIntoView. */
+export const targetSegmentIndex = writable<number | null>(null);
+
+/** Set of displayed-segment indices that should have the transient flash
+ *  (visual highlight after jump). Cleared by setTimeout after ~2 seconds.
+ *  SegmentRow ORs this with isPlaying to drive the `.playing` class. */
+export const flashSegmentIndices = writable<Set<number>>(new Set());
+
+/** One-shot scroll-top target for the seg-list container. Set by
+ *  _restoreFilterView, consumed + cleared by SegmentsList's afterUpdate. */
+export const pendingScrollTop = writable<number | null>(null);

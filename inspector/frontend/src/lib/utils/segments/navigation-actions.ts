@@ -19,7 +19,12 @@ import {
     selectedVerse,
 } from '../../stores/segments/chapter';
 import { activeFilters } from '../../stores/segments/filters';
-import { savedFilterView } from '../../stores/segments/navigation';
+import {
+    flashSegmentIndices,
+    pendingScrollTop,
+    savedFilterView,
+    targetSegmentIndex,
+} from '../../stores/segments/navigation';
 import { playStatusText, segListElement } from '../../stores/segments/playback';
 import { loadChapterData } from './chapter-actions';
 import { applyFiltersAndRender } from './filters-apply';
@@ -55,17 +60,29 @@ export async function jumpToSegment(chapter: number | string, segIndex: number):
         applyFiltersAndRender();
     }
 
-    const listEl = get(segListElement);
-    const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${segIndex}"]`) ?? null;
-    if (row) {
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        row.classList.add('playing');
-        setTimeout(() => row.classList.remove('playing'), 2000);
-    }
+    _flashAndScrollTo(segIndex);
 
     if (fromFilterView) {
         _showBackToResultsBanner();
     }
+}
+
+/** Drive the post-jump scroll-into-view + 2s highlight through stores.
+ *  SegmentRow reactively picks up both signals. */
+function _flashAndScrollTo(segIndex: number): void {
+    targetSegmentIndex.set(segIndex);
+    flashSegmentIndices.update((s) => {
+        const next = new Set(s);
+        next.add(segIndex);
+        return next;
+    });
+    setTimeout(() => {
+        flashSegmentIndices.update((s) => {
+            const next = new Set(s);
+            next.delete(segIndex);
+            return next;
+        });
+    }, 2000);
 }
 
 export async function jumpToMissingVerseContext(chapter: number | string, verseKey: string): Promise<void> {
@@ -104,32 +121,48 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
     }
 
     const listEl = get(segListElement);
-    const rows: HTMLElement[] = [];
-    if (prev && listEl) {
-        const row = listEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${prev.index}"]`);
-        if (row) rows.push(row);
-    }
-    if (next && listEl && (!prev || next.index !== prev.index)) {
-        const row = listEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${next.index}"]`);
-        if (row) rows.push(row);
-    }
+    const indices: number[] = [];
+    if (prev) indices.push(prev.index);
+    if (next && (!prev || next.index !== prev.index)) indices.push(next.index);
 
-    if (rows.length === 0) {
+    if (indices.length === 0) {
         playStatusText.set(`Could not locate boundary segments for missing verse ${verseKey}.`);
         return;
     }
 
-    if (rows.length === 1) {
-        rows[0]!.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (indices.length === 1) {
+        // Single-row case: use targetSegmentIndex so SegmentRow scrolls itself
+        // into view (no DOM query here).
+        targetSegmentIndex.set(indices[0]!);
     } else if (listEl) {
-        const top = Math.min(...rows.map(r => r.offsetTop));
-        const bottom = Math.max(...rows.map(r => r.offsetTop + r.offsetHeight));
-        const targetTop = Math.max(0, ((top + bottom) / 2) - (listEl.clientHeight / 2));
-        listEl.scrollTo({ top: targetTop, behavior: 'smooth' });
+        // Two-row case: still need offsetTop arithmetic to center the scroll
+        // between the two row midpoints. Residual DOM access is legit — Svelte
+        // can't express "scroll to midpoint between two {#each} children".
+        const rows: HTMLElement[] = [];
+        for (const idx of indices) {
+            const row = listEl.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${idx}"]`);
+            if (row) rows.push(row);
+        }
+        if (rows.length > 0) {
+            const top = Math.min(...rows.map(r => r.offsetTop));
+            const bottom = Math.max(...rows.map(r => r.offsetTop + r.offsetHeight));
+            const targetTop = Math.max(0, ((top + bottom) / 2) - (listEl.clientHeight / 2));
+            listEl.scrollTo({ top: targetTop, behavior: 'smooth' });
+        }
     }
 
-    rows.forEach(r => r.classList.add('playing'));
-    setTimeout(() => rows.forEach(r => r.classList.remove('playing')), 2000);
+    flashSegmentIndices.update((s) => {
+        const nextSet = new Set(s);
+        for (const idx of indices) nextSet.add(idx);
+        return nextSet;
+    });
+    setTimeout(() => {
+        flashSegmentIndices.update((s) => {
+            const nextSet = new Set(s);
+            for (const idx of indices) nextSet.delete(idx);
+            return nextSet;
+        });
+    }, 2000);
 
     if (prev && next) {
         playStatusText.set(`Missing verse ${verseKey} is between #${prev.index} and #${next.index}.`);
@@ -155,13 +188,7 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
         s.chapter === chapterNum && s.matched_ref && s.matched_ref.startsWith(prefix)
     );
     if (seg) {
-        const listEl = get(segListElement);
-        const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${seg.index}"]`) ?? null;
-        if (row) {
-            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            row.classList.add('playing');
-            setTimeout(() => row.classList.remove('playing'), 2000);
-        }
+        _flashAndScrollTo(seg.index);
         return;
     }
     playStatusText.set(`No segment found for verse ${verseKey}.`);
@@ -196,8 +223,7 @@ export function _restoreFilterView(): void {
 
     applyFiltersAndRender();
 
-    requestAnimationFrame(() => {
-        const listEl = get(segListElement);
-        if (listEl) listEl.scrollTop = saved.scrollTop;
-    });
+    // SegmentsList.afterUpdate consumes pendingScrollTop after the {#each}
+    // reconciles, so the scroll happens once rows are in the DOM.
+    pendingScrollTop.set(saved.scrollTop);
 }

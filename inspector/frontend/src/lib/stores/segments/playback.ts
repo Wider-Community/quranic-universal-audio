@@ -48,3 +48,14 @@ export const playStatusText = writable<string>('');
 /** Label on the main play/pause button. Reactive markup in
  *  SegmentsAudioControls. */
 export const playButtonLabel = writable<'Play' | 'Pause'>('Play');
+
+/** The displayed-segment index currently being played back. -1 when nothing
+ *  is playing. SegmentRow reactively applies class:playing when this matches
+ *  its seg.index. Written by updateSegHighlight from the rAF tick; the
+ *  Svelte safe_not_equal check makes same-value sets no-ops, which keeps the
+ *  60fps hot path from triggering unnecessary subscriber work. */
+export const playingSegmentIndex = writable<number>(-1);
+
+/** True when main-tab audio is playing (not paused, and activeAudioSource
+ *  === 'main'). Drives the per-row play-button glyph (stop vs play). */
+export const isMainAudioPlaying = writable<boolean>(false);

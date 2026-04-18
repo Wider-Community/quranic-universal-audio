@@ -23,6 +23,7 @@ import { setHistoryData, setHistoryVisible } from '../../stores/segments/history
 import {
     continuousPlay,
     playEndMs,
+    playingSegmentIndex,
 } from '../../stores/segments/playback';
 import {
     clearSavePreviewData,
@@ -62,6 +63,7 @@ export function clearPerReciterState(): void {
     clearSegPrefetchCache();
     continuousPlay.set(false);
     playEndMs.set(0);
+    playingSegmentIndex.set(-1);
     clearWaveformCache();
 
     cacheStatus.set('hidden');

@@ -39,7 +39,7 @@
         activeFilters,
         displayedSegments,
     } from '../../lib/stores/segments/filters';
-    import { savedFilterView } from '../../lib/stores/segments/navigation';
+    import { savedFilterView, targetSegmentIndex } from '../../lib/stores/segments/navigation';
     import { segConfig as segConfigStore } from '../../lib/stores/segments/config';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
@@ -298,9 +298,8 @@
             }
             case 'KeyJ': {
                 e.preventDefault();
-                const listEl = get(segListElement);
-                const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${get(segCurrentIdx)}"]`);
-                if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const curIdx = get(segCurrentIdx);
+                if (curIdx >= 0) targetSegmentIndex.set(curIdx);
                 break;
             }
             case 'KeyS': {

@@ -26,8 +26,12 @@
      * Svelte-owned and outside the {#each} block.
      */
 
+    import { afterUpdate } from 'svelte';
+    import { get } from 'svelte/store';
+
     import { displayedSegments } from '../../lib/stores/segments/filters';
     import { selectedChapter } from '../../lib/stores/segments/chapter';
+    import { pendingScrollTop } from '../../lib/stores/segments/navigation';
     import { segListElement } from '../../lib/stores/segments/playback';
     import { segValidation } from '../../lib/stores/segments/validation';
     import type { Segment } from '../../types/domain';
@@ -38,6 +42,17 @@
 
     let listEl: HTMLDivElement | undefined;
     $: segListElement.set(listEl ?? null);
+
+    // Consume one-shot pendingScrollTop after the {#each} reconciles. Called
+    // from _restoreFilterView — the scroll must happen once rows are in the
+    // DOM so scrollTop lands at the saved offset.
+    afterUpdate(() => {
+        const top = get(pendingScrollTop);
+        if (top !== null && listEl) {
+            listEl.scrollTop = top;
+            pendingScrollTop.set(null);
+        }
+    });
 
     /** Compute missing-word seg-indices for the current chapter from
      *  $segValidation. Now that segValidation is a proper writable store

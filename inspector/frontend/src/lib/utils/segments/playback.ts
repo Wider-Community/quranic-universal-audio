@@ -16,9 +16,11 @@ import {
     activeAudioSource,
     autoPlayEnabled,
     continuousPlay,
+    isMainAudioPlaying,
     playbackSpeed,
     playButtonLabel,
     playEndMs,
+    playingSegmentIndex,
     playStatusText,
     segAudioElement,
     segListElement,
@@ -39,8 +41,6 @@ import { _fetchPeaksForClick } from './waveform-utils';
 
 let _segAnimId: RafHandle | null = null;
 let _segPrefetchCache: Record<string, Promise<unknown>> = {};
-let _prevHighlightedRow: Element | null = null;
-let _prevHighlightedIdx = -1;
 let _prevPlayheadIdx = -1;
 let _currentPlayheadRow: Element | null = null;
 
@@ -49,12 +49,12 @@ export function clearSegPrefetchCache(): void {
     _segPrefetchCache = {};
 }
 
-/** Reset highlight / playhead DOM refs so the highlight layer does not point
- *  to nodes destroyed by the next {#each} reconciliation. Called by
- *  filters-apply.ts before re-rendering the list. */
+/** Reset playhead DOM refs so the draw layer does not point to nodes
+ *  destroyed by the next {#each} reconciliation. Called by filters-apply.ts
+ *  before re-rendering the list. The playing-row highlight is Svelte-owned
+ *  now (class:playing driven by playingSegmentIndex) so only the canvas
+ *  playhead draw state lives here. */
 export function resetHighlightRefs(): void {
-    _prevHighlightedRow = null;
-    _prevHighlightedIdx = -1;
     _currentPlayheadRow = null;
     _prevPlayheadIdx = -1;
 }
@@ -252,10 +252,7 @@ const _segAnimLoop = createAnimationLoop(() => {
 export function startSegAnimation(): void {
     playButtonLabel.set('Pause');
     activeAudioSource.set('main');
-    if (_prevHighlightedRow) {
-        const btn = _prevHighlightedRow.querySelector('.seg-card-play-btn');
-        if (btn) btn.textContent = '\u25A0';
-    }
+    isMainAudioPlaying.set(true);
     _segAnimLoop.start();
     _segAnimId = 1;
 }
@@ -266,12 +263,9 @@ export function stopSegAnimation(): void {
         playButtonLabel.set('Play');
     }
     if (get(activeAudioSource) === 'main') activeAudioSource.set(null);
+    isMainAudioPlaying.set(false);
     _segAnimLoop.stop();
     _segAnimId = null;
-    if (_prevHighlightedRow) {
-        const btn = _prevHighlightedRow.querySelector('.seg-card-play-btn');
-        if (btn) btn.textContent = '\u25B6';
-    }
 }
 
 export function onSegAudioEnded(): void {
@@ -298,28 +292,10 @@ export function isSegAnimRunning(): boolean {
 }
 
 export function updateSegHighlight(): void {
-    const curIdx = get(segCurrentIdx);
-    if (curIdx === _prevHighlightedIdx) return;
-    if (_prevHighlightedRow) {
-        _prevHighlightedRow.classList.remove('playing');
-        const prevBtn = _prevHighlightedRow.querySelector('.seg-card-play-btn');
-        if (prevBtn) prevBtn.textContent = '\u25B6';
-    }
-    _prevHighlightedRow = null;
-    _prevHighlightedIdx = curIdx;
-    if (curIdx >= 0) {
-        const listEl = get(segListElement);
-        const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${curIdx}"]`) ?? null;
-        if (row) {
-            row.classList.add('playing');
-            _prevHighlightedRow = row;
-            const audioEl = get(segAudioElement);
-            if (audioEl && !audioEl.paused) {
-                const btn = row.querySelector('.seg-card-play-btn');
-                if (btn) btn.textContent = '\u25A0';
-            }
-        }
-    }
+    // Svelte's safe_not_equal check makes same-value sets a no-op — safe to
+    // call every rAF frame. SegmentRow subscribes via class:playing and
+    // re-renders only when the matched index changes.
+    playingSegmentIndex.set(get(segCurrentIdx));
 }
 
 export function drawActivePlayhead(): void {

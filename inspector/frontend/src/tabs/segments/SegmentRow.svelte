@@ -49,9 +49,15 @@
     import { getConfClass } from '../../lib/utils/segments/conf-class';
     import { _ensureWaveformObserver } from '../../lib/utils/segments/waveform-utils';
     import {
+        isMainAudioPlaying,
+        playingSegmentIndex,
         segAudioElement,
         segListElement,
     } from '../../lib/stores/segments/playback';
+    import {
+        flashSegmentIndices,
+        targetSegmentIndex,
+    } from '../../lib/stores/segments/navigation';
     import { deleteSegment } from '../../lib/utils/segments/edit-delete';
     import { enterEditWithBuffer } from '../../lib/utils/segments/edit-enter';
     import { mergeAdjacent } from '../../lib/utils/segments/edit-merge';
@@ -132,6 +138,25 @@
     $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
+
+    // ---------------------------------------------------------------------
+    // Playback highlight + jump target (store-driven)
+    // ---------------------------------------------------------------------
+    // readOnly rows (history view, validation accordions, save preview) share
+    // seg.index with rows in the main list. Guarding on !readOnly keeps them
+    // from lighting up when the main-list row for the same index is playing
+    // or flashing.
+    $: isPlaying = !readOnly && $playingSegmentIndex === seg.index;
+    $: isFlashing = !readOnly && $flashSegmentIndices.has(seg.index);
+    $: highlighted = isPlaying || isFlashing;
+    $: playGlyph = isPlaying && $isMainAudioPlaying ? '\u25A0' : '\u25B6';
+
+    // Scroll into view when jump target matches, then clear the store so the
+    // next write re-fires reliably. `rowEl` is bound below; wait for it.
+    $: if (!readOnly && rowEl && $targetSegmentIndex === seg.index) {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetSegmentIndex.set(null);
+    }
 
     // ---------------------------------------------------------------------
     // Waveform observer registration
@@ -267,6 +292,7 @@
 <div
     class="seg-row"
     class:dirty
+    class:playing={highlighted}
     class:seg-row-context={isContext}
     class:seg-neighbour={isNeighbour}
     class:mode-history={mode === 'history'}
@@ -281,7 +307,7 @@
 >
     {#if !isContext && !readOnly}
         <div class="seg-play-col">
-            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>&#9654;</button>
+            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
             {#if showGotoBtn}
                 <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>
             {/if}
