@@ -38,10 +38,6 @@ export function exitEditMode(): void {
 
     const canvas = get(editCanvas);
     const editRow = canvas?.closest<HTMLElement>('.seg-row') ?? null;
-    if (editRow) {
-        const playCol = editRow.querySelector<HTMLElement>('.seg-play-col');
-        if (playCol) playCol.hidden = false;
-    }
     if (canvas) {
         canvas._editCleanup?.();
         delete canvas._trimWindow; delete canvas._splitData;
@@ -68,7 +64,6 @@ export function exitEditMode(): void {
     }
     const audioEl2 = get(segAudioElement);
     if (audioEl2 && !audioEl2.paused) { audioEl2.pause(); stopSegAnimation(); }
-    editRow?.classList.remove('seg-edit-target');
 }
 
 // Re-export play-range implementation so existing callers still work.

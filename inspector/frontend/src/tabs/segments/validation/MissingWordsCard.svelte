@@ -16,9 +16,6 @@
     // ---- Props ----
     export let item: SegValMissingWordsItem;
 
-    // ---- DOM refs ----
-    let wrapperEl: HTMLElement;
-
     // ---- State ----
     let showContext = false;
     let autoFixApplied = false;
@@ -98,11 +95,7 @@
             wasDirty,
         };
         const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
-        const card =
-            wrapperEl?.querySelector<HTMLElement>(
-                `.seg-row[data-seg-chapter="${segChapter}"][data-seg-index="${targetSeg.index}"]`,
-            ) ?? wrapperEl;
-        await commitRefEdit(targetSeg, newRef, card);
+        await commitRefEdit(targetSeg, newRef);
         autoFixApplied = true;
     }
 
@@ -131,7 +124,7 @@
     }
 </script>
 
-<div bind:this={wrapperEl} style:opacity={autoFixApplied ? 0.5 : null}>
+<div style:opacity={autoFixApplied ? 0.5 : null}>
     <div class="val-card-gap-label">{item.msg || 'Missing words between segments'}</div>
     {#if prevSeg}
         <SegmentRow

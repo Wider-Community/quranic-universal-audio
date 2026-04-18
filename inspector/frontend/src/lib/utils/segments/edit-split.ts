@@ -41,7 +41,7 @@ import {
 import type { SegCanvas } from '../../types/segments-waveform';
 import { getWaveformPeaks } from '../waveform-cache';
 import { _playRange, exitEditMode } from './edit-common';
-import { startRefEdit } from './edit-reference';
+import { beginRefEdit } from './edit-reference';
 import { applyVerseFilterAndRender, computeSilenceAfter } from './filters-apply';
 import {
     clearPlayRangeRAF,
@@ -74,8 +74,6 @@ export function enterSplitMode(seg: Segment, row: HTMLElement, prePausePlayMs: n
     setEdit('split', seg.segment_uid ?? null);
     editingSegIndex.set(seg.index);
     trimStatusText.set('');
-
-    row.classList.add('seg-edit-target');
 
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
@@ -261,19 +259,28 @@ export async function confirmSplit(seg: Segment, canvas?: SegCanvas | null): Pro
 
     playStatusText.set('Split \u2014 edit first half reference, then second');
 
-    splitChainUid.set(secondHalf.segment_uid ?? null);
+    // Chain the second-half ref edit. Setting `splitChainCategory` first and
+    // then `splitChainUid` is deliberate: SegmentRow's reactive effect reads
+    // both when `$splitChainUid` matches its seg uid, and fires only when
+    // `$editMode` is null (so it waits for the first-half ref-edit to
+    // finish before auto-entering the second).
     const chainCat = splitOp?.op_context_category || null;
     splitChainCategory.set(chainCat);
+    splitChainUid.set(secondHalf.segment_uid ?? null);
+
+    // Scroll to the first half and enter its ref-edit immediately (the
+    // chain reactive handles the second half after commit). The scroll
+    // stays imperative here because there's no store event that scopes
+    // "the first half's row" uniquely — SegmentRow's existing store
+    // reactives are index-based and would fire on context/accordion
+    // duplicates.
     const listEl = get(segListElement);
     const searchRoot: ParentNode = listEl ?? document;
     const firstRow = searchRoot.querySelector<HTMLElement>(`.seg-row[data-seg-chapter="${chapter}"][data-seg-index="${firstHalf.index}"]`);
     if (firstRow) {
         firstRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        const refSpan = firstRow.querySelector<HTMLElement>('.seg-text-ref');
-        if (refSpan) {
-            startRefEdit(refSpan, firstHalf, firstRow, chainCat);
-        }
     }
+    beginRefEdit(firstHalf, chainCat);
 }
 
 // ---------------------------------------------------------------------------

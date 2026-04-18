@@ -40,9 +40,6 @@ export function enterEditWithBuffer(
     if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
 
-    const playCol = row.querySelector<HTMLElement>('.seg-play-col');
-    if (playCol) playCol.hidden = true;
-
     const pending = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment',
         contextCategory ? { contextCategory } : undefined);
     pending.targets_before = [snapshotSeg(seg)];
@@ -55,9 +52,5 @@ export function enterEditWithBuffer(
         console.error(`[${mode}] error entering edit mode:`, e);
         setPendingOp(null);
         clearEdit();
-        const targetRow = document.querySelector<HTMLElement>('.seg-row.seg-edit-target');
-        if (targetRow) {
-            targetRow.classList.remove('seg-edit-target');
-        }
     }
 }

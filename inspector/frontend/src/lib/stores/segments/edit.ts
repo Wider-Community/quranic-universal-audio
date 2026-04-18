@@ -1,40 +1,21 @@
 /**
  * Segments tab — edit mode store.
  *
- * Tracks the currently-active edit mode (trim or split) and the segment
- * being edited (by uid). Drag state stays component-local (per Wave 4 pattern
- * note #3 — transient UI state via plain `let`); per-frame canvas overlay
- * state lives on the SegCanvas extension fields (per pattern note #4 — no
- * DOM-element caches in stores).
+ * Tracks the currently-active edit mode and the segment being edited (by
+ * UID). Drag state stays component-local (transient UI state via plain
+ * `let`); per-frame canvas overlay state lives on the SegCanvas extension
+ * fields (no DOM-element caches in stores).
  *
- * The store is intentionally thin: trim/split panels write `mode` +
- * `editingSegUid` here so the SegmentsList `{#each}` can reactively style
- * the active row (e.g. `class:seg-edit-target` slot) without imperative
- * `classList` pokes. Today the actual `seg-edit-target` class is still
- * applied imperatively by `enterTrimMode`/`enterSplitMode` for parity with
- * Stage-1; future Wave-7 refinements can drop that imperative line once
- * the panels render exclusively via the store.
+ * Modes:
+ *   - 'trim'      — persistent drag (boundary handles); backdrop shown.
+ *   - 'split'     — persistent drag (split handle); backdrop shown.
+ *   - 'merge'     — one-shot async; no backdrop.
+ *   - 'delete'    — one-shot async; no backdrop.
+ *   - 'reference' — inline input on the row; no backdrop.
  *
- * Wave 7a.2 status (2026-04-14): wired from enterTrimMode / enterSplitMode
- * (setEdit) and exitEditMode / clearSegDisplay / clearPerReciterState
- * (clearEdit). EditOverlay.svelte subscribes to `editMode`.
- *
- * Wave 7b status (2026-04-14): union extended to 'merge' | 'delete' |
- * 'reference'. setEdit wired in mergeAdjacent / deleteSegment /
- * startRefEdit + commitRefEdit cleanup paths. MergePanel / DeletePanel /
- * ReferenceEditor shells landed; EditOverlay extended with new branches.
- * Merge/delete are one-shot (instant) operations — backdrop omitted for
- * those modes. Reference editing is inline — backdrop also omitted.
- *
- * Wave 7b shape sufficiency: merge / delete / reference-edit each operate
- * on at most one primary segment resolvable by UID. Merge's target-adjacent
- * is derived at call time from segment index + direction ('prev' | 'next');
- * delete and reference take a single UID. The existing `editingSegUid:
- * string | null` shape covers all three — no `editingSegs: Segment[]`
- * extension needed. If Wave 7b surfaces a multi-select edit operation
- * (e.g. bulk ignore / bulk confidence-set), extend then.
- *
- * Provisional shape per S2-D11 (store granularity may evolve through Wave 9).
+ * The `.seg-edit-target` class is driven by SegmentRow reactively from
+ * `editingSegUid === seg.segment_uid`; edit utilities never touch
+ * `classList` directly.
  */
 
 import { writable } from 'svelte/store';
@@ -42,10 +23,9 @@ import { writable } from 'svelte/store';
 import type { AccordionOpCtx } from '../../types/segments';
 import type { SegCanvas, SplitData, TrimWindow } from '../../types/segments-waveform';
 
-/** Edit modes supported by the Segments tab. Wave 7b added 'merge' |
- *  'delete' | 'reference'. Note: merge + delete are one-shot (no backdrop);
- *  reference editing is inline (no backdrop). Only trim + split show the
- *  `.seg-edit-overlay` backdrop in EditOverlay.svelte. */
+/** Edit modes supported by the Segments tab. Only trim + split show the
+ *  `.seg-edit-overlay` backdrop in EditOverlay.svelte — merge/delete are
+ *  one-shot and reference editing is inline on the row. */
 export type SegEditMode = 'trim' | 'split' | 'merge' | 'delete' | 'reference' | null;
 
 /** Active edit mode for the segments tab. `null` = no edit in progress. */

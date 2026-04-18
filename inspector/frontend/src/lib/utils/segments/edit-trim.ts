@@ -62,8 +62,6 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     editingSegIndex.set(seg.index);
     trimStatusText.set('');
 
-    row.classList.add('seg-edit-target');
-
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
 

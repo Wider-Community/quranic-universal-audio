@@ -18,7 +18,7 @@
     } from '../../lib/utils/segments/edit-common';
     import { confirmSplit } from '../../lib/utils/segments/edit-split';
     import { confirmTrim } from '../../lib/utils/segments/edit-trim';
-    import { startRefEdit } from '../../lib/utils/segments/edit-reference';
+    import { beginRefEdit } from '../../lib/utils/segments/edit-reference';
     import { showHistoryView } from '../../lib/utils/segments/history-actions';
     import { onSegPlayClick, playFromSegment } from '../../lib/utils/segments/playback';
     import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from '../../lib/utils/segments/save-actions';
@@ -347,16 +347,11 @@
                 const curIdx = get(segCurrentIdx);
                 if (get(editMode) || curIdx < 0) break;
                 e.preventDefault();
-                const listEl = get(segListElement);
-                const row = listEl?.querySelector<HTMLElement>(`.seg-row[data-seg-index="${curIdx}"]`) ?? null;
                 const displayed = get(displayedSegments);
                 const seg = displayed
                     ? displayed.find(s => s.index === curIdx)
                     : null;
-                if (row && seg) {
-                    const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
-                    if (refSpan) startRefEdit(refSpan, seg, row);
-                }
+                if (seg) beginRefEdit(seg, null);
                 break;
             }
         }

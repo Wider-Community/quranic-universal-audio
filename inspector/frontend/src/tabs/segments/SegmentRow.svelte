@@ -37,7 +37,13 @@
         formatTimeMs,
     } from '../../lib/utils/segments/references';
     import { dirtyTick, isIndexDirty } from '../../lib/stores/segments/dirty';
-    import { editCanvas, editMode, editingSegUid } from '../../lib/stores/segments/edit';
+    import {
+        editCanvas,
+        editMode,
+        editingSegUid,
+        splitChainCategory,
+        splitChainUid,
+    } from '../../lib/stores/segments/edit';
     import { activeFilters } from '../../lib/stores/segments/filters';
     import { savedFilterView } from '../../lib/stores/segments/navigation';
     import type {
@@ -61,11 +67,12 @@
     import { deleteSegment } from '../../lib/utils/segments/edit-delete';
     import { enterEditWithBuffer } from '../../lib/utils/segments/edit-enter';
     import { mergeAdjacent } from '../../lib/utils/segments/edit-merge';
-    import { startRefEdit } from '../../lib/utils/segments/edit-reference';
+    import { beginRefEdit } from '../../lib/utils/segments/edit-reference';
     import { jumpToSegment } from '../../lib/utils/segments/navigation-actions';
     import { playFromSegment } from '../../lib/utils/segments/playback';
     import type { Segment } from '../../types/domain';
 
+    import ReferenceEditor from './edit/ReferenceEditor.svelte';
     import SplitPanel from './edit/SplitPanel.svelte';
     import TrimPanel from './edit/TrimPanel.svelte';
 
@@ -116,10 +123,10 @@
         }
     }
 
-    // True only for the one live row being trimmed / split. Drives the
-    // conditional mount of TrimPanel / SplitPanel in `.seg-left` (replaces
-    // the imperative `seg-actions.hidden = true` + `seg-edit-inline` inject
-    // that `edit-trim.ts` / `edit-split.ts` used to do).
+    // True only for the one live row currently being edited (any mode).
+    // Drives the conditional mount of TrimPanel / SplitPanel / ReferenceEditor
+    // inside the row, the `.seg-edit-target` class binding, and the hiding of
+    // `.seg-actions` + `.seg-play-col` during persistent drag modes.
     $: isEditingThisRow = !readOnly && !!seg.segment_uid && $editingSegUid === seg.segment_uid && $editMode !== null;
     $: editSegCanvas = canvasEl as SegCanvas | undefined;
 
@@ -177,6 +184,28 @@
     $: if (!readOnly && rowEl && $targetSegmentIndex === seg.index) {
         rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         targetSegmentIndex.set(null);
+    }
+
+    // Post-split ref-edit chain handoff. `confirmSplit` (edit-split.ts) sets
+    // `splitChainUid` to the second-half UID and `splitChainCategory` to the
+    // carried error-card context. Once the first half's ref edit finishes
+    // (editMode drops to null) this effect fires on the second-half row,
+    // scrolls it into view, and enters reference-edit mode. The `$editMode
+    // === null` guard waits for the first half's commit instead of
+    // preempting it; consuming both chain stores means the chain can only
+    // fire once per split.
+    $: if (
+        !readOnly
+        && rowEl
+        && !!seg.segment_uid
+        && $splitChainUid === seg.segment_uid
+        && $editMode === null
+    ) {
+        const chainCat = $splitChainCategory;
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        splitChainUid.set(null);
+        splitChainCategory.set(null);
+        beginRefEdit(seg, chainCat);
     }
 
     // ---------------------------------------------------------------------
@@ -256,15 +285,13 @@
 
     function onEditRefClick(e: MouseEvent): void {
         e.stopPropagation();
-        const refSpan = rowEl.querySelector<HTMLElement>('.seg-text-ref');
-        if (refSpan) startRefEdit(refSpan, seg, rowEl, null);
+        beginRefEdit(seg, null);
     }
 
     function onRefTextClick(e: MouseEvent): void {
         if (readOnly) return;
         e.stopPropagation();
-        const target = e.currentTarget as HTMLElement;
-        startRefEdit(target, seg, rowEl, null);
+        beginRefEdit(seg, null);
     }
 
     function onRowClick(e: MouseEvent): void {
@@ -316,6 +343,7 @@
     class:playing={highlighted}
     class:seg-row-context={isContext}
     class:seg-neighbour={isNeighbour}
+    class:seg-edit-target={isEditingThisRow}
     class:mode-history={mode === 'history'}
     data-seg-index={seg.index}
     data-seg-chapter={seg.chapter ?? undefined}
@@ -326,7 +354,7 @@
     bind:this={rowEl}
     on:click={onRowClick}
 >
-    {#if !isContext && !readOnly}
+    {#if !isContext && !readOnly && !(isEditingThisRow && ($editMode === 'trim' || $editMode === 'split'))}
         <div class="seg-play-col">
             <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
             {#if showGotoBtn}
@@ -375,8 +403,12 @@
             <div class="seg-text-header">
                 <span class="seg-text-index">{indexLabel}</span>
                 <span class="seg-text-sep">|</span>
-                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-                <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
+                {#if isEditingThisRow && $editMode === 'reference'}
+                    <ReferenceEditor {seg} />
+                {:else}
+                    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                    <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
+                {/if}
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-duration" class:seg-history-changed={changedDur} title={durTitle}>{durSec.toFixed(1)}s</span>
                 {#if showMissingTag}

@@ -1,5 +1,10 @@
 /**
- * Reference editing: startRefEdit, commitRefEdit, _chainSplitRefEdit.
+ * Reference editing: beginRefEdit (store setter) + commitRefEdit (apply).
+ *
+ * The inline `<input>` is owned by `tabs/segments/edit/ReferenceEditor.svelte`,
+ * which is conditionally mounted by SegmentRow in place of the `.seg-text-ref`
+ * span when the row is the current reference-edit target. This module only
+ * owns the store/pending-op transitions and the async commit path.
  */
 
 import { get } from 'svelte/store';
@@ -21,124 +26,45 @@ import {
     setPendingOp,
     snapshotSeg,
 } from '../../stores/segments/dirty';
-import {
-    clearEdit,
-    setEdit,
-    splitChainCategory,
-    splitChainUid,
-} from '../../stores/segments/edit';
+import { clearEdit, setEdit } from '../../stores/segments/edit';
 import {
     continuousPlay,
-    playStatusText,
     segAudioElement,
 } from '../../stores/segments/playback';
 import { stopSegAnimation } from './playback';
-import { _normalizeRef as _normalizeRefLib, formatRef as _formatRefLib } from './references';
+import { _normalizeRef as _normalizeRefLib } from './references';
 
 function _vwc() {
     return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
 }
 function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]) { return _normalizeRefLib(ref, _vwc()); }
-function formatRef(ref: Parameters<typeof _formatRefLib>[0]) { return _formatRefLib(ref, _vwc()); }
 
 // ---------------------------------------------------------------------------
-// startRefEdit — inline ref input on a segment card
+// beginRefEdit — enter reference-edit mode for a segment
 // ---------------------------------------------------------------------------
 
-export function startRefEdit(
-    refSpan: HTMLElement,
-    seg: Segment,
-    row: HTMLElement,
-    contextCategory: string | null = null,
-): void {
-    if (refSpan.querySelector('input')) return;
-
+/**
+ * Enter reference-edit mode for `seg`. Pauses audio, creates the pending op,
+ * and flips the edit store. SegmentRow reactively swaps the `.seg-text-ref`
+ * span for a `<ReferenceEditor>` input once the store updates.
+ */
+export function beginRefEdit(seg: Segment, contextCategory: string | null = null): void {
     const audioEl = get(segAudioElement);
     if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
 
-    // Signal reference-edit mode so EditOverlay knows an inline edit is
-    // in progress. No backdrop shown for reference mode (see EditOverlay).
     setEdit('reference', seg.segment_uid ?? null);
 
     const pending = createOp('edit_reference', contextCategory ? { contextCategory } : undefined);
     pending.targets_before = [snapshotSeg(seg)];
     setPendingOp(pending);
-
-    const originalRef = seg.matched_ref || '';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'seg-text-ref-input';
-    input.value = originalRef;
-
-    refSpan.textContent = '';
-    refSpan.appendChild(input);
-    input.focus();
-    input.select();
-
-    let committed = false;
-
-    function commit(): void {
-        if (committed) return;
-        committed = true;
-        const newRef = input.value.trim();
-        commitRefEdit(seg, newRef, row);
-    }
-
-    input.addEventListener('keydown', (e: KeyboardEvent) => {
-        e.stopPropagation();
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            commit();
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            committed = true;
-            setPendingOp(null);
-            splitChainUid.set(null);
-            splitChainCategory.set(null);
-            clearEdit();
-            refSpan.textContent = formatRef(originalRef);
-        }
-    });
-
-    input.addEventListener('blur', commit);
-    input.addEventListener('click', (e: MouseEvent) => e.stopPropagation());
-}
-
-// ---------------------------------------------------------------------------
-// _chainSplitRefEdit — after split, auto-chain ref editing to second half
-// ---------------------------------------------------------------------------
-
-export function _chainSplitRefEdit(chapter: number): void {
-    void chapter;
-    const chainUid = get(splitChainUid);
-    if (!chainUid) return;
-    const chainCat = get(splitChainCategory);
-    splitChainUid.set(null);
-    splitChainCategory.set(null);
-    const allSegs = get(segAllData)?.segments || get(segData)?.segments || [];
-    const secondSeg = allSegs.find(s => s.segment_uid === chainUid);
-    if (!secondSeg) return;
-    // Broad document lookup — the second half's row may live in the main
-    // list, a validation accordion card, or both. First match wins; all
-    // SegmentRow sites reactively re-render from segAllData so any present
-    // DOM occurrence is addressable by chapter+index.
-    const selector = `.seg-row[data-seg-chapter="${secondSeg.chapter}"][data-seg-index="${secondSeg.index}"]`;
-    const secondRow = document.querySelector<HTMLElement>(selector);
-    if (!secondRow) return;
-    secondRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    const refSpan = secondRow.querySelector<HTMLElement>('.seg-text-ref');
-    if (refSpan) {
-        playStatusText.set('Now edit second half reference');
-        setTimeout(() => startRefEdit(refSpan, secondSeg, secondRow, chainCat), 100);
-    }
 }
 
 // ---------------------------------------------------------------------------
 // commitRefEdit — resolve reference and apply edit
 // ---------------------------------------------------------------------------
 
-export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLElement): Promise<void> {
+export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<void> {
     const oldRef = seg.matched_ref || '';
     const chapter = seg.chapter || parseInt(get(selectedChapter));
     const newRef = _normalizeRef(newRefIn) ?? '';
@@ -168,10 +94,7 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
             }
         } else {
             setPendingOp(null);
-            const refSpan = row.querySelector<HTMLElement>('.seg-text-ref');
-            if (refSpan) refSpan.textContent = formatRef(oldRef);
         }
-        _chainSplitRefEdit(chapter);
         clearEdit();
         return;
     }
@@ -221,6 +144,5 @@ export async function commitRefEdit(seg: Segment, newRefIn: string, row: HTMLEle
         finalizeOp(chapter, pending);
     }
 
-    _chainSplitRefEdit(chapter);
     clearEdit();
 }
