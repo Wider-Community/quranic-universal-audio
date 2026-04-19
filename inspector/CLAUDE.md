@@ -61,7 +61,10 @@ inspector/
 ├── services/                       # Business logic — no Flask imports, pure functions
 │   ├── cache.py                    #   Centralized cache registry (getter/setter/invalidation for all caches)
 │   ├── data_loader.py              #   Load timestamps, segments, audio URLs, surah info, QPC, DK
-│   ├── validation.py               #   9-category validation engine, chapter validation counts
+│   ├── validation/                 #   Validation engine package (classify / detail / missing / structural)
+│   ├── ts_query.py                 #   Timestamps read queries (reciters, chapters, verses, random pick)
+│   ├── segments_query.py           #   Segments read queries (reciter/chapter listing, all-data payload)
+│   ├── history_query.py            #   Edit-history read queries + filtering for display
 │   ├── save.py                     #   Save flow: atomic write, backup, edit history, rebuild segments.json
 │   ├── undo.py                     #   Undo batch/ops: reversal, snapshot verification
 │   ├── peaks.py                    #   Waveform peak computation via ffmpeg
@@ -88,7 +91,7 @@ inspector/
     ├── dist/                       # Build output (GITIGNORED — run `npm run build`)
     │
     └── src/
-        ├── main.ts                 # Entry: mounts App.svelte, imports segments side-effect module + styles
+        ├── main.ts                 # Entry: mounts App.svelte, imports global styles
         │
         ├── styles/                 # Styles split by domain (imported from main.ts)
         │   ├── base.css            #   Reset, body, :root vars, tabs, scrollbars
@@ -294,7 +297,7 @@ src/main.ts (entry point, CSS imports)
 
 Each tab is **fully self-contained**: its Svelte components, stores, utils, and types all live under `tabs/<tab>/`. `lib/` is strictly cross-tab: `api/`, `components/`, `types/` (api.ts, domain.ts, ui.ts), and `utils/` (animation, arabic-text, surah-info, etc.). No tab imports from another tab's directory, and `lib/` never imports from `tabs/`.
 
-- **TypeScript + Vite** — bundled ES module output in `dist/`, one hashed JS + one hashed CSS file, sourcemaps on. Dev server at `:5173` with HMR; production served by Flask at `:5000` via `dist/` staticfiles (see `app.py`'s `FRONTEND_DIST` and `/` route).
+- **TypeScript + Vite** — bundled ES module output in `dist/`, one hashed JS + one hashed CSS file. Sourcemaps dev-only (see `vite.config.ts`); Chart.js split into a separate chunk via `rollupOptions.output.manualChunks`. Dev server at `:5173` with HMR; production served by Flask at `:5000` via `dist/` staticfiles (see `app.py`'s `FRONTEND_DIST` and `/` route).
 - **Strict typing** — `strict`, `noUncheckedIndexedAccess`, `noImplicitAny`, `strictNullChecks`, `allowJs:false`. Zero `@ts-nocheck` pragmas remaining in `src/`.
 - **Svelte 4 tabs** — all three tabs are pure Svelte 4: stores + `bind:this` for element refs. The Segments tab additionally calls action modules in `tabs/segments/utils/` (subfolders: edit/, waveform/, playback/, history/, save/, validation/, data/) for operations that need to reach outside the component tree.
 - **Hybrid pattern** — `WaveformCanvas.svelte` exposes a `getCanvas()` escape hatch so imperative overlay code can draw directly onto the canvas element each animation frame, avoiding costly reactive re-renders at 60fps.
