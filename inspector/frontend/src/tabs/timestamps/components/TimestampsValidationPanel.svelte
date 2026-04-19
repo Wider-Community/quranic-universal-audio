@@ -7,14 +7,14 @@
      * buttons that jump to the offending verse via the `onJump` callback prop.
      */
 
-    import AccordionPanel from '../../lib/components/AccordionPanel.svelte';
-    import ValidationBadge from '../../lib/components/ValidationBadge.svelte';
-    import { validationData } from '../../lib/stores/timestamps/verse';
+    import AccordionPanel from '../../../lib/components/AccordionPanel.svelte';
+    import ValidationBadge from '../../../lib/components/ValidationBadge.svelte';
+    import { validationData } from '../stores/verse';
     import type {
         TsBoundaryMismatch,
         TsMfaFailure,
         TsMissingWords,
-    } from '../../lib/types/domain';
+    } from '../../../lib/types/domain';
 
     /** Parent-supplied handler: jump the verse dropdown to the clicked issue. */
     export let onJump: (verseKey: string) => void;

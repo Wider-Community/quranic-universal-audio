@@ -15,11 +15,11 @@
 
     import { get } from 'svelte/store';
 
-    import { loadedVerse } from '../../lib/stores/timestamps/verse';
-    import { showLetters, showPhonemes } from '../../lib/stores/timestamps/display';
-    import { tsAudioElement } from '../../lib/stores/timestamps/playback';
-    import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../lib/utils/arabic-text';
-    import type { PhonemeInterval, TsWord } from '../../lib/types/domain';
+    import { loadedVerse } from '../stores/verse';
+    import { showLetters, showPhonemes } from '../stores/display';
+    import { tsAudioElement } from '../stores/playback';
+    import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
+    import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 

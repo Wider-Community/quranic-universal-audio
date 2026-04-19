@@ -2,11 +2,11 @@
     import { get } from 'svelte/store';
     import { createEventDispatcher } from 'svelte';
 
-    import { safePlay } from '../../lib/utils/audio';
-    import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
-    import { wordBoundaryScan } from '../../lib/utils/word-boundary';
-    import { viewMode } from '../../lib/stores/timestamps/display';
-    import { loadedVerse, selectedReciter } from '../../lib/stores/timestamps/verse';
+    import { safePlay } from '../../../lib/utils/audio';
+    import { shouldHandleKey } from '../../../lib/utils/keyboard-guard';
+    import { wordBoundaryScan } from '../../../lib/utils/word-boundary';
+    import { viewMode } from '../stores/display';
+    import { loadedVerse, selectedReciter } from '../stores/verse';
 
     import type TimestampsAudio from './TimestampsAudio.svelte';
 

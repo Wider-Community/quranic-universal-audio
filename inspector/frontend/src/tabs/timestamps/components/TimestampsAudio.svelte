@@ -2,17 +2,17 @@
     import { get } from 'svelte/store';
     import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
-    import AudioPlayer from '../../lib/components/AudioPlayer.svelte';
-    import { createAnimationLoop } from '../../lib/utils/animation';
-    import { LS_KEYS } from '../../lib/utils/constants';
+    import AudioPlayer from '../../../lib/components/AudioPlayer.svelte';
+    import { createAnimationLoop } from '../../../lib/utils/animation';
+    import { LS_KEYS } from '../../../lib/utils/constants';
     import {
         autoAdvancing,
         autoMode,
         currentTime,
         tsAudioElement,
-    } from '../../lib/stores/timestamps/playback';
-    import { viewMode } from '../../lib/stores/timestamps/display';
-    import { loadedVerse } from '../../lib/stores/timestamps/verse';
+    } from '../stores/playback';
+    import { viewMode } from '../stores/display';
+    import { loadedVerse } from '../stores/verse';
 
     // ---- Props ----
     /** Disabled state of the Prev button. */

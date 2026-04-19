@@ -3,9 +3,9 @@
     import { onMount } from 'svelte';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS } from './lib/utils/constants';
-    import { tsAudioElement } from './lib/stores/timestamps/playback';
+    import { tsAudioElement } from './tabs/timestamps/stores/playback';
     import { segAudioElement } from './tabs/segments/stores/playback';
-    import { audAudioElement } from './lib/stores/audio';
+    import { audAudioElement } from './tabs/audio/stores/audio';
     import { stopErrorCardAudio } from './tabs/segments/utils/playback/error-card-audio';
     import AudioTab from './tabs/audio/AudioTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';

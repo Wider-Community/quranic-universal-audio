@@ -11,17 +11,17 @@
     import { afterUpdate } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { granularity } from '../../lib/stores/timestamps/display';
-    import { loadedVerse } from '../../lib/stores/timestamps/verse';
-    import { tsAudioElement } from '../../lib/stores/timestamps/playback';
+    import { granularity } from '../stores/display';
+    import { loadedVerse } from '../stores/verse';
+    import { tsAudioElement } from '../stores/playback';
     import {
         charsMatch,
         DAGGER_ALEF,
         isCombiningMark,
         splitIntoCharGroups,
         ZWSP,
-    } from '../../lib/utils/arabic-text';
-    import type { TsWord } from '../../lib/types/domain';
+    } from '../../../lib/utils/arabic-text';
+    import type { TsWord } from '../../../lib/types/domain';
 
     // ---- Data model (produced by buildStructure) ----
 

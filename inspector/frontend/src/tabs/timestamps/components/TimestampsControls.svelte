@@ -1,16 +1,16 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
 
-    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
+    import SearchableSelect from '../../../lib/components/SearchableSelect.svelte';
     import {
         autoMode,
-    } from '../../lib/stores/timestamps/playback';
+    } from '../stores/playback';
     import {
         granularity,
         showLetters,
         showPhonemes,
         viewMode,
-    } from '../../lib/stores/timestamps/display';
+    } from '../stores/display';
     import {
         chaptersOptions,
         reciters,
@@ -18,10 +18,10 @@
         selectedReciter,
         selectedVerse,
         versesOptions,
-    } from '../../lib/stores/timestamps/verse';
-    import { buildGroupedReciters } from '../../lib/utils/grouped-reciters';
-    import { LS_KEYS } from '../../lib/utils/constants';
-    import type { TsReciter } from '../../lib/types/domain';
+    } from '../stores/verse';
+    import { buildGroupedReciters } from '../../../lib/utils/grouped-reciters';
+    import { LS_KEYS } from '../../../lib/utils/constants';
+    import type { TsReciter } from '../../../lib/types/domain';
 
     const dispatch = createEventDispatcher<{
         reciterChange: string;

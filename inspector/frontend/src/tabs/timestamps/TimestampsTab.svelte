@@ -17,14 +17,14 @@
     import { fetchJson } from '../../lib/api';
     import {
         autoAdvancing,
-    } from '../../lib/stores/timestamps/playback';
+    } from './stores/playback';
     import {
         granularity,
         showLetters,
         showPhonemes,
         tsConfig,
         viewMode,
-    } from '../../lib/stores/timestamps/display';
+    } from './stores/display';
     import {
         chapters,
         loadedVerse,
@@ -34,7 +34,7 @@
         selectedVerse,
         validationData,
         verses,
-    } from '../../lib/stores/timestamps/verse';
+    } from './stores/verse';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import type {
@@ -46,14 +46,14 @@
         TsVersesResponse,
     } from '../../lib/types/api';
 
-    import AnimationDisplay from './AnimationDisplay.svelte';
-    import TimestampsAudio from './TimestampsAudio.svelte';
-    import TimestampsControls from './TimestampsControls.svelte';
-    import TimestampsKeyboard from './TimestampsKeyboard.svelte';
-    import TimestampsShortcutsGuide from './TimestampsShortcutsGuide.svelte';
-    import TimestampsValidationPanel from './TimestampsValidationPanel.svelte';
-    import TimestampsWaveform from './TimestampsWaveform.svelte';
-    import UnifiedDisplay from './UnifiedDisplay.svelte';
+    import AnimationDisplay from './components/AnimationDisplay.svelte';
+    import TimestampsAudio from './components/TimestampsAudio.svelte';
+    import TimestampsControls from './components/TimestampsControls.svelte';
+    import TimestampsKeyboard from './components/TimestampsKeyboard.svelte';
+    import TimestampsShortcutsGuide from './components/TimestampsShortcutsGuide.svelte';
+    import TimestampsValidationPanel from './components/TimestampsValidationPanel.svelte';
+    import TimestampsWaveform from './components/TimestampsWaveform.svelte';
+    import UnifiedDisplay from './components/UnifiedDisplay.svelte';
 
     // ---- Component refs ----
     let audioComp: TimestampsAudio;

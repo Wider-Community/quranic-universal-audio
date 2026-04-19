@@ -8,10 +8,10 @@
 
 import { derived, writable } from 'svelte/store';
 
-import type { TsValidateResponse } from '../../types/api';
-import type { TsReciter, TsVerseData } from '../../types/domain';
-import type { SelectOption } from '../../types/ui';
-import { surahOptionText } from '../../utils/surah-info';
+import type { TsValidateResponse } from '../../../lib/types/api';
+import type { TsReciter, TsVerseData } from '../../../lib/types/domain';
+import type { SelectOption } from '../../../lib/types/ui';
+import { surahOptionText } from '../../../lib/utils/surah-info';
 
 /** A verse option as served by /api/ts/verses. */
 export interface TsVerseOption {

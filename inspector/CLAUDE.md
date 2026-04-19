@@ -100,7 +100,7 @@ inspector/
         │   ├── stats.css           #   Chart wrappers, fullscreen overlay
         │   └── filters.css         #   Filter bar, back banner
         │
-        ├── lib/                    # Shared cross-tab modules
+        ├── lib/                    # Strictly cross-tab modules (no tab-specific code)
         │   ├── api/
         │   │   └── index.ts        #   fetchJson / fetchJsonOrNull helpers (typed)
         │   ├── components/         # Reusable Svelte 4 primitives
@@ -111,17 +111,11 @@ inspector/
         │   │   ├── SpeedControl.svelte   #  Playback speed selector
         │   │   ├── ValidationBadge.svelte #  Color-coded count badge (default/warning/error)
         │   │   └── WaveformCanvas.svelte #  Canvas waveform renderer (sub-ranging support)
-        │   ├── stores/            # Cross-tab stores only (tab-specific stores colocated under tabs/)
-        │   │   ├── audio.ts        #   Audio tab state (reciter/surah/ayah selection)  [Ph15b: move to tabs/audio/]
-        │   │   └── timestamps/     #   Timestamps tab stores                            [Ph15b: move to tabs/timestamps/]
-        │   │       ├── verse.ts    #   reciters/chapters/verses selection + loadedVerse
-        │   │       ├── display.ts  #   view mode, granularity, show-letters, show-phonemes, config
-        │   │       └── playback.ts #   auto-mode, auto-advance guard, currentTime, tsAudioElement
-        │   ├── types/              # Cross-tab types only (segments/stats types now under tabs/segments/types/)
+        │   ├── types/              # Cross-tab types only
         │   │   ├── api.ts          #   Response shapes for every /api/* endpoint
         │   │   ├── domain.ts       #   Segment, Ref, PhonemeInterval, SegmentPeaks, SurahInfo, ...
         │   │   └── ui.ts           #   SelectOption, common UI types
-        │   └── utils/              # Cross-tab utilities only (segments utils now under tabs/segments/utils/)
+        │   └── utils/              # Cross-tab utilities only
         │       ├── active-tab.ts   #   Active-tab state (getActiveTab/setActiveTab)
         │       ├── animation.ts    #   createAnimationLoop() — rAF loop with start/stop
         │       ├── arabic-text.ts  #   stripTashkeel, isCombiningMark, char matching
@@ -138,15 +132,26 @@ inspector/
         │       ├── webaudio-peaks.ts # Client-side AudioContext + LRU cache + slice
         │       └── word-boundary.ts  # Word boundary helpers
         │
-        ├── tabs/audio/             # Audio tab — Svelte 4
-        │   └── AudioTab.svelte     #   Category toggle, reciter/surah/ayah dropdowns, player, nav
+        ├── tabs/audio/             # Audio tab — feature-colocated (Ph15b)
+        │   ├── AudioTab.svelte     #   Category toggle, reciter/surah/ayah dropdowns, player, nav
+        │   └── stores/
+        │       └── audio.ts        #   audAudioElement — shared with App.svelte for tab-switch pause
         │
-        ├── tabs/timestamps/        # Timestamps tab — Svelte 4 components
-        │   ├── TimestampsTab.svelte #   Shell: dropdowns, audio, keyboard, CSS vars, view toggle
-        │   ├── UnifiedDisplay.svelte #  Analysis view: mega-blocks + letters + phonemes + bridges
-        │   ├── AnimationDisplay.svelte # Reveal-mode animation, char/word granularity
-        │   ├── TimestampsWaveform.svelte # Waveform + overlays (wraps WaveformCanvas)
-        │   └── TimestampsValidationPanel.svelte # 3-category accordion (uses AccordionPanel)
+        ├── tabs/timestamps/        # Timestamps tab — feature-colocated (Ph15b)
+        │   ├── TimestampsTab.svelte #   Shell: dropdowns, data fetch, keyboard, CSS vars, view toggle
+        │   ├── components/         # Svelte 4 subcomponents
+        │   │   ├── UnifiedDisplay.svelte #  Analysis view: mega-blocks + letters + phonemes + bridges
+        │   │   ├── AnimationDisplay.svelte # Reveal-mode animation, char/word granularity
+        │   │   ├── TimestampsWaveform.svelte # Waveform + overlays (wraps WaveformCanvas)
+        │   │   ├── TimestampsValidationPanel.svelte # 3-category accordion (uses AccordionPanel)
+        │   │   ├── TimestampsControls.svelte # Reciter/chapter/verse dropdowns + mode toggles
+        │   │   ├── TimestampsAudio.svelte   # AudioPlayer + auto-advance logic + animation loop
+        │   │   ├── TimestampsKeyboard.svelte # Keyboard shortcut handler (delegated from Tab)
+        │   │   └── TimestampsShortcutsGuide.svelte # Keyboard shortcut reference overlay
+        │   └── stores/             # Tab-local reactive state
+        │       ├── verse.ts        #   reciters/chapters/verses selection + loadedVerse + validationData
+        │       ├── display.ts      #   view mode, granularity, show-letters, show-phonemes, tsConfig
+        │       └── playback.ts     #   auto-mode, auto-advance guard, currentTime, tsAudioElement
         │
         └── tabs/segments/          # Segments tab — feature-colocated (Ph15a)
             ├── SegmentsTab.svelte  #   Tab shell + reciter/chapter selectors
@@ -256,12 +261,6 @@ inspector/
                     ├── references.ts      # Ref parsing, formatting, verse markers
                     ├── filters-apply.ts   # Republish segment mutations to Svelte stores
                     └── filter-fields.ts   # Filter field descriptors (label, type, ops)
-            └── validation/
-                ├── ValidationPanel.svelte    # 11-category accordion panel
-                ├── ErrorCard.svelte          # Single validation error card
-                ├── GenericIssueCard.svelte   # Generic issue row (jump button + label)
-                ├── MissingVersesCard.svelte  # Missing verse card with context segments
-                └── MissingWordsCard.svelte   # Missing word card with context
 ```
 
 ## Architecture
@@ -284,12 +283,16 @@ routes/ (Flask Blueprints)  →  services/ (business logic)  →  utils/ (pure h
 
 ```
 src/main.ts (entry point, CSS imports)
-  └── App.svelte  →  tabs/timestamps/TimestampsTab.svelte  →  lib/stores/timestamps/
-                  →  tabs/segments/SegmentsTab.svelte      →  tabs/segments/stores/
-                  →  tabs/audio/AudioTab.svelte            →  lib/stores/audio.ts
+  └── App.svelte
+        ├── tabs/timestamps/TimestampsTab.svelte  →  tabs/timestamps/stores/  (verse, display, playback)
+        │                                         →  tabs/timestamps/components/
+        ├── tabs/segments/SegmentsTab.svelte       →  tabs/segments/stores/
+        │                                         →  tabs/segments/components/
+        │                                         →  tabs/segments/utils/
+        └── tabs/audio/AudioTab.svelte             →  tabs/audio/stores/audio.ts
 ```
 
-Each tab's Svelte components import from its own colocated `stores/` and `utils/` (Segments is fully colocated under `tabs/segments/`; Timestamps + Audio stores still live in `lib/stores/` pending Ph15b). Cross-tab helpers live in `lib/`. No cross-tab imports between tab roots.
+Each tab is **fully self-contained**: its Svelte components, stores, utils, and types all live under `tabs/<tab>/`. `lib/` is strictly cross-tab: `api/`, `components/`, `types/` (api.ts, domain.ts, ui.ts), and `utils/` (animation, arabic-text, surah-info, etc.). No tab imports from another tab's directory, and `lib/` never imports from `tabs/`.
 
 - **TypeScript + Vite** — bundled ES module output in `dist/`, one hashed JS + one hashed CSS file, sourcemaps on. Dev server at `:5173` with HMR; production served by Flask at `:5000` via `dist/` staticfiles (see `app.py`'s `FRONTEND_DIST` and `/` route).
 - **Strict typing** — `strict`, `noUncheckedIndexedAccess`, `noImplicitAny`, `strictNullChecks`, `allowJs:false`. Zero `@ts-nocheck` pragmas remaining in `src/`.
@@ -307,7 +310,7 @@ Each tab's Svelte components import from its own colocated `stores/` and `utils/
 - **Invalidation**: `invalidate_seg_caches(reciter)` after save/undo — clears segment cache, meta, verses, reciters
 
 **Client (JS):**
-- Tab stores hold reactive state (Segments: `tabs/segments/stores/`; Timestamps/Audio: `lib/stores/`); non-reactive caches live in `lib/utils/waveform-cache.ts` and `tabs/segments/utils/waveform/peaks-cache.ts`
+- Tab stores hold reactive state (all colocated: `tabs/segments/stores/`, `tabs/timestamps/stores/`, `tabs/audio/stores/`); non-reactive caches live in `lib/utils/waveform-cache.ts` and `tabs/segments/utils/waveform/peaks-cache.ts`
 - `IntersectionObserver` for lazy waveform drawing from pre-fetched peaks
 - Audio buffers cached per URL/chapter with size limits
 

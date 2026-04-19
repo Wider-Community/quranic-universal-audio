@@ -14,12 +14,12 @@
     import { afterUpdate, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import WaveformCanvas from '../../lib/components/WaveformCanvas.svelte';
-    import { loadedVerse } from '../../lib/stores/timestamps/verse';
-    import { tsAudioElement } from '../../lib/stores/timestamps/playback';
-    import { computePeaksForSlice, decodeAudioUrl } from '../../lib/utils/webaudio-peaks';
-    import type { PeakBucket } from '../../lib/types/domain';
-    import { PREVIEW_PLAYHEAD_COLOR } from '../../lib/utils/constants';
+    import WaveformCanvas from '../../../lib/components/WaveformCanvas.svelte';
+    import { loadedVerse } from '../stores/verse';
+    import { tsAudioElement } from '../stores/playback';
+    import { computePeaksForSlice, decodeAudioUrl } from '../../../lib/utils/webaudio-peaks';
+    import type { PeakBucket } from '../../../lib/types/domain';
+    import { PREVIEW_PLAYHEAD_COLOR } from '../../../lib/utils/constants';
 
     // ---- Sizing ----
 
