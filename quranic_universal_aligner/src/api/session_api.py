@@ -20,6 +20,13 @@ import numpy as np
 
 from config import SESSION_DIR, SESSION_EXPIRY_SECONDS, PHONEME_ASR_MODELS
 from src.core.zero_gpu import QuotaExhaustedError
+from src.core.worker_pool import PoolExhaustedError, PoolQueueFullError
+from src.core.usage_logger import (
+    log_error,
+    mark_endpoint_entry,
+    set_stage,
+    get_user_id,
+)
 
 # ---------------------------------------------------------------------------
 # Session manager
@@ -32,11 +39,39 @@ _VALID_ID = re.compile(r"^[0-9a-f]{32}$")
 _VALID_MODELS = set(PHONEME_ASR_MODELS.keys())
 
 
-def _validate_model_name(model_name):
-    """Return an error dict if model_name is invalid, else None."""
+def _validate_model_name(model_name, *, endpoint=None, audio_id=None, device=None,
+                         request=None):
+    """Return an error dict if model_name is invalid, else None.
+
+    When `endpoint` is provided, also append a row to the errors dataset.
+    """
     if model_name not in _VALID_MODELS:
         valid = ", ".join(sorted(_VALID_MODELS))
-        return {"error": f"Invalid model_name '{model_name}'. Must be one of: {valid}", "segments": []}
+        msg = f"Invalid model_name '{model_name}'. Must be one of: {valid}"
+        if endpoint:
+            log_error(
+                error_code="invalid_model",
+                endpoint=endpoint,
+                stage="validate",
+                audio_id=audio_id,
+                device=device,
+                user_id=get_user_id(request) if request else "unknown",
+                message=msg,
+                context={"model_name": model_name},
+            )
+        return {"error": msg, "segments": []}
+
+
+def _log_session_expired(*, endpoint: str, audio_id, request=None):
+    """Log a session-expired hit. Caller still returns `_SESSION_ERROR`."""
+    log_error(
+        error_code="session_expired",
+        endpoint=endpoint,
+        stage="validate",
+        audio_id=audio_id if isinstance(audio_id, str) else None,
+        user_id=get_user_id(request) if request else "unknown",
+        message="Session not found or expired",
+    )
 
 
 def _session_dir(audio_id: str):
@@ -190,6 +225,119 @@ def _load_segments(audio_id):
 _SESSION_ERROR = {"error": "Session not found or expired", "segments": []}
 
 
+def _quota_error_response(exc: QuotaExhaustedError, audio_id=None, *,
+                          endpoint: str = None, request=None) -> dict:
+    """Build the standard quota-exhausted rejection. No auto-fallback to CPU.
+
+    Caller is expected to retry with device='CPU'. No log row is written.
+
+    ZeroGPU's real error strings (verified from Space logs, Apr 2026):
+      * anonymous: "Unlogged user is runnning out of daily ZeroGPU quotas.
+                    Signup for free on .../join or login on .../login ..."
+      * logged:    "User is runnning out of daily ZeroGPU quotas.
+                    Visit .../subscribe/pro ..."
+
+    Neither string contains a reset timer — ZeroGPU doesn't give us one for
+    either tier. `reset_time` remains None until ZeroGPU adds it upstream.
+    """
+    raw_lower = str(exc).lower()
+    # ZeroGPU emits "0:00:00" when the daily cap is blown (vs. short-term
+    # rate-limit where it emits a real wait). Translate that to a daily hint
+    # since "Resets in 0:00:00" is confusing to users.
+    # ZeroGPU emits a non-zero `wait` only for short-term rate-limits (rare).
+    # For the far-more-common daily-cap case it emits "0:00:00" — HF does not
+    # expose the actual daily-reset timestamp anywhere (huggingface_hub#2842).
+    # Daily quota rolls 24h from the user's first GPU use of the day.
+    if exc.reset_time and exc.reset_time != "0:00:00":
+        reset_suffix = f" Resets in {exc.reset_time}."
+    elif exc.reset_time == "0:00:00":
+        reset_suffix = " Daily limit — resets ~24h after your first GPU use today."
+    else:
+        reset_suffix = ""
+    if "unlogged user" in raw_lower or "signup for free" in raw_lower:
+        resp = {
+            "error": (
+                f"Anonymous GPU quota exhausted for this IP.{reset_suffix} "
+                "Sign in at https://huggingface.co/login for more quota, "
+                "or retry with device=CPU."
+            ),
+            "error_code": "gpu_quota_anonymous",
+            "reset_time": exc.reset_time,
+            "segments": [],
+        }
+    else:
+        resp = {
+            "error": (
+                f"GPU quota exhausted for your account.{reset_suffix} "
+                "Upgrade at https://huggingface.co/subscribe/pro for more quota, "
+                "or retry with device=CPU."
+            ),
+            "error_code": "gpu_quota_exhausted",
+            "reset_time": exc.reset_time,
+            "segments": [],
+        }
+    if audio_id is not None:
+        resp["audio_id"] = audio_id
+    log_error(
+        error_code=resp["error_code"],
+        endpoint=endpoint or "unknown",
+        stage="dispatch",
+        audio_id=audio_id,
+        device="GPU",
+        exception=exc,
+        user_id=get_user_id(request) if request else "unknown",
+        message=resp["error"],
+        hint={
+            "suggested_action": "retry_with_cpu_or_wait",
+            "reset_time": exc.reset_time,
+        },
+    )
+    return resp
+
+
+def _pool_error_response(exc, audio_id=None, *,
+                         endpoint: str = None, request=None) -> dict:
+    """Structured rejection for CPU worker pool failures.
+
+    Mirrors the quota transparency pattern: distinct `error_code` per failure
+    mode so clients can react appropriately. No log row is written.
+    """
+    from src.core.worker_pool import PoolExhaustedError, PoolQueueFullError
+    if isinstance(exc, PoolQueueFullError):
+        resp = {
+            "error": "CPU workers are at capacity — too many users already queued. Retry in about a minute.",
+            "error_code": "cpu_pool_queue_full",
+            "segments": [],
+        }
+    elif isinstance(exc, PoolExhaustedError):
+        resp = {
+            "error": "CPU workers busy — no slot opened up within the wait limit. Retry in about a minute.",
+            "error_code": "cpu_pool_exhausted",
+            "segments": [],
+        }
+    else:
+        # Generic worker-call failure (network, crash, pickle, etc.) after all retries.
+        resp = {
+            "error": f"CPU worker call failed: {exc}",
+            "error_code": "cpu_worker_failed",
+            "segments": [],
+        }
+    if audio_id is not None:
+        resp["audio_id"] = audio_id
+    log_error(
+        error_code=resp["error_code"],
+        endpoint=endpoint or "unknown",
+        stage="dispatch",
+        audio_id=audio_id,
+        device="CPU",
+        exception=exc,
+        user_id=get_user_id(request) if request else "unknown",
+        message=resp["error"],
+        hint={"suggested_action": "retry"},
+    )
+    return resp
+
+
 # ---------------------------------------------------------------------------
 # Duration estimation
 # ---------------------------------------------------------------------------
@@ -235,7 +383,6 @@ def estimate_duration(endpoint, audio_duration_s=None, audio_id=None,
         ESTIMATE_GPU_LARGE_SLOPE, ESTIMATE_GPU_LARGE_INTERCEPT,
         ESTIMATE_CPU_BASE_SLOPE, ESTIMATE_CPU_BASE_INTERCEPT,
         ESTIMATE_CPU_LARGE_SLOPE, ESTIMATE_CPU_LARGE_INTERCEPT,
-        ESTIMATE_WALL_BUFFER,
         MFA_PROGRESS_SEGMENT_RATE,
     )
 
@@ -296,8 +443,6 @@ def estimate_duration(endpoint, audio_duration_s=None, audio_id=None,
         if endpoint not in _VAD_ENDPOINTS:
             estimate *= 0.5
 
-        estimate *= ESTIMATE_WALL_BUFFER
-
     rounded = max(5, math.ceil(estimate / 5) * 5)
 
     return {
@@ -341,32 +486,77 @@ def _format_response(audio_id, json_output, warning=None):
 # Endpoint wrappers
 # ---------------------------------------------------------------------------
 
+def _estimate_wall_for_log(endpoint: str, audio_duration_s: float | None,
+                           model_name: str, device: str) -> float | None:
+    """Best-effort wall-time estimate for logging (`timing.estimate_given_s`).
+
+    Never raises; returns None if inputs are insufficient. The result is only
+    used as the "what we told the user" baseline for residual analysis — not
+    for any runtime decision.
+    """
+    if not audio_duration_s or audio_duration_s <= 0:
+        return None
+    try:
+        r = estimate_duration(endpoint, audio_duration_s=float(audio_duration_s),
+                              model_name=model_name, device=device)
+        return r.get("estimated_duration_s")
+    except Exception:
+        return None
+
+
 def process_audio_session(audio_data, min_silence_ms, min_speech_ms, pad_ms,
                           model_name="Base", device="GPU",
                           request: gr.Request = None):
     """Full pipeline: preprocess -> VAD -> ASR -> alignment. Creates session."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="process_audio_session",
+                               device=device, request=request)
     if err:
         return err
     from src.pipeline import process_audio
 
-    quota_warning = None
+    # Probe audio duration for the log-row `estimate_given_s` field. Best-effort:
+    # if the probe fails, estimate_given_s stays None.
+    _audio_dur = None
+    try:
+        if isinstance(audio_data, str):
+            import librosa as _lr
+            _audio_dur = float(_lr.get_duration(path=audio_data))
+        elif isinstance(audio_data, tuple) and len(audio_data) == 2:
+            _sr, _arr = audio_data
+            _audio_dur = float(len(_arr) / _sr) if _sr else None
+    except Exception:
+        _audio_dur = None
+    _est = _estimate_wall_for_log("process_audio_session", _audio_dur, model_name, device)
+
     try:
         result = process_audio(
             audio_data, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
             model_name, device, request=request, endpoint="process",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-        quota_warning = f"GPU quota reached — processed on CPU (slower).{reset_msg}"
-        result = process_audio(
-            audio_data, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
-            model_name, "CPU", request=request, endpoint="process",
-        )
+        return _quota_error_response(e, endpoint="process_audio_session", request=request)
+    except (PoolQueueFullError, PoolExhaustedError) as e:
+        return _pool_error_response(e, endpoint="process_audio_session", request=request)
+    except Exception as e:
+        _code = "no_speech" if "NoSpeechIntervals" in str(e) else "pipeline_exception"
+        log_error(error_code=_code, endpoint="process_audio_session",
+                  stage="vad" if _code == "no_speech" else None,
+                  audio_id=None, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name})
+        raise
     # result is a 9-tuple:
     # (html, json_output, speech_intervals, is_complete, audio, sr, intervals, seg_dir, log_row)
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_speech", endpoint="process_audio_session",
+                  stage="vad", device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No speech detected in audio",
+                  context={"audio_duration_s": _audio_dur})
         return {"error": "No speech detected in audio", "segments": []}
 
     speech_intervals = result[2]
@@ -381,7 +571,7 @@ def process_audio_session(audio_data, min_silence_ms, min_speech_ms, pad_ms,
     audio_id = create_session(
         audio, speech_intervals, is_complete, intervals, model_name,
     )
-    return _format_response(audio_id, json_output, warning=quota_warning)
+    return _format_response(audio_id, json_output)
 
 
 def process_url_session(url, min_silence_ms, min_speech_ms, pad_ms,
@@ -393,41 +583,90 @@ def process_url_session(url, min_silence_ms, min_speech_ms, pad_ms,
     process_audio_session. Returns the same response format with an
     additional url_metadata field.
     """
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="process_url_session",
+                               device=device, request=request)
     if err:
         return err
 
     if not url or not isinstance(url, str) or not url.strip():
+        log_error(error_code="empty_url", endpoint="process_url_session",
+                  stage="validate",
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="URL is required")
         return {"error": "URL is required", "segments": []}
 
     url = url.strip()
 
     # Download audio
+    set_stage("download")
     try:
         from src.ui.handlers import _download_url_core
         wav_path, url_meta = _download_url_core(url)
     except Exception as e:
-        return {"error": f"Download failed: {e}", "segments": []}
+        msg = f"Download failed: {e}"
+        msg_l = msg.lower()
+        if "playlist" in msg_l:
+            code = "playlist_rejected"
+        else:
+            code = "download_failed"
+        log_error(error_code=code, endpoint="process_url_session",
+                  stage="download", device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message=msg, context={"url": url})
+        return {"error": msg, "segments": []}
 
     # Run the standard pipeline with the downloaded WAV path
     from src.pipeline import process_audio
 
-    quota_warning = None
+    _audio_dur = None
+    try:
+        import librosa as _lr
+        _audio_dur = float(_lr.get_duration(path=wav_path))
+    except Exception:
+        _audio_dur = url_meta.get("duration")
+    _est = _estimate_wall_for_log("process_url_session", _audio_dur, model_name, device)
+
     try:
         result = process_audio(
             wav_path, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
             model_name, device, request=request, endpoint="process_url",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-        quota_warning = f"GPU quota reached — processed on CPU (slower).{reset_msg}"
-        result = process_audio(
-            wav_path, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
-            model_name, "CPU", request=request, endpoint="process_url",
-        )
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass
+        return _quota_error_response(e, endpoint="process_url_session", request=request)
+    except (PoolQueueFullError, PoolExhaustedError) as e:
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass
+        return _pool_error_response(e, endpoint="process_url_session", request=request)
+    except Exception as e:
+        _code = "no_speech" if "NoSpeechIntervals" in str(e) else "pipeline_exception"
+        log_error(error_code=_code, endpoint="process_url_session",
+                  stage="vad" if _code == "no_speech" else None,
+                  device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name,
+                           "url": url})
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass
+        raise
 
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_speech", endpoint="process_url_session",
+                  stage="vad", device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No speech detected in audio",
+                  context={"audio_duration_s": _audio_dur, "url": url})
         return {"error": "No speech detected in audio", "segments": []}
 
     speech_intervals = result[2]
@@ -442,7 +681,7 @@ def process_url_session(url, min_silence_ms, min_speech_ms, pad_ms,
         audio, speech_intervals, is_complete, intervals, model_name,
     )
 
-    response = _format_response(audio_id, json_output, warning=quota_warning)
+    response = _format_response(audio_id, json_output)
     response["url_metadata"] = {
         "title": url_meta.get("title"),
         "duration": url_meta.get("duration"),
@@ -462,98 +701,140 @@ def resegment(audio_id, min_silence_ms, min_speech_ms, pad_ms,
                        model_name="Base", device="GPU",
                        request: gr.Request = None):
     """Re-clean VAD boundaries with new params and re-run ASR + alignment."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="resegment",
+                               audio_id=audio_id, device=device, request=request)
     if err:
         err["audio_id"] = audio_id
         return err
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="resegment", audio_id=audio_id, request=request)
         return _SESSION_ERROR
 
     from src.pipeline import resegment_audio
 
-    quota_warning = None
+    _audio_dur = float(len(session["audio"]) / 16000)
+    _est = _estimate_wall_for_log("resegment", _audio_dur, model_name, device)
+
     try:
         result = resegment_audio(
             session["speech_intervals"], session["is_complete"],
             session["audio"], 16000,
             int(min_silence_ms), int(min_speech_ms), int(pad_ms),
             model_name, device, request=request, endpoint="resegment",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-        quota_warning = f"GPU quota reached — processed on CPU (slower).{reset_msg}"
-        result = resegment_audio(
-            session["speech_intervals"], session["is_complete"],
-            session["audio"], 16000,
-            int(min_silence_ms), int(min_speech_ms), int(pad_ms),
-            model_name, "CPU", request=request, endpoint="resegment",
-        )
+        return _quota_error_response(e, audio_id=audio_id, endpoint="resegment",
+                                     request=request)
+    except (PoolQueueFullError, PoolExhaustedError) as e:
+        return _pool_error_response(e, audio_id=audio_id, endpoint="resegment",
+                                    request=request)
+    except Exception as e:
+        log_error(error_code="pipeline_exception", endpoint="resegment",
+                  audio_id=audio_id, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name})
+        raise
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_segments_after_resegment", endpoint="resegment",
+                  stage="vad", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No segments with these settings",
+                  context={"min_silence_ms": int(min_silence_ms),
+                           "min_speech_ms": int(min_speech_ms),
+                           "pad_ms": int(pad_ms)})
         return {"audio_id": audio_id, "error": "No segments with these settings", "segments": []}
 
     new_intervals = result[6]
     update_session(audio_id, intervals=new_intervals, model_name=model_name)
-    return _format_response(audio_id, json_output, warning=quota_warning)
+    return _format_response(audio_id, json_output)
 
 
 def retranscribe(audio_id, model_name="Base", device="GPU",
                           request: gr.Request = None):
     """Re-run ASR with a different model on current segment boundaries."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="retranscribe",
+                               audio_id=audio_id, device=device, request=request)
     if err:
         err["audio_id"] = audio_id
         return err
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="retranscribe", audio_id=audio_id, request=request)
         return _SESSION_ERROR
 
     # Guard: reject if model and boundaries unchanged
     if (model_name == session["model_name"]
             and _intervals_hash(session["intervals"]) == session["intervals_hash"]):
+        msg = "Model and boundaries unchanged. Change model_name or call /resegment first."
+        log_error(error_code="model_unchanged", endpoint="retranscribe",
+                  stage="validate", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message=msg, context={"model_name": model_name})
         return {
             "audio_id": audio_id,
-            "error": "Model and boundaries unchanged. Change model_name or call /resegment first.",
+            "error": msg,
             "segments": [],
         }
 
     from src.pipeline import retranscribe_audio
 
-    quota_warning = None
+    _audio_dur = float(len(session["audio"]) / 16000)
+    _est = _estimate_wall_for_log("retranscribe", _audio_dur, model_name, device)
+
     try:
         result = retranscribe_audio(
             session["intervals"],
             session["audio"], 16000,
             session["speech_intervals"], session["is_complete"],
             model_name, device, request=request, endpoint="retranscribe",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-        quota_warning = f"GPU quota reached — processed on CPU (slower).{reset_msg}"
-        result = retranscribe_audio(
-            session["intervals"],
-            session["audio"], 16000,
-            session["speech_intervals"], session["is_complete"],
-            model_name, "CPU", request=request, endpoint="retranscribe",
-        )
+        return _quota_error_response(e, audio_id=audio_id, endpoint="retranscribe",
+                                     request=request)
+    except (PoolQueueFullError, PoolExhaustedError) as e:
+        return _pool_error_response(e, audio_id=audio_id, endpoint="retranscribe",
+                                    request=request)
+    except Exception as e:
+        log_error(error_code="pipeline_exception", endpoint="retranscribe",
+                  audio_id=audio_id, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name})
+        raise
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="retranscription_failed", endpoint="retranscribe",
+                  stage="asr", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="Retranscription failed",
+                  context={"model_name": model_name})
         return {"audio_id": audio_id, "error": "Retranscription failed", "segments": []}
 
     update_session(audio_id, model_name=model_name)
-    return _format_response(audio_id, json_output, warning=quota_warning)
+    return _format_response(audio_id, json_output)
 
 
 def realign_from_timestamps(audio_id, timestamps, model_name="Base", device="GPU",
                              request: gr.Request = None):
     """Run ASR + alignment on caller-provided timestamp intervals."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="realign_from_timestamps",
+                               audio_id=audio_id, device=device, request=request)
     if err:
         err["audio_id"] = audio_id
         return err
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="realign_from_timestamps", audio_id=audio_id,
+                             request=request)
         return _SESSION_ERROR
 
     # Parse timestamps: accept list of {"start": f, "end": f} dicts
@@ -564,30 +845,44 @@ def realign_from_timestamps(audio_id, timestamps, model_name="Base", device="GPU
 
     from src.pipeline import realign_audio
 
-    quota_warning = None
+    _audio_dur = float(len(session["audio"]) / 16000)
+    _est = _estimate_wall_for_log("realign", _audio_dur, model_name, device)
+
     try:
         result = realign_audio(
             intervals,
             session["audio"], 16000,
             session["speech_intervals"], session["is_complete"],
             model_name, device, request=request, endpoint="realign",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        reset_msg = f" Resets in {e.reset_time}." if e.reset_time else ""
-        quota_warning = f"GPU quota reached — processed on CPU (slower).{reset_msg}"
-        result = realign_audio(
-            intervals,
-            session["audio"], 16000,
-            session["speech_intervals"], session["is_complete"],
-            model_name, "CPU", request=request, endpoint="realign",
-        )
+        return _quota_error_response(e, audio_id=audio_id,
+                                     endpoint="realign_from_timestamps",
+                                     request=request)
+    except (PoolQueueFullError, PoolExhaustedError) as e:
+        return _pool_error_response(e, audio_id=audio_id,
+                                    endpoint="realign_from_timestamps",
+                                    request=request)
+    except Exception as e:
+        log_error(error_code="pipeline_exception", endpoint="realign_from_timestamps",
+                  audio_id=audio_id, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name,
+                           "n_intervals": len(intervals)})
+        raise
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="alignment_failed", endpoint="realign_from_timestamps",
+                  stage="dp", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="Alignment failed",
+                  context={"model_name": model_name, "n_intervals": len(intervals)})
         return {"audio_id": audio_id, "error": "Alignment failed", "segments": []}
 
     new_intervals = result[6]
     update_session(audio_id, intervals=new_intervals, model_name=model_name)
-    return _format_response(audio_id, json_output, warning=quota_warning)
+    return _format_response(audio_id, json_output)
 
 
 # ---------------------------------------------------------------------------
@@ -682,11 +977,18 @@ def _normalize_segments(segments):
 
 def timestamps(audio_id, segments_json=None, granularity="words"):
     """Compute MFA word/letter timestamps using session audio."""
+    mark_endpoint_entry()
+    set_stage("validate")
     if granularity == "words+chars":
-        return {"audio_id": audio_id, "error": "chars granularity is currently disabled via API", "segments": []}
+        msg = "chars granularity is currently disabled via API"
+        log_error(error_code="unsupported_granularity", endpoint="timestamps",
+                  stage="validate", audio_id=audio_id,
+                  message=msg, context={"granularity": granularity})
+        return {"audio_id": audio_id, "error": msg, "segments": []}
 
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="timestamps", audio_id=audio_id)
         return _SESSION_ERROR
 
     # Parse segments: use provided or load stored
@@ -698,18 +1000,30 @@ def timestamps(audio_id, segments_json=None, granularity="words"):
     else:
         segments = _load_segments(audio_id)
         if not segments:
+            log_error(error_code="no_segments_in_session", endpoint="timestamps",
+                      stage="validate", audio_id=audio_id,
+                      message="No segments found in session")
             return {"audio_id": audio_id, "error": "No segments found in session", "segments": []}
 
     # Create segment WAVs from session audio
+    set_stage("mfa")
     try:
         seg_dir = _create_segment_wavs(session["audio"], 16000, segments)
     except Exception as e:
+        log_error(error_code="segment_wav_failed", endpoint="timestamps",
+                  stage="mfa", audio_id=audio_id, exception=e,
+                  message=f"Failed to create segment audio: {e}",
+                  context={"n_segments": len(segments)})
         return {"audio_id": audio_id, "error": f"Failed to create segment audio: {e}", "segments": []}
 
     from src.mfa import compute_mfa_timestamps_api
     try:
         result = compute_mfa_timestamps_api(segments, seg_dir, granularity or "words")
     except Exception as e:
+        log_error(error_code="mfa_failed", endpoint="timestamps",
+                  stage="mfa", audio_id=audio_id, exception=e,
+                  message=f"MFA alignment failed: {e}",
+                  context={"n_segments": len(segments), "granularity": granularity})
         return {"audio_id": audio_id, "error": f"MFA alignment failed: {e}", "segments": []}
 
     result["audio_id"] = audio_id
@@ -718,37 +1032,285 @@ def timestamps(audio_id, segments_json=None, granularity="words"):
 
 def timestamps_direct(audio_data, segments_json, granularity="words"):
     """Compute MFA word/letter timestamps with provided audio and segments."""
+    mark_endpoint_entry()
+    set_stage("validate")
     if granularity == "words+chars":
-        return {"error": "chars granularity is currently disabled via API", "segments": []}
+        msg = "chars granularity is currently disabled via API"
+        log_error(error_code="unsupported_granularity", endpoint="timestamps_direct",
+                  stage="validate", message=msg,
+                  context={"granularity": granularity})
+        return {"error": msg, "segments": []}
 
     # Parse segments
     if isinstance(segments_json, str):
         segments_json = json.loads(segments_json)
 
     if not segments_json:
+        log_error(error_code="no_segments_provided", endpoint="timestamps_direct",
+                  stage="validate", message="No segments provided")
         return {"error": "No segments provided", "segments": []}
 
     segments = _normalize_segments(segments_json)
 
     # Preprocess audio
+    set_stage("preprocess")
     try:
         audio_np, sr = _preprocess_api_audio(audio_data)
     except Exception as e:
+        log_error(error_code="preprocess_failed", endpoint="timestamps_direct",
+                  stage="preprocess", exception=e,
+                  message=f"Failed to preprocess audio: {e}")
         return {"error": f"Failed to preprocess audio: {e}", "segments": []}
 
     # Create segment WAVs
+    set_stage("mfa")
     try:
         seg_dir = _create_segment_wavs(audio_np, sr, segments)
     except Exception as e:
+        log_error(error_code="segment_wav_failed", endpoint="timestamps_direct",
+                  stage="mfa", exception=e,
+                  message=f"Failed to create segment audio: {e}",
+                  context={"n_segments": len(segments)})
         return {"error": f"Failed to create segment audio: {e}", "segments": []}
 
     from src.mfa import compute_mfa_timestamps_api
     try:
         result = compute_mfa_timestamps_api(segments, seg_dir, granularity or "words")
     except Exception as e:
+        log_error(error_code="mfa_failed", endpoint="timestamps_direct",
+                  stage="mfa", exception=e,
+                  message=f"MFA alignment failed: {e}",
+                  context={"n_segments": len(segments), "granularity": granularity})
         return {"error": f"MFA alignment failed: {e}", "segments": []}
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# CPU worker endpoint (invoked by main Space's worker_pool dispatcher)
+# ---------------------------------------------------------------------------
+
+def cpu_exec(hf_token, func_module, func_name, args_b64, kwargs_b64, meta_json=""):
+    """Execute a single GPU-decorated function on this worker's CPU.
+
+    Only enabled when WORKER_MODE=cpu. Called by the main Space over HTTP via
+    the worker_pool dispatcher.
+
+    Args, kwargs, and return value are pickled and base64-encoded. When
+    meta_json specifies a non-float32 transport, audio inside args is
+    decoded back to float32 before calling func.
+
+    Security:
+      - WORKER_MODE=cpu env gate (endpoint is inert on non-worker deploys).
+      - HF_TOKEN match against the Space secret.
+      - func_module must start with 'src.' (no stdlib / arbitrary imports).
+
+    Returns:
+      {"status": "ok", "result_b64": ..., "worker_timings": {...}} on success.
+      {"status": "error", "error": <message>} on failure.
+    """
+    import base64
+    import importlib
+    import json as _json
+    import pickle
+    import time
+    import traceback
+
+    if os.environ.get("WORKER_MODE", "").lower() != "cpu":
+        return {"status": "error", "error": "cpu_exec is disabled (WORKER_MODE != cpu)"}
+
+    space_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token or (space_token and hf_token != space_token):
+        return {"status": "error", "error": "Unauthorized"}
+
+    if not isinstance(func_module, str) or not func_module.startswith("src."):
+        return {"status": "error", "error": f"func_module '{func_module}' not in src.* namespace"}
+
+    req_body_mb = (len(args_b64) + len(kwargs_b64) + len(meta_json)) / 1e6
+    print(f"[cpu_exec] RECV {func_module}.{func_name} (body={req_body_mb:.2f} MB, meta={meta_json[:120]})")
+    t_total = time.time()
+
+    timings = {}
+
+    try:
+        t0 = time.time()
+        args = pickle.loads(base64.b64decode(args_b64))
+        kwargs = pickle.loads(base64.b64decode(kwargs_b64))
+        timings["unpickle_s"] = round(time.time() - t0, 3)
+    except Exception as e:
+        return {"status": "error", "error": f"Failed to unpickle args/kwargs: {e}"}
+
+    # Decode transport (e.g. int16 → float32)
+    try:
+        t0 = time.time()
+        meta = _json.loads(meta_json) if meta_json else {"transport": "float32"}
+        from src.core.audio_transport import decode_args_for_transport
+        args = decode_args_for_transport(args, meta)
+        timings["audio_decode_s"] = round(time.time() - t0, 3)
+        timings["transport"] = meta.get("transport", "float32")
+    except Exception as e:
+        tb = traceback.format_exc()
+        return {"status": "error", "error": f"Transport decode failed: {e}", "traceback": tb}
+
+    try:
+        module = importlib.import_module(func_module)
+        func = getattr(module, func_name)
+    except Exception as e:
+        return {"status": "error", "error": f"Failed to resolve {func_module}.{func_name}: {e}"}
+
+    # Unwrap @gpu_with_fallback so we run the raw function directly.
+    # On a CPU worker, WORKER_MODE=cpu already makes the wrapper a pass-through,
+    # but unwrapping removes the dead decorator frame from the traceback.
+    while hasattr(func, "__wrapped__"):
+        func = func.__wrapped__
+
+    try:
+        t0 = time.time()
+        result = func(*args, **kwargs)
+        timings["compute_s"] = round(time.time() - t0, 3)
+
+        t0 = time.time()
+        result_b64 = base64.b64encode(pickle.dumps(result)).decode()
+        timings["result_encode_s"] = round(time.time() - t0, 3)
+        timings["result_bytes"] = len(result_b64)
+
+        print(
+            f"[cpu_exec] DONE {func_name} total={time.time() - t_total:.1f}s "
+            f"compute={timings['compute_s']:.1f}s resp={len(result_b64)/1e6:.2f} MB "
+            f"timings={timings}"
+        )
+        return {"status": "ok", "result_b64": result_b64, "worker_timings": timings}
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[cpu_exec] {func_module}.{func_name} failed:\n{tb}")
+        return {"status": "error", "error": f"{type(e).__name__}: {e}", "traceback": tb}
+
+
+def pool_status(hf_token):
+    """Return per-worker state + pool config. HF-token-gated.
+
+    On Spaces without a configured pool (worker Spaces or dev), returns an
+    empty workers list with a note.
+    """
+    space_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token or (space_token and hf_token != space_token):
+        return {"error": "Unauthorized"}
+
+    from config import (
+        CPU_WORKER_ACQUIRE_TIMEOUT,
+        CPU_WORKER_HEALTH_INTERVAL,
+        CPU_WORKER_MAX_QUEUE_DEPTH,
+        CPU_WORKER_TRANSPORT_DEFAULT,
+    )
+    from src.core.worker_pool import POOL
+
+    config_block = {
+        "transport_default": CPU_WORKER_TRANSPORT_DEFAULT,
+        "max_queue_depth": CPU_WORKER_MAX_QUEUE_DEPTH,
+        "acquire_timeout_s": CPU_WORKER_ACQUIRE_TIMEOUT,
+        "health_interval_s": CPU_WORKER_HEALTH_INTERVAL,
+    }
+
+    if not POOL.has_workers():
+        return {
+            "workers": [],
+            "queue": {"busy_workers": 0, "total_workers": 0, "waiters": 0},
+            "config": config_block,
+            "note": "no workers configured on this Space",
+        }
+
+    return {
+        "workers": POOL.status(),
+        "queue": POOL.queue_info(),
+        "config": config_block,
+    }
+
+
+def cpu_pool_kill(hf_token, worker_id):
+    """Kill a persistent worker for crash-recovery testing. HF-token-gated."""
+    space_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token or (space_token and hf_token != space_token):
+        return {"error": "Unauthorized"}
+    try:
+        from src.core.cpu_worker_pool import _get_pool
+        import signal as _signal
+        import time as _time
+        p = _get_pool()
+        wid = int(worker_id)
+        h = p.workers[wid]
+        pid = h.pid
+        was_alive = h.process is not None and h.process.is_alive()
+        try:
+            os.kill(pid, _signal.SIGKILL)
+            sent = True
+            send_err = None
+        except Exception as ke:
+            sent = False
+            send_err = str(ke)
+        # give OS a moment to reap
+        _time.sleep(0.3)
+        alive_after = h.process is not None and h.process.is_alive()
+        return {
+            "worker_id": wid,
+            "pid": pid,
+            "was_alive": was_alive,
+            "kill_sent": sent,
+            "send_err": send_err,
+            "alive_after": alive_after,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def cpu_pool_status(hf_token):
+    """Return persistent CPU worker pool state. HF-token-gated.
+
+    Prototype diagnostic: shows per-worker boot snapshots, load times, pids,
+    live RSS, and job counts. Safe to call on Spaces where CPU_WORKER_MODE
+    is not 'persistent' — just returns `started=False`.
+    """
+    space_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token or (space_token and hf_token != space_token):
+        return {"error": "Unauthorized"}
+
+    try:
+        from src.core.cpu_worker_pool import is_started, stats as pool_stats, probe_rss
+    except Exception as e:
+        return {"error": f"pool import failed: {e}"}
+
+    if not is_started():
+        return {"started": False, "note": "CPU_WORKER_MODE != persistent or pool not yet bootstrapped"}
+
+    s = pool_stats()
+    # Augment with live RSS probe per worker
+    for w in s.get("workers", []):
+        try:
+            w["rss_now"] = probe_rss(w["id"])
+        except Exception as e:
+            w["rss_now_error"] = str(e)
+    # Include main process RSS
+    try:
+        import psutil as _ps
+        s["main_rss"] = _ps.Process(os.getpid()).memory_info().rss
+        vm = _ps.virtual_memory()
+        s["host_mem"] = {"total": vm.total, "available": vm.available, "used": vm.used, "percent": vm.percent}
+    except Exception as e:
+        s["main_rss_error"] = str(e)
+    # Probe cgroup (container) memory limit — authoritative Space budget.
+    cgroup = {}
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path) as _f:
+                cgroup[path] = _f.read().strip()
+        except Exception as e:
+            cgroup[path] = f"err: {e}"
+    try:
+        with open("/sys/fs/cgroup/memory.current") as _f:
+            cgroup["memory.current"] = _f.read().strip()
+    except Exception:
+        pass
+    s["cgroup"] = cgroup
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -775,7 +1337,10 @@ def debug_process(audio_data, min_silence_ms, min_speech_ms, pad_ms,
     if not hf_token or (space_token and hf_token != space_token):
         return {"error": "Unauthorized"}
 
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="debug_process",
+                               device=device, request=request)
     if err:
         return err
 
@@ -792,13 +1357,28 @@ def debug_process(audio_data, min_silence_ms, min_speech_ms, pad_ms,
             )
 
             collector = stop_debug_collection()
+        except QuotaExhaustedError as e:
+            stop_debug_collection()
+            return _quota_error_response(e, endpoint="debug_process", request=request)
+        except (PoolQueueFullError, PoolExhaustedError) as e:
+            stop_debug_collection()
+            return _pool_error_response(e, endpoint="debug_process", request=request)
         except Exception as e:
             stop_debug_collection()
+            log_error(error_code="pipeline_exception", endpoint="debug_process",
+                      device=device, exception=e,
+                      user_id=get_user_id(request) if request else "unknown",
+                      message=f"Pipeline failed: {e}",
+                      context={"model_name": model_name})
             return {"error": f"Pipeline failed: {e}"}
 
     # --- Assemble response ---
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_speech", endpoint="debug_process",
+                  stage="vad", device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No speech detected in audio")
         return {"error": "No speech detected in audio", "segments": []}
 
     # Extract profiling from collector (stored by _run_post_vad_pipeline)
@@ -832,11 +1412,19 @@ def debug_process(audio_data, min_silence_ms, min_speech_ms, pad_ms,
             entry["repeated_text"] = seg["repeated_text"]
         segments.append(entry)
 
+    # Surface CPU-worker dispatch info (from thread-local) on debug responses.
+    try:
+        from src.core.worker_pool import get_last_dispatch_info
+        worker_dispatch = get_last_dispatch_info()
+    except Exception:
+        worker_dispatch = None
+
     # Build final response
     response = {
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "profiling": profiling_dict,
+        "worker_dispatch": worker_dispatch,
         "segments": segments,
     }
 

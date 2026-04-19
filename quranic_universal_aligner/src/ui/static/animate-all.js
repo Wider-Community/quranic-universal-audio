@@ -69,9 +69,12 @@ function buildMegaCard() {
         var btn = card.querySelector('.animate-btn');
         var ref = (card.dataset.matchedRef || '').trim();
         var isSpecial = (ref === 'Basmala' || ref === "Isti'adha");
+        // A segment participates in the mega animation only if it has word timestamps
+        // (an MFA run has injected data-start on its .word spans).
+        var hasTimestamps = !!card.querySelector('.segment-text .word[data-start]');
 
-        if (!btn || btn.disabled) {
-            // Special segment without timestamps — buffer static text
+        if (!btn || !hasTimestamps) {
+            // Untimestamped segment — buffer static text (specials like transition markers)
             if (isSpecial || ref === '') {
                 var textEl = card.querySelector('.segment-text');
                 if (textEl) {
@@ -1151,17 +1154,20 @@ document.addEventListener('click', function(e) {
             audio.play().catch(function(){});
         }
     }
-    if (e.target.matches('.animate-btn.mfa-stale')) {
-        // Recompute MFA for this single segment
-        var btn = e.target;
-        var segIdx = parseInt(btn.getAttribute('data-segment'));
-        btn.textContent = '...';
-        btn.disabled = true;
-        submitRefEdit(segIdx, '', {action: 'recompute_mfa'});
-        return;
-    }
     if (e.target.matches('.animate-btn')) {
-        toggleAnimation(e.target);
+        var btn = e.target;
+        var card = btn.closest('.segment-card');
+        // If this segment has no timestamps yet, fetch them on demand then auto-start.
+        // No visual change to the button — on success the animation begins; the
+        // data-mfa-pending guard blocks re-entry without flickering the label.
+        if (card && !card.querySelector('.segment-text .word[data-start]')) {
+            if (btn.dataset.mfaPending === '1') return;
+            btn.dataset.mfaPending = '1';
+            var segIdx = parseInt(btn.getAttribute('data-segment'));
+            submitRefEdit(segIdx, '', {action: 'recompute_mfa', auto_start: true});
+            return;
+        }
+        toggleAnimation(btn);
     }
     if (e.target.matches('.animate-all-btn')) {
         toggleAnimateAll(e.target);
@@ -1306,30 +1312,40 @@ document.addEventListener('play', function(e) {
 
 // --- Edit patch observer (Python → JS surgical updates) ---
 (function() {
-    // Mark animate button as stale (MFA timestamps stripped — clickable "Recompute")
-    function markAnimateStale(card) {
-        if (!card) return;
-        var btn = card.querySelector('.animate-btn');
-        if (btn) {
-            btn.textContent = 'Recompute';
-            btn.classList.add('mfa-stale');
-            btn.classList.remove('active');
-            btn.disabled = false;
-        }
-    }
-    // Restore animate button (MFA timestamps restored from stash)
-    function restoreAnimate(card) {
+    // Reset animate button to idle state. Used both after MFA timestamps are
+    // stripped (ref edit) and after a fresh recompute completes — same blue
+    // "Animate" look in all cases; MFA is re-fetched on next click via the
+    // missing-timestamps fallback in the click handler above.
+    function resetAnimateButton(card) {
         if (!card) return;
         var btn = card.querySelector('.animate-btn');
         if (btn) {
             btn.textContent = 'Animate';
-            btn.classList.remove('mfa-stale', 'active');
+            btn.classList.remove('active');
             btn.disabled = false;
+            delete btn.dataset.mfaPending;
         }
     }
 
     function applyEditPatch(patch) {
         var container = document.querySelector('.segments-container');
+
+        // Animate-all handler finished MFA — jump straight into the mega card.
+        // Synthesize a Stop button (with its own hidden staging parent) so the
+        // Gradio animate_all_btn, which round-trips through Python on click,
+        // stays out of the Stop/Resume path. On stop the synthetic button is
+        // re-parented back into the hidden stage and becomes invisible again.
+        if (patch.status === 'start_megacard') {
+            var stage = document.createElement('div');
+            stage.style.display = 'none';
+            var synthBtn = document.createElement('button');
+            synthBtn.className = 'animate-all-btn';
+            synthBtn.textContent = 'Animate All';
+            stage.appendChild(synthBtn);
+            document.body.appendChild(stage);
+            toggleAnimateAll(synthBtn);
+            return;
+        }
 
         // MFA single-segment recompute completed
         if (patch.status === 'mfa_done' && container) {
@@ -1338,14 +1354,15 @@ document.addEventListener('play', function(e) {
                 // Replace text with timestamped HTML (has data-start/data-end on word spans)
                 var textDiv = card.querySelector('.segment-text');
                 if (textDiv && patch.text_html) textDiv.innerHTML = patch.text_html;
-                // Re-enable animate button
-                restoreAnimate(card);
+                resetAnimateButton(card);
+                var animBtn = card.querySelector('.animate-btn');
+                if (patch.auto_start && animBtn) toggleAnimation(animBtn);
             }
             return;
         }
         if (patch.status === 'mfa_failed' && container) {
             var card = container.querySelector('.segment-card[data-segment-idx="' + patch.idx + '"]');
-            if (card) markAnimateStale(card);
+            if (card) resetAnimateButton(card);
             console.warn('[REF-EDIT] MFA recompute failed for segment', patch.idx + 1);
             return;
         }
@@ -1371,10 +1388,13 @@ document.addEventListener('play', function(e) {
         if (patch.status !== 'ok') return;
         if (!container) return;
 
-        // MFA timestamp state changes
+        // MFA timestamp state changes — stripped timestamps are already reflected
+        // in the replaced matched_text_html (no data-start on word spans), so the
+        // regular Animate click handler will auto-refetch. Just reset the button
+        // state in case the user had an active animation when they edited the ref.
         if (patch.mfa_stripped) {
             var card = container.querySelector('.segment-card[data-segment-idx="' + patch.edited_idx + '"]');
-            markAnimateStale(card);
+            resetAnimateButton(card);
         }
 
         // Apply missing-words flag changes on affected segments

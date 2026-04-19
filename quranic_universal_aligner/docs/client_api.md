@@ -5,9 +5,12 @@
 - [Alignment Endpoints](#alignment-endpoints) — `/process_audio_session`, `/process_url_session`, `/resegment`, `/retranscribe`, `/realign_from_timestamps`
 - [Word Timestamps](#word-timestamps) — `/timestamps`, `/timestamps_direct`
 - [Utilities](#utilities) — `/estimate_duration`
-- [Response Reference](#response-reference) — segment fields, special types, word arrays, GPU warning, errors
+- [Response Reference](#response-reference) — segment fields, special types, word arrays, errors
 
 ## API Changelog
+
+**13/04/2026**
+- **Breaking:** GPU quota is no longer auto-routed to CPU. Requests now return a structured error and the caller decides whether to retry with `device="CPU"`. New `error_code` values: `gpu_quota_exhausted` (logged user), `gpu_quota_anonymous` (unlogged/IP-limited). The old `"warning"` field on successful responses is no longer emitted.
 
 **04/04/2026**
 - New fields on segment objects: `has_repeated_words`, `repeated_ranges`, `repeated_text` — surfaces repetition detection data when a reciter re-reads a portion of text
@@ -23,9 +26,9 @@
 
 ## GPU Usage & Access
 
-- **Free Tier:** Every user receives **free daily GPU quota**. Once your daily GPU quota is exhausted, you can continue using unlimited CPU processing for all endpoints.
-- **Unlimited GPU Access:** If you need unlimited API access on GPU (e.g., for high-volume or production use), please get in touch to arrange a payment plan and higher limits.
-- **Note:** CPU processing is always unlimited and available, but is much slower. When GPU quota is exceeded, requests will be automatically routed to CPU and a warning will appear in the response.
+- **Free Tier:** Every user receives **free daily GPU quota**. Once your daily quota is exhausted, GPU requests return an error — call the same endpoint again with `device="CPU"` to continue.
+- **Unlimited GPU Access:** If you need unlimited GPU access (e.g., high-volume or production use), please get in touch to arrange a payment plan and higher limits.
+- **CPU:** Always available and unlimited, but slower. You choose when to use it — there is no silent fallback.
 
 ## Quick Start
 
@@ -117,7 +120,7 @@ Processes a recitation audio file: detects speech segments, recognizes text, and
 | `model_name` | str | `"Base"` | `"Base"` (faster) or `"Large"` (more accurate). **Only these two values are accepted** — any other value will cause an error |
 | `device` | str | `"GPU"` | `"GPU"` or `"CPU"` |
 
-If the GPU is temporarily unavailable, processing continues on CPU (slower). When this happens, a `"warning"` field is included in the response (see [GPU Fallback Warning](#gpu-fallback-warning)).
+If GPU quota is exhausted, the response is an error with `error_code` `gpu_quota_exhausted` or `gpu_quota_anonymous`. Re-issue the same request with `device="CPU"` to continue. See [Errors](#errors) for the full shape.
 
 **Segmentation presets:**
 
@@ -461,23 +464,29 @@ Returned by `/timestamps` and `/timestamps_direct`. Each word is an array: `[loc
 
 > **Note:** `"words+chars"` granularity (letter-level timestamps) is currently disabled via API. Only word-level timestamps are returned.
 
-### GPU Fallback Warning
+### Errors
 
-When the server's GPU is temporarily unavailable, processing continues on CPU (slower). All endpoints include a `"warning"` field in the response:
+All errors share the same base shape: `{"error": "...", "segments": []}`. Endpoints with an active session also include `audio_id`.
+
+For capacity/quota errors, the response adds a stable `error_code` (and `reset_time` for GPU quota) so clients can react programmatically:
 
 ```json
 {
-  "audio_id": "...",
-  "warning": "GPU quota reached — processed on CPU (slower). Resets in 13:53:59.",
-  "segments": [...]
+  "error": "GPU quota exhausted for your account. Resets in 0:14:23. Upgrade at https://huggingface.co/subscribe/pro for more quota, or retry with device=CPU.",
+  "error_code": "gpu_quota_exhausted",
+  "reset_time": "0:14:23",
+  "segments": []
 }
 ```
 
-The `"warning"` key is **absent** (not `null`) when processing ran on GPU normally. Clients should check `if "warning" in result` rather than checking for `null`.
+`reset_time` is a `"H:MM:SS"` string when ZeroGPU provides one, else `null`.
 
-### Errors
+| `error_code` | When | Suggested client action |
+|---|---|---|
+| `gpu_quota_exhausted` | Your logged account is out of daily GPU quota | Retry with `device="CPU"`, or upgrade to Pro |
+| `gpu_quota_anonymous` | Anonymous/IP-based GPU quota is out | Sign in for more quota, or retry with `device="CPU"` |
 
-All errors follow the same shape: `{"error": "...", "segments": []}`. Endpoints that have an active session also include `audio_id`.
+Other error conditions (no `error_code`):
 
 | Condition | Error message | `audio_id` present? |
 |---|---|---|

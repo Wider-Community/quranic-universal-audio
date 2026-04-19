@@ -675,14 +675,19 @@ def _ts_progress_bar_html(total_segments, rate, animated=True):
 def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_row=None,
                            method=MFA_METHOD, beam=MFA_BEAM, retry_beam=MFA_RETRY_BEAM,
                            shared_cmvn=MFA_SHARED_CMVN):
-    """Compute word-level timestamps via MFA forced alignment and inject into HTML.
+    """Animate All handler: MFA-align only uncomputed segments, then signal the mega card.
 
-    Generator that yields (output_html, compute_ts_btn, animate_all_html, progress_bar, json_output)
-    tuples. First yield shows the animated progress bar; final yield contains results with enriched JSON
-    including word/letter timestamps.
+    Generator that yields (output_html, animate_all_btn, edit_patch, progress_bar, json_output)
+    tuples. Skips segments whose SegmentInfo.words is already populated (from prior per-card
+    or batch MFA). Progress counter reflects the uncomputed subset only.
     """
-    import re
+    import json as _json_mod
+    import time as _time_mod
     import traceback
+
+    # Nonce keeps each patch unique so Gradio re-emits on back-to-back clicks.
+    def _make_start_patch():
+        return _json_mod.dumps({"status": "start_megacard", "nonce": _time_mod.time()})
 
     # json_output is now List[SegmentInfo] from gr.State (not a JSON dict)
     segments_state = json_output if isinstance(json_output, list) else []
@@ -690,8 +695,8 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
         yield current_html, gr.update(), gr.update(), gr.update(), gr.update()
         return
 
-    # Re-render HTML from SegmentInfo to pick up any inline edits
-    # (patch-based edits update state but skip output_html)
+    # Re-render HTML from SegmentInfo to pick up any inline edits and any
+    # prior MFA timestamps already attached to .words.
     if segment_dir:
         from src.ui.segments import render_segments
         full_audio_url = f"/gradio_api/file={segment_dir}/full.wav"
@@ -707,13 +712,49 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
     # Write individual segment WAVs on demand (sliced from full.wav)
     _ensure_segment_wavs(segment_dicts, segment_dir)
 
-    refs, audio_paths, seg_to_result_idx = _build_mfa_refs(segment_dicts, segment_dir)
+    all_refs, all_audio_paths, all_seg_to_result_idx = _build_mfa_refs(segment_dicts, segment_dir)
+
+    # Partition animatable segments into "already computed" (synthesize a
+    # result from SegmentInfo.words) and "needs MFA" (batch-align). Both
+    # paths feed a unified results list so inject_timestamps_into_html can
+    # repaint every animatable segment in one pass after re-rendering.
+    refs, audio_paths = [], []
+    seg_to_result_idx = {}            # seg_idx -> position in combined_results
+    prebuilt_slots = {}               # combined_idx -> synthesized result dict
+    new_batch_slots = []              # combined_idx of each MFA batch entry, in submit order
+    for seg_idx, old_ri in all_seg_to_result_idx.items():
+        combined_idx = len(seg_to_result_idx)
+        seg_to_result_idx[seg_idx] = combined_idx
+        if 0 <= seg_idx < len(segments_state) and segments_state[seg_idx].words:
+            prebuilt_slots[combined_idx] = {
+                "status": "ok",
+                "ref": all_refs[old_ri],
+                "words": segments_state[seg_idx].words,
+            }
+        else:
+            refs.append(all_refs[old_ri])
+            audio_paths.append(all_audio_paths[old_ri])
+            new_batch_slots.append(combined_idx)
 
     if not refs:
-        yield current_html, gr.update(), gr.update(), gr.update(), gr.update()
+        # Everything is already timestamped. We still re-injected via render_segments
+        # above (which strips prior data-start), so repaint from the synthesized
+        # results before handing off to the mega card. Button stays visible so it
+        # reappears when the user stops the mega card and ts-row is restored.
+        synth_only = [prebuilt_slots[i] for i in range(len(prebuilt_slots))]
+        html_done, _ = inject_timestamps_into_html(
+            current_html, segment_dicts, synth_only, seg_to_result_idx, segment_dir
+        )
+        yield (
+            html_done,
+            gr.update(visible=True, interactive=True, variant="primary"),
+            gr.update(value=_make_start_patch()),
+            gr.update(visible=False),
+            segments_state,
+        )
         return
 
-    # Yield 1: hide button, show static progress bar at 0/N
+    # Yield 1: hide the button so the progress bar occupies the ts-row slot.
     total_segments = len(refs)
     static_bar = _ts_progress_bar_html(total_segments, MFA_PROGRESS_SEGMENT_RATE, animated=False)
     yield (
@@ -752,7 +793,7 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
 
     # Wait for MFA result (blocking — animation runs client-side)
     try:
-        results = _mfa_wait_result(event_id, mfa_headers, mfa_base)
+        batch_results = _mfa_wait_result(event_id, mfa_headers, mfa_base)
     except Exception as e:
         traceback.print_exc()
         yield (
@@ -764,48 +805,23 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
         )
         raise
 
+    # Splice synthesized "prior" results and fresh MFA results into a single
+    # list aligned with seg_to_result_idx.
+    total_slots = len(seg_to_result_idx)
+    results = [None] * total_slots
+    for combined_idx, synth in prebuilt_slots.items():
+        results[combined_idx] = synth
+    for i, combined_idx in enumerate(new_batch_slots):
+        results[combined_idx] = batch_results[i] if i < len(batch_results) else {"status": "failed"}
+
     html, enriched_json = inject_timestamps_into_html(
         current_html, segment_dicts, results, seg_to_result_idx, segment_dir
     )
 
-    # Log word and char timestamps to usage logger
-    if cached_log_row is not None:
-        try:
-            import json as _json
-            from src.core.usage_logger import update_word_timestamps
-            _ts_log = []
-            _char_ts_log = []
-            for result in results:
-                if result.get("status") != "ok":
-                    continue
-                _ts_log.append({
-                    "ref": result.get("ref", ""),
-                    "words": [
-                        {"word": w.get("word", ""), "start": round(w["start"], 4), "end": round(w["end"], 4)}
-                        for w in result.get("words", []) if w.get("start") is not None and w.get("end") is not None
-                    ],
-                })
-                _char_ts_log.append({
-                    "ref": result.get("ref", ""),
-                    "words": [
-                        {
-                            "word": w.get("word", ""),
-                            "location": w.get("location", ""),
-                            "letters": [
-                                {"char": lt.get("char", ""), "start": round(lt["start"], 4), "end": round(lt["end"], 4)}
-                                for lt in w.get("letters", []) if lt.get("start") is not None and lt.get("end") is not None
-                            ],
-                        }
-                        for w in result.get("words", []) if w.get("letters")
-                    ],
-                })
-            update_word_timestamps(
-                cached_log_row,
-                _json.dumps(_ts_log),
-                _json.dumps(_char_ts_log) if any(entry["words"] for entry in _char_ts_log) else None,
-            )
-        except Exception as e:
-            print(f"[USAGE_LOG] Failed to log word timestamps: {e}")
+    # V3 note: word/char timestamps are no longer logged to the main dataset.
+    # The offline `extract_timestamps.py` + Inspector flows are the authoritative
+    # timestamp producers. A separate `quran-aligner-timestamps` dataset may be
+    # added in v3.1 if the Space MFA path shows enough traffic to warrant it.
 
     # Copy MFA word/letter data back onto SegmentInfo objects
     enriched_segs = enriched_json.get("segments", []) if enriched_json else []
@@ -814,12 +830,14 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
         if 0 <= idx < len(enriched_segs) and "words" in enriched_segs[idx]:
             seg.words = enriched_segs[idx]["words"]
 
-    # Final yield: updated HTML, hide progress bar, show Animate All, SegmentInfo list
-    animate_all_btn_html = '<button class="animate-all-btn">Animate All</button>'
+    # Final yield: updated HTML, re-show the Gradio button (it was hidden during
+    # MFA so the progress bar took its slot), hide the progress bar, and signal
+    # JS to start the mega card. The mega card hides #ts-row via JS; on stop it's
+    # restored and the button reappears.
     yield (
         html,
-        gr.update(visible=False),
-        gr.update(value=animate_all_btn_html, visible=True),
+        gr.update(visible=True, interactive=True, variant="primary"),
+        gr.update(value=_make_start_patch()),
         gr.update(visible=False),
         segments_state,
     )

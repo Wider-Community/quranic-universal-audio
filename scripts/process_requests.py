@@ -28,8 +28,10 @@ Usage:
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -741,11 +743,23 @@ def cmd_prepare_pr(args):
             print(f"    ERROR: {e}")
             req["pr_url"] = ""
         finally:
-            # Always return to main
+            # Always return to main, preserving segment files as untracked.
+            # After commit on the branch, files are tracked — checking out main
+            # would delete them.  Copy aside, switch, copy back.
+            seg_abs = REPO_ROOT / "data" / "recitation_segments" / slug
+            _tmp = None
+            if seg_abs.is_dir():
+                _tmp = Path(tempfile.mkdtemp())
+                shutil.copytree(seg_abs, _tmp / slug, dirs_exist_ok=True)
             subprocess.run(
                 ["git", "checkout", "main"],
                 cwd=str(REPO_ROOT), capture_output=True, text=True,
             )
+            if _tmp and (_tmp / slug).is_dir():
+                if seg_abs.exists():
+                    shutil.rmtree(seg_abs)
+                shutil.copytree(_tmp / slug, seg_abs)
+                shutil.rmtree(_tmp)
 
     save_state(state)
     print(f"\nDone. State saved with PR URLs.")

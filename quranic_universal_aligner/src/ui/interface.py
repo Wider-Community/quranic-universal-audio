@@ -99,6 +99,13 @@ def build_interface():
         c.api_estimate_audio_duration = gr.Number(visible=False)
         c.api_url = gr.Textbox(visible=False)
         c.api_debug_token = gr.Textbox(visible=False)
+        c.api_cpu_exec_token = gr.Textbox(visible=False)
+        c.api_cpu_exec_module = gr.Textbox(visible=False)
+        c.api_cpu_exec_func = gr.Textbox(visible=False)
+        c.api_cpu_exec_args = gr.Textbox(visible=False)
+        c.api_cpu_exec_kwargs = gr.Textbox(visible=False)
+        c.api_cpu_exec_meta = gr.Textbox(visible=False)
+        c.api_pool_status_token = gr.Textbox(visible=False)
         c.api_result = gr.JSON(visible=False)
 
         # Inline ref editing bridge (JS → Python)
@@ -277,7 +284,7 @@ def _build_right_column(c):
 
 def _build_results_content(c):
     """Build the main results content (extract/resegment/output)."""
-    c.extract_btn = gr.Button("Extract Segments", variant="secondary", size="lg", interactive=False)
+    c.extract_btn = gr.Button("Align Recitation", variant="secondary", size="lg", interactive=False)
     c.pipeline_progress = gr.HTML(value="", visible=False)
     with gr.Row(elem_id="action-btns-row"):
         c.resegment_toggle_btn = gr.Button(
@@ -287,11 +294,10 @@ def _build_results_content(c):
             "Retranscribe with Large Model", variant="primary", size="lg", visible=False
         )
     with gr.Row(elem_id="ts-row"):
-        c.compute_ts_btn = gr.Button(
-            "Compute Timestamps", variant="secondary", size="lg", interactive=False, visible=False
+        c.animate_all_btn = gr.Button(
+            "Animate All", variant="secondary", size="lg", interactive=False, visible=False
         )
         c.compute_ts_progress = gr.HTML(value="", visible=False)
-        c.animate_all_html = gr.HTML(value="", visible=False)
 
     with gr.Column(visible=False) as c.resegment_panel:
         gr.Markdown(
@@ -304,7 +310,7 @@ def _build_results_content(c):
         c.resegment_btn = gr.Button("Resegment", variant="primary", size="lg")
 
     c.output_html = gr.HTML(
-        value='<div style="text-align: center; color: #666; padding: 60px;">Upload audio and click "Extract Segments" to begin</div>',
+        value='<div style="text-align: center; color: #666; padding: 60px;">Upload audio and click "Align Recitation" to begin</div>',
         elem_classes=["output-html"]
     )
     # Server-side state (gr.State avoids serializing the full JSON to the browser on every update)

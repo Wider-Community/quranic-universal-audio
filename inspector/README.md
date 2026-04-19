@@ -49,7 +49,7 @@ You can also open the **statistics** panel for graphs on confidence scores, segm
 | **Adjust** | Drag handles on the waveform to modify the segment's start and end time |
 | **Split** | Divide a segment into two at the playhead position |
 | **Merge** | Combine two adjacent segments into one |
-| **Edit Reference** | Change the Qur'anic reference (`surah:verse:word-surah:verse:word` format or shortcut `surah:verse` |
+| **Edit Reference** | Change the Qur'anic reference (`surah:verse:word-surah:verse:word` format or shortcut `surah:verse`) |
 | **Delete** | Remove a segment entirely |
 | **Auto-fill** | Extend an adjacent segment to cover a missing word (available on Missing Words cards) |
 | **Ignore** | Dismiss the issue for this category, marking the segment as reviewed-and-correct |

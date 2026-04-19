@@ -49,15 +49,14 @@ def _load_token() -> str | None:
 # ── Dataset helpers ────────────────────────────────────────────────────
 
 def _has_valid_segments(segments_str) -> bool:
+    """V3: segments column is a flat list of segment dicts (one per matched segment)."""
     if not segments_str:
         return False
     try:
-        runs = json.loads(segments_str)
-        if isinstance(runs, list) and runs:
-            return any(isinstance(run, dict) and run.get("segments") for run in runs)
+        segs = json.loads(segments_str)
+        return isinstance(segs, list) and len(segs) > 0
     except (json.JSONDecodeError, TypeError):
-        pass
-    return False
+        return False
 
 
 def _fmt_duration(seconds) -> str:
@@ -141,39 +140,95 @@ def build_dev_tab_ui(c):
 
 # ── Row extraction ─────────────────────────────────────────────────────
 
+def _safe_load(s):
+    """Parse a JSON string from a row, tolerating None / malformed input."""
+    if not s:
+        return {}
+    if isinstance(s, (dict, list)):
+        return s
+    try:
+        return json.loads(s)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
 def _row_to_dict(row) -> dict:
-    """Extract the fields we care about from a dataset row."""
+    """Extract the fields we care about from a V3 dataset row.
+
+    V3 layout: flat columns + JSON-string columns (`timing`, `settings`,
+    `results_summary`, `reciter_stats`, `segments`, etc.). This helper
+    unpacks the JSON side into flat keys so the rest of the dev_tools UI
+    keeps working with the same shape it used to get from v2.
+    """
+    settings        = _safe_load(row.get("settings"))
+    timing          = _safe_load(row.get("timing"))
+    results_summary = _safe_load(row.get("results_summary"))
+    anchor_col      = _safe_load(row.get("anchor"))
+    vad_block       = timing.get("vad", {}) if isinstance(timing, dict) else {}
+    asr_block       = timing.get("asr", {}) if isinstance(timing, dict) else {}
+    dp_block        = timing.get("dp",  {}) if isinstance(timing, dict) else {}
+    num_segments    = results_summary.get("num_segments") or 0
+    segments_passed = results_summary.get("segments_passed") or 0
+
+    def _vad_gpu():
+        w = vad_block.get("wall_s"); q = vad_block.get("queue_s")
+        return (w - q) if (w is not None and q is not None) else None
+
+    def _asr_gpu():
+        w = asr_block.get("wall_s"); q = asr_block.get("queue_s")
+        return (w - q) if (w is not None and q is not None) else None
+
     return {
+        # ── flat identity / metadata ──
         "audio_id": row.get("audio_id", ""),
         "timestamp": row.get("timestamp", ""),
-        "surah": row.get("surah"),
+        "schema_version": row.get("schema_version", ""),
+        "endpoint": row.get("endpoint", ""),
         "audio_duration_s": row.get("audio_duration_s"),
-        "num_segments": row.get("num_segments"),
-        "asr_model": row.get("asr_model", ""),
-        "device": row.get("device", ""),
-        "segments_passed": row.get("segments_passed"),
-        "segments_failed": row.get("segments_failed"),
-        "mean_confidence": row.get("mean_confidence"),
-        "tier1_retries": row.get("tier1_retries", 0) or 0,
-        "tier1_passed": row.get("tier1_passed", 0) or 0,
-        "tier2_retries": row.get("tier2_retries", 0) or 0,
-        "tier2_passed": row.get("tier2_passed", 0) or 0,
-        "reanchors": row.get("reanchors", 0) or 0,
-        "special_merges": row.get("special_merges", 0) or 0,
-        "total_time": row.get("total_time"),
-        "vad_queue_time": row.get("vad_queue_time"),
-        "vad_gpu_time": row.get("vad_gpu_time"),
-        "asr_gpu_time": row.get("asr_gpu_time"),
-        "dp_total_time": row.get("dp_total_time"),
-        "min_silence_ms": row.get("min_silence_ms"),
-        "min_speech_ms": row.get("min_speech_ms"),
-        "pad_ms": row.get("pad_ms"),
-        "segments": row.get("segments"),
-        "word_timestamps": row.get("word_timestamps"),
-        "char_timestamps": row.get("char_timestamps"),
-        "resegmented": row.get("resegmented"),
-        "retranscribed": row.get("retranscribed"),
-        "error": row.get("error"),
+        # 3.0.1+: device / asr_model / asr_model_label live inside settings
+        "asr_model":       settings.get("asr_model", ""),
+        "asr_model_label": settings.get("asr_model_label", ""),
+        "device":          settings.get("device", ""),
+        # 3.1.0+: wall_total_s lives inside timing
+        "total_time": timing.get("wall_total_s") if isinstance(timing, dict) else None,
+
+        # ── unpacked (3.1.0+: surah/anchor_ayah from anchor col; segments_failed derived) ──
+        "surah": anchor_col.get("winner_surah") if isinstance(anchor_col, dict) else None,
+        "anchor_ayah": anchor_col.get("winner_ayah") if isinstance(anchor_col, dict) else None,
+        "num_segments": num_segments,
+        "missing_word_count": results_summary.get("missing_word_count"),
+        "segments_passed": segments_passed,
+        "segments_failed": max(0, num_segments - segments_passed),
+        "mean_confidence": results_summary.get("mean_confidence"),
+        "min_confidence":  results_summary.get("min_confidence"),
+        "tier1_retries": results_summary.get("tier1_attempts") or 0,
+        "tier1_passed":  results_summary.get("tier1_passed") or 0,
+        "tier2_retries": results_summary.get("tier2_attempts") or 0,
+        "tier2_passed":  results_summary.get("tier2_passed") or 0,
+        "reanchors":        results_summary.get("reanchors") or 0,
+        "special_merges":   results_summary.get("special_merges") or 0,
+        "transition_skips": results_summary.get("transition_skips") or 0,
+        "wraps_detected":   results_summary.get("wraps_detected") or 0,
+
+        # ── timing unpacked (flattened equivalents of v2 per-stage fields) ──
+        "vad_gpu_time":   _vad_gpu(),
+        "asr_gpu_time":   _asr_gpu(),
+        "dp_total_time":  dp_block.get("total_s"),
+
+        # ── settings unpacked ──
+        "min_silence_ms": settings.get("min_silence_ms"),
+        "min_speech_ms":  settings.get("min_speech_ms"),
+        "pad_ms":         settings.get("pad_ms"),
+
+        # ── keep raw JSON columns addressable for downstream inspection ──
+        "segments":        row.get("segments"),
+        "events":          row.get("events"),
+        "anchor":          row.get("anchor"),
+        "asr_batches":     row.get("asr_batches"),
+        "reciter_stats":   row.get("reciter_stats"),
+        "gpu_memory":      row.get("gpu_memory"),
+        "timing":          row.get("timing"),
+        "results_summary": row.get("results_summary"),
     }
 
 
@@ -233,9 +288,9 @@ def load_logs_handler():
     surah_names = _load_surah_names()
 
     try:
-        ds = load_dataset("hetchyy/quran-aligner-logs", token=token,
+        from config import USAGE_LOG_LOGS_REPO
+        ds = load_dataset(USAGE_LOG_LOGS_REPO, token=token,
                           split="train", streaming=True)
-        ds = ds.remove_columns("audio")
     except Exception as e:
         gr.Warning(f"Failed to load dataset: {e}")
         return [], [], f"Error: {e}", gr.update()
@@ -244,6 +299,9 @@ def load_logs_handler():
     total = 0
     for row in ds:
         total += 1
+        # V3: only parse v3-shape rows. Older subsets/versions are skipped.
+        if not str(row.get("schema_version", "")).startswith("3."):
+            continue
         if _has_valid_segments(row.get("segments")):
             rows.append(_row_to_dict(row))
 
@@ -569,14 +627,17 @@ def _build_summary_html(row, surah_names) -> str:
     t1 = f"{row.get('tier1_passed', 0) or 0}/{row.get('tier1_retries', 0) or 0}"
     t2 = f"{row.get('tier2_passed', 0) or 0}/{row.get('tier2_retries', 0) or 0}"
 
+    # V3: no session flags; derive from endpoint instead. Errors now live in
+    # the separate JSONL log, not the main dataset — so there's no `error` col.
+    endpoint = row.get("endpoint") or ""
     flags = []
-    if row.get("resegmented"):
-        flags.append("Resegmented")
-    if row.get("retranscribed"):
-        flags.append("Retranscribed")
-    if row.get("error"):
-        flags.append(f"Error: {str(row['error'])[:60]}")
-    flags_html = f" &nbsp;|&nbsp; <span>Flags: {', '.join(flags)}</span>" if flags else ""
+    if endpoint == "resegment":
+        flags.append("Resegment")
+    elif endpoint == "retranscribe":
+        flags.append("Retranscribe")
+    elif endpoint == "realign":
+        flags.append("Realign")
+    flags_html = f" &nbsp;|&nbsp; <span>Endpoint: {', '.join(flags)}</span>" if flags else ""
 
     sections.append(f"""
     <div style="margin-bottom: 12px; padding: 10px; background: #f8f9fa; border-radius: 6px; border-left: 3px solid #d9534f;">
@@ -607,18 +668,13 @@ def _build_segments_from_log(row, audio_id):
         return _empty
 
     try:
-        runs = json.loads(segments_str)
+        seg_list = json.loads(segments_str)
     except (json.JSONDecodeError, TypeError):
         return ('<div style="color: #999; padding: 20px;">Could not parse segments JSON.</div>', [], None)
 
-    if not runs or not isinstance(runs, list):
-        return ('<div style="color: #999; padding: 20px;">Empty segment runs.</div>', [], None)
-
-    # Use the last run (most recent alignment pass)
-    last_run = runs[-1]
-    seg_list = last_run.get("segments", [])
-    if not seg_list:
-        return ('<div style="color: #999; padding: 20px;">No segments in last run.</div>', [], None)
+    # V3: segments column is a flat list of segment dicts (one row = one run).
+    if not seg_list or not isinstance(seg_list, list):
+        return ('<div style="color: #999; padding: 20px;">No segments in this row.</div>', [], None)
 
     # Try to download audio for this specific row
     audio_int16 = None
@@ -664,8 +720,8 @@ def _build_segments_from_log(row, audio_id):
         elif ref:
             matched_text = get_text_with_markers(ref) or ""
 
-        # Check for missing words
-        has_missing = seg_data.get("missing_words", False) or False
+        # V3 renamed: missing_words → has_missing_words (but accept both for safety)
+        has_missing = bool(seg_data.get("has_missing_words") or seg_data.get("missing_words"))
 
         seg_info = SegmentInfo(
             start_time=start,
@@ -717,8 +773,10 @@ def _download_audio_for_row(audio_id: str):
         raise ValueError("No HF token")
 
     from datasets import load_dataset
+    from config import USAGE_LOG_AUDIO_REPO
 
-    ds = load_dataset("hetchyy/quran-aligner-logs", token=token,
+    # V3: audio lives in its own dataset now, keyed by audio_id.
+    ds = load_dataset(USAGE_LOG_AUDIO_REPO, token=token,
                       split="train", streaming=True)
 
     for row in ds:
