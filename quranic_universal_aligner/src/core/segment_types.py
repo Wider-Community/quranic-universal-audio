@@ -65,6 +65,9 @@ class SegmentInfo:
     _original_ref: Optional[str] = None
     # MFA word/letter timestamps (list of dicts with location, start, end, letters)
     words: Optional[list] = None
+    # Index into the DebugCollector's alignment[] list (pre-split alignment order).
+    # Preserved across _split_fused_segments so dp_debug lookup survives splits.
+    _original_alignment_idx: Optional[int] = None
 
     def to_json_dict(self) -> dict:
         """Convert to the JSON dict format used by exports and API."""
@@ -229,7 +232,7 @@ class ProfilingData:
                     f"    Batch {b['batch_num']:>2}: {b['size']:>3} segs | "
                     f"{b['time']:.3f}s | "
                     f"{b['min_dur']:.2f}-{b['max_dur']:.2f}s "
-                    f"(A {b['avg_dur']:.2f}s, T {b['total_seconds']:.1f}s, W {b['pad_waste']:.0%}{qk_str})"
+                    f"(A {b['total_seconds']/b['size']:.2f}s, T {b['total_seconds']:.1f}s, W {b['pad_waste']:.0%}{qk_str})"
                 )
         lines += [
             f"  Global Anchor:",

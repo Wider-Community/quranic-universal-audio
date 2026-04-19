@@ -651,6 +651,20 @@ def align_segment(
     if PHONEME_ALIGNMENT_PROFILING:
         timing['window_setup_time'] = time.perf_counter() - t0
 
+    # Record DP trace for the debug collector / v3 log row.
+    # Captured up front so any failure path can still emit the window state
+    # the DP actually saw. j_start/best_j/basmala_consumed get filled in below
+    # on the success path.
+    timing['dp_trace'] = {
+        'R': list(R),
+        'R_phone_to_word': list(R_phone_to_word),
+        'win_start': win_start,
+        'win_end': win_end,
+        'j_start': None,
+        'best_j': None,
+        'basmala_consumed': False,
+    }
+
     # === DP ===
     if PHONEME_ALIGNMENT_PROFILING:
         t0 = time.perf_counter()
@@ -744,6 +758,11 @@ def align_segment(
             repeat_end = words[R_phone_to_word[post_end - 1]].location
             wrap_word_ranges.append((jump_to, jump_from, repeat_end))
         result.wrap_word_ranges = wrap_word_ranges
+
+    # Fill in success-path DP trace fields
+    timing['dp_trace']['j_start'] = j_start
+    timing['dp_trace']['best_j'] = best_j
+    timing['dp_trace']['basmala_consumed'] = basmala_consumed
 
     if PHONEME_ALIGNMENT_PROFILING:
         timing['result_build_time'] = time.perf_counter() - t0

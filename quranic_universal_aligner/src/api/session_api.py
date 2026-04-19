@@ -21,6 +21,12 @@ import numpy as np
 from config import SESSION_DIR, SESSION_EXPIRY_SECONDS, PHONEME_ASR_MODELS
 from src.core.zero_gpu import QuotaExhaustedError
 from src.core.worker_pool import PoolExhaustedError, PoolQueueFullError
+from src.core.usage_logger import (
+    log_error,
+    mark_endpoint_entry,
+    set_stage,
+    get_user_id,
+)
 
 # ---------------------------------------------------------------------------
 # Session manager
@@ -33,11 +39,39 @@ _VALID_ID = re.compile(r"^[0-9a-f]{32}$")
 _VALID_MODELS = set(PHONEME_ASR_MODELS.keys())
 
 
-def _validate_model_name(model_name):
-    """Return an error dict if model_name is invalid, else None."""
+def _validate_model_name(model_name, *, endpoint=None, audio_id=None, device=None,
+                         request=None):
+    """Return an error dict if model_name is invalid, else None.
+
+    When `endpoint` is provided, also append a row to the errors dataset.
+    """
     if model_name not in _VALID_MODELS:
         valid = ", ".join(sorted(_VALID_MODELS))
-        return {"error": f"Invalid model_name '{model_name}'. Must be one of: {valid}", "segments": []}
+        msg = f"Invalid model_name '{model_name}'. Must be one of: {valid}"
+        if endpoint:
+            log_error(
+                error_code="invalid_model",
+                endpoint=endpoint,
+                stage="validate",
+                audio_id=audio_id,
+                device=device,
+                user_id=get_user_id(request) if request else "unknown",
+                message=msg,
+                context={"model_name": model_name},
+            )
+        return {"error": msg, "segments": []}
+
+
+def _log_session_expired(*, endpoint: str, audio_id, request=None):
+    """Log a session-expired hit. Caller still returns `_SESSION_ERROR`."""
+    log_error(
+        error_code="session_expired",
+        endpoint=endpoint,
+        stage="validate",
+        audio_id=audio_id if isinstance(audio_id, str) else None,
+        user_id=get_user_id(request) if request else "unknown",
+        message="Session not found or expired",
+    )
 
 
 def _session_dir(audio_id: str):
@@ -191,7 +225,8 @@ def _load_segments(audio_id):
 _SESSION_ERROR = {"error": "Session not found or expired", "segments": []}
 
 
-def _quota_error_response(exc: QuotaExhaustedError, audio_id=None) -> dict:
+def _quota_error_response(exc: QuotaExhaustedError, audio_id=None, *,
+                          endpoint: str = None, request=None) -> dict:
     """Build the standard quota-exhausted rejection. No auto-fallback to CPU.
 
     Caller is expected to retry with device='CPU'. No log row is written.
@@ -243,10 +278,25 @@ def _quota_error_response(exc: QuotaExhaustedError, audio_id=None) -> dict:
         }
     if audio_id is not None:
         resp["audio_id"] = audio_id
+    log_error(
+        error_code=resp["error_code"],
+        endpoint=endpoint or "unknown",
+        stage="dispatch",
+        audio_id=audio_id,
+        device="GPU",
+        exception=exc,
+        user_id=get_user_id(request) if request else "unknown",
+        message=resp["error"],
+        hint={
+            "suggested_action": "retry_with_cpu_or_wait",
+            "reset_time": exc.reset_time,
+        },
+    )
     return resp
 
 
-def _pool_error_response(exc, audio_id=None) -> dict:
+def _pool_error_response(exc, audio_id=None, *,
+                         endpoint: str = None, request=None) -> dict:
     """Structured rejection for CPU worker pool failures.
 
     Mirrors the quota transparency pattern: distinct `error_code` per failure
@@ -274,6 +324,17 @@ def _pool_error_response(exc, audio_id=None) -> dict:
         }
     if audio_id is not None:
         resp["audio_id"] = audio_id
+    log_error(
+        error_code=resp["error_code"],
+        endpoint=endpoint or "unknown",
+        stage="dispatch",
+        audio_id=audio_id,
+        device="CPU",
+        exception=exc,
+        user_id=get_user_id(request) if request else "unknown",
+        message=resp["error"],
+        hint={"suggested_action": "retry"},
+    )
     return resp
 
 
@@ -425,28 +486,77 @@ def _format_response(audio_id, json_output, warning=None):
 # Endpoint wrappers
 # ---------------------------------------------------------------------------
 
+def _estimate_wall_for_log(endpoint: str, audio_duration_s: float | None,
+                           model_name: str, device: str) -> float | None:
+    """Best-effort wall-time estimate for logging (`timing.estimate_given_s`).
+
+    Never raises; returns None if inputs are insufficient. The result is only
+    used as the "what we told the user" baseline for residual analysis — not
+    for any runtime decision.
+    """
+    if not audio_duration_s or audio_duration_s <= 0:
+        return None
+    try:
+        r = estimate_duration(endpoint, audio_duration_s=float(audio_duration_s),
+                              model_name=model_name, device=device)
+        return r.get("estimated_duration_s")
+    except Exception:
+        return None
+
+
 def process_audio_session(audio_data, min_silence_ms, min_speech_ms, pad_ms,
                           model_name="Base", device="GPU",
                           request: gr.Request = None):
     """Full pipeline: preprocess -> VAD -> ASR -> alignment. Creates session."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="process_audio_session",
+                               device=device, request=request)
     if err:
         return err
     from src.pipeline import process_audio
+
+    # Probe audio duration for the log-row `estimate_given_s` field. Best-effort:
+    # if the probe fails, estimate_given_s stays None.
+    _audio_dur = None
+    try:
+        if isinstance(audio_data, str):
+            import librosa as _lr
+            _audio_dur = float(_lr.get_duration(path=audio_data))
+        elif isinstance(audio_data, tuple) and len(audio_data) == 2:
+            _sr, _arr = audio_data
+            _audio_dur = float(len(_arr) / _sr) if _sr else None
+    except Exception:
+        _audio_dur = None
+    _est = _estimate_wall_for_log("process_audio_session", _audio_dur, model_name, device)
 
     try:
         result = process_audio(
             audio_data, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
             model_name, device, request=request, endpoint="process",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        return _quota_error_response(e)
+        return _quota_error_response(e, endpoint="process_audio_session", request=request)
     except (PoolQueueFullError, PoolExhaustedError) as e:
-        return _pool_error_response(e)
+        return _pool_error_response(e, endpoint="process_audio_session", request=request)
+    except Exception as e:
+        _code = "no_speech" if "NoSpeechIntervals" in str(e) else "pipeline_exception"
+        log_error(error_code=_code, endpoint="process_audio_session",
+                  stage="vad" if _code == "no_speech" else None,
+                  audio_id=None, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name})
+        raise
     # result is a 9-tuple:
     # (html, json_output, speech_intervals, is_complete, audio, sr, intervals, seg_dir, log_row)
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_speech", endpoint="process_audio_session",
+                  stage="vad", device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No speech detected in audio",
+                  context={"audio_duration_s": _audio_dur})
         return {"error": "No speech detected in audio", "segments": []}
 
     speech_intervals = result[2]
@@ -473,45 +583,90 @@ def process_url_session(url, min_silence_ms, min_speech_ms, pad_ms,
     process_audio_session. Returns the same response format with an
     additional url_metadata field.
     """
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="process_url_session",
+                               device=device, request=request)
     if err:
         return err
 
     if not url or not isinstance(url, str) or not url.strip():
+        log_error(error_code="empty_url", endpoint="process_url_session",
+                  stage="validate",
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="URL is required")
         return {"error": "URL is required", "segments": []}
 
     url = url.strip()
 
     # Download audio
+    set_stage("download")
     try:
         from src.ui.handlers import _download_url_core
         wav_path, url_meta = _download_url_core(url)
     except Exception as e:
-        return {"error": f"Download failed: {e}", "segments": []}
+        msg = f"Download failed: {e}"
+        msg_l = msg.lower()
+        if "playlist" in msg_l:
+            code = "playlist_rejected"
+        else:
+            code = "download_failed"
+        log_error(error_code=code, endpoint="process_url_session",
+                  stage="download", device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message=msg, context={"url": url})
+        return {"error": msg, "segments": []}
 
     # Run the standard pipeline with the downloaded WAV path
     from src.pipeline import process_audio
+
+    _audio_dur = None
+    try:
+        import librosa as _lr
+        _audio_dur = float(_lr.get_duration(path=wav_path))
+    except Exception:
+        _audio_dur = url_meta.get("duration")
+    _est = _estimate_wall_for_log("process_url_session", _audio_dur, model_name, device)
 
     try:
         result = process_audio(
             wav_path, int(min_silence_ms), int(min_speech_ms), int(pad_ms),
             model_name, device, request=request, endpoint="process_url",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
         try:
             os.remove(wav_path)
         except OSError:
             pass
-        return _quota_error_response(e)
+        return _quota_error_response(e, endpoint="process_url_session", request=request)
     except (PoolQueueFullError, PoolExhaustedError) as e:
         try:
             os.remove(wav_path)
         except OSError:
             pass
-        return _pool_error_response(e)
+        return _pool_error_response(e, endpoint="process_url_session", request=request)
+    except Exception as e:
+        _code = "no_speech" if "NoSpeechIntervals" in str(e) else "pipeline_exception"
+        log_error(error_code=_code, endpoint="process_url_session",
+                  stage="vad" if _code == "no_speech" else None,
+                  device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name,
+                           "url": url})
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass
+        raise
 
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_speech", endpoint="process_url_session",
+                  stage="vad", device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No speech detected in audio",
+                  context={"audio_duration_s": _audio_dur, "url": url})
         return {"error": "No speech detected in audio", "segments": []}
 
     speech_intervals = result[2]
@@ -546,15 +701,22 @@ def resegment(audio_id, min_silence_ms, min_speech_ms, pad_ms,
                        model_name="Base", device="GPU",
                        request: gr.Request = None):
     """Re-clean VAD boundaries with new params and re-run ASR + alignment."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="resegment",
+                               audio_id=audio_id, device=device, request=request)
     if err:
         err["audio_id"] = audio_id
         return err
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="resegment", audio_id=audio_id, request=request)
         return _SESSION_ERROR
 
     from src.pipeline import resegment_audio
+
+    _audio_dur = float(len(session["audio"]) / 16000)
+    _est = _estimate_wall_for_log("resegment", _audio_dur, model_name, device)
 
     try:
         result = resegment_audio(
@@ -562,13 +724,29 @@ def resegment(audio_id, min_silence_ms, min_speech_ms, pad_ms,
             session["audio"], 16000,
             int(min_silence_ms), int(min_speech_ms), int(pad_ms),
             model_name, device, request=request, endpoint="resegment",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        return _quota_error_response(e, audio_id=audio_id)
+        return _quota_error_response(e, audio_id=audio_id, endpoint="resegment",
+                                     request=request)
     except (PoolQueueFullError, PoolExhaustedError) as e:
-        return _pool_error_response(e, audio_id=audio_id)
+        return _pool_error_response(e, audio_id=audio_id, endpoint="resegment",
+                                    request=request)
+    except Exception as e:
+        log_error(error_code="pipeline_exception", endpoint="resegment",
+                  audio_id=audio_id, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name})
+        raise
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_segments_after_resegment", endpoint="resegment",
+                  stage="vad", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No segments with these settings",
+                  context={"min_silence_ms": int(min_silence_ms),
+                           "min_speech_ms": int(min_speech_ms),
+                           "pad_ms": int(pad_ms)})
         return {"audio_id": audio_id, "error": "No segments with these settings", "segments": []}
 
     new_intervals = result[6]
@@ -579,24 +757,36 @@ def resegment(audio_id, min_silence_ms, min_speech_ms, pad_ms,
 def retranscribe(audio_id, model_name="Base", device="GPU",
                           request: gr.Request = None):
     """Re-run ASR with a different model on current segment boundaries."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="retranscribe",
+                               audio_id=audio_id, device=device, request=request)
     if err:
         err["audio_id"] = audio_id
         return err
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="retranscribe", audio_id=audio_id, request=request)
         return _SESSION_ERROR
 
     # Guard: reject if model and boundaries unchanged
     if (model_name == session["model_name"]
             and _intervals_hash(session["intervals"]) == session["intervals_hash"]):
+        msg = "Model and boundaries unchanged. Change model_name or call /resegment first."
+        log_error(error_code="model_unchanged", endpoint="retranscribe",
+                  stage="validate", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message=msg, context={"model_name": model_name})
         return {
             "audio_id": audio_id,
-            "error": "Model and boundaries unchanged. Change model_name or call /resegment first.",
+            "error": msg,
             "segments": [],
         }
 
     from src.pipeline import retranscribe_audio
+
+    _audio_dur = float(len(session["audio"]) / 16000)
+    _est = _estimate_wall_for_log("retranscribe", _audio_dur, model_name, device)
 
     try:
         result = retranscribe_audio(
@@ -604,13 +794,27 @@ def retranscribe(audio_id, model_name="Base", device="GPU",
             session["audio"], 16000,
             session["speech_intervals"], session["is_complete"],
             model_name, device, request=request, endpoint="retranscribe",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        return _quota_error_response(e, audio_id=audio_id)
+        return _quota_error_response(e, audio_id=audio_id, endpoint="retranscribe",
+                                     request=request)
     except (PoolQueueFullError, PoolExhaustedError) as e:
-        return _pool_error_response(e, audio_id=audio_id)
+        return _pool_error_response(e, audio_id=audio_id, endpoint="retranscribe",
+                                    request=request)
+    except Exception as e:
+        log_error(error_code="pipeline_exception", endpoint="retranscribe",
+                  audio_id=audio_id, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name})
+        raise
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="retranscription_failed", endpoint="retranscribe",
+                  stage="asr", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="Retranscription failed",
+                  context={"model_name": model_name})
         return {"audio_id": audio_id, "error": "Retranscription failed", "segments": []}
 
     update_session(audio_id, model_name=model_name)
@@ -620,12 +824,17 @@ def retranscribe(audio_id, model_name="Base", device="GPU",
 def realign_from_timestamps(audio_id, timestamps, model_name="Base", device="GPU",
                              request: gr.Request = None):
     """Run ASR + alignment on caller-provided timestamp intervals."""
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="realign_from_timestamps",
+                               audio_id=audio_id, device=device, request=request)
     if err:
         err["audio_id"] = audio_id
         return err
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="realign_from_timestamps", audio_id=audio_id,
+                             request=request)
         return _SESSION_ERROR
 
     # Parse timestamps: accept list of {"start": f, "end": f} dicts
@@ -636,19 +845,39 @@ def realign_from_timestamps(audio_id, timestamps, model_name="Base", device="GPU
 
     from src.pipeline import realign_audio
 
+    _audio_dur = float(len(session["audio"]) / 16000)
+    _est = _estimate_wall_for_log("realign", _audio_dur, model_name, device)
+
     try:
         result = realign_audio(
             intervals,
             session["audio"], 16000,
             session["speech_intervals"], session["is_complete"],
             model_name, device, request=request, endpoint="realign",
+            estimated_wall_s=_est,
         )
     except QuotaExhaustedError as e:
-        return _quota_error_response(e, audio_id=audio_id)
+        return _quota_error_response(e, audio_id=audio_id,
+                                     endpoint="realign_from_timestamps",
+                                     request=request)
     except (PoolQueueFullError, PoolExhaustedError) as e:
-        return _pool_error_response(e, audio_id=audio_id)
+        return _pool_error_response(e, audio_id=audio_id,
+                                    endpoint="realign_from_timestamps",
+                                    request=request)
+    except Exception as e:
+        log_error(error_code="pipeline_exception", endpoint="realign_from_timestamps",
+                  audio_id=audio_id, device=device, exception=e,
+                  user_id=get_user_id(request) if request else "unknown",
+                  context={"audio_duration_s": _audio_dur, "model_name": model_name,
+                           "n_intervals": len(intervals)})
+        raise
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="alignment_failed", endpoint="realign_from_timestamps",
+                  stage="dp", audio_id=audio_id, device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="Alignment failed",
+                  context={"model_name": model_name, "n_intervals": len(intervals)})
         return {"audio_id": audio_id, "error": "Alignment failed", "segments": []}
 
     new_intervals = result[6]
@@ -748,11 +977,18 @@ def _normalize_segments(segments):
 
 def timestamps(audio_id, segments_json=None, granularity="words"):
     """Compute MFA word/letter timestamps using session audio."""
+    mark_endpoint_entry()
+    set_stage("validate")
     if granularity == "words+chars":
-        return {"audio_id": audio_id, "error": "chars granularity is currently disabled via API", "segments": []}
+        msg = "chars granularity is currently disabled via API"
+        log_error(error_code="unsupported_granularity", endpoint="timestamps",
+                  stage="validate", audio_id=audio_id,
+                  message=msg, context={"granularity": granularity})
+        return {"audio_id": audio_id, "error": msg, "segments": []}
 
     session = load_session(audio_id)
     if session is None:
+        _log_session_expired(endpoint="timestamps", audio_id=audio_id)
         return _SESSION_ERROR
 
     # Parse segments: use provided or load stored
@@ -764,18 +1000,30 @@ def timestamps(audio_id, segments_json=None, granularity="words"):
     else:
         segments = _load_segments(audio_id)
         if not segments:
+            log_error(error_code="no_segments_in_session", endpoint="timestamps",
+                      stage="validate", audio_id=audio_id,
+                      message="No segments found in session")
             return {"audio_id": audio_id, "error": "No segments found in session", "segments": []}
 
     # Create segment WAVs from session audio
+    set_stage("mfa")
     try:
         seg_dir = _create_segment_wavs(session["audio"], 16000, segments)
     except Exception as e:
+        log_error(error_code="segment_wav_failed", endpoint="timestamps",
+                  stage="mfa", audio_id=audio_id, exception=e,
+                  message=f"Failed to create segment audio: {e}",
+                  context={"n_segments": len(segments)})
         return {"audio_id": audio_id, "error": f"Failed to create segment audio: {e}", "segments": []}
 
     from src.mfa import compute_mfa_timestamps_api
     try:
         result = compute_mfa_timestamps_api(segments, seg_dir, granularity or "words")
     except Exception as e:
+        log_error(error_code="mfa_failed", endpoint="timestamps",
+                  stage="mfa", audio_id=audio_id, exception=e,
+                  message=f"MFA alignment failed: {e}",
+                  context={"n_segments": len(segments), "granularity": granularity})
         return {"audio_id": audio_id, "error": f"MFA alignment failed: {e}", "segments": []}
 
     result["audio_id"] = audio_id
@@ -784,34 +1032,55 @@ def timestamps(audio_id, segments_json=None, granularity="words"):
 
 def timestamps_direct(audio_data, segments_json, granularity="words"):
     """Compute MFA word/letter timestamps with provided audio and segments."""
+    mark_endpoint_entry()
+    set_stage("validate")
     if granularity == "words+chars":
-        return {"error": "chars granularity is currently disabled via API", "segments": []}
+        msg = "chars granularity is currently disabled via API"
+        log_error(error_code="unsupported_granularity", endpoint="timestamps_direct",
+                  stage="validate", message=msg,
+                  context={"granularity": granularity})
+        return {"error": msg, "segments": []}
 
     # Parse segments
     if isinstance(segments_json, str):
         segments_json = json.loads(segments_json)
 
     if not segments_json:
+        log_error(error_code="no_segments_provided", endpoint="timestamps_direct",
+                  stage="validate", message="No segments provided")
         return {"error": "No segments provided", "segments": []}
 
     segments = _normalize_segments(segments_json)
 
     # Preprocess audio
+    set_stage("preprocess")
     try:
         audio_np, sr = _preprocess_api_audio(audio_data)
     except Exception as e:
+        log_error(error_code="preprocess_failed", endpoint="timestamps_direct",
+                  stage="preprocess", exception=e,
+                  message=f"Failed to preprocess audio: {e}")
         return {"error": f"Failed to preprocess audio: {e}", "segments": []}
 
     # Create segment WAVs
+    set_stage("mfa")
     try:
         seg_dir = _create_segment_wavs(audio_np, sr, segments)
     except Exception as e:
+        log_error(error_code="segment_wav_failed", endpoint="timestamps_direct",
+                  stage="mfa", exception=e,
+                  message=f"Failed to create segment audio: {e}",
+                  context={"n_segments": len(segments)})
         return {"error": f"Failed to create segment audio: {e}", "segments": []}
 
     from src.mfa import compute_mfa_timestamps_api
     try:
         result = compute_mfa_timestamps_api(segments, seg_dir, granularity or "words")
     except Exception as e:
+        log_error(error_code="mfa_failed", endpoint="timestamps_direct",
+                  stage="mfa", exception=e,
+                  message=f"MFA alignment failed: {e}",
+                  context={"n_segments": len(segments), "granularity": granularity})
         return {"error": f"MFA alignment failed: {e}", "segments": []}
 
     return result
@@ -1068,7 +1337,10 @@ def debug_process(audio_data, min_silence_ms, min_speech_ms, pad_ms,
     if not hf_token or (space_token and hf_token != space_token):
         return {"error": "Unauthorized"}
 
-    err = _validate_model_name(model_name)
+    mark_endpoint_entry()
+    set_stage("validate")
+    err = _validate_model_name(model_name, endpoint="debug_process",
+                               device=device, request=request)
     if err:
         return err
 
@@ -1087,17 +1359,26 @@ def debug_process(audio_data, min_silence_ms, min_speech_ms, pad_ms,
             collector = stop_debug_collection()
         except QuotaExhaustedError as e:
             stop_debug_collection()
-            return _quota_error_response(e)
+            return _quota_error_response(e, endpoint="debug_process", request=request)
         except (PoolQueueFullError, PoolExhaustedError) as e:
             stop_debug_collection()
-            return _pool_error_response(e)
+            return _pool_error_response(e, endpoint="debug_process", request=request)
         except Exception as e:
             stop_debug_collection()
+            log_error(error_code="pipeline_exception", endpoint="debug_process",
+                      device=device, exception=e,
+                      user_id=get_user_id(request) if request else "unknown",
+                      message=f"Pipeline failed: {e}",
+                      context={"model_name": model_name})
             return {"error": f"Pipeline failed: {e}"}
 
     # --- Assemble response ---
     json_output = result[1]
     if json_output is None:
+        log_error(error_code="no_speech", endpoint="debug_process",
+                  stage="vad", device=device,
+                  user_id=get_user_id(request) if request else "unknown",
+                  message="No speech detected in audio")
         return {"error": "No speech detected in audio", "segments": []}
 
     # Extract profiling from collector (stored by _run_post_vad_pipeline)

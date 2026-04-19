@@ -53,8 +53,18 @@ class DebugCollector:
 
     def add_alignment_result(self, segment_idx, asr_phonemes, window,
                              expected_pointer, result=None, timing=None,
-                             retry_tier=None, failed_reason=None):
-        """Record a per-segment alignment result."""
+                             retry_tier=None, failed_reason=None,
+                             R=None, R_phone_to_word=None,
+                             j_start=None, best_j=None,
+                             win_start=None, win_end=None,
+                             basmala_consumed=False):
+        """Record a per-segment alignment result.
+
+        Extra kwargs (`R`, `R_phone_to_word`, `j_start`, `best_j`, `win_start`,
+        `win_end`, `basmala_consumed`) are stored raw so `to_dp_debug(idx)` can
+        lazily render the `|`-separated P / R-window / R-locked strings at log
+        time. Avoids string-join cost on non-success retry paths.
+        """
         entry = {
             "segment_idx": segment_idx,
             "asr_phonemes": " ".join(asr_phonemes[:60]) + ("..." if len(asr_phonemes) > 60 else ""),
@@ -73,7 +83,87 @@ class DebugCollector:
             }
         if failed_reason is not None:
             entry["failed_reason"] = failed_reason
+        # Raw DP state kept under a private key (not in the public debug API
+        # response — serialized via to_dp_debug() only when building log rows).
+        # Prefer explicit kwargs, fall back to `timing['dp_trace']` populated
+        # by align_segment() for zero-touch call sites.
+        trace = None
+        if R is not None:
+            trace = {
+                "R": list(R),
+                "R_phone_to_word": list(R_phone_to_word) if R_phone_to_word is not None else None,
+                "j_start": j_start,
+                "best_j": best_j,
+                "win_start": win_start,
+                "win_end": win_end,
+                "basmala_consumed": basmala_consumed,
+            }
+        elif isinstance(timing, dict) and timing.get("dp_trace"):
+            trace = dict(timing["dp_trace"])
+        if trace is not None:
+            trace["asr_phonemes_full"] = list(asr_phonemes)
+            entry["_dp_raw"] = trace
         self.alignment.append(entry)
+
+    def to_dp_debug(self, segment_idx: int) -> dict | None:
+        """Render `|`-separated DP strings for a segment (for log rows).
+
+        Returns None if no raw DP state was recorded for this segment (e.g.
+        failed-retry paths that never called `add_alignment_result` with R).
+        """
+        raw = None
+        for entry in self.alignment:
+            if entry.get("segment_idx") == segment_idx and "_dp_raw" in entry:
+                raw = entry["_dp_raw"]
+                break
+        if raw is None:
+            return None
+
+        R = raw["R"]
+        R_phone_to_word = raw["R_phone_to_word"] or []
+        j_start = raw.get("j_start")
+        best_j = raw.get("best_j")
+        basmala_consumed = raw.get("basmala_consumed", False)
+
+        def _boundary_render(phonemes: list, phone_to_word: list) -> str:
+            """Emit phonemes space-separated with `|` at each word boundary.
+
+            The Basmala sentinel (-1) renders as a single `B` token. Consecutive
+            Basmala positions collapse into one `B` segment.
+            """
+            if not phonemes:
+                return ""
+            out = []
+            prev_word = None
+            for i, ph in enumerate(phonemes):
+                w = phone_to_word[i] if i < len(phone_to_word) else None
+                if prev_word is None:
+                    pass  # first token — no leading separator
+                elif w != prev_word:
+                    out.append("|")
+                if w == -1:  # Basmala sentinel
+                    # Collapse run of sentinel phones into a single "B"
+                    if not out or out[-1] != "B":
+                        out.append("B")
+                else:
+                    out.append(ph)
+                prev_word = w
+            return " ".join(out)
+
+        r_window = _boundary_render(R, R_phone_to_word)
+        if j_start is not None and best_j is not None:
+            r_locked = _boundary_render(R[j_start:best_j], R_phone_to_word[j_start:best_j])
+        else:
+            r_locked = ""
+        asr_p = " ".join(raw["asr_phonemes_full"])
+
+        return {
+            "asr_p": asr_p,
+            "r_window": r_window,
+            "r_locked": r_locked,
+            "r_window_word_range": [raw.get("win_start"), raw.get("win_end")],
+            "basmala_consumed": basmala_consumed,
+        }
 
     def to_dict(self):
         """Serialize collector to JSON-safe dict."""
@@ -95,6 +185,19 @@ def start_debug_collection():
 def get_debug_collector():
     """Return the active collector, or None if not in debug mode."""
     return getattr(_ctx, "collector", None)
+
+
+def ensure_collector() -> "DebugCollector":
+    """Return the active collector, starting one if none exists on this thread.
+
+    Called at request entry so v3 log rows always carry `events` / `anchor`
+    / per-segment `dp_debug` — not only `/debug_process` debug runs.
+    """
+    c = getattr(_ctx, "collector", None)
+    if c is None:
+        c = DebugCollector()
+        _ctx.collector = c
+    return c
 
 
 def stop_debug_collection():

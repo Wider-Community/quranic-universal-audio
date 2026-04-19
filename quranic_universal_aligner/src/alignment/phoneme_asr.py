@@ -324,21 +324,21 @@ def _transcribe_batch_pytorch(
         qk_bytes_per_head = len(batch_audios) * seq_len * seq_len * dtype_bytes
         qk_bytes_all_heads = qk_bytes_per_head * num_heads
 
+        total_seconds = sum(batch_durations)
         batch_profiling.append({
             "batch_num": batch_num,
             "size": len(batch_audios),
-            "time": batch_time,
-            "feat_time": feat_time,
-            "infer_time": infer_time,
-            "decode_time": decode_time,
-            "min_dur": min(batch_durations),
-            "max_dur": max_dur,
-            "avg_dur": sum(batch_durations) / len(batch_durations),
-            "total_seconds": sum(batch_durations),
-            "pad_waste": 1.0 - sum(batch_durations) / (len(batch_durations) * max_dur) if max_dur > 0 else 0.0,
+            "time": round(batch_time, 3),
+            "feat_time": round(feat_time, 3),
+            "infer_time": round(infer_time, 3),
+            "decode_time": round(decode_time, 3),
+            "min_dur": round(min(batch_durations), 3),
+            "max_dur": round(max_dur, 3),
+            "total_seconds": round(total_seconds, 3),
+            "pad_waste": round(1.0 - total_seconds / (len(batch_durations) * max_dur), 4) if max_dur > 0 else 0.0,
             "seq_len": seq_len,
-            "qk_mb_per_head": qk_bytes_per_head / (1024 * 1024),
-            "qk_mb_all_heads": qk_bytes_all_heads / (1024 * 1024),
+            "qk_mb_per_head": round(qk_bytes_per_head / (1024 * 1024), 2),
+            "qk_mb_all_heads": round(qk_bytes_all_heads / (1024 * 1024), 2),
         })
 
     return results, batch_profiling
