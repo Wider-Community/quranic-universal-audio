@@ -17,10 +17,27 @@ from src.core.zero_gpu import gpu_with_fallback
 
 
 def _reset_worker_dispatch_tls():
-    """Clear any stale CPU-worker dispatch info on this thread. Pipeline entry helper."""
+    """Clear stale per-request dispatch stats and start a fresh DebugCollector.
+
+    Called at every pipeline entry so v3 log rows always carry populated
+    `events` / `anchor` / per-segment `dp_debug` — not only `/debug_process`
+    runs. A previous collector on the thread is replaced (stale state dropped).
+    """
     try:
         from src.core.worker_pool import clear_last_dispatch_info
         clear_last_dispatch_info()
+    except Exception:
+        pass
+    try:
+        from src.core.zero_gpu import clear_cpu_stats
+        clear_cpu_stats()
+    except Exception:
+        pass
+    if hasattr(_LEASE_STATS_TLS, "info"):
+        del _LEASE_STATS_TLS.info
+    try:
+        from src.core.debug_collector import start_debug_collection
+        start_debug_collection()
     except Exception:
         pass
 
@@ -32,6 +49,20 @@ def _get_worker_dispatch_info():
         return get_last_dispatch_info()
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Thread-local lease stats — captured inside _combined_duration / _asr_only_duration
+# so pipeline.py can log the requested lease size + whether the ZeroGPU cap
+# bit the uncapped estimate. Read at log-build time.
+# ---------------------------------------------------------------------------
+import threading as _threading
+_LEASE_STATS_TLS = _threading.local()
+
+
+def _get_lease_stats() -> dict | None:
+    """Return this thread's last lease stats, or None."""
+    return getattr(_LEASE_STATS_TLS, "info", None)
 from src.segmenter.segmenter_model import load_segmenter, ensure_models_on_gpu
 from src.segmenter.vad import detect_speech_segments
 from src.segmenter.segmenter_aoti import test_vad_aoti_export
@@ -124,13 +155,31 @@ def _combined_duration(audio, sample_rate, *_args, **_kwargs):
     """Lease duration for VAD+ASR: sum of independent estimates, capped at ZeroGPU max."""
     minutes = len(audio) / sample_rate / 60
     model_name = _args[3] if len(_args) > 3 else _kwargs.get("model_name", "Base")
-    return min(get_vad_duration(minutes) + get_asr_duration(minutes, model_name), ZEROGPU_MAX_DURATION)
+    uncapped = get_vad_duration(minutes) + get_asr_duration(minutes, model_name)
+    capped = min(uncapped, ZEROGPU_MAX_DURATION)
+    _LEASE_STATS_TLS.info = {
+        "lease_type": "combined",
+        "requested_s": round(capped, 3),
+        "uncapped_s": round(uncapped, 3),
+        "cap_hit": uncapped > ZEROGPU_MAX_DURATION,
+        "cap_s": ZEROGPU_MAX_DURATION,
+    }
+    return capped
 
 def _asr_only_duration(segment_audios, sample_rate, *_args, **_kwargs):
     """Lease duration for standalone ASR, capped at ZeroGPU max."""
     minutes = sum(len(s) for s in segment_audios) / sample_rate / 60
     model_name = _args[0] if _args else _kwargs.get("model_name", "Base")
-    return min(get_asr_duration(minutes, model_name), ZEROGPU_MAX_DURATION)
+    uncapped = get_asr_duration(minutes, model_name)
+    capped = min(uncapped, ZEROGPU_MAX_DURATION)
+    _LEASE_STATS_TLS.info = {
+        "lease_type": "asr_only",
+        "requested_s": round(capped, 3),
+        "uncapped_s": round(uncapped, 3),
+        "cap_hit": uncapped > ZEROGPU_MAX_DURATION,
+        "cap_s": ZEROGPU_MAX_DURATION,
+    }
+    return capped
 
 
 def _run_asr_core(segment_audios, sample_rate, model_name="Base"):
@@ -359,6 +408,7 @@ def _split_fused_segments(segments, audio_int16, sample_rate):
                 transcribed_text=seg.transcribed_text, matched_text=verse_text,
                 matched_ref=verse_ref, match_score=seg.match_score,
                 error=seg.error, has_missing_words=seg.has_missing_words,
+                _original_alignment_idx=seg._original_alignment_idx,
             ))
             print(f"[MFA_SPLIT] Segment {idx}: fused_combined split at "
                   f"{istiatha_end:.3f}s / {basmala_end:.3f}s")
@@ -391,6 +441,7 @@ def _split_fused_segments(segments, audio_int16, sample_rate):
                 transcribed_text=seg.transcribed_text, matched_text=verse_text,
                 matched_ref=verse_ref, match_score=seg.match_score,
                 error=seg.error, has_missing_words=seg.has_missing_words,
+                _original_alignment_idx=seg._original_alignment_idx,
             ))
             print(f"[MFA_SPLIT] Segment {idx}: fused_istiatha split at {istiatha_end:.3f}s")
 
@@ -421,6 +472,7 @@ def _split_fused_segments(segments, audio_int16, sample_rate):
                 transcribed_text=seg.transcribed_text, matched_text=verse_text,
                 matched_ref=verse_ref, match_score=seg.match_score,
                 error=seg.error, has_missing_words=seg.has_missing_words,
+                _original_alignment_idx=seg._original_alignment_idx,
             ))
             print(f"[MFA_SPLIT] Segment {idx}: fused_basmala split at {basmala_end:.3f}s")
 
@@ -444,6 +496,7 @@ def _run_post_vad_pipeline(
     request=None, log_row=None,
     is_preset=False,
     endpoint="ui",
+    estimated_wall_s=None,
 ):
     """Shared pipeline after VAD: ASR → specials → anchor → matching → results.
 
@@ -500,6 +553,8 @@ def _run_post_vad_pipeline(
     else:
         # Standalone ASR GPU lease (resegment/retranscribe paths)
         print(f"[STAGE] Running ASR...")
+        from src.core.usage_logger import set_stage as _set_stage
+        _set_stage("asr")
 
         phoneme_asr_start = time.time()
         phoneme_texts, asr_batch_profiling, asr_sorting_time, asr_batch_build_time, asr_gpu_move_time, asr_gpu_time, peak_vram, reserved_vram = run_phoneme_asr_gpu(segment_audios, sample_rate, model_name)
@@ -519,7 +574,7 @@ def _run_post_vad_pipeline(
             print(f"  Batch {b['batch_num']:>2}: {b['size']:>3} segs | "
                   f"{b['time']:.3f}s | "
                   f"{b['min_dur']:.2f}-{b['max_dur']:.2f}s "
-                  f"(A {b['avg_dur']:.2f}s, T {b['total_seconds']:.1f}s, W {b['pad_waste']:.0%}, "
+                  f"(A {b['total_seconds']/b['size']:.2f}s, T {b['total_seconds']:.1f}s, W {b['pad_waste']:.0%}, "
                   f"QK^T {b['qk_mb_per_head']:.1f} MB/head, {b['qk_mb_all_heads']:.0f} MB total)")
 
     # Store ASR results on debug collector if active
@@ -543,6 +598,8 @@ def _run_post_vad_pipeline(
 
     # Anchor detection via phoneme n-gram voting
     print(f"[STAGE] Anchor detection...")
+    from src.core.usage_logger import set_stage as _set_stage_anchor
+    _set_stage_anchor("anchor")
     anchor_start = time.time()
     from src.alignment.phoneme_anchor import find_anchor_by_voting, verse_to_word_index
     from src.alignment.ngram_index import get_ngram_index
@@ -571,6 +628,8 @@ def _run_post_vad_pipeline(
     pointer = verse_to_word_index(chapter_ref, ayah)
 
     print(f"[STAGE] Text Matching...")
+    from src.core.usage_logger import set_stage as _set_stage_dp
+    _set_stage_dp("dp")
 
     # Phoneme-based DP alignment
     match_start = time.time()
@@ -694,6 +753,10 @@ def _run_post_vad_pipeline(
             wrap_word_ranges=wrap_ranges,
             repeated_ranges=rep_ranges,
             repeated_text=rep_text,
+            # alignment_pipeline keys DebugCollector entries by 1-indexed absolute
+            # VAD position (first_quran_idx + i + 1 ≡ vad_idx + 1). Match that here
+            # so build_segments can look up dp_debug by _original_alignment_idx.
+            _original_alignment_idx=idx + 1,
         ))
 
     # Post-processing: split combined/fused segments via MFA timestamps
@@ -766,125 +829,79 @@ def _run_post_vad_pipeline(
         print(f"  Speech pace   : {wpm:.1f} words/min, {pps:.1f} phonemes/sec (speech time only)")
     from src.alignment.special_segments import ALL_SPECIAL_REFS
 
-    # --- Usage logging ---
+    # --- Usage logging (V3 schema) ---
     if is_preset:
         print("[USAGE_LOG] Skipped (preset audio)")
     else:
         try:
-            from src.core.usage_logger import log_alignment, update_alignment_row
+            from src.core.usage_logger import log_alignment
+            from src.core.log_blocks import (
+                build_settings, build_timing, build_asr_batches, build_segments,
+                build_events, build_anchor, build_results_summary,
+                build_reciter_stats, build_gpu_memory,
+            )
+            from src.core.zero_gpu import get_cpu_stats
+            from config import PHONEME_ASR_MODELS, USAGE_LOG_DISABLE_DP_DEBUG
 
-            # Reciter stats (default 0.0 when no matched segments)
-            _log_wpm = wpm if matched_words else 0.0
-            _log_pps = pps if matched_words else 0.0
+            # Reciter stats fallbacks when there are no matched segments
+            _log_wpm   = wpm   if matched_words else 0.0
             _log_avg_d = avg_d if matched_words else 0.0
             _log_std_d = std_d if matched_words else 0.0
             _log_avg_p = avg_p if (matched_words and pauses) else 0.0
             _log_std_p = std_p if (matched_words and pauses) else 0.0
+            _total_speech_s = sum(matched_durs) if matched_words else 0.0
 
-            # Mean confidence across all segments
-            all_scores = [seg.match_score for seg in segments]
-            _log_mean_conf = sum(all_scores) / len(all_scores) if all_scores else 0.0
+            # Resolve model label → HF id for stable cross-version analysis
+            _model_id    = PHONEME_ASR_MODELS.get(model_name, model_name)
+            _model_label = model_name if model_name in PHONEME_ASR_MODELS else None
 
-            # Build per-segment objects for logging
-            _log_segments = []
-            for i, seg in enumerate(segments):
-                sp_type = seg.matched_ref if seg.matched_ref in ALL_SPECIAL_REFS else None
-                entry = {
-                    "idx": i + 1,
-                    "start": round(seg.start_time, 2),
-                    "end": round(seg.end_time, 2),
-                    "duration": round(seg.end_time - seg.start_time, 2),
-                    "ref": seg.matched_ref or "",
-                    "confidence": round(seg.match_score, 2),
-                    "word_count": _seg_word_counts[i] if i < len(_seg_word_counts) else 0,
-                    "ayah_span": _seg_ayah_spans[i] if i < len(_seg_ayah_spans) else 0,
-                    "phoneme_count": _seg_phoneme_counts[i] if i < len(_seg_phoneme_counts) else 0,
-                    "has_repeated_words": seg.has_repeated_words,
-                    "missing_words": seg.has_missing_words,
-                    "special_type": sp_type,
-                    "error": seg.error,
-                }
-                if seg.repeated_ranges:
-                    entry["repeated_ranges"] = seg.repeated_ranges
-                if seg.repeated_text:
-                    entry["repeated_text"] = seg.repeated_text
-                _log_segments.append(entry)
+            # Count segments flagged has_missing_words after gap-analysis
+            _missing_word_count = sum(1 for s in segments if s.has_missing_words)
 
-            _r = lambda v: round(v, 2)
-            actual_device = device
-            _log_kwargs = dict(
-                # Flat fields
-                audio_duration_s=_r(len(audio) / sample_rate),
-                endpoint=endpoint,
-                total_time=_r(profiling.total_time),
-                # Grouped JSON dicts
-                settings={
-                    "min_silence_ms": int(min_silence_ms),
-                    "min_speech_ms": int(min_speech_ms),
-                    "pad_ms": int(pad_ms),
-                    "asr_model": model_name,
-                    "device": actual_device,
-                },
-                profiling={
-                    "resample": _r(profiling.resample_time),
-                    "vad_queue": _r(getattr(profiling, "vad_wall_time", 0.0) - getattr(profiling, "vad_gpu_time", 0.0)),
-                    "vad_gpu": _r(getattr(profiling, "vad_gpu_time", 0.0)),
-                    "vad_model_load": _r(profiling.vad_model_load_time),
-                    "asr_gpu": _r(getattr(profiling, "asr_gpu_time", 0.0)),
-                    "asr_total": _r(profiling.asr_time),
-                    "asr_num_batches": len(profiling.asr_batch_profiling or []),
-                    "asr_pad_waste": _r(_compute_pad_waste(profiling)),
-                    "anchor": _r(profiling.anchor_time),
-                    "dp_total": _r(getattr(profiling, "phoneme_dp_total_time", 0.0)),
-                    "match_wall": _r(profiling.match_wall_time),
-                    "result_build": _r(profiling.result_build_time),
-                    "worker_dispatch": _get_worker_dispatch_info(),
-                },
-                gpu={
-                    "peak_vram_mb": _r(profiling.gpu_peak_vram_mb),
-                    "reserved_vram_mb": _r(profiling.gpu_reserved_vram_mb),
-                },
-                results_summary={
-                    "surah": surah,
-                    "num_segments": len(segments),
-                    "mean_confidence": _r(_log_mean_conf),
-                    "min_confidence": _r(min(all_scores) if all_scores else 0.0),
-                    "segments_passed": getattr(profiling, "segments_passed", 0),
-                    "segments_failed": getattr(profiling, "segments_attempted", 0) - getattr(profiling, "segments_passed", 0),
-                    "tier1_attempts": profiling.tier1_attempts,
-                    "tier1_passed": profiling.tier1_passed,
-                    "tier2_attempts": profiling.tier2_attempts,
-                    "tier2_passed": profiling.tier2_passed,
-                    "reanchors": profiling.consec_reanchors,
-                    "special_merges": profiling.special_merges,
-                    "transition_skips": profiling.transition_skips,
-                    "wraps_detected": profiling.phoneme_wraps_detected,
-                },
-                reciter_stats={
-                    "wpm": _r(_log_wpm),
-                    "pps": _r(_log_pps),
-                    "avg_seg_dur": _r(_log_avg_d),
-                    "std_seg_dur": _r(_log_std_d),
-                    "avg_pause_dur": _r(_log_avg_p),
-                    "std_pause_dur": _r(_log_std_p),
-                },
-                log_segments=_log_segments,
+            _timing_block = build_timing(
+                profiling=profiling,
+                cpu_stats=get_cpu_stats(),
+                worker_dispatch=_get_worker_dispatch_info(),
+                lease_stats=_get_lease_stats(),
+                estimate_given_s=estimated_wall_s,
+                device=device,
             )
 
-            if log_row is not None:
-                # Resegment / retranscribe: mutate existing row in-place
-                _prev_settings = json.loads(log_row.get("settings", "{}"))
-                _action = "retranscribe" if _prev_settings.get("asr_model") != model_name else "resegment"
-                update_alignment_row(log_row, action=_action, **_log_kwargs)
-            else:
-                # Initial run: create new row (async FLAC encode in background)
-                log_row = log_alignment(
+            log_row = log_alignment(
+                audio=audio,
+                sample_rate=sample_rate,
+                request=request,
+                audio_duration_s=round(len(audio) / sample_rate, 3),
+                endpoint=endpoint,
+                settings=build_settings(
+                    min_silence_ms, min_speech_ms, pad_ms,
+                    asr_model_id=_model_id, asr_model_label=_model_label,
+                    device=device,
+                ),
+                timing=_timing_block,
+                asr_batches=build_asr_batches(profiling),
+                segments=build_segments(
+                    segments, _dc,
+                    _seg_word_counts, _seg_ayah_spans,
+                    ALL_SPECIAL_REFS,
+                    include_dp_debug=not USAGE_LOG_DISABLE_DP_DEBUG,
+                ),
+                events=build_events(_dc),
+                anchor=build_anchor(_dc),
+                gpu_memory=build_gpu_memory(profiling, device),
+                results_summary=build_results_summary(
+                    segments=segments, profiling=profiling,
+                    total_speech_s=_total_speech_s,
+                    missing_word_count=_missing_word_count,
+                ),
+                reciter_stats=build_reciter_stats(
+                    wpm=_log_wpm,
+                    avg_seg_dur=_log_avg_d, std_seg_dur=_log_std_d,
+                    avg_pause_dur=_log_avg_p, std_pause_dur=_log_std_p,
                     audio=audio,
-                    sample_rate=sample_rate,
-                    request=request,
-                    **_log_kwargs,
-                    _async=True,
-                )
+                ),
+                _async=True,
+            )
         except Exception as e:
             print(f"[USAGE_LOG] Failed: {e}")
 
@@ -998,6 +1015,7 @@ def process_audio(
     is_preset=False,
     request: gr.Request = None,
     endpoint="ui",
+    estimated_wall_s=None,
 ):
     """Process uploaded audio and extract segments with automatic verse detection.
 
@@ -1064,6 +1082,8 @@ def process_audio(
             sample_rate = 16000
 
     print("[STAGE] Running VAD + ASR...")
+    from src.core.usage_logger import set_stage as _set_stage
+    _set_stage("vad")
 
     # Single GPU lease: VAD + ASR
     gpu_start = time.time()
@@ -1118,6 +1138,7 @@ def process_audio(
         request=request,
         is_preset=is_preset,
         endpoint=endpoint,
+        estimated_wall_s=estimated_wall_s,
     )
 
     audio_ref = _store_audio(audio, sample_rate)
@@ -1134,6 +1155,7 @@ def resegment_audio(
     is_preset=False,
     request: gr.Request = None,
     endpoint="ui",
+    estimated_wall_s=None,
 ):
     """Re-run segmentation with different settings using cached VAD data.
 
@@ -1211,6 +1233,7 @@ def resegment_audio(
         request=request, log_row=cached_log_row,
         is_preset=is_preset,
         endpoint=endpoint,
+        estimated_wall_s=estimated_wall_s,
     )
 
     # Pass through cached state unchanged (audio_ref key stays the same), but update intervals
@@ -1229,6 +1252,7 @@ def retranscribe_audio(
     min_silence_ms=0, min_speech_ms=0, pad_ms=0,
     request: gr.Request = None,
     endpoint="ui",
+    estimated_wall_s=None,
 ):
     """Re-run ASR + downstream with a different model using cached intervals.
 
@@ -1273,6 +1297,7 @@ def retranscribe_audio(
         request=request, log_row=cached_log_row,
         is_preset=is_preset,
         endpoint=endpoint,
+        estimated_wall_s=estimated_wall_s,
     )
 
     # Pass through all cached state unchanged (audio_ref key stays the same)
@@ -1288,6 +1313,7 @@ def realign_audio(
     cached_log_row=None,
     request: gr.Request = None,
     endpoint="ui",
+    estimated_wall_s=None,
 ):
     """Run ASR + alignment on caller-provided intervals.
 
@@ -1329,6 +1355,7 @@ def realign_audio(
         model_name, device, profiling, pipeline_start,
         request=request, log_row=cached_log_row,
         endpoint=endpoint,
+        estimated_wall_s=estimated_wall_s,
     )
 
     return html, json_output, cached_speech_intervals, cached_is_complete, cached_audio, sr, intervals, seg_dir, log_row

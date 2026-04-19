@@ -818,45 +818,10 @@ def compute_mfa_timestamps(current_html, json_output, segment_dir, cached_log_ro
         current_html, segment_dicts, results, seg_to_result_idx, segment_dir
     )
 
-    # Log word and char timestamps to usage logger — only the fresh MFA batch
-    # (segments already logged via prior batch or per-card paths are skipped).
-    if cached_log_row is not None:
-        try:
-            import json as _json
-            from src.core.usage_logger import update_word_timestamps
-            _ts_log = []
-            _char_ts_log = []
-            for result in batch_results:
-                if result.get("status") != "ok":
-                    continue
-                _ts_log.append({
-                    "ref": result.get("ref", ""),
-                    "words": [
-                        {"word": w.get("word", ""), "start": round(w["start"], 4), "end": round(w["end"], 4)}
-                        for w in result.get("words", []) if w.get("start") is not None and w.get("end") is not None
-                    ],
-                })
-                _char_ts_log.append({
-                    "ref": result.get("ref", ""),
-                    "words": [
-                        {
-                            "word": w.get("word", ""),
-                            "location": w.get("location", ""),
-                            "letters": [
-                                {"char": lt.get("char", ""), "start": round(lt["start"], 4), "end": round(lt["end"], 4)}
-                                for lt in w.get("letters", []) if lt.get("start") is not None and lt.get("end") is not None
-                            ],
-                        }
-                        for w in result.get("words", []) if w.get("letters")
-                    ],
-                })
-            update_word_timestamps(
-                cached_log_row,
-                _json.dumps(_ts_log),
-                _json.dumps(_char_ts_log) if any(entry["words"] for entry in _char_ts_log) else None,
-            )
-        except Exception as e:
-            print(f"[USAGE_LOG] Failed to log word timestamps: {e}")
+    # V3 note: word/char timestamps are no longer logged to the main dataset.
+    # The offline `extract_timestamps.py` + Inspector flows are the authoritative
+    # timestamp producers. A separate `quran-aligner-timestamps` dataset may be
+    # added in v3.1 if the Space MFA path shows enough traffic to warrant it.
 
     # Copy MFA word/letter data back onto SegmentInfo objects
     enriched_segs = enriched_json.get("segments", []) if enriched_json else []

@@ -142,7 +142,7 @@ NGRAM_SIZE = 5
 NGRAM_INDEX_PATH = DATA_PATH / f"phoneme_ngram_index_{NGRAM_SIZE}.pkl"
 
 # =============================================================================
-# Inference settings
+# ZeroGPU Lease Timings
 # =============================================================================
 
 ZEROGPU_MAX_DURATION = 120  # Hard cap enforced by HF ZeroGPU
@@ -150,7 +150,7 @@ AUDIO_DURATION_WARNING_MINUTES = 300  # Warn user on upload if audio exceeds thi
 
 def get_vad_duration(minutes):
     """GPU seconds needed for VAD based on audio minutes."""
-    VAD_LEASE_BUFFER = 9.62
+    VAD_LEASE_BUFFER = 5
     return max(3, 0.28 * minutes + 1.66 + VAD_LEASE_BUFFER)
 
 def get_asr_duration(minutes, model_name="Base"):
@@ -161,6 +161,12 @@ def get_asr_duration(minutes, model_name="Base"):
     ASR_LEASE_BUFFER = 4.5
     return max(3, 0.0198 * minutes + 0.32 + ASR_LEASE_BUFFER)
 
+# =============================================================================
+# Estimations
+# =============================================================================
+
+MFA_PROGRESS_SEGMENT_RATE = 0.05  # seconds per segment for progress bar animation
+
 ESTIMATE_GPU_BASE_SLOPE = 0.45
 ESTIMATE_GPU_BASE_INTERCEPT = 7.6
 ESTIMATE_GPU_LARGE_SLOPE = 0.53
@@ -169,6 +175,10 @@ ESTIMATE_CPU_BASE_SLOPE = 11.2
 ESTIMATE_CPU_BASE_INTERCEPT = 20.9
 ESTIMATE_CPU_LARGE_SLOPE = 25.2
 ESTIMATE_CPU_LARGE_INTERCEPT = 24.4
+
+# =============================================================================
+# Inference Settings
+# =============================================================================
 
 # Batching strategy
 BATCHING_STRATEGY = "dynamic"  # "naive" (fixed count) or "dynamic" (seconds + pad waste)
@@ -290,11 +300,38 @@ MFA_SHARED_CMVN = False         # Compute shared CMVN across batch (kalpy only)
 USAGE_LOG_DATASET_REPO = "hetchyy/quran-aligner-logs-v2"
 USAGE_LOG_PUSH_INTERVAL_MINUTES = 240
 
-# =============================================================================
-# Progress bar settings
-# =============================================================================
+USAGE_LOG_SCHEMA_VERSION = "3.1.0"
 
-MFA_PROGRESS_SEGMENT_RATE = 0.05  # seconds per segment for progress bar animation
+USAGE_LOG_LOGS_REPO      = os.environ.get("USAGE_LOG_LOGS_REPO",      "hetchyy/quran-aligner-logs")
+USAGE_LOG_AUDIO_REPO     = os.environ.get("USAGE_LOG_AUDIO_REPO",     "hetchyy/quran-aligner-audio")
+USAGE_LOG_TELEMETRY_REPO = os.environ.get("USAGE_LOG_TELEMETRY_REPO", "hetchyy/quran-aligner-telemetry")
+USAGE_LOG_ERRORS_REPO    = os.environ.get("USAGE_LOG_ERRORS_REPO",    "hetchyy/quran-aligner-errors")
+
+# HF subset (config) per dataset. Bump on breaking column changes
+# (column added/dropped/renamed). Patch-level schema changes stay in the same
+# subset and are filtered at read-time via row-level `schema_version`.
+USAGE_LOG_LOGS_SUBSET      = "v3.1"
+USAGE_LOG_AUDIO_SUBSET     = "v3.0"
+USAGE_LOG_TELEMETRY_SUBSET = "v1.0"
+USAGE_LOG_ERRORS_SUBSET    = "v1.0"
+
+# Flush cadence in minutes. Override to 1 on dev Space for fast feedback.
+USAGE_LOG_FLUSH_MINUTES        = int(os.environ.get("USAGE_LOG_FLUSH_MINUTES", "60"))
+USAGE_LOG_AUDIO_FLUSH_MINUTES  = int(os.environ.get("USAGE_LOG_AUDIO_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
+USAGE_LOG_ERRORS_FLUSH_MINUTES = int(os.environ.get("USAGE_LOG_ERRORS_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
+
+# Errors dataset schema version. Bump on any column change.
+USAGE_LOG_ERRORS_SCHEMA_VERSION = "1.0.0"
+
+# Telemetry sampler (persistent CPU worker pool only for v3.1 — spawn / remote
+# worker modes are deferred). Set TELEMETRY_ENABLED=0 to turn the thread off.
+TELEMETRY_ENABLED         = os.environ.get("TELEMETRY_ENABLED", "1") == "1"
+TELEMETRY_SAMPLE_SECONDS  = int(os.environ.get("TELEMETRY_SAMPLE_SECONDS", "60"))
+TELEMETRY_FLUSH_MINUTES   = int(os.environ.get("TELEMETRY_FLUSH_MINUTES", "60"))
+TELEMETRY_SCHEMA_VERSION  = "1.0.3"
+
+# Temporary kill-switch for the per-segment DP replay strings. Set to "1" to
+USAGE_LOG_DISABLE_DP_DEBUG = os.environ.get("USAGE_LOG_DISABLE_DP_DEBUG", "0") == "1"
 
 # =============================================================================
 # UI settings
