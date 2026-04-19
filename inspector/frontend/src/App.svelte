@@ -4,9 +4,9 @@
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS } from './lib/utils/constants';
     import { tsAudioElement } from './lib/stores/timestamps/playback';
-    import { segAudioElement } from './lib/stores/segments/playback';
+    import { segAudioElement } from './tabs/segments/stores/playback';
     import { audAudioElement } from './lib/stores/audio';
-    import { stopErrorCardAudio } from './lib/utils/segments/error-card-audio';
+    import { stopErrorCardAudio } from './tabs/segments/utils/playback/error-card-audio';
     import AudioTab from './tabs/audio/AudioTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';

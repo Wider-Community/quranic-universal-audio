@@ -10,11 +10,11 @@
     import { get } from 'svelte/store';
     import { onMount, tick } from 'svelte';
 
-    import { isDirtyStore } from '../../lib/stores/segments/dirty';
-    import { handleSegmentsKey } from '../../lib/utils/segments/keyboard';
-    import { showHistoryView } from '../../lib/utils/segments/history-actions';
-    import { onSegSaveClick } from '../../lib/utils/segments/save-actions';
-    import { loadSegConfig } from '../../lib/utils/segments/config-loader';
+    import { isDirtyStore } from './stores/dirty';
+    import { handleSegmentsKey } from './utils/keyboard';
+    import { showHistoryView } from './utils/history/actions';
+    import { onSegSaveClick } from './utils/save/actions';
+    import { loadSegConfig } from './utils/data/config-loader';
     import { buildGroupedReciters } from '../../lib/utils/grouped-reciters';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson } from '../../lib/api';
@@ -26,27 +26,27 @@
         selectedReciter,
         selectedVerse,
         verseOptions,
-    } from '../../lib/stores/segments/chapter';
-    import { activeFilters } from '../../lib/stores/segments/filters';
-    import { savedFilterView } from '../../lib/stores/segments/navigation';
+    } from './stores/chapter';
+    import { activeFilters } from './stores/filters';
+    import { savedFilterView } from './stores/navigation';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import type { SegReciter } from '../../lib/types/domain';
 
-    import { reloadCurrentReciter } from '../../lib/utils/segments/reciter-actions';
-    import { loadChapterData } from '../../lib/utils/segments/chapter-actions';
-    import HistoryPanel from './history/HistoryPanel.svelte';
-    import { segListElement, waveformContainer } from '../../lib/stores/segments/playback';
-    import { historyData, historyVisible } from '../../lib/stores/segments/history';
-    import { savePreviewVisible, saveButtonLabel } from '../../lib/stores/segments/save';
-    import ValidationPanel from './validation/ValidationPanel.svelte';
-    import EditOverlay from './edit/EditOverlay.svelte';
-    import FiltersBar from './filters/FiltersBar.svelte';
-    import SegmentsList from './list/SegmentsList.svelte';
-    import SegmentsAudioControls from './audio/SegmentsAudioControls.svelte';
-    import StatsPanel from './stats/StatsPanel.svelte';
-    import SavePreview from './save/SavePreview.svelte';
-    import AudioCacheBar from './audio/AudioCacheBar.svelte';
+    import { reloadCurrentReciter } from './utils/data/reciter-actions';
+    import { loadChapterData } from './utils/data/chapter-actions';
+    import HistoryPanel from './components/history/HistoryPanel.svelte';
+    import { segListElement, waveformContainer } from './stores/playback';
+    import { historyData, historyVisible } from './stores/history';
+    import { savePreviewVisible, saveButtonLabel } from './stores/save';
+    import ValidationPanel from './components/validation/ValidationPanel.svelte';
+    import EditOverlay from './components/edit/EditOverlay.svelte';
+    import FiltersBar from './components/filters/FiltersBar.svelte';
+    import SegmentsList from './components/list/SegmentsList.svelte';
+    import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
+    import StatsPanel from './components/stats/StatsPanel.svelte';
+    import SavePreview from './components/save/SavePreview.svelte';
+    import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
     import ShortcutsGuide from './ShortcutsGuide.svelte';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.

@@ -1,0 +1,425 @@
+<script lang="ts">
+    /**
+     * SegmentRow — one .seg-row card in the segments list.
+     *
+     * Used from every SegmentRow site: the primary list (#seg-list) via
+     * SegmentsList.svelte, the validation accordion subcomponents
+     * (GenericIssueCard / MissingWordsCard / MissingVersesCard), history
+     * view (SplitChainRow / HistoryOp), and the save preview. Per-button
+     * on:click handlers are wired directly here so no delegated container
+     * listeners are needed.
+     *
+     * History-mode props. Highlight props (splitHL / trimHL / mergeHL /
+     * changedFields) drive visual overlays in history mode.
+     *
+     * Layout: normal mode = horizontal (play-col | left-col | text-box).
+     * History mode = vertical (waveform above text) — scoped via `class:mode-history`.
+     *
+     * Waveform observer: onMount registers the canvas with the segments
+     * IntersectionObserver via _ensureWaveformObserver().observe(canvas).
+     * On destroy the canvas is implicitly unobserved (the observer's weak
+     * tracking releases destroyed nodes; see segments/waveform/index.ts).
+     */
+
+    import { get } from 'svelte/store';
+    import { onMount } from 'svelte';
+
+    import {
+        getAdjacentSegments,
+        segAllData,
+        segCurrentIdx,
+        selectedChapter,
+        selectedVerse,
+    } from '../../stores/chapter';
+    import {
+        _addVerseMarkers,
+        formatRef,
+        formatTimeMs,
+    } from '../../utils/data/references';
+    import { dirtyTick, isIndexDirty } from '../../stores/dirty';
+    import {
+        editCanvas,
+        editMode,
+        editingSegUid,
+        splitChainCategory,
+        splitChainUid,
+    } from '../../stores/edit';
+    import { activeFilters } from '../../stores/filters';
+    import { savedFilterView } from '../../stores/navigation';
+    import type {
+        MergeHighlight,
+        SegCanvas,
+        SplitHighlight,
+        TrimHighlight,
+    } from '../../types/segments-waveform';
+    import { getConfClass } from '../../utils/validation/conf-class';
+    import { _ensureWaveformObserver } from '../../utils/waveform/utils';
+    import {
+        isMainAudioPlaying,
+        playingSegmentIndex,
+        segAudioElement,
+        segListElement,
+    } from '../../stores/playback';
+    import {
+        flashSegmentIndices,
+        targetSegmentIndex,
+    } from '../../stores/navigation';
+    import { deleteSegment } from '../../utils/edit/delete';
+    import { enterEditWithBuffer } from '../../utils/edit/enter';
+    import { mergeAdjacent } from '../../utils/edit/merge';
+    import { beginRefEdit } from '../../utils/edit/reference';
+    import { jumpToSegment } from '../../utils/data/navigation-actions';
+    import { playFromSegment } from '../../utils/playback/playback';
+    import type { Segment } from '../../../../lib/types/domain';
+
+    import ReferenceEditor from '../edit/ReferenceEditor.svelte';
+    import SplitPanel from '../edit/SplitPanel.svelte';
+    import TrimPanel from '../edit/TrimPanel.svelte';
+
+    // ---- Required ----
+    export let seg: Segment;
+    // ---- Optional rendering flags ----
+    export let readOnly: boolean = false;
+    export let showChapter: boolean = false;
+    export let showPlayBtn: boolean = true;
+    export let showGotoBtn: boolean = false;
+    export let isContext: boolean = false;
+    export let contextLabel: string = '';
+    export let missingWordSegIndices: Set<number> | null = null;
+    export let isNeighbour: boolean = false;
+    /** Provisioning slot — overlay applied in history mode. */
+    export let splitHL: SplitHighlight | null = null;
+    /** Provisioning slot — overlay applied in history mode. */
+    export let trimHL: TrimHighlight | null = null;
+    /** Provisioning slot — overlay applied in history mode. */
+    export let mergeHL: MergeHighlight | null = null;
+    /** Provisioning slot — marks changed fields in the card. */
+    export let changedFields: Set<'ref' | 'duration' | 'conf' | 'body'> | null = null;
+    /** `history` mode = vertical layout (waveform above text). */
+    export let mode: 'normal' | 'history' = 'normal';
+    /** Fallback chapter when `seg.chapter` is null — only used for dirty lookup. */
+    export let fallbackChapter: number = 0;
+
+    // Apply history-mode highlight descriptors to the underlying canvas element
+    // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
+    // draw.ts) can read them via the SegCanvas ad-hoc fields. `canvasEl` is
+    // bound below; these statements run after it is assigned and re-run when
+    // any prop changes.
+    $: if (canvasEl) {
+        const c = canvasEl as SegCanvas;
+        c._splitHL = splitHL ?? undefined;
+        c._trimHL = trimHL ?? undefined;
+        c._mergeHL = mergeHL ?? undefined;
+    }
+
+    // Publish canvas to `editCanvas` store whenever this row is the active
+    // edit target. Replaces the legacy `_getEditCanvas()` document-wide
+    // DOM query. readOnly sites (history view, validation accordions, save
+    // preview) share seg.index / uid with the main list — skip them so a
+    // readOnly row doesn't shadow the real editing row's canvas.
+    $: {
+        if (!readOnly && canvasEl && seg.segment_uid && $editingSegUid === seg.segment_uid) {
+            editCanvas.set(canvasEl as SegCanvas);
+        }
+    }
+
+    // True only for the one live row currently being edited (any mode).
+    // Drives the conditional mount of TrimPanel / SplitPanel / ReferenceEditor
+    // inside the row, the `.seg-edit-target` class binding, and the hiding of
+    // `.seg-actions` + `.seg-play-col` during persistent drag modes.
+    $: isEditingThisRow = !readOnly && !!seg.segment_uid && $editingSegUid === seg.segment_uid && $editMode !== null;
+    $: editSegCanvas = canvasEl as SegCanvas | undefined;
+
+    // Derived values. Seg-derived reactives also subscribe to $segAllData via
+    // `segStoreTick` so they re-fire when refreshSegInStore bumps the store —
+    // validation-card sites derive resolvedSeg from the store, so their seg
+    // prop points to the refreshed object only after the store tick.
+    $: segStoreTick = $segAllData;
+    $: chapterForDirty = seg.chapter ?? fallbackChapter;
+    $: dirty = (void $dirtyTick, !readOnly && isIndexDirty(chapterForDirty, seg.index));
+    $: confClass = (void segStoreTick, getConfClass(seg));
+    $: durSec = (void segStoreTick, (seg.time_end - seg.time_start) / 1000);
+    $: durTitle = (void segStoreTick, `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`);
+    $: adj = !readOnly && !isContext && !showGotoBtn
+        ? getAdjacentSegments(seg.chapter ?? 0, seg.index)
+        : { prev: null, next: null };
+    $: mergePrevDisabled = !adj.prev
+        || (!!adj.prev?.audio_url && !!seg.audio_url && adj.prev.audio_url !== seg.audio_url);
+    $: mergePrevTitle = !adj.prev
+        ? 'No previous segment to merge with'
+        : (adj.prev.audio_url && seg.audio_url && adj.prev.audio_url !== seg.audio_url)
+        ? 'Cannot merge segments from different audio files'
+        : '';
+    $: mergeNextDisabled = !adj.next
+        || (!!adj.next?.audio_url && !!seg.audio_url && adj.next.audio_url !== seg.audio_url);
+    $: mergeNextTitle = !adj.next
+        ? 'No next segment to merge with'
+        : (adj.next.audio_url && seg.audio_url && adj.next.audio_url !== seg.audio_url)
+        ? 'Cannot merge segments from different audio files'
+        : '';
+    $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
+    // History-mode changed-field markers.
+    $: changedRef = !!changedFields?.has('ref');
+    $: changedDur = !!changedFields?.has('duration');
+    $: changedConf = !!changedFields?.has('conf');
+    $: changedBody = !!changedFields?.has('body');
+    $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
+    $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
+    $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
+
+    // ---------------------------------------------------------------------
+    // Playback highlight + jump target (store-driven)
+    // ---------------------------------------------------------------------
+    // readOnly rows (history view, validation accordions, save preview) share
+    // seg.index with rows in the main list. Guarding on !readOnly keeps them
+    // from lighting up when the main-list row for the same index is playing
+    // or flashing.
+    $: isPlaying = !readOnly && $playingSegmentIndex === seg.index;
+    $: isFlashing = !readOnly && $flashSegmentIndices.has(seg.index);
+    $: highlighted = isPlaying || isFlashing;
+    $: playGlyph = isPlaying && $isMainAudioPlaying ? '\u25A0' : '\u25B6';
+
+    // Scroll into view when jump target matches, then clear the store so the
+    // next write re-fires reliably. `rowEl` is bound below; wait for it.
+    $: if (!readOnly && rowEl && $targetSegmentIndex === seg.index) {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetSegmentIndex.set(null);
+    }
+
+    // Post-split ref-edit chain handoff. `confirmSplit` (edit-split.ts) sets
+    // `splitChainUid` to the second-half UID and `splitChainCategory` to the
+    // carried error-card context. Once the first half's ref edit finishes
+    // (editMode drops to null) this effect fires on the second-half row,
+    // scrolls it into view, and enters reference-edit mode. The `$editMode
+    // === null` guard waits for the first half's commit instead of
+    // preempting it; consuming both chain stores means the chain can only
+    // fire once per split.
+    $: if (
+        !readOnly
+        && rowEl
+        && !!seg.segment_uid
+        && $splitChainUid === seg.segment_uid
+        && $editMode === null
+    ) {
+        const chainCat = $splitChainCategory;
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        splitChainUid.set(null);
+        splitChainCategory.set(null);
+        beginRefEdit(seg, chainCat);
+    }
+
+    // ---------------------------------------------------------------------
+    // Waveform observer registration
+    // ---------------------------------------------------------------------
+    let canvasEl: HTMLCanvasElement | undefined;
+    let rowEl: HTMLElement;
+
+    onMount(() => {
+        if (!canvasEl) return;
+        const observer = _ensureWaveformObserver();
+        observer.observe(canvasEl);
+        return () => {
+            // IntersectionObserver doesn't strongly retain disconnected nodes,
+            // but unobserve explicitly avoids dangling entries when rows are
+            // recycled mid-edit (e.g. split → re-render).
+            observer.unobserve(canvasEl!);
+        };
+    });
+
+    // ---------------------------------------------------------------------
+    // Per-button handlers (replace delegated click router for #seg-list rows)
+    // ---------------------------------------------------------------------
+
+    function onPlayClick(e: MouseEvent): void {
+        e.stopPropagation();
+        if (readOnly) return;
+        const idx = seg.index;
+        const chapter = seg.chapter ?? 0;
+        const audioEl = get(segAudioElement);
+        if (audioEl && idx === get(segCurrentIdx) && !audioEl.paused) {
+            audioEl.pause();
+        } else {
+            playFromSegment(idx, chapter);
+        }
+    }
+
+    function onGotoClick(e: MouseEvent): void {
+        e.stopPropagation();
+        const filters = get(activeFilters);
+        if (filters.some(f => f.value !== null)) {
+            const listEl = get(segListElement);
+            savedFilterView.set({
+                filters: JSON.parse(JSON.stringify(filters)),
+                chapter: get(selectedChapter),
+                verse: get(selectedVerse),
+                scrollTop: listEl?.scrollTop ?? 0,
+            });
+        }
+        jumpToSegment(seg.chapter ?? 0, seg.index);
+    }
+
+    function onAdjustClick(e: MouseEvent): void {
+        e.stopPropagation();
+        enterEditWithBuffer(seg, rowEl, 'trim', null);
+    }
+
+    function onSplitClick(e: MouseEvent): void {
+        e.stopPropagation();
+        enterEditWithBuffer(seg, rowEl, 'split', null);
+    }
+
+    function onMergePrevClick(e: MouseEvent): void {
+        e.stopPropagation();
+        mergeAdjacent(seg, 'prev', null);
+    }
+
+    function onMergeNextClick(e: MouseEvent): void {
+        e.stopPropagation();
+        mergeAdjacent(seg, 'next', null);
+    }
+
+    function onDeleteClick(e: MouseEvent): void {
+        e.stopPropagation();
+        deleteSegment(seg, rowEl, null);
+    }
+
+    function onEditRefClick(e: MouseEvent): void {
+        e.stopPropagation();
+        beginRefEdit(seg, null);
+    }
+
+    function onRefTextClick(e: MouseEvent): void {
+        if (readOnly) return;
+        e.stopPropagation();
+        beginRefEdit(seg, null);
+    }
+
+    function onRowClick(e: MouseEvent): void {
+        if (get(editMode) || readOnly) return;
+        const t = e.target as Element;
+        if (t.closest('.seg-play-col') || t.closest('.seg-actions') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
+        playFromSegment(seg.index, seg.chapter ?? 0);
+    }
+
+    function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
+        const rect = canvas.getBoundingClientRect();
+        const progress = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const hl = canvas._splitHL;
+        const tStart = hl ? hl.wfStart : seg.time_start;
+        const tEnd = hl ? hl.wfEnd : seg.time_end;
+        const timeMs = tStart + progress * (tEnd - tStart);
+
+        const audioEl = get(segAudioElement);
+        if (audioEl && seg.index === get(segCurrentIdx) && !audioEl.paused) {
+            audioEl.currentTime = timeMs / 1000;
+        } else {
+            playFromSegment(seg.index, seg.chapter ?? 0, timeMs);
+        }
+    }
+
+    function onCanvasMousedown(e: MouseEvent): void {
+        if (readOnly || get(editMode)) return;
+        const canvas = e.currentTarget as SegCanvas;
+
+        e.preventDefault();
+        _seekFromCanvasEvent(e, canvas);
+
+        function onMove(ev: MouseEvent): void {
+            _seekFromCanvasEvent(ev, canvas);
+        }
+        function onUp(): void {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+</script>
+
+<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+<div
+    class="seg-row"
+    class:dirty
+    class:playing={highlighted}
+    class:seg-row-context={isContext}
+    class:seg-neighbour={isNeighbour}
+    class:seg-edit-target={isEditingThisRow}
+    class:mode-history={mode === 'history'}
+    data-seg-index={seg.index}
+    data-seg-chapter={seg.chapter ?? undefined}
+    data-seg-uid={seg.segment_uid || undefined}
+    data-hist-time-start={readOnly ? String(seg.time_start) : undefined}
+    data-hist-time-end={readOnly ? String(seg.time_end) : undefined}
+    data-hist-audio-url={readOnly && seg.audio_url ? seg.audio_url : undefined}
+    bind:this={rowEl}
+    on:click={onRowClick}
+>
+    {#if !isContext && !readOnly && !(isEditingThisRow && ($editMode === 'trim' || $editMode === 'split'))}
+        <div class="seg-play-col">
+            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
+            {#if showGotoBtn}
+                <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>
+            {/if}
+        </div>
+    {/if}
+
+    <div class="seg-left">
+        {#if readOnly && showPlayBtn}
+            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
+        {/if}
+        <canvas
+            bind:this={canvasEl}
+            width="380"
+            height="60"
+            data-needs-waveform
+            on:mousedown={onCanvasMousedown}
+        ></canvas>
+        {#if isEditingThisRow && $editMode === 'trim' && editSegCanvas}
+            <TrimPanel {seg} canvas={editSegCanvas} />
+        {:else if isEditingThisRow && $editMode === 'split' && editSegCanvas}
+            <SplitPanel {seg} canvas={editSegCanvas} />
+        {:else if !isContext && !readOnly}
+            <div class="seg-actions">
+                <button class="btn btn-sm btn-adjust" on:click={onAdjustClick}>Adjust</button>
+                <button class="btn btn-sm btn-merge-prev"
+                    disabled={mergePrevDisabled}
+                    title={mergePrevTitle}
+                    on:click={onMergePrevClick}>Merge &uarr;</button>
+                <button class="btn btn-sm btn-delete" on:click={onDeleteClick}>Delete</button>
+                <button class="btn btn-sm btn-split" on:click={onSplitClick}>Split</button>
+                <button class="btn btn-sm btn-merge-next"
+                    disabled={mergeNextDisabled}
+                    title={mergeNextTitle}
+                    on:click={onMergeNextClick}>Merge &darr;</button>
+                <button class="btn btn-sm btn-edit-ref" on:click={onEditRefClick}>Edit Ref</button>
+            </div>
+        {:else if isContext}
+            <button class="btn btn-sm seg-card-play-btn" hidden></button>
+        {/if}
+    </div>
+
+    <div class="seg-text {confClass}">
+        <div class="seg-text-meta">
+            <div class="seg-text-header">
+                <span class="seg-text-index">{indexLabel}</span>
+                <span class="seg-text-sep">|</span>
+                {#if isEditingThisRow && $editMode === 'reference'}
+                    <ReferenceEditor {seg} />
+                {:else}
+                    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                    <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
+                {/if}
+                <span class="seg-text-sep">|</span>
+                <span class="seg-text-duration" class:seg-history-changed={changedDur} title={durTitle}>{durSec.toFixed(1)}s</span>
+                {#if showMissingTag}
+                    <span class="seg-tag seg-tag-missing">Missing words</span>
+                {/if}
+            </div>
+            <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
+            {#if contextLabel}
+                <div class="seg-text-label">{contextLabel}</div>
+            {/if}
+        </div>
+        <div class="seg-text-body" class:seg-history-changed={changedBody}>{bodyText}</div>
+    </div>
+</div>

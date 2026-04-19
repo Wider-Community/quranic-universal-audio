@@ -111,85 +111,32 @@ inspector/
         │   │   ├── SpeedControl.svelte   #  Playback speed selector
         │   │   ├── ValidationBadge.svelte #  Color-coded count badge (default/warning/error)
         │   │   └── WaveformCanvas.svelte #  Canvas waveform renderer (sub-ranging support)
-        │   ├── stores/
-        │   │   ├── audio.ts        #   Audio tab state (reciter/surah/ayah selection)
-        │   │   ├── timestamps/     #   Timestamps tab stores
-        │   │   │   ├── verse.ts    #   reciters/chapters/verses selection + loadedVerse
-        │   │   │   ├── display.ts  #   view mode, granularity, show-letters, show-phonemes, config
-        │   │   │   └── playback.ts #   auto-mode, auto-advance guard, currentTime, tsAudioElement
-        │   │   └── segments/       #   Segments tab stores
-        │   │       ├── audio-cache.ts # by_surah cache download/delete UI state
-        │   │       ├── chapter.ts  #   reciter/chapter selection + segAllData
-        │   │       ├── config.ts   #   server-side seg config (loaded once)
-        │   │       ├── dirty.ts    #   dirty chapter set + op log (unsaved mutations)
-        │   │       ├── edit.ts     #   active edit mode, overlay state
-        │   │       ├── filters.ts  #   filter bar predicates + derived filtered list
-        │   │       ├── history.ts  #   edit history panel visibility, data, display items
-        │   │       ├── navigation.ts # back-to-results banner state + savedFilterView
-        │   │       ├── playback.ts #   audio playback state, continuous-play, tsAudioElement
-        │   │       ├── save.ts     #   save preview visibility + data
-        │   │       ├── stats.ts    #   stats panel open state + data
-        │   │       └── validation.ts # validation panel open state + data
-        │   ├── types/
+        │   ├── stores/            # Cross-tab stores only (tab-specific stores colocated under tabs/)
+        │   │   ├── audio.ts        #   Audio tab state (reciter/surah/ayah selection)  [Ph15b: move to tabs/audio/]
+        │   │   └── timestamps/     #   Timestamps tab stores                            [Ph15b: move to tabs/timestamps/]
+        │   │       ├── verse.ts    #   reciters/chapters/verses selection + loadedVerse
+        │   │       ├── display.ts  #   view mode, granularity, show-letters, show-phonemes, config
+        │   │       └── playback.ts #   auto-mode, auto-advance guard, currentTime, tsAudioElement
+        │   ├── types/              # Cross-tab types only (segments/stats types now under tabs/segments/types/)
         │   │   ├── api.ts          #   Response shapes for every /api/* endpoint
         │   │   ├── domain.ts       #   Segment, Ref, PhonemeInterval, SegmentPeaks, SurahInfo, ...
-        │   │   ├── segments-waveform.ts #  SegCanvas extension types, highlight descriptors
-        │   │   ├── segments.ts     #   SplitChain, HistorySnapshot, OpFlatItem and related types
-        │   │   ├── stats.ts        #   ChartCfg, Distribution — shared stats chart types
         │   │   └── ui.ts           #   SelectOption, common UI types
-        │   └── utils/
+        │   └── utils/              # Cross-tab utilities only (segments utils now under tabs/segments/utils/)
         │       ├── active-tab.ts   #   Active-tab state (getActiveTab/setActiveTab)
         │       ├── animation.ts    #   createAnimationLoop() — rAF loop with start/stop
         │       ├── arabic-text.ts  #   stripTashkeel, isCombiningMark, char matching
         │       ├── audio.ts        #   safePlay() — swallows AbortError on interrupted play()
         │       ├── chart.ts        #   Chart.js bootstrap (registers plugins, re-exports Chart)
         │       ├── constants.ts    #   localStorage keys (LS_KEYS), placeholder strings
+        │       ├── grouped-reciters.ts # Grouped reciter dropdown option builder
         │       ├── keyboard-guard.ts # shouldHandleKey(e, tab) — shared keyboard guard helper
         │       ├── speed-control.ts  # Speed option list for SpeedControl.svelte
-        │       ├── stats-chart-draw.ts # Chart.js histogram draw helpers (StatsChart)
         │       ├── surah-info.ts   #   surahInfo data + surahInfoReady promise + surahOptionText
         │       ├── svg-arrow-geometry.ts # computeArrowLayout() for history diff arrows
         │       ├── waveform-cache.ts # Normalized URL → peaks Map cache (non-reactive)
         │       ├── waveform-draw.ts  # Peak array → canvas draw (reused by all waveform contexts)
         │       ├── webaudio-peaks.ts # Client-side AudioContext + LRU cache + slice
-        │       └── segments/       # Segments-tab utility modules (one concern per file)
-        │           ├── audio-cache-ui.ts    # Cache download/delete API calls + store updates
-        │           ├── chapter-actions.ts   # Chapter-level data load action
-        │           ├── classify.ts          # Per-segment validation category classification
-        │           ├── clear-per-reciter-state.ts # Reset validation/stats/history/save state on reciter change
-        │           ├── conf-class.ts        # getConfClass() — CSS class from confidence score
-        │           ├── constants.ts         # Label dicts, filter field IDs, op-type sets
-        │           ├── edit-common.ts       # exitEditMode + _playRange passthrough
-        │           ├── edit-delete.ts       # Delete segment operation
-        │           ├── edit-enter.ts        # enterEditWithBuffer — entry point for trim/split
-        │           ├── edit-merge.ts        # Merge adjacent segments operation
-        │           ├── edit-reference.ts    # beginRefEdit / commitRefEdit
-        │           ├── edit-split.ts        # Split mode: enter, drag, preview, confirm
-        │           ├── edit-trim.ts         # Trim mode: enter, drag handles, preview, confirm
-        │           ├── error-card-audio.ts  # Error card audio playback + animation
-        │           ├── filter-fields.ts     # Filter field descriptors (label, type, ops)
-        │           ├── filters-apply.ts     # Republish segment mutations to Svelte stores
-        │           ├── history-actions.ts   # Edit history panel lifecycle (show/hide)
-        │           ├── history-render.ts    # Push raw edit-history response to history store
-        │           ├── missing-verse-context.ts # Find surrounding segments for a missing verse
-        │           ├── navigation-actions.ts # jumpToSegment/Verse + filter view save/restore
-        │           ├── peaks-cache.ts       # IntersectionObserver + peak fetching/indexing
-        │           ├── play-range.ts        # _playRange — preview playback with animated playhead
-        │           ├── playback.ts          # Audio playback, animation, highlight tracking
-        │           ├── prefetch.ts          # Audio prefetch for the next displayed segment
-        │           ├── reciter-actions.ts   # Reciter-level reload action
-        │           ├── reciter.ts           # isBysurahReciter() helper
-        │           ├── references.ts        # Ref parsing, formatting, verse markers
-        │           ├── save-actions.ts      # Save flow: preview, confirm, execute
-        │           ├── save-execute.ts      # POST save to server + dirty state cleanup
-        │           ├── save-preview.ts      # Build save-preview data from dirty state + op log
-        │           ├── split-draw.ts        # Canvas drawing for split mode
-        │           ├── trim-draw.ts         # Canvas drawing for trim mode
-        │           ├── undo.ts              # Batch/op/chain undo API calls + store updates
-        │           ├── validation-fixups.ts # Index fixup helpers for validation results
-        │           ├── validation-refresh.ts # Fetch validation + push to store
-        │           ├── waveform-draw-seg.ts # Segments waveform drawing (peaks + overlays)
-        │           └── waveform-utils.ts    # Peak fetch, adjacent segment lookup helpers
+        │       └── word-boundary.ts  # Word boundary helpers
         │
         ├── tabs/audio/             # Audio tab — Svelte 4
         │   └── AudioTab.svelte     #   Category toggle, reciter/surah/ayah dropdowns, player, nav
@@ -201,40 +148,114 @@ inspector/
         │   ├── TimestampsWaveform.svelte # Waveform + overlays (wraps WaveformCanvas)
         │   └── TimestampsValidationPanel.svelte # 3-category accordion (uses AccordionPanel)
         │
-        └── tabs/segments/          # Segments tab — Svelte 4 components
+        └── tabs/segments/          # Segments tab — feature-colocated (Ph15a)
             ├── SegmentsTab.svelte  #   Tab shell + reciter/chapter selectors
             ├── ShortcutsGuide.svelte #  Keyboard shortcut reference overlay
-            ├── list/               # Segment list rendering
-            │   ├── SegmentsList.svelte        #  Virtualized segment list container
-            │   ├── SegmentRow.svelte          #  Individual segment card (read + edit-mode props)
-            │   ├── SegmentWaveformCanvas.svelte # Waveform canvas wrapper for segment rows
-            │   └── Navigation.svelte          #  Back-to-results banner
-            ├── filters/            # Filter bar
-            │   ├── FiltersBar.svelte          #  Filter bar + active filter pills
-            │   └── FilterCondition.svelte     #  Single filter condition input
-            ├── stats/              # Statistics panel
-            │   ├── StatsPanel.svelte          #  Statistics panel accordion shell
-            │   ├── StatsChart.svelte          #  Chart.js histogram component
-            │   └── ChartFullscreen.svelte     #  Fullscreen overlay for charts
-            ├── audio/              # Audio controls
-            │   ├── SegmentsAudioControls.svelte # Audio player + continuous-play controls
-            │   └── AudioCacheBar.svelte       #  by_surah cache status + download/delete controls
-            ├── edit/               # Editing mode overlays
-            │   ├── EditOverlay.svelte #  Active edit mode container
-            │   ├── TrimPanel.svelte   #  Trim handles + confirm
-            │   ├── SplitPanel.svelte  #  Split handle + confirm + ref chaining
-            │   ├── MergePanel.svelte  #  Merge confirmation
-            │   ├── DeletePanel.svelte #  Delete confirmation
-            │   └── ReferenceEditor.svelte # Inline ref edit + autocomplete
-            ├── history/            # Edit history view
-            │   ├── HistoryPanel.svelte #  Panel shell + summary stats
-            │   ├── HistoryBatch.svelte #  Batch record (save event)
-            │   ├── HistoryOp.svelte   #  Single op (trim/split/merge/delete/ref)
-            │   ├── HistoryArrows.svelte # SVG arrows between before/after columns
-            │   ├── HistoryFilters.svelte # Filter pills + sort
-            │   └── SplitChainRow.svelte #  Split chain segment row in history diff
-            ├── save/
-            │   └── SavePreview.svelte # Save preview panel (confirm/cancel)
+            ├── components/         # Svelte 4 components
+            │   ├── list/               # Segment list rendering
+            │   │   ├── SegmentsList.svelte        #  Virtualized segment list container
+            │   │   ├── SegmentRow.svelte          #  Individual segment card (read + edit-mode props)
+            │   │   ├── SegmentWaveformCanvas.svelte # Waveform canvas wrapper for segment rows
+            │   │   └── Navigation.svelte          #  Back-to-results banner
+            │   ├── filters/            # Filter bar
+            │   │   ├── FiltersBar.svelte          #  Filter bar + active filter pills
+            │   │   └── FilterCondition.svelte     #  Single filter condition input
+            │   ├── stats/              # Statistics panel
+            │   │   ├── StatsPanel.svelte          #  Statistics panel accordion shell
+            │   │   ├── StatsChart.svelte          #  Chart.js histogram component
+            │   │   └── ChartFullscreen.svelte     #  Fullscreen overlay for charts
+            │   ├── audio/              # Audio controls
+            │   │   ├── SegmentsAudioControls.svelte # Audio player + continuous-play controls
+            │   │   └── AudioCacheBar.svelte       #  by_surah cache status + download/delete controls
+            │   ├── edit/               # Editing mode overlays
+            │   │   ├── EditOverlay.svelte #  Active edit mode container
+            │   │   ├── TrimPanel.svelte   #  Trim handles + confirm
+            │   │   ├── SplitPanel.svelte  #  Split handle + confirm + ref chaining
+            │   │   ├── MergePanel.svelte  #  Merge confirmation
+            │   │   ├── DeletePanel.svelte #  Delete confirmation
+            │   │   └── ReferenceEditor.svelte # Inline ref edit + autocomplete
+            │   ├── history/            # Edit history view
+            │   │   ├── HistoryPanel.svelte #  Panel shell + summary stats
+            │   │   ├── HistoryBatch.svelte #  Batch record (save event)
+            │   │   ├── HistoryOp.svelte   #  Single op (trim/split/merge/delete/ref)
+            │   │   ├── HistoryArrows.svelte # SVG arrows between before/after columns
+            │   │   ├── HistoryFilters.svelte # Filter pills + sort
+            │   │   └── SplitChainRow.svelte #  Split chain segment row in history diff
+            │   ├── save/
+            │   │   └── SavePreview.svelte # Save preview panel (confirm/cancel)
+            │   └── validation/         # Validation panel + category cards
+            │       ├── ValidationPanel.svelte    # 11-category accordion panel
+            │       ├── ErrorCard.svelte          # Single validation error card
+            │       ├── GenericIssueCard.svelte   # Generic issue row (jump button + label)
+            │       ├── MissingVersesCard.svelte  # Missing verse card with context segments
+            │       └── MissingWordsCard.svelte   # Missing word card with context
+            ├── stores/             # Tab-local reactive state
+            │   ├── audio-cache.ts  #   by_surah cache download/delete UI state
+            │   ├── chapter.ts      #   reciter/chapter selection + segAllData
+            │   ├── config.ts       #   server-side seg config (loaded once)
+            │   ├── dirty.ts        #   dirty chapter set + op log (unsaved mutations)
+            │   ├── edit.ts         #   active edit mode, overlay state
+            │   ├── filters.ts      #   filter bar predicates + derived filtered list
+            │   ├── history.ts      #   edit history panel visibility, data, display items
+            │   ├── navigation.ts   #   back-to-results banner state + savedFilterView
+            │   ├── playback.ts     #   audio playback state, continuous-play, segAudioElement
+            │   ├── save.ts         #   save preview visibility + data
+            │   ├── stats.ts        #   stats panel open state + data
+            │   └── validation.ts   #   validation panel open state + data
+            ├── types/              # Tab-local types
+            │   ├── segments.ts         # SplitChain, HistorySnapshot, OpFlatItem and related types
+            │   ├── segments-waveform.ts # SegCanvas extension types, highlight descriptors
+            │   └── stats.ts            # ChartCfg, Distribution — stats chart types
+            └── utils/              # Tab-local action modules (7-subfolder split)
+                ├── constants.ts       # Label dicts, filter field IDs, op-type sets (top-level)
+                ├── keyboard.ts        # handleSegmentsKey — tab-wide keyboard dispatcher (top-level)
+                ├── stats-chart-draw.ts # Chart.js histogram draw helpers (StatsChart/ChartFullscreen)
+                ├── edit/              # Edit-mode operations
+                │   ├── common.ts          # exitEditMode + _playRange passthrough + finalizeEdit
+                │   ├── enter.ts           # enterEditWithBuffer — entry point for trim/split
+                │   ├── split.ts           # Split mode: enter, drag, preview, confirm
+                │   ├── trim.ts            # Trim mode: enter, drag handles, preview, confirm
+                │   ├── merge.ts           # Merge adjacent segments operation
+                │   ├── delete.ts          # Delete segment operation
+                │   └── reference.ts       # beginRefEdit / commitRefEdit
+                ├── waveform/          # Waveform drawing + peak caching
+                │   ├── draw-seg.ts        # Segments waveform drawing (peaks + overlays)
+                │   ├── utils.ts           # Peak fetch, adjacent segment lookup helpers
+                │   ├── peaks-cache.ts     # IntersectionObserver + peak fetching/indexing
+                │   ├── split-draw.ts      # Canvas drawing for split mode
+                │   └── trim-draw.ts       # Canvas drawing for trim mode
+                ├── playback/          # Audio playback
+                │   ├── playback.ts        # Audio playback, animation, highlight tracking
+                │   ├── play-range.ts      # _playRange — preview playback with animated playhead
+                │   ├── prefetch.ts        # Audio prefetch for the next displayed segment
+                │   ├── error-card-audio.ts # Error card audio playback + animation
+                │   └── audio-cache-ui.ts  # Cache download/delete API calls + store updates
+                ├── history/           # Edit history rendering + navigation
+                │   ├── actions.ts         # Edit history panel lifecycle (show/hide)
+                │   ├── render.ts          # Push raw edit-history response to history store
+                │   ├── chains.ts          # Split-chain construction + traversal
+                │   └── items.ts           # Flatten batches into display items
+                ├── save/              # Save + undo flow
+                │   ├── actions.ts         # Save flow: preview, confirm, execute
+                │   ├── execute.ts         # POST save to server + dirty state cleanup
+                │   ├── preview.ts         # Build save-preview data from dirty state + op log
+                │   └── undo.ts            # Batch/op/chain undo API calls + store updates
+                ├── validation/        # Validation classify/refresh/fixups
+                │   ├── classify.ts        # Per-segment validation category classification
+                │   ├── fixups.ts          # Index fixup helpers for validation results
+                │   ├── refresh.ts         # Fetch validation + push to store
+                │   ├── missing-verse-context.ts # Find surrounding segments for a missing verse
+                │   └── conf-class.ts      # getConfClass() — CSS class from confidence score
+                └── data/              # Data-loading actions + reference/filter helpers
+                    ├── chapter-actions.ts # Chapter-level data load action
+                    ├── reciter-actions.ts # Reciter-level reload action
+                    ├── reciter.ts         # isBysurahReciter() helper
+                    ├── config-loader.ts   # Load server-side seg config
+                    ├── clear-per-reciter-state.ts # Reset validation/stats/history/save state on reciter change
+                    ├── navigation-actions.ts # jumpToSegment/Verse + filter view save/restore
+                    ├── references.ts      # Ref parsing, formatting, verse markers
+                    ├── filters-apply.ts   # Republish segment mutations to Svelte stores
+                    └── filter-fields.ts   # Filter field descriptors (label, type, ops)
             └── validation/
                 ├── ValidationPanel.svelte    # 11-category accordion panel
                 ├── ErrorCard.svelte          # Single validation error card
@@ -264,17 +285,17 @@ routes/ (Flask Blueprints)  →  services/ (business logic)  →  utils/ (pure h
 ```
 src/main.ts (entry point, CSS imports)
   └── App.svelte  →  tabs/timestamps/TimestampsTab.svelte  →  lib/stores/timestamps/
-                  →  tabs/segments/SegmentsTab.svelte      →  lib/stores/segments/
+                  →  tabs/segments/SegmentsTab.svelte      →  tabs/segments/stores/
                   →  tabs/audio/AudioTab.svelte            →  lib/stores/audio.ts
 ```
 
-Each tab's Svelte components import from `lib/stores/` (reactive state) and `lib/utils/segments/` (imperative actions). No cross-tab imports.
+Each tab's Svelte components import from its own colocated `stores/` and `utils/` (Segments is fully colocated under `tabs/segments/`; Timestamps + Audio stores still live in `lib/stores/` pending Ph15b). Cross-tab helpers live in `lib/`. No cross-tab imports between tab roots.
 
 - **TypeScript + Vite** — bundled ES module output in `dist/`, one hashed JS + one hashed CSS file, sourcemaps on. Dev server at `:5173` with HMR; production served by Flask at `:5000` via `dist/` staticfiles (see `app.py`'s `FRONTEND_DIST` and `/` route).
 - **Strict typing** — `strict`, `noUncheckedIndexedAccess`, `noImplicitAny`, `strictNullChecks`, `allowJs:false`. Zero `@ts-nocheck` pragmas remaining in `src/`.
-- **Svelte 4 tabs** — all three tabs are pure Svelte 4: stores + `bind:this` for element refs. The Segments tab additionally calls action modules in `lib/utils/segments/` for operations (edit/save/undo/validation/navigation/playback) that need to reach outside the component tree.
+- **Svelte 4 tabs** — all three tabs are pure Svelte 4: stores + `bind:this` for element refs. The Segments tab additionally calls action modules in `tabs/segments/utils/` (subfolders: edit/, waveform/, playback/, history/, save/, validation/, data/) for operations that need to reach outside the component tree.
 - **Hybrid pattern** — `WaveformCanvas.svelte` exposes a `getCanvas()` escape hatch so imperative overlay code can draw directly onto the canvas element each animation frame, avoiding costly reactive re-renders at 60fps.
-- **Animation loop** — `lib/utils/animation.ts::createAnimationLoop()` wraps raw `requestAnimationFrame` chains with clean start/stop lifecycle. Used by `lib/utils/segments/playback.ts` and `TimestampsTab.svelte`.
+- **Animation loop** — `lib/utils/animation.ts::createAnimationLoop()` wraps raw `requestAnimationFrame` chains with clean start/stop lifecycle. Used by `tabs/segments/utils/playback/playback.ts` and `TimestampsTab.svelte`.
 - **Chart.js** imported from npm (`chart.js` + `chartjs-plugin-annotation`), registered once in `lib/utils/chart.ts`. Consumers import `Chart` from there, never from a global.
 
 ### Caching Strategy
@@ -286,7 +307,7 @@ Each tab's Svelte components import from `lib/stores/` (reactive state) and `lib
 - **Invalidation**: `invalidate_seg_caches(reciter)` after save/undo — clears segment cache, meta, verses, reciters
 
 **Client (JS):**
-- Tab stores (`lib/stores/`) hold reactive state; non-reactive caches live in `lib/utils/waveform-cache.ts` and `lib/utils/segments/peaks-cache.ts`
+- Tab stores hold reactive state (Segments: `tabs/segments/stores/`; Timestamps/Audio: `lib/stores/`); non-reactive caches live in `lib/utils/waveform-cache.ts` and `tabs/segments/utils/waveform/peaks-cache.ts`
 - `IntersectionObserver` for lazy waveform drawing from pre-fetched peaks
 - Audio buffers cached per URL/chapter with size limits
 
@@ -314,13 +335,13 @@ Each tab's Svelte components import from `lib/stores/` (reactive state) and `lib
 
 | Operation | Confidence After | Module |
 |-----------|-----------------|--------|
-| **Trim** | Unchanged | `lib/utils/segments/edit-trim.ts` |
-| **Split** | Unchanged until ref edit → 1.0 | `lib/utils/segments/edit-split.ts` |
-| **Merge** | 1.0 | `lib/utils/segments/edit-merge.ts` |
-| **Edit Reference** | 1.0 | `lib/utils/segments/edit-reference.ts` |
-| **Delete** | N/A | `lib/utils/segments/edit-delete.ts` |
-| **Auto-fill** | 1.0 | `lib/utils/segments/edit-reference.ts` (via commitRefEdit) |
-| **Ignore** | Unchanged | `lib/utils/segments/save-actions.ts` (adds to ignored_categories) |
+| **Trim** | Unchanged | `tabs/segments/utils/edit/trim.ts` |
+| **Split** | Unchanged until ref edit → 1.0 | `tabs/segments/utils/edit/split.ts` |
+| **Merge** | 1.0 | `tabs/segments/utils/edit/merge.ts` |
+| **Edit Reference** | 1.0 | `tabs/segments/utils/edit/reference.ts` |
+| **Delete** | N/A | `tabs/segments/utils/edit/delete.ts` |
+| **Auto-fill** | 1.0 | `tabs/segments/utils/edit/reference.ts` (via commitRefEdit) |
+| **Ignore** | Unchanged | `tabs/segments/utils/save/actions.ts` (adds to ignored_categories) |
 
 ## Segments Validation Categories
 
@@ -328,27 +349,27 @@ Accordions appear in this order (empty categories hidden):
 
 | Category | Detection | Key module |
 |----------|-----------|------------|
-| Failed Alignments | Empty `matched_ref` | `lib/utils/segments/validation-fixups.ts` |
+| Failed Alignments | Empty `matched_ref` | `tabs/segments/utils/validation/fixups.ts` |
 | Missing Verses | Verse has zero coverage | `services/validation.py` (server) |
 | Missing Words | Gap in word indices | `services/validation.py` (server) |
 | Structural Errors | Time/word ordering issues | `services/validation.py` (server) |
-| Low Confidence | `confidence < 0.80` | `lib/utils/segments/classify.ts` |
-| Detected Repetitions | `wrap_word_ranges` set | `lib/utils/segments/classify.ts` |
-| May Require Boundary Adj | 1-word segment (filtered) | `lib/utils/segments/classify.ts` |
-| Cross-verse | Start ayah != end ayah | `lib/utils/segments/classify.ts` |
-| Audio Bleeding | by_ayah: verse mismatch | `lib/utils/segments/classify.ts` |
-| Muqatta'at | Huruf muqatta'at verse | `lib/utils/segments/classify.ts` |
-| Qalqala | Last letter is qalqala | `lib/utils/segments/classify.ts` |
+| Low Confidence | `confidence < 0.80` | `tabs/segments/utils/validation/classify.ts` |
+| Detected Repetitions | `wrap_word_ranges` set | `tabs/segments/utils/validation/classify.ts` |
+| May Require Boundary Adj | 1-word segment (filtered) | `tabs/segments/utils/validation/classify.ts` |
+| Cross-verse | Start ayah != end ayah | `tabs/segments/utils/validation/classify.ts` |
+| Audio Bleeding | by_ayah: verse mismatch | `tabs/segments/utils/validation/classify.ts` |
+| Muqatta'at | Huruf muqatta'at verse | `tabs/segments/utils/validation/classify.ts` |
+| Qalqala | Last letter is qalqala | `tabs/segments/utils/validation/classify.ts` |
 
 ## Save Flow
 
-1. Client: `lib/utils/segments/save-execute.ts` → `POST /api/seg/save/<reciter>/<chapter>`
+1. Client: `tabs/segments/utils/save/execute.ts` → `POST /api/seg/save/<reciter>/<chapter>`
 2. Server: `services/save.py` → validation_before snapshot → mutate segments → atomic write `detailed.json` → file hash → rebuild `segments.json` → validation_after snapshot → append `edit_history.jsonl` → invalidate caches
 3. Client: refresh UI, trigger validation log
 
 ## Edit History
 
-Append-only JSONL at `data/recitation_segments/<reciter>/edit_history.jsonl`. Batch records (save) and revert records (undo). Server filters out undone batches. Client renders via `lib/utils/segments/history-render.ts` + `history-actions.ts` into the `lib/stores/segments/history.ts` store, displayed by `tabs/segments/history/` components (HistoryPanel, HistoryBatch, HistoryOp, HistoryArrows, HistoryFilters, SplitChainRow). Canonical `SplitChain` + `OpFlatItem` + `HistorySnapshot` types live in `lib/types/segments.ts`.
+Append-only JSONL at `data/recitation_segments/<reciter>/edit_history.jsonl`. Batch records (save) and revert records (undo). Server filters out undone batches. Client renders via `tabs/segments/utils/history/render.ts` + `actions.ts` into the `tabs/segments/stores/history.ts` store, displayed by `tabs/segments/components/history/` components (HistoryPanel, HistoryBatch, HistoryOp, HistoryArrows, HistoryFilters, SplitChainRow). Canonical `SplitChain` + `OpFlatItem` + `HistorySnapshot` types live in `tabs/segments/types/segments.ts`.
 
 ## Dependencies
 
