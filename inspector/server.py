@@ -1581,8 +1581,6 @@ def load_reciter_segments(reciter):
                 if not _is_ignored_for(seg, "cross_verse"):
                     v_cross_verse.append({
                         "chapter": chapter, "seg_index": idx, "ref": matched_ref,
-                        "msg": f"seg#{idx} cross-verse {matched_ref} "
-                               f"({t_start / 1000:.3f}s-{t_end / 1000:.3f}s)",
                     })
                 for ayah in range(s_ayah, e_ayah + 1):
                     if ayah == s_ayah:
@@ -1638,9 +1636,6 @@ def load_reciter_segments(reciter):
                     "chapter": chapter, "seg_index": idx,
                     "ref": matched_ref, "qalqala_letter": _last_ltr,
                     "end_of_verse": e_word == word_counts.get((surah, e_ayah), 0),
-                    "msg": f"seg#{idx} {matched_ref} "
-                           f"({t_start / 1000:.3f}s-{t_end / 1000:.3f}s) "
-                           f"qalqala letter {_last_ltr}",
                 })
 
     # --- validate post-loop: missing words ---
@@ -1755,56 +1750,25 @@ def load_reciter_segments(reciter):
 
                 if t_from >= t_to:
                     v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
-                                     "seg_index": s_idx,
-                                     "msg": f"seg#{s_idx} time_from >= time_to "
-                                            f"(t_from={t_from / 1000:.3f}s, "
-                                            f"t_to={t_to / 1000:.3f}s, "
-                                            f"w={w_from}-{w_to})"})
+                                     "msg": "time_from >= time_to"})
                 if w_from < 1:
                     v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
-                                     "seg_index": s_idx,
-                                     "msg": f"seg#{s_idx} word_from < 1 "
-                                            f"(w_from={w_from}, w_to={w_to})"})
+                                     "msg": "word_from < 1"})
                 if not is_cross_verse and w_to < w_from:
                     v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
-                                     "seg_index": s_idx,
-                                     "msg": f"seg#{s_idx} word_to < word_from "
-                                            f"(w_from={w_from}, w_to={w_to})"})
+                                     "msg": "word_to < word_from"})
                 elif is_cross_verse and w_to < 1:
                     v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
-                                     "seg_index": s_idx,
-                                     "msg": f"seg#{s_idx} word_to < 1 "
-                                            f"(w_from={w_from}, w_to={w_to})"})
+                                     "msg": "word_to < 1"})
 
                 if s_idx + 1 < len(segs) and len(segs[s_idx + 1]) >= 4:
-                    next_s = segs[s_idx + 1]
-                    next_t_from = next_s[2]
+                    next_t_from = segs[s_idx + 1][2]
                     if next_t_from < t_to:
                         v_errors.append({"verse_key": verse_key, "chapter": vk_surah,
-                                         "seg_index": s_idx,
-                                         "msg": f"time overlap: seg#{s_idx}(current) "
-                                                f"ends at {t_to / 1000:.3f}s but "
-                                                f"seg#{s_idx + 1} starts at "
-                                                f"{next_t_from / 1000:.3f}s "
-                                                f"(overlap={(t_to - next_t_from) / 1000:.3f}s)"})
+                                         "msg": "time overlap"})
                     else:
                         true_pause = (next_t_from - t_to) + 2 * pad_ms
                         pause_durations.append(true_pause)
-
-        if v_errors:
-            print(f"[validate/{reciter}] {len(v_errors)} structural error(s):")
-            for e in v_errors:
-                print(f"  - {e['verse_key']} {e['msg']}")
-
-        if v_cross_verse:
-            print(f"[validate/{reciter}] {len(v_cross_verse)} cross-verse issue(s):")
-            for e in v_cross_verse:
-                print(f"  - {e['ref']} {e['msg']}")
-
-        if v_qalqala:
-            print(f"[validate/{reciter}] {len(v_qalqala)} qalqala issue(s):")
-            for e in v_qalqala:
-                print(f"  - {e['ref']} {e['msg']}")
 
         # Missing verses
         all_verse_keys_in_file = set()

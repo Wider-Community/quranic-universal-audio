@@ -923,22 +923,6 @@ body.seg-edit-active #seg-validation-global {
     width: 100%;
 }
 
-.seg-edit-inline .seg-edit-nudge {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-}
-
-.seg-edit-inline .seg-edit-nudge-label {
-    color: #888;
-    font-size: 0.75rem;
-    font-family: monospace;
-}
-
-.seg-edit-inline .seg-edit-nudge .btn-sm {
-    flex: 1;
-}
-
 /* Edit-target card gets an active border, elevated above the dim overlay.
    pointer-events: auto re-enables interaction (container has pointer-events: none). */
 .seg-row.seg-edit-target {

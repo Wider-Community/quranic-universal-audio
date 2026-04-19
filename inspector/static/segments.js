@@ -3496,16 +3496,6 @@ function enterTrimMode(seg, row) {
     btnRow.appendChild(statusSpan);
     inline.appendChild(btnRow);
 
-    const nudgeRow = document.createElement('div');
-    nudgeRow.className = 'seg-edit-nudge';
-    const nudgeLabel = document.createElement('span');
-    nudgeLabel.className = 'seg-edit-nudge-label';
-    nudgeLabel.textContent = 'End:';
-    nudgeRow.appendChild(nudgeLabel);
-    nudgeRow.appendChild(mkBtn('\u22120.05s', 'btn-nudge', () => nudgeTrimEnd(-50)));
-    nudgeRow.appendChild(mkBtn('+0.05s', 'btn-nudge', () => nudgeTrimEnd(50)));
-    inline.appendChild(nudgeRow);
-
     segLeft.appendChild(inline);
 
     // Store element refs on canvas for other functions to access
@@ -3755,18 +3745,6 @@ function updateTrimDuration(canvas) {
     const el = canvas?._trimEls?.durationSpan;
     if (!tw || !el) return;
     el.textContent = `${((tw.currentEnd - tw.currentStart) / 1000).toFixed(2)}s`;
-}
-
-function nudgeTrimEnd(deltaMs) {
-    const canvas = _getEditCanvas();
-    const tw = canvas?._trimWindow;
-    if (!tw) return;
-    const minEnd = tw.currentStart + 50;
-    const nextEnd = Math.max(minEnd, Math.min(tw.currentEnd + deltaMs, tw.windowEnd));
-    if (nextEnd === tw.currentEnd) return;
-    tw.currentEnd = nextEnd;
-    updateTrimDuration(canvas);
-    drawTrimWaveform(canvas);
 }
 
 function confirmTrim(seg) {
@@ -5781,7 +5759,7 @@ function renderCategoryCards(type, items, container) {
             const wrapper = document.createElement('div');
             wrapper.className = 'val-card-wrapper';
 
-            if (issue.msg && type !== 'qalqala') {
+            if (issue.msg) {
                 const msgLabel = document.createElement('div');
                 msgLabel.className = 'val-card-issue-label';
                 msgLabel.textContent = issue.msg;
@@ -5903,15 +5881,11 @@ function resolveIssueToSegment(type, issue) {
         return seg;
     }
     if (type === 'errors') {
-        const chapterSegs = getChapterSegments(issue.chapter);
-        // Prefer verse-local seg_index: find all segs in this verse_key, then pick the Nth.
+        // Try to find a segment whose matched_ref starts with the verse_key prefix
         const parts = (issue.verse_key || '').split(':');
         const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : issue.verse_key;
-        const verseSegs = chapterSegs.filter(s => s.matched_ref && s.matched_ref.startsWith(prefix));
-        if (issue.seg_index != null && verseSegs[issue.seg_index]) {
-            return verseSegs[issue.seg_index];
-        }
-        return verseSegs[0] || chapterSegs[0] || null;
+        const chapterSegs = getChapterSegments(issue.chapter);
+        return chapterSegs.find(s => s.matched_ref && s.matched_ref.startsWith(prefix)) || chapterSegs[0] || null;
     }
     return null;
 }
