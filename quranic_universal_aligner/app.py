@@ -55,29 +55,6 @@ else:
 from src.ui.interface import build_interface
 
 # =============================================================================
-# Persistent CPU worker pool — spawn BEFORE any GPU use if enabled.
-# This keeps the workers free of any inherited CUDA/ZeroGPU state.
-# =============================================================================
-try:
-    from config import (
-        CPU_STRATEGY as _CPU_STRATEGY,
-        CPU_WORKER_MODE as _CPU_WORKER_MODE,
-        CPU_SUBPROCESS_CONCURRENCY as _CPU_SUBPROCESS_CONCURRENCY,
-        CPU_POOL_PRELOAD_LARGE as _CPU_POOL_PRELOAD_LARGE,
-    )
-    from src.core.zero_gpu import IS_CPU_WORKER as _IS_CPU_WORKER
-    if (
-        _CPU_STRATEGY == "subprocess"
-        and _CPU_WORKER_MODE == "persistent"
-        and not _IS_CPU_WORKER
-    ):
-        print(f"[APP] Bootstrapping persistent CPU pool: {_CPU_SUBPROCESS_CONCURRENCY} worker(s), preload_large={_CPU_POOL_PRELOAD_LARGE}")
-        from src.core.cpu_worker_pool import start_pool as _start_pool
-        _start_pool(_CPU_SUBPROCESS_CONCURRENCY, preload_large=_CPU_POOL_PRELOAD_LARGE)
-except Exception as _e:
-    print(f"[APP] Persistent CPU pool bootstrap failed (non-fatal): {_e}")
-
-# =============================================================================
 # Module-level demo for Gradio hot-reload (`gradio app.py`)
 # =============================================================================
 demo = build_interface()
@@ -93,6 +70,34 @@ demo.queue(default_concurrency_limit=1 if IS_CPU_WORKER else 20)
 # =============================================================================
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+
+    # =============================================================================
+    # Persistent CPU worker pool — spawn BEFORE any GPU use if enabled.
+    # Must be inside __main__ guard: spawn re-imports app.py as __mp_main__ during
+    # worker bootstrap; without the guard, module-level Process.start() would be
+    # called inside a spawned child, triggering the "bootstrapping phase" error.
+    # =============================================================================
+    try:
+        from config import (
+            CPU_STRATEGY as _CPU_STRATEGY,
+            CPU_WORKER_MODE as _CPU_WORKER_MODE,
+            CPU_SUBPROCESS_CONCURRENCY as _CPU_SUBPROCESS_CONCURRENCY,
+            CPU_POOL_PRELOAD_LARGE as _CPU_POOL_PRELOAD_LARGE,
+        )
+        from src.core.zero_gpu import IS_CPU_WORKER as _IS_CPU_WORKER
+        if (
+            _CPU_STRATEGY == "subprocess"
+            and _CPU_WORKER_MODE == "persistent"
+            and not _IS_CPU_WORKER
+        ):
+            print(f"[APP] Bootstrapping persistent CPU pool: {_CPU_SUBPROCESS_CONCURRENCY} worker(s), preload_large={_CPU_POOL_PRELOAD_LARGE}")
+            from src.core.cpu_worker_pool import start_pool as _start_pool
+            _start_pool(_CPU_SUBPROCESS_CONCURRENCY, preload_large=_CPU_POOL_PRELOAD_LARGE)
+    except Exception as _e:
+        print(f"[APP] Persistent CPU pool bootstrap failed (non-fatal): {_e}")
+
     import argparse
     import numpy as np
     import librosa
@@ -135,6 +140,17 @@ if __name__ == "__main__":
                                   orig_sr=44100, target_sr=16000, res_type=RESAMPLE_TYPE)
         del _dummy
         print("Resampler warmed up.")
+
+    # Telemetry sampler — daemon thread samples host + CPU pool every N seconds
+    # and flushes to the telemetry dataset. Skip on CPU workers (they have no
+    # pool of their own and don't host the main Space's schedulers).
+    from src.core.zero_gpu import IS_CPU_WORKER as _IS_CPU_WORKER_TEL
+    if not _IS_CPU_WORKER_TEL:
+        try:
+            from src.core.telemetry_sampler import start_sampler
+            start_sampler()
+        except Exception as _e:
+            print(f"[APP] Telemetry sampler start failed (non-fatal): {_e}")
 
     # AoT compilation for VAD model (requires GPU lease — skip on CPU workers)
     from src.core.zero_gpu import IS_CPU_WORKER

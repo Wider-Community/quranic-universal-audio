@@ -455,14 +455,25 @@ class _Pool:
         raise TimeoutError("load_large timed out")
 
     def stats(self) -> dict:
+        # Peek free_q without popping — derives per-worker is_busy. Queue.queue
+        # is a private-but-stable deque attribute; the read is best-effort and
+        # transient mismatches during pickup/release are acceptable for the
+        # telemetry sampler (periodic, non-critical).
+        try:
+            free_ids = set(list(self.free_q.queue))
+        except Exception:
+            free_ids = set()
         return {
             "started": self._started,
             "n_workers": len(self.workers),
+            "free_count": self.free_q.qsize(),
+            "busy_count": max(0, len(self.workers) - self.free_q.qsize()),
             "workers": [
                 {
                     "id": h.worker_id,
                     "pid": h.pid,
                     "alive": h.process is not None and h.process.is_alive(),
+                    "is_busy": h.worker_id not in free_ids,
                     "total_jobs": h.total_jobs,
                     "boot_time": h.boot_time,
                     "snapshots": {k: v for k, v in h.snapshots.items()},

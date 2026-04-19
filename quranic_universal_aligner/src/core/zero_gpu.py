@@ -54,10 +54,30 @@ def _get_subprocess_semaphore():
         with _subprocess_semaphore_lock:
             if _subprocess_semaphore is None:
                 from config import CPU_SUBPROCESS_CONCURRENCY
-                _subprocess_semaphore = threading.BoundedSemaphore(
+                from .cpu_sem import CountedBoundedSemaphore
+                _subprocess_semaphore = CountedBoundedSemaphore(
                     max(1, CPU_SUBPROCESS_CONCURRENCY)
                 )
     return _subprocess_semaphore
+
+
+# ---------------------------------------------------------------------------
+# Thread-local CPU dispatch stats — populated on every subprocess dispatch
+# (local-subprocess path only; worker-pool path has its own _DISPATCH_TLS in
+# worker_pool.py). Read by pipeline.py at log-row build time.
+# ---------------------------------------------------------------------------
+_CPU_STATS_TLS = threading.local()
+
+
+def get_cpu_stats() -> dict | None:
+    """Return this thread's last CPU subprocess dispatch stats, or None."""
+    return getattr(_CPU_STATS_TLS, "info", None)
+
+
+def clear_cpu_stats() -> None:
+    """Drop any stashed CPU dispatch stats on this thread. Call at request entry."""
+    if hasattr(_CPU_STATS_TLS, "info"):
+        del _CPU_STATS_TLS.info
 
 # ---------------------------------------------------------------------------
 # GPU lease tracking — lets code know if ANY thread currently holds a lease.
@@ -269,11 +289,10 @@ def gpu_with_fallback(duration=60):
 
                 if CPU_STRATEGY == "subprocess":
                     import time as _time
-                    from config import CPU_WORKER_MODE
+                    from config import CPU_WORKER_MODE, CPU_DTYPE
                     sem = _get_subprocess_semaphore()
-                    _t_acq = _time.time()
-                    sem.acquire()
-                    _wait = _time.time() - _t_acq
+                    _wait, _peers_at_acquire = sem.acquire_with_stats()
+                    _compute_start = _time.time()
                     try:
                         _check_cuda_fork_state(f"before CPU subprocess ({func.__name__})")
                         if CPU_WORKER_MODE == "persistent":
@@ -285,20 +304,35 @@ def gpu_with_fallback(duration=60):
                                 start_pool(CPU_SUBPROCESS_CONCURRENCY, preload_large=CPU_POOL_PRELOAD_LARGE)
                             print(
                                 f"[CPU] Running {func.__name__} on persistent worker "
-                                f"(CPU_WORKER_MODE=persistent, queue_wait={_wait:.2f}s)"
+                                f"(CPU_WORKER_MODE=persistent, queue_wait={_wait:.2f}s, peers_at_acquire={_peers_at_acquire})"
                             )
+                            _spawn_s = 0.0  # persistent pool: no spawn cost per request
                             result = run_on_persistent_worker(func, args, kwargs)
                         else:
                             print(
                                 f"[CPU] Running {func.__name__} in isolated subprocess "
-                                f"(CPU_STRATEGY=subprocess, queue_wait={_wait:.2f}s)"
+                                f"(CPU_STRATEGY=subprocess, queue_wait={_wait:.2f}s, peers_at_acquire={_peers_at_acquire})"
                             )
                             from .cpu_subprocess import run_in_cpu_subprocess
+                            _t_spawn = _time.time()
                             result = run_in_cpu_subprocess(func, args, kwargs)
+                            _spawn_s = _time.time() - _t_spawn  # best-effort: total subprocess wall
                         _check_cuda_fork_state(f"after CPU subprocess ({func.__name__})")
                         return result
                     finally:
-                        sem.release()
+                        _compute_s = _time.time() - _compute_start
+                        _peers_at_release = sem.release_with_stats()
+                        _CPU_STATS_TLS.info = {
+                            "strategy": "subprocess",
+                            "worker_mode": CPU_WORKER_MODE,
+                            "dtype": CPU_DTYPE,
+                            "concurrency_cap": sem.capacity,
+                            "queue_wait_s": round(_wait, 3),
+                            "compute_s": round(_compute_s, 3),
+                            "peers_at_acquire": _peers_at_acquire,
+                            "peers_at_release": _peers_at_release,
+                            "subprocess_spawn_s": round(_spawn_s, 3) if CPU_WORKER_MODE != "persistent" else 0.0,
+                        }
 
                 if CPU_STRATEGY == "workers":
                     from .worker_pool import has_workers, run_on_worker_cpu
