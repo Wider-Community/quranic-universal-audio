@@ -13,6 +13,7 @@ export const LS_KEYS = {
     SEG_RECITER:     'insp_seg_reciter',
     SEG_SPEED:       'insp_seg_speed',
     SEG_AUTOPLAY:    'insp_seg_autoplay',
+    SEG_AUTOSCROLL:  'insp_seg_autoscroll',
     AUD_RECITER:     'insp_aud_reciter',
 } as const;
 
@@ -20,8 +21,38 @@ export const PLACEHOLDER_SELECT = '-- select --';
 export const PLACEHOLDER_DASH   = '--';
 export const PLACEHOLDER_RECITER = '-- Select reciter --';
 
-// Audio buffer cache eviction limit
-export const AUDIO_BUFFER_CACHE_SIZE = 5;
+/** Segments-tab auto-scroll animation modes. Not a user preference — the
+ *  active mode is served by /api/seg/config (SEG_SCROLL_ANIM_MODE in
+ *  inspector/config.py) and consumed via segConfig.scrollAnimMode. These
+ *  constants define the valid value set shared by server and client.
+ *   - NONE   — instant jump, no animation.
+ *   - SMOOTH — native CSS smooth scroll on every target change.
+ *   - HYBRID — smooth when the target is more than one viewport away,
+ *              instant otherwise (default).
+ */
+export const SCROLL_ANIM_MODES = {
+    NONE:   'none',
+    SMOOTH: 'smooth',
+    HYBRID: 'hybrid',
+} as const;
+export type ScrollAnimMode = typeof SCROLL_ANIM_MODES[keyof typeof SCROLL_ANIM_MODES];
+export const SCROLL_ANIM_DEFAULT: ScrollAnimMode = SCROLL_ANIM_MODES.HYBRID;
+
+export const TAB_NAMES = {
+    TIMESTAMPS: 'timestamps',
+    SEGMENTS: 'segments',
+    AUDIO: 'audio',
+} as const;
+export type TabName = typeof TAB_NAMES[keyof typeof TAB_NAMES];
 
 // Playhead color used in the edit-mode preview overlay (trim / split / play-range)
 export const PREVIEW_PLAYHEAD_COLOR = '#f72585';
+
+// Waveform canvas colors shared across all waveform drawing modules
+export const WAVEFORM_BG_COLOR     = '#0f0f23';
+export const WAVEFORM_FILL_COLOR   = 'rgba(67, 97, 238, 0.3)';
+export const WAVEFORM_STROKE_COLOR = '#4361ee';
+export const WAVEFORM_DIM_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.45)';
+
+/** Letter-level highlight color used by the Timestamps display + waveform. */
+export const LETTER_HIGHLIGHT_COLOR = '#2ec4b6';

@@ -16,6 +16,24 @@ cd inspector/frontend && npm run dev   # http://localhost:5173
 # Vite proxies /api and /audio to Flask on :5000 (see vite.config.ts)
 ```
 
+## Testing
+
+```bash
+# Frontend unit tests (Vitest + happy-dom + @testing-library/svelte)
+cd inspector/frontend && npm run test           # one-shot
+cd inspector/frontend && npm run test:watch     # watch mode
+cd inspector/frontend && npm run test:ui        # interactive UI
+
+# Backend unit tests (pytest + pytest-cov)
+pip install -r inspector/requirements-dev.txt    # one-time
+cd inspector && python -m pytest tests/ -v
+```
+
+Frontend tests live next to source in `src/**/__tests__/`. Backend tests live
+in `inspector/tests/`. Neither runs the dev servers — they're pure unit tests
+with the Flask app reached via `app.test_client()`. Config: `vitest.config.ts`
+(frontend), `pyproject.toml` (backend).
+
 ## Tech Stack
 
 - **Backend:** Python / Flask (Blueprints), no ORM
@@ -23,6 +41,7 @@ cd inspector/frontend && npm run dev   # http://localhost:5173
 - **Charts:** Chart.js (npm) + `chartjs-plugin-annotation`, registered centrally in `src/lib/utils/chart.ts`
 - **CSS:** Plain CSS split by domain (no preprocessor, no CSS-in-JS), imported from `src/styles/`
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
+- **Testing:** Vitest 4 + `@testing-library/svelte` + `happy-dom` for the frontend (requires Node ≥ 20.19 — repo developed on Node 24 LTS); `pytest` + `pytest-cov` for the backend
 
 ## Code Principles
 
@@ -132,7 +151,7 @@ inspector/
         │       ├── svg-arrow-geometry.ts # computeArrowLayout() for history diff arrows
         │       ├── waveform-cache.ts # Normalized URL → peaks Map cache (non-reactive)
         │       ├── waveform-draw.ts  # Peak array → canvas draw (reused by all waveform contexts)
-        │       ├── webaudio-peaks.ts # Client-side AudioContext + LRU cache + slice
+        │       ├── peaks-fetch.ts  # Cross-tab fetch helper for /api/seg/segment-peaks
         │       └── word-boundary.ts  # Word boundary helpers
         │
         ├── tabs/audio/             # Audio tab — feature-colocated (Ph15b)

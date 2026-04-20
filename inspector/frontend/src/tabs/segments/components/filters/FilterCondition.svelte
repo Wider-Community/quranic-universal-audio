@@ -26,7 +26,8 @@
 
     const dispatch = createEventDispatcher<{ change: void; remove: void }>();
 
-    const DEBOUNCE_MS = 300;
+    // 150ms: short enough to feel instant, long enough to skip intermediate keystrokes.
+    const DEBOUNCE_MS = 150;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     function onFieldChange(e: Event): void {

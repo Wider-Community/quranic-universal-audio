@@ -13,12 +13,20 @@
      * Scoped styles use `:global()` selectors for the dynamic classes.
      */
 
+    import { onDestroy } from 'svelte';
     import { get } from 'svelte/store';
 
     import { loadedVerse } from '../stores/verse';
-    import { showLetters, showPhonemes } from '../stores/display';
-    import { tsAudioElement } from '../stores/playback';
+    import {
+        showLetters,
+        showPhonemes,
+        tsHoveredElement,
+        tsWaveformHoverTime,
+    } from '../stores/display';
+    import { autoMode, loopTarget, tsAudioElement } from '../stores/playback';
+    import type { TsLoopTarget } from '../stores/playback';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
+    import { safePlay } from '../../../lib/utils/audio';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
@@ -60,6 +68,11 @@
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
     $: rendered, (_prevActivePhonemeIdx = -1);
+
+    // Waveform hover → re-run highlights. The rAF loop is stopped while paused,
+    // so without this reactive trigger hover-driven previews wouldn't repaint.
+    // Loop target changes also retrigger so `.loop` classes update.
+    $: ($tsWaveformHoverTime, $loopTarget, updateHighlights());
 
     // ---- Pure helpers (state-free) ----
 
@@ -261,7 +274,11 @@
             }
         }
 
-        // Block highlights (.active / .past) — diff-only
+        // Block highlights (.active / .past) — diff-only.
+        // Suppress scrollIntoView when the update is driven by waveform hover
+        // (user is actively scrubbing; auto-scrolling would fight the pointer).
+        const audioEl = get(tsAudioElement);
+        const isHoverDriven = get(tsWaveformHoverTime) != null && !!audioEl && audioEl.paused;
         if (currentWordIndex !== _prevActiveWordIdx) {
             const blocks = rootEl.querySelectorAll<HTMLElement>('.mega-block');
             blocks.forEach((block) => {
@@ -269,7 +286,7 @@
                 block.classList.remove('active', 'past');
                 if (wi === currentWordIndex) {
                     block.classList.add('active');
-                    block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    if (!isHoverDriven) block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else if (currentWordIndex >= 0 && wi < currentWordIndex) {
                     block.classList.add('past');
                 }
@@ -293,11 +310,41 @@
                 const e = parseFloat(el.dataset.letterEnd ?? '0');
                 el.classList.toggle('active', time >= s && time < e);
             });
+
+        // Loop perma-highlight — outline the looped element on its tier.
+        const lp = get(loopTarget);
+        rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((block) => {
+            const wi = parseInt(block.dataset.wordIndex ?? '-1');
+            block.classList.toggle(
+                'loop',
+                lp?.kind === 'word' && lp.wordIndex === wi,
+            );
+        });
+        rootEl.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)').forEach((el) => {
+            const wi = parseInt(el.dataset.wordIndex ?? '-1');
+            const li = parseInt(el.dataset.letterIndex ?? '-1');
+            el.classList.toggle(
+                'loop',
+                lp?.kind === 'letter' && lp.wordIndex === wi && lp.childIndex === li,
+            );
+        });
+        rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((el) => {
+            const idx = parseInt(el.dataset.index ?? '-1');
+            el.classList.toggle(
+                'loop',
+                lp?.kind === 'phoneme' && lp.childIndex === idx,
+            );
+        });
     }
 
     function getSegRelTime(segOffset: number): number {
         const audio = get(tsAudioElement);
         if (!audio) return 0;
+        // While paused, waveform hover drives a preview: treat the hovered
+        // slice-relative time as the "current" time so block highlights
+        // (active word / letter / phoneme) follow the pointer.
+        const hoverT = get(tsWaveformHoverTime);
+        if (hoverT != null && audio.paused) return hoverT;
         return audio.currentTime - segOffset;
     }
 
@@ -314,29 +361,156 @@
         const audio = get(tsAudioElement);
         if (!audio) return;
         audio.currentTime = absTime;
+        // Clicking a block always starts playback — resumes if paused.
+        if (audio.paused) void safePlay(audio);
         // Force a repaint immediately after user seek (not waiting on timeupdate)
         updateHighlights();
     }
 
-    function onWordClick(word: TsWord): void {
+    function onWordClick(word: TsWord, wordIndex: number): void {
         const lv = get(loadedVerse);
         if (!lv) return;
+        const cur = get(loopTarget);
+        if (cur) {
+            if (cur.kind === 'word' && cur.wordIndex === wordIndex) return;
+            loopTarget.set({
+                kind: 'word',
+                startSec: word.start,
+                endSec: word.end,
+                wordIndex,
+            });
+        }
         seekToTime(word.start + lv.tsSegOffset);
     }
 
-    function onPhonemeClick(e: MouseEvent, iv: PhonemeInterval): void {
+    function onPhonemeClick(
+        e: MouseEvent,
+        iv: PhonemeInterval,
+        phonemeIndex: number,
+        wordIndex: number,
+    ): void {
         e.stopPropagation();
         const lv = get(loadedVerse);
         if (!lv) return;
+        const cur = get(loopTarget);
+        if (cur) {
+            if (cur.kind === 'phoneme' && cur.childIndex === phonemeIndex) return;
+            loopTarget.set({
+                kind: 'phoneme',
+                startSec: iv.start,
+                endSec: iv.end,
+                wordIndex,
+                childIndex: phonemeIndex,
+            });
+        }
         seekToTime(iv.start + lv.tsSegOffset);
     }
 
-    function onLetterClick(e: MouseEvent, startSec: number): void {
+    // ---- Double-click handlers: toggle loop on the clicked token ----
+
+    /**
+     * Toggle loop on the given token. If it's already the looped target,
+     * exit loop mode; otherwise engage loop + seek to its start. Also
+     * clears `autoMode` (loop + auto-advance are mutually exclusive).
+     */
+    function toggleLoopOn(target: TsLoopTarget): void {
+        const lv = get(loadedVerse);
+        if (!lv) return;
+        const cur = get(loopTarget);
+        const sameTarget =
+            cur?.kind === target.kind
+            && cur.wordIndex === target.wordIndex
+            && cur.childIndex === target.childIndex;
+        if (sameTarget) {
+            loopTarget.set(null);
+            return;
+        }
+        loopTarget.set(target);
+        autoMode.set(null);
+        seekToTime(target.startSec + lv.tsSegOffset);
+    }
+
+    function onWordDblClick(word: TsWord, wordIndex: number): void {
+        toggleLoopOn({ kind: 'word', startSec: word.start, endSec: word.end, wordIndex });
+    }
+
+    function onLetterDblClick(
+        e: MouseEvent,
+        startSec: number,
+        endSec: number,
+        wordIndex: number,
+        letterIndex: number,
+    ): void {
+        e.stopPropagation();
+        toggleLoopOn({ kind: 'letter', startSec, endSec, wordIndex, childIndex: letterIndex });
+    }
+
+    function onPhonemeDblClick(
+        e: MouseEvent,
+        iv: PhonemeInterval,
+        phonemeIndex: number,
+        wordIndex: number,
+    ): void {
+        e.stopPropagation();
+        toggleLoopOn({
+            kind: 'phoneme',
+            startSec: iv.start,
+            endSec: iv.end,
+            wordIndex,
+            childIndex: phonemeIndex,
+        });
+    }
+
+    function onLetterClick(
+        e: MouseEvent,
+        startSec: number,
+        endSec: number,
+        wordIndex: number,
+        letterIndex: number,
+    ): void {
         e.stopPropagation();
         const lv = get(loadedVerse);
         if (!lv) return;
+        const cur = get(loopTarget);
+        if (cur) {
+            if (
+                cur.kind === 'letter'
+                && cur.wordIndex === wordIndex
+                && cur.childIndex === letterIndex
+            ) return;
+            loopTarget.set({
+                kind: 'letter',
+                startSec,
+                endSec,
+                wordIndex,
+                childIndex: letterIndex,
+            });
+        }
         seekToTime(startSec + lv.tsSegOffset);
     }
+
+    // ---- Hover handlers: publish to tsHoveredElement for waveform sync ----
+
+    function onWordEnter(word: TsWord): void {
+        tsHoveredElement.set({ kind: 'word', startSec: word.start, endSec: word.end });
+    }
+
+    function onLetterEnter(startSec: number | null, endSec: number | null): void {
+        if (startSec == null || endSec == null) return;
+        tsHoveredElement.set({ kind: 'letter', startSec, endSec });
+    }
+
+    function onPhonemeEnter(iv: PhonemeInterval): void {
+        tsHoveredElement.set({ kind: 'phoneme', startSec: iv.start, endSec: iv.end });
+    }
+
+    function onHoverLeave(): void {
+        tsHoveredElement.set(null);
+    }
+
+    // Safety net: if the component unmounts while a hover is active (e.g. view
+    // switch), clear the store so the waveform doesn't keep a stale band.
+    onDestroy(() => tsHoveredElement.set(null));
 </script>
 
 <div
@@ -356,7 +530,10 @@
                             ph.interval.phone === 'sp'}
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
-                        on:click={(e) => onPhonemeClick(e, ph.interval)}
+                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
+                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                        on:mouseenter={() => onPhonemeEnter(ph.interval)}
+                        on:mouseleave={onHoverLeave}
                         on:keydown={() => {}}
                         role="button"
                         tabindex="-1"
@@ -369,12 +546,17 @@
         <div
             class="mega-block"
             data-word-index={block.wordIndex}
-            on:click={() => onWordClick(block.word)}
+            on:click={() => onWordClick(block.word, block.wordIndex)}
+            on:dblclick={() => onWordDblClick(block.word, block.wordIndex)}
             on:keydown={() => {}}
             role="button"
             tabindex="-1"
         >
-            <div class="mega-word">{block.word.display_text || block.word.text}</div>
+            <div
+                class="mega-word"
+                on:mouseenter={() => onWordEnter(block.word)}
+                on:mouseleave={onHoverLeave}
+            >{block.word.display_text || block.word.text}</div>
             {#if block.letters.length}
                 <div class="mega-letters" class:hidden={!$showLetters} dir="rtl">
                     {#each block.letters as lt, li (li)}
@@ -391,7 +573,14 @@
                                 class="mega-letter"
                                 data-letter-start={lt.start}
                                 data-letter-end={lt.end}
-                                on:click={(e) => onLetterClick(e, lt.start ?? 0)}
+                                data-word-index={block.wordIndex}
+                                data-letter-index={li}
+                                on:click={(e) =>
+                                    onLetterClick(e, lt.start ?? 0, lt.end ?? 0, block.wordIndex, li)}
+                                on:dblclick={(e) =>
+                                    onLetterDblClick(e, lt.start ?? 0, lt.end ?? 0, block.wordIndex, li)}
+                                on:mouseenter={() => onLetterEnter(lt.start, lt.end)}
+                                on:mouseleave={onHoverLeave}
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
@@ -409,7 +598,10 @@
                             ph.interval.phone === 'sp'}
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
-                        on:click={(e) => onPhonemeClick(e, ph.interval)}
+                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
+                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                        on:mouseenter={() => onPhonemeEnter(ph.interval)}
+                        on:mouseleave={onHoverLeave}
                         on:keydown={() => {}}
                         role="button"
                         tabindex="-1"

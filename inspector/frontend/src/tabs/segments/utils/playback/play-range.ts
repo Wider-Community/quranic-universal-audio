@@ -2,7 +2,7 @@
  * _playRange — preview playback with animated playhead overlay.
  */
 
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
 import { safePlay } from '../../../../lib/utils/audio';
 import { PREVIEW_PLAYHEAD_COLOR } from '../../../../lib/utils/constants';
@@ -20,14 +20,14 @@ import { drawTrimWaveform } from '../waveform/trim-draw';
 // Module-local state
 // ---------------------------------------------------------------------------
 
-let _previewLooping: PreviewLoopMode = false;
+export const previewLooping = writable<PreviewLoopMode>(false);
 let _previewJustSeeked = false;
 let _playRangeRAF: RafHandle | null = null;
 let _previewStopHandler: ((ev: Event) => void) | null = null;
 let _previewCanplayHandler: (() => void) | null = null;
 
-export function getPreviewLooping(): PreviewLoopMode { return _previewLooping; }
-export function setPreviewLooping(v: PreviewLoopMode): void { _previewLooping = v; }
+export function getPreviewLooping(): PreviewLoopMode { return get(previewLooping); }
+export function setPreviewLooping(v: PreviewLoopMode): void { previewLooping.set(v); }
 
 export function setPreviewJustSeeked(v: boolean): void { _previewJustSeeked = v; }
 
@@ -73,17 +73,28 @@ export function _playRange(startMs: number, endMs: number): void {
     }
 
     function animatePlayhead(): void {
-        if (!canvas || audioEl!.paused) return;
+        if (!canvas) return;
+        // Keep the rAF chain alive across transient paused states (post-seek
+        // before play() resolves, between loop-seek-back and resume, etc).
+        // Bailing on paused here used to kill the chain on the first frame
+        // after `doPlay` → the playhead never drew, loop-back never ran,
+        // drag-updates-loop-live stopped working. Explicit cleanup uses
+        // `clearPlayRangeRAF` to cancel the rAF.
+        if (audioEl!.paused) {
+            _playRangeRAF = requestAnimationFrame(animatePlayhead);
+            return;
+        }
         const curMs = audioEl!.currentTime * 1000;
+        const loopMode = get(previewLooping);
         let effectiveEnd = endMs;
         let loopStart: number | null = null;
-        if (_previewLooping === 'trim' && canvas?._trimWindow) {
+        if (loopMode === 'trim' && canvas?._trimWindow) {
             effectiveEnd = canvas._trimWindow.currentEnd;
             loopStart = canvas._trimWindow.currentStart;
-        } else if (_previewLooping === 'split-left' && canvas?._splitData) {
+        } else if (loopMode === 'split-left' && canvas?._splitData) {
             effectiveEnd = canvas._splitData.currentSplit;
             loopStart = canvas._splitData.seg.time_start;
-        } else if (_previewLooping === 'split-right' && canvas?._splitData) {
+        } else if (loopMode === 'split-right' && canvas?._splitData) {
             effectiveEnd = canvas._splitData.seg.time_end;
             loopStart = canvas._splitData.currentSplit;
         } else if (canvas?._splitData && endMs !== canvas._splitData.seg.time_end) {
@@ -93,7 +104,7 @@ export function _playRange(startMs: number, endMs: number): void {
             _previewJustSeeked = false;
         }
         if (curMs >= effectiveEnd && !_previewJustSeeked) {
-            if (_previewLooping && loopStart !== null) {
+            if (loopMode && loopStart !== null) {
                 audioEl!.currentTime = loopStart / 1000;
                 _previewJustSeeked = true;
                 _playRangeRAF = requestAnimationFrame(animatePlayhead);
@@ -127,6 +138,10 @@ export function _playRange(startMs: number, endMs: number): void {
         audioEl.currentTime = start;
         audioEl.playbackRate = get(playbackSpeed);
         safePlay(audioEl);
+        // Start the rAF immediately. `animatePlayhead` is now resilient to
+        // paused state (see the early-continue above), so whether `safePlay`
+        // has resolved yet doesn't matter — the chain keeps ticking and
+        // starts drawing the playhead as soon as `audioEl.paused` flips false.
         _playRangeRAF = requestAnimationFrame(animatePlayhead);
     };
 

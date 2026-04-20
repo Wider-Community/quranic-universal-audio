@@ -159,6 +159,18 @@
     gap: 6px;
 }
 
+.ts-random-group .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ts-random-icon {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
 #audio-player {
     width: 500px;
     flex-shrink: 1;

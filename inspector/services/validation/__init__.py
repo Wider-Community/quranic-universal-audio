@@ -23,7 +23,7 @@ from services.data_loader import get_word_counts, load_detailed
 from services.phoneme_matching import get_phoneme_tails
 from services.phonemizer_service import get_canonical_phonemes
 from utils.formatting import format_ms
-from utils.references import chapter_from_ref, seg_belongs_to_entry
+from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
 from services.validation._classify import (
     is_ignored_for,
@@ -40,7 +40,7 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
     """Count validation issues for a single chapter.  Returns ``{category: count}``."""
     word_counts = get_word_counts()
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
-    is_by_ayah = "by_ayah" in meta.get("audio_source", "")
+    is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
 
     counts = {cat: 0 for cat in VALIDATION_CATEGORIES}
     verse_segments: dict[tuple, list] = defaultdict(list)
@@ -127,7 +127,7 @@ def validate_reciter_segments(reciter: str) -> dict:
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
 
     meta = cache.get_seg_meta(reciter)
-    is_by_ayah = "by_ayah" in meta.get("audio_source", "")
+    is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
 
     detail = _build_detail_lists(entries, is_by_ayah, word_counts, canonical, single_word_verses)
     missing_words = _build_missing_words(detail["verse_segments"], word_counts)

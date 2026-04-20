@@ -11,9 +11,7 @@
  */
 
 import { getActiveTab } from './active-tab';
-
-/** Tabs that have keyboard handlers. */
-type TabName = 'segments' | 'timestamps' | 'audio';
+import type { TabName } from './constants';
 
 /**
  * Returns true when a keyboard event should be handled by the given tab's

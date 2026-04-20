@@ -18,8 +18,9 @@ from config import (
     SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
 )
-from constants import STOP_SIGNS
+from constants import AUDIO_META_CATEGORIES, STOP_SIGNS, TS_AUDIO_CATEGORIES
 from services import cache
+from utils.formatting import slug_to_name
 from utils.references import chapter_from_ref
 
 
@@ -104,7 +105,7 @@ def discover_ts_reciters() -> list[dict]:
         return []
     result = []
     ts_all = cache.get_all_ts_cache()
-    for category in ("by_ayah_audio", "by_surah_audio"):
+    for category in TS_AUDIO_CATEGORIES:
         cat_dir = TIMESTAMPS_PATH / category
         if not cat_dir.is_dir():
             continue
@@ -117,7 +118,7 @@ def discover_ts_reciters() -> list[dict]:
                 if not ts_file.exists():
                     continue
             slug = reciter_dir.name
-            name = slug.replace("_", " ").title()
+            name = slug_to_name(slug)
             audio_source = ""
             if slug in ts_all:
                 audio_source = ts_all[slug].get("meta", {}).get("audio_source", "")
@@ -145,7 +146,7 @@ def load_timestamps(reciter: str) -> dict:
     if cached is not None:
         return cached
     path = None
-    for category in ("by_ayah_audio", "by_surah_audio"):
+    for category in TS_AUDIO_CATEGORIES:
         full = TIMESTAMPS_PATH / category / reciter / "timestamps_full.json"
         basic = TIMESTAMPS_PATH / category / reciter / "timestamps.json"
         if full.exists():
@@ -294,7 +295,7 @@ def load_audio_sources() -> dict:
     if not AUDIO_METADATA_PATH.exists():
         cache.set_audio_sources_cache(result)
         return result
-    for category in ("by_surah", "by_ayah"):
+    for category in AUDIO_META_CATEGORIES:
         cat_dir = AUDIO_METADATA_PATH / category
         if not cat_dir.exists():
             continue
@@ -306,7 +307,7 @@ def load_audio_sources() -> dict:
             reciters = []
             for p in sorted(source_dir.glob("*.json")):
                 slug = p.stem
-                name = slug.replace("_", " ").title()
+                name = slug_to_name(slug)
                 reciters.append({"slug": slug, "name": name})
             if reciters:
                 cat_data[source] = reciters

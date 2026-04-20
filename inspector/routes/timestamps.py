@@ -11,7 +11,11 @@ from config import (
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
     SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
+    TS_RANDOM_MAX_RETRIES,
+    TS_BOUNDARY_TOLERANCE_MS,
+    MISSING_WORD_DIFF_MS_WEIGHT,
 )
+from constants import TS_AUDIO_CATEGORIES
 from services.data_loader import (
     discover_ts_reciters,
     load_audio_urls,
@@ -102,7 +106,7 @@ def ts_random():
     reciters = discover_ts_reciters()
     if not reciters:
         return jsonify({"error": "No timestamps data"}), 500
-    for _ in range(10):
+    for _ in range(TS_RANDOM_MAX_RETRIES):
         r = random.choice(reciters)
         data = load_timestamps(r["slug"])
         if not data or not data["verses"]:
@@ -129,7 +133,7 @@ def ts_validate(reciter):
     from validators.validate_timestamps import load_word_counts as _load_ts_wc
 
     ts_dir = None
-    for audio_type in ("by_surah_audio", "by_ayah_audio"):
+    for audio_type in reversed(TS_AUDIO_CATEGORIES):
         candidate = TIMESTAMPS_PATH / audio_type / reciter
         if (candidate / "timestamps.json").exists():
             ts_dir = candidate
@@ -163,7 +167,7 @@ def ts_validate(reciter):
         missing_words.append({
             "verse_key": vk, "chapter": mw["surah"],
             "missing": mw["missing"], "count": count,
-            "diff_ms": count * 1000,
+            "diff_ms": count * MISSING_WORD_DIFF_MS_WEIGHT,
             "label": f"{vk} [-{count}w]",
         })
     missing_words.sort(key=lambda x: x["diff_ms"], reverse=True)
@@ -185,6 +189,6 @@ def ts_validate(reciter):
         "boundary_mismatches": boundary_mismatches,
         "meta": {
             "has_segments": result.get("has_segments", False),
-            "tolerance_ms": result.get("seg_tolerance_ms", 500),
+            "tolerance_ms": result.get("seg_tolerance_ms", TS_BOUNDARY_TOLERANCE_MS),
         },
     })

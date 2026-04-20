@@ -19,7 +19,7 @@ from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     PEAKS_MIN_CHUNK_BYTES, PEAKS_PCM_NORMALIZER,
                     PEAKS_WORKER_COUNT, ID3_PROBE_BYTES,
                     ID3_PROBE_TIMEOUT, DEFAULT_BYTES_PER_SEC,
-                    RANGE_DECODE_PAD_SEC)
+                    RANGE_DECODE_PAD_SEC, TEMP_AUDIO_SUFFIX)
 from services import cache
 from services.data_loader import load_detailed
 from utils.references import chapter_from_ref
@@ -103,6 +103,11 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
 # HTTP Range infrastructure for segment-level peak extraction
 # ---------------------------------------------------------------------------
 
+def _decode_synchsafe_int(b: bytes) -> int:
+    """Decode a 4-byte ID3v2 synchsafe integer. Per ID3v2.3 §3.1 spec."""
+    return (b[0] & 0x7F) << 21 | (b[1] & 0x7F) << 14 | (b[2] & 0x7F) << 7 | (b[3] & 0x7F)
+
+
 def _get_audio_meta(url: str) -> dict:
     """Probe a remote MP3 URL for ID3v2 offset and approximate bytes_per_sec."""
     cached = cache.get_url_audio_meta(url)
@@ -117,13 +122,7 @@ def _get_audio_meta(url: str) -> dict:
             # Check for ID3v2 header: "ID3" magic bytes
             if len(header_data) >= 10 and header_data[:3] == b"ID3":
                 # ID3v2 size is a synchsafe integer in bytes 6-9
-                size_bytes = header_data[6:10]
-                id3_offset = 10 + (
-                    (size_bytes[0] & 0x7F) << 21
-                    | (size_bytes[1] & 0x7F) << 14
-                    | (size_bytes[2] & 0x7F) << 7
-                    | (size_bytes[3] & 0x7F)
-                )
+                id3_offset = 10 + _decode_synchsafe_int(header_data[6:10])
     except Exception:
         pass
 
@@ -133,7 +132,7 @@ def _get_audio_meta(url: str) -> dict:
         req = urllib.request.Request(url, headers={"Range": f"bytes={id3_offset}-{id3_offset + ID3_PROBE_BYTES - 1}"})
         with urllib.request.urlopen(req, timeout=ID3_PROBE_TIMEOUT) as resp:
             probe_data = resp.read(ID3_PROBE_BYTES)
-        fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
+        fd, tmp_path = tempfile.mkstemp(suffix=TEMP_AUDIO_SUFFIX)
         try:
             os.write(fd, probe_data)
             os.close(fd)
@@ -187,11 +186,15 @@ def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
     try:
         os.write(fd, chunk)
         os.close(fd)
-        # Seek within the chunk to the exact target window
+        # Seek within the chunk to the exact target window, emitting exactly
+        # `duration_sec` seconds of PCM. The byte-range pad exists only so
+        # ffmpeg has enough context for MP3 frame sync — it must NOT leak into
+        # the output, or downstream peaks will cover a longer range than
+        # requested (mis-aligning every peak relative to [start_ms, end_ms]).
         seek_within = max(0, start_sec - aligned_start)
         result = subprocess.run(
             ["ffmpeg", "-ss", str(seek_within), "-i", tmp_path,
-             "-t", str(duration_sec + 2 * pad),
+             "-t", str(duration_sec),
              "-f", "s16le", "-ac", "1",
              "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
              "-v", "quiet", "-"],

@@ -5,7 +5,7 @@
     import { safePlay } from '../../../lib/utils/audio';
     import { shouldHandleKey } from '../../../lib/utils/keyboard-guard';
     import { wordBoundaryScan } from '../../../lib/utils/word-boundary';
-    import { viewMode } from '../stores/display';
+    import { viewMode, TS_VIEW_MODES } from '../stores/display';
     import { loadedVerse, selectedReciter } from '../stores/verse';
 
     import type TimestampsAudio from './TimestampsAudio.svelte';
@@ -23,6 +23,7 @@
         toggleModeB: void;
         scrollActive: void;
         tick: void;
+        cycleSpeed: 'up' | 'down';
     }>();
 
     function handleKeydown(e: KeyboardEvent): void {
@@ -77,7 +78,7 @@
             case 'Period':
             case 'Comma':
                 e.preventDefault();
-                audioComp?.cycleSpeed(e.code === 'Period' ? 'up' : 'down');
+                dispatch('cycleSpeed', e.code === 'Period' ? 'up' : 'down');
                 break;
             case 'KeyR':
                 if (e.shiftKey) dispatch('randomAny');
@@ -85,7 +86,7 @@
                 break;
             case 'KeyA':
                 e.preventDefault();
-                dispatch('setView', get(viewMode) === 'analysis' ? 'animation' : 'analysis');
+                dispatch('setView', get(viewMode) === TS_VIEW_MODES.ANALYSIS ? TS_VIEW_MODES.ANIMATION : TS_VIEW_MODES.ANALYSIS);
                 break;
             case 'KeyL':
                 e.preventDefault();

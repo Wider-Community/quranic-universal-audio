@@ -18,7 +18,6 @@ import {
     setSortMode,
 } from '../../stores/history';
 import { reloadCurrentReciter } from '../data/reciter-actions';
-import { stopErrorCardAudio } from '../playback/error-card-audio';
 
 // ---------------------------------------------------------------------------
 // showHistoryView
@@ -35,7 +34,6 @@ export function showHistoryView(): void {
 // ---------------------------------------------------------------------------
 
 export function hideHistoryView(): void {
-    stopErrorCardAudio();
     clearFilters();
     setHistoryVisible(false);
     if (get(historyDataStale)) {

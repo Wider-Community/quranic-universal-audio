@@ -20,7 +20,6 @@ import {
     getChapterOps,
     getDirtyMap,
 } from '../../stores/dirty';
-import { playStatusText } from '../../stores/playback';
 import { saveButtonLabel } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
 import { refreshValidation } from '../validation/refresh';
@@ -135,7 +134,7 @@ export async function executeSave(): Promise<void> {
                 },
             );
             if (!result.ok) {
-                playStatusText.set(`Save error (ch ${ch}): ${result.error}`);
+                console.error(`Save error (ch ${ch}):`, result.error);
                 allOk = false;
                 break;
             }
@@ -168,7 +167,6 @@ export async function executeSave(): Promise<void> {
         }
     } catch (e) {
         console.error('Save failed:', e);
-        playStatusText.set('Save failed');
         saveButtonLabel.set('Save');
     }
 }

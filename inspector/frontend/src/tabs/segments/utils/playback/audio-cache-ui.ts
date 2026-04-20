@@ -57,7 +57,7 @@ export function _updateCacheStatusUI(data: SegAudioCacheStatusResponse | null | 
         if (allCached) {
             cacheStatusText.set(`All cached (${_formatBytes(data.cached_bytes)})`);
         } else {
-            cacheStatusText.set('Download audio for faster playback while editing');
+            cacheStatusText.set('Download audio for offline editing');
         }
     }
 }

@@ -1,9 +1,15 @@
 import { fetchJsonOrNull } from '../../../../lib/api';
+import {
+    SCROLL_ANIM_DEFAULT,
+    SCROLL_ANIM_MODES,
+    type ScrollAnimMode,
+} from '../../../../lib/utils/constants';
 import { segConfig } from '../../stores/config';
 
 type SegConfigApiResponse = {
     seg_font_size?: string;
     seg_word_spacing?: string;
+    seg_scroll_anim_mode?: string;
     trim_pad_left?: number;
     trim_pad_right?: number;
     trim_dim_alpha?: number;
@@ -16,6 +22,8 @@ type SegConfigApiResponse = {
     standalone_words?: string[];
     accordion_context?: Record<string, string>;
 };
+
+const _validAnim = new Set<string>(Object.values(SCROLL_ANIM_MODES));
 
 /**
  * Fetch `/api/seg/config`, push parsed values to `segConfig` store,
@@ -38,6 +46,10 @@ export async function loadSegConfig(): Promise<{ fontSize: string; wordSpacing: 
             trimPadLeft: cfg.trim_pad_left ?? 500,
             trimPadRight: cfg.trim_pad_right ?? 500,
             trimDimAlpha: cfg.trim_dim_alpha ?? 0.45,
+            scrollAnimMode: cfg.seg_scroll_anim_mode
+                && _validAnim.has(cfg.seg_scroll_anim_mode)
+                ? (cfg.seg_scroll_anim_mode as ScrollAnimMode)
+                : SCROLL_ANIM_DEFAULT,
         });
         return {
             fontSize: cfg.seg_font_size ? String(cfg.seg_font_size) : '',

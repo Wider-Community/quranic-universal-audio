@@ -152,6 +152,7 @@
                                 readOnly={true}
                                 showPlayBtn={true}
                                 mode="history"
+                                instanceRole="history"
                             />
                         {/if}
                     </div>

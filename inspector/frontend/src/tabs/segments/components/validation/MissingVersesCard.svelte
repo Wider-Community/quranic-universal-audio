@@ -1,9 +1,12 @@
 <script lang="ts">
+    import { createEventDispatcher } from 'svelte';
     import { getAdjacentSegments, segAllData } from '../../stores/chapter';
     import { findMissingVerseBoundarySegments } from '../../utils/validation/missing-verse-context';
     import type { SegValMissingVerseItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import SegmentRow from '../list/SegmentRow.svelte';
+
+    const dispatch = createEventDispatcher<{ contextchange: boolean }>();
 
     // ---- Props ----
     export let item: SegValMissingVerseItem;
@@ -33,11 +36,12 @@
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }
-    export function showContextForced(): void { showContext = true; }
-    export function hideContextForced(): void { showContext = false; }
+    export function showContextForced(): void { showContext = true; dispatch('contextchange', true); }
+    export function hideContextForced(): void { showContext = false; dispatch('contextchange', false); }
 
     function toggleContext(): void {
         showContext = !showContext;
+        dispatch('contextchange', showContext);
     }
 </script>
 

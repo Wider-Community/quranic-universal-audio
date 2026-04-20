@@ -209,6 +209,10 @@
     overflow-y: auto;
 }
 
+.val-cards-spacer {
+    flex-shrink: 0;
+}
+
 .val-card-wrapper {
     border: 1px solid #2a2a4a;
     border-radius: 6px;

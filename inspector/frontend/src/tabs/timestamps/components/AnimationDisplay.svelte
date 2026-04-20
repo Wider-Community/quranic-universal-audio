@@ -11,9 +11,10 @@
     import { afterUpdate } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { granularity } from '../stores/display';
+    import { granularity, TS_GRANULARITIES } from '../stores/display';
     import { loadedVerse } from '../stores/verse';
-    import { tsAudioElement } from '../stores/playback';
+    import { loopTarget, tsAudioElement } from '../stores/playback';
+    import { safePlay } from '../../../lib/utils/audio';
     import {
         charsMatch,
         DAGGER_ALEF,
@@ -177,6 +178,7 @@
         _lastWordIdx = -1;
         _lastCharIdx = -1;
         _charsReindexed = true;
+        _applyLoopClasses();
     });
 
     function indexCache(container: HTMLElement, selector: string): Cache {
@@ -291,11 +293,11 @@
         const time = audio.currentTime - lv.tsSegOffset;
 
         const gran = get(granularity);
-        const cache = gran === 'characters' ? _charCache : _wordCache;
+        const cache = gran === TS_GRANULARITIES.CHARACTERS ? _charCache : _wordCache;
         if (!cache || cache.items.length === 0) return;
 
         const items = cache.items;
-        const lastIdx = gran === 'characters' ? _lastCharIdx : _lastWordIdx;
+        const lastIdx = gran === TS_GRANULARITIES.CHARACTERS ? _lastCharIdx : _lastWordIdx;
 
         // Fast-path tick: check current → next → full scan
         let newIdx = -1;
@@ -334,7 +336,7 @@
                 const item = items[newIdx];
                 if (item) item.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
-            if (gran === 'characters') _lastCharIdx = newIdx;
+            if (gran === TS_GRANULARITIES.CHARACTERS) _lastCharIdx = newIdx;
             else _lastWordIdx = newIdx;
         }
     }
@@ -342,8 +344,8 @@
     /** Scroll the currently-active item into view (keyboard `J`). */
     export function scrollActiveIntoView(): void {
         const gran = get(granularity);
-        const cache = gran === 'characters' ? _charCache : _wordCache;
-        const idx = gran === 'characters' ? _lastCharIdx : _lastWordIdx;
+        const cache = gran === TS_GRANULARITIES.CHARACTERS ? _charCache : _wordCache;
+        const idx = gran === TS_GRANULARITIES.CHARACTERS ? _lastCharIdx : _lastWordIdx;
         if (!cache || idx < 0) return;
         const item = cache.items[idx];
         if (item) item.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -384,14 +386,50 @@
         }
     }
 
-    // Click to seek
-    function onWordClick(word: TsWord): void {
+    // Click to seek (or loop-target swap when loop is active).
+    function onWordClick(word: TsWord, wordIndex: number): void {
         const lv = get(loadedVerse);
         if (!lv) return;
         const audio = get(tsAudioElement);
         if (!audio) return;
+        const cur = get(loopTarget);
+        if (cur) {
+            // Revealed only: unrevealed words can't be looped since audio
+            // hasn't reached them yet — click is a no-op in that case.
+            const relTime = audio.currentTime - lv.tsSegOffset;
+            if (word.start > relTime) return;
+            if (cur.kind === 'word' && cur.wordIndex === wordIndex) return;
+            loopTarget.set({
+                kind: 'word',
+                startSec: word.start,
+                endSec: word.end,
+                wordIndex,
+            });
+            audio.currentTime = word.start + lv.tsSegOffset;
+            if (audio.paused) void safePlay(audio);
+            updateHighlights();
+            return;
+        }
         audio.currentTime = word.start + lv.tsSegOffset;
         updateHighlights();
+    }
+
+    // Loop class re-apply on store change — the rAF loop is stopped while paused
+    // so without this trigger the `.loop` outline wouldn't update.
+    $: ($loopTarget, _applyLoopClasses());
+
+    function _applyLoopClasses(): void {
+        if (!_wordCache) return;
+        const lp = get(loopTarget);
+        for (let i = 0; i < _wordCache.items.length; i++) {
+            const it = _wordCache.items[i];
+            if (!it) continue;
+            const wi = parseInt(it.el.dataset.wordIndex ?? '-1');
+            it.el.classList.toggle(
+                'loop',
+                lp?.kind === 'word' && lp.wordIndex === wi,
+            );
+        }
     }
 </script>
 
@@ -399,7 +437,7 @@
     bind:this={rootEl}
     id="animation-display"
     class="anim-window"
-    class:anim-chars={$granularity === 'characters'}
+    class:anim-chars={$granularity === TS_GRANULARITIES.CHARACTERS}
 >
     {#each structure as w, wi (w.wordIndex)}
         {#if wi > 0}{' '}{/if}
@@ -408,7 +446,8 @@
             data-start={w.start}
             data-end={w.end}
             data-pos={w.word.location}
-            on:click={() => onWordClick(w.word)}
+            data-word-index={w.wordIndex}
+            on:click={() => onWordClick(w.word, w.wordIndex)}
             on:keydown={() => {}}
             role="button"
             tabindex="-1"

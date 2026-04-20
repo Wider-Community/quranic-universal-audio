@@ -54,14 +54,19 @@
     }
 
     /**
-     * Load a URL and start playback.
+     * Load a URL and (optionally) start playback.
      *
      * - If url is null/undefined: clears the src and calls load().
-     * - If src is unchanged (same-src): seeks to atTime and plays immediately.
+     * - If src is unchanged (same-src): seeks to atTime and plays/stays per autoplay.
      * - If src changed: registers a one-shot loadedmetadata handler that
-     *   seeks to atTime and starts playback once metadata is ready.
+     *   seeks to atTime and starts playback (if autoplay) once metadata is ready.
+     * - autoplay defaults to true to preserve prior behavior.
      */
-    export async function load(url: string | null | undefined, atTime?: number): Promise<void> {
+    export async function load(
+        url: string | null | undefined,
+        atTime?: number,
+        autoplay: boolean = true,
+    ): Promise<void> {
         const audio = element();
         if (!audio) return;
 
@@ -84,14 +89,14 @@
                 audio.removeEventListener('loadedmetadata', onMeta);
                 if (_pendingOnMeta === onMeta) _pendingOnMeta = null;
                 audio.currentTime = seekTo;
-                audio.play().catch(() => {/* AbortError on rapid src change */});
+                if (autoplay) audio.play().catch(() => {/* AbortError on rapid src change */});
             };
             _pendingOnMeta = onMeta;
             audio.addEventListener('loadedmetadata', onMeta);
             audio.src = url;
         } else {
             if (atTime !== undefined) audio.currentTime = atTime;
-            audio.play().catch(() => {/* AbortError on interrupted play() */});
+            if (autoplay) audio.play().catch(() => {/* AbortError on interrupted play() */});
         }
     }
 

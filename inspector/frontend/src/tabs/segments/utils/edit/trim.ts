@@ -9,6 +9,7 @@ import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import {
     getChapterSegments,
     getCurrentChapterSegs,
+    invalidateChapterIndexFor,
     refreshSegInStore,
     segAllData,
     segData,
@@ -23,14 +24,16 @@ import {
 } from '../../stores/dirty';
 import {
     editCanvas,
-    editingSegIndex,
     editMode,
-    editStatusText,
     setEdit,
-    trimWindow,
+    setEditingSegIndex,
+    setEditStatusText,
+    setTrimWindow,
+    updateTrimWindow,
 } from '../../stores/edit';
-import { playStatusText, segAudioElement } from '../../stores/playback';
+import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
     clearPlayRangeRAF,
     getPreviewLooping,
@@ -38,6 +41,7 @@ import {
     setPreviewLooping,
 } from '../playback/play-range';
 import { _ensureTrimBaseCache, drawTrimWaveform } from '../waveform/trim-draw';
+import { _fetchPeaksForClick } from '../waveform/utils';
 import { _playRange, exitEditMode, finalizeEdit } from './common';
 
 // Re-export draw functions so registration sites and other callers still work.
@@ -47,14 +51,14 @@ export { _ensureTrimBaseCache, drawTrimWaveform };
 // enterTrimMode
 // ---------------------------------------------------------------------------
 
-export function enterTrimMode(seg: Segment, row: HTMLElement): void {
+export function enterTrimMode(seg: Segment, row: HTMLElement, mountId: symbol | null = null): void {
     if (get(editMode)) {
         console.warn('[trim] blocked: already in edit mode:', get(editMode));
         return;
     }
-    setEdit('trim', seg.segment_uid ?? null);
-    editingSegIndex.set(seg.index);
-    editStatusText.set('');
+    setEdit('trim', seg.segment_uid ?? null, mountId);
+    setEditingSegIndex(seg.index);
+    setEditStatusText('');
 
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
@@ -74,12 +78,28 @@ export function enterTrimMode(seg: Segment, row: HTMLElement): void {
     const windowStart = Math.max(prevEnd, seg.time_start - cfg.trimPadLeft);
     const windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
     canvas._trimWindow = { windowStart, windowEnd, currentStart: seg.time_start, currentEnd: seg.time_end, audioUrl };
-    trimWindow.set({ ...canvas._trimWindow });
+    setTrimWindow({ ...canvas._trimWindow });
     canvas._wfCache = null;
     canvas._trimBaseCache = null;
 
     drawTrimWaveform(canvas);
     setupTrimDragHandles(canvas, seg);
+
+    // Fire the preview loop SYNCHRONOUSLY so the audio.play() call stays
+    // inside the user-gesture context of the Adjust click. An async IIFE
+    // with `await _fetchPeaksForClick` breaks that context (browsers drop
+    // the transient activation across microtasks in some cases), and Chrome
+    // silently rejects the play promise — leaving the play/pause button in
+    // the "stop" state with no audio. `animatePlayhead` is resilient to
+    // paused state now, so it's fine for the playhead rAF to run before
+    // peaks arrive. Then kick off the peaks fetch in the background; when
+    // peaks land, `redrawPeaksWaveforms` repaints the edit canvas, or we
+    // redraw here after the fetch completes.
+    previewTrimAudio(canvas);
+    void _fetchPeaksForClick(seg, chapter).then(() => {
+        if (!canvas._trimWindow) return; // user exited trim mode mid-fetch
+        drawTrimWaveform(canvas);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +110,7 @@ export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
     void seg; // reserved for future per-seg snap tuning
     let dragging: 'start' | 'end' | null = null;
     let didDrag = false;
-    const HANDLE_THRESHOLD = 12;
+    const HANDLE_THRESHOLD = TRIM_HANDLE_HIT_RADIUS_PX;
 
     function _getHandleXs(): { startX: number; endX: number } {
         const tw = canvas._trimWindow!;
@@ -126,14 +146,14 @@ export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
         }
         didDrag = true;
         const timeAtX = tw.windowStart + (x / width) * (tw.windowEnd - tw.windowStart);
-        const snapped = Math.round(timeAtX / 10) * 10;
+        const snapped = Math.round(timeAtX / EDIT_SNAP_MS) * EDIT_SNAP_MS;
 
         if (dragging === 'start') {
-            tw.currentStart = Math.max(tw.windowStart, Math.min(snapped, tw.currentEnd - 50));
+            tw.currentStart = Math.max(tw.windowStart, Math.min(snapped, tw.currentEnd - EDIT_MIN_DURATION_MS));
         } else {
-            tw.currentEnd = Math.max(tw.currentStart + 50, Math.min(snapped, tw.windowEnd));
+            tw.currentEnd = Math.max(tw.currentStart + EDIT_MIN_DURATION_MS, Math.min(snapped, tw.windowEnd));
         }
-        trimWindow.update(w => w ? { ...w, currentStart: tw.currentStart, currentEnd: tw.currentEnd } : w);
+        updateTrimWindow((w) => w ? { ...w, currentStart: tw.currentStart, currentEnd: tw.currentEnd } : w);
         drawTrimWaveform(canvas);
     }
 
@@ -144,7 +164,7 @@ export function setupTrimDragHandles(canvas: SegCanvas, seg: Segment): void {
             const tw = canvas._trimWindow;
             if (!tw) return;
             const timeAtX = tw.windowStart + (x / canvas.width) * (tw.windowEnd - tw.windowStart);
-            const snapped = Math.round(timeAtX / 10) * 10;
+            const snapped = Math.round(timeAtX / EDIT_SNAP_MS) * EDIT_SNAP_MS;
             _playRange(snapped, tw.currentEnd);
         }
         dragging = null;
@@ -175,7 +195,7 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     const newStart = tw?.currentStart;
     const newEnd = tw?.currentEnd;
     if (newStart == null || newEnd == null || newStart >= newEnd) {
-        editStatusText.set('Invalid time range');
+        setEditStatusText('Invalid time range');
         return;
     }
 
@@ -188,11 +208,11 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     const nextSeg = (segIdx >= 0 && segIdx < chapterSegs.length - 1) ? chapterSegs[segIdx + 1] : null;
 
     if (prevSeg && prevSeg.audio_url === seg.audio_url && newStart < prevSeg.time_end) {
-        editStatusText.set('Start overlaps with previous segment');
+        setEditStatusText('Start overlaps with previous segment');
         return;
     }
     if (nextSeg && nextSeg.audio_url === seg.audio_url && newEnd > nextSeg.time_start) {
-        editStatusText.set('End overlaps with next segment');
+        setEditStatusText('End overlaps with next segment');
         return;
     }
 
@@ -212,11 +232,11 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 
     const curData = get(segData);
     if (chapter !== currentChapter || !curData?.segments) {
-        const allData = get(segAllData);
-        if (allData) {
-            allData._byChapter = null;
-            allData._byChapterIndex = null;
-        }
+        // Non-current chapter trim: seg identity replaced via refreshSegInStore
+        // below patches the cache surgically. Drop only the affected chapter's
+        // entries as a safety net for the rare case where the seg is newly
+        // added to the chapter (cache miss rebuild).
+        invalidateChapterIndexFor(chapter);
     } else {
         syncChapterSegsToAll();
     }
@@ -224,9 +244,7 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     exitEditMode();
     refreshSegInStore(seg);
     if (trimOp) {
-        finalizeEdit(trimOp, chapter, [seg], 'Adjusted (unsaved)', { skipAccordion: true });
-    } else {
-        playStatusText.set('Adjusted (unsaved)');
+        finalizeEdit(trimOp, chapter, [seg], { skipAccordion: true });
     }
 }
 

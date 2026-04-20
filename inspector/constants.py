@@ -33,3 +33,16 @@ STANDALONE_WORDS = {"\u0643\u0644\u0627", "\u0630\u0644\u0643", "\u0643\u0630\u0
 
 # Phonemes that indicate a long vowel at word boundary
 BOUNDARY_VOWELS = {'a:', 'a\u02E4:', 'u:', 'i:'}
+
+# Timestamp audio category directory names under data/timestamps/
+# Index 0 (by_ayah_audio) is the default category.
+TS_AUDIO_CATEGORIES = ("by_ayah_audio", "by_surah_audio")
+
+# Audio metadata category directory names under data/audio/
+AUDIO_META_CATEGORIES = ("by_surah", "by_ayah")
+
+# Substring marker used to identify by-ayah audio sources
+AUDIO_SOURCE_AYAH_MARKER = "by_ayah"
+
+# Edit-history JSONL schema version — immutable record-format fact.
+HISTORY_SCHEMA_VERSION = 1

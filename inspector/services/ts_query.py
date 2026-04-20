@@ -3,6 +3,7 @@
 No Flask imports -- functions accept parameters and return plain dicts/lists.
 """
 
+from constants import TS_AUDIO_CATEGORIES
 from services.data_loader import (
     load_audio_urls,
     load_dk,
@@ -99,7 +100,8 @@ def get_verse_data(reciter: str, verse_ref: str) -> dict | None:
         urls = load_audio_urls(audio_source, audio_reciter)
         audio_url = urls.get(verse_ref, urls.get(str(chapter), ""))
 
-    audio_category = data.get("audio_category", "by_ayah_audio")
+    # TS_AUDIO_CATEGORIES[0] is "by_ayah_audio" — the default/most common category.
+    audio_category = data.get("audio_category", TS_AUDIO_CATEGORIES[0])
     time_start_ms = 0
     time_end_ms = 0
 
@@ -130,6 +132,7 @@ def get_verse_data(reciter: str, verse_ref: str) -> dict | None:
         "chapter": chapter,
         "verse_ref": verse_ref,
         "audio_url": audio_url,
+        "audio_category": audio_category,
         "time_start_ms": time_start_ms,
         "time_end_ms": time_end_ms,
         "intervals": intervals,

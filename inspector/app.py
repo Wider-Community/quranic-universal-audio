@@ -26,6 +26,7 @@ from flask import Flask, jsonify, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 from config import (AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR, DEFAULT_PORT,
+                    FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST,
                     STARTUP_PRELOAD_WORKERS)
 from routes import register_blueprints
 from services.data_loader import discover_ts_reciters, load_surah_info_lite, load_timestamps
@@ -178,6 +179,6 @@ if __name__ == "__main__":
     # Flask reloader only needs to watch Python modules, which it does natively.
     # Debug + reloader default off for production; opt in with `FLASK_ENV=development`
     # (matches plan §4: `debug=False` unless `FLASK_ENV=development`).
-    debug = os.environ.get("FLASK_ENV") == "development"
+    debug = os.environ.get(FLASK_ENV_VAR) == FLASK_DEV_VALUE
     logger.info("Starting server at http://localhost:%d (debug=%s)", args.port, debug)
-    app.run(host="0.0.0.0", port=args.port, debug=debug, use_reloader=debug)
+    app.run(host=SERVER_HOST, port=args.port, debug=debug, use_reloader=debug)

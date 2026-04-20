@@ -214,6 +214,8 @@ export interface TsVerseData {
     chapter: number;
     verse_ref: VerseRef;
     audio_url: string;
+    /** "by_ayah_audio" (default) or "by_surah_audio" — drives URL-rewrite + offset handling. */
+    audio_category: 'by_ayah_audio' | 'by_surah_audio';
     time_start_ms: number;
     time_end_ms: number;
     intervals: PhonemeInterval[];

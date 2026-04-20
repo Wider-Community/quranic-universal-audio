@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config import RECITATION_SEGMENTS_PATH
-from constants import VALIDATION_CATEGORIES
+from constants import HISTORY_SCHEMA_VERSION, VALIDATION_CATEGORIES
 from services import cache
 from services.data_loader import load_detailed
 from services.save import persist_detailed
@@ -250,7 +250,7 @@ def _append_revert_record(history_path: Path, target_batch_id: str, reciter: str
     from utils.io import backup_file
     backup_file(history_path)
     revert = {
-        "schema_version": 1,
+        "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
         "reverts_batch_id": target_batch_id,
         "reciter": reciter,

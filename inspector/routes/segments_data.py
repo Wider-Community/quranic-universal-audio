@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 from config import (
     RECITATION_SEGMENTS_PATH,
     SEG_FONT_SIZE, SEG_WORD_SPACING,
+    SEG_SCROLL_ANIM_MODE,
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
     SHOW_BOUNDARY_PHONEMES,
     LOW_CONF_DEFAULT_THRESHOLD,
@@ -25,6 +26,7 @@ from services.data_loader import (
     load_detailed,
 )
 from services.segments_query import get_chapter_data
+from utils.formatting import slug_to_name
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
@@ -37,6 +39,7 @@ def seg_config():
     return jsonify({
         "seg_font_size": SEG_FONT_SIZE,
         "seg_word_spacing": SEG_WORD_SPACING,
+        "seg_scroll_anim_mode": SEG_SCROLL_ANIM_MODE,
         "trim_pad_left": TRIM_PAD_LEFT,
         "trim_pad_right": TRIM_PAD_RIGHT,
         "trim_dim_alpha": TRIM_DIM_ALPHA,
@@ -64,7 +67,7 @@ def seg_reciters():
         if not d.is_dir() or not (d / "detailed.json").exists():
             continue
         slug = d.name
-        name = slug.replace("_", " ").title()
+        name = slug_to_name(slug)
         audio_source = ""
         seg_path = d / "segments.json"
         if seg_path.exists():

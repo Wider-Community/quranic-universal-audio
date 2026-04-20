@@ -4,6 +4,7 @@
  */
 
 import type { PeakBucket } from '../types/domain';
+import { WAVEFORM_BG_COLOR, WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from './constants';
 
 /**
  * Options for drawWaveformPeaks().
@@ -51,7 +52,7 @@ export function drawWaveformPeaks(
     const { width, height, startMs, endMs, totalDurationMs } = opts;
     const centerY = height / 2;
 
-    ctx.fillStyle = '#0f0f23';
+    ctx.fillStyle = WAVEFORM_BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
     if (!peaks || peaks.length === 0) return;
@@ -92,11 +93,11 @@ export function drawWaveformPeaks(
         ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+    ctx.fillStyle = WAVEFORM_FILL_COLOR;
     ctx.fill();
 
     // Top-envelope stroke
-    ctx.strokeStyle = '#4361ee';
+    ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i < buckets; i++) {

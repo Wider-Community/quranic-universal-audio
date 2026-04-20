@@ -1,3 +1,44 @@
+/** Hardcoded confidence coloring cutoffs (not user-adjustable). */
+export const CONF_HIGH_THRESHOLD = 0.80;
+export const CONF_MID_THRESHOLD = 0.60;
+
+/** Virtualized list: extra rows rendered above/below the visible viewport. */
+export const VIRT_BUFFER_ROWS = 8;
+
+/** ValidationPanel: skip virtualization for category lists smaller than this —
+ *  overhead not worth it, and virtualization also evicts mid-edit rows which
+ *  breaks accordion-initiated editing flows. */
+export const VAL_VIRTUALIZE_THRESHOLD = 40;
+
+/** Snap grid resolution for trim/split drag (ms). */
+export const EDIT_SNAP_MS = 10;
+/** Minimum segment duration after trim/split (ms). */
+export const EDIT_MIN_DURATION_MS = 50;
+/** Hit radius for trim drag handles (px). */
+export const TRIM_HANDLE_HIT_RADIUS_PX = 12;
+
+/** Canvas dimensions for segment row waveforms. */
+export const SEG_ROW_CANVAS_WIDTH = 380;
+export const SEG_ROW_CANVAS_HEIGHT = 60;
+
+/** Segments below this duration trigger a warning highlight in the stats chart. */
+export const SHORT_SEG_WARN_MS = 1000;
+
+/** VAD min-silence fallback when server does not provide the value. */
+export const VAD_MIN_SILENCE_FALLBACK_MS = 300;
+
+/** ArrowLeft / ArrowRight audio seek delta, in seconds. */
+export const KEY_SEEK_SECONDS = 3;
+
+/** How long (ms) the .playing flash stays on a row after a jump completes. */
+export const FLASH_DURATION_MS = 2000;
+
+/** Max passes for the split-group transitive closure walk. Bounds iteration on
+ *  malformed history where a split op's before/after UIDs form a cycle. A
+ *  single split adds at most one generation of children, so 8 passes covers
+ *  any realistic chain depth (root → halves → halves → ...). */
+export const SPLIT_GROUP_MAX_PASSES = 8;
+
 export const EDIT_OP_LABELS: Record<string, string> = {
     trim_segment: 'Boundary adjustment', split_segment: 'Split',
     merge_segments: 'Merge', delete_segment: 'Deletion',
@@ -17,8 +58,6 @@ export const ERROR_CAT_LABELS: Record<string, string> = {
 };
 
 export const SEG_FILTER_OPS: readonly string[] = ['>', '>=', '<', '<=', '='];
-
-export const SEG_SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
 
 export const _VAL_SINGLE_INDEX_CATS: readonly string[] = [
     'failed', 'low_confidence', 'boundary_adj', 'cross_verse',

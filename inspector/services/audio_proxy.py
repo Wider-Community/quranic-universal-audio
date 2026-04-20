@@ -3,14 +3,17 @@
 No Flask imports -- all functions accept parameters and return plain dicts.
 """
 
+import logging
 import os
 import shutil
 import tempfile
 import urllib.request
 from pathlib import Path
 
-from config import CACHE_DIR
+from config import CACHE_DIR, TEMP_AUDIO_SUFFIX
 from services import cache
+
+logger = logging.getLogger(__name__)
 from services.data_loader import load_detailed
 from services.peaks import compute_audio_peaks
 from utils.references import chapter_from_ref
@@ -61,7 +64,7 @@ def download_audio(reciter: str, url: str) -> Path | None:
     if not cache_path.exists():
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            fd, tmp_name = tempfile.mkstemp(suffix=".mp3", dir=cache_path.parent)
+            fd, tmp_name = tempfile.mkstemp(suffix=TEMP_AUDIO_SUFFIX, dir=cache_path.parent)
             os.close(fd)
             tmp_path = Path(tmp_name)
             urllib.request.urlretrieve(url, tmp_path)
@@ -71,7 +74,7 @@ def download_audio(reciter: str, url: str) -> Path | None:
                 tmp_path.unlink(missing_ok=True)
             except Exception:
                 pass
-            print(f"Audio download failed: {url}: {e}")
+            logger.error("Audio download failed: %s: %s", url, e)
             return None
     # Compute peaks from local file, keyed by original URL for client lookup
     peaks_data = compute_audio_peaks(str(cache_path), cache_key=url, reciter=reciter)

@@ -113,9 +113,38 @@ export function invalidateChapterIndex(): void {
     all._byChapterIndex = null;
 }
 
+/** Surgical invalidation: drop only the given chapter's cache entries.
+ *  Leaves other chapters' cached slices + index rows alive so their
+ *  SegmentRows don't force a full `ensureChapterIndex` rebuild on the next
+ *  tick. Used after structural edits (split/merge/delete/trim) which reindex
+ *  a single chapter in place. */
+export function invalidateChapterIndexFor(chapter: number | string): void {
+    const all = get(segAllData);
+    if (!all) return;
+    const ch = typeof chapter === 'number' ? chapter : parseInt(chapter);
+    if (!ch) {
+        all._byChapter = null;
+        all._byChapterIndex = null;
+        return;
+    }
+    if (all._byChapter) delete all._byChapter[String(ch)];
+    if (all._byChapterIndex) {
+        const prefix = `${ch}:`;
+        for (const key of all._byChapterIndex.keys()) {
+            if (key.startsWith(prefix)) all._byChapterIndex.delete(key);
+        }
+    }
+}
+
 /** Refresh a segment in segAllData.segments by replacing its object ref,
  *  triggering Svelte reactivity for all SegmentRow instances rendering
- *  this seg. */
+ *  this seg.
+ *
+ *  Surgical cache patch: the common non-structural case (trim / ref-edit /
+ *  confidence bump) only mutates one entry — we replace the per-chapter
+ *  slice entry and the `"chapter:index"` index entry in place instead of
+ *  nulling both caches. Nulling forces the next `getAdjacentSegments` read
+ *  to rebuild the entire index for every SegmentRow — N rows × per commit. */
 export function refreshSegInStore(seg: Segment): void {
     const all = get(segAllData);
     if (!all?.segments) return;
@@ -125,9 +154,30 @@ export function refreshSegInStore(seg: Segment): void {
         (s.chapter === seg.chapter && s.index === seg.index),
     );
     if (idx < 0) return;
-    all.segments[idx] = { ...seg };
-    all._byChapter = null;
-    all._byChapterIndex = null;
+    const fresh = { ...seg };
+    all.segments[idx] = fresh;
+
+    // Surgical patch: update just this entry in both caches. Only safe when
+    // chapter/index haven't shifted (non-structural edit) — structural ops
+    // (split/merge/delete) go through syncChapterSegsToAll / direct cache
+    // invalidation paths that target just the affected chapter.
+    if (fresh.chapter != null && all._byChapter && all._byChapterIndex) {
+        const chKey = String(fresh.chapter);
+        const list = all._byChapter[chKey];
+        if (list) {
+            const localIdx = list.findIndex((s) =>
+                (uid && s.segment_uid === uid) ||
+                (s.chapter === fresh.chapter && s.index === fresh.index),
+            );
+            if (localIdx >= 0) list[localIdx] = fresh;
+            else {
+                // Edge case: seg added to this chapter after cache build.
+                // Drop just this chapter's slice so next read rebuilds it.
+                delete all._byChapter[chKey];
+            }
+        }
+        all._byChapterIndex.set(`${fresh.chapter}:${fresh.index}`, fresh);
+    }
     segAllData.update((d) => d);
 }
 
@@ -143,7 +193,16 @@ export function syncChapterSegsToAll(): void {
     if (!all || !cur || !cur.segments || !chapter) return;
 
     const other = all.segments.filter((s) => s.chapter !== chapter);
-    const updated = cur.segments.map((s) => {
+    // Cross-chapter guard: if a seg was handed to this cur.segments list with a
+    // non-null chapter that doesn't match, do NOT stomp it with the sync
+    // chapter — that would corrupt its real chapter pointer. Warn and skip.
+    const updated = cur.segments.filter((s) => {
+        if (s.chapter != null && s.chapter !== chapter) {
+            console.warn('syncChapterSegsToAll: cross-chapter leak', s.segment_uid);
+            return false;
+        }
+        return true;
+    }).map((s) => {
         s.chapter = chapter;
         return s;
     });
@@ -157,8 +216,26 @@ export function syncChapterSegsToAll(): void {
             ...other.slice(insertIdx),
         ];
     }
-    all._byChapter = null;
-    all._byChapterIndex = null;
+    // Structural reindex changed THIS chapter only — drop just its entries.
+    // Other chapters' slices + index entries remain valid and stay cached so
+    // SegmentRows in unaffected chapters don't rebuild on next reactive tick.
+    if (all._byChapter) delete all._byChapter[String(chapter)];
+    if (all._byChapterIndex) {
+        const prefix = `${chapter}:`;
+        for (const key of all._byChapterIndex.keys()) {
+            if (key.startsWith(prefix)) all._byChapterIndex.delete(key);
+        }
+        // Re-populate with the fresh `updated` list so subsequent lookups
+        // hit without rebuilding. Cheaper than waiting for the next reader
+        // to trigger `ensureChapterIndex`, which would re-scan all segments.
+        for (const s of updated) {
+            if (s.chapter != null) all._byChapterIndex.set(`${s.chapter}:${s.index}`, s);
+        }
+    }
+    if (all._byChapter) {
+        const sorted = [...updated].sort((a, b) => a.index - b.index);
+        all._byChapter[String(chapter)] = sorted;
+    }
 }
 
 /** Read the current chapter's segments from segData or segAllData. */

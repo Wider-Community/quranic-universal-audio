@@ -14,14 +14,26 @@
      * `enterSplitMode`.
      */
 
+    import { get } from 'svelte/store';
+
     import type { Segment } from '../../../../lib/types/domain';
-    import { splitState, editStatusText } from '../../stores/edit';
+    import { editingMountId, splitState, editStatusText } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { exitEditMode } from '../../utils/edit/common';
     import { confirmSplit, previewSplitAudio } from '../../utils/edit/split';
 
     export let seg: Segment;
     export let canvas: SegCanvas;
+
+    function onConfirm(): void {
+        // Thread the initiating row's mountId through to confirmSplit so the
+        // chained first-half ref-edit stays pinned to the accordion row that
+        // started the split (not the main-list twin). Reads editingMountId
+        // live at click time rather than caching in a prop — covers both
+        // accordion (mountId = row's _mountId) and main-list (same) paths.
+        const mountId = get(editingMountId);
+        confirmSplit(seg, canvas, mountId);
+    }
 
     $: infoText = $splitState
         ? `L ${(($splitState.currentSplit - $splitState.seg.time_start) / 1000).toFixed(2)}s | R ${(($splitState.seg.time_end - $splitState.currentSplit) / 1000).toFixed(2)}s`
@@ -33,7 +45,7 @@
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
         <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('left', canvas)}>Play Left</button>
         <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('right', canvas)}>Play Right</button>
-        <button class="btn btn-sm btn-confirm" on:click={() => confirmSplit(seg, canvas)}>Split</button>
+        <button class="btn btn-sm btn-confirm" on:click={onConfirm}>Split</button>
         <span class="seg-edit-info">{infoText}</span>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>

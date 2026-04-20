@@ -12,6 +12,7 @@
      */
     import { segStats } from '../../stores/stats';
     import { selectedReciter } from '../../stores/chapter';
+    import { CONF_HIGH_THRESHOLD, CONF_MID_THRESHOLD, SHORT_SEG_WARN_MS, VAD_MIN_SILENCE_FALLBACK_MS } from '../../utils/constants';
     import type { Distribution, ChartCfg } from '../../types/stats';
     import StatsChart from './StatsChart.svelte';
     import ChartFullscreen from './ChartFullscreen.svelte';
@@ -38,7 +39,7 @@
     $: reciter = $selectedReciter;
 
     $: charts = data
-        ? buildCharts(data.vad_params ?? { min_silence_ms: 300 })
+        ? buildCharts(data.vad_params ?? { min_silence_ms: VAD_MIN_SILENCE_FALLBACK_MS })
         : [];
 
     function buildCharts(vad: { min_silence_ms: number }): ChartCfg[] {
@@ -54,7 +55,7 @@
             {
                 key: 'seg_duration_ms',
                 title: 'Segment Duration (ms)',
-                barColor: (bin) => bin < 1000 ? '#ff9800' : '#4cc9f0',
+                barColor: (bin) => bin < SHORT_SEG_WARN_MS ? '#ff9800' : '#4cc9f0',
                 formatBin: v => (v / 1000).toFixed(1) + 's',
                 showAllLabels: true,
             },
@@ -74,7 +75,7 @@
             {
                 key: 'confidence',
                 title: 'Confidence (%)',
-                barColor: (bin) => bin < 60 ? '#f44336' : bin < 80 ? '#ff9800' : '#4caf50',
+                barColor: (bin) => bin < CONF_MID_THRESHOLD * 100 ? '#f44336' : bin < CONF_HIGH_THRESHOLD * 100 ? '#ff9800' : '#4caf50',
                 formatBin: v => v >= 100 ? '100' : String(v),
             },
         ];

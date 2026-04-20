@@ -1,7 +1,12 @@
 import { get } from 'svelte/store';
 
 import type { AudioPeaks, PeakBucket, Segment } from '../../../../lib/types/domain';
-import { PREVIEW_PLAYHEAD_COLOR } from '../../../../lib/utils/constants';
+import {
+    PREVIEW_PLAYHEAD_COLOR,
+    WAVEFORM_BG_COLOR,
+    WAVEFORM_FILL_COLOR,
+    WAVEFORM_DIM_OVERLAY_COLOR,
+} from '../../../../lib/utils/constants';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { drawWaveformPeaks } from '../../../../lib/utils/waveform-draw';
 import { segAllData } from '../../stores/chapter';
@@ -127,7 +132,7 @@ export function drawEditPeakBase(
     const height = canvas.height;
     const centerY = height / 2;
 
-    ctx.fillStyle = '#0f0f23';
+    ctx.fillStyle = WAVEFORM_BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
     const data = _slicePeaks(audioUrl, startMs, endMs, width);
@@ -145,7 +150,7 @@ export function drawEditPeakBase(
         ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(67, 97, 238, 0.3)';
+    ctx.fillStyle = WAVEFORM_FILL_COLOR;
     ctx.fill();
 
     return data;
@@ -242,7 +247,7 @@ export function _drawSplitHighlight(canvas: SegCanvas, wfSeg: Segment): void {
     const x1 = toX(hlStart);
     const x2 = toX(hlEnd);
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillStyle = WAVEFORM_DIM_OVERLAY_COLOR;
     if (x1 > 0) ctx.fillRect(0, 0, x1, h);
     if (x2 < w) ctx.fillRect(x2, 0, w - x2, h);
 
@@ -264,7 +269,7 @@ export function _drawMergeHighlight(canvas: SegCanvas, seg: Segment): void {
     const x1 = toX(hl.hlStart);
     const x2 = toX(hl.hlEnd);
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillStyle = WAVEFORM_DIM_OVERLAY_COLOR;
     if (x1 > 0) ctx.fillRect(0, 0, x1, h);
     if (x2 < w) ctx.fillRect(x2, 0, w - x2, h);
 

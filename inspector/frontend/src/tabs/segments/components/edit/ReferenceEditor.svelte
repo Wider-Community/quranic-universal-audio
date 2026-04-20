@@ -16,8 +16,7 @@
     import { setPendingOp } from '../../stores/dirty';
     import {
         clearEdit,
-        splitChainCategory,
-        splitChainUid,
+        pendingChainTarget,
     } from '../../stores/edit';
     import { commitRefEdit } from '../../utils/edit/reference';
     import { formatRef } from '../../utils/data/references';
@@ -44,8 +43,7 @@
         if (committed) return;
         committed = true;
         setPendingOp(null);
-        splitChainUid.set(null);
-        splitChainCategory.set(null);
+        pendingChainTarget.set(null);
         clearEdit();
     }
 

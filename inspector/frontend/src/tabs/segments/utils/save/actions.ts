@@ -29,7 +29,6 @@ import {
     showPreview,
 } from '../../stores/save';
 import { reloadCurrentReciter } from '../data/reciter-actions';
-import { stopErrorCardAudio } from '../playback/error-card-audio';
 import { executeSave } from './execute';
 import { buildSavePreviewData } from './preview';
 
@@ -84,7 +83,6 @@ export function showSavePreview(): void {
 // ---------------------------------------------------------------------------
 
 export function hideSavePreview(restoreScroll = true): void {
-    stopErrorCardAudio();
     hidePreview();
     clearSavePreviewData();
 

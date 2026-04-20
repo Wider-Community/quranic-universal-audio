@@ -10,19 +10,19 @@
 import { get } from 'svelte/store';
 
 import type { EditOp, Segment } from '../../../../lib/types/domain';
-import { getSegByChapterIndex } from '../../stores/chapter';
+import { getSegByChapterIndex, segAllData } from '../../stores/chapter';
 import {
     finalizeOp,
     setPendingOp,
     snapshotSeg,
 } from '../../stores/dirty';
 import {
-    accordionOpCtx,
     clearEdit,
     editCanvas,
+    editingSegUid,
 } from '../../stores/edit';
-import { playStatusText, segAudioElement } from '../../stores/playback';
-import { applyVerseFilterAndRender, computeSilenceAfter } from '../data/filters-apply';
+import { segAudioElement } from '../../stores/playback';
+import { applyVerseFilterAndRender, recomputeSilenceForRange } from '../data/filters-apply';
 import {
     _playRange as _playRangeImpl,
     clearPlayRangeRAF,
@@ -31,7 +31,7 @@ import {
     setPreviewLooping,
     setPreviewStopHandler,
 } from '../playback/play-range';
-import { stopSegAnimation } from '../playback/playback';
+import { startSegAnimation, stopSegAnimation } from '../playback/playback';
 import { refreshOpenAccordionCards } from '../validation/fixups';
 import { drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 
@@ -41,7 +41,6 @@ import { drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 
 export function exitEditMode(): void {
     setPendingOp(null);
-    accordionOpCtx.set(null);
 
     const canvas = get(editCanvas);
     const editRow = canvas?.closest<HTMLElement>('.seg-row') ?? null;
@@ -49,13 +48,26 @@ export function exitEditMode(): void {
         canvas._editCleanup?.();
         delete canvas._trimWindow; delete canvas._splitData;
         delete canvas._editCleanup;
+        // Clear cached trim/split base images too — stale caches otherwise let
+        // a later `drawTrimWaveform` path repaint the old handle/dim overlay.
+        canvas._trimBaseCache = null;
+        canvas._splitBaseCache = null;
         canvas._wfCache = null;
         canvas.style.cursor = '';
+        // Unconditionally blank the canvas so the trim handles/dim are gone
+        // even when peaks aren't cached — otherwise the canvas retained its
+        // last trim draw and ESC appeared to do nothing.
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
         if (editRow) {
             const idx = parseInt(editRow.dataset.segIndex ?? '-1');
             const chapter = parseInt(editRow.dataset.segChapter ?? '-1');
             const seg = chapter >= 0 ? getSegByChapterIndex(chapter, idx) : null;
-            if (seg) drawWaveformFromPeaksForSeg(canvas, seg, seg.chapter ?? 0);
+            // If peaks are cached, redraw the plain waveform immediately;
+            // otherwise re-attach to the IntersectionObserver so it repaints
+            // as soon as peaks arrive.
+            const drew = seg ? drawWaveformFromPeaksForSeg(canvas, seg, seg.chapter ?? 0) : false;
+            if (!drew) canvas.setAttribute('data-needs-waveform', '');
         }
     }
 
@@ -70,7 +82,11 @@ export function exitEditMode(): void {
         setPreviewStopHandler(null);
     }
     const audioEl2 = get(segAudioElement);
-    if (audioEl2 && !audioEl2.paused) { audioEl2.pause(); stopSegAnimation(); }
+    // If preview left audio playing (e.g. user hit Apply mid-loop), hand
+    // playback back to the main rAF loop. `startSegAnimation` is a no-op
+    // while editMode is set — we reach it here only AFTER `clearEdit()`
+    // above, so the gate is open and the main-list playhead resumes.
+    if (audioEl2 && !audioEl2.paused) startSegAnimation();
 }
 
 // Re-export play-range implementation so existing callers still work.
@@ -97,19 +113,35 @@ export function finalizeEdit(
     op: EditOp,
     chapter: number,
     targetsAfter: Segment[],
-    statusMsg: string,
     opts?: {
         skipSilence?: boolean;
         skipFilterRender?: boolean;
         skipAccordion?: boolean;
-        skipStatus?: boolean;
     },
 ): void {
     op.applied_at_utc = new Date().toISOString();
     op.targets_after = targetsAfter.map(snapshotSeg);
-    if (!opts?.skipSilence) computeSilenceAfter();
+    if (!opts?.skipSilence) recomputeSilenceForRange(targetsAfter);
     if (!opts?.skipFilterRender) applyVerseFilterAndRender();
     if (!opts?.skipAccordion) refreshOpenAccordionCards();
     finalizeOp(chapter, op);
-    if (!opts?.skipStatus) playStatusText.set(statusMsg);
+}
+
+// ---------------------------------------------------------------------------
+// getEditingSeg — resolve the currently-editing seg by UID
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the currently-editing segment by walking `segAllData.segments` for a
+ * UID match against `$editingSegUid`. Used by keyboard handlers that must
+ * operate on accordion-mounted edits too — the main-list `displayedSegments`
+ * lookup misses when the editing row belongs to an accordion in a different
+ * chapter. Returns null if no edit is active or the UID is stale.
+ */
+export function getEditingSeg(): Segment | null {
+    const uid = get(editingSegUid);
+    if (!uid) return null;
+    const all = get(segAllData);
+    if (!all?.segments) return null;
+    return all.segments.find((s) => s.segment_uid === uid) ?? null;
 }

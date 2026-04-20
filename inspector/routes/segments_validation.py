@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from config import RECITATION_SEGMENTS_PATH
 from services.history_query import load_edit_history
+from utils.io import safe_filename
 from services.stats import compute_stats
 from services.validation import run_validation_log, validate_reciter_segments
 
@@ -45,8 +46,7 @@ def seg_save_chart(reciter):
     seg_dir = RECITATION_SEGMENTS_PATH / reciter
     if not seg_dir.exists():
         return jsonify({"error": "Reciter not found"}), 404
-    name = request.form.get("name", "chart")
-    name = "".join(c for c in name if c.isalnum() or c in "-_").strip() or "chart"
+    name = safe_filename(request.form.get("name", "chart"), fallback="chart")
     f = request.files.get("image")
     if not f:
         return jsonify({"error": "No image provided"}), 400

@@ -4,6 +4,7 @@
  */
 
 import type { SegCanvas } from '../../types/segments-waveform';
+import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import { drawEditPeakBase } from './draw-seg';
 
 // ---------------------------------------------------------------------------
@@ -33,7 +34,7 @@ export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
     const scale = (height / 2) * 0.9;
 
     // Split strokes only the top (max) outline for a thinner visual.
-    ctx.strokeStyle = '#4361ee';
+    ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i < width; i++) {

@@ -10,7 +10,7 @@
 
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson } from '../../lib/api';
-    import { LS_KEYS } from '../../lib/utils/constants';
+    import { LS_KEYS, PLACEHOLDER_RECITER } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import { audAudioElement } from './stores/audio';
     import type { SelectOption } from '../../lib/types/ui';
@@ -340,7 +340,7 @@
         <SearchableSelect
             options={reciterOptions}
             bind:value={selectedReciter}
-            placeholder="-- Select reciter --"
+            placeholder={PLACEHOLDER_RECITER}
             on:change={(e) => { void onReciterChange(e.detail); }}
         />
     </label>

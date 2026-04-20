@@ -1,5 +1,12 @@
 """Reference string parsing and segment classification utilities."""
 
+from constants import AUDIO_SOURCE_AYAH_MARKER
+
+
+def is_by_ayah_source(audio_source: str) -> bool:
+    """Return True if audio_source indicates a by-ayah audio category."""
+    return AUDIO_SOURCE_AYAH_MARKER in audio_source
+
 
 def chapter_from_ref(ref: str) -> int:
     """Extract chapter (surah) number from a ref string.

@@ -172,6 +172,7 @@
                         showChapter={true}
                         showPlayBtn={true}
                         mode="history"
+                        instanceRole="history"
                         trimHL={i === 0 ? trimHighlights.before : null}
                     />
                 </div>
@@ -198,6 +199,7 @@
                             showChapter={true}
                             showPlayBtn={true}
                             mode="history"
+                            instanceRole="history"
                             trimHL={isOneToOne && i === 0 ? trimHighlights.after : null}
                             mergeHL={i === 0 ? mergeAfterHL : null}
                             changedFields={isOneToOne && i === 0 ? afterChangedFields : null}

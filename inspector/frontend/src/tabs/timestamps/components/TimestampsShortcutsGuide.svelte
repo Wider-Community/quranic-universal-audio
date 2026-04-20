@@ -31,8 +31,10 @@
             <div class="sg-col">
                 <h4>Interactions</h4>
                 <dl>
-                    <dt>Click word</dt><dd>Seek to that word's start time</dd>
-                    <dt>Click waveform</dt><dd>Seek to that position</dd>
+                    <dt>Click word / letter / phoneme</dt><dd>Seek to that token's start time</dd>
+                    <dt>Double-click word / letter / phoneme</dt><dd>Toggle loop on that token</dd>
+                    <dt>Click waveform</dt><dd>Seek to the enclosing word's start</dd>
+                    <dt>Click waveform while looping</dt><dd>Switch loop target to that word</dd>
                     <dt>Auto Next / Random</dt><dd>Auto-advance when verse ends</dd>
                 </dl>
             </div>

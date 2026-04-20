@@ -5,8 +5,12 @@
 import type { Writable } from 'svelte/store';
 import { get } from 'svelte/store';
 
-/** Canonical speed options — mirrors SpeedControl.svelte. */
-const _SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
+/** Canonical speed options shared across all speed controls. */
+export const SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
+export const DEFAULT_SPEED = 1;
+
+/** @deprecated Internal alias — use SPEEDS */
+const _SPEEDS = SPEEDS;
 
 /**
  * Cycle an audio speed <select> up or down, mirror to the playback element,

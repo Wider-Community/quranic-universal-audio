@@ -68,6 +68,13 @@ SEG_FONT_SIZE = "1.8rem"                  # Arabic text size in segment cards
 LOW_CONF_DEFAULT_THRESHOLD = 80           # default % for low-confidence slider (50–99)
 SEG_WORD_SPACING = "0.2em"                # gap between words in segment cards
 
+# Auto-scroll animation mode for the segments list.
+# Values: "none"   — instant (no animation)
+#         "smooth" — native CSS smooth scroll on every target
+#         "hybrid" — smooth only when the jump exceeds one viewport, instant otherwise
+# Not a user preference — the same behavior ships for all deployments.
+SEG_SCROLL_ANIM_MODE = "hybrid"
+
 # Adjust (trim) mode settings
 TRIM_PAD_LEFT = 10000                     # ms padding before segment
 TRIM_PAD_RIGHT = 10000                    # ms padding after segment
@@ -91,7 +98,6 @@ ACCORDION_CONTEXT = {
 }
 
 # HTTP / subprocess timeouts (seconds)
-FFPROBE_TIMEOUT = 5
 FFMPEG_TIMEOUT = 10
 FFMPEG_FULL_TIMEOUT = 300
 ID3_PROBE_TIMEOUT = 5
@@ -103,10 +109,12 @@ ID3_PROBE_BYTES = 50_000
 MIN_SEG_PEAK_BUCKETS = 10
 MIN_FULL_PEAK_BUCKETS = 100
 PEAKS_BUCKETS_PER_SEC = 50                # target peak density for segment-level peaks
-PEAKS_NEIGHBOR_COUNT = 0                  # neighbors to pre-fetch (0 = disabled, observer-only)
 
 # Validation thresholds
 LOW_CONFIDENCE_THRESHOLD = 0.80
+# "Show everything below perfect" tier — used to populate detail lists (not count badges).
+# Distinct from LOW_CONFIDENCE_THRESHOLD (count badge cutoff) and LOW_CONFIDENCE_RED (red highlight).
+LOW_CONFIDENCE_DETAIL_THRESHOLD = 1.0
 MAX_AYAH_BOUNDARY_CHECK = 300
 METADATA_PEEK_BYTES = 512
 
@@ -122,6 +130,10 @@ AUDIO_CACHE_MAX_AGE = 31_536_000
 # Confidence thresholds
 LOW_CONFIDENCE_RED = 0.60           # below this = red highlight ("below_60" stat)
 
+# Temp audio suffix — used by services/peaks.py and services/cache.py when writing
+# partial HTTP byte-range chunks. ffmpeg needs a plausible extension for frame sync.
+TEMP_AUDIO_SUFFIX = ".mp3"
+
 # Peaks (ffmpeg) — waveform peak extraction defaults (services/peaks.py)
 PEAKS_FFMPEG_SAMPLE_RATE = 8000          # Hz — ffmpeg resample target for peak computation
 PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 1] float
@@ -136,6 +148,25 @@ AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download worker
 
 # Server defaults (app.py)
 DEFAULT_PORT = 5000                      # Flask --port default
+FLASK_ENV_VAR = "FLASK_ENV"              # environment variable name for Flask env
+FLASK_DEV_VALUE = "development"          # value that triggers debug/reloader mode
+# Bind host — override with INSPECTOR_HOST for non-local deployments.
+SERVER_HOST = os.environ.get("INSPECTOR_HOST", "0.0.0.0")
+
+# Timestamps validation (routes/timestamps.py)
+TS_RANDOM_MAX_RETRIES = 10              # max attempts to find a non-empty verse in /ts/random
+TS_BOUNDARY_TOLERANCE_MS = 500         # default boundary tolerance when not in result metadata
+# Sort-order weight for missing-word issues: one missing word adds this many ms to diff_ms.
+# This is NOT a unit conversion — it is purely a sort-order heuristic.
+MISSING_WORD_DIFF_MS_WEIGHT = 1000
+
+# Statistics histogram shape constants (services/stats.py)
+WORDS_PER_SEG_HIST_MAX = 15            # upper bound for words-per-segment histogram
+SEGS_PER_VERSE_HIST_MAX = 8            # upper bound for segs-per-verse histogram
+CONF_HIST_BIN_SIZE = 5                 # bin width (percentage points) for confidence histogram
+
+# Boundary display: how many extra phonemes beyond BOUNDARY_TAIL_K to show in detail cards
+BOUNDARY_TAIL_DISPLAY_EXTRA = 2        # display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
 
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {

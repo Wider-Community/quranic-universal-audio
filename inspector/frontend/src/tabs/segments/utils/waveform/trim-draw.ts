@@ -9,6 +9,7 @@ import { get } from 'svelte/store';
 
 import { segConfig } from '../../stores/config';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import { drawEditPeakBase } from './draw-seg';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +41,7 @@ export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
         ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
     }
     ctx.closePath();
-    ctx.strokeStyle = '#4361ee';
+    ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -77,8 +78,6 @@ export function drawTrimWaveform(canvas: SegCanvas): void {
     ctx.moveTo(startX, 0);
     ctx.lineTo(startX, height);
     ctx.stroke();
-    ctx.fillStyle = '#4caf50';
-    ctx.fillRect(startX - 4, height / 2 - 10, 8, 20);
 
     ctx.strokeStyle = '#f44336';
     ctx.lineWidth = 3;
@@ -86,6 +85,4 @@ export function drawTrimWaveform(canvas: SegCanvas): void {
     ctx.moveTo(endX, 0);
     ctx.lineTo(endX, height);
     ctx.stroke();
-    ctx.fillStyle = '#f44336';
-    ctx.fillRect(endX - 4, height / 2 - 10, 8, 20);
 }

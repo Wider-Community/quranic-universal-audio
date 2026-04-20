@@ -1,5 +1,7 @@
 import { writable } from 'svelte/store';
 
+import { SCROLL_ANIM_DEFAULT, type ScrollAnimMode } from '../../../lib/utils/constants';
+
 export interface SegConfig {
     validationCategories: string[] | null;
     muqattaatVerses: Set<string> | null;
@@ -12,6 +14,7 @@ export interface SegConfig {
     trimPadLeft: number;
     trimPadRight: number;
     trimDimAlpha: number;
+    scrollAnimMode: ScrollAnimMode;
 }
 
 const _defaults: SegConfig = {
@@ -26,6 +29,7 @@ const _defaults: SegConfig = {
     trimPadLeft: 500,
     trimPadRight: 500,
     trimDimAlpha: 0.45,
+    scrollAnimMode: SCROLL_ANIM_DEFAULT,
 };
 
 export const segConfig = writable<SegConfig>({ ..._defaults });

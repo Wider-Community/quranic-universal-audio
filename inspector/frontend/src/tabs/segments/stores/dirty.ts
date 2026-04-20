@@ -115,6 +115,11 @@ export function finalizeOp(chapter: number, op: EditOp): void {
 
 /**
  * Mark a chapter as dirty (has unsaved edits).
+ *
+ * When `structural=true` the `indices` set becomes advisory only — save takes
+ * the full-replace path for that chapter, so specific edited indices stop
+ * being load-bearing once any structural op has landed in the batch.
+ *
  * @param chapter - chapter number (MUST be number, not string)
  * @param index - optional segment index to mark as edited
  * @param structural - whether this is a structural change (split/merge/delete)

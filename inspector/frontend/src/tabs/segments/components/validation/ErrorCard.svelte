@@ -5,9 +5,16 @@
      *
      * Public 3-method API (getIsContextShown / showContextForced /
      * hideContextForced) is forwarded to the active child via bind:this so
-     * ValidationPanel's "Show All Context" feature keeps working identically.
+     * ValidationPanel's "Show All Context" feature keeps working.
+     *
+     * `initialContextShown`: context-open state to restore when this card
+     * re-mounts after scrolling back into the virtualization window.
+     *
+     * Dispatches `contextchange` (detail: boolean) whenever the child card's
+     * context-shown state changes so ValidationPanel can persist it.
      */
 
+    import { createEventDispatcher, onMount } from 'svelte';
     import GenericIssueCard from './GenericIssueCard.svelte';
     import MissingVersesCard from './MissingVersesCard.svelte';
     import MissingWordsCard from './MissingWordsCard.svelte';
@@ -20,6 +27,10 @@
     // ---- Props ----
     export let category: string;
     export let item: SegValAnyItem;
+    /** Context-shown state to restore when re-entering the virtualization window. */
+    export let initialContextShown = false;
+
+    const dispatch = createEventDispatcher<{ contextchange: boolean }>();
 
     // ---- Child refs for API forwarding ----
     let mwCard: MissingWordsCard;
@@ -41,11 +52,21 @@
         return _active()?.getIsContextShown() ?? false;
     }
     export function showContextForced(): void {
+        // Child dispatches contextchange(true); the template on:contextchange
+        // re-bubbles it from this component — no need to dispatch twice.
         _active()?.showContextForced();
     }
     export function hideContextForced(): void {
         _active()?.hideContextForced();
     }
+
+    // Restore context state when re-mounted into the virtualization window.
+    // Deferred via microtask so child card refs are set before the call.
+    onMount(() => {
+        if (initialContextShown) {
+            Promise.resolve().then(() => { _active()?.showContextForced(); });
+        }
+    });
 </script>
 
 <div class="val-card-wrapper">
@@ -53,17 +74,20 @@
         <MissingWordsCard
             bind:this={mwCard}
             item={mwItem}
+            on:contextchange={(e) => dispatch('contextchange', e.detail)}
         />
     {:else if category === 'missing_verses'}
         <MissingVersesCard
             bind:this={mvCard}
             item={mvItem}
+            on:contextchange={(e) => dispatch('contextchange', e.detail)}
         />
     {:else}
         <GenericIssueCard
             bind:this={genCard}
             {category}
             {item}
+            on:contextchange={(e) => dispatch('contextchange', e.detail)}
         />
     {/if}
 </div>

@@ -22,8 +22,8 @@ export interface TrimHighlight {
  * Highlight descriptor for a split-history after-card.
  *
  * `wfStart` / `wfEnd` are the waveform bounds (always set). `hlStart` / `hlEnd`
- * are the green highlight sub-range — optional because error-card-audio only
- * cares about `wf*` for seek-to-canvas routing.
+ * are the green highlight sub-range — optional because some canvas-scrub
+ * callers only need the `wf*` bounds for seek-to-canvas routing.
  */
 export interface SplitHighlight {
     wfStart: number;

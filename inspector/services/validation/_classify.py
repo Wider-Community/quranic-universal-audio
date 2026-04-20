@@ -13,7 +13,7 @@ are extracted here.
 
 from __future__ import annotations
 
-from config import BOUNDARY_TAIL_K, LOW_CONFIDENCE_THRESHOLD
+from config import BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
 from constants import MUQATTAAT_VERSES, QALQALA_LETTERS, STANDALONE_REFS, STANDALONE_WORDS
 from services.phoneme_matching import tail_phoneme_mismatch
 from utils.arabic_text import last_arabic_letter, strip_quran_deco
@@ -117,7 +117,7 @@ def _classify_segment(
 
     if confidence < LOW_CONFIDENCE_THRESHOLD:
         result["low_confidence"] = True
-    if confidence < 1.0:
+    if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD:
         result["low_confidence_detail"] = True
 
     if s_ayah != e_ayah:

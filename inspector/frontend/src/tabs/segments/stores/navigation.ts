@@ -31,15 +31,47 @@ export const backBannerVisible = derived(
     ($s) => $s !== null,
 );
 
-/** The displayed-segment index that should be scrolled into view. Cleared
- *  to null by SegmentRow after it observes the match and calls
- *  scrollIntoView. */
-export const targetSegmentIndex = writable<number | null>(null);
+/** A (chapter, index) pair — reused by `targetSegmentIndex` and
+ *  `flashSegmentIndices` so same-index rows across chapters never collide.
+ *  Chapter is always a concrete number (the targeted chapter); callers that
+ *  only know "the current chapter" resolve it at the call site. */
+export interface ChapterIndexRef {
+    chapter: number;
+    index: number;
+}
 
-/** Set of displayed-segment indices that should have the transient flash
+/** Build the canonical `"chapter:index"` string key. Kept as a helper so the
+ *  shape matches the row-registry key format exactly. */
+export function chapterIndexKey(chapter: number, index: number): string {
+    return `${chapter}:${index}`;
+}
+
+/** The displayed-segment target that should be scrolled into view. Only the
+ *  main-list SegmentRow instance reacts to this — accordion / history /
+ *  preview twins leave it alone. Cleared to null by SegmentRow after the
+ *  match + scrollIntoView. Chapter-scoped so a same-index row in another
+ *  chapter (accordion with chapter=null) can't match the wrong row. */
+export const targetSegmentIndex = writable<ChapterIndexRef | null>(null);
+
+/** Set of `"chapter:index"` keys that should have the transient flash
  *  (visual highlight after jump). Cleared by setTimeout after ~2 seconds.
- *  SegmentRow ORs this with isPlaying to drive the `.playing` class. */
-export const flashSegmentIndices = writable<Set<number>>(new Set());
+ *  SegmentRow ORs this with isPlaying to drive the `.playing` class.
+ *  Chapter-scoped so a flash for chapter 5 doesn't also light chapter 3
+ *  rows that happen to be mounted in accordions. */
+export const flashSegmentIndices = writable<Set<string>>(new Set());
+
+/** Drop every flash key belonging to `chapter`. Called by structural
+ *  mutations (split/merge/delete) after reindex so a flash keyed by the
+ *  pre-mutation index doesn't linger on the wrong row post-reindex. */
+export function clearFlashForChapter(chapter: number): void {
+    const prefix = `${chapter}:`;
+    flashSegmentIndices.update((s) => {
+        for (const k of [...s]) {
+            if (k.startsWith(prefix)) s.delete(k);
+        }
+        return s;
+    });
+}
 
 /** One-shot scroll-top target for the seg-list container. Set by
  *  _restoreFilterView, consumed + cleared by SegmentsList's afterUpdate. */

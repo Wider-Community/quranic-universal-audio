@@ -96,12 +96,6 @@ export interface DirtyEntry {
 // Accordion / edit context
 // ---------------------------------------------------------------------------
 
-/** The accordion op context captured at the row / prev / next button click site. */
-export interface AccordionOpCtx {
-    wrapper: HTMLElement;
-    direction?: 'prev' | 'next';
-}
-
 /** Snapshot of the split-chain state captured while showing the save preview. */
 export interface SavedChainsSnapshot {
     splitChains: Map<string, SplitChain> | null;

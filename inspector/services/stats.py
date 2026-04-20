@@ -6,10 +6,13 @@ No Flask imports -- all functions accept parameters and return plain dicts.
 import statistics as _statistics
 
 from config import (
+    CONF_HIST_BIN_SIZE,
     PAUSE_HIST_BIN_MS,
     PAUSE_HIST_MAX_MS,
     SEG_DUR_HIST_BIN_MS,
     SEG_DUR_HIST_MAX_MS,
+    SEGS_PER_VERSE_HIST_MAX,
+    WORDS_PER_SEG_HIST_MAX,
 )
 from services import cache
 from services.data_loader import load_detailed, load_seg_verses
@@ -121,9 +124,9 @@ def compute_stats(reciter: str) -> dict | None:
     distributions = {
         "pause_duration_ms": histogram(pause_durations, PAUSE_HIST_BIN_MS, 0, PAUSE_HIST_MAX_MS),
         "seg_duration_ms": histogram(seg_durations, SEG_DUR_HIST_BIN_MS, 0, SEG_DUR_HIST_MAX_MS, cap=False),
-        "words_per_seg": histogram(words_per_seg, 1, 1, 15, cap=False),
-        "segs_per_verse": histogram(spv_values, 1, 1, 8),
-        "confidence": histogram(confidences, 5, 0, 100),
+        "words_per_seg": histogram(words_per_seg, 1, 1, WORDS_PER_SEG_HIST_MAX, cap=False),
+        "segs_per_verse": histogram(spv_values, 1, 1, SEGS_PER_VERSE_HIST_MAX),
+        "confidence": histogram(confidences, CONF_HIST_BIN_SIZE, 0, 100),
     }
 
     for key, values in [

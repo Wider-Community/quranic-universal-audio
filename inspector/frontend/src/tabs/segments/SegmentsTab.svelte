@@ -29,12 +29,13 @@
     } from './stores/chapter';
     import { activeFilters } from './stores/filters';
     import { savedFilterView } from './stores/navigation';
-    import { LS_KEYS } from '../../lib/utils/constants';
+    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import type { SegReciter } from '../../lib/types/domain';
 
     import { reloadCurrentReciter } from './utils/data/reciter-actions';
     import { loadChapterData } from './utils/data/chapter-actions';
+    import { playFromSegment } from './utils/playback/playback';
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import { segListElement, waveformContainer } from './stores/playback';
     import { historyData, historyVisible } from './stores/history';
@@ -90,7 +91,19 @@
         await loadChapterData(get(selectedReciter), chapter);
     }
     function onVerseSelectChange(e: Event): void {
-        selectedVerse.set((e.currentTarget as HTMLSelectElement).value);
+        const sel = e.currentTarget as HTMLSelectElement;
+        const v = sel.value;
+        // Reset immediately so the dropdown snaps back to "All" — we don't
+        // want the verse filter to engage; this is a jump-and-play trigger.
+        sel.value = '';
+        if (!v) return;
+        const chStr = get(selectedChapter);
+        const chapter = parseInt(chStr);
+        if (!chapter) return;
+        const segs = getChapterSegments(chapter);
+        const prefix = `${chapter}:${v}:`;
+        const first = segs.find((s) => s.matched_ref?.startsWith(prefix));
+        if (first) playFromSegment(first.index, first.chapter ?? chapter);
     }
 
     async function onNavigationRestore(): Promise<void> {
@@ -133,6 +146,8 @@
     style:--seg-font-size={cssFontSize || null}
     style:--seg-word-spacing={cssWordSpacing || null}
 >
+    <ShortcutsGuide />
+
     <div class="info-bar seg-selector-bar">
         <label>Reciter:
             <select
@@ -140,7 +155,7 @@
                 value={$selectedReciter}
                 on:change={onReciterSelectChange}
             >
-                <option value="">{$segAllReciters.length ? '-- select --' : 'Loading...'}</option>
+                <option value="">{$segAllReciters.length ? PLACEHOLDER_SELECT : 'Loading...'}</option>
                 {#each groupedReciters as g}
                     <optgroup label={g.group}>
                         {#each g.items as r}
@@ -151,7 +166,7 @@
             </select>
         </label>
         <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
-        <label>Chapter:
+        <label>Surah:
             <SearchableSelect
                 options={chaptersOptions}
                 value={$selectedChapter}
@@ -159,7 +174,7 @@
                 on:change={onChapterSelectChange}
             />
         </label>
-        <label>Verse:
+        <label>Ayah:
             <select
                 id="seg-verse-select"
                 value={$selectedVerse}
@@ -189,8 +204,6 @@
 
     {#if !$historyVisible && !$savePreviewVisible}
         <AudioCacheBar />
-
-        <ShortcutsGuide />
 
         <StatsPanel />
 

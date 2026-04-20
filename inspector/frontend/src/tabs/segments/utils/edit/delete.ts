@@ -14,6 +14,7 @@ import { get } from 'svelte/store';
 import type { Segment } from '../../../../lib/types/domain';
 import {
     getChapterSegments,
+    invalidateChapterIndexFor,
     segAllData,
     segData,
     selectedChapter,
@@ -24,7 +25,9 @@ import {
     snapshotSeg,
 } from '../../stores/dirty';
 import { clearEdit, setEdit } from '../../stores/edit';
+import { clearFlashForChapter } from '../../stores/navigation';
 import { formatRef as _formatRefLib, getVerseWordCounts } from '../data/references';
+import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { _fixupValIndicesForDelete } from '../validation/fixups';
 import { finalizeEdit } from './common';
 
@@ -36,7 +39,12 @@ function formatRef(ref: Parameters<typeof _formatRefLib>[0]): string {
 // deleteSegment — remove a segment and reindex
 // ---------------------------------------------------------------------------
 
-export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: string | null = null): void {
+export function deleteSegment(
+    seg: Segment,
+    row: HTMLElement,
+    contextCategory: string | null = null,
+    mountId: symbol | null = null,
+): void {
     void row;
     const chStr = get(selectedChapter);
     const chapter = seg.chapter || parseInt(chStr);
@@ -49,7 +57,13 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
     if (!confirm(`Delete segment ${label} (${formatRef(seg.matched_ref) || 'no match'})?`)) return;
 
     // Signal delete mode to EditOverlay (confirmed — committed to executing).
-    setEdit('delete', seg.segment_uid ?? null);
+    // `mountId` pins the initiating row so accordion twins stay passive;
+    // omit (null) for programmatic calls.
+    setEdit('delete', seg.segment_uid ?? null, mountId);
+
+    // Capture pre-mutation playing UID so reconcilePlayingAfterMutation can
+    // clear + stop if the playing seg was the one being deleted.
+    const prePlayingUid = seg.segment_uid ?? null;
 
     // Unified splice+reindex against segAllData (single source of truth).
     const allData = get(segAllData);
@@ -59,8 +73,8 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
     allData.segments.splice(globalIdx, 1);
     let idx = 0;
     allData.segments.forEach(s => { if (s.chapter === chapter) s.index = idx++; });
-    allData._byChapter = null;
-    allData._byChapterIndex = null;
+    // Surgical cache drop: only this chapter's entries changed.
+    invalidateChapterIndexFor(chapter);
 
     // Refresh segData.segments from the re-indexed segAllData whenever the
     // delete happened in the currently-displayed chapter.
@@ -69,9 +83,12 @@ export function deleteSegment(seg: Segment, row: HTMLElement, contextCategory: s
         curData.segments = getChapterSegments(chapter);
     }
 
+    reconcilePlayingAfterMutation(chapter, prePlayingUid);
+    clearFlashForChapter(chapter);
+
     markDirty(chapter, undefined, true);
     _fixupValIndicesForDelete(chapter, seg.index);
 
-    finalizeEdit(deleteOp, chapter, [], 'Segment deleted (unsaved)');
+    finalizeEdit(deleteOp, chapter, []);
     clearEdit();
 }

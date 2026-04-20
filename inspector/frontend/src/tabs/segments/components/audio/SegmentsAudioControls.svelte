@@ -9,13 +9,14 @@
     import { segData } from '../../stores/chapter';
     import {
         autoPlayEnabled,
+        autoScrollEnabled,
         continuousPlay,
         playbackSpeed,
         playButtonLabel,
-        playStatusText,
         segAudioElement,
     } from '../../stores/playback';
     import { LS_KEYS } from '../../../../lib/utils/constants';
+    import { SPEEDS } from '../../../../lib/utils/speed-control';
     import {
         onSegAudioEnded,
         onSegPlayClick,
@@ -23,7 +24,6 @@
         startSegAnimation,
         stopSegAnimation,
     } from '../../utils/playback/playback';
-    import { getValCardAudioOrNull, stopErrorCardAudio } from '../../utils/playback/error-card-audio';
     import AudioPlayer from '../../../../lib/components/AudioPlayer.svelte';
 
     // ---- Exported prop: raw HTMLAudioElement exposed to parent via bind:audioEl ----
@@ -38,8 +38,9 @@
     $: audioEl = _player?.element() ?? null;
     $: segAudioElement.set(audioEl);
 
-    // Reactive button class driven by the `autoPlayEnabled` store.
+    // Reactive button classes driven by the toggle stores.
     $: autoPlayClass = 'btn ' + ($autoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
+    $: autoScrollClass = 'btn ' + ($autoScrollEnabled ? 'seg-autoscroll-on' : 'seg-autoscroll-off');
 
     // -------------------------------------------------------------------------
     // Event handlers
@@ -56,18 +57,30 @@
         localStorage.setItem(LS_KEYS.SEG_AUTOPLAY, String(next));
     }
 
+    function handleAutoScrollToggle(): void {
+        const next = !get(autoScrollEnabled);
+        autoScrollEnabled.set(next);
+        localStorage.setItem(LS_KEYS.SEG_AUTOSCROLL, String(next));
+    }
+
     function onSpeedSelectChange(e: Event): void {
         const v = parseFloat((e.currentTarget as HTMLSelectElement).value);
         if (!isNaN(v)) {
             playbackSpeed.set(v);
             localStorage.setItem(LS_KEYS.SEG_SPEED, String(v));
-            const valAudio = getValCardAudioOrNull();
-            if (valAudio) valAudio.playbackRate = v;
+            if (audioEl) audioEl.playbackRate = v;
         }
     }
 
-    // Mirror the playbackSpeed store onto the audio element when either changes.
-    $: if (audioEl) audioEl.playbackRate = $playbackSpeed;
+    // Seed the audio element's playbackRate from the store once it mounts.
+    // Don't mirror $playbackSpeed reactively — a `$: audioEl.playbackRate =
+    // $playbackSpeed` block re-runs inside Svelte's update cycle alongside
+    // the speed <select>'s re-render, which drops focus onto the select and
+    // halts audio playback. All speed writes set audioEl.playbackRate
+    // directly at the call site (keyboard.ts, onSpeedSelectChange).
+    $: if (audioEl && audioEl.playbackRate === 1 && $playbackSpeed !== 1) {
+        audioEl.playbackRate = $playbackSpeed;
+    }
 
     // Ensure the audio element's src reflects the current chapter's audio_url
     // after the normal-content block re-mounts (e.g. leaving history/save
@@ -79,7 +92,7 @@
         const cur = audioEl.src;
         if (!cur || (cur !== want && cur !== location.origin + want)) {
             audioEl.src = want;
-            audioEl.preload = 'metadata';
+            audioEl.preload = 'auto';
         }
     }
 
@@ -107,7 +120,6 @@
             el.removeEventListener('pause', stopSegAnimation);
             el.removeEventListener('ended', onSegAudioEnded);
             el.removeEventListener('timeupdate', onSegTimeUpdate);
-            stopErrorCardAudio();
         };
     });
 </script>
@@ -126,7 +138,7 @@
             value={$playbackSpeed}
             on:change={onSpeedSelectChange}
         >
-            {#each [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5] as s}
+            {#each SPEEDS as s}
                 <option value={s}>{s}x</option>
             {/each}
         </select>
@@ -143,7 +155,12 @@
         title="Auto-play consecutive segments"
         on:click={handleAutoPlayToggle}
     >Auto-play</button>
-    <span id="seg-play-status" class="seg-play-status">{$playStatusText}</span>
+    <button
+        id="seg-autoscroll-btn"
+        class={autoScrollClass}
+        title="Auto-scroll the list to follow the playing segment"
+        on:click={handleAutoScrollToggle}
+    >Auto-scroll</button>
 </div>
 
 <style>

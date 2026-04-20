@@ -12,11 +12,9 @@ import type { Segment } from '../../../../lib/types/domain';
 import { createOp, setPendingOp, snapshotSeg } from '../../stores/dirty';
 import { clearEdit, editMode } from '../../stores/edit';
 import {
-    activeAudioSource,
     continuousPlay,
     segAudioElement,
 } from '../../stores/playback';
-import { getValCardAudioOrNull, stopErrorCardAudio } from '../playback/error-card-audio';
 import { stopSegAnimation } from '../playback/playback';
 import { enterSplitMode } from './split';
 import { enterTrimMode } from './trim';
@@ -26,17 +24,13 @@ export function enterEditWithBuffer(
     row: HTMLElement,
     mode: 'trim' | 'split',
     contextCategory: string | null = null,
+    mountId: symbol | null = null,
 ): void {
     if (get(editMode)) return;
 
     const audioEl = get(segAudioElement);
-    const valAudio = getValCardAudioOrNull();
-    const isErrorPlaying = get(activeAudioSource) === 'error' && valAudio && !valAudio.paused;
-    const prePausePlayMs = isErrorPlaying
-        ? valAudio!.currentTime * 1000
-        : (!audioEl || audioEl.paused ? null : audioEl.currentTime * 1000);
+    const prePausePlayMs = !audioEl || audioEl.paused ? null : audioEl.currentTime * 1000;
 
-    if (isErrorPlaying) stopErrorCardAudio();
     if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
 
@@ -46,8 +40,8 @@ export function enterEditWithBuffer(
     setPendingOp(pending);
 
     try {
-        if (mode === 'trim') enterTrimMode(seg, row);
-        else enterSplitMode(seg, row, prePausePlayMs);
+        if (mode === 'trim') enterTrimMode(seg, row, mountId);
+        else enterSplitMode(seg, row, prePausePlayMs, mountId);
     } catch (e) {
         console.error(`[${mode}] error entering edit mode:`, e);
         setPendingOp(null);

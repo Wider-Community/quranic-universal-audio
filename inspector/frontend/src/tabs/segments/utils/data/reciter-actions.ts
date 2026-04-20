@@ -10,6 +10,7 @@
 import { get } from 'svelte/store';
 
 import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
+import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import type {
     SegAllResponse,
     SegChaptersResponse,
@@ -75,6 +76,7 @@ export async function reloadCurrentReciter(): Promise<void> {
         segAllData.set(allResult.value);
         _rewriteAudioUrls();
         computeSilenceAfter();
+        preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
         if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
     } else {
         console.error('Error loading all segments:', allResult.reason);

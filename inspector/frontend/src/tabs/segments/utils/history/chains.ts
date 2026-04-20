@@ -27,11 +27,17 @@ export function buildSplitLineage(allBatches: HistoryBatch[]): SplitLineage {
             if (op.op_type !== 'split_segment') continue;
             const parent = op.targets_before?.[0] as { segment_uid?: string; time_start?: number; time_end?: number; audio_url?: string } | undefined;
             if (!parent) continue;
-            const parentCtx: SplitLineageEntry = (parent.segment_uid && lineage.has(parent.segment_uid))
-                ? lineage.get(parent.segment_uid)!
+            const parentUid = parent.segment_uid;
+            const parentCtx: SplitLineageEntry = (parentUid && lineage.has(parentUid))
+                ? lineage.get(parentUid)!
                 : { wfStart: parent.time_start ?? 0, wfEnd: parent.time_end ?? 0, audioUrl: parent.audio_url ?? '' };
             for (const child of (op.targets_after || []) as Array<{ segment_uid?: string }>) {
-                if (child.segment_uid) lineage.set(child.segment_uid, parentCtx);
+                // firstHalf's UID now equals parentUid (UID preservation).
+                // Recording it as its own lineage descendant would make
+                // `buildSplitChains` skip every split as a chain root.
+                if (child.segment_uid && child.segment_uid !== parentUid) {
+                    lineage.set(child.segment_uid, parentCtx);
+                }
             }
         }
     }

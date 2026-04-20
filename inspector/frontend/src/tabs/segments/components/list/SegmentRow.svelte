@@ -22,12 +22,11 @@
      */
 
     import { get } from 'svelte/store';
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
 
     import {
         getAdjacentSegments,
         segAllData,
-        segCurrentIdx,
         selectedChapter,
         selectedVerse,
     } from '../../stores/chapter';
@@ -38,11 +37,10 @@
     } from '../../utils/data/references';
     import { dirtyTick, isIndexDirty } from '../../stores/dirty';
     import {
-        editCanvas,
         editMode,
+        editingMountId,
         editingSegUid,
-        splitChainCategory,
-        splitChainUid,
+        setEditCanvas,
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
@@ -61,6 +59,7 @@
         segListElement,
     } from '../../stores/playback';
     import {
+        chapterIndexKey,
         flashSegmentIndices,
         targetSegmentIndex,
     } from '../../stores/navigation';
@@ -70,6 +69,8 @@
     import { beginRefEdit } from '../../utils/edit/reference';
     import { jumpToSegment } from '../../utils/data/navigation-actions';
     import { playFromSegment } from '../../utils/playback/playback';
+    import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
+    import { SEG_ROW_CANVAS_WIDTH, SEG_ROW_CANVAS_HEIGHT } from '../../utils/constants';
     import type { Segment } from '../../../../lib/types/domain';
 
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
@@ -99,6 +100,28 @@
     export let mode: 'normal' | 'history' = 'normal';
     /** Fallback chapter when `seg.chapter` is null — only used for dirty lookup. */
     export let fallbackChapter: number = 0;
+    /**
+     * Which DOM context is rendering this row. Default `accordion` — the
+     * most common non-readOnly placement (validation cards, ErrorCard
+     * contexts). Only `main` reacts to `$targetSegmentIndex` scroll, so
+     * a "Go to" or verse-pill jump always targets the main list even when
+     * an identical row is mounted in an accordion twin. Only `main` also
+     * claims a programmatic edit session (split-chain handoff, auto-fix,
+     * keyboard `E`) when `editingMountId` is null. `history` / `preview`
+     * rows are always readOnly and never participate in edit or scroll.
+     */
+    export let instanceRole: 'main' | 'accordion' | 'history' | 'preview' = 'accordion';
+    /**
+     * Validation category that initiated this row's rendering (e.g.
+     * 'low_confidence', 'cross_verse'). Set by accordion cards on the
+     * resolved (non-context) SegmentRow so every edit op started from
+     * this row is tagged with its originating category — the save flow
+     * then auto-adds the category to `ignored_categories` on commit so
+     * the issue disappears from the accordion post-save. Context rows
+     * (isContext=true) leave this null: editing a neighbour must not
+     * auto-ignore the issue for the original seg.
+     */
+    export let validationCategory: string | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -112,14 +135,27 @@
         c._mergeHL = mergeHL ?? undefined;
     }
 
-    // Publish canvas to `editCanvas` store whenever this row is the active
-    // edit target. Replaces the legacy `_getEditCanvas()` document-wide
-    // DOM query. readOnly sites (history view, validation accordions, save
-    // preview) share seg.index / uid with the main list — skip them so a
-    // readOnly row doesn't shadow the real editing row's canvas.
+    // True only when this specific mounted row is the editing target. The
+    // editing row is identified by (segment_uid) AND (initiating mountId).
+    // When `editingMountId` is null the edit was started programmatically
+    // (split-chain handoff, auto-fix, keyboard E) — the main-list instance
+    // claims it so edit panels always appear in the main list, not on an
+    // accordion twin. readOnly sites (history, save preview) share uids
+    // with main-list rows and must never participate.
+    $: isInitiatingEditRow = !readOnly
+        && !!seg.segment_uid
+        && $editingSegUid === seg.segment_uid
+        && ($editingMountId === _mountId
+            || ($editingMountId === null && instanceRole === 'main'));
+
+    // Publish canvas to `editCanvas` store whenever THIS mounted row is the
+    // active edit target. Replaces the legacy `_getEditCanvas()` document-
+    // wide DOM query. UID alone is ambiguous across twin mounts; gating on
+    // the initiating mountId keeps the accordion twin from clobbering the
+    // main-list row's canvas (or vice-versa) after an edit starts.
     $: {
-        if (!readOnly && canvasEl && seg.segment_uid && $editingSegUid === seg.segment_uid) {
-            editCanvas.set(canvasEl as SegCanvas);
+        if (isInitiatingEditRow && canvasEl) {
+            setEditCanvas(canvasEl as SegCanvas);
         }
     }
 
@@ -127,7 +163,7 @@
     // Drives the conditional mount of TrimPanel / SplitPanel / ReferenceEditor
     // inside the row, the `.seg-edit-target` class binding, and the hiding of
     // `.seg-actions` + `.seg-play-col` during persistent drag modes.
-    $: isEditingThisRow = !readOnly && !!seg.segment_uid && $editingSegUid === seg.segment_uid && $editMode !== null;
+    $: isEditingThisRow = isInitiatingEditRow && $editMode !== null;
     $: editSegCanvas = canvasEl as SegCanvas | undefined;
 
     // Derived values. Seg-derived reactives also subscribe to $segAllData via
@@ -140,7 +176,7 @@
     $: confClass = (void segStoreTick, getConfClass(seg));
     $: durSec = (void segStoreTick, (seg.time_end - seg.time_start) / 1000);
     $: durTitle = (void segStoreTick, `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`);
-    $: adj = !readOnly && !isContext && !showGotoBtn
+    $: adj = !readOnly && !isContext
         ? getAdjacentSegments(seg.chapter ?? 0, seg.index)
         : { prev: null, next: null };
     $: mergePrevDisabled = !adj.prev
@@ -170,43 +206,53 @@
     // ---------------------------------------------------------------------
     // Playback highlight + jump target (store-driven)
     // ---------------------------------------------------------------------
-    // readOnly rows (history view, validation accordions, save preview) share
-    // seg.index with rows in the main list. Guarding on !readOnly keeps them
-    // from lighting up when the main-list row for the same index is playing
-    // or flashing.
-    $: isPlaying = !readOnly && $playingSegmentIndex === seg.index;
-    $: isFlashing = !readOnly && $flashSegmentIndices.has(seg.index);
+    // readOnly rows (history view, save preview) share seg.index with rows in
+    // the main list. Guarding on !readOnly keeps them from lighting up when
+    // the main-list row for the same index is playing or flashing. Validation
+    // accordion rows (isContext=true) are NOT readOnly — they MUST light up
+    // in sync with the main-list twin for the same segment.
+    //
+    // Active-pair match: both chapter AND index must match. The validation
+    // panel can be mounted with chapter=null (all chapters), so same-index
+    // rows in other chapters must not collide.
+    $: rowChapter = seg.chapter ?? fallbackChapter;
+    $: isPlaying = !readOnly
+        && !!$playingSegmentIndex
+        && $playingSegmentIndex.chapter === rowChapter
+        && $playingSegmentIndex.index === seg.index;
+    // flashSegmentIndices is keyed by "chapter:index" — both the main-list
+    // and accordion twin for the correctly-matched pair still light up, but
+    // a same-index row in a different chapter (validation panel with
+    // chapter=null) no longer collides.
+    $: rowFlashKey = chapterIndexKey(rowChapter, seg.index);
+    $: isFlashing = !readOnly && $flashSegmentIndices.has(rowFlashKey);
     $: highlighted = isPlaying || isFlashing;
     $: playGlyph = isPlaying && $isMainAudioPlaying ? '\u25A0' : '\u25B6';
 
     // Scroll into view when jump target matches, then clear the store so the
-    // next write re-fires reliably. `rowEl` is bound below; wait for it.
-    $: if (!readOnly && rowEl && $targetSegmentIndex === seg.index) {
+    // next write re-fires reliably. Only the main-list instance reacts —
+    // accordion / history / preview twins would otherwise race the main-list
+    // row (the accordion's short scroll container usually wins), yanking
+    // focus onto the accordion instead of the main list the user expects.
+    // `rowEl` is bound below; wait for it.
+    $: if (
+        instanceRole === 'main'
+        && !readOnly
+        && rowEl
+        && $targetSegmentIndex
+        && $targetSegmentIndex.chapter === rowChapter
+        && $targetSegmentIndex.index === seg.index
+    ) {
         rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         targetSegmentIndex.set(null);
     }
 
-    // Post-split ref-edit chain handoff. `confirmSplit` (edit-split.ts) sets
-    // `splitChainUid` to the second-half UID and `splitChainCategory` to the
-    // carried error-card context. Once the first half's ref edit finishes
-    // (editMode drops to null) this effect fires on the second-half row,
-    // scrolls it into view, and enters reference-edit mode. The `$editMode
-    // === null` guard waits for the first half's commit instead of
-    // preempting it; consuming both chain stores means the chain can only
-    // fire once per split.
-    $: if (
-        !readOnly
-        && rowEl
-        && !!seg.segment_uid
-        && $splitChainUid === seg.segment_uid
-        && $editMode === null
-    ) {
-        const chainCat = $splitChainCategory;
-        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        splitChainUid.set(null);
-        splitChainCategory.set(null);
-        beginRefEdit(seg, chainCat);
-    }
+    // Post-split ref-edit chain handoff is owned by
+    // `utils/edit/reference.ts::commitRefEdit` now — it reads-and-clears
+    // `pendingChainTarget` after clearEdit() and calls beginRefEdit
+    // directly. No reactive store indirection, no subscriber race. The
+    // accordion path routes via `mountId=null` which the secondHalf's
+    // main-list row claims through the `instanceRole === 'main'` fallback.
 
     // ---------------------------------------------------------------------
     // Waveform observer registration
@@ -214,16 +260,64 @@
     let canvasEl: HTMLCanvasElement | undefined;
     let rowEl: HTMLElement;
 
+    // Unique per-mount identifier — disambiguates twin deregistration so the
+    // main-list row and an accordion row for the same segment can coexist
+    // and unmount independently without clobbering each other's entry.
+    const _mountId = Symbol('seg-row');
+
+    // Track the (chapter, index) we most recently registered under so
+    // structural mutations (split/merge/delete reindex) can deregister
+    // under the OLD key before re-registering under the new one. Without
+    // this, a shifted row would leave a stale entry in the registry keyed
+    // to its pre-mutation index.
+    let _prevRegChapter: number | null = null;
+    let _prevRegIdx: number | null = null;
+
     onMount(() => {
+        // Register every non-readOnly row — both the main-list and any
+        // accordion twin. drawActivePlayhead iterates all entries for the
+        // playing (chapter, index) so both instances render a synchronized
+        // playhead. Keyed by (chapter, index) so same-index rows in different
+        // chapters don't collide (validation panel with chapter=null).
+        if (!readOnly && rowEl) {
+            registerRow(rowChapter, seg.index, rowEl, canvasEl, _mountId, instanceRole);
+            _prevRegChapter = rowChapter;
+            _prevRegIdx = seg.index;
+        }
         if (!canvasEl) return;
         const observer = _ensureWaveformObserver();
         observer.observe(canvasEl);
         return () => {
-            // IntersectionObserver doesn't strongly retain disconnected nodes,
-            // but unobserve explicitly avoids dangling entries when rows are
-            // recycled mid-edit (e.g. split → re-render).
             observer.unobserve(canvasEl!);
         };
+    });
+
+    // Re-register under the new (chapter, index) key whenever seg.index or
+    // rowChapter shifts (split/merge/delete reindex). Without this, the
+    // registry would still point at the pre-mutation key, and
+    // drawActivePlayhead would draw on the wrong row (or miss this row
+    // entirely). Fires after onMount completes — the `_prevRegChapter !==
+    // null` guard prevents double-registration with the initial mount.
+    $: if (
+        rowEl
+        && !readOnly
+        && (rowChapter !== _prevRegChapter || seg.index !== _prevRegIdx)
+    ) {
+        if (_prevRegChapter !== null && _prevRegIdx !== null) {
+            deregisterRow(_prevRegChapter, _prevRegIdx, _mountId);
+        }
+        registerRow(rowChapter, seg.index, rowEl, canvasEl, _mountId, instanceRole);
+        _prevRegChapter = rowChapter;
+        _prevRegIdx = seg.index;
+    }
+
+    onDestroy(() => {
+        // Use the stored prev values rather than the current (potentially
+        // shifted) seg.index — otherwise a row that's been reindexed since
+        // mount would deregister under the wrong key, leaving a ghost entry.
+        if (!readOnly && _prevRegChapter !== null && _prevRegIdx !== null) {
+            deregisterRow(_prevRegChapter, _prevRegIdx, _mountId);
+        }
     });
 
     // ---------------------------------------------------------------------
@@ -234,9 +328,17 @@
         e.stopPropagation();
         if (readOnly) return;
         const idx = seg.index;
-        const chapter = seg.chapter ?? 0;
+        const chapter = seg.chapter ?? fallbackChapter;
         const audioEl = get(segAudioElement);
-        if (audioEl && idx === get(segCurrentIdx) && !audioEl.paused) {
+        // Use the full (chapter, index) active pair so a context row for a
+        // different chapter with the same index doesn't mistake itself for
+        // the playing one and pause unrelated playback.
+        const active = get(playingSegmentIndex);
+        const isSelfPlaying = !!active
+            && active.chapter === chapter
+            && active.index === idx
+            && audioEl && !audioEl.paused;
+        if (isSelfPlaying) {
             audioEl.pause();
         } else {
             playFromSegment(idx, chapter);
@@ -260,38 +362,38 @@
 
     function onAdjustClick(e: MouseEvent): void {
         e.stopPropagation();
-        enterEditWithBuffer(seg, rowEl, 'trim', null);
+        enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId);
     }
 
     function onSplitClick(e: MouseEvent): void {
         e.stopPropagation();
-        enterEditWithBuffer(seg, rowEl, 'split', null);
+        enterEditWithBuffer(seg, rowEl, 'split', validationCategory, _mountId);
     }
 
     function onMergePrevClick(e: MouseEvent): void {
         e.stopPropagation();
-        mergeAdjacent(seg, 'prev', null);
+        mergeAdjacent(seg, 'prev', validationCategory, _mountId);
     }
 
     function onMergeNextClick(e: MouseEvent): void {
         e.stopPropagation();
-        mergeAdjacent(seg, 'next', null);
+        mergeAdjacent(seg, 'next', validationCategory, _mountId);
     }
 
     function onDeleteClick(e: MouseEvent): void {
         e.stopPropagation();
-        deleteSegment(seg, rowEl, null);
+        deleteSegment(seg, rowEl, validationCategory, _mountId);
     }
 
     function onEditRefClick(e: MouseEvent): void {
         e.stopPropagation();
-        beginRefEdit(seg, null);
+        beginRefEdit(seg, validationCategory, _mountId);
     }
 
     function onRefTextClick(e: MouseEvent): void {
         if (readOnly) return;
         e.stopPropagation();
-        beginRefEdit(seg, null);
+        beginRefEdit(seg, validationCategory, _mountId);
     }
 
     function onRowClick(e: MouseEvent): void {
@@ -310,10 +412,16 @@
         const timeMs = tStart + progress * (tEnd - tStart);
 
         const audioEl = get(segAudioElement);
-        if (audioEl && seg.index === get(segCurrentIdx) && !audioEl.paused) {
+        const chapter = seg.chapter ?? fallbackChapter;
+        const active = get(playingSegmentIndex);
+        const isSelfPlaying = !!active
+            && active.chapter === chapter
+            && active.index === seg.index
+            && audioEl && !audioEl.paused;
+        if (isSelfPlaying) {
             audioEl.currentTime = timeMs / 1000;
         } else {
-            playFromSegment(seg.index, seg.chapter ?? 0, timeMs);
+            playFromSegment(seg.index, chapter, timeMs);
         }
     }
 
@@ -354,7 +462,7 @@
     bind:this={rowEl}
     on:click={onRowClick}
 >
-    {#if !isContext && !readOnly && !(isEditingThisRow && ($editMode === 'trim' || $editMode === 'split'))}
+    {#if !readOnly && !(isEditingThisRow && ($editMode === 'trim' || $editMode === 'split'))}
         <div class="seg-play-col">
             <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
             {#if showGotoBtn}
@@ -369,8 +477,8 @@
         {/if}
         <canvas
             bind:this={canvasEl}
-            width="380"
-            height="60"
+            width={SEG_ROW_CANVAS_WIDTH}
+            height={SEG_ROW_CANVAS_HEIGHT}
             data-needs-waveform
             on:mousedown={onCanvasMousedown}
         ></canvas>
@@ -393,8 +501,6 @@
                     on:click={onMergeNextClick}>Merge &darr;</button>
                 <button class="btn btn-sm btn-edit-ref" on:click={onEditRefClick}>Edit Ref</button>
             </div>
-        {:else if isContext}
-            <button class="btn btn-sm seg-card-play-btn" hidden></button>
         {/if}
     </div>
 

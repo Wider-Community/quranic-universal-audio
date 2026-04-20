@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { SPEEDS, DEFAULT_SPEED } from '../utils/speed-control';
 
     /** The audio element whose playbackRate this widget controls. */
     export let audioElement: HTMLAudioElement | null = null;
@@ -8,8 +9,8 @@
     /** Optional DOM id placed on the underlying <select> element. */
     export let selectId: string | undefined = undefined;
 
-    const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
-    let selected = 1;
+    const speeds = SPEEDS;
+    let selected = DEFAULT_SPEED;
 
     onMount(() => {
         const stored = localStorage.getItem(lsKey);

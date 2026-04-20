@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from config import BOUNDARY_TAIL_K, SHOW_BOUNDARY_PHONEMES
+from config import BOUNDARY_TAIL_DISPLAY_EXTRA, BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, SHOW_BOUNDARY_PHONEMES
 from services.phoneme_matching import get_phoneme_tails
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
@@ -80,7 +80,7 @@ def _build_detail_lists(
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                         "text": seg.get("matched_text", ""),
                     })
-                if confidence < 1.0:
+                if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD:
                     low_confidence.append({
                         "ref": matched_ref, "chapter": chapter, "seg_index": i,
                         "confidence": round(confidence, 4),
@@ -155,7 +155,7 @@ def _build_detail_lists(
                     "verse_key": f"{surah}:{s_ayah}",
                 }
                 if SHOW_BOUNDARY_PHONEMES and canonical and seg.get("phonemes_asr"):
-                    display_n = BOUNDARY_TAIL_K + 2
+                    display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
                     tails = get_phoneme_tails(seg["phonemes_asr"], matched_ref, canonical, display_n)
                     if tails:
                         item["gt_tail"] = " ".join(tails[0])

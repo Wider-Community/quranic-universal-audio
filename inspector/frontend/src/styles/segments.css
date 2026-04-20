@@ -114,16 +114,13 @@
     font-size: 14px;
 }
 
-#seg-autoplay-btn.seg-autoplay-on {
+#seg-autoplay-btn.seg-autoplay-on,
+#seg-autoscroll-btn.seg-autoscroll-on {
     background: #4361ee;
 }
-#seg-autoplay-btn.seg-autoplay-off {
+#seg-autoplay-btn.seg-autoplay-off,
+#seg-autoscroll-btn.seg-autoscroll-off {
     background: #555;
-}
-
-.seg-play-status {
-    color: #aaa;
-    font-size: 0.9rem;
 }
 
 /* Segment list */
@@ -146,14 +143,10 @@
     border: 2px solid transparent;
     cursor: pointer;
     transition: border-color 0.2s, background 0.2s;
-    /* Skip layout + paint for offscreen rows so a single-row DOM change
-     * (trim/split edit mode, show/hide context) doesn't reflow hundreds of
-     * sibling rows. Onscreen rows stay unaffected — avoid explicit `contain:
-     * layout` here because it creates a stacking context that isolates the
-     * target row's `z-index: 11` from the fixed overlay in the root stacking
-     * context, leaving the overlay painting over the edit UI. */
-    content-visibility: auto;
-    contain-intrinsic-size: auto 80px;
+    /* Virtualization in SegmentsList keeps the rendered row count small
+     * (viewport + buffer only), so content-visibility/contain-intrinsic-size
+     * are no longer needed to elide off-screen work — they would only
+     * confuse the row-height measurement used by the window math. */
 }
 
 .seg-row:hover {
@@ -403,6 +396,13 @@
 
 .seg-row.seg-edit-target canvas {
     cursor: col-resize;
+}
+
+/* Virtualization spacer — reserves scroll height for rows outside the
+ * render window so the scrollbar matches the true list size. flex-shrink: 0
+ * keeps the flex container from collapsing it. */
+.seg-list-spacer {
+    flex-shrink: 0;
 }
 
 .seg-silence-gap-wrapper {

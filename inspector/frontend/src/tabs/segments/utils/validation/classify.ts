@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import type { EditOp, Segment } from '../../../../lib/types/domain';
 import { segAllData } from '../../stores/chapter';
 import { segConfig } from '../../stores/config';
-import { _LETTER_RE, _MN_RE, _STRIP_CHARS } from '../constants';
+import { _LETTER_RE, _MN_RE, _STRIP_CHARS, CONF_HIGH_THRESHOLD } from '../constants';
 
 // A segment-like record that `_classifySegCategories` / `_isIgnoredFor` can
 // read. Live segments satisfy `Segment`; history snapshots (opaque
@@ -75,7 +75,7 @@ export function _classifySegCategories(seg: Segment | SegClassifyInput): string[
 
     if (!ref) { cats.push('failed'); return cats; }
 
-    if (confidence < 0.80) cats.push('low_confidence');
+    if (confidence < CONF_HIGH_THRESHOLD) cats.push('low_confidence');
     if (seg.wrap_word_ranges || seg.has_repeated_words) cats.push('repetitions');
 
     const parts = ref.split('-');
@@ -148,7 +148,7 @@ export function _classifySnapIssues(snap: SnapForIssues | null | undefined): str
     if (snap?.categories) return [...snap.categories];
     const issues: string[] = [];
     if (!snap || !snap.matched_ref) { if (snap) issues.push('failed'); return issues; }
-    if ((snap.confidence ?? 0) < 0.80) issues.push('low_confidence');
+    if ((snap.confidence ?? 0) < CONF_HIGH_THRESHOLD) issues.push('low_confidence');
     if (snap.wrap_word_ranges || snap.has_repeated_words) issues.push('repetitions');
     const parts = snap.matched_ref.split('-');
     if (parts.length === 2 && parts[0] && parts[1]) {

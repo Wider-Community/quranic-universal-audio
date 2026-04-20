@@ -17,12 +17,14 @@ import {
 } from '../../stores/chapter';
 import { activeFilters } from '../../stores/filters';
 import {
+    chapterIndexKey,
     flashSegmentIndices,
     pendingScrollTop,
     savedFilterView,
     targetSegmentIndex,
 } from '../../stores/navigation';
-import { playStatusText, segListElement } from '../../stores/playback';
+import { segListElement } from '../../stores/playback';
+import { FLASH_DURATION_MS } from '../constants';
 import {
     _parseVerseFromKey,
     findMissingVerseBoundarySegments,
@@ -55,29 +57,36 @@ export async function jumpToSegment(chapter: number | string, segIndex: number):
         applyFiltersAndRender();
     }
 
-    _flashAndScrollTo(segIndex);
+    // `_ensureChapter` guarantees `selectedChapter === String(chapter)` by the
+    // time we reach this line, so the main-list SegmentRow for (chapter,
+    // segIndex) is mounted and will pick up the scroll target reactively.
+    const chapterNum = typeof chapter === 'string' ? parseInt(chapter) : chapter;
+    _flashAndScrollTo(chapterNum, segIndex);
 
     if (fromFilterView) {
         _showBackToResultsBanner();
     }
 }
 
-/** Drive the post-jump scroll-into-view + 2s highlight through stores.
- *  SegmentRow reactively picks up both signals. */
-function _flashAndScrollTo(segIndex: number): void {
-    targetSegmentIndex.set(segIndex);
+/** Drive the post-jump scroll-into-view + flash-highlight through stores.
+ *  Only the main-list SegmentRow instance for the matching (chapter, index)
+ *  reacts to `targetSegmentIndex`; any mounted twin (chapter, index) also
+ *  flashes — desired UX so the accordion reflects the jump. */
+function _flashAndScrollTo(chapter: number, segIndex: number): void {
+    targetSegmentIndex.set({ chapter, index: segIndex });
+    const flashKey = chapterIndexKey(chapter, segIndex);
     flashSegmentIndices.update((s) => {
         const next = new Set(s);
-        next.add(segIndex);
+        next.add(flashKey);
         return next;
     });
     setTimeout(() => {
         flashSegmentIndices.update((s) => {
             const next = new Set(s);
-            next.delete(segIndex);
+            next.delete(flashKey);
             return next;
         });
-    }, 2000);
+    }, FLASH_DURATION_MS);
 }
 
 export async function jumpToMissingVerseContext(chapter: number | string, verseKey: string): Promise<void> {
@@ -121,14 +130,14 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
     if (next && (!prev || next.index !== prev.index)) indices.push(next.index);
 
     if (indices.length === 0) {
-        playStatusText.set(`Could not locate boundary segments for missing verse ${verseKey}.`);
         return;
     }
 
+    const chapterNum = typeof chapter === 'string' ? parseInt(chapter) : chapter;
     if (indices.length === 1) {
         // Single-row case: use targetSegmentIndex so SegmentRow scrolls itself
         // into view (no DOM query here).
-        targetSegmentIndex.set(indices[0]!);
+        targetSegmentIndex.set({ chapter: chapterNum, index: indices[0]! });
     } else if (listEl) {
         // Two-row case: still need offsetTop arithmetic to center the scroll
         // between the two row midpoints. Residual DOM access is legit — Svelte
@@ -148,24 +157,16 @@ export async function jumpToMissingVerseContext(chapter: number | string, verseK
 
     flashSegmentIndices.update((s) => {
         const nextSet = new Set(s);
-        for (const idx of indices) nextSet.add(idx);
+        for (const idx of indices) nextSet.add(chapterIndexKey(chapterNum, idx));
         return nextSet;
     });
     setTimeout(() => {
         flashSegmentIndices.update((s) => {
             const nextSet = new Set(s);
-            for (const idx of indices) nextSet.delete(idx);
+            for (const idx of indices) nextSet.delete(chapterIndexKey(chapterNum, idx));
             return nextSet;
         });
-    }, 2000);
-
-    if (prev && next) {
-        playStatusText.set(`Missing verse ${verseKey} is between #${prev.index} and #${next.index}.`);
-    } else if (prev) {
-        playStatusText.set(`Missing verse ${verseKey} is after #${prev.index}.`);
-    } else if (next) {
-        playStatusText.set(`Missing verse ${verseKey} is before #${next.index}.`);
-    }
+    }, FLASH_DURATION_MS);
 
     if (hasFilterView) {
         _showBackToResultsBanner();
@@ -183,10 +184,8 @@ export async function jumpToVerse(chapter: number | string, verseKey: string): P
         s.chapter === chapterNum && s.matched_ref && s.matched_ref.startsWith(prefix)
     );
     if (seg) {
-        _flashAndScrollTo(seg.index);
-        return;
+        _flashAndScrollTo(chapterNum, seg.index);
     }
-    playStatusText.set(`No segment found for verse ${verseKey}.`);
 }
 
 // ---------------------------------------------------------------------------

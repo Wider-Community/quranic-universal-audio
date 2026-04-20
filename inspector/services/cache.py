@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from config import CACHE_DIR
+from config import CACHE_DIR, TEMP_AUDIO_SUFFIX
 
 _T = TypeVar("_T")
 
@@ -323,6 +323,6 @@ def set_surah_info_lite_cache(data: dict) -> None:
 
 def audio_cache_path(reciter: str, url: str) -> Path:
     """Return disk cache path for an audio URL under the reciter's cache dir."""
-    ext = Path(url.split("?")[0].split("#")[0]).suffix or ".mp3"
+    ext = Path(url.split("?")[0].split("#")[0]).suffix or TEMP_AUDIO_SUFFIX
     url_hash = hashlib.sha256(url.encode()).hexdigest()[:32]
     return CACHE_DIR / reciter / "audio" / f"{url_hash}{ext}"

@@ -38,9 +38,11 @@
 
     let canvas: HTMLCanvasElement;
 
-    // Reactive trigger includes all drawing inputs so resize + sub-range
-    // changes both cause a redraw.
-    $: if (canvas && peaks && (width, height, startMs, endMs, totalDurationMs)) redraw();
+    // Reactive trigger fires whenever any drawing input changes. Optional
+    // sub-range props (startMs/endMs/totalDurationMs) must NOT gate the
+    // condition — when callers omit them they're undefined (falsy) and the
+    // guard would never match. drawWaveformPeaks handles undefined natively.
+    $: if (canvas && peaks && width && height && (startMs, endMs, totalDurationMs, true)) redraw();
     $: if (canvas && !peaks) clearCanvas();
 
     function redraw(): void {

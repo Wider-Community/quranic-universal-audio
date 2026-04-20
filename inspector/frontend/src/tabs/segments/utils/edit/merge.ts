@@ -9,6 +9,7 @@ import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import {
     getChapterSegments,
+    invalidateChapterIndexFor,
     segAllData,
     segData,
     selectedChapter,
@@ -20,10 +21,11 @@ import {
     snapshotSeg,
 } from '../../stores/dirty';
 import {
-    accordionOpCtx,
     clearEdit,
     setEdit,
 } from '../../stores/edit';
+import { clearFlashForChapter } from '../../stores/navigation';
+import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { _fixupValIndicesForMerge } from '../validation/fixups';
 import { finalizeEdit } from './common';
 
@@ -35,6 +37,7 @@ export async function mergeAdjacent(
     seg: Segment,
     direction: 'prev' | 'next',
     contextCategory: string | null = null,
+    mountId: symbol | null = null,
 ): Promise<void> {
     const chStr = get(selectedChapter);
     const chapter = seg.chapter || parseInt(chStr);
@@ -62,8 +65,9 @@ export async function mergeAdjacent(
 
     // Signal merge mode to EditOverlay (and future MergePanel) only after all
     // pure guard checks pass, so the store only reflects merge while we're
-    // actually committed to executing.
-    setEdit('merge', seg.segment_uid ?? null);
+    // actually committed to executing. `mountId` pins the initiating row
+    // so accordion twins stay passive; omit (null) for programmatic calls.
+    setEdit('merge', seg.segment_uid ?? null, mountId);
 
     const mergeOp = createOp('merge_segments', contextCategory ? { contextCategory } : undefined);
     mergeOp.merge_direction = direction;
@@ -99,9 +103,12 @@ export async function mergeAdjacent(
         }
     }
 
+    // UID preservation: the merged seg inherits `first`'s UID so the row-registry
+    // entry and accordion twins that were bound to first stay bound. The
+    // consumed side's UID is simply dropped.
     const merged: Segment = {
         ...first,
-        segment_uid: crypto.randomUUID(),
+        segment_uid: first.segment_uid,
         index: first.index,
         time_start: first.time_start,
         time_end: second.time_end,
@@ -120,27 +127,39 @@ export async function mergeAdjacent(
     const keptOldIdx = first.index;
     const consumedOldIdx = second.index;
 
+    // Capture pre-mutation UIDs for playing-pair reconciliation. The playing
+    // seg might be either side of the merge; try whichever survives post-merge.
+    const firstUid = first.segment_uid ?? null;
+    const secondUid = second.segment_uid ?? null;
+
     if (chapter === currentChapter && curData?.segments) {
         const spliceIdx = Math.min(idx, otherIdx);
         curData.segments.splice(spliceIdx, 2, merged);
         curData.segments.forEach((s, i) => { s.index = i; });
         syncChapterSegsToAll();
     } else if (allData?.segments) {
-        const globalFirst = allData.segments.indexOf(first);
-        const globalSecond = allData.segments.indexOf(second);
+        // Identity via UID (not object reference) — safer across store refreshes.
+        const globalFirst = allData.segments.findIndex(s => s.segment_uid === first.segment_uid);
+        const globalSecond = allData.segments.findIndex(s => s.segment_uid === second.segment_uid);
         const spliceStart = Math.min(globalFirst, globalSecond);
         allData.segments.splice(spliceStart, 2, merged);
         let reIdx = 0;
         allData.segments.forEach(s => { if (s.chapter === chapter) s.index = reIdx++; });
-        allData._byChapter = null; allData._byChapterIndex = null;
+        invalidateChapterIndexFor(chapter);
     }
+
+    // Try both sides for the playing seg — whichever preserves a hit resolves
+    // to the merged kept-UID (first), whichever doesn't is the consumed side
+    // which now legitimately clears.
+    reconcilePlayingAfterMutation(chapter, firstUid);
+    reconcilePlayingAfterMutation(chapter, secondUid);
+    clearFlashForChapter(chapter);
 
     markDirty(chapter, undefined, true);
     _fixupValIndicesForMerge(chapter, keptOldIdx, consumedOldIdx);
     if (chapter === currentChapter && curData) {
         curData.segments = getChapterSegments(chapter);
     }
-    accordionOpCtx.set(null);
-    finalizeEdit(mergeOp, chapter, [merged], 'Segments merged (unsaved)');
+    finalizeEdit(mergeOp, chapter, [merged]);
     clearEdit();
 }

@@ -74,10 +74,25 @@
     gap: var(--word-phoneme-gap);
     cursor: pointer;
     transition: transform 0.15s;
+    /* Double-click engages loop — don't let the browser's default word-select
+       kick in and smear text highlight across the token. */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-.mega-block:hover {
-    transform: scale(1.03);
+/* Per-tier hovers — element-scoped so word/letter/phoneme hovers are
+ * independent. Alpha values match the waveform hover fills for visual
+ * consistency across panels. */
+.mega-word:hover {
+    background: rgba(240, 165, 0, 0.15);
+}
+
+.mega-letter:not(.null-ts):hover {
+    background: rgba(46, 196, 182, 0.22);
+}
+
+.mega-phoneme:hover {
+    background: rgba(67, 97, 238, 0.25);
 }
 
 .mega-word {
@@ -240,14 +255,83 @@
     color: #555;
 }
 
+/* ============ Loop perma-highlight ============ */
+/* Outline — not background — so `.active`/`.past` styles remain readable
+   when the looped element is also the currently-playing one. */
+.mega-block.loop {
+    outline: 2px solid var(--anim-highlight-color, #f0a500);
+    outline-offset: 2px;
+}
+.mega-letter.loop {
+    outline: 2px solid #2ec4b6;
+}
+.mega-phoneme.loop {
+    outline: 2px solid #4361ee;
+}
+#animation-display .anim-word.loop {
+    outline: 2px solid var(--anim-highlight-color, #f0a500);
+    outline-offset: 2px;
+    opacity: 1 !important;
+}
+
 /* ============ View toggle controls ============ */
 .ts-view-controls { display: flex; gap: 12px; align-items: center; margin: 8px 0; justify-content: center; }
-.ts-view-toggle, .ts-mode-toggle { display: flex; gap: 2px; background: #0f0f23; border-radius: 6px; padding: 2px; }
-.ts-view-btn, .ts-mode-btn { padding: 4px 12px; border: none; background: transparent; color: #888; cursor: pointer; border-radius: 4px; font-size: 0.85rem; }
+.ts-view-mode-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: #0f0f23;
+    border-radius: 6px;
+    padding: 2px;
+}
+/* display:contents lifts the inner toggles' children directly into the outer
+   grid so all four buttons share one background + gap, eliminating the seam
+   between rows. */
+.ts-view-toggle, .ts-mode-toggle { display: contents; }
+.ts-view-btn, .ts-mode-btn {
+    padding: 4px 12px;
+    border: none;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    text-align: center;
+}
 .ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: #1a1a2e; font-weight: bold; }
-.ts-auto-toggles { display: flex; gap: 2px; background: #0f0f23; border-radius: 6px; padding: 2px; }
-.ts-auto-btn { padding: 4px 12px; border: none; background: transparent; color: #888; cursor: pointer; border-radius: 4px; font-size: 0.85rem; }
-.ts-auto-btn.active { background: var(--anim-highlight-color); color: #1a1a2e; font-weight: bold; }
+.ts-auto-toggles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: #0f0f23;
+    border-radius: 6px;
+    padding: 2px;
+}
+.ts-auto-row { display: contents; }
+.ts-auto-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0 12px;
+    height: 23px;
+}
+.ts-auto-btn.active { background: var(--anim-highlight-color); }
+.ts-auto-icon {
+    width: 14px;
+    height: 14px;
+    display: block;
+    pointer-events: none;
+    /* White SVGs render dim on the idle dark background... */
+    filter: brightness(0.6);
+    transition: filter 0.1s ease;
+}
+.ts-auto-btn:hover .ts-auto-icon { filter: brightness(1); }
+/* ...and flip to near-black on the gold active background for contrast. */
+.ts-auto-btn.active .ts-auto-icon { filter: brightness(0.08); }
 
 /* ============ Animation display ============ */
 #animation-display {

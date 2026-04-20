@@ -25,7 +25,6 @@ import {
     continuousPlay,
     playEndMs,
     playingSegmentIndex,
-    playStatusText,
 } from '../../stores/playback';
 import {
     clearSavePreviewData,
@@ -36,6 +35,7 @@ import { clearStats } from '../../stores/stats';
 import { clearValidation } from '../../stores/validation';
 import { clearAudioCachePollTimer } from '../playback/audio-cache-ui';
 import { clearSegPrefetchCache, stopSegAnimation } from '../playback/playback';
+import { clearRowRegistry } from '../playback/row-registry';
 import { resetWaveformState } from '../waveform/utils';
 
 export function clearPerReciterState(): void {
@@ -58,15 +58,14 @@ export function clearPerReciterState(): void {
     clearSavePreviewData();
 
     clearSegPrefetchCache();
+    clearRowRegistry();
     continuousPlay.set(false);
     playEndMs.set(0);
-    playingSegmentIndex.set(-1);
+    playingSegmentIndex.set(null);
     clearWaveformCache();
 
     cacheStatus.set('hidden');
     clearAudioCachePollTimer();
-
-    playStatusText.set('');
 
     stopSegAnimation();
 }

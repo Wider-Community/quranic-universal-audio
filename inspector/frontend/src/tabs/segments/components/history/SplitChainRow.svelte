@@ -148,6 +148,7 @@
                             showChapter={true}
                             showPlayBtn={true}
                             mode="history"
+                            instanceRole="history"
                             splitHL={rootSplitHL}
                         />
                     </div>
@@ -174,6 +175,7 @@
                                 showChapter={true}
                                 showPlayBtn={true}
                                 mode="history"
+                                instanceRole="history"
                                 splitHL={leafSplitHL(leaf)}
                             />
                         </div>

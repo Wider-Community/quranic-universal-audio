@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config import RECITATION_SEGMENTS_PATH
+from constants import HISTORY_SCHEMA_VERSION
 from services import cache
 from services.data_loader import get_word_counts, load_detailed
 from services.validation import chapter_validation_counts
@@ -215,7 +216,7 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     val_after = chapter_validation_counts(entries, chapter, meta)
     operations = updates.get("operations", [])
     batch = {
-        "schema_version": 1,
+        "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
         "reciter": reciter,
         "chapter": chapter,

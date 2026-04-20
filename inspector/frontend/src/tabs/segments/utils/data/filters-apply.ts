@@ -7,9 +7,7 @@
  * `applyVerseFilterAndRender()` to republish their change:
  *  1. Reset playback highlight DOM refs so the highlight layer does not
  *     point to nodes destroyed by the next {#each} reconciliation.
- *  2. Nudge `activeFilters` store (`update(a => [...a])`) so subscribers see
- *     the new data even when filter list is unchanged.
- *  3. Notify `segAllData` subscribers via `update(a => a)` so the derived
+ *  2. Notify `segAllData` subscribers via `update(a => a)` so the derived
  *     `displayedSegments` re-fires and {#each} re-reconciles.
  */
 
@@ -21,23 +19,26 @@ import { resetHighlightRefs } from '../playback/playback';
 // Re-export shared helpers so existing import sites keep working.
 export {
     computeSilenceAfter,
+    recomputeSilenceForRange,
     segDerivedProps,
 } from '../../stores/filters';
 export type { SegDerivedProps } from '../../stores/filters';
 
 /**
- * Notify Svelte stores that segment data and/or active filters changed so
- * the SegmentsList {#each} re-renders.
+ * Notify Svelte stores that segment data changed so SegmentsList {#each}
+ * re-renders.
+ *
+ * `displayedResult` depends on `[segAllData, selectedChapter, selectedVerse,
+ * activeFilters]` — bumping `segAllData` alone is enough to retrigger the
+ * derived. The previous implementation also bumped `activeFilters` so the
+ * derived fired TWICE per mutation, doubling the cost of `computeDisplayed`
+ * (O(n) filter pass + neighbour-grouping) and every downstream subscriber.
  */
 export function applyFiltersAndRender(): void {
     resetHighlightRefs();
 
-    // Spread so subscribers see a fresh array reference even when the
-    // content matches; otherwise `derived` may short-circuit.
-    activeFilters.update((list) => [...list]);
-
     // The derived `displayedSegments` recomputes from the current (in-place
-    // mutated) segments array.
+    // mutated) segments array. Single store bump → single derived fire.
     segAllData.update((a) => a);
 }
 

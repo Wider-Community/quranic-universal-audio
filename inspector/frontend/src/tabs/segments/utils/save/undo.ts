@@ -14,10 +14,7 @@ import {
     deleteOpLogEntry,
     isDirty,
 } from '../../stores/dirty';
-import {
-    splitChainCategory,
-    splitChainUid,
-} from '../../stores/edit';
+import { pendingChainTarget } from '../../stores/edit';
 import {
     buildSplitChains,
     buildSplitLineage,
@@ -26,7 +23,6 @@ import {
     setSplitChains,
     type SplitChain,
 } from '../../stores/history';
-import { playStatusText } from '../../stores/playback';
 import { setSavePreviewData } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
 import { buildSavePreviewData, hideSavePreview } from './actions';
@@ -36,8 +32,7 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 // ---------------------------------------------------------------------------
 
 export async function _afterUndoSuccess(reciter: string, opsReversed: number): Promise<void> {
-    splitChainUid.set(null);
-    splitChainCategory.set(null);
+    pendingChainTarget.set(null);
 
     try {
         const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
@@ -49,7 +44,6 @@ export async function _afterUndoSuccess(reciter: string, opsReversed: number): P
     } catch (_) { /* non-critical */ }
     historyDataStale.set(true);
     fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
-    playStatusText.set(`Undo successful \u2014 ${opsReversed} op${opsReversed !== 1 ? 's' : ''} reversed`);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,9 +177,7 @@ export async function onChainUndoClick(batchIds: string[], chapter: number | nul
     }
 
     await _afterUndoSuccess(reciter, totalReversed);
-    if (!failed) {
-        playStatusText.set(`Undo successful \u2014 ${totalReversed} op${totalReversed !== 1 ? 's' : ''} reversed across ${batchIds.length} save(s)`);
-    } else {
+    if (failed) {
         btn.disabled = false;
         btn.textContent = 'Undo';
     }
@@ -200,8 +192,7 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
     if (!confirm(`Discard pending edits${chLabel}?`)) return;
 
-    splitChainUid.set(null);
-    splitChainCategory.set(null);
+    pendingChainTarget.set(null);
 
     // Use dirty store helpers (number keys only).
     deleteDirtyEntry(chapter);
