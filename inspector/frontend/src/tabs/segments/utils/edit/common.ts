@@ -26,6 +26,7 @@ import { applyVerseFilterAndRender, recomputeSilenceForRange } from '../data/fil
 import {
     _playRange as _playRangeImpl,
     clearPlayRangeRAF,
+    clearPreviewCanplayHandler,
     getPreviewStopHandler,
     setPreviewJustSeeked,
     setPreviewLooping,
@@ -75,6 +76,7 @@ export function exitEditMode(): void {
     setPreviewLooping(false);
     setPreviewJustSeeked(false);
     clearPlayRangeRAF();
+    clearPreviewCanplayHandler();
     const stopHandler = getPreviewStopHandler();
     if (stopHandler) {
         const audioEl = get(segAudioElement);

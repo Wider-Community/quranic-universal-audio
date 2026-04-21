@@ -113,11 +113,19 @@ export function invalidateChapterIndex(): void {
     all._byChapterIndex = null;
 }
 
-/** Surgical invalidation: drop only the given chapter's cache entries.
- *  Leaves other chapters' cached slices + index rows alive so their
- *  SegmentRows don't force a full `ensureChapterIndex` rebuild on the next
- *  tick. Used after structural edits (split/merge/delete/trim) which reindex
- *  a single chapter in place. */
+/** Surgical re-cache: drop the given chapter's cache entries and repopulate
+ *  from the current `all.segments` so subsequent `getChapterSegments(chapter)`
+ *  reads return the post-edit slice.
+ *
+ *  Can't rely on `ensureChapterIndex` for lazy rebuild: it early-returns when
+ *  `_byChapter` is truthy, so a per-chapter `delete` without immediate rebuild
+ *  leaves `_byChapter[ch]` permanently undefined and `getChapterSegments`
+ *  returning `[]` forever. That broke accordion cards (resolvedSeg = null
+ *  → card body hidden) after any cross-chapter split/merge/trim/delete.
+ *
+ *  Leaves other chapters' cached slices + index rows untouched. Used after
+ *  structural edits (split/merge/delete/trim) which reindex a single chapter
+ *  in place. */
 export function invalidateChapterIndexFor(chapter: number | string): void {
     const all = get(segAllData);
     if (!all) return;
@@ -127,11 +135,18 @@ export function invalidateChapterIndexFor(chapter: number | string): void {
         all._byChapterIndex = null;
         return;
     }
-    if (all._byChapter) delete all._byChapter[String(ch)];
     if (all._byChapterIndex) {
         const prefix = `${ch}:`;
         for (const key of all._byChapterIndex.keys()) {
             if (key.startsWith(prefix)) all._byChapterIndex.delete(key);
+        }
+    }
+    if (all._byChapter) {
+        const slice = all.segments.filter((s) => s.chapter === ch);
+        slice.sort((a, b) => a.index - b.index);
+        all._byChapter[String(ch)] = slice;
+        if (all._byChapterIndex) {
+            for (const s of slice) all._byChapterIndex.set(`${ch}:${s.index}`, s);
         }
     }
 }

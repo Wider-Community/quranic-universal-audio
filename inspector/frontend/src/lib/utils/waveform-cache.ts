@@ -27,7 +27,13 @@ import type { AudioPeaks } from '../types/domain';
  * This makes normalizeAudioUrl() safe to call on any URL.
  */
 export function normalizeAudioUrl(url: string): string {
-    const m = url.match(/^\/api\/seg\/audio-proxy\/[^?]+\?url=(.+)/);
+    // Match the proxy form whether the URL is relative (`/api/seg/...`) or
+    // absolute (`http://host/api/seg/...`). audioEl.src returns the resolved
+    // absolute form even when set via a relative href, so the regex must
+    // tolerate both — otherwise audioSrcMatches misses the proxy ↔ canonical
+    // equivalence and downstream logic (seg-on-audio detection, autoplay
+    // gap advance) silently falls back to non-matching paths.
+    const m = url.match(/\/api\/seg\/audio-proxy\/[^?]+\?url=(.+)/);
     return (m && m[1]) ? decodeURIComponent(m[1]) : url;
 }
 

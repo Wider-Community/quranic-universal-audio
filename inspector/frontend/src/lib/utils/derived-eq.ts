@@ -30,10 +30,18 @@ export function derivedEq<S, T>(
     fn: (s: S) => T,
 ): Readable<T> {
     return readable(fn(get(src)), (set) => {
-        let last = fn(get(src));
+        // Force the first emission through so the readable's internal value is
+        // synced with the source AT SUBSCRIBE TIME. Otherwise, if the source
+        // changed while no one was subscribed (e.g. `get()` on a store with no
+        // Svelte component subscribers), the readable's value is stuck on its
+        // module-load `initial` and `get()` returns that instead of the
+        // current source-derived value.
+        let last: T;
+        let primed = false;
         return src.subscribe((v) => {
             const next = fn(v);
-            if (next !== last) {
+            if (!primed || next !== last) {
+                primed = true;
                 last = next;
                 set(next);
             }

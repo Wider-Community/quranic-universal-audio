@@ -133,6 +133,40 @@ export function formatTimeMs(ms: number): string {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Format ms as fixed-width `hh:mm:ss.MMM`. Used by the SegmentRow time-edit
+ * widget where monospace alignment and per-digit-group addressing matter.
+ * Negative or non-finite inputs collapse to `00:00:00.000`.
+ */
+export function formatHmsMs(ms: number): string {
+    if (!isFinite(ms) || ms < 0) ms = 0;
+    const total = Math.floor(ms);
+    const hh = Math.floor(total / 3600000);
+    const mm = Math.floor((total % 3600000) / 60000);
+    const ss = Math.floor((total % 60000) / 1000);
+    const mmm = total % 1000;
+    const pad2 = (n: number): string => n.toString().padStart(2, '0');
+    const pad3 = (n: number): string => n.toString().padStart(3, '0');
+    return `${pad2(hh)}:${pad2(mm)}:${pad2(ss)}.${pad3(mmm)}`;
+}
+
+/** Compose ms from four digit-group integers. Caller is responsible for
+ *  passing values already validated against their per-group ranges. */
+export function composeHmsMs(hh: number, mm: number, ss: number, mmm: number): number {
+    return hh * 3600000 + mm * 60000 + ss * 1000 + mmm;
+}
+
+/** Split ms into its four digit-group integers (hh/mm/ss/MMM). */
+export function splitHmsMs(ms: number): { hh: number; mm: number; ss: number; mmm: number } {
+    const total = Math.max(0, Math.floor(isFinite(ms) ? ms : 0));
+    return {
+        hh: Math.floor(total / 3600000),
+        mm: Math.floor((total % 3600000) / 60000),
+        ss: Math.floor((total % 60000) / 1000),
+        mmm: total % 1000,
+    };
+}
+
 export function formatDurationMs(ms: number): string {
     if (!isFinite(ms) || ms === 0) return '0s';
     const seconds = ms / 1000;
