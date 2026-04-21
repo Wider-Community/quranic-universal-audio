@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `inspector/app.py` uses flat imports (`from config import ...`,
+# `from services.data_loader import ...`). Put inspector/ on sys.path so
+# those resolve during tests without having to restructure as a package.
+pythonpath = ["."]
+addopts = [
+    "-ra",
+    "--strict-markers",
+]
