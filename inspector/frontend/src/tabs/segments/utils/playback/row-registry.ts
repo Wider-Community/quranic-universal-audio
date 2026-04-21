@@ -83,6 +83,20 @@ export function getRowEntriesFor(chapter: number, index: number): Iterable<RowEn
     return _registry.get(_key(chapter, index)) ?? EMPTY_ITER;
 }
 
+/** Resolve one mounted row entry by its mountId for a concrete
+ *  (chapter, index) pair. Used by edit flows that need to preserve the
+ *  initiating UI context across a mutation. */
+export function getRowEntryForMount(
+    chapter: number,
+    index: number,
+    mountId: symbol,
+): RowEntry | null {
+    for (const entry of getRowEntriesFor(chapter, index)) {
+        if (entry.mountId === mountId) return entry;
+    }
+    return null;
+}
+
 const EMPTY_ITER: Iterable<RowEntry> = { [Symbol.iterator]: () => ({ next: () => ({ done: true, value: undefined }) }) };
 
 export function clearRowRegistry(): void {

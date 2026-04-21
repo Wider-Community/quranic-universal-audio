@@ -131,22 +131,40 @@
     max-height: 70vh;
     overflow-y: auto;
     padding-right: 4px;
+    /* SegmentsList.svelte drives its own scroll anchoring via the row-group
+     * ResizeObserver (see `_handleGroupResize`). The browser's default
+     * `overflow-anchor: auto` also kicks in when a row grows — the two
+     * stack and scrollTop jumps by more than the content grew. Disable
+     * the browser behavior so our JS anchor is the sole actor adjusting
+     * scrollTop in response to row-height changes. */
+    overflow-anchor: none;
+}
+
+/* Layout-transparent wrapper around a row + its optional silence-gap
+ * sibling. Observed as a single unit by the ResizeObserver in
+ * SegmentsList.svelte so the virtualization height cache tracks the row +
+ * gap together. Preserves the 6px gap between row and silence-gap that
+ * `.seg-list`'s flex gap used to supply directly. */
+.seg-row-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .seg-row {
     display: flex;
     gap: 12px;
     align-items: stretch;
-    padding: 6px;
+    padding: 8px;
     background: #16213e;
-    border-radius: 8px;
+    border-radius: 12px;
     border: 2px solid transparent;
     cursor: pointer;
     transition: border-color 0.2s, background 0.2s;
     /* Virtualization in SegmentsList keeps the rendered row count small
      * (viewport + buffer only), so content-visibility/contain-intrinsic-size
      * are no longer needed to elide off-screen work — they would only
-     * confuse the row-height measurement used by the window math. */
+     * confuse the per-row height measurement used by the window math. */
 }
 
 .seg-row:hover {
@@ -162,14 +180,14 @@
     display: flex;
     flex-direction: column;
     flex: 0 0 380px;
-    gap: 4px;
+    gap: 8px;
 }
 
 .seg-row canvas {
     width: 100%;
     height: 60px;
     background: #0f0f23;
-    border-radius: 6px;
+    border-radius: 10px;
     cursor: crosshair;
 }
 
@@ -285,6 +303,90 @@
     user-select: none;
 }
 
+.seg-text-times {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+}
+
+.seg-text-time-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    color: #bbb;
+}
+
+.seg-text-time {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    color: #bbb;
+    cursor: pointer;
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+
+.seg-text-time.clickable:hover {
+    background: rgba(76, 201, 240, 0.12);
+    color: #4cc9f0;
+}
+
+.seg-text-time-editing {
+    background: rgba(76, 201, 240, 0.08);
+    border: 1px solid rgba(76, 201, 240, 0.35);
+    padding: 1px 3px;
+    border-radius: 3px;
+    color: #ddd;
+}
+
+.seg-text-time-editing.invalid {
+    background: rgba(244, 67, 54, 0.15);
+    border-color: #f44336;
+}
+
+.seg-time-group {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+.seg-time-group.editable {
+    color: #4cc9f0;
+    cursor: pointer;
+}
+
+.seg-time-group.editable:hover {
+    background: rgba(76, 201, 240, 0.18);
+}
+
+.seg-time-group.greyed {
+    color: #555;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.seg-time-sep {
+    color: #666;
+    user-select: none;
+}
+
+.seg-time-group-input {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: inherit;
+    color: #4cc9f0;
+    background: #0f0f23;
+    border: 1px solid #4cc9f0;
+    border-radius: 2px;
+    padding: 0 2px;
+    outline: none;
+    text-align: center;
+}
+
+
 .seg-tag {
     font-size: 0.65rem;
     padding: 1px 6px;
@@ -330,17 +432,23 @@
     pointer-events: auto;
 }
 
-/* Play / Go-to column at the far left of the row (between waveforms) */
-.seg-play-col {
+/* Controls beneath the waveform */
+.seg-row-controls {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 0 0 auto;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
 }
-.seg-play-col .seg-card-play-btn,
-.seg-play-col .seg-card-goto-btn {
+
+.seg-row-play-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex: 0 0 auto;
+}
+
+.seg-row-play-actions .seg-card-play-btn,
+.seg-row-play-actions .seg-card-goto-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -354,6 +462,10 @@
     grid-template-columns: 1fr 1fr 1fr;
     gap: 4px;
     flex: 1;
+}
+
+.seg-row-controls .seg-actions {
+    min-width: 0;
 }
 
 /* Inline edit controls (replaces .seg-actions when Adjust/Split is active) */
@@ -379,6 +491,69 @@
 
 .seg-edit-inline .seg-edit-buttons .btn-sm {
     flex: 1;
+}
+
+/* Compact Cancel / Apply — sized to text + a small breather, not stretched. */
+.seg-edit-inline .seg-edit-buttons .btn-cancel,
+.seg-edit-inline .seg-edit-buttons .btn-confirm {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+}
+
+/* Trim cursor steppers — green for start side, red for end side. Square-ish
+ * icon buttons, no flex stretch. Disabled state dims to ~50%. */
+.seg-edit-inline .seg-edit-buttons .seg-trim-step {
+    flex: 0 0 auto;
+    padding: 4px 6px;
+    min-width: 22px;
+    font-family: monospace;
+    font-weight: bold;
+    line-height: 1;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-start {
+    background: #1a3d1f;
+    color: #4caf50;
+    border: 1px solid #2a6c2f;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-start:hover:not(:disabled) {
+    background: #2a6c2f;
+    color: #b3eab6;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-end {
+    background: #3d1a1a;
+    color: #f44336;
+    border: 1px solid #6c2a2a;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-end:hover:not(:disabled) {
+    background: #6c2a2a;
+    color: #f9b3b0;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Split cursor stepper — yellow to match the #ffeb3b split line drawn on
+ * the canvas. Single cursor (no start/end pair), so both < and > share the
+ * one theme. Same sizing + disabled treatment as .seg-trim-step. */
+.seg-edit-inline .seg-edit-buttons .seg-split-step {
+    flex: 0 0 auto;
+    padding: 4px 6px;
+    min-width: 22px;
+    font-family: monospace;
+    font-weight: bold;
+    line-height: 1;
+    background: #3d3a1a;
+    color: #ffeb3b;
+    border: 1px solid #6c662a;
+}
+.seg-edit-inline .seg-edit-buttons .seg-split-step:hover:not(:disabled) {
+    background: #6c662a;
+    color: #fff3a0;
+}
+.seg-edit-inline .seg-edit-buttons .seg-split-step:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 .seg-edit-inline .seg-edit-status {

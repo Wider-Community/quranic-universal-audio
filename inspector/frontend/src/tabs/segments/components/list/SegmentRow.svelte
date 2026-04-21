@@ -76,6 +76,7 @@
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
     import SplitPanel from '../edit/SplitPanel.svelte';
     import TrimPanel from '../edit/TrimPanel.svelte';
+    import TimeRange from './TimeRange.svelte';
 
     // ---- Required ----
     export let seg: Segment;
@@ -162,7 +163,7 @@
     // True only for the one live row currently being edited (any mode).
     // Drives the conditional mount of TrimPanel / SplitPanel / ReferenceEditor
     // inside the row, the `.seg-edit-target` class binding, and the hiding of
-    // `.seg-actions` + `.seg-play-col` during persistent drag modes.
+    // the row control footer during persistent drag modes.
     $: isEditingThisRow = isInitiatingEditRow && $editMode !== null;
     $: editSegCanvas = canvasEl as SegCanvas | undefined;
 
@@ -399,7 +400,7 @@
     function onRowClick(e: MouseEvent): void {
         if (get(editMode) || readOnly) return;
         const t = e.target as Element;
-        if (t.closest('.seg-play-col') || t.closest('.seg-actions') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
+        if (t.closest('.seg-row-controls') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
         playFromSegment(seg.index, seg.chapter ?? 0);
     }
 
@@ -462,15 +463,6 @@
     bind:this={rowEl}
     on:click={onRowClick}
 >
-    {#if !readOnly && !(isEditingThisRow && ($editMode === 'trim' || $editMode === 'split'))}
-        <div class="seg-play-col">
-            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
-            {#if showGotoBtn}
-                <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>
-            {/if}
-        </div>
-    {/if}
-
     <div class="seg-left">
         {#if readOnly && showPlayBtn}
             <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
@@ -486,20 +478,35 @@
             <TrimPanel {seg} canvas={editSegCanvas} />
         {:else if isEditingThisRow && $editMode === 'split' && editSegCanvas}
             <SplitPanel {seg} canvas={editSegCanvas} />
-        {:else if !isContext && !readOnly}
-            <div class="seg-actions">
-                <button class="btn btn-sm btn-adjust" on:click={onAdjustClick}>Adjust</button>
-                <button class="btn btn-sm btn-merge-prev"
-                    disabled={mergePrevDisabled}
-                    title={mergePrevTitle}
-                    on:click={onMergePrevClick}>Merge &uarr;</button>
-                <button class="btn btn-sm btn-delete" on:click={onDeleteClick}>Delete</button>
-                <button class="btn btn-sm btn-split" on:click={onSplitClick}>Split</button>
-                <button class="btn btn-sm btn-merge-next"
-                    disabled={mergeNextDisabled}
-                    title={mergeNextTitle}
-                    on:click={onMergeNextClick}>Merge &darr;</button>
-                <button class="btn btn-sm btn-edit-ref" on:click={onEditRefClick}>Edit Ref</button>
+        {:else if !readOnly}
+            <div class="seg-row-controls">
+                {#if showPlayBtn || showGotoBtn}
+                    <div class="seg-row-play-actions">
+                        {#if showPlayBtn}
+                            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
+                        {/if}
+                        {#if showGotoBtn}
+                            <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>
+                        {/if}
+                    </div>
+                {/if}
+
+                {#if !isContext}
+                    <div class="seg-actions">
+                        <button class="btn btn-sm btn-adjust" on:click={onAdjustClick}>Adjust</button>
+                        <button class="btn btn-sm btn-merge-prev"
+                            disabled={mergePrevDisabled}
+                            title={mergePrevTitle}
+                            on:click={onMergePrevClick}>Merge &uarr;</button>
+                        <button class="btn btn-sm btn-delete" on:click={onDeleteClick}>Delete</button>
+                        <button class="btn btn-sm btn-split" on:click={onSplitClick}>Split</button>
+                        <button class="btn btn-sm btn-merge-next"
+                            disabled={mergeNextDisabled}
+                            title={mergeNextTitle}
+                            on:click={onMergeNextClick}>Merge &darr;</button>
+                        <button class="btn btn-sm btn-edit-ref" on:click={onEditRefClick}>Edit Ref</button>
+                    </div>
+                {/if}
             </div>
         {/if}
     </div>
@@ -516,12 +523,21 @@
                     <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
                 {/if}
                 <span class="seg-text-sep">|</span>
-                <span class="seg-text-duration" class:seg-history-changed={changedDur} title={durTitle}>{durSec.toFixed(1)}s</span>
+                <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
                 {#if showMissingTag}
                     <span class="seg-tag seg-tag-missing">Missing words</span>
                 {/if}
             </div>
-            <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
+            <div class="seg-text-times" class:seg-history-changed={changedDur} title={durTitle}>
+                <TimeRange
+                    {seg}
+                    {rowEl}
+                    mountId={_mountId}
+                    {validationCategory}
+                    {instanceRole}
+                    {readOnly}
+                />
+            </div>
             {#if contextLabel}
                 <div class="seg-text-label">{contextLabel}</div>
             {/if}
