@@ -59,11 +59,45 @@ from src.ui.interface import build_interface
 # =============================================================================
 demo = build_interface()
 
+# Concurrency: main Space serves many parallel requests (GPU requests funnel into
+# ZeroGPU's own queue; CPU-dispatches are cheap I/O to worker Spaces). Worker Spaces
+# run single-threaded — 2 vCPUs would thrash under concurrent ML inference.
+from src.core.zero_gpu import IS_CPU_WORKER
+demo.queue(default_concurrency_limit=1 if IS_CPU_WORKER else 20)
+
 # =============================================================================
 # Main
 # =============================================================================
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+
+    # =============================================================================
+    # Persistent CPU worker pool — spawn BEFORE any GPU use if enabled.
+    # Must be inside __main__ guard: spawn re-imports app.py as __mp_main__ during
+    # worker bootstrap; without the guard, module-level Process.start() would be
+    # called inside a spawned child, triggering the "bootstrapping phase" error.
+    # =============================================================================
+    try:
+        from config import (
+            CPU_STRATEGY as _CPU_STRATEGY,
+            CPU_WORKER_MODE as _CPU_WORKER_MODE,
+            CPU_SUBPROCESS_CONCURRENCY as _CPU_SUBPROCESS_CONCURRENCY,
+            CPU_POOL_PRELOAD_LARGE as _CPU_POOL_PRELOAD_LARGE,
+        )
+        from src.core.zero_gpu import IS_CPU_WORKER as _IS_CPU_WORKER
+        if (
+            _CPU_STRATEGY == "subprocess"
+            and _CPU_WORKER_MODE == "persistent"
+            and not _IS_CPU_WORKER
+        ):
+            print(f"[APP] Bootstrapping persistent CPU pool: {_CPU_SUBPROCESS_CONCURRENCY} worker(s), preload_large={_CPU_POOL_PRELOAD_LARGE}")
+            from src.core.cpu_worker_pool import start_pool as _start_pool
+            _start_pool(_CPU_SUBPROCESS_CONCURRENCY, preload_large=_CPU_POOL_PRELOAD_LARGE)
+    except Exception as _e:
+        print(f"[APP] Persistent CPU pool bootstrap failed (non-fatal): {_e}")
+
     import argparse
     import numpy as np
     import librosa
@@ -107,8 +141,20 @@ if __name__ == "__main__":
         del _dummy
         print("Resampler warmed up.")
 
-    # AoT compilation for VAD model (requires GPU lease)
-    if IS_HF_SPACE and ZERO_GPU_AVAILABLE:
+    # Telemetry sampler — daemon thread samples host + CPU pool every N seconds
+    # and flushes to the telemetry dataset. Skip on CPU workers (they have no
+    # pool of their own and don't host the main Space's schedulers).
+    from src.core.zero_gpu import IS_CPU_WORKER as _IS_CPU_WORKER_TEL
+    if not _IS_CPU_WORKER_TEL:
+        try:
+            from src.core.telemetry_sampler import start_sampler
+            start_sampler()
+        except Exception as _e:
+            print(f"[APP] Telemetry sampler start failed (non-fatal): {_e}")
+
+    # AoT compilation for VAD model (requires GPU lease — skip on CPU workers)
+    from src.core.zero_gpu import IS_CPU_WORKER
+    if IS_HF_SPACE and ZERO_GPU_AVAILABLE and not IS_CPU_WORKER:
         print("Running AoT compilation for VAD model...")
         try:
             aoti_result = test_aoti_compilation_gpu()
@@ -124,4 +170,5 @@ if __name__ == "__main__":
         server_port=port,
         share=args.share,
         allowed_paths=["/tmp"],
+        ssr_mode=False,  # Gradio 6.5.1 SSR probes localhost; fails on some HF container restarts
     )

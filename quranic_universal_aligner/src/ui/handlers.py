@@ -44,16 +44,29 @@ def fetch_url_info(url: str):
     """Fetch metadata only (no download). Returns (info_html, warning) tuple. Raises Exception on error."""
     import yt_dlp
     from urllib.parse import urlparse
+    from src.core.usage_logger import log_error, mark_endpoint_entry, set_stage
 
     if not url or not url.strip():
         return None, None
 
     url = url.strip()
+    mark_endpoint_entry()
+    set_stage("validate")
 
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
-        info = ydl.extract_info(url, download=False)
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as e:
+        log_error(error_code="url_probe_failed", endpoint="ui_url_info",
+                  stage="validate", exception=e,
+                  message=f"URL probe failed: {e}", context={"url": url})
+        raise
 
     if info.get("_type") == "playlist":
+        log_error(error_code="playlist_rejected", endpoint="ui_url_info",
+                  stage="validate",
+                  message="Playlists are not supported",
+                  context={"url": url})
         raise Exception("Playlists are not supported. Please paste a single video/audio URL.")
 
     title = info.get("title", "Unknown")
@@ -113,7 +126,23 @@ def _download_url_core(url: str):
 
 def download_url_audio(url: str):
     """Full download of audio from URL. Returns (wav_path, info_html). Raises Exception on error."""
-    wav_path, info = _download_url_core(url)
+    from src.core.usage_logger import log_error, mark_endpoint_entry, set_stage
+    mark_endpoint_entry()
+    set_stage("download")
+    try:
+        wav_path, info = _download_url_core(url)
+    except Exception as e:
+        msg = str(e)
+        if "Please enter a URL" in msg:
+            code = "empty_url"
+        elif "was not created" in msg:
+            code = "download_file_missing"
+        else:
+            code = "download_failed"
+        log_error(error_code=code, endpoint="ui_url_download",
+                  stage="download", exception=e, message=msg,
+                  context={"url": url})
+        raise
     return wav_path, _build_info_html(info["title"], info["duration"], info["thumbnail"])
 
 

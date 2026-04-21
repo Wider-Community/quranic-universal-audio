@@ -33,10 +33,85 @@ SESSION_DIR = Path("/tmp/aligner_sessions")  # Per-session cached data (audio, V
 SESSION_EXPIRY_SECONDS = 3600*5              # 5 hours — matches DELETE_CACHE_AGE
 
 # =============================================================================
-# CPU subprocess settings
+# CPU dispatch strategy — which path runs @gpu_with_fallback funcs when the
+# user selects device=CPU (or when GPU quota is exhausted).
 # =============================================================================
 
-CPU_SUBPROCESS_TIMEOUT = 3600 * 2            # 2 hours — long recordings (e.g. taraweeh)
+# Routing:
+#   "subprocess" — spawn a local subprocess on the main Space (fast on zero-a10g,
+#                  ~10s for 112.mp3 Base; isolates CUDA state). Requires main
+#                  Space hardware to be ZeroGPU-capable.
+#   "workers"    — dispatch to remote CPU Spaces listed in WORKER_SPACES
+#                  (isolates load off main; ~40–80s per request on cpu-basic).
+#   "both"       — prefer local subprocess (concurrency 1), overflow to remote.
+#                  NOT IMPLEMENTED yet — reserved for future orchestration work.
+CPU_STRATEGY = os.environ.get("CPU_STRATEGY", "subprocess").lower()
+
+# Max seconds a subprocess CPU job can run before SIGKILL (used by "subprocess" and "both" strategies).
+CPU_SUBPROCESS_TIMEOUT = int(os.environ.get("CPU_SUBPROCESS_TIMEOUT", str(3600 * 2)))
+
+# Max concurrent CPU subprocesses on the main Space.
+CPU_SUBPROCESS_CONCURRENCY = int(os.environ.get("CPU_SUBPROCESS_CONCURRENCY", "2"))
+
+# CPU_WORKER_MODE — when CPU_STRATEGY="subprocess", chooses between:
+#   "spawn"      — legacy: fork a fresh subprocess per request (cpu_subprocess.py).
+#   "persistent" — new: route to a pool of long-lived workers (cpu_worker_pool.py).
+# Semaphore capacity stays = CPU_SUBPROCESS_CONCURRENCY either way.
+CPU_WORKER_MODE = os.environ.get("CPU_WORKER_MODE", "persistent").lower()
+
+# Whether the persistent pool preloads ASR Large at boot. If False, Large is
+# loaded on-demand inside the worker and cached there.
+CPU_POOL_PRELOAD_LARGE = os.environ.get("CPU_POOL_PRELOAD_LARGE", "1") == "1"
+
+# Model dtype for CPU inference.
+#   "bfloat16" — default. Routes attention through PyTorch's chunked CPU flash
+#                kernel (`_scaled_dot_product_flash_attention_for_cpu`), which
+#                does NOT materialise the full `(batch, heads, seq, seq)` QK^T
+#                tensor per layer. Avoids the L3-cache cliff that fp16 triggers
+#                at large batch shapes (observed 24× slowdown on 22 min audio).
+#                Measured ~32% faster than fp16 on the same input.
+#   "float16"  — fast on CPUs with AVX512_FP16 (zero-a10g host) but CATASTROPHIC
+#                on CPUs without it (cpu-basic workers: 10-100× slower) AND
+#                hits the cache cliff at large batches even on supported CPUs.
+#   "float32"  — safe fallback, ~2× slower than bf16 on modern hosts.
+CPU_DTYPE = os.environ.get("CPU_DTYPE", "bfloat16").lower()
+
+# =============================================================================
+# CPU worker pool settings (remote dispatch to duplicate CPU Spaces)
+# =============================================================================
+
+# Comma-separated HF Space slugs, e.g. "owner/space-a,owner/space-b".
+# Empty = no pool (dispatch falls back to local subprocess).
+CPU_WORKER_SPACES = os.environ.get("WORKER_SPACES", "").strip()
+
+# Audio encoding on the wire: "float32" | "int16" | "ogg". OGG is ~17x smaller
+# than float32 for speech and fastest end-to-end at every tested size.
+CPU_WORKER_TRANSPORT_DEFAULT = os.environ.get("CPU_TRANSPORT", "ogg").lower()
+
+# Per-job HTTP read timeout (seconds). Long because CPU pipelines are slow and
+# workers may cold-start from sleep.
+CPU_WORKER_HTTP_TIMEOUT = int(os.environ.get("CPU_WORKER_TIMEOUT", str(3600 * 2)))
+
+# Max wait for a free worker before failing with PoolExhaustedError. User-facing.
+CPU_WORKER_ACQUIRE_TIMEOUT = int(os.environ.get("CPU_WORKER_ACQUIRE_TIMEOUT", "900")) # 15 mins
+
+# Admission control: reject when busy_workers + queued_waiters exceeds this and
+# no worker is immediately free. Prevents runaway pile-up under bursty load.
+CPU_WORKER_MAX_QUEUE_DEPTH = int(os.environ.get("CPU_WORKER_MAX_QUEUE", "10"))
+
+# Background thread ping interval for unhealthy workers (seconds).
+CPU_WORKER_HEALTH_INTERVAL = int(os.environ.get("CPU_WORKER_HEALTH_INTERVAL", "600"))
+
+# Max retry attempts on dispatch failure (retries land on a different worker if available).
+CPU_WORKER_MAX_RETRIES = 1
+
+# Idle-read timeout on the SSE stream from a worker. If no bytes arrive within
+# this window, either the worker is stuck or the client has disconnected and
+# we give the watchdog a chance to abort. Must be > longest silent compute block.
+CPU_WORKER_SSE_IDLE_TIMEOUT = int(os.environ.get("CPU_WORKER_SSE_IDLE_TIMEOUT", "120"))
+
+# Client-disconnect poll interval (seconds) for the cancel watchdog thread.
+CPU_WORKER_CANCEL_POLL_INTERVAL = float(os.environ.get("CPU_WORKER_CANCEL_POLL_INTERVAL", "2.0"))
 
 # =============================================================================
 # Model and data paths
@@ -67,7 +142,7 @@ NGRAM_SIZE = 5
 NGRAM_INDEX_PATH = DATA_PATH / f"phoneme_ngram_index_{NGRAM_SIZE}.pkl"
 
 # =============================================================================
-# Inference settings
+# ZeroGPU Lease Timings
 # =============================================================================
 
 ZEROGPU_MAX_DURATION = 120  # Hard cap enforced by HF ZeroGPU
@@ -75,24 +150,35 @@ AUDIO_DURATION_WARNING_MINUTES = 300  # Warn user on upload if audio exceeds thi
 
 def get_vad_duration(minutes):
     """GPU seconds needed for VAD based on audio minutes."""
-    VAD_LEASE_BUFFER = 3.16 + 15
-    return max(3, 0.277 * minutes + 1.48 + VAD_LEASE_BUFFER)
+    VAD_LEASE_BUFFER = 5
+    return max(3, 0.28 * minutes + 1.66 + VAD_LEASE_BUFFER)
 
 def get_asr_duration(minutes, model_name="Base"):
-    """GPU seconds needed for ASR (constant, independent of audio duration)."""
+    """GPU seconds needed for ASR, scales linearly with audio duration."""
     if model_name == "Large":
-        return 10
-    return 5
+        ASR_LEASE_BUFFER = 6.54
+        return max(3, 0.0579 * minutes + 1.72 + ASR_LEASE_BUFFER)
+    ASR_LEASE_BUFFER = 4.5
+    return max(3, 0.0198 * minutes + 0.32 + ASR_LEASE_BUFFER)
 
-ESTIMATE_GPU_BASE_SLOPE = 0.43
-ESTIMATE_GPU_BASE_INTERCEPT = 5.5
-ESTIMATE_GPU_LARGE_SLOPE = 0.50
-ESTIMATE_GPU_LARGE_INTERCEPT = 11.2
+# =============================================================================
+# Estimations
+# =============================================================================
+
+MFA_PROGRESS_SEGMENT_RATE = 0.05  # seconds per segment for progress bar animation
+
+ESTIMATE_GPU_BASE_SLOPE = 0.45
+ESTIMATE_GPU_BASE_INTERCEPT = 7.6
+ESTIMATE_GPU_LARGE_SLOPE = 0.53
+ESTIMATE_GPU_LARGE_INTERCEPT = 7.2
 ESTIMATE_CPU_BASE_SLOPE = 11.2
 ESTIMATE_CPU_BASE_INTERCEPT = 20.9
 ESTIMATE_CPU_LARGE_SLOPE = 25.2
 ESTIMATE_CPU_LARGE_INTERCEPT = 24.4
-ESTIMATE_WALL_BUFFER = 1.5  # multiplier on regression to cover variance
+
+# =============================================================================
+# Inference Settings
+# =============================================================================
 
 # Batching strategy
 BATCHING_STRATEGY = "dynamic"  # "naive" (fixed count) or "dynamic" (seconds + pad waste)
@@ -101,7 +187,8 @@ BATCHING_STRATEGY = "dynamic"  # "naive" (fixed count) or "dynamic" (seconds + p
 INFERENCE_BATCH_SIZE = 32      # Fixed segments per batch (used when BATCHING_STRATEGY="naive")
 
 # Dynamic batching constraints
-MAX_BATCH_SECONDS = 600      # Max total audio seconds per batch (sum of durations)
+MAX_BATCH_SECONDS = 600      # GPU: max total audio seconds per batch (sum of durations)
+MAX_BATCH_SECONDS_CPU = 300  # CPU: tighter cap. SDPA materialises the QK^T tensor per encoder layer
 MAX_PAD_WASTE = 0.2          # Max fraction of padded tensor that is wasted (0=no waste, 1=all waste)
 MIN_BATCH_SIZE = 8           # Minimum segments per batch (prevents underutilization)
 
@@ -133,7 +220,7 @@ COST_DELETION = 1.0                 # Delete phoneme from ASR (P)
 # Repetition detection (wraparound DP)
 WRAP_PENALTY = 3.5                  # Cost per wrap transition in DP
 WRAP_SPAN_WEIGHT = 0.1              # Per-word cost for wrap span width (penalizes wide jumps)
-MAX_WRAPS = 6                       # Max wraps for all segments
+MAX_WRAPS = 5                       # Max wraps for all segments
 # Scoring mode for wraparound candidate selection:
 #   "no_subtract" — WRAP_PENALTY stays in the raw cost before normalizing, so wraps
 #                    are penalized proportionally to segment length. WRAP_SCORE_COST ignored.
@@ -213,11 +300,38 @@ MFA_SHARED_CMVN = False         # Compute shared CMVN across batch (kalpy only)
 USAGE_LOG_DATASET_REPO = "hetchyy/quran-aligner-logs-v2"
 USAGE_LOG_PUSH_INTERVAL_MINUTES = 240
 
-# =============================================================================
-# Progress bar settings
-# =============================================================================
+USAGE_LOG_SCHEMA_VERSION = "3.1.0"
 
-MFA_PROGRESS_SEGMENT_RATE = 0.05  # seconds per segment for progress bar animation
+USAGE_LOG_LOGS_REPO      = os.environ.get("USAGE_LOG_LOGS_REPO",      "hetchyy/quran-aligner-logs")
+USAGE_LOG_AUDIO_REPO     = os.environ.get("USAGE_LOG_AUDIO_REPO",     "hetchyy/quran-aligner-audio")
+USAGE_LOG_TELEMETRY_REPO = os.environ.get("USAGE_LOG_TELEMETRY_REPO", "hetchyy/quran-aligner-telemetry")
+USAGE_LOG_ERRORS_REPO    = os.environ.get("USAGE_LOG_ERRORS_REPO",    "hetchyy/quran-aligner-errors")
+
+# HF subset (config) per dataset. Bump on breaking column changes
+# (column added/dropped/renamed). Patch-level schema changes stay in the same
+# subset and are filtered at read-time via row-level `schema_version`.
+USAGE_LOG_LOGS_SUBSET      = "v3.1"
+USAGE_LOG_AUDIO_SUBSET     = "v3.0"
+USAGE_LOG_TELEMETRY_SUBSET = "v1.0"
+USAGE_LOG_ERRORS_SUBSET    = "v1.0"
+
+# Flush cadence in minutes. Override to 1 on dev Space for fast feedback.
+USAGE_LOG_FLUSH_MINUTES        = int(os.environ.get("USAGE_LOG_FLUSH_MINUTES", "60"))
+USAGE_LOG_AUDIO_FLUSH_MINUTES  = int(os.environ.get("USAGE_LOG_AUDIO_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
+USAGE_LOG_ERRORS_FLUSH_MINUTES = int(os.environ.get("USAGE_LOG_ERRORS_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
+
+# Errors dataset schema version. Bump on any column change.
+USAGE_LOG_ERRORS_SCHEMA_VERSION = "1.0.0"
+
+# Telemetry sampler (persistent CPU worker pool only for v3.1 — spawn / remote
+# worker modes are deferred). Set TELEMETRY_ENABLED=0 to turn the thread off.
+TELEMETRY_ENABLED         = os.environ.get("TELEMETRY_ENABLED", "1") == "1"
+TELEMETRY_SAMPLE_SECONDS  = int(os.environ.get("TELEMETRY_SAMPLE_SECONDS", "60"))
+TELEMETRY_FLUSH_MINUTES   = int(os.environ.get("TELEMETRY_FLUSH_MINUTES", "60"))
+TELEMETRY_SCHEMA_VERSION  = "1.0.3"
+
+# Temporary kill-switch for the per-segment DP replay strings. Set to "1" to
+USAGE_LOG_DISABLE_DP_DEBUG = os.environ.get("USAGE_LOG_DISABLE_DP_DEBUG", "0") == "1"
 
 # =============================================================================
 # UI settings

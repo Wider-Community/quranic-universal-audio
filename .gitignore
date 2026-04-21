@@ -18,6 +18,8 @@ CLAUDE.md
 # Local
 jobs/
 extract_segments.py
+extract_segments_taraweeh.py
+cut_taraweeh.py
 
 # Release packaging output
 dist/

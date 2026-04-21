@@ -147,7 +147,6 @@ def build_css() -> str:
     .animate-btn:hover:not(:disabled) {{ background: #357abd !important; }}
     .animate-btn.active {{ background: #dc3545 !important; }}
     .animate-btn:disabled {{ background: #888 !important; cursor: not-allowed; opacity: 0.5; }}
-    .animate-btn.mfa-stale {{ background: #6c757d !important; }}
 
     /* Make the HTML wrapper inside ts-row match the Gradio Button wrapper */
     #ts-row > .gr-html {{

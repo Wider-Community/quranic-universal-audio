@@ -11,6 +11,7 @@ captures/
 sync_mfa.sh
 fetch_results.sh
 mfa_train.pbs
+analyse_loudness.py
 prepare_labs.py
 audit_reciters.py
 .process_state.json

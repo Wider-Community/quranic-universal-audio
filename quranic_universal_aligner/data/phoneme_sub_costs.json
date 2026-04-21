@@ -63,5 +63,10 @@
   "common_subs": {
     "n|l": 0.25,
     "n|m": 0.25
+  },
+
+  "vowel_consonant": {
+    "w|u:": 0.1,
+    "j|i:": 0.1
   }
 }

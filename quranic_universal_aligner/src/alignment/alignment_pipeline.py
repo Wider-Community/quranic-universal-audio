@@ -565,9 +565,12 @@ def run_phoneme_matching(
                           f"{prev_matched_idx + 1} and {idx + 1}")
                     _dc = get_debug_collector()
                     if _dc is not None:
+                        missing_refs = [chapter_ref.words[w].location
+                                        for w in range(prev_end + 1, curr_start)]
                         _dc.add_event("gap", position="between",
                                       segment_before=prev_matched_idx + 1,
-                                      segment_after=idx + 1, missing_words=gap)
+                                      segment_after=idx + 1, missing_words=gap,
+                                      missing_word_refs=missing_refs)
 
         prev_matched_idx = idx
 
@@ -581,8 +584,12 @@ def run_phoneme_matching(
             print(f"  [GAP] {gap_count} word(s) missing before first segment {first_matched + 1}")
             _dc = get_debug_collector()
             if _dc is not None:
+                missing_refs = [chapter_ref.words[w].location
+                                for w in range(start_pointer, first_start)
+                                if 0 <= w < chapter_ref.num_words]
                 _dc.add_event("gap", position="before_first",
-                              segment_idx=first_matched + 1, missing_words=gap_count)
+                              segment_idx=first_matched + 1, missing_words=gap_count,
+                              missing_word_refs=missing_refs)
 
     # Edge case: missing words at end of current verse
     # Only flag if the last matched segment is also the final segment overall.
@@ -604,8 +611,11 @@ def run_phoneme_matching(
             print(f"  [GAP] {gap_count} word(s) missing after last segment {last_matched + 1}")
             _dc = get_debug_collector()
             if _dc is not None:
+                missing_refs = [chapter_ref.words[w].location
+                                for w in range(last_end + 1, verse_end + 1)]
                 _dc.add_event("gap", position="after_last",
-                              segment_idx=last_matched + 1, missing_words=gap_count)
+                              segment_idx=last_matched + 1, missing_words=gap_count,
+                              missing_word_refs=missing_refs)
 
     # Build profiling dict
     if PHONEME_ALIGNMENT_PROFILING:
