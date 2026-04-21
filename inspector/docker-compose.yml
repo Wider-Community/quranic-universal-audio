@@ -18,13 +18,10 @@
 #       build:
 #         context: ..
 #         dockerfile: inspector/Dockerfile
-#
-# TEMP: pinned to :inspector-refactor while CI is being validated on that
-# branch. Flip to :latest once this branch merges to main.
 
 services:
   inspector:
-    image: ghcr.io/wider-community/inspector:inspector-refactor
+    image: ghcr.io/wider-community/inspector:latest
     container_name: inspector
     pull_policy: always
     ports:
