@@ -518,7 +518,7 @@ def _run_post_vad_pipeline(
     import time
 
     if not intervals:
-        empty = {"segments": []} if endpoint != "ui" else []
+        empty = {"segments": []} if not endpoint.startswith("ui") else []
         return "<div>No speech segments detected in audio</div>", empty, None, None
 
     # Build VAD segments and extract audio arrays
@@ -906,7 +906,7 @@ def _run_post_vad_pipeline(
             print(f"[USAGE_LOG] Failed: {e}")
 
     # API callers get a JSON dict; UI callers get the SegmentInfo list directly
-    if endpoint != "ui":
+    if not endpoint.startswith("ui"):
         json_output = segments_to_json(segments)
         return "", json_output, str(segment_dir), log_row
 

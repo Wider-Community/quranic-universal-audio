@@ -82,6 +82,7 @@ def build_interface():
         c.cached_segment_dir = gr.State(value=None)
         c.cached_log_row = gr.State(value=None)
         c.is_preset = gr.State(value=False)
+        c.audio_source = gr.State(value="upload")
         c.resegment_panel_visible = gr.State(value=False)
 
         # Session API components (hidden, API-only)

@@ -149,6 +149,13 @@ def _wire_url_input(c):
         api_name=False, show_progress="hidden",
     )
 
+    # Manual URL edit clears preset flag (programmatic sets from pill buttons
+    # use .change not .input, so pill's is_preset=True survives).
+    c.url_input.input(
+        fn=lambda: False, inputs=[], outputs=[c.is_preset],
+        api_name=False, show_progress="hidden",
+    )
+
     def _on_download(url):
         """Download audio from URL."""
         # Yield 1: button shows downloading state
@@ -189,6 +196,9 @@ def _wire_url_input(c):
     ).then(
         fn=_on_audio_change, inputs=[c.audio_input], outputs=_dl_reset_outputs,
         api_name=False, show_progress="hidden",
+    ).then(
+        fn=lambda: "link", inputs=[], outputs=[c.audio_source],
+        api_name=False, show_progress="hidden",
     )
 
     # Site pill buttons: set URL (+ optional slider override) → download → reset UI
@@ -197,19 +207,22 @@ def _wire_url_input(c):
         "soundcloud": ("https://soundcloud.com/quranmta/recitation-of-the-764269316?in=quranmta/sets/suras", None),
         "mp3quran": ("https://server12.mp3quran.net/maher/027.mp3", 100),
     }
-    _pill_outputs = [c.url_input, c.min_silence_slider]
+    _pill_outputs = [c.url_input, c.min_silence_slider, c.is_preset]
     for btn, key in [(c.btn_site_tiktok, "tiktok"),
                      (c.btn_site_soundcloud, "soundcloud"),
                      (c.btn_site_mp3quran, "mp3quran")]:
         _url, _sil = _SITE_URLS[key]
         btn.click(
-            fn=lambda u=_url, s=_sil: (u, gr.update() if s is None else s),
+            fn=lambda u=_url, s=_sil: (u, gr.update() if s is None else s, True),
             inputs=[], outputs=_pill_outputs, api_name=False,
         ).then(
             fn=_on_download, inputs=[c.url_input], outputs=_dl_outputs,
             api_name=False, show_progress="hidden",
         ).then(
             fn=_on_audio_change, inputs=[c.audio_input], outputs=_dl_reset_outputs,
+            api_name=False, show_progress="hidden",
+        ).then(
+            fn=lambda: "link", inputs=[], outputs=[c.audio_source],
             api_name=False, show_progress="hidden",
         )
 
@@ -233,13 +246,17 @@ def _wire_audio_input(c):
     ]
     _ready_outputs = [c.audio_input] + _reset_outputs
 
-    def _on_audio_ready_reset_preset(audio_path):
-        """Bridge audio to State + reset UI + clear is_preset in one round-trip."""
-        return (*_on_audio_ready(audio_path), False)
+    def _on_upload(audio_path):
+        """Bridge upload to State + reset UI + clear is_preset + tag source."""
+        return (*_on_audio_ready(audio_path), False, "upload")
 
-    _ready_preset_outputs = _ready_outputs + [c.is_preset]
-    c.audio_upload.input(fn=_on_audio_ready_reset_preset, inputs=[c.audio_upload], outputs=_ready_preset_outputs, api_name=False, show_progress="hidden")
-    c.audio_record.input(fn=_on_audio_ready_reset_preset, inputs=[c.audio_record], outputs=_ready_preset_outputs, api_name=False, show_progress="hidden")
+    def _on_record(audio_path):
+        """Bridge record to State + reset UI + clear is_preset + tag source."""
+        return (*_on_audio_ready(audio_path), False, "record")
+
+    _ready_preset_outputs = _ready_outputs + [c.is_preset, c.audio_source]
+    c.audio_upload.input(fn=_on_upload, inputs=[c.audio_upload], outputs=_ready_preset_outputs, api_name=False, show_progress="hidden")
+    c.audio_record.input(fn=_on_record, inputs=[c.audio_record], outputs=_ready_preset_outputs, api_name=False, show_progress="hidden")
 
     # Example buttons: set audio_upload (for waveform) + device + preset flag,
     # then chain _on_audio_ready since .input() won't fire for programmatic sets.
@@ -257,7 +274,7 @@ def _wire_audio_input(c):
 def _wire_extract_chain(c):
     """Extract segments + save JSON + show action buttons in one round-trip."""
     def _extract_all(audio_data, silence, speech, pad, model, device, is_preset,
-                     request: gr.Request = None):
+                     audio_source="upload", request: gr.Request = None):
         # Compute audio duration and show animated progress bar
         import librosa
         audio_dur = librosa.get_duration(path=audio_data) if audio_data else None
@@ -281,7 +298,8 @@ def _wire_extract_chain(c):
 
         try:
             result = process_audio(audio_data, silence, speech, pad, model, device,
-                                   is_preset=is_preset, request=request)
+                                   is_preset=is_preset, request=request,
+                                   endpoint=f"ui:{audio_source}")
         except QuotaExhaustedError as e:
             raw = str(e).lower()
             if e.reset_time and e.reset_time != "0:00:00":
@@ -364,7 +382,7 @@ def _wire_extract_chain(c):
             c.audio_input,
             c.min_silence_slider, c.min_speech_slider, c.pad_slider,
             c.model_radio, c.device_radio,
-            c.is_preset,
+            c.is_preset, c.audio_source,
         ],
         outputs=[
             c.output_html, c.output_json,
@@ -407,7 +425,7 @@ def _wire_resegment_chain(c):
 
     def _resegment_all(speech_intervals, is_complete, audio, sr,
                        silence, speech, pad, model, device, log_row, is_preset,
-                       request: gr.Request = None):
+                       audio_source="upload", request: gr.Request = None):
         # Compute estimate and show progress bar
         from src.pipeline import _audio_duration_from_ref
         audio_dur = _audio_duration_from_ref(audio)
@@ -430,7 +448,8 @@ def _wire_resegment_chain(c):
         try:
             result = resegment_audio(speech_intervals, is_complete, audio, sr,
                                      silence, speech, pad, model, device, log_row,
-                                     is_preset=is_preset, request=request)
+                                     is_preset=is_preset, request=request,
+                                     endpoint=f"ui:{audio_source}")
         except QuotaExhaustedError as e:
             raw = str(e).lower()
             if e.reset_time and e.reset_time != "0:00:00":
@@ -506,7 +525,7 @@ def _wire_resegment_chain(c):
             c.rs_silence, c.rs_speech, c.rs_pad,
             c.model_radio, c.device_radio,
             c.cached_log_row,
-            c.is_preset,
+            c.is_preset, c.audio_source,
         ],
         outputs=[
             c.output_html, c.output_json,
@@ -528,7 +547,7 @@ def _wire_retranscribe_chain(c):
     """Retranscribe + save + hide button + update model name in one round-trip."""
     def _retranscribe_all(intervals, audio, sr, speech_intervals, is_complete,
                           model_name, device, log_row, silence, speech, pad, is_preset,
-                          request: gr.Request = None):
+                          audio_source="upload", request: gr.Request = None):
         # Compute estimate and show progress bar
         from src.pipeline import _audio_duration_from_ref
         audio_dur = _audio_duration_from_ref(audio)
@@ -551,7 +570,8 @@ def _wire_retranscribe_chain(c):
             result = _retranscribe_wrapper(intervals, audio, sr, speech_intervals,
                                            is_complete, model_name, device, log_row,
                                            silence, speech, pad,
-                                           is_preset=is_preset, request=request)
+                                           is_preset=is_preset, request=request,
+                                           endpoint=f"ui:{audio_source}")
         except QuotaExhaustedError as e:
             raw = str(e).lower()
             if e.reset_time and e.reset_time != "0:00:00":
@@ -619,7 +639,7 @@ def _wire_retranscribe_chain(c):
             c.cached_model_name, c.device_radio,
             c.cached_log_row,
             c.min_silence_slider, c.min_speech_slider, c.pad_slider,
-            c.is_preset,
+            c.is_preset, c.audio_source,
         ],
         outputs=[
             c.output_html, c.output_json,
