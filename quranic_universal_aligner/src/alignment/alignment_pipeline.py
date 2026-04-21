@@ -565,8 +565,10 @@ def run_phoneme_matching(
                           f"{prev_matched_idx + 1} and {idx + 1}")
                     _dc = get_debug_collector()
                     if _dc is not None:
-                        missing_refs = [chapter_ref.words[w].location
-                                        for w in range(prev_end + 1, curr_start)]
+                        gap_ref = get_chapter_reference(int(prev_surah))
+                        missing_refs = [gap_ref.words[w].location
+                                        for w in range(prev_end + 1, curr_start)
+                                        if 0 <= w < gap_ref.num_words]
                         _dc.add_event("gap", position="between",
                                       segment_before=prev_matched_idx + 1,
                                       segment_after=idx + 1, missing_words=gap,
