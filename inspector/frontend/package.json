@@ -15,7 +15,6 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.60.2",
     "chart.js": "^4.4.0",
     "chartjs-plugin-annotation": "^3.0.1"
   },
