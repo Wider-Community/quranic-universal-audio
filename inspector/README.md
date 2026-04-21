@@ -4,17 +4,14 @@ Flask web app for reviewing and editing Quran recitation alignment results. Thre
 
 ## Setup
 
-```bash
-pip install -r inspector/requirements.txt
-```
-
-## Run
+Requires [Docker](https://docs.docker.com/get-docker/). From the repo root:
 
 ```bash
-python inspector/server.py
+docker compose -f inspector/docker-compose.yml up
 ```
 
-Open http://localhost:5000.
+Open http://localhost:5000. The image is pulled from GHCR — no local build needed. `data/` at the repo root is mounted into the container, so edits save back to your working tree.
+
 
 
 ## Segments Reviewing
@@ -156,3 +153,11 @@ We're continuously improving the Inspector to make reviewing as smooth as possib
 - Ways to improve the reviewer experience, make it more enjoyable, and reduce the time it takes to review a reciter
 - General UI improvements, new features, or bug reports
 - General improvements for the timestamps and audio tabs experience
+
+## Tech stack
+
+- **Backend:** Python 3.11, Flask (Blueprints), `quranic-phonemizer`
+- **Frontend:** Svelte 4 + TypeScript + Vite
+- **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
+- **Testing:** Pytest for backend; Vitest 4 + happy-dom + `@testing-library/svelte` for frontend; Playwright for end-to-end testing
+- **Packaging:** Multi-stage Docker image (Node build → Python runtime), published to GHCR via GitHub Actions on pushes to `main`

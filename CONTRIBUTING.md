@@ -31,7 +31,7 @@ Reciters in the project fall into one of three states. Browse the full list in [
 
 ## Setup
 
-Requesting processing and reporting issues only need a browser. For reviewing segments, you'll need Git and Python.
+Requesting processing and reporting issues only need a browser. For reviewing segments, you'll need Git and Docker.
 
 ### Prerequisites
 
@@ -39,39 +39,32 @@ Requesting processing and reporting issues only need a browser. For reviewing se
 <summary><b>Installing Git</b></summary>
 
 - **Windows:** Download from [git-scm.com](https://git-scm.com/download/win). The installer includes Git Bash, a terminal you can use for all commands below.
-- **Mac:** Run `xcode-select --install` in Terminal. Alternatively, if you have [Homebrew](https://brew.sh): `brew install git`.
+- **Mac:** Run `xcode-select --install` in a terminal. Alternatively, if you have [Homebrew](https://brew.sh): `brew install git`.
 - **Linux:** `sudo apt install git` (Ubuntu/Debian) or `sudo dnf install git` (Fedora).
 
-Verify: `git --version`
+Verify: `git --version` from a terminal 
 
 New to Git? GitHub's [Get Started guide](https://docs.github.com/en/get-started/getting-started-with-git) covers the basics.
 
 </details>
 
 <details>
-<summary><b>Installing Python</b></summary>
+<summary><b>Installing Docker</b></summary>
 
-- **Windows:** Download from [python.org/downloads](https://www.python.org/downloads/). During installation, **check "Add Python to PATH"**. Avoid the Microsoft Store version.
-- **Mac:** `brew install python` (if you have [Homebrew](https://brew.sh)), or download from [python.org/downloads](https://www.python.org/downloads/).
-- **Linux:** `sudo apt install python3 python3-pip` (Ubuntu/Debian) or `sudo dnf install python3 python3-pip` (Fedora).
+- **Windows / Mac:** Install [Docker Desktop](https://docs.docker.com/get-docker/) and launch it — the whale icon in the tray means the daemon is running.
+- **Linux:** Install [Docker Engine](https://docs.docker.com/engine/install/) and the Compose plugin (`sudo apt install docker-compose-plugin` on Ubuntu/Debian).
 
-Verify: `python3 --version` (should print 3.10 or higher)
-
-> **Windows note:** If `python3` isn't recognized, try `python --version` instead.
+Verify: `docker --version` and `docker compose version` from a terminal
 
 </details>
 
-### Clone and install
+### Clone
 
 Run the following in a terminal:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Wider-Community/quranic-universal-audio.git
-cd quranic-universal-audio
-
-# Install the Inspector dependencies
-pip install -r inspector/requirements.txt
+git clone https://github.com/Wider-Community/quranic-universal-audio.git # Clone the repository locally
+cd quranic-universal-audio # Change into the project folder
 ```
 
 ## How to review results
@@ -82,23 +75,24 @@ There are two ways to get started:
 
 **If you'd like to review an existing reciter**, browse [issues needing a reviewer](https://github.com/Wider-Community/quranic-universal-audio/issues?q=is%3Aopen+label%3Areviewer-needed) and comment `/claim` on the one you'd like to work on. If you're already a repository collaborator, you'll be assigned immediately. If not, you'll receive a collaborator invite — accept it on GitHub, then comment `/confirm` to get assigned.
 
-Once the segments are ready, you will be automatically assigned to the [pull request](https://github.com/Wider-Community/quranic-universal-audio/pulls).
+Once the segments are ready, you will be automatically assigned to the [Pull Request](https://github.com/Wider-Community/quranic-universal-audio/pulls).
 
 **1. Check out the pull request branch**
 
 ```bash
-git pull origin main  # get latest updates
-git branch -r                                   # list available branches
+git pull origin main  # get latest updates (ensure you are inside the repo folder)
 git checkout feat/add-segments-mishary-alafasi  # switch to the PR branch
 ```
 
 **2. Run the Inspector**
 
+Launch the Docker app and run from a terminal:
+
 ```bash
-python inspector/server.py # or python3 inspector/server.py
+docker compose -f inspector/docker-compose.yml up
 ```
 
-Open http://localhost:5000 to start editing. See the [Inspector README](inspector/README.md) for detailed documentation, visual guides, and the full review workflow.
+Open http://localhost:5000 to start editing.  See the [Inspector README](inspector/README.md) for detailed documentation, visual guides, and the full review workflow.
 
 **3. Push your fixes**
 
@@ -106,7 +100,7 @@ As you fix errors, save your changes and push. You can push multiple rounds of f
 
 ```bash
 git add data/recitation_segments/<reciter>/
-git commit -m "fix: correct segmentation errors for <reciter>"
+git commit -m "fix: correct errors for <reciter>"
 git push
 ```
 
