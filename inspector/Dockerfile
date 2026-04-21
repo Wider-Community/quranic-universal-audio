@@ -87,6 +87,14 @@ COPY inspector/routes/ ./inspector/routes/
 COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
 COPY validators/ ./validators/
+# Linguistic data read by services/data_loader.py via config.py's _QUA_DATA.
+# Without these, UnifiedDisplay renders empty Arabic (word.text / display_text
+# come from qpc_hafs + digital_khatt). Fonts/.py siblings in that dir aren't
+# needed at runtime — copy only the 3 jsons config.py references.
+COPY quranic_universal_aligner/data/qpc_hafs.json \
+     quranic_universal_aligner/data/digital_khatt_v2_script.json \
+     quranic_universal_aligner/data/phoneme_sub_costs.json \
+     ./quranic_universal_aligner/data/
 COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 
 # Data volume is mounted here at runtime (see docker-compose.yml). Inside the
