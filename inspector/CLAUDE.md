@@ -41,7 +41,7 @@ with the Flask app reached via `app.test_client()`. Config: `vitest.config.ts`
 - **Charts:** Chart.js (npm) + `chartjs-plugin-annotation`, registered centrally in `src/lib/utils/chart.ts`
 - **CSS:** Plain CSS split by domain (no preprocessor, no CSS-in-JS), imported from `src/styles/`
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
-- **Testing:** Vitest 4 + `@testing-library/svelte` + `happy-dom` for the frontend (requires Node ≥ 20.19 — repo developed on Node 24 LTS); `pytest` + `pytest-cov` for the backend
+- **Testing:** Vitest 4 + `@testing-library/svelte` + `happy-dom` for the frontend; `pytest` + `pytest-cov` for the backend
 
 ## Code Principles
 

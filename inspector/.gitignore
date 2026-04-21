@@ -5,5 +5,4 @@ __pycache__/
 .env
 .venv
 captures/
-# CLAUDE.md is tracked for this sub-project (override root gitignore)
-!CLAUDE.md
+CLAUDE.md
