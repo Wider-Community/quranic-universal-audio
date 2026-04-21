@@ -1,0 +1,53 @@
+/* ============ Segment filter bar ============ */
+.seg-filter-bar {
+    margin-bottom: 8px;
+    background: #16213e;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+
+.seg-filter-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seg-filter-title  { font-size: 0.85rem; color: #aaa; font-weight: 600; }
+.seg-filter-count  { color: #4cc9f0; font-size: 0.8rem; }
+.seg-filter-status { margin-left: auto; font-size: 0.8rem; color: #888; }
+.seg-filter-rows   { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.seg-filter-row    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.seg-filter-field, .seg-filter-op {
+    background: #1a1a3e; color: #e0e0e0;
+    border: 1px solid #3a3a5a; border-radius: 4px;
+    padding: 4px 8px; font-size: 0.85rem;
+}
+.seg-filter-field { min-width: 160px; }
+.seg-filter-op    { width: 60px; }
+
+.seg-filter-value {
+    background: #1a1a3e; color: #e0e0e0;
+    border: 1px solid #3a3a5a; border-radius: 4px;
+    padding: 4px 8px; font-size: 0.85rem; width: 90px;
+}
+.seg-filter-remove { padding: 2px 8px; font-size: 0.9rem; }
+
+/* Back to filter results banner */
+.seg-back-banner {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #1b3a4b;
+    border-bottom: 2px solid #4361ee;
+    padding: 6px 12px;
+    text-align: center;
+}
+.seg-back-btn {
+    background: #4361ee;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 4px 14px;
+    border-radius: 4px;
+}
+.seg-back-btn:hover {
+    background: #5a7bff;
+}
