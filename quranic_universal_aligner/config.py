@@ -297,40 +297,37 @@ MFA_SHARED_CMVN = False         # Compute shared CMVN across batch (kalpy only)
 # Usage logging (pushed to HF Hub via ParquetScheduler)
 # =============================================================================
 
-USAGE_LOG_DATASET_REPO = "hetchyy/quran-aligner-logs-v2"
-USAGE_LOG_PUSH_INTERVAL_MINUTES = 240
+# Subset naming: HF config per dataset. Bump on breaking column changes
+# (column added / dropped / renamed). Patch-level changes stay in the same
+# subset and are filtered at read-time via the row-level `schema_version`.
+# Flush cadences default to 60 min on prod; dev Space overrides to 1 via env.
 
-USAGE_LOG_SCHEMA_VERSION = "3.1.0"
+# --- Logs dataset (per-request metadata) ---
+USAGE_LOG_LOGS_REPO       = os.environ.get("USAGE_LOG_LOGS_REPO", "hetchyy/quran-aligner-logs")
+USAGE_LOG_LOGS_SUBSET     = "v3.1"
+USAGE_LOG_SCHEMA_VERSION  = "3.1.1"   # row-level tag; also inherited by audio rows
+USAGE_LOG_FLUSH_MINUTES   = int(os.environ.get("USAGE_LOG_FLUSH_MINUTES", "60"))
 
-USAGE_LOG_LOGS_REPO      = os.environ.get("USAGE_LOG_LOGS_REPO",      "hetchyy/quran-aligner-logs")
-USAGE_LOG_AUDIO_REPO     = os.environ.get("USAGE_LOG_AUDIO_REPO",     "hetchyy/quran-aligner-audio")
-USAGE_LOG_TELEMETRY_REPO = os.environ.get("USAGE_LOG_TELEMETRY_REPO", "hetchyy/quran-aligner-telemetry")
-USAGE_LOG_ERRORS_REPO    = os.environ.get("USAGE_LOG_ERRORS_REPO",    "hetchyy/quran-aligner-errors")
+# --- Audio dataset (source audio, deduped by content hash) ---
+USAGE_LOG_AUDIO_REPO          = os.environ.get("USAGE_LOG_AUDIO_REPO", "hetchyy/quran-aligner-audio")
+USAGE_LOG_AUDIO_SUBSET        = "v3.0"
+USAGE_LOG_AUDIO_FLUSH_MINUTES = int(os.environ.get("USAGE_LOG_AUDIO_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
 
-# HF subset (config) per dataset. Bump on breaking column changes
-# (column added/dropped/renamed). Patch-level schema changes stay in the same
-# subset and are filtered at read-time via row-level `schema_version`.
-USAGE_LOG_LOGS_SUBSET      = "v3.1"
-USAGE_LOG_AUDIO_SUBSET     = "v3.0"
-USAGE_LOG_TELEMETRY_SUBSET = "v1.0"
-USAGE_LOG_ERRORS_SUBSET    = "v1.0"
-
-# Flush cadence in minutes. Override to 1 on dev Space for fast feedback.
-USAGE_LOG_FLUSH_MINUTES        = int(os.environ.get("USAGE_LOG_FLUSH_MINUTES", "60"))
-USAGE_LOG_AUDIO_FLUSH_MINUTES  = int(os.environ.get("USAGE_LOG_AUDIO_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
-USAGE_LOG_ERRORS_FLUSH_MINUTES = int(os.environ.get("USAGE_LOG_ERRORS_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
-
-# Errors dataset schema version. Bump on any column change.
+# --- Errors dataset (per-error-event rows) ---
+USAGE_LOG_ERRORS_REPO           = os.environ.get("USAGE_LOG_ERRORS_REPO", "hetchyy/quran-aligner-errors")
+USAGE_LOG_ERRORS_SUBSET         = "v1.0"
 USAGE_LOG_ERRORS_SCHEMA_VERSION = "1.0.0"
+USAGE_LOG_ERRORS_FLUSH_MINUTES  = int(os.environ.get("USAGE_LOG_ERRORS_FLUSH_MINUTES", str(USAGE_LOG_FLUSH_MINUTES)))
 
-# Telemetry sampler (persistent CPU worker pool only for v3.1 — spawn / remote
-# worker modes are deferred). Set TELEMETRY_ENABLED=0 to turn the thread off.
-TELEMETRY_ENABLED         = os.environ.get("TELEMETRY_ENABLED", "1") == "1"
-TELEMETRY_SAMPLE_SECONDS  = int(os.environ.get("TELEMETRY_SAMPLE_SECONDS", "60"))
-TELEMETRY_FLUSH_MINUTES   = int(os.environ.get("TELEMETRY_FLUSH_MINUTES", "60"))
-TELEMETRY_SCHEMA_VERSION  = "1.0.3"
+# --- Telemetry dataset (periodic host + CPU pool samples) ---
+USAGE_LOG_TELEMETRY_REPO = os.environ.get("USAGE_LOG_TELEMETRY_REPO", "hetchyy/quran-aligner-telemetry")
+USAGE_LOG_TELEMETRY_SUBSET = "v1.0"
+TELEMETRY_SCHEMA_VERSION   = "1.0.3"
+TELEMETRY_ENABLED          = os.environ.get("TELEMETRY_ENABLED", "1") == "1"
+TELEMETRY_SAMPLE_SECONDS   = int(os.environ.get("TELEMETRY_SAMPLE_SECONDS", "60"))
+TELEMETRY_FLUSH_MINUTES    = int(os.environ.get("TELEMETRY_FLUSH_MINUTES", "60"))
 
-# Temporary kill-switch for the per-segment DP replay strings. Set to "1" to
+# Temporary kill-switch for the per-segment DP replay strings. Set to "1" to disable.
 USAGE_LOG_DISABLE_DP_DEBUG = os.environ.get("USAGE_LOG_DISABLE_DP_DEBUG", "0") == "1"
 
 # =============================================================================
