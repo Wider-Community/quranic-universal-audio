@@ -99,6 +99,14 @@ COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 
 # Data volume is mounted here at runtime (see docker-compose.yml). Inside the
 # container every data path derives from DATA_DIR via inspector/config.py.
+# Run as non-root. uid/gid 1000 matches the common host-user convention so
+# bind-mounted /data stays readable without chown gymnastics. The inspector
+# cache dir (see config.py) needs to be writable by this user.
+RUN addgroup -g 1000 -S inspector && \
+    adduser -u 1000 -S -G inspector -H -D inspector && \
+    chown -R inspector:inspector /app
+USER inspector
+
 EXPOSE 5000
 
 CMD ["python3", "inspector/app.py"]
