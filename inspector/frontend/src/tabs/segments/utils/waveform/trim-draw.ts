@@ -23,7 +23,10 @@ export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
     const tw = canvas._trimWindow;
     if (!tw) return false;
 
-    const data = drawEditPeakBase(canvas, tw.audioUrl || '', tw.windowStart, tw.windowEnd);
+    // Slice peaks for the VISIBLE window (viewStart/End), not the absolute
+    // clamp window — wheel zoom rebuilds this cache after dropping the prior
+    // ImageData via `_trimBaseCache = null`.
+    const data = drawEditPeakBase(canvas, tw.audioUrl || '', tw.viewStart, tw.viewEnd);
     if (!data) return false;
 
     const width = canvas.width;
@@ -65,12 +68,29 @@ export function drawTrimWaveform(canvas: SegCanvas): void {
 
     ctx.putImageData(c._trimBaseCache, 0, 0);
 
-    const startX = ((tw.currentStart - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
-    const endX = ((tw.currentEnd - tw.windowStart) / (tw.windowEnd - tw.windowStart)) * width;
+    // Pixel positions of the cursors in the VISIBLE window. Two flavors:
+    //   - Raw  (sxRaw, exRaw): unclamped — can be < 0 or > width when the
+    //     cursor's actual time is outside the visible window. Used for the
+    //     dim regions so off-view trim ranges still produce correct dimming
+    //     (e.g. trim-range entirely off-view → whole canvas dimmed).
+    //   - Strict-clamped (startX, endX): start clips to LEFT edge (x=0),
+    //     end clips to RIGHT edge (x=width). Used for the cursor lines so
+    //     the user can grab + drag a clamped handle right at the canvas
+    //     edge, regardless of which side of the view it actually fell off.
+    const span = tw.viewEnd - tw.viewStart;
+    const sxRaw = ((tw.currentStart - tw.viewStart) / span) * width;
+    const exRaw = ((tw.currentEnd - tw.viewStart) / span) * width;
+    const startOff = tw.currentStart < tw.viewStart || tw.currentStart > tw.viewEnd;
+    const endOff   = tw.currentEnd   < tw.viewStart || tw.currentEnd   > tw.viewEnd;
+    const startX = startOff ? 0     : sxRaw;
+    const endX   = endOff   ? width : exRaw;
+
+    const leftDimEnd    = Math.max(0, Math.min(width, sxRaw));
+    const rightDimStart = Math.max(0, Math.min(width, exRaw));
 
     ctx.fillStyle = `rgba(0, 0, 0, ${get(segConfig).trimDimAlpha})`;
-    ctx.fillRect(0, 0, startX, height);
-    ctx.fillRect(endX, 0, width - endX, height);
+    ctx.fillRect(0, 0, leftDimEnd, height);
+    ctx.fillRect(rightDimStart, 0, width - rightDimStart, height);
 
     ctx.strokeStyle = '#4caf50';
     ctx.lineWidth = 3;

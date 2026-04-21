@@ -38,19 +38,47 @@ export interface MergeHighlight {
     hlEnd: number;
 }
 
-/** Edit-mode trim window snapshot (currentStart/End are mutable as user drags). */
+/** Edit-mode trim window snapshot (currentStart/End are mutable as user drags).
+ *
+ *  - `windowStart/windowEnd` — hard CLAMP bounds (from neighbors + trim padding).
+ *    Cursors can never have an actual time outside this range.
+ *  - `viewStart/viewEnd` — currently VISIBLE time range on the canvas (mouse-wheel
+ *    zoom narrows this within `[windowStart, windowEnd]`). Drives all pixel↔time
+ *    math (drag-mapping, hit-detection, peak slice, cursor + playhead x). When
+ *    not zoomed: `viewStart === windowStart && viewEnd === windowEnd`.
+ *    Reset on every `enterTrimMode` (not preserved across edit sessions).
+ *  - When a cursor's actual time falls outside `[viewStart, viewEnd]`, it is
+ *    visually clamped — strict per side: start to LEFT edge, end to RIGHT edge.
+ */
 export interface TrimWindow {
     windowStart: number;
     windowEnd: number;
+    viewStart: number;
+    viewEnd: number;
     currentStart: number;
     currentEnd: number;
     audioUrl: string;
 }
 
-/** Edit-mode split data. */
+/** Edit-mode split data.
+ *
+ *  - `seg.time_start`/`seg.time_end` are the absolute clamp bounds (cursor
+ *    cannot leave the segment).
+ *  - `viewStart/viewEnd` — currently VISIBLE time range on the canvas (mouse-
+ *    wheel zoom narrows this within `[seg.time_start, seg.time_end]`). Drives
+ *    pixel↔time math (drag, hit-detection, peak slice, cursor x). When not
+ *    zoomed: `viewStart === seg.time_start && viewEnd === seg.time_end`.
+ *    Reset on every `enterSplitMode` (not preserved across edit sessions).
+ *  - When the split cursor's actual time falls outside `[viewStart, viewEnd]`,
+ *    it is visually clamped to the canvas MIDDLE (not an edge — single cursor
+ *    has no "side", and middle keeps both step directions productive: into-
+ *    view from middle still lands on-canvas going either way).
+ */
 export interface SplitData {
     seg: Segment;
     currentSplit: number;
+    viewStart: number;
+    viewEnd: number;
     audioUrl: string;
 }
 

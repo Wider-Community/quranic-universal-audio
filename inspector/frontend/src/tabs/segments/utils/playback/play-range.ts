@@ -4,7 +4,7 @@
 
 import { get, writable } from 'svelte/store';
 
-import { safePlay } from '../../../../lib/utils/audio';
+import { audioSrcMatches, safePlay } from '../../../../lib/utils/audio';
 import { PREVIEW_PLAYHEAD_COLOR } from '../../../../lib/utils/constants';
 import { getSegByChapterIndex, selectedChapter } from '../../stores/chapter';
 import { editCanvas, editingSegIndex } from '../../stores/edit';
@@ -36,6 +36,18 @@ export function clearPlayRangeRAF(): void {
     if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
 }
 
+/** Detach any pending `canplay` listener from the audio element and clear the
+ *  handler ref. Called from exitEditMode so that a canplay event that fires
+ *  AFTER the user has cancelled the edit doesn't re-enter `doPlay` and kick
+ *  off a phantom preview loop on a canvas whose _trimWindow is already gone. */
+export function clearPreviewCanplayHandler(): void {
+    const audioEl = get(segAudioElement);
+    if (audioEl && _previewCanplayHandler) {
+        audioEl.removeEventListener('canplay', _previewCanplayHandler);
+    }
+    _previewCanplayHandler = null;
+}
+
 export function getPreviewStopHandler(): ((ev: Event) => void) | null { return _previewStopHandler; }
 export function setPreviewStopHandler(h: ((ev: Event) => void) | null): void { _previewStopHandler = h; }
 
@@ -55,8 +67,16 @@ export function _playRange(startMs: number, endMs: number): void {
     const canvas = get(editCanvas);
 
     let wfStart: number, wfEnd: number;
-    if (canvas?._trimWindow) { wfStart = canvas._trimWindow.windowStart; wfEnd = canvas._trimWindow.windowEnd; }
-    else if (canvas?._splitData) { wfStart = canvas._splitData.seg.time_start; wfEnd = canvas._splitData.seg.time_end; }
+    // Trim + Split modes: playhead x is mapped against the VISIBLE window
+    // (not the full clamp / segment range) — so a zoomed-in view shows the
+    // playhead aligned with the rendered peaks. Playback itself is unaffected
+    // (still plays the full preview range); when curMs falls outside the
+    // visible window the `if (curMs >= wfStart && curMs <= wfEnd)` gate
+    // below simply skips drawing for that frame. The animatePlayhead loop
+    // re-reads view bounds each frame so wheel-zoom mid-playback updates
+    // the mapping live.
+    if (canvas?._trimWindow) { wfStart = canvas._trimWindow.viewStart; wfEnd = canvas._trimWindow.viewEnd; }
+    else if (canvas?._splitData) { wfStart = canvas._splitData.viewStart; wfEnd = canvas._splitData.viewEnd; }
     else { wfStart = startMs; wfEnd = endMs; }
 
     const cleanup = (): void => {
@@ -120,11 +140,21 @@ export function _playRange(startMs: number, endMs: number): void {
             const ctx2 = canvas.getContext('2d');
             if (ctx2) ctx2.putImageData(_playRangeSnapshot, 0, 0);
         }
-        if (curMs >= wfStart && curMs <= wfEnd) {
+        // Re-read view bounds each frame so wheel-zoom mid-playback updates
+        // the playhead mapping immediately (closure-captured values would
+        // go stale otherwise). Both trim AND split support live re-scaling;
+        // non-edit mode keeps its closure-captured bounds.
+        const liveStart = canvas._trimWindow ? canvas._trimWindow.viewStart
+            : canvas._splitData ? canvas._splitData.viewStart
+            : wfStart;
+        const liveEnd   = canvas._trimWindow ? canvas._trimWindow.viewEnd
+            : canvas._splitData ? canvas._splitData.viewEnd
+            : wfEnd;
+        if (curMs >= liveStart && curMs <= liveEnd) {
             const ctx = canvas.getContext('2d');
             if (!ctx) { _playRangeRAF = requestAnimationFrame(animatePlayhead); return; }
             const w = canvas.width, h = canvas.height;
-            const x = ((curMs - wfStart) / (wfEnd - wfStart)) * w;
+            const x = ((curMs - liveStart) / (liveEnd - liveStart)) * w;
             ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
             ctx.fillStyle = PREVIEW_PLAYHEAD_COLOR;
@@ -152,7 +182,7 @@ export function _playRange(startMs: number, endMs: number): void {
                      const editIdx = get(editingSegIndex);
                      const s = ch != null ? getSegByChapterIndex(ch, editIdx) : null;
                      return s && s.audio_url; })();
-    if (targetUrl && !audioEl.src.endsWith(targetUrl)) {
+    if (targetUrl && !audioSrcMatches(audioEl.src, targetUrl)) {
         if (_previewCanplayHandler) {
             audioEl.removeEventListener('canplay', _previewCanplayHandler);
             _previewCanplayHandler = null;

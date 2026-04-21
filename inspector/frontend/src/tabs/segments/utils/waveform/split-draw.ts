@@ -17,11 +17,13 @@ export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
     if (canvas._splitBaseCache) return true;
     const sd = canvas._splitData;
     if (!sd) return false;
-    const seg = sd.seg;
     const width = canvas.width;
     const height = canvas.height;
 
-    const data = drawEditPeakBase(canvas, sd.audioUrl || '', seg.time_start, seg.time_end);
+    // Slice peaks for the VISIBLE window (not the whole segment) — wheel zoom
+    // rebuilds this cache after dropping the prior ImageData via
+    // `_splitBaseCache = null`.
+    const data = drawEditPeakBase(canvas, sd.audioUrl || '', sd.viewStart, sd.viewEnd);
     if (!data) {
         ctx.fillStyle = '#888';
         ctx.font = '14px monospace';
@@ -60,32 +62,41 @@ export function drawSplitWaveform(canvas: SegCanvas): void {
     const height = c.height;
     const sd = c._splitData;
     if (!sd) return;
-    const seg = sd.seg;
 
     if (hasCachedBase && c._splitBaseCache) ctx.putImageData(c._splitBaseCache, 0, 0);
 
-    const splitX = ((sd.currentSplit - seg.time_start) / (seg.time_end - seg.time_start)) * width;
+    // Two flavors of x for the split cursor in the VISIBLE window:
+    //   - Raw (sxRaw): can be < 0 or > width if `currentSplit` is outside the
+    //     view (zoomed past the cursor). Used to compute the right-side tint
+    //     so the orange shading correctly fills the canvas when the entire
+    //     view is to the right or left of the actual split.
+    //   - Visual (splitX): when the cursor is off-view, clamp to canvas
+    //     MIDDLE so the user can still grab + drag it. Single cursor → no
+    //     left/right "side" to clamp to like trim, and middle keeps both
+    //     stepper directions productive (mid + delta lands in-view either way).
+    const span = sd.viewEnd - sd.viewStart;
+    const sxRaw = ((sd.currentSplit - sd.viewStart) / span) * width;
+    const off = sd.currentSplit < sd.viewStart || sd.currentSplit > sd.viewEnd;
+    const splitX = off ? width / 2 : sxRaw;
 
+    // Tint the right-half region. Use raw x clamped to canvas so an off-view
+    // split still paints correctly:
+    //   - currentSplit > viewEnd  → sxRaw > width → tintStart = width → no tint
+    //     (the entire view is BEFORE the split, so it's all left-half).
+    //   - currentSplit < viewStart → sxRaw < 0  → tintStart = 0 → full canvas
+    //     tinted (the entire view is AFTER the split, so it's all right-half).
+    const tintStart = Math.max(0, Math.min(width, sxRaw));
     ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
-    ctx.fillRect(splitX, 0, width - splitX, height);
+    ctx.fillRect(tintStart, 0, width - tintStart, height);
 
+    // Plain vertical line, same shape + thickness as the trim cursors
+    // (green/red in trim-draw.ts). Kept yellow here so the single split
+    // cursor stays visually distinct from the paired trim boundaries, but
+    // the cap triangles were dropped to match the adjust-mode aesthetic.
     ctx.strokeStyle = '#ffeb3b';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(splitX, 0);
     ctx.lineTo(splitX, height);
     ctx.stroke();
-    ctx.fillStyle = '#ffeb3b';
-    ctx.beginPath();
-    ctx.moveTo(splitX - 6, 0);
-    ctx.lineTo(splitX + 6, 0);
-    ctx.lineTo(splitX, 8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(splitX - 6, height);
-    ctx.lineTo(splitX + 6, height);
-    ctx.lineTo(splitX, height - 8);
-    ctx.closePath();
-    ctx.fill();
 }
