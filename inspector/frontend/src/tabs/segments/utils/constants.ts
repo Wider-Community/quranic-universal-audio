@@ -14,8 +14,27 @@ export const VAL_VIRTUALIZE_THRESHOLD = 40;
 export const EDIT_SNAP_MS = 10;
 /** Minimum segment duration after trim/split (ms). */
 export const EDIT_MIN_DURATION_MS = 50;
+/** Step size for the trim-panel cursor nudge buttons (ms). One press of a
+ *  start/end stepper moves the boundary by this amount (clamped to the trim
+ *  window + EDIT_MIN_DURATION_MS against the opposite handle). Independent
+ *  of EDIT_SNAP_MS — drag snaps because pixel→time is fuzzy; the steppers
+ *  give a coarser-but-deterministic nudge. */
+export const EDIT_NUDGE_MS = 50;
 /** Hit radius for trim drag handles (px). */
 export const TRIM_HANDLE_HIT_RADIUS_PX = 12;
+
+/** Minimum visible window for trim-canvas mouse-wheel zoom (ms). At this
+ *  width, further wheel-in is a no-op. 500 ms keeps even fast-recitation
+ *  word-boundaries comfortably resolvable on the ~380 px-wide canvas
+ *  (≈ 1.3 ms / px → ≈ 38× the precision of the un-zoomed view). */
+export const TRIM_MIN_VIEW_MS = 500;
+
+/** Multiplicative factor per wheel tick on the trim canvas. Wheel-in (deltaY < 0)
+ *  multiplies the visible range by this, wheel-out divides — symmetric so a
+ *  zoom-in followed by an equal zoom-out lands exactly back at the original
+ *  width (modulo float). 0.85 → ~6 ticks to halve the view, which feels
+ *  responsive without overshooting on a single mouse-wheel notch. */
+export const TRIM_WHEEL_ZOOM_FACTOR = 0.85;
 
 /** Canvas dimensions for segment row waveforms. */
 export const SEG_ROW_CANVAS_WIDTH = 380;
@@ -32,6 +51,14 @@ export const KEY_SEEK_SECONDS = 3;
 
 /** How long (ms) the .playing flash stays on a row after a jump completes. */
 export const FLASH_DURATION_MS = 2000;
+
+/** Autoplay inter-segment pause (ms). When continuous-play advances from one
+ *  segment to the next on the same audio file, we pause the audio briefly,
+ *  jump the highlight to the next row, then seek + resume at the next seg's
+ *  time_start. This gives the user an audible + visual "advancing" cue and
+ *  skips the inter-seg gap audio (trimmed-out region or naturally-silent
+ *  boundary) that browsers would otherwise play straight through. */
+export const AUTOPLAY_GAP_PAUSE_MS = 200;
 
 /** Max passes for the split-group transitive closure walk. Bounds iteration on
  *  malformed history where a split op's before/after UIDs form a cycle. A

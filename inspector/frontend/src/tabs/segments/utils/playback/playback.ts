@@ -27,8 +27,10 @@ import {
     setPlayingSegment,
 } from '../../stores/playback';
 import type { RafHandle } from '../../types/segments';
+import { AUTOPLAY_GAP_PAUSE_MS } from '../constants';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
+import { resolveAutoplayGapAdvance } from './autoplay-gap';
 import { nextDisplayedSeg, prefetchNextSegAudio } from './prefetch';
 import { getRowEntriesFor } from './row-registry';
 
@@ -38,6 +40,40 @@ import { getRowEntriesFor } from './row-registry';
 
 let _segAnimId: RafHandle | null = null;
 let _segPrefetchCache: Record<string, Promise<unknown>> = {};
+/** Pending autoplay inter-segment gap timeout id, or null when no gap is
+ *  scheduled. Tracked so that manual pause / manual play / edit-mode entry
+ *  can cancel a pending resume (otherwise audio would resume mid-action). */
+let _autoplayGapTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/** Suppress the next auto-clear triggered by our OWN `audioEl.pause()` inside
+ *  the gap-advance branch. The 'pause' DOM event is async, and the pause
+ *  listener (`el.addEventListener('pause', stopSegAnimation)` in
+ *  SegmentsAudioControls.svelte) routes through `stopSegAnimation` which
+ *  calls `_clearAutoplayGap`. Without this flag, our own gap-initiated pause
+ *  would immediately cancel the resume timer we just set. */
+let _suppressNextGapClear = false;
+
+/** Cancel a pending autoplay gap resume. Safe to call when none is pending.
+ *  Honors the one-shot suppress flag set by the gap-advance branch so the
+ *  very pause event our branch triggered doesn't kill the pending resume. */
+function _clearAutoplayGap(): void {
+    if (_suppressNextGapClear) { _suppressNextGapClear = false; return; }
+    if (_autoplayGapTimeout !== null) {
+        clearTimeout(_autoplayGapTimeout);
+        _autoplayGapTimeout = null;
+    }
+}
+
+/** Force-cancel a pending autoplay gap resume regardless of suppress flags.
+ *  Used when a fresh user-initiated action takes ownership of playback and any
+ *  queued auto-resume would be stale. */
+function _cancelAutoplayGap(): void {
+    _suppressNextGapClear = false;
+    if (_autoplayGapTimeout !== null) {
+        clearTimeout(_autoplayGapTimeout);
+        _autoplayGapTimeout = null;
+    }
+}
 /** Last drawn (chapter, index) pair so the animation loop can erase the
  *  playhead on the previous row when playback advances. Carries the chapter
  *  so cross-chapter advance (accordion -> another chapter's row) erases from
@@ -63,6 +99,7 @@ export function playFromSegment(
     chapterOverride?: number | null,
     seekToMs?: number | null,
 ): void {
+    _cancelAutoplayGap();
     const allData = get(segAllData);
     if (!allData) return;
     const audioEl = get(segAudioElement);
@@ -109,6 +146,7 @@ function _nextDisplayedSeg(afterIndex: number) {
 }
 
 export function onSegPlayClick(): void {
+    _cancelAutoplayGap();
     const audioEl = get(segAudioElement);
     if (!audioEl) return;
     const displayed = get(displayedSegments);
@@ -134,6 +172,12 @@ export function onSegPlayClick(): void {
 }
 
 export function onSegTimeUpdate(): void {
+    // During trim/split preview, the edit-preview rAF (animatePlayhead in
+    // play-range.ts) owns loop-boundary enforcement. Letting the main
+    // time-update logic run can spuriously pause the preview audio when
+    // it reads past the seg.time_end that `lastSegOnAudio` points at.
+    // Mirrors the editMode gate in startSegAnimation.
+    if (get(editMode)) return;
     const audioEl = get(segAudioElement);
     if (!audioEl) return;
     const timeMs = audioEl.currentTime * 1000;
@@ -183,6 +227,60 @@ export function onSegTimeUpdate(): void {
         }
     }
 
+    const curPlayEnd = get(playEndMs);
+    const autoplayGapAdvance = get(continuousPlay)
+        ? resolveAutoplayGapAdvance({
+            active,
+            currentSrc,
+            displayedSegments: displayed,
+            playEndMs: curPlayEnd,
+            timeMs,
+        })
+        : null;
+    if (autoplayGapAdvance && _autoplayGapTimeout === null) {
+        const { justEnded, next } = autoplayGapAdvance;
+        const activeBeforePause = active ?? {
+            chapter: justEnded.chapter ?? 0,
+            index: justEnded.index,
+        };
+
+        // Flip the controls into their paused state immediately so the user sees
+        // the segment boundary before the timed resume starts.
+        stopSegAnimation();
+        _suppressNextGapClear = true;
+        audioEl.pause();
+
+        const nextStartMs = next.time_start;
+        const nextEndMs = next.time_end;
+        const nextChapter = next.chapter ?? activeBeforePause.chapter;
+        _autoplayGapTimeout = setTimeout(() => {
+            _autoplayGapTimeout = null;
+            if (!get(continuousPlay) || get(editMode)) return;
+            const aEl = get(segAudioElement);
+            if (!aEl || !aEl.paused) return;
+            const currentActive = get(playingSegmentIndex);
+            if (!currentActive
+                    || currentActive.index !== activeBeforePause.index
+                    || currentActive.chapter !== activeBeforePause.chapter) {
+                return;
+            }
+            setPlayingSegment({ chapter: nextChapter, index: next.index });
+            segCurrentIdx.set(next.index);
+            playEndMs.set(nextEndMs);
+            prefetchNextSegAudio(displayed, next.index, aEl.src || '', _segPrefetchCache);
+            if (nextChapter) void _fetchPeaksForClick(next, nextChapter);
+            aEl.currentTime = nextStartMs / 1000;
+            startSegAnimation();
+            void safePlay(aEl);
+        }, AUTOPLAY_GAP_PAUSE_MS);
+        return;
+    }
+
+    // A trailing timeupdate can still arrive after we've paused and scheduled
+    // the resume. Ignore it so the generic end-of-range branch below does not
+    // disable continuousPlay before the timeout fires.
+    if (_autoplayGapTimeout !== null) return;
+
     const prevIdx = get(segCurrentIdx);
     // Fast path: the active pair (written by playFromSegment) is the authority
     // for the currently-playing segment. Use it directly so cross-chapter
@@ -219,18 +317,7 @@ export function onSegTimeUpdate(): void {
     }
     segCurrentIdx.set(nextCurrentIdx);
 
-    const curPlayEnd = get(playEndMs);
     if (nextCurrentIdx === -1 && curPlayEnd > 0 && timeMs >= curPlayEnd) {
-        if (get(continuousPlay) && displayed) {
-            const justEnded = displayed.find(s => s.time_end === curPlayEnd
-                && audioSrcMatches(s.audio_url, currentSrc));
-            if (justEnded) {
-                const nextSeg2 = _nextDisplayedSeg(justEnded.index);
-                if (nextSeg2 && audioSrcMatches(nextSeg2.audio_url, currentSrc)) {
-                    return;
-                }
-            }
-        }
         audioEl.pause();
         stopSegAnimation();
         continuousPlay.set(false);
@@ -311,6 +398,9 @@ export function stopSegAnimation(): void {
     isMainAudioPlaying.set(false);
     _segAnimLoop.stop();
     _segAnimId = null;
+    // Any pending autoplay-gap resume would fire after the user has already
+    // paused/stopped. Cancel here so the timer doesn't silently restart audio.
+    _clearAutoplayGap();
 }
 
 export function onSegAudioEnded(): void {
@@ -436,4 +526,3 @@ export function drawActivePlayhead(): void {
         if (entry.canvas) drawSegPlayhead(entry.canvas, seg.time_start, seg.time_end, time, audioUrl);
     }
 }
-
