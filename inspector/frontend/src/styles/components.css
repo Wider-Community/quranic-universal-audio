@@ -138,6 +138,9 @@
     gap: 10px;
     align-self: center;
 }
+.audio-controls .btn {
+    margin-left: 0;
+}
 .ts-speed-label {
     font-size: 0.85rem;
     color: #aaa;

@@ -27,6 +27,7 @@
     import type { TsLoopTarget } from '../stores/playback';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
     import { safePlay } from '../../../lib/utils/audio';
+    import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
@@ -251,6 +252,8 @@
 
         const intervals = lv.data.intervals;
         const words = lv.data.words;
+        const audioEl = get(tsAudioElement);
+        const hoverTime = get(tsWaveformHoverTime);
 
         // Current phoneme (skip geminate_end)
         let currentIndex = -1;
@@ -277,8 +280,32 @@
         // Block highlights (.active / .past) — diff-only.
         // Suppress scrollIntoView when the update is driven by waveform hover
         // (user is actively scrubbing; auto-scrolling would fight the pointer).
-        const audioEl = get(tsAudioElement);
-        const isHoverDriven = get(tsWaveformHoverTime) != null && !!audioEl && audioEl.paused;
+        let hoverWordIndex = -1;
+        let hoverPhonemeIndex = -1;
+        const showWaveformPreview = hoverTime != null && !!audioEl && !audioEl.paused;
+        if (showWaveformPreview) {
+            for (let i = 0; i < words.length; i++) {
+                const w = words[i];
+                if (!w) continue;
+                if (hoverTime >= w.start && hoverTime < w.end) {
+                    hoverWordIndex = i;
+                    break;
+                }
+            }
+            if (hoverWordIndex === currentWordIndex) {
+                hoverWordIndex = -1;
+            } else {
+                for (let i = 0; i < intervals.length; i++) {
+                    const iv = intervals[i];
+                    if (!iv) continue;
+                    if (hoverTime >= iv.start && hoverTime < iv.end) {
+                        hoverPhonemeIndex = iv.geminate_end ? i - 1 : i;
+                        break;
+                    }
+                }
+            }
+        }
+        const isHoverDriven = hoverTime != null && !!audioEl && audioEl.paused;
         if (currentWordIndex !== _prevActiveWordIdx) {
             const blocks = rootEl.querySelectorAll<HTMLElement>('.mega-block');
             blocks.forEach((block) => {
@@ -293,6 +320,10 @@
             });
             _prevActiveWordIdx = currentWordIndex;
         }
+        rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((block) => {
+            const wi = parseInt(block.dataset.wordIndex ?? '-1');
+            block.classList.toggle('hover-preview', wi === hoverWordIndex);
+        });
 
         // Phoneme highlights — diff-only
         if (currentIndex !== _prevActivePhonemeIdx) {
@@ -301,6 +332,9 @@
             });
             _prevActivePhonemeIdx = currentIndex;
         }
+        rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((ph) => {
+            ph.classList.toggle('hover-preview', parseInt(ph.dataset.index ?? '-1') === hoverPhonemeIndex);
+        });
 
         // Letter highlights — must check each frame (time-based within word)
         rootEl
@@ -308,7 +342,12 @@
             .forEach((el) => {
                 const s = parseFloat(el.dataset.letterStart ?? '0');
                 const e = parseFloat(el.dataset.letterEnd ?? '0');
+                const wi = parseInt(el.dataset.wordIndex ?? '-1');
                 el.classList.toggle('active', time >= s && time < e);
+                el.classList.toggle(
+                    'hover-preview',
+                    hoverTime != null && wi === hoverWordIndex && hoverTime >= s && hoverTime < e,
+                );
             });
 
         // Loop perma-highlight — outline the looped element on its tier.
@@ -367,20 +406,73 @@
         updateHighlights();
     }
 
-    function onWordClick(word: TsWord, wordIndex: number): void {
-        const lv = get(loadedVerse);
-        if (!lv) return;
+    // Single-click handlers are DEFERRED by `TS_CLICK_DELAY_MS` to
+    // disambiguate from double-click. The DOM fires `click` before
+    // `dblclick`, so without this defer the sequence for a user double-
+    // clicking word B while looped on word A would be:
+    //   click#1 → swap loop A → B → zoom animates to B
+    //   click#2 → no-op (already on B)
+    //   dblclick → toggleLoopOn(B) sees sameTarget → clears loop → zoom
+    //              resets to full view. Net effect: "dblclick on B
+    //              destroyed my loop". Deferring click and cancelling it
+    //              on dblclick gives dblclick exclusive say over loop
+    //              toggling.
+    //
+    // When in loop mode and the click lands on a DIFFERENT word (or tier
+    // target), the committed click swaps the loop target — matching the
+    // waveform and Animation-view click surfaces so all three behave
+    // identically.
+    let _pendingClick: number | null = null;
+
+    function _cancelPendingClick(): void {
+        if (_pendingClick !== null) {
+            clearTimeout(_pendingClick);
+            _pendingClick = null;
+        }
+    }
+
+    function _deferClick(fn: () => void): void {
+        _cancelPendingClick();
+        _pendingClick = window.setTimeout(() => {
+            _pendingClick = null;
+            fn();
+        }, TS_CLICK_DELAY_MS);
+    }
+
+    function _swapLoopOrSeek(target: TsLoopTarget, absSeek: number): void {
         const cur = get(loopTarget);
         if (cur) {
-            if (cur.kind === 'word' && cur.wordIndex === wordIndex) return;
-            loopTarget.set({
-                kind: 'word',
-                startSec: word.start,
-                endSec: word.end,
-                wordIndex,
-            });
+            const same =
+                cur.kind === target.kind
+                && cur.wordIndex === target.wordIndex
+                && cur.childIndex === target.childIndex;
+            if (same) return;
+            loopTarget.set(target);
+            const audio = get(tsAudioElement);
+            if (audio) {
+                audio.currentTime = absSeek;
+                if (audio.paused) void safePlay(audio);
+            }
+            updateHighlights();
+            return;
         }
-        seekToTime(word.start + lv.tsSegOffset);
+        // No loop active → pure seek.
+        const audio = get(tsAudioElement);
+        if (!audio) return;
+        audio.currentTime = absSeek;
+        if (audio.paused) void safePlay(audio);
+        updateHighlights();
+    }
+
+    function onWordClick(word: TsWord, wordIndex: number): void {
+        _deferClick(() => {
+            const lv = get(loadedVerse);
+            if (!lv) return;
+            _swapLoopOrSeek(
+                { kind: 'word', startSec: word.start, endSec: word.end, wordIndex },
+                word.start + lv.tsSegOffset,
+            );
+        });
     }
 
     function onPhonemeClick(
@@ -390,20 +482,20 @@
         wordIndex: number,
     ): void {
         e.stopPropagation();
-        const lv = get(loadedVerse);
-        if (!lv) return;
-        const cur = get(loopTarget);
-        if (cur) {
-            if (cur.kind === 'phoneme' && cur.childIndex === phonemeIndex) return;
-            loopTarget.set({
-                kind: 'phoneme',
-                startSec: iv.start,
-                endSec: iv.end,
-                wordIndex,
-                childIndex: phonemeIndex,
-            });
-        }
-        seekToTime(iv.start + lv.tsSegOffset);
+        _deferClick(() => {
+            const lv = get(loadedVerse);
+            if (!lv) return;
+            _swapLoopOrSeek(
+                {
+                    kind: 'phoneme',
+                    startSec: iv.start,
+                    endSec: iv.end,
+                    wordIndex,
+                    childIndex: phonemeIndex,
+                },
+                iv.start + lv.tsSegOffset,
+            );
+        });
     }
 
     // ---- Double-click handlers: toggle loop on the clicked token ----
@@ -428,9 +520,12 @@
         loopTarget.set(target);
         autoMode.set(null);
         seekToTime(target.startSec + lv.tsSegOffset);
+        // Zoom/pan is handled by the centralized `loopTarget` subscription in
+        // `utils/zoom.ts::setupZoomLifecycle` — no per-callsite hook needed.
     }
 
     function onWordDblClick(word: TsWord, wordIndex: number): void {
+        _cancelPendingClick();
         toggleLoopOn({ kind: 'word', startSec: word.start, endSec: word.end, wordIndex });
     }
 
@@ -442,6 +537,7 @@
         letterIndex: number,
     ): void {
         e.stopPropagation();
+        _cancelPendingClick();
         toggleLoopOn({ kind: 'letter', startSec, endSec, wordIndex, childIndex: letterIndex });
     }
 
@@ -452,6 +548,7 @@
         wordIndex: number,
     ): void {
         e.stopPropagation();
+        _cancelPendingClick();
         toggleLoopOn({
             kind: 'phoneme',
             startSec: iv.start,
@@ -469,24 +566,14 @@
         letterIndex: number,
     ): void {
         e.stopPropagation();
-        const lv = get(loadedVerse);
-        if (!lv) return;
-        const cur = get(loopTarget);
-        if (cur) {
-            if (
-                cur.kind === 'letter'
-                && cur.wordIndex === wordIndex
-                && cur.childIndex === letterIndex
-            ) return;
-            loopTarget.set({
-                kind: 'letter',
-                startSec,
-                endSec,
-                wordIndex,
-                childIndex: letterIndex,
-            });
-        }
-        seekToTime(startSec + lv.tsSegOffset);
+        _deferClick(() => {
+            const lv = get(loadedVerse);
+            if (!lv) return;
+            _swapLoopOrSeek(
+                { kind: 'letter', startSec, endSec, wordIndex, childIndex: letterIndex },
+                startSec + lv.tsSegOffset,
+            );
+        });
     }
 
     // ---- Hover handlers: publish to tsHoveredElement for waveform sync ----
@@ -510,7 +597,11 @@
 
     // Safety net: if the component unmounts while a hover is active (e.g. view
     // switch), clear the store so the waveform doesn't keep a stale band.
-    onDestroy(() => tsHoveredElement.set(null));
+    // Also drop any pending deferred click so it doesn't fire post-unmount.
+    onDestroy(() => {
+        tsHoveredElement.set(null);
+        _cancelPendingClick();
+    });
 </script>
 
 <div

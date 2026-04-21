@@ -25,6 +25,14 @@
     cursor: crosshair;
 }
 
+/* Middle-mouse pan: added by TimestampsWaveform while a pan session is
+ * active, removed on release. Overrides the default crosshair cursor on
+ * the child canvas via `*` so the grabbing feedback reads as intended. */
+.visualization.ts-pan-grabbing,
+.visualization.ts-pan-grabbing * {
+    cursor: grabbing !important;
+}
+
 .phoneme-labels {
     position: absolute;
     bottom: 0;
@@ -93,6 +101,26 @@
 
 .mega-phoneme:hover {
     background: rgba(67, 97, 238, 0.25);
+}
+
+/* Waveform-hover preview while audio is playing. Keep the playing token louder
+   than the hovered token by using a lighter 30%-strength preview treatment. */
+.mega-block.hover-preview .mega-word {
+    background: color-mix(in srgb, var(--anim-highlight-color) 30%, #0f0f23);
+    color: color-mix(in srgb, var(--anim-highlight-color) 70%, #d7d7df);
+    border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
+}
+
+.mega-letter.hover-preview {
+    background: rgba(46, 196, 182, 0.3);
+    color: #e7fffb;
+    border-color: rgba(46, 196, 182, 0.35);
+}
+
+.mega-phoneme.hover-preview {
+    background: rgba(67, 97, 238, 0.3);
+    color: #e6ebff;
+    border-color: rgba(67, 97, 238, 0.35);
 }
 
 .mega-word {
@@ -190,7 +218,7 @@
 }
 
 .crossword-bridge.hidden {
-    visibility: hidden;
+    display: none;
 }
 
 /* Active states */
@@ -243,7 +271,7 @@
 
 .mega-letters.hidden,
 .mega-phonemes.hidden {
-    visibility: hidden;
+    display: none;
 }
 
 .mega-block.past .mega-word {
@@ -258,15 +286,26 @@
 /* ============ Loop perma-highlight ============ */
 /* Outline — not background — so `.active`/`.past` styles remain readable
    when the looped element is also the currently-playing one. */
+/* position:relative + z-index lifts the looped element above its flex
+   siblings so the offset outline isn't clipped by the next box's background
+   (painting order otherwise covers the outline on the leading/trailing edge). */
 .mega-block.loop {
     outline: 2px solid var(--anim-highlight-color, #f0a500);
     outline-offset: 2px;
+    position: relative;
+    z-index: 1;
 }
 .mega-letter.loop {
     outline: 2px solid #2ec4b6;
+    outline-offset: 2px;
+    position: relative;
+    z-index: 1;
 }
 .mega-phoneme.loop {
     outline: 2px solid #4361ee;
+    outline-offset: 2px;
+    position: relative;
+    z-index: 1;
 }
 #animation-display .anim-word.loop {
     outline: 2px solid var(--anim-highlight-color, #f0a500);

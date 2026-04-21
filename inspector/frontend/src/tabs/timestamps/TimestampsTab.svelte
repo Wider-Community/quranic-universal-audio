@@ -58,6 +58,7 @@
     import TimestampsViewControls from './components/TimestampsViewControls.svelte';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
+    import { setupZoomLifecycle } from './utils/zoom';
 
     // ---- Local display constants ----
     const TS_EASING_NONE = 'none';
@@ -353,6 +354,10 @@
     // ---------------------------------------------------------------------
 
     onMount(() => {
+        // Wire waveform-zoom reset triggers (loop exit, verse change). Idempotent
+        // — internal `_wired` guard makes it safe to call on every mount even if
+        // TimestampsTab.svelte ever gets remounted (e.g. tab swap teardown).
+        setupZoomLifecycle();
         init();
     });
 </script>

@@ -40,7 +40,11 @@
         viewMode,
     } from '../stores/display';
     import { findWordAt } from '../utils/loop-target';
+    import { applyTsWheelZoom, isTsZoomAnimating, panTsViewBy } from '../utils/zoom';
+    import { tsZoom, tsZoomAnimating } from '../stores/zoom';
+    import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
     import { fetchSegmentPeaks } from '../../../lib/utils/peaks-fetch';
+    import { drawWaveformPeaks } from '../../../lib/utils/waveform-draw';
     import { safePlay } from '../../../lib/utils/audio';
     import type { PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
     import {
@@ -119,6 +123,15 @@
     let _baseImageData: ImageData | null = null;
     let _baseCacheKey: string | null = null;
 
+    // Eager base invalidation the moment a zoom tween starts. Without this,
+    // an audio-tick rAF queued earlier in the same frame can reach
+    // `drawOverlays` BEFORE `onZoomChange`'s two-tick capture-skip logic
+    // has run — and it would composite new overlays onto the pre-sweep
+    // cached base, leaving a stale playhead stroke baked into what the
+    // NEXT `_captureBase` (at sweep end) eventually snapshots. Flipping
+    // the flag store to `true` here clears the cache first thing.
+    $: if ($tsZoomAnimating) { _baseImageData = null; _baseCacheKey = null; }
+
     // ---- Active-tier flags (drive marker + hover behavior) ----
     $: lettersActive =
         ($viewMode === TS_VIEW_MODES.ANALYSIS && $showLetters)
@@ -130,6 +143,56 @@
     // even while paused. Subscriptions on `$tsHoveredElement` and `$loopTarget`
     // trigger block-originated hover renders + loop band updates respectively.
     $: ($tsHoveredElement, $loopTarget, lettersActive, phonemesActive, wordColor, drawOverlays());
+
+    // ---- Zoom: pass sub-range to WaveformCanvas + recapture base on change ----
+
+    /** Cached for fast read inside `tToX` / `_pointerTime` (avoids repeated
+     *  `get(tsZoom)` per draw call). Updated by the reactive subscription. */
+    let _zoom: { viewStart: number; viewEnd: number } | null = null;
+    $: _zoom = $tsZoom;
+
+    /** Sub-range props forwarded to WaveformCanvas. Both `undefined` → full
+     *  slice (default). When zoomed, `wcStartMs/wcEndMs` are SLICE-relative
+     *  ms (the WaveformCanvas already has full-slice peaks; we just tell it
+     *  which window to render). */
+    $: wcTotalDurationMs = $loadedVerse
+        ? Math.round(($loadedVerse.tsSegEnd - $loadedVerse.tsSegOffset) * 1000)
+        : undefined;
+    $: wcStartMs = _zoom ? Math.round(_zoom.viewStart * 1000) : undefined;
+    $: wcEndMs = _zoom ? Math.round(_zoom.viewEnd * 1000) : undefined;
+
+    // When `tsZoom` changes, the base peak canvas re-renders via WaveformCanvas's
+    // reactive on (startMs, endMs, totalDurationMs). We drop the cached
+    // ImageData snapshot so the overlay system doesn't composite onto a stale
+    // base, and recapture AFTER WaveformCanvas redraws. Two `tick()`s: one for
+    // Svelte to flow new props down, one for WaveformCanvas's reactive redraw.
+    //
+    // During a loop-target sweep (`isTsZoomAnimating()`), `_zoom` mutates ~60
+    // times per second. Capturing a fresh ImageData snapshot each frame means
+    // allocating ~960 KB × ~54 frames for a long sweep — a noticeable GC
+    // spike. While animating, skip the capture: the overlay path falls
+    // through to the WaveformCanvas reactive redraw (peaks re-render every
+    // frame anyway), and we recapture ONCE when the tween finishes.
+    let _zoomFetchGen = 0;
+    $: void onZoomChange(_zoom);
+    async function onZoomChange(_z: { viewStart: number; viewEnd: number } | null): Promise<void> {
+        if (!waveformRef) return;
+        const gen = ++_zoomFetchGen;
+        _baseImageData = null;
+        _baseCacheKey = null;
+        await tick();
+        await tick();
+        if (gen !== _zoomFetchGen) return; // stale — newer zoom landed
+        if (isTsZoomAnimating()) {
+            // Mid-sweep: no base capture; WaveformCanvas already redrew
+            // peaks this frame, overlays paint on top via drawOverlays.
+            drawOverlays();
+            return;
+        }
+        const k = `zoom:${_z?.viewStart ?? 'full'}:${_z?.viewEnd ?? 'full'}`;
+        _captureBase(k);
+        drawOverlays();
+    }
 
     // ---- Hover state (waveform-origin) ----
     /** Slice-relative seconds. null when pointer is off the waveform. */
@@ -202,6 +265,27 @@
         if (!canvas || !canvas.width || !canvas.height) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
+        // Force a clean peaks-only canvas BEFORE snapshotting. We can't
+        // trust that WaveformCanvas's reactive redraw fired on this flush:
+        // `wcStartMs` / `wcEndMs` are `Math.round(_zoom * 1000)`, and the
+        // final tween frame often rounds to the same integer as the
+        // second-to-last frame — Svelte sees no prop change, skips the
+        // child redraw, and the canvas still holds the PREVIOUS frame's
+        // overlays + playhead. Capturing that as the base would bake a
+        // stale playhead into every subsequent `putImageData` call
+        // (user-visible as a fixed ghost cursor inside the loop word).
+        if (peaks) {
+            const lv = get(loadedVerse);
+            const zoom = _zoom;
+            const totalMs = lv ? Math.round((lv.tsSegEnd - lv.tsSegOffset) * 1000) : undefined;
+            drawWaveformPeaks(ctx, peaks, {
+                width: canvas.width,
+                height: canvas.height,
+                startMs: zoom ? Math.round(zoom.viewStart * 1000) : undefined,
+                endMs: zoom ? Math.round(zoom.viewEnd * 1000) : undefined,
+                totalDurationMs: totalMs,
+            });
+        }
         _baseImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         _baseCacheKey = key;
     }
@@ -233,14 +317,45 @@
         const intervals = lv.data.intervals;
 
         // 1. Restore pristine base.
-        if (_baseImageData && _baseImageData.width === width && _baseImageData.height === heightAll) {
+        //    Fast path: use the cached ImageData snapshot when it matches the
+        //    current canvas size. Fallback (mid-sweep, or before first
+        //    capture): redraw peaks inline via the pure helper. Pure black
+        //    fill only when peaks haven't loaded yet.
+        //
+        //    During a zoom tween (`isTsZoomAnimating()`), always take the
+        //    inline-redraw path — never `putImageData`. Reason: an
+        //    audio-tick rAF that fires BEFORE the zoom-step rAF on the
+        //    first sweep frame would otherwise paint new overlays on top
+        //    of the last-captured base (which still reflects the pre-sweep
+        //    zoom), leaving ghosted playhead / double-intensity overlay
+        //    bands. Forcing the fallback path guarantees each mid-sweep
+        //    frame starts from a full canvas clear.
+        const animating = isTsZoomAnimating();
+        if (!animating && _baseImageData && _baseImageData.width === width && _baseImageData.height === heightAll) {
             ctx.putImageData(_baseImageData, 0, 0);
+        } else if (peaks) {
+            const zoomMs = _zoom
+                ? { startMs: Math.round(_zoom.viewStart * 1000), endMs: Math.round(_zoom.viewEnd * 1000) }
+                : { startMs: undefined, endMs: undefined };
+            drawWaveformPeaks(ctx, peaks, {
+                width,
+                height: heightAll,
+                startMs: zoomMs.startMs,
+                endMs: zoomMs.endMs,
+                totalDurationMs: Math.round(duration * 1000),
+            });
         } else {
             ctx.fillStyle = '#0f0f23';
             ctx.fillRect(0, 0, width, heightAll);
         }
 
-        const tToX = (t: number): number => (t / duration) * width;
+        // Zoom-aware time → pixel. When `_zoom` is null, maps the full slice to
+        // canvas width (existing behavior). When zoomed, maps only [viewStart,
+        // viewEnd] — boundaries/fills/playhead outside the view naturally land
+        // past [0, width] and get clipped by the canvas.
+        const tToX = _zoom
+            ? (t: number): number => ((t - _zoom!.viewStart) / (_zoom!.viewEnd - _zoom!.viewStart)) * width
+            : (t: number): number => (t / duration) * width;
         const audio = get(tsAudioElement);
         const audioPaused = !audio || audio.paused;
 
@@ -404,11 +519,12 @@
         _strokeLines(ctx, letterXs, height, LETTER_HIGHLIGHT_COLOR, LETTER_LINE_WIDTH);
         _strokeLines(ctx, wordXs, height, wordColor, WORD_LINE_WIDTH);
 
-        // 4. Playhead.
+        // 4. Playhead. Zoom-aware via `tToX` — playback outside the visible
+        // window gets `px` past [0, width], clipped by canvas (i.e. no visible
+        // playhead until playback re-enters the view).
         if (!audio) return;
         const time = audio.currentTime - segOffset;
-        const progress = duration > 0 ? time / duration : 0;
-        const px = progress * width;
+        const px = tToX(time);
 
         ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR;
         ctx.lineWidth = 2;
@@ -470,8 +586,9 @@
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const progress = x / Math.max(1, rect.width);
-        const duration = lv.tsSegEnd - lv.tsSegOffset;
-        return progress * duration;
+        // Zoom-aware: when zoomed, pixel x maps back to view window, not full slice.
+        if (_zoom) return _zoom.viewStart + progress * (_zoom.viewEnd - _zoom.viewStart);
+        return progress * (lv.tsSegEnd - lv.tsSegOffset);
     }
 
     function onCanvasMove(e: MouseEvent): void {
@@ -526,13 +643,112 @@
 
     // ---- Resize handling ----
 
+    // Wheel zoom on the waveform canvas (works in both Analysis and Animation
+    // views). `{ passive: false }` lets us call `preventDefault()` so scrolling
+    // the wheel over the canvas doesn't also scroll the page. Wired via
+    // addEventListener rather than svelte's `on:wheel` because the latter
+    // doesn't support the passive flag.
+    function onWheel(e: WheelEvent): void {
+        if (!waveformRef) return;
+        const canvas = waveformRef.getCanvas();
+        if (!canvas) return;
+        e.preventDefault();
+        applyTsWheelZoom(canvas, e.clientX, e.deltaY);
+    }
+
+    // ---- Middle-mouse pan (while zoomed) --------------------------------
+    //
+    // Velocity-based pan: press middle button anchors a reference `clientX`;
+    // the rAF loop pans `tsZoom` at a speed proportional to the cursor's
+    // current offset from the anchor. At an offset of half the canvas width,
+    // the view pans `TS_PAN_HALF_CANVAS_VIEWS_PER_SEC` view-widths per second.
+    // Scales linearly; returning to the anchor stops the pan, crossing it
+    // pans the other way.
+    //
+    // This single model captures both the "hold-and-drag" and "Windows-style
+    // continuous autoscroll" interactions the user asked for: a fast cursor
+    // flick produces a big transient offset (≈ direct drag), and a stationary
+    // held offset produces continuous velocity (≈ autoscroll).
+    //
+    // `document`-level mousemove/mouseup so release anywhere (including
+    // outside the canvas) ends the session cleanly.
+    let _panAnchorX = 0;
+    let _panCurrentX = 0;
+    let _panRafId: number | null = null;
+    let _panPrevTs = 0;
+
+    function onMouseDown(e: MouseEvent): void {
+        if (e.button !== 1) return;                // middle only
+        if (get(tsZoom) === null) return;          // not zoomed → no-op
+        if (isTsZoomAnimating()) return;           // tween in flight → no-op
+        e.preventDefault();                        // suppress browser autoscroll cursor
+        _panAnchorX = e.clientX;
+        _panCurrentX = e.clientX;
+        _panPrevTs = performance.now();
+        document.addEventListener('mousemove', onPanMove);
+        document.addEventListener('mouseup', onPanUp);
+        containerEl?.classList.add('ts-pan-grabbing');
+        if (_panRafId !== null) cancelAnimationFrame(_panRafId);
+        _panRafId = requestAnimationFrame(panTick);
+    }
+
+    function onPanMove(e: MouseEvent): void {
+        _panCurrentX = e.clientX;
+    }
+
+    function onPanUp(e: MouseEvent): void {
+        if (e.button !== 1) return;                // require middle-button release
+        if (_panRafId !== null) { cancelAnimationFrame(_panRafId); _panRafId = null; }
+        document.removeEventListener('mousemove', onPanMove);
+        document.removeEventListener('mouseup', onPanUp);
+        containerEl?.classList.remove('ts-pan-grabbing');
+    }
+
+    /** Defensive variant of `onPanUp` that force-stops the session regardless
+     *  of which button fired. Used by `panTick` when zoom state changes out
+     *  from under it (tween starts, verse change) and by `onDestroy`. */
+    function _forceEndPan(): void {
+        if (_panRafId !== null) { cancelAnimationFrame(_panRafId); _panRafId = null; }
+        document.removeEventListener('mousemove', onPanMove);
+        document.removeEventListener('mouseup', onPanUp);
+        containerEl?.classList.remove('ts-pan-grabbing');
+    }
+
+    function panTick(ts: number): void {
+        const dtMs = ts - _panPrevTs;
+        _panPrevTs = ts;
+        const z = get(tsZoom);
+        // Abort if zoom cleared (verse change) or a loop-tween took over —
+        // the tween writes tsZoom each frame and we shouldn't fight it.
+        if (z === null || isTsZoomAnimating()) {
+            _forceEndPan();
+            return;
+        }
+        const canvas = waveformRef?.getCanvas();
+        if (!canvas) { _panRafId = requestAnimationFrame(panTick); return; }
+        const rectWidth = canvas.getBoundingClientRect().width;
+        const halfCanvas = (rectWidth || 1) / 2;
+        const dxPx = _panCurrentX - _panAnchorX;
+        const offsetNorm = dxPx / halfCanvas;
+        const viewSpan = z.viewEnd - z.viewStart;
+        const deltaSec = offsetNorm * viewSpan * TS_PAN_HALF_CANVAS_VIEWS_PER_SEC * (dtMs / 1000);
+        if (deltaSec !== 0) panTsViewBy(deltaSec);
+        _panRafId = requestAnimationFrame(panTick);
+    }
+
     onMount(() => {
         updateSizeFromContainer();
         const onResize = (): void => {
             updateSizeFromContainer();
         };
         window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
+        const canvas = waveformRef?.getCanvas();
+        canvas?.addEventListener('wheel', onWheel, { passive: false });
+        return () => {
+            window.removeEventListener('resize', onResize);
+            canvas?.removeEventListener('wheel', onWheel);
+            _forceEndPan();
+        };
     });
 
     function updateSizeFromContainer(): void {
@@ -556,12 +772,14 @@
     bind:this={containerEl}
     class="visualization"
     on:click={onCanvasClick}
+    on:mousedown={onMouseDown}
     on:mousemove={onCanvasMove}
     on:mouseleave={onCanvasLeave}
     on:keydown={() => {}}
     role="button"
     tabindex="-1"
 >
-    <WaveformCanvas bind:this={waveformRef} {peaks} width={canvasWidth} height={canvasHeight} />
+    <WaveformCanvas bind:this={waveformRef} {peaks} width={canvasWidth} height={canvasHeight}
+        startMs={wcStartMs} endMs={wcEndMs} totalDurationMs={wcTotalDurationMs} />
     <div class="phoneme-labels" id="phoneme-labels"></div>
 </div>

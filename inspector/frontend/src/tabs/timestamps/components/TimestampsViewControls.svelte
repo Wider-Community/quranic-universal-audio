@@ -105,6 +105,8 @@
         if (audio.paused) void safePlay(audio);
         // Loop cancels auto-advance.
         autoMode.set(null);
+        // Zoom on Loop-button activation is handled by the centralized
+        // `loopTarget` subscription in `utils/zoom.ts::setupZoomLifecycle`.
     }
 </script>
 
