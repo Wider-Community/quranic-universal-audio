@@ -31,10 +31,11 @@ from pathlib import Path
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# Load HF_TOKEN from quranic_universal_aligner/.env if not already in environment
+# Load HF_TOKEN from quranic_universal_aligner/.env (overrides shell env to
+# avoid stale tokens from prior activations)
 # ---------------------------------------------------------------------------
 _env_file = Path(__file__).parent / "quranic_universal_aligner" / ".env"
-if _env_file.exists() and not os.environ.get("HF_TOKEN"):
+if _env_file.exists():
     for line in _env_file.read_text().splitlines():
         if line.startswith("HF_TOKEN="):
             os.environ["HF_TOKEN"] = line.split("=", 1)[1].strip()
@@ -208,6 +209,75 @@ def _seg_is_home_for_key(matched_ref: str, output_key: str) -> bool:
     (its derived key is the compound ``"5:69:8-5:70:2"``).
     """
     return _matched_ref_to_output_key(matched_ref) == output_key
+
+
+def _declared_widx_range(matched_ref: str) -> tuple[int, int] | None:
+    """Return (W1, W2) widx range declared by a single-verse matched_ref.
+
+    '27:37:1-27:37:11' → (1, 11). Cross-verse or malformed refs → None.
+    Used to distinguish primary (widx within declared range) from bleed
+    (MFA emitted a widx outside what the seg was supposed to align).
+    """
+    for prefix in ("Basmala+", "Isti'adha+"):
+        if matched_ref.startswith(prefix):
+            matched_ref = matched_ref[len(prefix):]
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return None
+    sp = parts[0].split(":")
+    ep = parts[1].split(":")
+    if len(sp) != 3 or len(ep) != 3:
+        return None
+    if sp[:2] != ep[:2]:
+        return None
+    try:
+        return int(sp[2]), int(ep[2])
+    except ValueError:
+        return None
+
+
+def _merge_seg_words(entry: dict, matched_ref: str, verse_key: str,
+                     verse_words: list) -> None:
+    """Merge one seg's words for a verse_key into the accumulator entry.
+
+    `entry` has shape {"words": list[list], "_provenance": list[bool]}
+    (provenance aligned with words: True=primary, False=bleed).
+
+    Contributions are classified primary when the seg is home for
+    verse_key AND widx lies within the declared matched_ref range.
+    Primaries append (multiple primaries at the same widx = legitimate
+    within-verse repetition — both kept). Primaries supersede any prior
+    bleed at the same widx. Bleeds dedupe: first-seen wins.
+    """
+    is_home = _seg_is_home_for_key(matched_ref, verse_key)
+    declared = _declared_widx_range(matched_ref) if is_home else None
+    for w in verse_words:
+        widx = w[0]
+        is_primary = (declared is not None
+                      and declared[0] <= widx <= declared[1])
+        has_primary = any(
+            ew[0] == widx and ep
+            for ew, ep in zip(entry["words"], entry["_provenance"]))
+        has_bleed = any(
+            ew[0] == widx and not ep
+            for ew, ep in zip(entry["words"], entry["_provenance"]))
+        if is_primary:
+            if has_bleed:
+                kept_w, kept_p = [], []
+                for ew, ep in zip(entry["words"], entry["_provenance"]):
+                    if ew[0] == widx and not ep:
+                        continue
+                    kept_w.append(ew)
+                    kept_p.append(ep)
+                entry["words"] = kept_w
+                entry["_provenance"] = kept_p
+            entry["words"].append(w)
+            entry["_provenance"].append(True)
+        else:
+            if has_primary or has_bleed:
+                continue
+            entry["words"].append(w)
+            entry["_provenance"].append(False)
 
 
 def _ref_sort_key(ref_str: str):
@@ -748,27 +818,16 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
                 if not words_by_verse:
                     continue
 
-                # Deduplicate: prefer words from "home" segments (where
-                # the segment covers only one verse) over words that
-                # bleed in from cross-verse segments.
+                # Provenance-aware merge: see `_merge_seg_words` docstring.
                 for verse_key, verse_words in words_by_verse.items():
-                    is_home = _seg_is_home_for_key(matched_ref, verse_key)
                     entry = full_data.setdefault(
-                        verse_key, {"words": [], "_home_indices": set()})
-                    for w in verse_words:
-                        widx = w[0]
-                        if widx in entry["_home_indices"]:
-                            continue  # already have at-home version
-                        if is_home:
-                            # Replace any non-home version of this word
-                            entry["words"] = [
-                                ew for ew in entry["words"] if ew[0] != widx]
-                            entry["words"].append(w)
-                            entry["_home_indices"].add(widx)
-                        else:
-                            # Only add if we don't have this word at all yet
-                            if not any(ew[0] == widx for ew in entry["words"]):
-                                entry["words"].append(w)
+                        verse_key, {"words": [], "_provenance": []})
+                    if "_provenance" not in entry:
+                        # Pre-existing entry loaded from a prior run: treat
+                        # existing words as primary so repetitions don't
+                        # evict them.
+                        entry["_provenance"] = [True] * len(entry["words"])
+                    _merge_seg_words(entry, matched_ref, verse_key, verse_words)
         else:
             # by-ayah: each chapter entry = one verse, ref is the key
             all_words = []
@@ -814,6 +873,7 @@ def process(input_dir: Path, space_url: str, method: str, beam: int,
     # Post-process: sort words, compute verse boundaries, clean up tracking
     for ref, val in full_data.items():
         val.pop("_home_indices", None)
+        val.pop("_provenance", None)
         words = val["words"]
         # Sort by start time — sorting by word index breaks cross-verse
         # segments where indices reset at verse boundaries (e.g. 3,4,5,1,2)

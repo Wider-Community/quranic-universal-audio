@@ -1,0 +1,11 @@
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.git
+**/.venv
+**/.vscode
+**/dist
+**/.DS_Store
+**/.claude
+**/coverage

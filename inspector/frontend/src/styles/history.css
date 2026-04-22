@@ -1,0 +1,353 @@
+/* ============ Edit History View ============ */
+
+.seg-history-view {
+    margin-bottom: 8px;
+}
+.seg-history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0 12px;
+}
+.seg-history-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ccc;
+}
+
+/* Summary stats */
+.seg-history-stats {
+    padding: 8px 12px 4px;
+}
+.seg-history-stat-cards {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.seg-history-stat-card {
+    min-width: 100px;
+    background: #0f0f23;
+    border-radius: 4px;
+    padding: 8px 12px;
+    text-align: center;
+}
+.seg-history-stat-value {
+    color: #4cc9f0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.seg-history-stat-label {
+    font-size: 0.7rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+/* History filter bar */
+.seg-history-filters {
+    padding: 6px 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-bottom: 1px solid #2a2a4a;
+}
+.seg-history-filter-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.seg-history-filter-label {
+    font-size: 0.73rem;
+    color: #666;
+    min-width: 80px;
+    white-space: nowrap;
+}
+.seg-history-filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+.seg-history-filter-pill {
+    display: inline-block;
+    background: #1a1a3e;
+    border: 1px solid #3a3a5a;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.73rem;
+    color: #aaa;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    user-select: none;
+}
+.seg-history-filter-pill:hover {
+    background: #1a2a4e;
+    color: #ccc;
+}
+.seg-history-filter-pill.active {
+    background: #4361ee;
+    border-color: #4361ee;
+    color: #fff;
+}
+.seg-history-filter-pill .pill-count {
+    color: #4cc9f0;
+    font-weight: 600;
+}
+.seg-history-filter-pill.active .pill-count {
+    color: #fff;
+}
+
+/* Empty state (shared between filter-no-results and delete placeholder) */
+.seg-history-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 70px;
+    padding: 24px;
+    text-align: center;
+    color: #555;
+    font-style: italic;
+    font-size: 0.85rem;
+    border: 1px dashed #333;
+    border-radius: 6px;
+}
+
+/* Batches container */
+.seg-history-batches {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 12px 12px;
+}
+
+/* Individual batch */
+.seg-history-batch {
+    background: #0f0f23;
+    border-radius: 6px;
+    border: 1px solid #3a3a5a;
+    overflow: hidden;
+}
+
+.seg-history-batch-header {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #2a2a4a;
+}
+
+.seg-history-batch.is-revert {
+    opacity: 0.6;
+}
+.seg-history-batch-time {
+    color: #ccc;
+    font-weight: 600;
+}
+.seg-history-batch-chapter {
+    color: #4cc9f0;
+}
+.seg-history-batch-ops-count {
+    background: #16213e;
+    border-radius: 8px;
+    padding: 1px 8px;
+    font-size: 0.72rem;
+}
+.seg-history-batch-revert-badge {
+    background: #5a3a1e;
+    color: #ffb347;
+    border-radius: 8px;
+    padding: 1px 8px;
+    font-size: 0.72rem;
+}
+
+/* Per-batch undo button */
+.seg-history-undo-btn {
+    margin-left: auto;
+    font-size: 0.72rem;
+    padding: 2px 10px;
+    background: transparent;
+    border: 1px solid #f44336;
+    color: #f44336;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.seg-history-undo-btn:hover:not(:disabled) {
+    background: #f44336;
+    color: #fff;
+}
+.seg-history-undo-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+/* Per-operation undo button (in op label row) */
+.seg-history-op-undo-btn {
+    margin-left: auto;
+    font-size: 0.68rem;
+    padding: 1px 8px;
+    background: transparent;
+    border: 1px solid #f44336;
+    color: #f44336;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.seg-history-op-undo-btn:hover:not(:disabled) {
+    background: #f44336;
+    color: #fff;
+}
+.seg-history-op-undo-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* Validation delta badges */
+.seg-history-val-delta {
+    font-size: 0.7rem;
+    border-radius: 8px;
+    padding: 1px 7px;
+}
+.seg-history-val-delta.improved {
+    background: rgba(76, 175, 80, 0.15);
+    color: #4caf50;
+}
+.seg-history-val-delta.regression {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+}
+
+/* Batch operations container */
+.seg-history-batch-body {
+    padding: 6px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Compact chapter list for multi-chapter auto-fix batches */
+.seg-history-chapter-list {
+    color: #aaa;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    padding: 4px 0;
+}
+
+/* Single operation */
+.seg-history-op {
+    background: #16213e;
+    border-radius: 6px;
+    padding: 8px;
+}
+.seg-history-op-label {
+    font-size: 0.73rem;
+    color: #888;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.seg-history-op-type-badge {
+    background: #1a1a3e;
+    border: 1px solid #3a3a5a;
+    border-radius: 4px;
+    padding: 1px 8px;
+    color: #ccc;
+    font-weight: 600;
+}
+.seg-history-op-type-badge.secondary {
+    font-weight: 400;
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+.seg-history-op-fix-kind {
+    color: #666;
+    font-style: italic;
+}
+
+/* 3-column diff grid */
+.seg-history-diff {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    align-items: center;
+    gap: 0;
+}
+.seg-history-before,
+.seg-history-after {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Arrow SVG container */
+.seg-history-arrows {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+}
+.seg-history-arrows svg {
+    width: 60px;
+    overflow: visible;
+}
+
+/* History cards within the diff (stacked: waveform on top, text below) */
+.seg-history-diff .seg-row {
+    margin: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+.seg-history-diff .seg-left {
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: stretch;
+}
+.seg-history-diff .seg-left > .seg-card-play-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+.seg-history-diff .seg-left > canvas {
+    flex: 1;
+    min-width: 0;
+}
+.seg-history-diff .seg-row canvas {
+    width: 100%;
+    height: 40px;
+}
+.seg-history-diff .seg-text {
+    display: flex;
+    flex-direction: column;
+    border-left: none;
+    border-top: 4px solid #666;
+    padding: 4px 8px;
+}
+.seg-history-diff .seg-text.conf-high  { border-top-color: #4caf50; border-left: none; }
+.seg-history-diff .seg-text.conf-mid   { border-top-color: #ff9800; border-left: none; }
+.seg-history-diff .seg-text.conf-low   { border-top-color: #f44336; border-left: none; }
+.seg-history-diff .seg-text.conf-fail  { border-top-color: #555;    border-left: none; }
+
+/* Change highlighting */
+.seg-history-changed {
+    color: #f0a500 !important;
+}
+
+/* Save preview toolbar */
+.seg-save-preview-toolbar { justify-content: space-between; }
+.seg-save-preview-toolbar .seg-history-title { flex: 1; text-align: center; }
+.seg-save-preview-warning {
+    background: #3e2723;
+    border: 1px solid #f0a500;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 12px;
+    color: #f0a500;
+    font-size: 0.82rem;
+}
