@@ -1,27 +1,44 @@
+import os
 from pathlib import Path
 
 # Repo root (inspector/ is one level below)
 _REPO = Path(__file__).resolve().parent.parent
 
-# Audio files locationnf
-AUDIO_PATH = _REPO / "data"
+# Data root — override with INSPECTOR_DATA_DIR for standalone / Docker deployments.
+# All per-category data paths below derive from this single root so a deployment
+# can volume-mount a single directory (e.g. `-v ./data:/data` with
+# INSPECTOR_DATA_DIR=/data).
+DATA_DIR = Path(os.environ.get("INSPECTOR_DATA_DIR", str(_REPO / "data"))).resolve()
 
-# Cache directory
-CACHE_DIR = _REPO / "inspector" / ".cache"
+# Audio files are served directly from the data root (`/audio/<reciter>/<file>`
+# maps to `<DATA_DIR>/<reciter>/<file>`), so AUDIO_PATH == DATA_DIR.
+AUDIO_PATH = DATA_DIR
 
-# MFA alignment resources
-MODEL_PATH = _REPO / "mfa_aligner" / "quran_aligner_model.zip"
-DICTIONARY_PATH = _REPO / "mfa_aligner" / "dictionary.txt"
-SURAH_INFO_PATH = _REPO / "data" / "surah_info.json"
+SURAH_INFO_PATH = DATA_DIR / "surah_info.json"
 
 # Recitation segments from extract_segments.py
-RECITATION_SEGMENTS_PATH = _REPO / "data" / "recitation_segments"
+RECITATION_SEGMENTS_PATH = DATA_DIR / "recitation_segments"
 
 # Audio metadata (JSON files with surah URLs per reciter)
-AUDIO_METADATA_PATH = _REPO / "data" / "audio"
+AUDIO_METADATA_PATH = DATA_DIR / "audio"
 
 # Timestamps from MFA forced alignment (JSONL per reciter)
-TIMESTAMPS_PATH = _REPO / "data" / "timestamps"
+TIMESTAMPS_PATH = DATA_DIR / "timestamps"
+
+# Cache directory — defaults under DATA_DIR so peak/audio/phoneme caches survive
+# container restarts when the data directory is a persistent volume.
+# Override via INSPECTOR_CACHE_DIR if a volatile / separate cache location is preferred.
+CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))).resolve()
+
+# Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).
+# Each consumer in services/ gracefully degrades to an empty set/dict if the file is
+# missing, so these paths are advisory rather than required. Override the base dir via
+# INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.
+_QUA_DATA_OVERRIDE = os.getenv("INSPECTOR_QUA_DATA_PATH")
+_QUA_DATA = Path(_QUA_DATA_OVERRIDE) if _QUA_DATA_OVERRIDE else _REPO / "quranic_universal_aligner" / "data"
+QPC_HAFS_PATH = _QUA_DATA / "qpc_hafs.json"
+DK_SCRIPT_PATH = _QUA_DATA / "digital_khatt_v2_script.json"
+PHONEME_SUB_COSTS_PATH = _QUA_DATA / "phoneme_sub_costs.json"
 
 # Display settings
 UNIFIED_DISPLAY_MAX_HEIGHT = 800  # px
@@ -51,29 +68,110 @@ SEG_FONT_SIZE = "1.8rem"           # Arabic text size in segment cards
 LOW_CONF_DEFAULT_THRESHOLD = 80    # default % for low-confidence slider (50–99)
 SEG_WORD_SPACING = "0.2em"         # gap between words in segment cards
 
+# Auto-scroll animation mode for the segments list.
+# Values: "none"   — instant (no animation)
+#         "smooth" — native CSS smooth scroll on every target
+#         "hybrid" — smooth only when the jump exceeds one viewport, instant otherwise
+# Not a user preference — the same behavior ships for all deployments.
+SEG_SCROLL_ANIM_MODE = "hybrid"
+
 # Adjust (trim) mode settings
-TRIM_PAD_LEFT = 10000              # ms padding before segment
-TRIM_PAD_RIGHT = 10000             # ms padding after segment
-TRIM_DIM_ALPHA = 0.4               # dimming opacity for padded regions
+TRIM_PAD_LEFT = 10000                     # ms padding before segment
+TRIM_PAD_RIGHT = 10000                    # ms padding after segment
+TRIM_DIM_ALPHA = 0.4                      # dimming opacity for padded regions
 
 # Boundary adjustment: phoneme tail mismatch detection
-BOUNDARY_TAIL_K = 3                # number of trailing phonemes to compare
-SHOW_BOUNDARY_PHONEMES = False     # show GT/ASR tail phonemes on boundary_adj cards
+BOUNDARY_TAIL_K = 3                       # number of trailing phonemes to compare
+SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards
 
-# Peaks computation
-PEAKS_SAMPLE_RATE = 2000      # Hz — sample rate for ffmpeg peak extraction (lower = faster)
-PEAKS_BUCKETS_PER_SEC = 50    # number of peak buckets per second of audio
-PEAKS_NEIGHBOR_COUNT = 0      # number of segments after to prefetch peaks on click
-
-# Accordion context card defaults per category
-# Values: "hidden" (collapsed), "shown" (prev+next auto-open), "next_only" (next auto-open)
+# Accordion context: which validation categories auto-expand context cards
+# Values: "shown" (default open), "hidden" (default closed), "next_only" (open on nav)
 ACCORDION_CONTEXT = {
-    "failed":         "shown",
+    "failed": "shown",
     "low_confidence": "hidden",
-    "boundary_adj":   "hidden",
-    "cross_verse":    "hidden",
+    "boundary_adj": "hidden",
+    "repetitions": "hidden",
+    "cross_verse": "hidden",
+    "muqattaat": "hidden",
+    "qalqala": "hidden",
     "audio_bleeding": "shown",
-    "repetitions":    "hidden",
-    "muqattaat":      "hidden",
-    "qalqala":        "hidden",
+}
+
+# HTTP / subprocess timeouts (seconds)
+FFMPEG_TIMEOUT = 10
+FFMPEG_FULL_TIMEOUT = 300
+ID3_PROBE_TIMEOUT = 5
+
+# Audio processing
+DEFAULT_BYTES_PER_SEC = 16_000
+RANGE_DECODE_PAD_SEC = 5
+ID3_PROBE_BYTES = 50_000
+MIN_SEG_PEAK_BUCKETS = 10
+MIN_FULL_PEAK_BUCKETS = 100
+PEAKS_BUCKETS_PER_SEC = 50                # target peak density for segment-level peaks
+
+# Validation thresholds
+LOW_CONFIDENCE_THRESHOLD = 0.80
+# "Show everything below perfect" tier — used to populate detail lists (not count badges).
+# Distinct from LOW_CONFIDENCE_THRESHOLD (count badge cutoff) and LOW_CONFIDENCE_RED (red highlight).
+LOW_CONFIDENCE_DETAIL_THRESHOLD = 1.0
+MAX_AYAH_BOUNDARY_CHECK = 300
+METADATA_PEEK_BYTES = 512
+
+# Statistics histogram defaults
+PAUSE_HIST_BIN_MS = 50
+PAUSE_HIST_MAX_MS = 3000
+SEG_DUR_HIST_BIN_MS = 500
+SEG_DUR_HIST_MAX_MS = 15000
+
+# Cache headers
+AUDIO_CACHE_MAX_AGE = 31_536_000
+
+# Confidence thresholds
+LOW_CONFIDENCE_RED = 0.60           # below this = red highlight ("below_60" stat)
+
+# Temp audio suffix — used by services/peaks.py and services/cache.py when writing
+# partial HTTP byte-range chunks. ffmpeg needs a plausible extension for frame sync.
+TEMP_AUDIO_SUFFIX = ".mp3"
+
+# Peaks (ffmpeg) — waveform peak extraction defaults (services/peaks.py)
+PEAKS_FFMPEG_SAMPLE_RATE = 8000          # Hz — ffmpeg resample target for peak computation
+PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 1] float
+PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parallel peak compute
+PEAKS_MIN_CHUNK_BYTES = 100              # short-circuit below this raw-chunk size (prevents tiny ffmpeg invocations)
+
+# Startup preload (app.py)
+STARTUP_PRELOAD_WORKERS = 8              # ThreadPoolExecutor cap for eager timestamp preload
+
+# Audio-cache background download (routes/audio_proxy.py)
+AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download workers for by_surah cache warmup
+
+# Server defaults (app.py)
+DEFAULT_PORT = 5000                      # Flask --port default
+FLASK_ENV_VAR = "FLASK_ENV"              # environment variable name for Flask env
+FLASK_DEV_VALUE = "development"          # value that triggers debug/reloader mode
+# Bind host — override with INSPECTOR_HOST for non-local deployments.
+SERVER_HOST = os.environ.get("INSPECTOR_HOST", "0.0.0.0")
+
+# Timestamps validation (routes/timestamps.py)
+TS_RANDOM_MAX_RETRIES = 10              # max attempts to find a non-empty verse in /ts/random
+TS_BOUNDARY_TOLERANCE_MS = 500         # default boundary tolerance when not in result metadata
+# Sort-order weight for missing-word issues: one missing word adds this many ms to diff_ms.
+# This is NOT a unit conversion — it is purely a sort-order heuristic.
+MISSING_WORD_DIFF_MS_WEIGHT = 1000
+
+# Statistics histogram shape constants (services/stats.py)
+WORDS_PER_SEG_HIST_MAX = 15            # upper bound for words-per-segment histogram
+SEGS_PER_VERSE_HIST_MAX = 8            # upper bound for segs-per-verse histogram
+CONF_HIST_BIN_SIZE = 5                 # bin width (percentage points) for confidence histogram
+
+# Boundary display: how many extra phonemes beyond BOUNDARY_TAIL_K to show in detail cards
+BOUNDARY_TAIL_DISPLAY_EXTRA = 2        # display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
+
+# Audio MIME types (shared between app.py and audio_proxy)
+AUDIO_MIME_TYPES = {
+    ".flac": "audio/flac",
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
 }
