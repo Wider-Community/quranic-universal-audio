@@ -72,7 +72,7 @@ result = client.predict(
 )
 
 # Subdivide long segments at word boundaries
-result = client.predict(audio_id, 1, 20, None, False, api_name="/split_segments")
+result = client.predict(audio_id, 1, 15, None, False, api_name="/split_segments")
 
 # Get word-level timestamps (uses stored session segments)
 ts = client.predict(audio_id, None, "words", api_name="/timestamps")
@@ -277,17 +277,19 @@ Aligns audio using custom time boundaries you provide. Useful for manually adjus
 
 Subdivides existing aligned segments that exceed one or more of three limits, using word-level timestamps to find precise word-boundary cuts.
 
-Splits prefer waqf stop-signs inside the Quran text (preferred_stop ۗ → optional_stop ۚ → preferred_continue ۖ, closest-to-middle tiebreak); falls back to equal-word split when no stop exists.
-
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `audio_id` | str | required | Session ID from a previous call |
 | `max_verses` | int | 1 | Max distinct verses a segment may span (1–4). Pass `5`, `0`, or `null` to disable |
-| `max_words` | int | `null` | Max Quran words per segment (10–45, step 5). Pass `50`, `0`, or `null` to disable |
-| `max_duration` | float | `null` | Max segment duration in seconds (3–29, step 1). Pass `30`, `0`, or `null` to disable |
-| `require_stop_sign` | bool | `false` | When `true`, the word/duration pass only splits at a waqf mark — segments with no stop sign stay as-is even if they exceed the limit. The verse-split pass is unaffected |
+| `max_words` | int | `null` | Max Quran words per segment (5–29, step 1). Pass `30`, `0`, or `null` to disable |
+| `max_duration` | float | `null` | Max segment duration in seconds (5–29, step 1). Pass `30`, `0`, or `null` to disable |
+| `require_stop_sign` | bool | `false` | When `true`, the word/duration pass only splits at a waqf mark — segments with no stop sign stay as-is even if they exceed the limit. Does not affect verse boundary cuts |
 
-**Priority:** verse-split runs first (at verse boundaries). Word and duration are resolved together in a second pass, recursing until every sub-segment satisfies both.
+**How the criteria interact:** `max_verses` and `max_words`/`max_duration` are independent — enable any combination.
+
+- **`max_verses` only** — cuts at verse boundaries, grouping up to `max_verses` verses per segment.
+- **`max_words`/`max_duration` only** — for each violating segment, cuts at verse boundaries first, then waqf stop-signs (preferred_stop ۗ → optional_stop ۚ → preferred_continue ۖ, closest to middle), then equal-word fallback.
+- **Both enabled** — `max_verses` pass runs first; the word/duration pass then handles remaining violations (and re-checks verse boundaries for multi-verse segments the first pass didn't cut).
 
 **Response:** Same shape as `/process_audio_session`. New sub-segments share a `split_group_id` string so clients can visually group them. Session boundaries are replaced with the new split boundaries. If splitting fails for a segment, it is kept unsplit and `error` is set to `"split_failed"`.
 
