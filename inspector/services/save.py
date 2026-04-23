@@ -136,10 +136,19 @@ def _make_seg(s: dict, existing_by_time: dict, existing_by_uid: dict) -> dict:
         result["wrap_word_ranges"] = wrap
     if s.get("has_repeated_words") or existing.get("has_repeated_words"):
         result["has_repeated_words"] = True
-    ic = s.get("ignored_categories") or existing.get("ignored_categories")
-    if ic:
-        result["ignored_categories"] = list(ic)
-    elif s.get("ignored") or existing.get("ignored"):
+    if "ignored_categories" in s:
+        ic = s.get("ignored_categories") or []
+        if ic:
+            result["ignored_categories"] = list(ic)
+    else:
+        ic = existing.get("ignored_categories")
+        if ic:
+            result["ignored_categories"] = list(ic)
+    if (
+        "ignored_categories" not in result
+        and "ignored_categories" not in s
+        and (s.get("ignored") or existing.get("ignored"))
+    ):
         result["ignored_categories"] = ["_all"]
     return result
 
@@ -202,8 +211,13 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
             flat_segments[idx]["matched_text"] = upd.get("matched_text", "")
             if "confidence" in upd:
                 flat_segments[idx]["confidence"] = upd["confidence"]
-            if upd.get("ignored_categories"):
-                flat_segments[idx]["ignored_categories"] = upd["ignored_categories"]
+            if "ignored_categories" in upd:
+                ic = upd.get("ignored_categories") or []
+                if ic:
+                    flat_segments[idx]["ignored_categories"] = ic
+                else:
+                    flat_segments[idx].pop("ignored_categories", None)
+                    flat_segments[idx].pop("ignored", None)
 
 
 def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,

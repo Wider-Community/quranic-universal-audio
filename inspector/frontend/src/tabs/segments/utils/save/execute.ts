@@ -95,10 +95,10 @@ export async function executeSave(): Promise<void> {
                             confidence: s.confidence,
                             phonemes_asr: s.phonemes_asr || '',
                             audio_url: s.audio_url || '',
+                            ignored_categories: s.ignored_categories ?? [],
                         };
                         if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
                         if (s.has_repeated_words) o.has_repeated_words = true;
-                        if (s.ignored_categories?.length) o.ignored_categories = s.ignored_categories;
                         return o;
                     }),
                     operations: chOps,
@@ -115,8 +115,8 @@ export async function executeSave(): Promise<void> {
                             matched_ref: seg.matched_ref,
                             matched_text: seg.matched_text,
                             confidence: seg.confidence,
+                            ignored_categories: seg.ignored_categories ?? [],
                         };
-                        if (seg.ignored_categories?.length) upd.ignored_categories = seg.ignored_categories;
                         updates.push(upd);
                     }
                 }

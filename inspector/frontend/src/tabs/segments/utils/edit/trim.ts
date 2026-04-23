@@ -353,7 +353,7 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     seg.time_end = newEnd;
     seg.confidence = 1.0;
     const pending = getPendingOp();
-    if (pending?.op_context_category) {
+    if (pending?.op_context_category && pending.op_context_category !== 'muqattaat') {
         if (!seg.ignored_categories) seg.ignored_categories = [];
         if (!seg.ignored_categories.includes(pending.op_context_category))
             seg.ignored_categories.push(pending.op_context_category);

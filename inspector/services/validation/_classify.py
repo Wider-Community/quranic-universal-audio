@@ -110,14 +110,15 @@ def _classify_segment(
         return result
 
     if is_by_ayah and ":" in entry_ref and not seg_belongs_to_entry(matched_ref, entry_ref):
-        result["audio_bleeding"] = True
+        if not is_ignored_for(seg, "audio_bleeding"):
+            result["audio_bleeding"] = True
 
-    if seg.get("wrap_word_ranges"):
+    if seg.get("wrap_word_ranges") and not is_ignored_for(seg, "repetitions"):
         result["repetitions"] = True
 
-    if confidence < LOW_CONFIDENCE_THRESHOLD:
+    if confidence < LOW_CONFIDENCE_THRESHOLD and not is_ignored_for(seg, "low_confidence"):
         result["low_confidence"] = True
-    if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD:
+    if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD and not is_ignored_for(seg, "low_confidence"):
         result["low_confidence_detail"] = True
 
     if s_ayah != e_ayah:
