@@ -75,8 +75,12 @@ export function _classifySegCategories(seg: Segment | SegClassifyInput): string[
 
     if (!ref) { cats.push('failed'); return cats; }
 
-    if (confidence < CONF_HIGH_THRESHOLD) cats.push('low_confidence');
-    if (seg.wrap_word_ranges || seg.has_repeated_words) cats.push('repetitions');
+    if (confidence < CONF_HIGH_THRESHOLD && !_isIgnoredFor(seg, 'low_confidence')) {
+        cats.push('low_confidence');
+    }
+    if ((seg.wrap_word_ranges || seg.has_repeated_words) && !_isIgnoredFor(seg, 'repetitions')) {
+        cats.push('repetitions');
+    }
 
     const parts = ref.split('-');
     if (parts.length !== 2 || !parts[0] || !parts[1]) return cats;
@@ -123,7 +127,9 @@ export function _classifySegCategories(seg: Segment | SegClassifyInput): string[
             if (entryParts.length >= 2) {
                 const segVerse = `${sp[0]}:${sp[1]}`;
                 const entryVerse = `${entryParts[0]}:${entryParts[1]}`;
-                if (segVerse !== entryVerse) cats.push('audio_bleeding');
+                if (segVerse !== entryVerse && !_isIgnoredFor(seg, 'audio_bleeding')) {
+                    cats.push('audio_bleeding');
+                }
             }
         }
     }

@@ -32,7 +32,7 @@ Reciters in the project fall into one of three states. Browse the full list in [
 
 ## Setup
 
-Requesting processing and reporting issues only need a browser. For reviewing alignment in the Inspector, you'll need Git and Docker.
+For reviewing alignment in the Inspector, you'll need Git and Docker.
 
 ### Prerequisites
 

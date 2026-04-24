@@ -14,13 +14,13 @@ Open http://localhost:5000. The image is pulled from GHCR — no local build nee
 
 ## Segments Reviewing
 
-The main editing interface in the **Segments** tab. Browse the AI-generated segments, review flagged errors, and fix them so timestamps can be generated.
+The main editing interface in the **Segments** tab. Browse clips, review flagged errors, and fix them so timestamps can be generated.
 
 > **Important**: Make sure to save edits regularly to avoid losing work. The app does not auto-save, and unsaved changes might be lost if you refresh or navigate away.
 
 ### Getting started
 
-Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache chapter audio locally (~1-2 GB) for offline editing. 
+Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache audio locally (~1-2 GB) for offline editing. 
 
 **This is also needed if you notice segments' audio consistently don't match their text and play audio from neighbouring segments instead (CDN streaming issue with a small number of reciters).**
 

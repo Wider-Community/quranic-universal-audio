@@ -2,12 +2,17 @@
 
 - [Quick Start](#quick-start)
 - [Sessions](#sessions)
-- [Alignment Endpoints](#alignment-endpoints) — `/process_audio_session`, `/process_url_session`, `/resegment`, `/retranscribe`, `/realign_from_timestamps`
+- [Alignment Endpoints](#alignment-endpoints)
+  - [Fresh Sessions](#fresh-sessions) — `/process_audio_session`, `/process_url_session`
+  - [Follow-up Endpoints](#follow-up-endpoints) — `/resegment`, `/retranscribe`, `/realign_from_timestamps`, `/split_segments`
 - [Word Timestamps](#word-timestamps) — `/timestamps`, `/timestamps_direct`
 - [Utilities](#utilities) — `/estimate_duration`
 - [Response Reference](#response-reference) — segment fields, special types, word arrays, errors
 
 ## API Changelog
+
+**23/04/2026**
+- New `/split_segments` endpoint: subdivides existing aligned segments that exceed `max_verses`, `max_words`, or `max_duration` limits. Adds optional `split_group_id` field to segment objects, stamping siblings that came from the same parent.
 
 **13/04/2026**
 - **Breaking:** GPU quota is no longer auto-routed to CPU. Requests now return a structured error and the caller decides whether to retry with `device="CPU"`. New `error_code` values: `gpu_quota_exhausted` (logged user), `gpu_quota_anonymous` (unlogged/IP-limited). The old `"warning"` field on successful responses is no longer emitted.
@@ -66,6 +71,9 @@ result = client.predict(
     api_name="/realign_from_timestamps"
 )
 
+# Subdivide long segments at word boundaries
+result = client.predict(audio_id, 1, 15, None, False, api_name="/split_segments")
+
 # Get word-level timestamps (uses stored session segments)
 ts = client.predict(audio_id, None, "words", api_name="/timestamps")
 
@@ -94,7 +102,7 @@ The first call returns an `audio_id` (32-character hex string). Pass it to subse
 |---|---|
 | Preprocessed audio | — |
 | Detected speech intervals | — |
-| Cleaned segment boundaries | `/resegment`, `/realign_from_timestamps` |
+| Cleaned segment boundaries | `/resegment`, `/realign_from_timestamps`, `/split_segments` |
 | Model name | `/retranscribe` |
 | Alignment segments | Any alignment call |
 
@@ -106,6 +114,8 @@ If `audio_id` is missing, expired, or invalid:
 ---
 
 ## Alignment Endpoints
+
+### Fresh Sessions
 
 ### `POST /process_audio_session`
 
@@ -199,6 +209,8 @@ Downloads audio from a URL, then runs the same pipeline as `/process_audio_sessi
 
 ---
 
+### Follow-up Endpoints
+
 ### `POST /resegment`
 
 Re-splits the audio into segments using different silence/speech settings, then re-aligns. Reuses the uploaded audio.
@@ -258,6 +270,28 @@ Aligns audio using custom time boundaries you provide. Useful for manually adjus
 ```
 
 **Response:** Same shape as `/process_audio_session`. Session boundaries are replaced with the provided timestamps.
+
+---
+
+### `POST /split_segments`
+
+Subdivides existing aligned segments that exceed one or more of three limits, using word-level timestamps to find precise word-boundary cuts.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `audio_id` | str | required | Session ID from a previous call |
+| `max_verses` | int | 1 | Max distinct verses a segment may span (1–4). Pass `5`, `0`, or `null` to disable |
+| `max_words` | int | `null` | Max Quran words per segment (5–29, step 1). Pass `30`, `0`, or `null` to disable |
+| `max_duration` | float | `null` | Max segment duration in seconds (5–29, step 1). Pass `30`, `0`, or `null` to disable |
+| `require_stop_sign` | bool | `false` | When `true`, the word/duration pass only splits at a waqf mark — segments with no stop sign stay as-is even if they exceed the limit. Does not affect verse boundary cuts |
+
+**How the criteria interact:** `max_verses` and `max_words`/`max_duration` are independent — enable any combination.
+
+- **`max_verses` only** — cuts at verse boundaries, grouping up to `max_verses` verses per segment.
+- **`max_words`/`max_duration` only** — for each violating segment, cuts at verse boundaries first, then waqf stop-signs (preferred_stop ۗ → optional_stop ۚ → preferred_continue ۖ, closest to middle), then equal-word fallback.
+- **Both enabled** — `max_verses` pass runs first; the word/duration pass then handles remaining violations (and re-checks verse boundaries for multi-verse segments the first pass didn't cut).
+
+**Response:** Same shape as `/process_audio_session`. New sub-segments share a `split_group_id` string so clients can visually group them. Session boundaries are replaced with the new split boundaries. If splitting fails for a segment, it is kept unsplit and `error` is set to `"split_failed"`.
 
 ---
 
@@ -436,6 +470,7 @@ Returned by all alignment endpoints (`/process_audio_session`, `/resegment`, `/r
 | `repeated_ranges` | array | Only present when `has_repeated_words` is true. Array of `[ref_from, ref_to]` pairs showing the full reading sequence in recitation order |
 | `repeated_text` | array | Only present when `has_repeated_words` is true. Array of text strings parallel to `repeated_ranges`, each containing the Arabic text for that reading pass |
 | `special_type` | str | Only present for special (non-Quranic) segments — see below. Absent for normal segments |
+| `split_group_id` | str? | Only present on sub-segments produced by `/split_segments`. Same value across siblings from the same pre-split parent |
 | `error` | str? | Error message if alignment failed, else `null` |
 
 ### Special Segment Types

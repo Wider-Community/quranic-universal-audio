@@ -121,7 +121,7 @@ export async function mergeAdjacent(
         ...(first.ignored_categories || []),
         ...(second.ignored_categories || []),
     ]);
-    if (contextCategory) mergedIc.add(contextCategory);
+    if (contextCategory && contextCategory !== 'muqattaat') mergedIc.add(contextCategory);
     if (mergedIc.size) merged.ignored_categories = [...mergedIc];
 
     const keptOldIdx = first.index;

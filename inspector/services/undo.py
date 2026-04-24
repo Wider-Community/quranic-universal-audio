@@ -71,7 +71,18 @@ def snap_to_segment(snap: dict) -> dict:
         seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
     if snap.get("phonemes_asr"):
         seg["phonemes_asr"] = snap["phonemes_asr"]
+    if snap.get("ignored_categories"):
+        seg["ignored_categories"] = list(snap["ignored_categories"])
     return seg
+
+
+def _restore_ignored_categories(seg: dict, snap: dict) -> None:
+    """Restore per-category ignore markers from a snapshot."""
+    if snap.get("ignored_categories"):
+        seg["ignored_categories"] = list(snap["ignored_categories"])
+    else:
+        seg.pop("ignored_categories", None)
+        seg.pop("ignored", None)
 
 
 def verify_segment_matches_snapshot(seg: dict, snap: dict) -> str | None:
@@ -126,6 +137,10 @@ def _reverse_trim(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     snap_before = before[0]
     seg["time_start"] = snap_before["time_start"]
     seg["time_end"] = snap_before["time_end"]
+    seg["matched_ref"] = snap_before.get("matched_ref", "")
+    seg["matched_text"] = snap_before.get("matched_text", "")
+    seg["confidence"] = snap_before.get("confidence", 0)
+    _restore_ignored_categories(seg, snap_before)
     entry["segments"].sort(key=lambda s: s["time_start"])
 
 
@@ -193,6 +208,7 @@ def _reverse_ref_edit(entries: list[dict], op: dict, chapter_set: set[int]) -> N
     seg["matched_ref"] = snap_before.get("matched_ref", "")
     seg["matched_text"] = snap_before.get("matched_text", "")
     seg["confidence"] = snap_before.get("confidence", 0)
+    _restore_ignored_categories(seg, snap_before)
 
 
 def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
@@ -202,7 +218,9 @@ def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> Non
     if not after or not before:
         return
     _, _, seg = _find_and_verify(entries, after[0], chapter_set)
-    seg["confidence"] = before[0].get("confidence", 0)
+    snap_before = before[0]
+    seg["confidence"] = snap_before.get("confidence", 0)
+    _restore_ignored_categories(seg, snap_before)
 
 
 # ---------------------------------------------------------------------------

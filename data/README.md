@@ -118,7 +118,7 @@ All JSON audio manifests must include a `_meta` object. Fields marked **required
 | `name_en` | string | **yes** | English display name (e.g., `"Ahmad Al-Nufais"`) |
 | `name_ar` | string | | Arabic display name (e.g., `"أحمد النفيس"`) |
 | `riwayah` | string | | Quranic reading tradition (e.g., `"hafs_an_asim"`) |
-| `style` | string | | Recitation style: `murattal`, `mujawwad`, `muallim`, `hadr`, or `unknown` |
+| `style` | string | | Recitation style: `murattal`, `mujawwad`, `muallim`, `children_repeat`, or `taraweeh` |
 | `audio_category` | string | | `"by_surah"` or `"by_ayah"` |
 | `source` | string | | Source URL or description |
 | `country` | string | | Country of origin |
