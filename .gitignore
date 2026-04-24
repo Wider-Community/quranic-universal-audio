@@ -24,7 +24,5 @@ cut_taraweeh.py
 # Release packaging output
 dist/
 
-# Large binaries tracked in HF Spaces but not in parent repo
-mfa_aligner/quran_aligner_model.zip
-quranic_universal_aligner/data/*.pkl
-quranic_universal_aligner/data/*.mp3
+mfa_aligner/
+quranic_universal_aligner/
