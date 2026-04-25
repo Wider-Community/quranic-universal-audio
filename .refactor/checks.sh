@@ -118,16 +118,19 @@ echo "[7] Worktree status:"
 git status --short || true
 
 # 8. MUST-11 refactor-trace breadcrumb check.
-# Scope: lines INTRODUCED by this refactor only (compare against main).
-# Pattern: very specific breadcrumb phrases, not general historical phrasing.
+# Scope: lines INTRODUCED by this refactor only (compare against main), excluding allowlist directories.
+# Pathspec exclusion runs at the git layer so the grep pipeline never sees the noise.
 echo
 echo "[8] MUST-11 refactor-trace breadcrumb check (vs main):"
 if git rev-parse main >/dev/null 2>&1; then
-    BREADCRUMBS=$(git diff main...HEAD --no-color 2>/dev/null \
+    BREADCRUMBS=$(git diff main...HEAD --no-color -- \
+        ':!.refactor/' \
+        ':!inspector/tests/fixtures/' \
+        ':!docs/inspector-segments-refactor-plan.md' \
+        2>/dev/null \
         | grep -E '^\+[^+]' \
         | grep -ivE '^\+\+\+' \
         | grep -inE '(// refactored|// removed|# refactored|# removed|previously this|previously did|now uses the new|now dispatches via|migrated from|replaced by|superseded by Phase|before this refactor|as of Phase [0-9])' \
-        | grep -v -E '\.refactor/|inspector/tests/fixtures/|docs/inspector-segments-refactor-plan' \
         | head -20 || true)
     if [ -n "$BREADCRUMBS" ]; then
         echo "  VIOLATIONS — refactor-trace comments introduced:"
