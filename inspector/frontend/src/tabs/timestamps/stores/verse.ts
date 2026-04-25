@@ -52,11 +52,6 @@ export const selectedVerse = writable<string>('');
 /** Currently-loaded verse data (null before first load). */
 export const loadedVerse = writable<TsLoadedVerse | null>(null);
 
-// `intervals` and `words` derived stores were removed: components compute
-// these inline via `$loadedVerse` + `$:` reactive statements as needed
-// (UnifiedDisplay / AnimationDisplay). Re-introducing them without any
-// `$store` consumer would be a tautological pass-through.
-
 // ---------------------------------------------------------------------------
 // Validation data
 // ---------------------------------------------------------------------------
@@ -67,10 +62,6 @@ export const validationData = writable<TsValidateResponse | null>(null);
 // ---------------------------------------------------------------------------
 // Derived dropdown options
 // ---------------------------------------------------------------------------
-
-// `recitersOptions` was removed — TimestampsTab reads `$reciters` directly
-// to build its grouped-<optgroup> structure; an identity-wrap derived store
-// has zero value.
 
 /** Chapter select options (passed to SearchableSelect). */
 export const chaptersOptions = derived<typeof chapters, SelectOption[]>(chapters, ($cs) =>
