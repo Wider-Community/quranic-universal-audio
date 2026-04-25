@@ -291,7 +291,7 @@ export interface SegValidateResponse {
     failed?: SegValFailedItem[];
     missing_verses?: SegValMissingVerseItem[];
     missing_words?: SegValMissingWordsItem[];
-    /** Never emitted by the server; kept as a defensive alias in case a future route adds it. */
+    /** Live alias of {@link errors} — both keys are emitted by the server (additive, MUST-1 compliant). */
     structural_errors?: SegValStructuralErrorItem[];
     low_confidence?: SegValLowConfidenceItem[];
     boundary_adj?: SegValBoundaryAdjItem[];

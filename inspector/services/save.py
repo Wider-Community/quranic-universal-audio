@@ -140,12 +140,15 @@ def _make_seg(s: dict, existing_by_time: dict, existing_by_uid: dict) -> dict:
     # ``ignored_categories`` is filtered against the registry's
     # ``persists_ignore`` flag before serialization: categories whose registry
     # entry is non-persisting drop out of the on-disk representation, while
-    # the legacy ``"_all"`` marker passes through. Empty payload arrays still
-    # clear the field (MUST-7).
+    # the legacy ``"_all"`` marker passes through.
+    #
+    # MUST-7 semantics:
+    #   - Key present in payload (including []) → respect what was sent.
+    #     Empty array or all-non-persisting result → write [] (clears persisted).
+    #   - Key absent → preserve existing entry-side value.
     if "ignored_categories" in s:
         ic = filter_persistent_ignores(s.get("ignored_categories") or [])
-        if ic:
-            result["ignored_categories"] = ic
+        result["ignored_categories"] = list(ic)
     else:
         ic = filter_persistent_ignores(existing.get("ignored_categories") or [])
         if ic:

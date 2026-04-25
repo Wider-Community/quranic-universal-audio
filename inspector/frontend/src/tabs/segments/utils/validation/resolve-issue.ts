@@ -44,7 +44,7 @@ import { getChapterSegments, getSegByChapterIndex, selectedChapter } from '../..
  *      split / merge reindexes. Returns null on UID miss (seg deleted or
  *      consumed by merge — card body should hide).
  *   2. `(chapter, seg_index)` lookup — initial / unbound path.
- *   3. `errors` category special-case: match by verse-key prefix.
+ *   3. `structural_errors` category special-case: match by verse-key prefix.
  *
  * Does NOT fall back to `matched_ref === item.ref` (the legacy
  * ref-fallback heuristic). That fallback could re-point resolution to
@@ -65,7 +65,7 @@ export function resolveIssueSeg(
 
     if (anyItem.seg_index != null && anyItem.seg_index < 0) return null;
 
-    if (category === 'errors') {
+    if (category === 'structural_errors') {
         const vk = anyItem.verse_key || '';
         const parts = vk.split(':');
         const prefix = parts.length >= 2 ? `${parts[0]}:${parts[1]}:` : vk;

@@ -149,8 +149,9 @@ def validate_reciter_segments(reciter: str) -> dict:
     missing_words = _build_missing_words(detail["verse_segments"], word_counts)
     errors, missing_verses, stats = _check_structural_errors(reciter, entries)
 
-    return {
+    result = {
         "errors": errors,
+        "structural_errors": errors,  # alias — same list; MUST-1 additive
         "missing_verses": missing_verses,
         "missing_words": missing_words,
         "failed": detail["failed"],
@@ -163,6 +164,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "qalqala": detail["qalqala"],
         "stats": stats,
     }
+    return result
 
 
 def run_validation_log(reciter_dir: Path) -> None:
