@@ -1,0 +1,549 @@
+# .refactor/plan.yaml — Inspector Segments Refactor (machine-readable mirror of plan.md)
+name: inspector-segments-refactor
+created: 2026-04-25
+subtype_primary: monolith-split
+subtype_secondary: pattern-replacement
+
+goals:
+  - Eliminate domain-rule fragmentation across frontend, backend, CLI for validation categories.
+  - Single Issue Registry drives accordion order, card type, Ignore visibility, auto-suppress, persistence.
+  - Unified backend classifier; CLI imports it; frontend stops live-segment classification.
+  - Command application layer; UI dispatches commands; segments are not mutated directly.
+  - Normalized segment state with stable segment_uid identity.
+  - Patch-based undo (forward-only) replaces field-by-field reconstruction.
+  - Validation issues reference segments by segment_uid; positional seg_index falls back for legacy issues.
+  - Adding a new validation category requires only a registry row + classifier rule.
+
+non_goals:
+  - Changing the inspector's HTTP surface (route URLs, response field set).
+  - Migrating Flask → FastAPI or Svelte 4 → Svelte 5.
+  - Touching the timestamps tab or audio tab.
+  - Reworking authentication or static-asset pipeline.
+  - Backfilling patch-based undo to pre-refactor history records.
+
+invariants:
+  must:
+    - id: MUST-1
+      statement: All inspector HTTP routes accept the same request shapes and return the same response field set as before. Additive only; no removed/renamed fields.
+      testable_via: "test_routes_*.py schema-snapshot tests on every route; baseline frozen before Phase 1."
+    - id: MUST-2
+      statement: detailed.json on-disk schema is additive-only. segment_uid, ignored_categories, wrap_word_ranges, confidence, time_*, matched_* retain shape and semantics.
+      testable_via: "test_persistence_schema.py round-trip + key-set parity."
+    - id: MUST-3
+      statement: segments.json on-disk format unchanged (verse_key → tuples + _meta).
+      testable_via: "test_segments_json.py rebuild parity."
+    - id: MUST-4
+      statement: segment_uid is stable across reload+save cycles. Existing UIDs never regenerated; missing UIDs deterministically backfilled and stable on subsequent reloads.
+      testable_via: "test_uid_stability.py: load → save → load → assert UIDs equal."
+    - id: MUST-5
+      statement: Ignore button visibility on every category card matches IssueRegistry[category].canIgnore.
+      testable_via: "Parametrized vitest: every category, button presence/absence."
+    - id: MUST-6
+      statement: After Phase 2, backend classifier and CLI classifier produce identical category sets for any fixture. Frontend reads backend DTOs only.
+      testable_via: "test_classifier_parity_backend_cli.py: same fixture, equal output."
+    - id: MUST-7
+      statement: "Empty ignored_categories array on save = clear persisted ignores. Omitted key = preserve existing. ['_all'] retains 'ignore everything' semantics."
+      testable_via: "test_save_clears_ignores.py: 3 explicit cases."
+    - id: MUST-8
+      statement: After Phase 5, undo applies a complete inverse patch; pre-Phase-5 batches keep legacy field-restore. Forward-only.
+      testable_via: "test_patch_undo.py: every command type round-trips."
+    - id: MUST-9
+      statement: After Phase 6, validation issues reference segments by segment_uid (with seg_index fallback for legacy). Stale items hidden, not rendered.
+      testable_via: "test_validation_identity.py: structural edit on fixture; assert stale items filtered."
+    - id: MUST-10
+      statement: Adding a new category requires changes in exactly two files (registry row + classifier rule). Test suite picks it up via parametrization.
+      testable_via: "SC-3 manual exercise — add tashkeel_drift, count edited files."
+    - id: MUST-11
+      statement: |
+        No refactor-trace breadcrumbs in code or doc artifacts after Phase 6. Forbidden in NEW lines
+        introduced by the refactor (case-insensitive): "// refactored", "// removed", "# refactored",
+        "# removed", "(was X before)", "previously this", "previously did", "now uses the new",
+        "now dispatches via", "migrated from", "replaced by", "superseded by Phase",
+        "before this refactor", "as of Phase N", "legacy <Foo> handling". Pre-existing technical
+        comments that happen to use historical phrasing to explain WHY are NOT targeted; only
+        breadcrumbs left by this refactor's diff. Sonnet quality reviewer flags every phase.
+      testable_via: |
+        Stage 5: `git diff main...HEAD --no-color | grep -E '^\+' | grep -inE '<forbidden patterns>'`
+        returns empty. Allow-list: .refactor/, inspector/tests/fixtures/, docs/inspector-segments-refactor-plan.md.
+  may:
+    - id: MAY-1
+      statement: Internal module organization within validation/, segments/ tabs/, validators/.
+    - id: MAY-2
+      statement: Private helper signatures and call-site narrowing style.
+    - id: MAY-3
+      statement: Comment wording, placement, doc-strings.
+    - id: MAY-4
+      statement: _byChapter / _byChapterIndex cache fields — replaced or hidden in Phase 4.
+    - id: MAY-5
+      statement: Frontend _classifySegCategories — removed in Phase 2.
+    - id: MAY-6
+      statement: Internal store layout (denormalized → normalized) so long as compat selectors preserve $segData/$segAllData read shape.
+    - id: MAY-7
+      statement: Operation-log entry shape can grow new optional fields (e.g., before_patch / after_patch in Phase 5) but cannot remove existing.
+    - id: MAY-8
+      statement: History record can grow new fields (e.g., classified_issues snapshot in Phase 2) but cannot remove existing.
+    - id: MAY-9
+      statement: CLI validator output formatting; only category counts must match backend.
+    - id: MAY-10
+      statement: Validation API responses and history record snapshots may carry classified_issues string[]. This field is NEVER persisted into detailed.json (only validation responses + history snapshots). MUST-2 holds for detailed.json.
+  changing:
+    - id: IS-1
+      statement: Introduce IssueRegistry (Python + TS twin) as single source of truth for category metadata. Replace scattered category checks.
+      phases: [1]
+    - id: IS-2
+      statement: CLI validator imports backend classifier. Duplicated helpers deleted from CLI.
+      phases: [2]
+    - id: IS-3
+      statement: Frontend _classifySegCategories removed. Live-segment classification comes only from backend. Snapshot classification reads stored classified_issues.
+      phases: [2]
+    - id: IS-4
+      statement: Validation API responses gain classified_issues per snapshot. History records persist this field.
+      phases: [2]
+    - id: IS-5
+      statement: Introduce SegmentCommand union and applyCommand reducer. UI dispatches commands.
+      phases: [3]
+    - id: IS-6
+      statement: trim/split/merge/editReference/delete/ignoreIssue migrated to dispatch through applyCommand. UI components stop mutating segments directly.
+      phases: [3]
+    - id: IS-7
+      statement: Introduce SegmentState{byId, idsByChapter, selectedChapter}. Compat selectors preserve $segData/$segAllData. Caches retired.
+      phases: [4]
+    - id: IS-8
+      statement: Loader backfills segment_uid deterministically when absent. Persists on next save.
+      phases: [4]
+    - id: IS-9
+      statement: Commands produce SegmentPatch{before, after, removedIds, insertedIds, affectedChapterIds}. History records gain optional patch field. Backend undo applies inverse patch when present.
+      phases: [5]
+    - id: IS-10
+      statement: Validation DTO gains segment_uid on every issue. Frontend resolution uses uid first; falls back to seg_index for legacy. Stale issues filtered.
+      phases: [6]
+    - id: IS-11
+      statement: _fixupValIndicesForSplit/Merge/Delete removed once all issues carry uid.
+      phases: [6]
+
+success_criteria:
+  - id: SC-1
+    metric: backend ↔ CLI classifier divergence count on shared fixtures
+    baseline: 5
+    target: 0
+    tolerance: 0
+  - id: SC-2
+    metric: frontend live-segment classifier file count
+    baseline: 1
+    target: 0
+    tolerance: 0
+  - id: SC-3
+    metric: edits required to add a new category
+    baseline: unknown
+    target: 2 files (registry row + classifier rule), 0 test files
+    tolerance: 0
+  - id: SC-4
+    metric: total inspector test cases
+    baseline: ~9
+    target: ≥ 150
+    tolerance: -10%
+  - id: SC-5
+    metric: test pass rate at end of refactor
+    baseline: n/a
+    target: "100%"
+    tolerance: 0
+  - id: SC-6
+    metric: UI sites mutating segments directly
+    baseline: ~12
+    target: 0
+    tolerance: 0
+  - id: SC-7
+    metric: cache repair sites
+    baseline: 4
+    target: 0
+    tolerance: 0
+  - id: SC-8
+    metric: validation issue identity scheme
+    baseline: positional seg_index
+    target: stable segment_uid (with seg_index display fallback)
+    tolerance: binary
+  - id: SC-9
+    metric: file count in inspector/services/validation/
+    baseline: 5
+    target: ≤ 7
+    tolerance: 2
+
+testing_strategy:
+  branch: "4d-recommended"
+  notes: |
+    Target-behavior TDD. Tests describe post-refactor target; broken-today cases use xfail
+    with reason="phase-N". Each phase removes its xfail markers (verified by Sonnet quality
+    reviewer). Two-tier registry tests: parametrized behavioral (read registry → consequences)
+    + policy-snapshot test (pins literal matrix). Cross-stack parity tests share JSON fixtures
+    between pytest and vitest.
+
+stakeholders:
+  contributors: [hetchyy]
+  consumers_internal: [inspector frontend, validators CLI]
+  consumers_external: []
+
+shared_doc:
+  type: bug-log
+  path: .refactor/bug-log.md
+  id_prefix: B
+  protocol_notes: |
+    Append-only. Seeded with B-1, B-2, B-3 from exploration findings. Implementation agents
+    and reviewers append new entries. Pre-phase check verifies no unsubstituted fix-SHA
+    placeholders.
+
+stop_points:
+  - id: S1
+    trigger: After Phase 0 (test suite + fixtures committed)
+    action: pause
+    check: User reviews test inventory; confirms target behavior matches intent; approves Phase 1.
+
+context_window_threshold: 0.75
+
+phases:
+  - id: 0
+    name: Test infrastructure + fixtures
+    subtype: test-addition
+    risk: low
+    behavior_surface: pure additions
+    size_estimate:
+      files_touched: 30
+      loc_churn: 1500
+      wall_clock_minutes: 25
+    scope_files:
+      - inspector/tests/conftest.py
+      - inspector/tests/fixtures/segments/README.md
+      - inspector/tests/fixtures/segments/112-ikhlas.detailed.json
+      - inspector/tests/fixtures/segments/113-falaq.detailed.json
+      - inspector/tests/fixtures/segments/synthetic-structural.detailed.json
+      - inspector/tests/fixtures/segments/synthetic-classifier.detailed.json
+      - inspector/tests/fixtures/segments/expected/
+      - inspector/tests/registry/test_registry_policy.py
+      - inspector/tests/registry/test_registry_behavior.py
+      - inspector/tests/registry/test_registry_extensibility.py
+      - inspector/tests/classifier/test_classify_per_category.py
+      - inspector/tests/classifier/test_classify_parity.py
+      - inspector/tests/classifier/test_classify_ignored_filter.py
+      - inspector/tests/routes/test_route_validate.py
+      - inspector/tests/routes/test_route_save.py
+      - inspector/tests/routes/test_route_undo.py
+      - inspector/tests/routes/test_route_history.py
+      - inspector/tests/routes/test_route_data.py
+      - inspector/tests/persistence/test_detailed_schema.py
+      - inspector/tests/persistence/test_segments_json.py
+      - inspector/tests/persistence/test_uid_backfill.py
+      - inspector/tests/persistence/test_save_clears_ignores.py
+      - inspector/tests/command/test_apply_command.py
+      - inspector/tests/command/test_command_per_op.py
+      - inspector/tests/command/test_auto_suppress.py
+      - inspector/tests/undo/test_patch_undo.py
+      - inspector/tests/identity/test_validation_identity.py
+      - inspector/tests/parity/test_classifier_parity_backend_cli.py
+      - inspector/tests/parity/snapshot_expected_outputs.py
+      - inspector/frontend/src/tabs/segments/__tests__/helpers/fixtures.ts
+      - inspector/frontend/src/tabs/segments/__tests__/helpers/make-segment.ts
+      - inspector/frontend/src/tabs/segments/__tests__/registry/policy.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/registry/behavior.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/registry/parity.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/apply-command.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/trim.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/split.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/merge.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/reference.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/delete.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/ignore.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/command/auto-suppress.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/normalized-state/selectors.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/normalized-state/compat.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/normalized-state/uid-backfill.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/save/payload-shape.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/save/patch-included.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/identity/resolve-issue.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/identity/stale-filter.test.ts
+      - inspector/frontend/src/tabs/segments/__tests__/parity/classifier-output.test.ts
+    out_of_scope_hint:
+      - inspector/services/
+      - inspector/routes/
+      - inspector/frontend/src/tabs/timestamps/
+      - inspector/frontend/src/tabs/audio/
+      - validators/
+    review_allocation:
+      sonnet: true
+      haiku: true
+      opus: false
+      rationale: |
+        Test code; coverage check confirms every test file has xfail markers consistent with
+        plan-declared phase. Sonnet checks duplication across test files.
+    stop_points: [S1]
+    verification:
+      build: false
+      typecheck: true
+      lint: true
+      tests: "pytest --collect-only inspector/tests/ && cd inspector/frontend && npx vitest --run --reporter=basic"
+      custom_checks:
+        - "grep -rh 'xfail.*reason=\"phase-' inspector/tests/ inspector/frontend/src/**/__tests__/ | sed -E 's/.*reason=\"(phase-[0-9]+)\".*/\\1/' | sort | uniq -c"
+
+  - id: 1
+    name: Issue registry
+    subtype: pattern-replacement
+    risk: low
+    behavior_surface: content edits, preserve semantics
+    size_estimate:
+      files_touched: 12
+      loc_churn: 400
+      wall_clock_minutes: 35
+    scope_files:
+      - inspector/services/validation/registry.py
+      - inspector/services/validation/__init__.py
+      - inspector/constants.py
+      - inspector/services/save.py
+      - inspector/frontend/src/tabs/segments/domain/registry.ts
+      - inspector/frontend/src/tabs/segments/utils/constants.ts
+      - inspector/frontend/src/tabs/segments/components/validation/ValidationPanel.svelte
+      - inspector/frontend/src/tabs/segments/components/validation/GenericIssueCard.svelte
+      - inspector/frontend/src/tabs/segments/components/validation/ErrorCard.svelte
+      - inspector/frontend/src/tabs/segments/utils/edit/trim.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/reference.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/split.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/merge.ts
+    out_of_scope_hint:
+      - validators/validate_segments.py
+      - inspector/services/validation/_classify.py
+      - inspector/frontend/src/tabs/segments/utils/validation/classify.ts
+    function_moves:
+      - from: inspector/constants.py:5-32
+        to: inspector/services/validation/registry.py
+        notes: VALIDATION_CATEGORIES + MUQATTAAT_VERSES + QALQALA_LETTERS + STANDALONE_REFS + STANDALONE_WORDS migrate to registry, indexed by category.
+      - from: inspector/frontend/src/tabs/segments/components/validation/ValidationPanel.svelte:210-222
+        to: inspector/frontend/src/tabs/segments/domain/registry.ts
+        notes: Accordion order array becomes registry-derived.
+    review_allocation:
+      sonnet: true
+      haiku: false
+      opus: false
+      rationale: Registry extraction; mostly mechanical with judgment on per-verse/per-chapter scope. Sonnet checks duplication, naming consistency.
+    stop_points: []
+    verification:
+      build: false
+      typecheck: true
+      lint: true
+      tests: "pytest inspector/tests/registry/ -v && cd inspector/frontend && npx vitest run __tests__/registry"
+      custom_checks:
+        - "grep -rn 'VALIDATION_CATEGORIES' inspector/ | grep -v registry.py | head"
+        - "grep -rn 'canIgnore' inspector/frontend/src | grep -v registry.ts"
+
+  - id: 2
+    name: Classifier consolidation
+    subtype: pattern-replacement
+    risk: high
+    behavior_surface: judgment calls expected
+    size_estimate:
+      files_touched: 17
+      loc_churn: 550
+      wall_clock_minutes: 55
+    scope_files:
+      - inspector/services/validation/classifier.py
+      - inspector/services/validation/snapshot_classifier.py
+      - inspector/services/validation/__init__.py
+      - inspector/services/validation/_detail.py
+      - inspector/services/validation/_classify.py
+      - inspector/routes/segments_validation.py
+      - inspector/routes/segments_edit.py
+      - inspector/services/save.py
+      - validators/validate_segments.py
+      - inspector/frontend/src/tabs/segments/utils/validation/classify.ts
+      - inspector/frontend/src/tabs/segments/utils/history/items.ts
+      - inspector/frontend/src/tabs/segments/stores/dirty.ts
+      - inspector/frontend/src/tabs/segments/components/history/SplitChainRow.svelte
+      - inspector/frontend/src/tabs/segments/components/history/HistoryBatch.svelte
+      - inspector/frontend/src/tabs/segments/components/history/HistoryFilters.svelte
+      - inspector/frontend/src/tabs/segments/utils/edit/split.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/merge.ts
+    out_of_scope_hint:
+      - inspector/frontend/src/tabs/segments/components/
+      - inspector/frontend/src/tabs/segments/stores/
+    function_moves:
+      - from: validators/validate_segments.py:42-53,81-98,209-214
+        to: deletion (helpers replaced by imports)
+        notes: _MUQATTAAT_VERSES, _QALQALA_LETTERS, _STANDALONE_*, _strip_diacritics, _last_arabic_letter, _is_ignored_for.
+      - from: inspector/frontend/src/tabs/segments/utils/validation/classify.ts
+        to: deletion
+        notes: Live-segment classification removed entirely.
+    review_allocation:
+      sonnet: true
+      haiku: true
+      opus: true
+      rationale: |
+        3 classifiers consolidating with documented divergence. Opus verifies each merged
+        predicate matches the chosen tie-breaker; Haiku confirms no unmigrated consumer; Sonnet
+        catches duplication / dead helpers.
+    stop_points: []
+    verification:
+      build: false
+      typecheck: true
+      lint: true
+      tests: "pytest inspector/tests/classifier/ inspector/tests/parity/ -v && cd inspector/frontend && npx vitest run __tests__/parity"
+      custom_checks:
+        - "grep -rn '_classifySegCategories' inspector/frontend/src | head"
+        - "grep -rn 'def _classify' validators/"
+        - "python validators/validate_segments.py mohammed_siddiq_al_minshawi 2>&1 | tail -20"
+
+  - id: 3
+    name: Command application layer
+    subtype: pattern-replacement
+    risk: high
+    behavior_surface: judgment calls expected
+    size_estimate:
+      files_touched: 13
+      loc_churn: 520
+      wall_clock_minutes: 60
+    scope_files:
+      - inspector/frontend/src/tabs/segments/domain/command.ts
+      - inspector/frontend/src/tabs/segments/domain/apply-command.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/trim.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/split.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/merge.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/reference.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/delete.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/ignore.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/common.ts
+      - inspector/frontend/src/tabs/segments/components/validation/GenericIssueCard.svelte
+      - inspector/frontend/src/tabs/segments/components/validation/MissingWordsCard.svelte
+      - inspector/frontend/src/tabs/segments/stores/dirty.ts
+    out_of_scope_hint:
+      - inspector/services/
+      - inspector/routes/
+      - inspector/frontend/src/tabs/segments/stores/segments.ts  # Phase 4
+    review_allocation:
+      sonnet: true
+      haiku: false
+      opus: true
+      rationale: |
+        Command-layer migration touches semantics (auto-suppress, ordering, mountId). Opus
+        verifies no regression in op-log shape. Haiku unnecessary — single coherent change set.
+    stop_points: []
+    verification:
+      build: false
+      typecheck: true
+      lint: true
+      tests: "cd inspector/frontend && npx vitest run __tests__/command"
+      custom_checks:
+        - "grep -rn 'segAllData.*segments\\[' inspector/frontend/src/tabs/segments/components/ inspector/frontend/src/tabs/segments/utils/edit/ | head"
+
+  - id: 4
+    name: Normalize segment state + uid backfill
+    subtype: monolith-split
+    risk: medium
+    behavior_surface: content edits + structural moves
+    size_estimate:
+      files_touched: 14
+      loc_churn: 600
+      wall_clock_minutes: 50
+    scope_files:
+      - inspector/domain/segment.py
+      - inspector/domain/identity.py
+      - inspector/adapters/detailed_json.py
+      - inspector/adapters/segments_json.py
+      - inspector/adapters/save_payload.py
+      - inspector/services/save.py
+      - inspector/services/data_loader.py
+      - inspector/frontend/src/tabs/segments/domain/identity.ts
+      - inspector/frontend/src/tabs/segments/stores/segments.ts
+      - inspector/frontend/src/tabs/segments/stores/chapter.ts
+      - inspector/frontend/src/tabs/segments/stores/filters.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/common.ts
+      - inspector/frontend/src/tabs/segments/domain/apply-command.ts
+    out_of_scope_hint:
+      - inspector/routes/
+      - inspector/services/validation/
+    review_allocation:
+      sonnet: true
+      haiku: true
+      opus: false
+      rationale: |
+        Large file count (~14); Haiku catches missed consumers. Compat-shim minimizes logic
+        risk; Opus skipped unless Sonnet flags surprise.
+    stop_points: []
+    verification:
+      build: false
+      typecheck: true
+      lint: true
+      tests: "pytest inspector/tests/persistence/ -v && cd inspector/frontend && npx vitest run __tests__/normalized-state"
+      custom_checks:
+        - "grep -rn '_byChapter' inspector/frontend/src | head"
+        - "grep -rn 'silence_after_ms.*=' inspector/frontend/src/tabs/segments/stores/filters.ts | head"
+
+  - id: 5
+    name: Patch-based undo (forward-only)
+    subtype: pattern-replacement
+    risk: medium
+    behavior_surface: content edits, preserve undo correctness
+    size_estimate:
+      files_touched: 7
+      loc_churn: 250
+      wall_clock_minutes: 35
+    scope_files:
+      - inspector/domain/command.py
+      - inspector/frontend/src/tabs/segments/domain/command.ts
+      - inspector/frontend/src/tabs/segments/domain/apply-command.ts
+      - inspector/frontend/src/tabs/segments/utils/save/execute.ts
+      - inspector/services/save.py
+      - inspector/services/undo.py
+      - inspector/frontend/src/tabs/segments/utils/save/undo.ts
+    out_of_scope_hint:
+      - inspector/routes/
+      - inspector/services/validation/
+    review_allocation:
+      sonnet: true
+      haiku: false
+      opus: true
+      rationale: Undo correctness is the risk. Opus verifies inverse patch covers all field types.
+    stop_points: []
+    verification:
+      build: false
+      typecheck: true
+      lint: true
+      tests: "pytest inspector/tests/undo/ -v && cd inspector/frontend && npx vitest run __tests__/save"
+      custom_checks:
+        - "grep -rn 'patch' inspector/services/undo.py"
+
+  - id: 6
+    name: Stable validation issue identity
+    subtype: pattern-replacement
+    risk: low
+    behavior_surface: content edits
+    size_estimate:
+      files_touched: 10
+      loc_churn: 200
+      wall_clock_minutes: 30
+    scope_files:
+      - inspector/routes/segments_validation.py
+      - inspector/services/validation/detail.py
+      - inspector/frontend/src/lib/types/api.ts
+      - inspector/frontend/src/tabs/segments/utils/validation/resolve-issue.ts
+      - inspector/frontend/src/tabs/segments/utils/validation/stale.ts
+      - inspector/frontend/src/tabs/segments/utils/validation/fixups.ts
+      - inspector/frontend/src/tabs/segments/components/validation/ValidationPanel.svelte
+      - inspector/frontend/src/tabs/segments/utils/edit/split.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/merge.ts
+      - inspector/frontend/src/tabs/segments/utils/edit/delete.ts
+    out_of_scope_hint:
+      - inspector/services/validation/classifier.py
+      - inspector/services/save.py
+    review_allocation:
+      sonnet: true
+      haiku: false
+      opus: true
+      rationale: DTO change is cross-stack; Opus verifies stale-filter doesn't drop legitimate issues.
+    stop_points: []
+    verification:
+      build: false
+      typecheck: true
+      lint: true
+      tests: "pytest inspector/tests/identity/ -v && cd inspector/frontend && npx vitest run __tests__/identity"
+      custom_checks:
+        - "grep -rn '_fixupValIndicesFor' inspector/frontend/src"
+        - "grep -rn 'segment_uid' inspector/lib/types/api.ts"
+
+automations:
+  pre_phase_checks:
+    - "bash .refactor/checks.sh"
