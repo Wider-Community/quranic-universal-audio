@@ -9,7 +9,9 @@ __pycache__/
 # IDEs / Agents
 .vscode/
 .claude/
+.agents/
 CLAUDE.md
+AGENTS.md
 
 # envs
 .env
@@ -17,6 +19,7 @@ CLAUDE.md
 
 # Local
 jobs/
+notebooks/
 extract_segments.py
 extract_segments_taraweeh.py
 cut_taraweeh.py
