@@ -63,6 +63,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     INSPECTOR_DATA_DIR=/data \
+    INSPECTOR_QUA_DATA_PATH=/data \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -88,13 +89,13 @@ COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
 COPY validators/ ./validators/
 # Linguistic data read by services/data_loader.py via config.py's _QUA_DATA.
-# Without these, UnifiedDisplay renders empty Arabic (word.text / display_text
-# come from qpc_hafs + digital_khatt). Fonts/.py siblings in that dir aren't
-# needed at runtime — copy only the 3 jsons config.py references.
-COPY quranic_universal_aligner/data/qpc_hafs.json \
-     quranic_universal_aligner/data/digital_khatt_v2_script.json \
-     quranic_universal_aligner/data/phoneme_sub_costs.json \
-     ./quranic_universal_aligner/data/
+# These live in data/ (tracked by git) so the Docker build context has them.
+# INSPECTOR_QUA_DATA_PATH=/data tells config.py to look there instead of the
+# default quranic_universal_aligner/data/ sibling path.
+COPY data/qpc_hafs.json \
+     data/digital_khatt_v2_script.json \
+     data/phoneme_sub_costs.json \
+     ./data/
 COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 
 # Data volume is mounted here at runtime (see docker-compose.yml). Inside the
