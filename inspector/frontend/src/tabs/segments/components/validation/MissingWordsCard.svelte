@@ -6,16 +6,13 @@
         getSegByChapterIndex,
         segAllData,
     } from '../../stores/chapter';
-    import { commitRefEdit } from '../../utils/edit/reference';
+    import { autoFixMissingWord } from '../../utils/edit/auto-fix';
     import { segConfig } from '../../stores/config';
     import {
-        createOp,
         dirtyTick,
         getChapterOpsSnapshot,
         getOpLog,
         isSegmentDirty,
-        setPendingOp,
-        snapshotSeg,
         unmarkDirty,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
@@ -136,23 +133,18 @@
         if (!targetSeg) return;
         const segChapter = targetSeg.chapter ?? item.chapter;
         const wasDirty = isSegmentDirty(segChapter, targetSeg.index);
-        const pending = createOp('auto_fix_missing_word', {
-            contextCategory: 'missing_words',
-            fixKind: 'auto_fix',
-        });
-        pending.targets_before = [snapshotSeg(targetSeg)];
-        setPendingOp(pending);
-        autoFixOpId = pending.op_id;
+        const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
+        const dispatched = await autoFixMissingWord(targetSeg, newRef);
+        if (!dispatched) return;
+        autoFixOpId = dispatched.opId;
         autoFixOldState = {
-            ref: targetSeg.matched_ref || '',
-            text: targetSeg.matched_text || '',
-            display: targetSeg.display_text || '',
-            conf: targetSeg.confidence,
-            ignoredCats: targetSeg.ignored_categories ? [...targetSeg.ignored_categories] : null,
+            ref: dispatched.before.matched_ref,
+            text: dispatched.before.matched_text,
+            display: dispatched.before.display_text,
+            conf: dispatched.before.confidence,
+            ignoredCats: dispatched.before.ignored_categories,
             wasDirty,
         };
-        const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
-        await commitRefEdit(targetSeg, newRef);
         autoFixApplied = true;
     }
 

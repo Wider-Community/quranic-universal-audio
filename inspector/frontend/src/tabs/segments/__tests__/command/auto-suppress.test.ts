@@ -1,7 +1,6 @@
 // auto-suppress parametrized over the registry's per-segment categories.
 
 import { describe, it, expect } from 'vitest';
-import { xfail } from '../helpers/xfail';
 import { makeSegment } from '../helpers/make-segment';
 import { CAN_IGNORE_CATEGORIES, AUTO_SUPPRESS_CATEGORIES } from '../helpers/categories';
 import { loadOptional } from '../helpers/optional';
@@ -17,7 +16,7 @@ const baseState = () => ({
 
 describe.skipIf(!applyCommand)('command/auto-suppress', () => {
   for (const cat of CAN_IGNORE_CATEGORIES) {
-    it(`for category ${cat} with auto_suppress=Y, edit-from-card adds C to seg.ignored_categories`, xfail('phase-3', () => {
+    it(`for category ${cat} with auto_suppress=Y, edit-from-card adds C to seg.ignored_categories`, () => {
       const r = applyCommand(baseState(), {
         type: 'editFromCard',
         segmentUid: 'uid-as',
@@ -29,20 +28,20 @@ describe.skipIf(!applyCommand)('command/auto-suppress', () => {
       } else {
         expect(updated.ignored_categories ?? []).not.toContain(cat);
       }
-    }));
+    });
   }
 
-  it('for category C with auto_suppress=N, edit-from-card does not add C', xfail('phase-3', () => {
+  it('for category C with auto_suppress=N, edit-from-card does not add C', () => {
     const r = applyCommand(baseState(), { type: 'editFromCard', segmentUid: 'uid-as', category: 'muqattaat' } as any);
     const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
     expect((updated.ignored_categories ?? [])).not.toContain('muqattaat');
-  }));
+  });
 
-  it('muqattaat is never auto-suppressed regardless of edit context', xfail('phase-3', () => {
+  it('muqattaat is never auto-suppressed regardless of edit context', () => {
     const r = applyCommand(baseState(), { type: 'editReference', segmentUid: 'uid-as', matched_ref: '2:1:1-2:1:1', matched_text: 'x', sourceCategory: 'muqattaat' } as any);
     const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
     expect((updated.ignored_categories ?? [])).not.toContain('muqattaat');
-  }));
+  });
 });
 
 describe.skipIf(applyCommand)('command/auto-suppress (deferred)', () => {

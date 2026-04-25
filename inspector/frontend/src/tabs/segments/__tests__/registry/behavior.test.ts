@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { ALL_CATEGORIES, CAN_IGNORE_CATEGORIES, AUTO_SUPPRESS_CATEGORIES } from '../helpers/categories';
-import { xfail } from '../helpers/xfail';
+import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
 const regMod = await loadOptional<{ IssueRegistry: any }>('../../domain/registry');
@@ -24,18 +24,21 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
       expect(wants).toBe(expected);
     });
 
-    it(`auto-suppress fires per registry through applyCommand (${cat})`, xfail('phase-3', async () => {
+    it(`auto-suppress fires per registry through applyCommand (${cat})`, async () => {
       const acMod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
       if (!acMod) throw new Error('phase-3 module not present');
-      const result = acMod.applyCommand({ byId: {}, idsByChapter: {} }, {
-        type: 'editFromCard',
-        category: cat,
-      } as any);
+      const seg = makeSegment(0, 0, 1000, { segment_uid: `uid-${cat}` });
+      const result = acMod.applyCommand(
+        { byId: { [`uid-${cat}`]: seg }, idsByChapter: { 1: [`uid-${cat}`] }, selectedChapter: 1 },
+        { type: 'editFromCard', segmentUid: `uid-${cat}`, category: cat } as any,
+      );
       const row = registry[cat];
+      expect(result.operation).toBeTruthy();
       if (row.autoSuppress && row.scope === 'per_segment') {
-        expect(result.operation).toBeTruthy();
+        const updated = result.nextState.byId[`uid-${cat}`];
+        expect(updated?.ignored_categories ?? []).toContain(cat);
       }
-    }));
+    });
 
     it(`card type dispatched from registry (${cat})`, () => {
       const row = registry[cat];

@@ -10,19 +10,16 @@
     } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import {
-        createOp,
         dirtyTick,
-        finalizeOp,
         getChapterOpsSnapshot,
         isSegmentDirty,
-        markDirty,
-        snapshotSeg,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
     import { IssueRegistry } from '../../domain/registry';
     import { isIgnoredFor } from '../../utils/validation/classified-issues';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
+    import { ignoreIssueOnSegment } from '../../utils/edit/ignore';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import SegmentRow from '../list/SegmentRow.svelte';
@@ -185,29 +182,14 @@
 
     // ---- Ignore handler ----
     function handleIgnore(): void {
-        if (!resolvedSeg || isIgnoredFor(resolvedSeg, category)) return;
-        const segChapter = resolvedSeg.chapter ?? parseInt(get(selectedChapter));
-        let ignoreOp;
+        if (!resolvedSeg) return;
         try {
-            ignoreOp = createOp('ignore_issue', { contextCategory: category, fixKind: 'ignore' });
-            ignoreOp.targets_before = [snapshotSeg(resolvedSeg)];
-            ignoreOp.applied_at_utc = ignoreOp.started_at_utc;
-        } catch (err) {
-            console.warn('Ignore: edit history snapshot failed:', err);
-        }
-        if (!resolvedSeg.ignored_categories) resolvedSeg.ignored_categories = [];
-        resolvedSeg.ignored_categories.push(category);
-        delete (resolvedSeg as Segment & { _derived?: unknown })._derived;
-        markDirty(segChapter, resolvedSeg.index);
-        if (ignoreOp) {
-            try {
-                ignoreOp.targets_after = [snapshotSeg(resolvedSeg)];
-                finalizeOp(segChapter, ignoreOp);
-            } catch (err) {
-                console.warn('Ignore: edit history finalize failed:', err);
+            if (ignoreIssueOnSegment(resolvedSeg, category)) {
+                isAlreadyIgnored = true;
             }
+        } catch (err) {
+            console.warn('Ignore: dispatch failed:', err);
         }
-        isAlreadyIgnored = true;
     }
 </script>
 

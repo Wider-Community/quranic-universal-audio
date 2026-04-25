@@ -34,7 +34,7 @@ import {
 } from '../../stores/edit';
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { applyAutoSuppress } from '../../domain/registry';
+import { applyCommand } from '../../domain/apply-command';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
     clearPlayRangeRAF,
@@ -350,12 +350,37 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
         return;
     }
 
-    seg.time_start = newStart;
-    seg.time_end = newEnd;
-    seg.confidence = 1.0;
     const pending = getPendingOp();
-    if (pending?.op_context_category) {
-        applyAutoSuppress(seg, pending.op_context_category, 'card');
+    const ctxCat = pending?.op_context_category ?? null;
+    const uid = seg.segment_uid;
+    if (uid) {
+        const result = applyCommand(
+            {
+                byId: { [uid]: seg },
+                idsByChapter: { [chapter]: [uid] },
+                selectedChapter: chapter,
+            },
+            {
+                type: 'trim',
+                segmentUid: uid,
+                delta: { time_start: newStart, time_end: newEnd },
+                sourceCategory: ctxCat ?? undefined,
+                contextCategory: ctxCat ?? undefined,
+            },
+        );
+        const updated = result.nextState.byId[uid];
+        if (updated) {
+            seg.time_start = updated.time_start;
+            seg.time_end = updated.time_end;
+            seg.confidence = updated.confidence;
+            if (updated.ignored_categories) {
+                seg.ignored_categories = [...updated.ignored_categories];
+            }
+        }
+    } else {
+        seg.time_start = newStart;
+        seg.time_end = newEnd;
+        seg.confidence = 1.0;
     }
     markDirty(chapter, undefined, true);
 

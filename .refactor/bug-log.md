@@ -15,12 +15,61 @@ ID prefix: `B`
 | B-1 | Frontend repetitions classifier extends `wrap_word_ranges` with `has_repeated_words` | 2 | RESOLVED-fix-3a5dca8 |
 | B-2 | `boundary_adj` phoneme tail check is backend-only | 2 | RESOLVED-fix-3a5dca8 |
 | B-3 | `audio_bleeding` algorithm differs across 3 stacks | 2 | RESOLVED-fix-3a5dca8 |
+| B-4 | Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope | 3 | DEFERRED |
 
 ---
 
 ## Section 2 — Active
 
-(empty)
+### B-4 — Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope
+
+**Surfaced in:** Phase 3
+**Status:** DEFERRED
+
+**Symptom**
+- Four pytest files retain `@pytest.mark.xfail(reason="phase-3", strict=False)` markers after Phase 3 lands:
+  - `inspector/tests/command/test_apply_command.py::test_history_record_reflects_command_result_metadata` — asserts backend rejects ops without a `command` envelope (HTTP 400).
+  - `inspector/tests/command/test_auto_suppress.py::test_edit_from_card_records_suppression_per_registry` — parametrized over per-segment categories; asserts the SAVE handler reads the registry and writes `ignored_categories` even when the payload omits the field.
+  - `inspector/tests/command/test_command_per_op.py::test_command_save_round_trip` — parametrized over op types; asserts backend rejects `command.type !== op.type` mismatches (HTTP 400).
+  - `inspector/tests/routes/test_route_save.py::test_save_payload_is_correctly_built_from_command_results` — asserts schema-strict validation on `command.type` (rejects unknown types, HTTP 400).
+- Two parametrized cases (`failed`, `muqattaat`) of `test_edit_from_card_records_suppression_per_registry` xpass because they're negative assertions.
+
+**Root cause**
+- Each of these tests exercises the `/api/seg/save` route's payload acceptance behavior:
+  - Schema validation on the new `command` envelope.
+  - Registry-driven write of `ignored_categories` from the SAVE handler (rather than from the payload as today).
+  - Strict rejection of malformed `command` shapes.
+- Plan §Invariants pins MUST-1 (HTTP routes additive). The Phase 3 dispatch
+  brief restates: "Phase 3 should NOT change route shapes (no `services/`
+  or `routes/` touches)" and "If you find that the save endpoint requires
+  a change to accept the new op-record shape, surface it as a SCOPE
+  EXPANSION REQUEST (S4)."
+- The frontend `applyCommand` reducer now produces operations with `type`,
+  `kind`, `snapshots`, `targetSegmentIndex` fields, plus the existing
+  `op_id`, `op_type`, `targets_before`, `targets_after`. Save-route
+  acceptance is unchanged; the new fields ride along as additive shape.
+  The route does not yet validate the `command` envelope, look up the
+  registry to filter `ignored_categories` writes, or reject malformed
+  payloads — those changes belong in a route-validation phase (Phase 4
+  adapters or a dedicated 3.5 scope expansion).
+
+**Fix**
+- DEFERRED. Frontend Phase 3 work is complete. Backend route-validation
+  changes are out-of-scope; surface as scope expansion if/when the
+  orchestrator decides the SAVE handler should validate the `command`
+  envelope.
+- Route-additive properties (MUST-1) are preserved: the new fields on
+  operations are accepted and round-tripped through the history record
+  without rejection. `test_save_payload_carries_op_log_in_canonical_shape`
+  (which only verifies round-trip persistence) xpassed pre-Phase-3 and
+  cleanly passes post-Phase-3 with its marker removed.
+
+**Test coverage**
+- Frontend tests under `inspector/frontend/src/tabs/segments/__tests__/command/`
+  cover the `applyCommand` reducer, command shapes, and auto-suppress
+  behavior end-to-end. 61 tests pass; 0 phase-3 vitest markers remain.
+- Backend round-trip persistence is covered by the unmarked
+  `test_save_payload_carries_op_log_in_canonical_shape`.
 
 ---
 

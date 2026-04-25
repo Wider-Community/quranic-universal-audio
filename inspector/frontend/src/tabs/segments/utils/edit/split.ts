@@ -35,7 +35,8 @@ import {
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { applyAutoSuppress } from '../../domain/registry';
+import { applyCommand } from '../../domain/apply-command';
+import { IssueRegistry } from '../../domain/registry';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts } from '../data/references';
 import {
@@ -316,8 +317,30 @@ export async function confirmSplit(
     const splitOp = getPendingOp();
     const ctxCat = splitOp?.op_context_category;
     if (ctxCat) {
-        applyAutoSuppress(firstHalf, ctxCat, 'card');
-        applyAutoSuppress(secondHalf, ctxCat, 'card');
+        // Mirror the registry's per-segment auto-suppress rule onto both
+        // halves through the command reducer. `editFromCard` is the
+        // appropriate surrogate: the resolved-refs flow above already
+        // mutated time / matched_text on each half; the reducer's job
+        // here is solely to record the suppression on `ignored_categories`.
+        const defn = IssueRegistry[ctxCat];
+        if (defn?.autoSuppress && defn.scope === 'per_segment') {
+            for (const half of [firstHalf, secondHalf]) {
+                const halfUid = half.segment_uid;
+                if (!halfUid) continue;
+                const r = applyCommand(
+                    {
+                        byId: { [halfUid]: half },
+                        idsByChapter: { [chapter]: [halfUid] },
+                        selectedChapter: chapter,
+                    },
+                    { type: 'editFromCard', segmentUid: halfUid, category: ctxCat },
+                );
+                const updated = r.nextState.byId[halfUid];
+                if (updated?.ignored_categories) {
+                    half.ignored_categories = [...updated.ignored_categories];
+                }
+            }
+        }
     }
 
     // Auto-suggest per-verse refs for cross-verse splits.

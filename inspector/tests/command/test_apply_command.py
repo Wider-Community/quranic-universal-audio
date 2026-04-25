@@ -10,7 +10,6 @@ import json
 import pytest
 
 
-@pytest.mark.xfail(reason="phase-3", strict=False)
 def test_save_payload_carries_op_log_in_canonical_shape(flask_client, tmp_reciter_dir):
     """Save payload includes a per-op `command` envelope describing the discriminated union.
 

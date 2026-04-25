@@ -24,7 +24,7 @@ import {
     clearEdit,
     setEdit,
 } from '../../stores/edit';
-import { IssueRegistry } from '../../domain/registry';
+import { applyCommand } from '../../domain/apply-command';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { _fixupValIndicesForMerge } from '../validation/fixups';
@@ -122,13 +122,22 @@ export async function mergeAdjacent(
         ...(first.ignored_categories || []),
         ...(second.ignored_categories || []),
     ]);
-    if (contextCategory) {
-        const defn = IssueRegistry[contextCategory];
-        if (defn?.autoSuppress && defn.scope === 'per_segment') {
-            mergedIc.add(contextCategory);
+    if (mergedIc.size) merged.ignored_categories = [...mergedIc];
+    if (contextCategory && merged.segment_uid) {
+        // Defer the auto-suppress decision to the registry-driven reducer.
+        const r = applyCommand(
+            {
+                byId: { [merged.segment_uid]: merged },
+                idsByChapter: { [chapter]: [merged.segment_uid] },
+                selectedChapter: chapter,
+            },
+            { type: 'editFromCard', segmentUid: merged.segment_uid, category: contextCategory },
+        );
+        const updated = r.nextState.byId[merged.segment_uid];
+        if (updated?.ignored_categories) {
+            merged.ignored_categories = [...updated.ignored_categories];
         }
     }
-    if (mergedIc.size) merged.ignored_categories = [...mergedIc];
 
     const keptOldIdx = first.index;
     const consumedOldIdx = second.index;

@@ -1,10 +1,7 @@
 // Save payload shape tests (MUST-1 contract).
 
 import { describe, it, expect } from 'vitest';
-import { xfail } from '../helpers/xfail';
 import { loadOptional } from '../helpers/optional';
-
-const saveExecute = await loadOptional<any>('../../utils/save/execute');
 
 describe('save payload shape', () => {
   it('save payload matches MUST-1 contract for full_replace', () => {
@@ -28,7 +25,7 @@ describe('save payload shape', () => {
     expect(payload.segments[0]).toHaveProperty('index');
   });
 
-  it('save payload built from CommandResult includes all expected fields', xfail('phase-3', async () => {
+  it('save payload built from CommandResult includes all expected fields', async () => {
     const exec = await loadOptional<any>('../../utils/save/execute');
     if (!exec) throw new Error('phase-3: build helper not yet present');
     const result = {
@@ -39,5 +36,5 @@ describe('save payload shape', () => {
     const payload = exec.buildPayloadFromCommandResult?.(result);
     expect(payload).toBeTruthy();
     expect(payload.operations[0]).toMatchObject({ op_id: 'x', type: 'trim' });
-  }));
+  });
 });

@@ -33,7 +33,7 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/playback';
-import { applyAutoSuppress } from '../../domain/registry';
+import { applyCommand } from '../../domain/apply-command';
 import { _normalizeRef as _normalizeRefLib, getVerseWordCounts } from '../data/references';
 import { stopSegAnimation } from '../playback/playback';
 import type { RowEntry, RowInstanceRole } from '../playback/row-registry';
@@ -90,8 +90,26 @@ export function beginRefEdit(
  * dirty, re-publish the seg to the store, and finalize the pending op.
  */
 function _applyRefChange(seg: Segment, pending: EditOp | null, chapter: number): void {
-    const ctxCat = pending?.op_context_category;
-    if (ctxCat) applyAutoSuppress(seg, ctxCat, 'card');
+    const ctxCat = pending?.op_context_category ?? null;
+    const uid = seg.segment_uid;
+    if (uid && ctxCat) {
+        // Reuse the registry-driven auto-suppress branch in `applyCommand`
+        // by issuing an `editFromCard` surrogate. The reference-text edit
+        // itself already mutated `seg`; this call only mirrors the
+        // auto-suppress write into `seg.ignored_categories`.
+        const result = applyCommand(
+            {
+                byId: { [uid]: seg },
+                idsByChapter: { [chapter]: [uid] },
+                selectedChapter: chapter,
+            },
+            { type: 'editFromCard', segmentUid: uid, category: ctxCat },
+        );
+        const updated = result.nextState.byId[uid];
+        if (updated?.ignored_categories) {
+            seg.ignored_categories = [...updated.ignored_categories];
+        }
+    }
     delete seg._derived;
     markDirty(chapter, seg.index);
     refreshSegInStore(seg);
