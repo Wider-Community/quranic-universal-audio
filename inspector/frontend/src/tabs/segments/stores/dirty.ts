@@ -8,14 +8,15 @@
  *
  * Map keys are always `number` (never string-cast).
  *
- * `snapshotSeg` calls `_classifySegCategories` from
- * `lib/utils/segments/classify.ts`.
+ * `snapshotSeg` produces a structural copy of a `Segment` — no
+ * classification happens client-side. Categories are derived from the
+ * backend at save time (the save endpoint enriches each persisted
+ * snapshot with `classified_issues`).
  */
 
 import { derived, writable } from 'svelte/store';
 
 import type { EditOp, Segment } from '../../../lib/types/domain';
-import { _classifySegCategories } from '../utils/validation/classify';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,8 +29,10 @@ export interface DirtyEntry {
 }
 
 /** Snapshot of a segment captured at op-start / op-end. Shape mirrors `Segment`
- *  with a few client-added flags (`index_at_save`, `categories`). Loose-typed
- *  so downstream history rendering doesn't have to cast every read. */
+ *  with a few client-added flags (`index_at_save`). The backend save endpoint
+ *  enriches each persisted snapshot with a `classified_issues: string[]`
+ *  field at write time. Loose-typed so downstream history rendering doesn't
+ *  have to cast every read. */
 export type SegSnapshot = Record<string, unknown>;
 
 export interface CreateOpOptions {
@@ -98,7 +101,6 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
     if (seg.entry_ref) snap.entry_ref = seg.entry_ref;
     if (seg.chapter != null) snap.chapter = seg.chapter;
     if (seg.ignored_categories?.length) snap.ignored_categories = [...seg.ignored_categories];
-    snap.categories = _classifySegCategories(seg);
     return snap;
 }
 

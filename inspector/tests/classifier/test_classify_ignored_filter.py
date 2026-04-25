@@ -13,7 +13,7 @@ from tests.conftest import CAN_IGNORE_CATEGORIES
 @pytest.mark.parametrize("category", CAN_IGNORE_CATEGORIES, ids=CAN_IGNORE_CATEGORIES)
 def test_ignored_categories_excludes_from_classification(category):
     """A segment with C in ignored_categories is not classified as C."""
-    from services.validation._classify import _classify_segment, is_ignored_for
+    from services.validation.classifier import classify_flags, is_ignored_for
 
     seg = {
         "matched_ref": "112:1:1-112:1:4",
@@ -25,7 +25,7 @@ def test_ignored_categories_excludes_from_classification(category):
     }
     assert is_ignored_for(seg, category) is True
 
-    flags = _classify_segment(
+    flags = classify_flags(
         seg,
         entry_ref="112",
         is_by_ayah=False,
@@ -44,7 +44,7 @@ def test_ignored_categories_excludes_from_classification(category):
 
 def test_all_marker_excludes_all():
     """A segment with ['_all'] in ignored_categories is not classified as any per-segment category."""
-    from services.validation._classify import _classify_segment
+    from services.validation.classifier import classify_flags
 
     seg = {
         "matched_ref": "112:1:1-112:1:4",
@@ -54,7 +54,7 @@ def test_all_marker_excludes_all():
         "wrap_word_ranges": [[1, 1]],
         "ignored_categories": ["_all"],
     }
-    flags = _classify_segment(
+    flags = classify_flags(
         seg,
         entry_ref="112",
         is_by_ayah=False,
@@ -74,7 +74,7 @@ def test_all_marker_excludes_all():
 
 def test_legacy_ignored_boolean_treated_as_all():
     """A segment with ignored=true (legacy form, no ignored_categories) is treated as _all."""
-    from services.validation._classify import _classify_segment, is_ignored_for
+    from services.validation.classifier import classify_flags, is_ignored_for
 
     seg = {
         "matched_ref": "112:1:1-112:1:4",
@@ -87,7 +87,7 @@ def test_legacy_ignored_boolean_treated_as_all():
     for category in CAN_IGNORE_CATEGORIES:
         assert is_ignored_for(seg, category) is True
 
-    flags = _classify_segment(
+    flags = classify_flags(
         seg,
         entry_ref="112",
         is_by_ayah=False,

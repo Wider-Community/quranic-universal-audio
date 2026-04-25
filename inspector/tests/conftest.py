@@ -175,6 +175,32 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         dst_dir.mkdir(parents=True, exist_ok=True)
         dst_path = dst_dir / "detailed.json"
         shutil.copy(str(src), str(dst_path))
+
+        # Build a matching segments.json so consumers that read both files
+        # (the CLI, ``services.save.rebuild_segments_json``-driven flows)
+        # see a consistent on-disk state for the fixture.
+        try:
+            from services.save import rebuild_segments_json  # type: ignore
+            with open(dst_path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+            entries = doc.get("entries", [])
+            meta = doc.get("_meta", {})
+            seg_path = dst_dir / "segments.json"
+            if not seg_path.exists():
+                with open(seg_path, "w", encoding="utf-8") as g:
+                    json.dump({"_meta": meta}, g, ensure_ascii=False)
+            rebuild_segments_json(reciter, entries)
+            # Re-stamp the segments.json _meta block from detailed-side meta
+            # so CLI's ``parse_segments`` sees a complete header.
+            with open(seg_path, "r", encoding="utf-8") as g:
+                seg_doc = json.load(g)
+            if "_meta" not in seg_doc or not seg_doc["_meta"]:
+                seg_doc["_meta"] = meta
+                with open(seg_path, "w", encoding="utf-8") as g:
+                    json.dump(seg_doc, g, ensure_ascii=False)
+        except Exception:
+            pass
+
         _invalidate_seg_caches()
         return dst_path
 

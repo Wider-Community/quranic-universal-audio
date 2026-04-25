@@ -81,7 +81,6 @@ def test_detailed_json_no_field_removed(load_fixture):
         )
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_detailed_json_additive_only_classified_issues_optional(load_fixture, tmp_reciter_dir, flask_client):
     """Phase 2: validation responses carry classified_issues — but it must NOT be persisted to detailed.json (MAY-10)."""
     reciter = "fixture_reciter"

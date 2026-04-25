@@ -1,8 +1,11 @@
 """Per-segment detail-list builder for validate_reciter_segments.
 
-Extracted from __init__.py. Iterates entries and returns all detail lists
-(failed, low_confidence, boundary_adj, cross_verse, audio_bleeding,
-repetitions, muqattaat, qalqala) plus the verse_segments coverage map.
+Iterates entries and returns the detail lists (failed, low_confidence,
+boundary_adj, cross_verse, audio_bleeding, repetitions, muqattaat,
+qalqala) plus the verse_segments coverage map. Each detail item carries a
+``classified_issues`` field — the full category list the segment matches
+under the unified classifier (forward-compat for multi-category card
+indicators on the frontend).
 """
 
 from __future__ import annotations
@@ -14,7 +17,26 @@ from services.phoneme_matching import get_phoneme_tails
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
 
-from services.validation._classify import _classify_segment
+from services.validation.classifier import (
+    classify_flags,
+    classify_segment,
+)
+from services.validation.registry import PER_SEGMENT_CATEGORIES
+
+
+def _classified_issues_from_flags(flags: dict, *, detail: bool) -> list[str]:
+    """Translate a classifier flags dict to a category list (registry order).
+
+    Mirrors the public ``classify_segment`` output so detail items and the
+    standalone classifier API agree on the field's contents.
+    """
+    cats: list[str] = []
+    for cat in PER_SEGMENT_CATEGORIES:
+        if flags.get(cat):
+            cats.append(cat)
+    if detail and flags.get("low_confidence_detail") and "low_confidence" not in cats:
+        cats.append("low_confidence_detail")
+    return cats
 
 
 def _build_detail_lists(
@@ -57,11 +79,15 @@ def _build_detail_lists(
                 failed.append({
                     "chapter": chapter, "seg_index": i,
                     "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                    "classified_issues": classify_segment(seg),
                 })
                 continue
 
             parts = matched_ref.split("-")
             if len(parts) != 2:
+                # Malformed structural ref — fall back to a minimal flag check
+                # so audio_bleeding / repetitions / low_confidence still surface.
+                fallback_issues: list[str] = []
                 if is_by_ayah and ":" in entry_ref and not seg_belongs_to_entry(matched_ref, entry_ref):
                     seg_start = matched_ref.split("-")[0]
                     seg_parts = seg_start.split(":")
@@ -72,18 +98,23 @@ def _build_detail_lists(
                         "confidence": round(confidence, 4),
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                         "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
+                        "classified_issues": ["audio_bleeding"],
                     })
+                    fallback_issues.append("audio_bleeding")
                 if seg.get("wrap_word_ranges"):
                     repetitions.append({
                         "chapter": chapter, "seg_index": i, "ref": matched_ref,
                         "display_ref": matched_ref, "confidence": round(confidence, 4),
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                         "text": seg.get("matched_text", ""),
+                        "classified_issues": ["repetitions"],
                     })
+                    fallback_issues.append("repetitions")
                 if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD:
                     low_confidence.append({
                         "ref": matched_ref, "chapter": chapter, "seg_index": i,
                         "confidence": round(confidence, 4),
+                        "classified_issues": ["low_confidence"] + fallback_issues,
                     })
                 continue
 
@@ -100,11 +131,12 @@ def _build_detail_lists(
             except (ValueError, IndexError):
                 continue
 
-            flags = _classify_segment(
+            flags = classify_flags(
                 seg, entry_ref, is_by_ayah,
                 surah, s_ayah, e_ayah, s_word, e_word,
                 single_word_verses, canonical,
             )
+            classified = _classified_issues_from_flags(flags, detail=True)
 
             if flags["audio_bleeding"]:
                 seg_start = matched_ref.split("-")[0]
@@ -116,6 +148,7 @@ def _build_detail_lists(
                     "confidence": round(confidence, 4),
                     "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                     "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
+                    "classified_issues": classified,
                 })
 
             if flags["repetitions"]:
@@ -131,6 +164,7 @@ def _build_detail_lists(
                     "display_ref": display_ref, "confidence": round(confidence, 4),
                     "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                     "text": seg.get("matched_text", ""),
+                    "classified_issues": classified,
                 })
 
             if flags["low_confidence_detail"]:
@@ -144,15 +178,20 @@ def _build_detail_lists(
                 low_confidence.append({
                     "ref": display_ref, "chapter": chapter, "seg_index": i,
                     "confidence": round(confidence, 4),
+                    "classified_issues": classified,
                 })
 
             if flags["cross_verse"]:
-                cross_verse.append({"chapter": chapter, "seg_index": i, "ref": matched_ref})
+                cross_verse.append({
+                    "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                    "classified_issues": classified,
+                })
 
             if flags["boundary_adj"]:
                 item: dict = {
                     "chapter": chapter, "seg_index": i, "ref": matched_ref,
                     "verse_key": f"{surah}:{s_ayah}",
+                    "classified_issues": classified,
                 }
                 if SHOW_BOUNDARY_PHONEMES and canonical and seg.get("phonemes_asr"):
                     display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
@@ -163,13 +202,17 @@ def _build_detail_lists(
                 boundary_adj.append(item)
 
             if flags["muqattaat"]:
-                muqattaat.append({"chapter": chapter, "seg_index": i, "ref": matched_ref})
+                muqattaat.append({
+                    "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                    "classified_issues": classified,
+                })
 
             if flags["qalqala"]:
                 qalqala.append({
                     "chapter": chapter, "seg_index": i, "ref": matched_ref,
                     "qalqala_letter": flags["qalqala_letter"],
                     "end_of_verse": (e_word == word_counts.get((surah, e_ayah), 0)),
+                    "classified_issues": classified,
                 })
 
             # Accumulate verse coverage (3-tuple: word_from, word_to, seg_index)

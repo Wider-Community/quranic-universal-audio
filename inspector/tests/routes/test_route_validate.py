@@ -24,9 +24,14 @@ def test_validate_response_shape(flask_client, tmp_reciter_dir, load_expected):
         assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/validate")
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tmp_reciter_dir):
-    """Every issue item should carry a classified_issues: string[] field after Phase 2."""
+    """Every issue item should carry a classified_issues: string[] field after Phase 2.
+
+    Walks the per-category arrays at the top of the response (``failed``,
+    ``low_confidence``, ``boundary_adj``, ``cross_verse``, ``audio_bleeding``,
+    ``repetitions``, ``muqattaat``, ``qalqala``) plus any nested ``by_*``
+    container the response may grow in later phases.
+    """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "synthetic-classifier")
 
@@ -34,7 +39,16 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
     assert res.status_code == 200
     body = res.get_json()
 
-    issues_lists = []
+    per_segment_array_keys = {
+        "failed", "low_confidence", "boundary_adj", "cross_verse",
+        "audio_bleeding", "repetitions", "muqattaat", "qalqala",
+    }
+
+    issues_lists: list[list] = []
+    for top_key in per_segment_array_keys:
+        v = body.get(top_key)
+        if isinstance(v, list):
+            issues_lists.append(v)
     for top_key in ("issues", "details", "by_chapter"):
         v = body.get(top_key)
         if isinstance(v, list):
@@ -44,8 +58,7 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
                 if isinstance(inner, list):
                     issues_lists.append(inner)
 
-    assert issues_lists, "no issues lists found in validate response to inspect"
-
+    inspected = 0
     for lst in issues_lists:
         for item in lst:
             if isinstance(item, dict):
@@ -53,6 +66,12 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
                     f"issue item missing classified_issues field: {item}"
                 )
                 assert isinstance(item["classified_issues"], list)
+                inspected += 1
+
+    assert inspected > 0, (
+        "no per-issue items inspected; synthetic-classifier fixture should "
+        "yield at least one item per per-segment category"
+    )
 
 
 @pytest.mark.xfail(reason="phase-6", strict=False)

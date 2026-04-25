@@ -31,7 +31,7 @@
         type HistorySnapshot,
         type OpFlatItem,
     } from '../../stores/history';
-    import { _deriveOpIssueDelta } from '../../utils/validation/classify';
+    import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
     import type { EditOp } from '../../../../lib/types/domain';
 
     // Props ------------------------------------------------------------------
@@ -60,7 +60,7 @@
         }
         return [...set];
     })();
-    $: issueDelta = group.length > 0 ? _deriveOpIssueDelta(group) : { resolved: [], introduced: [] };
+    $: issueDelta = group.length > 0 ? deriveOpIssueDelta(group) : { resolved: [], introduced: [] };
 
     // Strip-specials single-snapshot diff (shared "before" card + empty-after).
     $: stripSnap = item.type === 'strip-specials-card'

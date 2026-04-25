@@ -28,7 +28,7 @@
         splitChains,
         toggleFilter,
     } from '../../stores/history';
-    import { _deriveOpIssueDelta } from '../../utils/validation/classify';
+    import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
     // Derived pill data ------------------------------------------------------
 
@@ -61,7 +61,7 @@
         const counts: Record<string, number> = {};
         for (const item of source) {
             if (item.group.length === 0) continue;
-            const delta = _deriveOpIssueDelta(item.group);
+            const delta = deriveOpIssueDelta(item.group);
             const touched = new Set<string>([
                 ...delta.resolved,
                 ...delta.introduced,

@@ -28,7 +28,6 @@ PARITY_FIXTURES = ["112-ikhlas", "113-falaq", "synthetic-classifier"]
 
 
 @pytest.mark.parametrize("fixture_name", PARITY_FIXTURES, ids=PARITY_FIXTURES)
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_backend_and_cli_classify_identically_per_fixture(
     fixture_name, load_fixture, tmp_reciter_dir
 ):
@@ -50,6 +49,16 @@ def test_backend_and_cli_classify_identically_per_fixture(
     assert proc.returncode == 0, f"CLI failed: stdout={proc.stdout!r} stderr={proc.stderr!r}"
 
     backend_counts = backend_result.get("category_counts") or backend_result.get("counts") or {}
+
+    # MUST-6 scopes parity to per-segment categories where both stacks share
+    # the same classifier predicate. Coverage / structural categories are
+    # computed at different layers (CLI counts every Quran verse the fixture
+    # doesn't cover; backend scopes to entry chapters), so they're excluded.
+    PER_SEGMENT_PARITY_CATS = {
+        "failed", "repetitions", "audio_bleeding", "boundary_adj",
+        "cross_verse", "qalqala", "muqattaat", "low_confidence",
+    }
+
     cli_counts: dict[str, int] = {}
     for line in proc.stdout.splitlines():
         for category in backend_counts:
@@ -58,14 +67,14 @@ def test_backend_and_cli_classify_identically_per_fixture(
                 if token.isdigit():
                     cli_counts[category] = int(token)
 
-    for category, expected in backend_counts.items():
+    for category in PER_SEGMENT_PARITY_CATS:
+        expected = backend_counts.get(category, 0)
         actual = cli_counts.get(category, 0)
         assert actual == expected, (
             f"{fixture_name}::{category}: backend={expected} cli={actual}"
         )
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_no_duplicate_helpers_in_cli():
     """Phase 2 deletes duplicated helpers from validators/validate_segments.py."""
     cli_text = CLI_SCRIPT.read_text(encoding="utf-8")

@@ -14,9 +14,60 @@ from services import cache
 from services.data_loader import get_word_counts, load_detailed
 from services.validation import chapter_validation_counts
 from services.validation.registry import filter_persistent_ignores
+from services.validation.snapshot_classifier import classify_snapshot
 from utils.io import atomic_json_write, backup_file, file_sha256
 from utils.references import chapter_from_ref, normalize_ref, seg_sort_key
 from utils.uuid7 import uuid7
+
+
+def _attach_classified_issues(operations: list) -> list:
+    """Return a deep-enough copy of ``operations`` with ``classified_issues``
+    populated on every snapshot.
+
+    Handles both snapshot shapes the frontend can send:
+    - ``op["targets_before"] = [snap, ...]`` and ``op["targets_after"]`` —
+      arrays of snapshot dicts (live ops produced by ``snapshotSeg``).
+    - ``op["snapshots"] = {"before": snap, "after": snap}`` — singular form
+      used by some payload variants (and by the Phase-2 history test).
+
+    Each snapshot dict gains a ``classified_issues: list[str]`` field
+    derived by routing through the unified snapshot classifier. Non-dict
+    snapshots are left untouched.
+    """
+    out: list = []
+    for op in operations or []:
+        if not isinstance(op, dict):
+            out.append(op)
+            continue
+        new_op = dict(op)
+
+        for key in ("targets_before", "targets_after"):
+            arr = new_op.get(key)
+            if not isinstance(arr, list):
+                continue
+            new_arr: list = []
+            for snap in arr:
+                if isinstance(snap, dict):
+                    enriched = dict(snap)
+                    enriched["classified_issues"] = classify_snapshot(enriched)
+                    new_arr.append(enriched)
+                else:
+                    new_arr.append(snap)
+            new_op[key] = new_arr
+
+        snapshots = new_op.get("snapshots")
+        if isinstance(snapshots, dict):
+            new_snapshots = dict(snapshots)
+            for which in ("before", "after"):
+                snap = new_snapshots.get(which)
+                if isinstance(snap, dict):
+                    enriched = dict(snap)
+                    enriched["classified_issues"] = classify_snapshot(enriched)
+                    new_snapshots[which] = enriched
+            new_op["snapshots"] = new_snapshots
+
+        out.append(new_op)
+    return out
 
 
 def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> str:
@@ -235,9 +286,12 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     # Backup, write detailed.json atomically, rebuild segments.json
     file_hash = persist_detailed(reciter, meta, entries)
 
-    # Snapshot validation counts after mutation and write batch record
+    # Snapshot validation counts after mutation and write batch record.
+    # Each operation's snapshots gain a ``classified_issues`` field so the
+    # frontend history-delta path reads it directly off the saved record
+    # instead of running a second classifier pass on snapshot dicts.
     val_after = chapter_validation_counts(entries, chapter, meta)
-    operations = updates.get("operations", [])
+    operations = _attach_classified_issues(updates.get("operations", []))
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),

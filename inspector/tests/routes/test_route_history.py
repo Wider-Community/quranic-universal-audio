@@ -24,7 +24,6 @@ def test_history_response_shape(flask_client, tmp_reciter_dir, load_expected):
             assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/edit-history")
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_history_record_includes_classified_issues_on_snapshots(flask_client, tmp_reciter_dir):
     """Phase 2: history record snapshots persist classified_issues."""
     reciter = "fixture_reciter"

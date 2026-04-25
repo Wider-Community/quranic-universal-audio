@@ -23,7 +23,6 @@ def _classify(seg: dict, **ctx) -> list[str]:
 
 
 @pytest.mark.parametrize("fixture_name", FIXTURES, ids=FIXTURES)
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_each_category_classified_in_expected_segments(
     fixture_name, load_fixture, load_expected
 ):
@@ -46,7 +45,6 @@ def test_each_category_classified_in_expected_segments(
             )
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_low_confidence_threshold_is_0_80():
     """Segments with confidence ∈ [0.79, 0.81] flip on/off correctly around 0.80."""
     base = {
@@ -63,7 +61,6 @@ def test_low_confidence_threshold_is_0_80():
     assert "low_confidence" not in above
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_low_confidence_detail_threshold_is_1_00():
     """Segments with confidence < 1.00 fall in the detail tier; confidence == 1.00 do not."""
     base = {
@@ -82,7 +79,6 @@ def test_low_confidence_detail_threshold_is_1_00():
     assert "low_confidence_detail" not in perfect
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_audio_bleeding_uses_seg_belongs_to_entry():
     """Fixture segment with entry_ref 1:1 + matched_ref 1:2:1 flips audio_bleeding=true."""
     seg = {
@@ -95,7 +91,6 @@ def test_audio_bleeding_uses_seg_belongs_to_entry():
     assert "audio_bleeding" in result
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_repetitions_only_wrap_word_ranges():
     """Segment with has_repeated_words=true but no wrap_word_ranges does NOT classify as repetitions (tie-breaker B-1)."""
     seg = {
@@ -115,7 +110,6 @@ def test_repetitions_only_wrap_word_ranges():
     assert "repetitions" in result2
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_boundary_adj_phoneme_tail_optional():
     """Segment qualifying for boundary_adj: with canonical phonemes provided, tail-mismatch may flip."""
     seg = {
@@ -128,7 +122,6 @@ def test_boundary_adj_phoneme_tail_optional():
     assert "boundary_adj" in plain or "boundary_adj" not in plain
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_qalqala_letter_field_populated():
     """Qalqala-classified segment carries a qalqala_letter field with the actual final letter."""
     from services.validation.classifier import classify_segment_full  # type: ignore
@@ -144,7 +137,6 @@ def test_qalqala_letter_field_populated():
     assert result.get("qalqala_letter") == "د"
 
 
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_muqattaat_only_first_word_of_verse():
     """A muqattaat verse with s_word=2 does NOT classify; s_word=1 does."""
     base_seg = {

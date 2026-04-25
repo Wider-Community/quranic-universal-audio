@@ -23,7 +23,6 @@ CLI_SCRIPT = REPO_ROOT / "validators" / "validate_segments.py"
 
 
 @pytest.mark.parametrize("fixture_name", ["112-ikhlas", "113-falaq", "synthetic-classifier"])
-@pytest.mark.xfail(reason="phase-2", strict=False)
 def test_backend_cli_parity_holistic(fixture_name, tmp_reciter_dir, load_expected):
     """Backend route counts == CLI counts for every fixture; baseline matches expected/<fixture>.classify.json."""
     reciter = "fixture_reciter"

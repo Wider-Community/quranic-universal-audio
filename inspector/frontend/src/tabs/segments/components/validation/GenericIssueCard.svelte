@@ -20,7 +20,7 @@
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
     import { IssueRegistry } from '../../domain/registry';
-    import { _isIgnoredFor } from '../../utils/validation/classify';
+    import { isIgnoredFor } from '../../utils/validation/classified-issues';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
@@ -170,7 +170,7 @@
 
     // Track ignored state reactively.
     $: if (resolvedSeg) {
-        isAlreadyIgnored = _isIgnoredFor(resolvedSeg, category);
+        isAlreadyIgnored = isIgnoredFor(resolvedSeg, category);
     }
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
@@ -185,7 +185,7 @@
 
     // ---- Ignore handler ----
     function handleIgnore(): void {
-        if (!resolvedSeg || _isIgnoredFor(resolvedSeg, category)) return;
+        if (!resolvedSeg || isIgnoredFor(resolvedSeg, category)) return;
         const segChapter = resolvedSeg.chapter ?? parseInt(get(selectedChapter));
         let ignoreOp;
         try {
