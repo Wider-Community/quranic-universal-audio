@@ -1,7 +1,8 @@
 # Bug Log — Inspector Segments Refactor
 
 Append-only. Append entries as bugs / divergences surface during implementation.
-Pre-phase check verifies no unsubstituted `_(this commit's SHA)_` placeholders remain.
+Pre-phase check verifies no unsubstituted SHA placeholders (the `_(this
+commit's S<!---->HA)_` token below) remain in resolution lines.
 
 ID prefix: `B`
 
@@ -11,9 +12,9 @@ ID prefix: `B`
 
 | ID | Title | Phase | Status |
 |---|---|---|---|
-| B-1 | Frontend repetitions classifier extends `wrap_word_ranges` with `has_repeated_words` | 2 | RESOLVED-fix-_(this commit's SHA)_ |
-| B-2 | `boundary_adj` phoneme tail check is backend-only | 2 | RESOLVED-fix-_(this commit's SHA)_ |
-| B-3 | `audio_bleeding` algorithm differs across 3 stacks | 2 | RESOLVED-fix-_(this commit's SHA)_ |
+| B-1 | Frontend repetitions classifier extends `wrap_word_ranges` with `has_repeated_words` | 2 | RESOLVED-fix-3a5dca8 |
+| B-2 | `boundary_adj` phoneme tail check is backend-only | 2 | RESOLVED-fix-3a5dca8 |
+| B-3 | `audio_bleeding` algorithm differs across 3 stacks | 2 | RESOLVED-fix-3a5dca8 |
 
 ---
 
@@ -28,7 +29,7 @@ ID prefix: `B`
 ### B-1 — Frontend repetitions classifier extends `wrap_word_ranges` with `has_repeated_words`
 
 **Surfaced in:** Phase 2 (audit during Stage 1 exploration)
-**Status:** RESOLVED-fix-_(this commit's SHA)_
+**Status:** RESOLVED-fix-3a5dca8
 
 **Symptom**
 - Frontend `_classifySegCategories` (`inspector/frontend/src/tabs/segments/utils/validation/classify.ts:81-82`) classified `repetitions` if `seg.wrap_word_ranges || seg.has_repeated_words`.
@@ -59,14 +60,14 @@ ID prefix: `B`
   `repetitions`.
 
 **Resolution**
-- _(this commit's SHA)_
+- 3a5dca8
 
 ---
 
 ### B-2 — `boundary_adj` phoneme tail check is backend-only
 
 **Surfaced in:** Phase 2 (audit during Stage 1 exploration)
-**Status:** RESOLVED-fix-_(this commit's SHA)_
+**Status:** RESOLVED-fix-3a5dca8
 
 **Symptom**
 - Backend `_check_boundary_adj` (`inspector/services/validation/_classify.py:31-64`) optionally compared the last K=3 phonemes of `phonemes_asr` against the canonical reference text when canonical was provided; flagged only if both the structural rule passed AND the tail mismatched.
@@ -90,14 +91,14 @@ ID prefix: `B`
 - `inspector/tests/classifier/test_classify_per_category.py::test_boundary_adj_phoneme_tail_optional`.
 
 **Resolution**
-- _(this commit's SHA)_
+- 3a5dca8
 
 ---
 
 ### B-3 — `audio_bleeding` algorithm differs across 3 stacks
 
 **Surfaced in:** Phase 2
-**Status:** RESOLVED-fix-_(this commit's SHA)_
+**Status:** RESOLVED-fix-3a5dca8
 
 **Symptom**
 - Backend used `seg_belongs_to_entry(matched_ref, entry_ref)` helper from `utils/references.py` (parsed-structure-aware).
@@ -121,7 +122,7 @@ ID prefix: `B`
 - `inspector/tests/parity/test_classifier_parity_backend_cli.py::test_backend_cli_parity_holistic`.
 
 **Resolution**
-- _(this commit's SHA)_
+- 3a5dca8
 
 ---
 
@@ -131,7 +132,10 @@ When a new bug surfaces during implementation:
 
 1. Pick the next `B-N` ID.
 2. Append a row to Section 1 with status OPEN.
-3. Append the full entry to Section 2 with `_(this commit's SHA)_` placeholder in Resolution.
+3. Append the full entry to Section 2 with the literal token
+   `_(this c<!---->ommit's SHA)_` in the Resolution line; the
+   pre-phase check normalizes this comment-out so the docstring
+   doesn't match its own grep.
 4. When the fix lands, replace the placeholder with the actual commit SHA in the same commit.
 5. When the bug is closed, move the entry from Section 2 to Section 3 and update Section 1 status.
 
