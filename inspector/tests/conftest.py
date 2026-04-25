@@ -181,6 +181,11 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         # see a consistent on-disk state for the fixture.
         try:
             from services.save import rebuild_segments_json  # type: ignore
+        except ImportError:
+            # rebuild_segments_json not yet available (pre-phase); skip
+            # segments.json generation without masking other errors.
+            rebuild_segments_json = None  # type: ignore[assignment]
+        if rebuild_segments_json is not None:
             with open(dst_path, "r", encoding="utf-8") as f:
                 doc = json.load(f)
             entries = doc.get("entries", [])
@@ -198,8 +203,6 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
                 seg_doc["_meta"] = meta
                 with open(seg_path, "w", encoding="utf-8") as g:
                     json.dump(seg_doc, g, ensure_ascii=False)
-        except Exception:
-            pass
 
         _invalidate_seg_caches()
         return dst_path

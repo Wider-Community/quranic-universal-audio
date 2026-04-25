@@ -20,6 +20,7 @@ from utils.references import chapter_from_ref, seg_belongs_to_entry
 from services.validation.classifier import (
     classify_flags,
     classify_segment,
+    is_ignored_for,
 )
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 
@@ -76,11 +77,15 @@ def _build_detail_lists(
             t_end = seg.get("time_end", 0)
 
             if not matched_ref:
-                failed.append({
-                    "chapter": chapter, "seg_index": i,
-                    "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                    "classified_issues": classify_segment(seg),
-                })
+                # Respect is_ignored_for so _all / ignored=True suppresses the
+                # failed entry from detail lists and category_counts alike —
+                # mirrors the classify_flags gate added for MUST-6 consistency.
+                if not is_ignored_for(seg, "failed"):
+                    failed.append({
+                        "chapter": chapter, "seg_index": i,
+                        "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                        "classified_issues": classify_segment(seg),
+                    })
                 continue
 
             parts = matched_ref.split("-")

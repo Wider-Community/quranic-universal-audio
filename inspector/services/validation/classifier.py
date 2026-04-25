@@ -190,7 +190,10 @@ def classify_flags(
     confidence = seg.get("confidence", 0.0)
 
     if not matched_ref:
-        result["failed"] = True
+        # Gate on is_ignored_for so that _all / ignored=True suppresses even
+        # the failed flag — the _all marker means "suppress every classification
+        # including errors", which is the strongest user-set suppression.
+        result["failed"] = not is_ignored_for(seg, "failed")
         return result
 
     if is_by_ayah and ":" in entry_ref and not seg_belongs_to_entry(matched_ref, entry_ref):
