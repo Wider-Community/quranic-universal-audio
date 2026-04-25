@@ -22,6 +22,20 @@ export type FixtureName =
   | 'synthetic-structural'
   | 'synthetic-classifier';
 
+/** Minimal top-level shape of a ``*.detailed.json`` fixture file. */
+export interface RawDetailedFixture {
+  _meta: Record<string, unknown>;
+  _fixture_meta?: Record<string, unknown>;
+  entries: Array<Record<string, unknown>>;
+}
+
+/** Minimal top-level shape of a ``expected/*.classify.json`` baseline file. */
+export interface RawClassifyExpected {
+  _meta: Record<string, unknown>;
+  by_segment_uid: Record<string, { categories: string[]; [key: string]: unknown }>;
+  category_counts: Record<string, number>;
+}
+
 const FIXTURES: Record<FixtureName, unknown> = {
   '112-ikhlas': ikhlas,
   '113-falaq': falaq,
@@ -36,13 +50,13 @@ const EXPECTED_CLASSIFY: Record<FixtureName, unknown> = {
   'synthetic-classifier': classifierExpected,
 };
 
-export function loadFixture<T = any>(name: FixtureName): T {
+export function loadFixture<T = RawDetailedFixture>(name: FixtureName): T {
   const f = FIXTURES[name];
   if (!f) throw new Error(`unknown fixture: ${name}`);
   return JSON.parse(JSON.stringify(f)) as T;
 }
 
-export function loadExpectedClassify<T = any>(name: FixtureName): T {
+export function loadExpectedClassify<T = RawClassifyExpected>(name: FixtureName): T {
   const f = EXPECTED_CLASSIFY[name];
   if (!f) throw new Error(`no expected classify baseline for: ${name}`);
   return JSON.parse(JSON.stringify(f)) as T;

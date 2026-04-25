@@ -1,0 +1,69 @@
+{
+  "_meta": {
+    "fixture": "112-ikhlas",
+    "captured_against_commit": "4be27a3",
+    "captured_at_utc": "2026-04-25T14:48:39Z",
+    "policy": "MUST-1 baseline; response field set must remain a superset of this on every subsequent commit"
+  },
+  "validate": {
+    "status_code": 200,
+    "field_keys_top_level": [
+      "audio_bleeding",
+      "boundary_adj",
+      "cross_verse",
+      "errors",
+      "failed",
+      "low_confidence",
+      "missing_verses",
+      "missing_words",
+      "muqattaat",
+      "qalqala",
+      "repetitions",
+      "stats"
+    ]
+  },
+  "data": {
+    "status_code": 200,
+    "field_keys_top_level": [
+      "audio_url",
+      "segments",
+      "summary",
+      "verse_word_counts"
+    ]
+  },
+  "all": {
+    "status_code": 200,
+    "field_keys_top_level": [
+      "audio_by_chapter",
+      "pad_ms",
+      "segments",
+      "verse_word_counts"
+    ]
+  },
+  "edit_history": {
+    "status_code": 200,
+    "field_keys_top_level": [
+      "batches",
+      "summary"
+    ]
+  },
+  "config": {
+    "status_code": 200,
+    "field_keys_top_level": [
+      "accordion_context",
+      "low_conf_default_threshold",
+      "muqattaat_verses",
+      "qalqala_letters",
+      "seg_font_size",
+      "seg_scroll_anim_mode",
+      "seg_word_spacing",
+      "show_boundary_phonemes",
+      "standalone_refs",
+      "standalone_words",
+      "trim_dim_alpha",
+      "trim_pad_left",
+      "trim_pad_right",
+      "validation_categories"
+    ]
+  }
+}

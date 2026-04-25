@@ -1,49 +1,53 @@
-"""GET /api/seg/data/<reciter>/<chapter>, /all/<reciter>, /config tests."""
+"""GET /api/seg/data/<reciter>/<chapter>, /all/<reciter>, /config tests (MUST-1)."""
 from __future__ import annotations
 
 import pytest
 
+from tests.conftest import assert_keys_superset
 
-def test_seg_data_response_shape(flask_client, tmp_reciter_dir):
+
+def test_seg_data_response_shape(flask_client, tmp_reciter_dir, load_expected):
+    """The /data endpoint returns at least the frozen MUST-1 baseline field set."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
+
+    baseline = load_expected("112-ikhlas", "routes")
+    expected_keys = baseline["data"]["field_keys_top_level"]
+
     res = flask_client.get(f"/api/seg/data/{reciter}/112")
     assert res.status_code in (200, 404)
     if res.status_code == 200:
         body = res.get_json()
         assert isinstance(body, dict)
-        for key in ("segments", "audio", "summary", "issues"):
-            if key in body:
-                break
-        else:
-            pass
+        assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/data")
 
 
-def test_seg_all_response_shape(flask_client, tmp_reciter_dir):
+def test_seg_all_response_shape(flask_client, tmp_reciter_dir, load_expected):
+    """The /all endpoint returns at least the frozen MUST-1 baseline field set."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
+
+    baseline = load_expected("112-ikhlas", "routes")
+    expected_keys = baseline["all"]["field_keys_top_level"]
+
     res = flask_client.get(f"/api/seg/all/{reciter}")
     assert res.status_code in (200, 404)
     if res.status_code == 200:
         body = res.get_json()
         assert isinstance(body, dict)
+        assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/all")
 
 
-def test_seg_config_response_shape(flask_client):
-    """The /config endpoint returns a dict with the canonical keys."""
+def test_seg_config_response_shape(flask_client, load_expected):
+    """The /config endpoint returns at least the frozen MUST-1 baseline field set."""
+    baseline = load_expected("112-ikhlas", "routes")
+    expected_keys = baseline["config"]["field_keys_top_level"]
+
     res = flask_client.get("/api/seg/config")
     assert res.status_code == 200
     body = res.get_json()
     assert isinstance(body, dict)
-    expected_keys = {
-        "seg_font_size",
-        "validation_categories",
-        "muqattaat_verses",
-        "qalqala_letters",
-    }
-    assert expected_keys.issubset(set(body.keys())), (
-        f"missing keys: {expected_keys - set(body.keys())}"
-    )
+    assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/config")
 
 
 @pytest.mark.xfail(reason="phase-1", strict=False)

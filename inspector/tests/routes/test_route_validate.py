@@ -3,11 +3,16 @@ from __future__ import annotations
 
 import pytest
 
+from tests.conftest import assert_keys_superset
 
-def test_validate_response_shape(flask_client, tmp_reciter_dir):
-    """The validate route returns the canonical SegValidateResponse shape."""
+
+def test_validate_response_shape(flask_client, tmp_reciter_dir, load_expected):
+    """The validate route returns at least the frozen MUST-1 baseline field set."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
+
+    baseline = load_expected("112-ikhlas", "routes")
+    expected_keys = baseline["validate"]["field_keys_top_level"]
 
     res = flask_client.get(f"/api/seg/validate/{reciter}")
     assert res.status_code in (200, 404), (
@@ -16,18 +21,7 @@ def test_validate_response_shape(flask_client, tmp_reciter_dir):
     if res.status_code == 200:
         body = res.get_json()
         assert isinstance(body, dict)
-        for key in ("category_counts", "categories"):
-            if key in body:
-                break
-        else:
-            allowed_top_level_keys = {
-                "category_counts", "issues", "details", "categories",
-                "missing_verses", "missing_words", "structural_errors",
-                "summary", "by_chapter", "reciter",
-            }
-            assert set(body.keys()) & allowed_top_level_keys, (
-                f"validate response missing all known top-level keys; got {list(body.keys())}"
-            )
+        assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/validate")
 
 
 @pytest.mark.xfail(reason="phase-2", strict=False)

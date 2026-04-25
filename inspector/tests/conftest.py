@@ -130,6 +130,8 @@ def _modules_holding_seg_path() -> list[str]:
     return [
         "config",
         "routes.segments_data",
+        "routes.segments_edit",
+        "routes.segments_validation",
         "services.data_loader",
         "services.history_query",
         "services.save",
@@ -197,6 +199,25 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         "install": staticmethod(_install),
         "data_dir": tmp_path,
     })
+
+
+def assert_keys_superset(
+    baseline_keys: list[str],
+    response_keys: list[str],
+    route_name: str,
+) -> None:
+    """Assert that *response_keys* is a superset of *baseline_keys* (MUST-1).
+
+    Any key present in the baseline must remain present in the live response.
+    New keys are allowed (additive-only contract); missing keys are failures.
+    """
+    missing = set(baseline_keys) - set(response_keys)
+    assert not missing, (
+        f"MUST-1 violation on {route_name!r}: "
+        f"baseline keys no longer in response: {sorted(missing)!r}. "
+        f"Baseline had {sorted(baseline_keys)!r}; "
+        f"live response has {sorted(response_keys)!r}."
+    )
 
 
 @pytest.fixture

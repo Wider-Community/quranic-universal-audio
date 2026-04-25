@@ -27,15 +27,12 @@ def _payload_with_command(op_type: str, chapter: int) -> dict:
 @pytest.mark.parametrize("op_type", OP_TYPES, ids=OP_TYPES)
 @pytest.mark.xfail(reason="phase-3", strict=False)
 def test_command_save_round_trip(op_type, flask_client, tmp_reciter_dir):
-    """For each op type, the save endpoint persists `command`, `affected_chapters`, and `snapshots`.
+    """Save handler rejects ops whose ``command.type`` does not match ``op.type``.
 
-    Phase 3 contract: every op carries a `command` envelope; the backend's
-    save handler MUST persist it. Pre-Phase-3 the backend stores
-    `operations` verbatim, so the assertion that the persisted op has a
-    parsed `command.segmentUid` matching the input is true even pre-Phase-3
-    — but Phase 3 also validates that the envelope's `type` matches the
-    op-level `type`. Pre-Phase-3 there is no validator, so injecting a
-    mismatched envelope still saves.
+    Every operation must carry a ``command`` envelope and its ``type``
+    must match the enclosing ``op.type``.  A mismatched type must be
+    rejected with HTTP 400; a correct type must be persisted in the
+    history record.
     """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")

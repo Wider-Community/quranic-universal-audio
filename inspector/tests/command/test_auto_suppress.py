@@ -13,15 +13,13 @@ from tests.conftest import PER_SEGMENT_CATEGORIES, AUTO_SUPPRESS_CATEGORIES
 def test_edit_from_card_records_suppression_per_registry(
     category, flask_client, tmp_reciter_dir, load_fixture
 ):
-    """The save handler must derive auto-suppression from the registry, not the payload.
+    """The save handler derives auto-suppression from the registry, not the payload.
 
-    Phase 3 contract: when the frontend dispatches an "edit-from-card"
-    command, the backend looks up the registry's `auto_suppress` flag for
-    the given category and writes (or skips writing) `ignored_categories`
-    accordingly. Pre-Phase-3 the backend trusts whatever ignored_categories
-    the payload carries — so this test verifies the post-Phase-3 contract
-    by sending a payload WITHOUT explicit ignored_categories and checking
-    that the backend wrote the right thing on its own.
+    When the frontend dispatches an "edit-from-card" command, the backend
+    looks up the registry's ``auto_suppress`` flag for the given category
+    and writes (or skips writing) ``ignored_categories`` accordingly.
+    A payload that omits ``ignored_categories`` must still produce the
+    correct on-disk value, driven entirely by the registry.
     """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")

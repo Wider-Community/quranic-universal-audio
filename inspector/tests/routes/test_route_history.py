@@ -6,21 +6,22 @@ import json
 import pytest
 
 
-def test_history_response_shape(flask_client, tmp_reciter_dir):
-    """edit-history route returns a frozen-baseline shape."""
+def test_history_response_shape(flask_client, tmp_reciter_dir, load_expected):
+    """edit-history route returns at least the frozen MUST-1 baseline field set."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
+
+    baseline = load_expected("112-ikhlas", "routes")
+    expected_keys = baseline["edit_history"]["field_keys_top_level"]
 
     res = flask_client.get(f"/api/seg/edit-history/{reciter}")
     assert res.status_code in (200, 404)
     if res.status_code == 200:
         body = res.get_json()
         assert isinstance(body, (dict, list))
-        if isinstance(body, dict):
-            allowed_keys = {"batches", "summary", "reciter", "ok", "error", "items"}
-            assert any(k in body for k in allowed_keys), (
-                f"unexpected response shape: {list(body.keys())}"
-            )
+        if isinstance(body, dict) and expected_keys:
+            from tests.conftest import assert_keys_superset
+            assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/edit-history")
 
 
 @pytest.mark.xfail(reason="phase-2", strict=False)

@@ -56,12 +56,11 @@ def test_save_payload_carries_op_log_in_canonical_shape(flask_client, tmp_recite
 
 @pytest.mark.xfail(reason="phase-3", strict=False)
 def test_history_record_reflects_command_result_metadata(flask_client, tmp_reciter_dir):
-    """Phase 3 contract: history record's op carries `affected_chapters` AND `command`.
+    """Save handler rejects ops that lack a ``command`` envelope.
 
-    Pre-Phase-3 the backend only persists whatever fields the frontend
-    sends, but does not validate the new schema. Phase 3 adds explicit
-    schema validation: missing `command` envelope → reject. This test
-    fails pre-Phase-3 because the contract isn't enforced.
+    Every operation in the save payload must carry a ``command`` object
+    whose ``type`` matches the enclosing ``op.type``.  A payload with a
+    missing ``command`` key must be rejected with HTTP 400.
     """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")

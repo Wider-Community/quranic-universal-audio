@@ -1,7 +1,7 @@
 """Per-category classifier tests, parametrized over fixtures.
 
-Each test loads a fixture, runs the unified classifier (post-Phase-2),
-and compares per-segment categories to the baseline in
+Each test loads a fixture, runs the unified backend classifier, and
+compares per-segment categories to the baseline in
 ``expected/<fixture>.classify.json``.
 """
 from __future__ import annotations
@@ -97,7 +97,7 @@ def test_audio_bleeding_uses_seg_belongs_to_entry():
 
 @pytest.mark.xfail(reason="phase-2", strict=False)
 def test_repetitions_only_wrap_word_ranges():
-    """Segment with has_repeated_words=true but no wrap_word_ranges does NOT classify (post-Phase-2 tie-breaker B-1)."""
+    """Segment with has_repeated_words=true but no wrap_word_ranges does NOT classify as repetitions (tie-breaker B-1)."""
     seg = {
         "matched_ref": "1:1:1-1:1:1",
         "matched_text": "x",
@@ -107,7 +107,7 @@ def test_repetitions_only_wrap_word_ranges():
     }
     result = _classify(seg, entry_ref="1", is_by_ayah=False)
     assert "repetitions" not in result, (
-        "has_repeated_words alone should not classify as repetitions post-Phase-2 (see bug-log B-1)"
+        "has_repeated_words alone should not classify as repetitions; wrap_word_ranges is required (see bug-log B-1)"
     )
 
     seg_with_wrap = dict(seg, wrap_word_ranges=[[1, 1]])

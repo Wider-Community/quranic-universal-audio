@@ -56,13 +56,12 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
 
 @pytest.mark.xfail(reason="phase-4", strict=False)
 def test_uid_stable_across_load_save_load(tmp_reciter_dir, flask_client, load_fixture):
-    """Load → save (without UIDs in payload) → load: UIDs persist (MUST-4 + IS-8).
+    """Load → save (without UIDs in payload) → load: UIDs persist (MUST-4).
 
-    Phase 4 contract: when a save payload lacks `segment_uid` on segments
-    (e.g. an older client), the backend looks up the existing UID by
-    (chapter, original_index, start_ms) — backfilling deterministically —
-    and writes it back to disk. Pre-Phase-4 the save handler trusts the
-    payload only, so an empty `segment_uid` zeroes out the on-disk UID.
+    When a save payload omits ``segment_uid`` on segments, the backend
+    must look up the existing UID by ``(chapter, original_index, start_ms)``
+    — backfilling deterministically — and write it back to disk.  The
+    on-disk UID must equal the pre-save UID after every round-trip.
     """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")

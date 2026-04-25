@@ -6,7 +6,7 @@
 // not exist at config time. Wrapping the specifier in a runtime variable
 // keeps the build green while preserving lazy resolution at test time.
 
-export async function loadOptional<T = any>(
+export async function loadOptional<T = unknown>(
   modulePath: string,
 ): Promise<T | null> {
   const path = modulePath;

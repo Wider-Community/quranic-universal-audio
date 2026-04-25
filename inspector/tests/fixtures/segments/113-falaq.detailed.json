@@ -18,8 +18,8 @@
       {"index": 7, "purpose": "boundary_adj — single-word matched_ref (113:1:1-113:1:1) on a non-standalone word"}
     ],
     "segments": [
-      {"index": 0, "expected_categories": ["qalqala"], "notes": "Real segment; final letter qāf (ق) — qalqala letter; segment ignores qalqala via ignored_categories"},
-      {"index": 1, "expected_categories": ["qalqala"], "notes": "Real segment; ignored_categories includes qalqala — should NOT classify post-Phase-2"},
+      {"index": 0, "expected_categories": [], "notes": "Real segment; final letter qāf (ق) triggers qalqala classification, but ignored_categories=[\"qalqala\"] suppresses it — classifier emits no categories"},
+      {"index": 1, "expected_categories": [], "notes": "Real segment; final letter qāf triggers qalqala classification, but ignored_categories=[\"qalqala\"] suppresses it — classifier emits no categories"},
       {"index": 2, "expected_categories": [], "notes": "Real segment; final letter is bā' (ب), qalqala letter"},
       {"index": 3, "expected_categories": [], "notes": "Real segment"},
       {"index": 4, "expected_categories": [], "notes": "Real segment; final letter dāl, qalqala letter"},
