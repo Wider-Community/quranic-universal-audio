@@ -31,6 +31,7 @@
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
     import { segAllData } from '../../stores/chapter';
+    import { IssueRegistry } from '../../domain/registry';
     import {
         CONF_MID_THRESHOLD,
         VAL_VIRTUALIZE_THRESHOLD,
@@ -173,6 +174,33 @@
         return chapter === null ? (arr ?? []) : (arr ?? []).filter((i) => i.chapter === chapter);
     }
 
+    // ---- Per-category presentation hints (count badge class). ----
+    // Severity \u2192 CSS hook for the count pill. The two flag-style classes
+    // (val-rep-count, val-cross-count) are used to colour repetition /
+    // cross-verse / muqattaat / qalqala counts in their own palette.
+    const COUNT_CLASS_OVERRIDES: Record<string, string> = {
+        repetitions: 'val-rep-count',
+        cross_verse: 'val-cross-count',
+        muqattaat: 'val-cross-count',
+        qalqala: 'val-cross-count',
+    };
+    function _countClassFor(kind: string): string {
+        const override = COUNT_CLASS_OVERRIDES[kind];
+        if (override) return override;
+        const sev = IssueRegistry[kind]?.severity ?? 'error';
+        return sev === 'error' ? 'has-errors' : 'has-warnings';
+    }
+
+    // Each registry entry maps to the response field it consumes. The accordion
+    // descriptor is built in registry accordionOrder.
+    function _itemsFor(kind: string, data: SegValidateResponse): SegValAnyItem[] {
+        if (kind === 'structural_errors') {
+            return matchChapter(data.errors ?? data.structural_errors);
+        }
+        const slot = (data as Record<string, SegValAnyItem[] | undefined>)[kind];
+        return matchChapter(slot);
+    }
+
     // ---- Build category list from store ----
     function buildCategories(
         data: SegValidateResponse | null,
@@ -182,44 +210,48 @@
     ): CategoryDescriptor[] {
         if (!data) return [];
 
-        const failed = matchChapter(data.failed);
-        const mv = matchChapter(data.missing_verses);
-        const mw = matchChapter(data.missing_words);
-        const errs = matchChapter(data.errors ?? data.structural_errors);
-        const lowConf = matchChapter(data.low_confidence) as SegValLowConfidenceItem[];
-        const ba = matchChapter(data.boundary_adj);
-        const cv = matchChapter(data.cross_verse);
-        const ab = matchChapter(data.audio_bleeding);
-        const rep = matchChapter(data.repetitions);
-        const muq = matchChapter(data.muqattaat);
-        const qal = matchChapter(data.qalqala) as SegValQalqalaItem[];
+        const ordered = Object.values(IssueRegistry).slice()
+            .sort((a, b) => a.accordionOrder - b.accordionOrder);
 
-        // Low confidence
         const LC_DEFAULT = get(segConfig).lcDefaultThreshold;
-        const lcVisible = lowConf
-            .filter((i) => (i.confidence * 100) < _lcThreshold)
-            .sort((a, b) => a.confidence - b.confidence);
-        const lcSummaryCount = lowConf.filter((i) => (i.confidence * 100) < LC_DEFAULT).length;
+        const all: CategoryDescriptor[] = ordered.map((defn) => {
+            const items = _itemsFor(defn.kind, data);
+            let visibleItems: SegValAnyItem[] = items;
+            let summaryCount = items.length;
+            let isLowConf = false;
+            let isQalqala = false;
+            let qalqalaLetters: string[] = [];
 
-        // Qalqala
-        let qalVisible: SegValQalqalaItem[] = qal;
-        if (_activeQalqalaLetter) qalVisible = qalVisible.filter((i) => i.qalqala_letter === _activeQalqalaLetter);
-        if (_qalqalaEndOfVerse) qalVisible = qalVisible.filter((i) => i.end_of_verse === true);
-        const qalLetters = QALQALA_LETTERS_ORDER.filter((l) => qal.some((i) => i.qalqala_letter === l));
+            if (defn.kind === 'low_confidence') {
+                const lowConf = items as SegValLowConfidenceItem[];
+                visibleItems = lowConf
+                    .filter((i) => (i.confidence * 100) < _lcThreshold)
+                    .sort((a, b) => a.confidence - b.confidence);
+                summaryCount = lowConf.filter((i) => (i.confidence * 100) < LC_DEFAULT).length;
+                isLowConf = true;
+            } else if (defn.kind === 'qalqala') {
+                const qal = items as SegValQalqalaItem[];
+                let q: SegValQalqalaItem[] = qal;
+                if (_activeQalqalaLetter) q = q.filter((i) => i.qalqala_letter === _activeQalqalaLetter);
+                if (_qalqalaEndOfVerse) q = q.filter((i) => i.end_of_verse === true);
+                visibleItems = q;
+                summaryCount = qal.length;
+                isQalqala = true;
+                qalqalaLetters = QALQALA_LETTERS_ORDER.filter((l) => qal.some((i) => i.qalqala_letter === l));
+            }
 
-        const all: CategoryDescriptor[] = [
-            { name: 'Failed Alignments',              type: 'failed',         countClass: 'has-errors',     items: failed,  visibleItems: failed,     summaryCount: failed.length,    isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Missing Verses',                  type: 'missing_verses', countClass: 'has-errors',     items: mv,      visibleItems: mv,         summaryCount: mv.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Missing Words',                   type: 'missing_words',  countClass: 'has-errors',     items: mw,      visibleItems: mw,         summaryCount: mw.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Structural Errors',               type: 'errors',         countClass: 'has-errors',     items: errs,    visibleItems: errs,       summaryCount: errs.length,      isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Low Confidence',                  type: 'low_confidence', countClass: 'has-warnings',   items: lowConf, visibleItems: lcVisible,  summaryCount: lcSummaryCount,   isLowConf: true,  isQalqala: false, qalqalaLetters: [] },
-            { name: 'Detected Repetitions',            type: 'repetitions',    countClass: 'val-rep-count',  items: rep,     visibleItems: rep,        summaryCount: rep.length,       isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'May Require Boundary Adjustment', type: 'boundary_adj',   countClass: 'has-warnings',   items: ba,      visibleItems: ba,         summaryCount: ba.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Cross-verse',                     type: 'cross_verse',    countClass: 'val-cross-count',items: cv,      visibleItems: cv,         summaryCount: cv.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Audio Bleeding',                  type: 'audio_bleeding', countClass: 'has-warnings',   items: ab,      visibleItems: ab,         summaryCount: ab.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Muqatta\u02bcat',                 type: 'muqattaat',      countClass: 'val-cross-count',items: muq,     visibleItems: muq,        summaryCount: muq.length,       isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Qalqala',                         type: 'qalqala',        countClass: 'val-cross-count',items: qal,     visibleItems: qalVisible, summaryCount: qal.length,       isLowConf: false, isQalqala: true,  qalqalaLetters: qalLetters },
-        ];
+            return {
+                name: defn.displayTitle,
+                type: defn.kind,
+                countClass: _countClassFor(defn.kind),
+                items,
+                visibleItems,
+                summaryCount,
+                isLowConf,
+                isQalqala,
+                qalqalaLetters,
+            };
+        });
 
         return all.filter((c) => c.items.length > 0);
     }
@@ -330,7 +362,7 @@
         };
         void $segAllData; // re-evaluate on seg mutations so live ref tracks
         if (type === 'failed') return `${any.chapter}:#${any.seg_index}`;
-        if (type === 'missing_verses' || type === 'errors') return any.verse_key ?? '';
+        if (type === 'missing_verses' || type === 'structural_errors') return any.verse_key ?? '';
         if (type === 'missing_words') {
             const indices = (issue as SegValMissingWordsItem).seg_indices || [];
             return indices.length > 0 ? `${any.verse_key} #${indices.join('/#')}` : (any.verse_key ?? '');
@@ -349,7 +381,7 @@
         const any = issue as { msg?: string; time?: string; verse_key?: string; ref?: string; entry_ref?: string; matched_verse?: string; confidence?: number };
         void $segAllData;
         if (type === 'failed') return any.time ?? '';
-        if (type === 'missing_verses' || type === 'errors') return any.msg ?? '';
+        if (type === 'missing_verses' || type === 'structural_errors') return any.msg ?? '';
         if (type === 'missing_words') return any.msg ?? '';
         if (type === 'low_confidence') return `${((any.confidence ?? 0) * 100).toFixed(1)}%`;
         if (type === 'boundary_adj') return any.verse_key ?? '';
@@ -378,7 +410,7 @@
             const first = indices[0];
             if (first != null) jumpToSegment(any.chapter, first);
             else jumpToVerse(any.chapter, any.verse_key ?? '');
-        } else if (type === 'errors') {
+        } else if (type === 'structural_errors') {
             jumpToVerse(any.chapter, any.verse_key ?? '');
         }
     }

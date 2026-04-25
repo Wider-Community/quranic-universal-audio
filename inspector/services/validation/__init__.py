@@ -33,6 +33,22 @@ from services.validation._classify import (
 from services.validation._missing import _build_missing_words
 from services.validation._structural import _check_structural_errors
 from services.validation._detail import _build_detail_lists
+from services.validation.registry import (
+    IssueDefinition,
+    IssueRegistry,
+    ALL_CATEGORIES,
+    PER_SEGMENT_CATEGORIES,
+    PER_VERSE_CATEGORIES,
+    PER_CHAPTER_CATEGORIES,
+    CAN_IGNORE_CATEGORIES,
+    AUTO_SUPPRESS_CATEGORIES,
+    PERSISTS_IGNORE_CATEGORIES,
+    apply_auto_suppress,
+    filter_persistent_ignores,
+)
+
+# Friendly alias for callers that prefer the plan's external naming.
+ISSUE_REGISTRY = IssueRegistry
 
 
 def chapter_validation_counts(entries: list, chapter: int, meta: dict,

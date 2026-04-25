@@ -13,12 +13,12 @@ from config import (
     ACCORDION_CONTEXT,
 )
 from constants import (
-    VALIDATION_CATEGORIES,
     MUQATTAAT_VERSES as _MUQATTAAT_VERSES,
     QALQALA_LETTERS as _QALQALA_LETTERS,
     STANDALONE_REFS as _STANDALONE_REFS,
     STANDALONE_WORDS as _STANDALONE_WORDS,
 )
+from services.validation.registry import ALL_CATEGORIES
 from services import cache
 from services.data_loader import (
     dk_text_for_ref,
@@ -45,7 +45,7 @@ def seg_config():
         "trim_dim_alpha": TRIM_DIM_ALPHA,
         "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
         "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
-        "validation_categories": list(VALIDATION_CATEGORIES),
+        "validation_categories": list(ALL_CATEGORIES),
         "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
         "qalqala_letters": sorted(_QALQALA_LETTERS),
         "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),

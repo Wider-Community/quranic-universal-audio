@@ -37,7 +37,6 @@ def _registry():
     return IssueRegistry
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_registry_pins_matrix_verbatim():
     reg = _registry()
     for cat, expected in EXPECTED_MATRIX.items():
@@ -49,13 +48,11 @@ def test_registry_pins_matrix_verbatim():
             )
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_registry_has_all_eleven_categories():
     reg = _registry()
     assert set(reg.keys()) == EXPECTED_CATEGORIES
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_registry_scope_field_resolves_per_category():
     reg = _registry()
     valid_scopes = {"per_segment", "per_verse", "per_chapter"}
@@ -65,7 +62,6 @@ def test_registry_scope_field_resolves_per_category():
         assert scope in valid_scopes, f"{cat} scope={scope!r} not in {valid_scopes}"
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_registry_severity_field_resolves():
     reg = _registry()
     valid = {"error", "warning", "info"}
@@ -75,7 +71,6 @@ def test_registry_severity_field_resolves():
         assert sev in valid
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_registry_card_type_dispatch():
     reg = _registry()
     expected_types = {
@@ -92,7 +87,6 @@ def test_registry_card_type_dispatch():
             assert ct == "generic"
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_registry_accordion_order_is_complete():
     reg = _registry()
     orders = []

@@ -50,7 +50,6 @@ def test_seg_config_response_shape(flask_client, load_expected):
     assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/config")
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_seg_config_validation_categories_match_registry(flask_client):
     """The /config response's validation_categories list is registry-derived."""
     pytest.importorskip(

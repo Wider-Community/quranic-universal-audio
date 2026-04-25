@@ -24,6 +24,7 @@ import {
     clearEdit,
     setEdit,
 } from '../../stores/edit';
+import { IssueRegistry } from '../../domain/registry';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { _fixupValIndicesForMerge } from '../validation/fixups';
@@ -121,7 +122,12 @@ export async function mergeAdjacent(
         ...(first.ignored_categories || []),
         ...(second.ignored_categories || []),
     ]);
-    if (contextCategory && contextCategory !== 'muqattaat') mergedIc.add(contextCategory);
+    if (contextCategory) {
+        const defn = IssueRegistry[contextCategory];
+        if (defn?.autoSuppress && defn.scope === 'per_segment') {
+            mergedIc.add(contextCategory);
+        }
+    }
     if (mergedIc.size) merged.ignored_categories = [...mergedIc];
 
     const keptOldIdx = first.index;

@@ -33,6 +33,7 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/playback';
+import { applyAutoSuppress } from '../../domain/registry';
 import { _normalizeRef as _normalizeRefLib, getVerseWordCounts } from '../data/references';
 import { stopSegAnimation } from '../playback/playback';
 import type { RowEntry, RowInstanceRole } from '../playback/row-registry';
@@ -84,18 +85,13 @@ export function beginRefEdit(
 // ---------------------------------------------------------------------------
 
 /**
- * Shared tail for both commitRefEdit branches: append the op-context category
- * to ignored_categories (except muqattaat which tracks confidence instead),
- * clear derived cache, mark dirty, re-publish the seg to the store, and
- * finalize the pending op.
+ * Shared tail for both commitRefEdit branches: route the op-context category
+ * through the registry's auto-suppress helper, clear derived cache, mark
+ * dirty, re-publish the seg to the store, and finalize the pending op.
  */
 function _applyRefChange(seg: Segment, pending: EditOp | null, chapter: number): void {
     const ctxCat = pending?.op_context_category;
-    if (ctxCat && ctxCat !== 'muqattaat') {
-        if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(ctxCat))
-            seg.ignored_categories.push(ctxCat);
-    }
+    if (ctxCat) applyAutoSuppress(seg, ctxCat, 'card');
     delete seg._derived;
     markDirty(chapter, seg.index);
     refreshSegInStore(seg);

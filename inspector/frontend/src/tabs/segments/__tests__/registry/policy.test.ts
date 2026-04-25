@@ -5,7 +5,6 @@
 // the load-bearing artifact for the matrix.
 
 import { describe, it, expect } from 'vitest';
-import { xfail } from '../helpers/xfail';
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ IssueRegistry: any }>('../../domain/registry');
@@ -26,7 +25,7 @@ const EXPECTED = {
 };
 
 describe.skipIf(!IssueRegistry)('registry policy snapshot', () => {
-  it('pins matrix verbatim (TS)', xfail('phase-1', () => {
+  it('pins matrix verbatim (TS)', () => {
     for (const [cat, want] of Object.entries(EXPECTED)) {
       const row = IssueRegistry[cat];
       expect(row).toBeTruthy();
@@ -34,12 +33,12 @@ describe.skipIf(!IssueRegistry)('registry policy snapshot', () => {
         expect(row[key]).toBe(value);
       }
     }
-  }));
+  });
 
-  it('mirror parity with Python registry', xfail('phase-1', () => {
+  it('mirror parity with Python registry', () => {
     const keys = Object.keys(IssueRegistry).sort();
     expect(keys).toEqual(Object.keys(EXPECTED).sort());
-  }));
+  });
 });
 
 describe.skipIf(IssueRegistry)('registry policy (deferred)', () => {

@@ -35,6 +35,7 @@ import {
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { applyAutoSuppress } from '../../domain/registry';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts } from '../data/references';
 import {
@@ -314,11 +315,9 @@ export async function confirmSplit(
     };
     const splitOp = getPendingOp();
     const ctxCat = splitOp?.op_context_category;
-    if (ctxCat && ctxCat !== 'muqattaat') {
-        const firstIgnored = firstHalf.ignored_categories ?? (firstHalf.ignored_categories = []);
-        const secondIgnored = secondHalf.ignored_categories ?? (secondHalf.ignored_categories = []);
-        if (!firstIgnored.includes(ctxCat)) firstIgnored.push(ctxCat);
-        if (!secondIgnored.includes(ctxCat)) secondIgnored.push(ctxCat);
+    if (ctxCat) {
+        applyAutoSuppress(firstHalf, ctxCat, 'card');
+        applyAutoSuppress(secondHalf, ctxCat, 'card');
     }
 
     // Auto-suggest per-verse refs for cross-verse splits.

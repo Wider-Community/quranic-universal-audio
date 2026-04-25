@@ -74,22 +74,17 @@ export const EDIT_OP_LABELS: Record<string, string> = {
     waqf_sakt: 'Waqf sakt merge', remove_sadaqa: 'Remove Sadaqa',
 };
 
-export const ERROR_CAT_LABELS: Record<string, string> = {
-    failed: 'Failed', low_confidence: 'Low confidence',
-    boundary_adj: 'Boundary adj.',
-    cross_verse: 'Cross-verse', missing_words: 'Missing words',
-    audio_bleeding: 'Audio bleeding',
-    repetitions: 'Repetitions',
-    muqattaat: 'Muqattaat letters',
-    qalqala: 'Qalqala',
-};
+import { PER_SEGMENT_CATEGORIES, IssueRegistry } from '../domain/registry';
+
+/** Display labels for each validation category — sourced from the registry. */
+export const ERROR_CAT_LABELS: Record<string, string> = Object.fromEntries(
+    Object.entries(IssueRegistry).map(([k, v]) => [k, v.displayTitle]),
+);
 
 export const SEG_FILTER_OPS: readonly string[] = ['>', '>=', '<', '<=', '='];
 
-export const _VAL_SINGLE_INDEX_CATS: readonly string[] = [
-    'failed', 'low_confidence', 'boundary_adj', 'cross_verse',
-    'audio_bleeding', 'repetitions', 'muqattaat', 'qalqala',
-];
+/** Categories whose validation items address a single segment by index. */
+export const _VAL_SINGLE_INDEX_CATS: readonly string[] = PER_SEGMENT_CATEGORIES;
 
 export const _ARABIC_DIGITS: readonly string[] = ['\u0660','\u0661','\u0662','\u0663','\u0664','\u0665','\u0666','\u0667','\u0668','\u0669'];
 

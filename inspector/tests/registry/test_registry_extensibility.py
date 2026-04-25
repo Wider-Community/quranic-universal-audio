@@ -13,7 +13,6 @@ pytest.importorskip(
 )
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_synthetic_new_category_picked_up_by_parametrization(monkeypatch):
     from services.validation.registry import IssueRegistry  # type: ignore
 

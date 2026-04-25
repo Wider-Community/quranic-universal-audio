@@ -19,6 +19,7 @@
         snapshotSeg,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
+    import { IssueRegistry } from '../../domain/registry';
     import { _isIgnoredFor } from '../../utils/validation/classify';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
@@ -65,14 +66,13 @@
     // hides via `{#if resolvedSeg}`.
     $: if (!_boundUid && resolvedSeg) _boundUid = resolvedSeg.segment_uid ?? null;
 
+    // Base gate from the registry; ``low_confidence`` adds a runtime guard so
+    // a segment whose confidence has been promoted to 1.0 (e.g. after a save
+    // edit) doesn't keep offering the Ignore button.
     $: canIgnore =
         resolvedSeg != null &&
-        (category === 'boundary_adj' ||
-            category === 'cross_verse' ||
-            category === 'audio_bleeding' ||
-            category === 'repetitions' ||
-            category === 'qalqala' ||
-            (category === 'low_confidence' && (resolvedSeg.confidence ?? 1) < 1.0));
+        (IssueRegistry[category]?.canIgnore ?? false) &&
+        (category !== 'low_confidence' || (resolvedSeg.confidence ?? 1) < 1.0);
 
     $: segChapterForBtn =
         resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(get(selectedChapter))) : 0;

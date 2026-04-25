@@ -27,7 +27,6 @@ def _registry():
 
 
 @pytest.mark.parametrize("category", ALL_CATEGORIES, ids=ALL_CATEGORIES)
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_can_ignore_drives_save_serialization(category):
     """For category C, save serializes ignored_categories iff registry[C].persists_ignore."""
     reg = _registry()
@@ -61,7 +60,6 @@ def test_can_ignore_drives_save_serialization(category):
 
 
 @pytest.mark.parametrize("category", PER_SEGMENT_CATEGORIES, ids=PER_SEGMENT_CATEGORIES)
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_auto_suppress_on_edit_per_segment_categories(category):
     """For per_segment C with auto_suppress=Y, an edit-from-card op writes C to seg.ignored_categories."""
     reg = _registry()
@@ -85,7 +83,6 @@ def test_auto_suppress_on_edit_per_segment_categories(category):
     "category", PER_VERSE_CATEGORIES + PER_CHAPTER_CATEGORIES,
     ids=PER_VERSE_CATEGORIES + PER_CHAPTER_CATEGORIES,
 )
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_auto_suppress_is_noop_for_chapter_scope_categories(category):
     """For per_verse / per_chapter C, edit-from-card does NOT write to any ignored_categories.
 
@@ -101,7 +98,6 @@ def test_auto_suppress_is_noop_for_chapter_scope_categories(category):
     )
 
 
-@pytest.mark.xfail(reason="phase-1", strict=False)
 def test_view_only_was_dropped():
     """Registry has no view_only field; only can_ignore controls Ignore button visibility."""
     reg = _registry()

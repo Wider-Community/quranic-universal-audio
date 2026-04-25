@@ -34,6 +34,7 @@ import {
 } from '../../stores/edit';
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { applyAutoSuppress } from '../../domain/registry';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
     clearPlayRangeRAF,
@@ -353,10 +354,8 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
     seg.time_end = newEnd;
     seg.confidence = 1.0;
     const pending = getPendingOp();
-    if (pending?.op_context_category && pending.op_context_category !== 'muqattaat') {
-        if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(pending.op_context_category))
-            seg.ignored_categories.push(pending.op_context_category);
+    if (pending?.op_context_category) {
+        applyAutoSuppress(seg, pending.op_context_category, 'card');
     }
     markDirty(chapter, undefined, true);
 

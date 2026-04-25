@@ -13,6 +13,7 @@ from constants import HISTORY_SCHEMA_VERSION
 from services import cache
 from services.data_loader import get_word_counts, load_detailed
 from services.validation import chapter_validation_counts
+from services.validation.registry import filter_persistent_ignores
 from utils.io import atomic_json_write, backup_file, file_sha256
 from utils.references import chapter_from_ref, normalize_ref, seg_sort_key
 from utils.uuid7 import uuid7
@@ -136,14 +137,19 @@ def _make_seg(s: dict, existing_by_time: dict, existing_by_uid: dict) -> dict:
         result["wrap_word_ranges"] = wrap
     if s.get("has_repeated_words") or existing.get("has_repeated_words"):
         result["has_repeated_words"] = True
+    # ``ignored_categories`` is filtered against the registry's
+    # ``persists_ignore`` flag before serialization: categories whose registry
+    # entry is non-persisting drop out of the on-disk representation, while
+    # the legacy ``"_all"`` marker passes through. Empty payload arrays still
+    # clear the field (MUST-7).
     if "ignored_categories" in s:
-        ic = s.get("ignored_categories") or []
+        ic = filter_persistent_ignores(s.get("ignored_categories") or [])
         if ic:
-            result["ignored_categories"] = list(ic)
+            result["ignored_categories"] = ic
     else:
-        ic = existing.get("ignored_categories")
+        ic = filter_persistent_ignores(existing.get("ignored_categories") or [])
         if ic:
-            result["ignored_categories"] = list(ic)
+            result["ignored_categories"] = ic
     if (
         "ignored_categories" not in result
         and "ignored_categories" not in s
@@ -212,7 +218,7 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
             if "confidence" in upd:
                 flat_segments[idx]["confidence"] = upd["confidence"]
             if "ignored_categories" in upd:
-                ic = upd.get("ignored_categories") or []
+                ic = filter_persistent_ignores(upd.get("ignored_categories") or [])
                 if ic:
                     flat_segments[idx]["ignored_categories"] = ic
                 else:
