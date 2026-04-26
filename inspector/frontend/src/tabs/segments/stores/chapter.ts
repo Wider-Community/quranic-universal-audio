@@ -11,11 +11,8 @@ import type {
 } from '../../../lib/types/api';
 import type { Segment,SegReciter } from '../../../lib/types/domain';
 
-/** `SegAllResponse` + lazily-built per-chapter indices (mutable cache fields). */
-export interface SegAllDataState extends SegAllResponse {
-    _byChapter?: Record<string, Segment[]> | null;
-    _byChapterIndex?: Map<string, Segment> | null;
-}
+/** Shape of segAllData — no internal cache fields exposed. */
+export type SegAllDataState = SegAllResponse;
 
 /** Alias for clarity — `SegDataResponse` may be mutated with a proxy URL. */
 export type SegDataState = SegDataResponse;
@@ -46,11 +43,21 @@ export const segData = writable<SegDataState | null>(null);
 export const segCurrentIdx = writable<number>(-1);
 
 // ---------------------------------------------------------------------------
-// Helpers — lazy per-chapter index building on segAllData
+// Module-level index caches — keyed by SegAllDataState identity
 // ---------------------------------------------------------------------------
 
-function ensureChapterIndex(all: SegAllDataState): void {
-    if (all._byChapter && all._byChapterIndex) return;
+let _cachedRef: SegAllDataState | null = null;
+let _byChapter: Record<string, Segment[]> = {};
+let _byChapterIndex: Map<string, Segment> = new Map();
+
+function _resetCache(): void {
+    _cachedRef = null;
+    _byChapter = {};
+    _byChapterIndex = new Map();
+}
+
+function _buildIndex(all: SegAllDataState): void {
+    if (_cachedRef === all) return;
     const byChapter: Record<string, Segment[]> = {};
     const byIndex = new Map<string, Segment>();
     for (const s of all.segments) {
@@ -58,23 +65,28 @@ function ensureChapterIndex(all: SegAllDataState): void {
         if (ch == null) continue;
         const key = String(ch);
         if (!byChapter[key]) byChapter[key] = [];
-        byChapter[key].push(s);
+        byChapter[key]!.push(s);
         byIndex.set(`${ch}:${s.index}`, s);
     }
     for (const ch of Object.keys(byChapter)) {
         const list = byChapter[ch];
         if (list) list.sort((a, b) => a.index - b.index);
     }
-    all._byChapter = byChapter;
-    all._byChapterIndex = byIndex;
+    _byChapter = byChapter;
+    _byChapterIndex = byIndex;
+    _cachedRef = all;
 }
+
+// ---------------------------------------------------------------------------
+// Public selectors — preserved compat surface for ~50 subscriber sites
+// ---------------------------------------------------------------------------
 
 /** Lazy per-chapter segment lookup. */
 export function getChapterSegments(chapter: number | string): Segment[] {
     const all = get(segAllData);
     if (!all || !all.segments) return [];
-    ensureChapterIndex(all);
-    return all._byChapter?.[String(chapter)] ?? [];
+    _buildIndex(all);
+    return _byChapter[String(chapter)] ?? [];
 }
 
 /** Lazy single-segment lookup by (chapter, index). */
@@ -84,8 +96,8 @@ export function getSegByChapterIndex(
 ): Segment | null {
     const all = get(segAllData);
     if (!all || !all.segments) return null;
-    ensureChapterIndex(all);
-    return all._byChapterIndex?.get(`${chapter}:${index}`) ?? null;
+    _buildIndex(all);
+    return _byChapterIndex.get(`${chapter}:${index}`) ?? null;
 }
 
 export interface AdjacentSegments {
@@ -105,23 +117,14 @@ export function getAdjacentSegments(
     };
 }
 
-/** Drop lazy indices so next call to `getChapterSegments` rebuilds them. */
+/** Drop the chapter index so the next call to `getChapterSegments` rebuilds it. */
 export function invalidateChapterIndex(): void {
-    const all = get(segAllData);
-    if (!all) return;
-    all._byChapter = null;
-    all._byChapterIndex = null;
+    _resetCache();
 }
 
-/** Surgical re-cache: drop the given chapter's cache entries and repopulate
+/** Surgical re-cache: drop the given chapter's entries and repopulate
  *  from the current `all.segments` so subsequent `getChapterSegments(chapter)`
  *  reads return the post-edit slice.
- *
- *  Can't rely on `ensureChapterIndex` for lazy rebuild: it early-returns when
- *  `_byChapter` is truthy, so a per-chapter `delete` without immediate rebuild
- *  leaves `_byChapter[ch]` permanently undefined and `getChapterSegments`
- *  returning `[]` forever. That broke accordion cards (resolvedSeg = null
- *  → card body hidden) after any cross-chapter split/merge/trim/delete.
  *
  *  Leaves other chapters' cached slices + index rows untouched. Used after
  *  structural edits (split/merge/delete/trim) which reindex a single chapter
@@ -131,24 +134,19 @@ export function invalidateChapterIndexFor(chapter: number | string): void {
     if (!all) return;
     const ch = typeof chapter === 'number' ? chapter : parseInt(chapter);
     if (!ch) {
-        all._byChapter = null;
-        all._byChapterIndex = null;
+        _resetCache();
         return;
     }
-    if (all._byChapterIndex) {
-        const prefix = `${ch}:`;
-        for (const key of all._byChapterIndex.keys()) {
-            if (key.startsWith(prefix)) all._byChapterIndex.delete(key);
-        }
+    // Evict just this chapter's rows from the index map
+    const prefix = `${ch}:`;
+    for (const key of _byChapterIndex.keys()) {
+        if (key.startsWith(prefix)) _byChapterIndex.delete(key);
     }
-    if (all._byChapter) {
-        const slice = all.segments.filter((s) => s.chapter === ch);
-        slice.sort((a, b) => a.index - b.index);
-        all._byChapter[String(ch)] = slice;
-        if (all._byChapterIndex) {
-            for (const s of slice) all._byChapterIndex.set(`${ch}:${s.index}`, s);
-        }
-    }
+    // Rebuild this chapter's slice from the source array
+    const slice = all.segments.filter((s) => s.chapter === ch);
+    slice.sort((a, b) => a.index - b.index);
+    _byChapter[String(ch)] = slice;
+    for (const s of slice) _byChapterIndex.set(`${ch}:${s.index}`, s);
 }
 
 /** Refresh a segment in segAllData.segments by replacing its object ref,
@@ -158,8 +156,7 @@ export function invalidateChapterIndexFor(chapter: number | string): void {
  *  Surgical cache patch: the common non-structural case (trim / ref-edit /
  *  confidence bump) only mutates one entry — we replace the per-chapter
  *  slice entry and the `"chapter:index"` index entry in place instead of
- *  nulling both caches. Nulling forces the next `getAdjacentSegments` read
- *  to rebuild the entire index for every SegmentRow — N rows × per commit. */
+ *  nulling both caches. */
 export function refreshSegInStore(seg: Segment): void {
     const all = get(segAllData);
     if (!all?.segments) return;
@@ -172,13 +169,10 @@ export function refreshSegInStore(seg: Segment): void {
     const fresh = { ...seg };
     all.segments[idx] = fresh;
 
-    // Surgical patch: update just this entry in both caches. Only safe when
-    // chapter/index haven't shifted (non-structural edit) — structural ops
-    // (split/merge/delete) go through syncChapterSegsToAll / direct cache
-    // invalidation paths that target just the affected chapter.
-    if (fresh.chapter != null && all._byChapter && all._byChapterIndex) {
+    // Surgical patch: update just this entry in the module-level caches.
+    if (fresh.chapter != null && _cachedRef === all) {
         const chKey = String(fresh.chapter);
-        const list = all._byChapter[chKey];
+        const list = _byChapter[chKey];
         if (list) {
             const localIdx = list.findIndex((s) =>
                 (uid && s.segment_uid === uid) ||
@@ -187,11 +181,10 @@ export function refreshSegInStore(seg: Segment): void {
             if (localIdx >= 0) list[localIdx] = fresh;
             else {
                 // Edge case: seg added to this chapter after cache build.
-                // Drop just this chapter's slice so next read rebuilds it.
-                delete all._byChapter[chKey];
+                delete _byChapter[chKey];
             }
         }
-        all._byChapterIndex.set(`${fresh.chapter}:${fresh.index}`, fresh);
+        _byChapterIndex.set(`${fresh.chapter}:${fresh.index}`, fresh);
     }
     segAllData.update((d) => d);
 }
@@ -232,24 +225,18 @@ export function syncChapterSegsToAll(): void {
         ];
     }
     // Structural reindex changed THIS chapter only — drop just its entries.
-    // Other chapters' slices + index entries remain valid and stay cached so
-    // SegmentRows in unaffected chapters don't rebuild on next reactive tick.
-    if (all._byChapter) delete all._byChapter[String(chapter)];
-    if (all._byChapterIndex) {
+    if (_cachedRef === all) {
         const prefix = `${chapter}:`;
-        for (const key of all._byChapterIndex.keys()) {
-            if (key.startsWith(prefix)) all._byChapterIndex.delete(key);
+        for (const key of _byChapterIndex.keys()) {
+            if (key.startsWith(prefix)) _byChapterIndex.delete(key);
         }
-        // Re-populate with the fresh `updated` list so subsequent lookups
-        // hit without rebuilding. Cheaper than waiting for the next reader
-        // to trigger `ensureChapterIndex`, which would re-scan all segments.
-        for (const s of updated) {
-            if (s.chapter != null) all._byChapterIndex.set(`${s.chapter}:${s.index}`, s);
-        }
-    }
-    if (all._byChapter) {
         const sorted = [...updated].sort((a, b) => a.index - b.index);
-        all._byChapter[String(chapter)] = sorted;
+        _byChapter[String(chapter)] = sorted;
+        for (const s of updated) {
+            if (s.chapter != null) _byChapterIndex.set(`${s.chapter}:${s.index}`, s);
+        }
+    } else {
+        _resetCache();
     }
 }
 
@@ -273,8 +260,8 @@ export const currentChapterSegments = derived(
     [segAllData, selectedChapter],
     ([$all, $ch]) => {
         if (!$all || !$ch) return [];
-        ensureChapterIndex($all);
-        return $all._byChapter?.[$ch] ?? [];
+        _buildIndex($all);
+        return _byChapter[$ch] ?? [];
     },
 );
 

@@ -14,6 +14,7 @@
 import type { EditOp, Segment } from '../../../lib/types/domain';
 import { snapshotSeg } from '../stores/dirty';
 import type { SegSnapshot } from '../stores/dirty';
+import type { SegmentState } from '../stores/segments';
 import {
     applyAutoSuppress,
     IssueRegistry,
@@ -490,7 +491,7 @@ function _reduceAutoFixMissingWord(
 // ---------------------------------------------------------------------------
 
 export function applyCommand(
-    state: ApplyCommandState,
+    state: ApplyCommandState | SegmentState,
     command: SegmentCommand,
     ctx: ApplyCommandContext = {},
 ): CommandResult {

@@ -57,6 +57,37 @@ interface SegWithDerived extends Segment {
 export const activeFilters = writable<SegActiveFilter[]>([]);
 
 // ---------------------------------------------------------------------------
+// Derived timing values — silence_after_ms per segment (IS-7 derivation)
+// ---------------------------------------------------------------------------
+
+/** Per-uid silence timing derived from segment adjacency within each entry.
+ *  Maps ``segment_uid`` → ``{ silence_after_ms, silence_after_raw_ms }``.
+ *  Consumers that need the current silence value for a segment should read
+ *  from this store rather than relying on the in-place field. */
+export const derivedTimings = derived(segAllData, ($all) => {
+    const timings = new Map<string, { silence_after_ms: number | null; silence_after_raw_ms: number | null }>();
+    if (!$all) return timings;
+    const pad = $all.pad_ms ?? 0;
+    const segs = $all.segments;
+    for (let i = 0; i < segs.length; i++) {
+        const cur = segs[i]!;
+        const next = segs[i + 1];
+        const sameEntry = !!next && cur.audio_url === next.audio_url
+                               && cur.entry_idx === next.entry_idx;
+        const silence_after_ms = sameEntry && next
+            ? (next.time_start - cur.time_end) + 2 * pad
+            : null;
+        const silence_after_raw_ms = sameEntry && next
+            ? next.time_start - cur.time_end
+            : null;
+        if (cur.segment_uid) {
+            timings.set(cur.segment_uid, { silence_after_ms, silence_after_raw_ms });
+        }
+    }
+    return timings;
+});
+
+// ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
 

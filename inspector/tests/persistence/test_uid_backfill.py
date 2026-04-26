@@ -26,7 +26,6 @@ def test_uid_present_in_modern_fixture_unchanged(load_fixture):
         assert len(uid) >= 16
 
 
-@pytest.mark.xfail(reason="phase-4", strict=False)
 def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
     """A legacy fixture (no UIDs) gets deterministic UIDs on load."""
     reciter = "legacy_reciter"
@@ -54,7 +53,6 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
         assert uid, "loader must backfill segment_uid for legacy fixtures"
 
 
-@pytest.mark.xfail(reason="phase-4", strict=False)
 def test_uid_stable_across_load_save_load(tmp_reciter_dir, flask_client, load_fixture):
     """Load → save (without UIDs in payload) → load: UIDs persist (MUST-4).
 
@@ -98,7 +96,6 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, flask_client, load_fi
     )
 
 
-@pytest.mark.xfail(reason="phase-4", strict=False)
 def test_uid_persisted_on_next_save(tmp_reciter_dir, flask_client):
     """Load legacy fixture → save → reload from disk: UIDs are now present in the disk file."""
     reciter = "legacy_reciter"
@@ -132,7 +129,6 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, flask_client):
         assert seg.get("segment_uid"), "save did not persist backfilled segment_uid"
 
 
-@pytest.mark.xfail(reason="phase-4", strict=False)
 def test_uid_deterministic_across_processes(tmp_path):
     """Backfill the same legacy fixture in two cold processes; UIDs must match."""
     legacy_dir = tmp_path / "recitation_segments" / "legacy_reciter"
@@ -164,13 +160,8 @@ def test_uid_deterministic_across_processes(tmp_path):
     )
 
     import os as _os
-    inspector_dir = str((tmp_path.parent / "inspector").parent)
-    inspector_dir = str((tmp_path / "..").resolve().parent / "inspector")
-    real_inspector = str((tmp_path.parent / "inspector").parent / "inspector")
-    real_inspector = str((__file__ + "/../../../").replace("\\", "/"))
-
-    repo_inspector = str((tmp_path.parent / "inspector").parent / "inspector")
-    repo_inspector = str(__file__).replace("/tests/persistence/test_uid_backfill.py", "")
+    from pathlib import Path as _Path
+    repo_inspector = str(_Path(__file__).parent.parent.parent)
 
     proc1 = subprocess.run(
         [sys.executable, "-c", script],

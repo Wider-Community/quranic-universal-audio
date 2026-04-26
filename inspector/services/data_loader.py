@@ -19,6 +19,7 @@ from config import (
     TIMESTAMPS_PATH,
 )
 from constants import AUDIO_META_CATEGORIES, STOP_SIGNS, TS_AUDIO_CATEGORIES
+from domain.identity import backfill_entries_uids
 from services import cache
 from utils.formatting import slug_to_name
 from utils.references import chapter_from_ref
@@ -199,6 +200,7 @@ def load_detailed(reciter: str) -> list[dict]:
     if "_meta" in doc:
         cache.set_seg_meta(reciter, doc["_meta"])
     entries = doc.get("entries", [])
+    backfill_entries_uids(entries)
     cache.set_seg_cache(reciter, entries)
     # Fallback: if detailed.json had no _meta, try segments.json
     if not cache.get_seg_meta(reciter):

@@ -11,6 +11,7 @@ import { get } from 'svelte/store';
 
 import type { EditOp, Segment } from '../../../../lib/types/domain';
 import { getSegByChapterIndex, segAllData } from '../../stores/chapter';
+import type { SegmentState } from '../../stores/segments';
 import {
     finalizeOp,
     setPendingOp,
@@ -146,4 +147,30 @@ export function getEditingSeg(): Segment | null {
     const all = get(segAllData);
     if (!all?.segments) return null;
     return all.segments.find((s) => s.segment_uid === uid) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// segSlice — build a minimal SegmentState for a single-segment applyCommand call
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the minimal ``SegmentState`` slice that ``applyCommand`` expects when
+ * dispatching a single-segment command. All per-dispatcher call sites repeat
+ * the same three-field literal; this helper centralizes that boilerplate.
+ *
+ * Usage:
+ * ```ts
+ * const result = applyCommand(segSlice(seg, chapter), { type: 'trim', ... });
+ * ```
+ */
+export function segSlice(seg: Segment, chapter: number): SegmentState {
+    const uid = seg.segment_uid;
+    if (!uid) {
+        return { byId: {}, idsByChapter: { [chapter]: [] }, selectedChapter: chapter };
+    }
+    return {
+        byId: { [uid]: seg },
+        idsByChapter: { [chapter]: [uid] },
+        selectedChapter: chapter,
+    };
 }

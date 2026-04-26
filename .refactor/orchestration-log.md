@@ -96,7 +96,13 @@ No agent invocations; no token logging.
 
 ### Phase 4 — Normalize segment state + uid backfill
 
-(Not yet executed)
+- **Files modified**: 9 production files + 7 new files + 3 test files
+- **LOC added/removed**: ~700 added (identity.py, segments.ts, identity.ts, adapters, derivedTimings); ~30 removed (cache fields retired from store value)
+- **Wall-clock**: ~35–40 min (single Sonnet 4.6 agent; context window filled, resumed in continuation)
+- **Token budget**: _not captured_ (agent ran over context limit mid-session)
+- **Markers cleared**: 4 pytest phase-4 + 11 vitest phase-4 → all green
+- **Test counts after**: pytest 103 passed / 33 xfailed / 2 xpassed; vitest 197 passed / 3 skipped / 16 todo
+- **Notes**: Windows subprocess path bug in `test_uid_deterministic_across_processes` fixed (pathlib cross-platform). `--reporter=basic` vitest flag incompatible with installed version — dropped.
 
 ### Phase 5 — Patch-based undo
 
