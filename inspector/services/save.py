@@ -12,6 +12,7 @@ from adapters.save_payload import make_seg as _adapter_make_seg
 from adapters.segments_json import rebuild as _adapter_rebuild_segments
 from config import RECITATION_SEGMENTS_PATH
 from constants import HISTORY_SCHEMA_VERSION
+from domain.command import validate_patch_dict
 from services import cache
 from services.data_loader import get_word_counts, load_detailed
 from services.validation import chapter_validation_counts
@@ -20,6 +21,48 @@ from services.validation.snapshot_classifier import classify_snapshot
 from utils.io import atomic_json_write, backup_file, file_sha256
 from utils.references import chapter_from_ref, normalize_ref
 from utils.uuid7 import uuid7
+
+
+def _validate_op_patches(operations: list) -> str | None:
+    """Return an error message if any op has a malformed ``patch`` field, else None."""
+    for op in operations or []:
+        if not isinstance(op, dict):
+            continue
+        patch = op.get("patch")
+        if patch is None:
+            continue
+        err = validate_patch_dict(patch)
+        if err:
+            return err
+    return None
+
+
+def _ensure_patch_on_ops(operations: list) -> list:
+    """Return a copy of *operations* with a ``patch`` field on every op.
+
+    Ops that already carry a ``patch`` are left unchanged.  Ops without one
+    receive a minimal empty-patch envelope so the history record always has
+    the field (forward-only: new records carry it; inverse-patch path in
+    ``services/undo.py`` detects presence via ``"patch" in op``).
+    """
+    out: list = []
+    for op in operations or []:
+        if not isinstance(op, dict):
+            out.append(op)
+            continue
+        if "patch" not in op:
+            new_op = dict(op)
+            new_op["patch"] = {
+                "before": [],
+                "after": [],
+                "removedIds": [],
+                "insertedIds": [],
+                "affectedChapterIds": [],
+            }
+            out.append(new_op)
+        else:
+            out.append(op)
+    return out
 
 
 def _attach_classified_issues(operations: list) -> list:
@@ -215,6 +258,12 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
 def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,
                         val_before: dict, updates: dict) -> dict:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
+    # Validate patch envelopes before writing anything.
+    raw_ops = updates.get("operations", [])
+    patch_err = _validate_op_patches(raw_ops)
+    if patch_err:
+        return {"error": patch_err}, 400
+
     # Backup, write detailed.json atomically, rebuild segments.json
     file_hash = persist_detailed(reciter, meta, entries)
 
@@ -222,8 +271,9 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     # Each operation's snapshots gain a ``classified_issues`` field so the
     # frontend history-delta path reads it directly off the saved record
     # instead of running a second classifier pass on snapshot dicts.
+    # Ops also receive a ``patch`` envelope when absent.
     val_after = chapter_validation_counts(entries, chapter, meta)
-    operations = _attach_classified_issues(updates.get("operations", []))
+    operations = _attach_classified_issues(_ensure_patch_on_ops(raw_ops))
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),

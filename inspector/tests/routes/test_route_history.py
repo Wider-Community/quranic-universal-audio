@@ -48,7 +48,6 @@ def test_history_record_includes_classified_issues_on_snapshots(flask_client, tm
         )
 
 
-@pytest.mark.xfail(reason="phase-5", strict=False)
 def test_history_record_includes_patch_when_present(flask_client, tmp_reciter_dir):
     """Phase 5: GET /edit-history endpoint surfaces the persisted patch in its response.
 

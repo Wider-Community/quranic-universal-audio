@@ -106,7 +106,13 @@ No agent invocations; no token logging.
 
 ### Phase 5 — Patch-based undo
 
-(Not yet executed)
+- **Files modified**: 7 production files modified + 1 new Python file + 1 new fixture + 1 new fixture history + 1 conftest update
+- **LOC added/removed**: ~250 net added
+- **Wall-clock**: ~30 min (single Sonnet 4.6 agent)
+- **Token budget**: _not captured_
+- **Markers cleared**: 10 pytest phase-5 (6 parametrized + 4 singular; 1 kept as xfail) + 2 vitest phase-5 wrappers unwrapped
+- **Test counts after**: pytest 116 passed / 22 xfailed / 2 xpassed; vitest 201 passed / 3 skipped / 15 todo
+- **Notes**: `test_inverse_patch_restores_state_exactly` kept as `xfail(strict=False)` — test sends `full_replace` with empty segments which removes all segments, but `post == pre` is unsatisfiable since `_fixture_meta` is not preserved by `persist_detailed`. A `112-ikhlas.edit_history.jsonl` fixture was added to support `test_history_record_includes_patch_when_present`. IS-9 enacted; MUST-8 satisfied.
 
 ### Phase 6 — Stable validation issue identity
 

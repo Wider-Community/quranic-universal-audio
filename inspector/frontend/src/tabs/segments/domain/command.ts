@@ -187,8 +187,8 @@ export interface CommandResult {
      *  vs introduced. `resolved` always populated when auto-suppress fires;
      *  `introduced` is reserved for future flows. */
     validationDelta?: { resolved: string[]; introduced: string[] };
-    /** Stub field reserved for Phase 5. Populated with empty arrays here. */
-    patch?: SegmentPatch;
+    /** Patch envelope describing the forward change. */
+    patch: SegmentPatch;
 }
 
 // ---------------------------------------------------------------------------

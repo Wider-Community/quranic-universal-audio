@@ -176,6 +176,10 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         dst_path = dst_dir / "detailed.json"
         shutil.copy(str(src), str(dst_path))
 
+        history_src = FIXTURES_DIR / f"{fixture_name}.edit_history.jsonl"
+        if history_src.exists():
+            shutil.copy(str(history_src), str(dst_dir / "edit_history.jsonl"))
+
         # Build a matching segments.json so consumers that read both files
         # (the CLI, ``services.save.rebuild_segments_json``-driven flows)
         # see a consistent on-disk state for the fixture.

@@ -1,7 +1,6 @@
 // applyCommand reducer tests (IS-5).
 
 import { describe, it, expect } from 'vitest';
-import { xfail } from '../helpers/xfail';
 import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
@@ -37,12 +36,12 @@ describe.skipIf(!applyCommand)('applyCommand', () => {
     expect('validationDelta' in r).toBe(true);
   });
 
-  it('returns patch field (stub in Phase 3, populated in Phase 5)', xfail('phase-5', () => {
+  it('returns patch field (stub in Phase 3, populated in Phase 5)', () => {
     const r = applyCommand(baseState, { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } } as any);
     expect(r.patch).toBeTruthy();
     expect(Array.isArray(r.patch.before)).toBe(true);
     expect(Array.isArray(r.patch.after)).toBe(true);
-  }));
+  });
 });
 
 describe.skipIf(applyCommand)('applyCommand (deferred)', () => {

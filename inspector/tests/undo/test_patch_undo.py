@@ -28,7 +28,6 @@ def _save_with_patch(flask_client, reciter, chapter, op_type, patch):
 
 
 @pytest.mark.parametrize("op_type", COMMAND_TYPES, ids=COMMAND_TYPES)
-@pytest.mark.xfail(reason="phase-5", strict=False)
 def test_command_produces_complete_patch(op_type, flask_client, tmp_reciter_dir):
     """For each op, the backend validates the patch shape and rejects malformed ones.
 
@@ -86,7 +85,6 @@ def test_inverse_patch_restores_state_exactly(flask_client, tmp_reciter_dir):
     assert post == pre, "undo did not restore detailed.json byte-equal to pre-state"
 
 
-@pytest.mark.xfail(reason="phase-5", strict=False)
 def test_inverse_patch_restores_ignored_categories(flask_client, tmp_reciter_dir):
     """Segments with ignored_categories are fully restored on undo."""
     reciter = "fixture_reciter"
@@ -118,7 +116,6 @@ def test_inverse_patch_restores_ignored_categories(flask_client, tmp_reciter_dir
     assert restored.get("ignored_categories") == target["ignored_categories"]
 
 
-@pytest.mark.xfail(reason="phase-5", strict=False)
 def test_inverse_patch_handles_inserted_and_removed_ids(flask_client, tmp_reciter_dir):
     """Split (inserts) and delete (removes) round-trip correctly."""
     reciter = "fixture_reciter"

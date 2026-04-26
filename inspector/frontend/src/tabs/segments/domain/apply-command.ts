@@ -96,16 +96,14 @@ function _findSeg(state: ApplyCommandState, uid: string): Segment | undefined {
     return state.byId[uid];
 }
 
-/** Phase 3 patch stub: undefined until Phase 5 fills the inverse-patch
- *  arrays. The type carries `patch?: SegmentPatch`; Phase 3 leaves the
- *  field absent so callers know the result lacks an inverse-patch (Phase 5
- *  populates it with `before`/`after`/`removedIds`/`insertedIds`).
- *
- *  `affectedChapters` is accepted so the Phase 5 fill site can reuse the
- *  same call shape without changing call sites. */
-function _emptyPatch(affectedChapters: number[]): SegmentPatch | undefined {
-    void affectedChapters;
-    return undefined;
+function _buildPatch(
+    before: SegSnapshot[],
+    after: SegSnapshot[],
+    removedIds: string[],
+    insertedIds: string[],
+    affectedChapterIds: number[],
+): SegmentPatch {
+    return { before, after, removedIds, insertedIds, affectedChapterIds };
 }
 
 function _baseOperation(
@@ -194,7 +192,13 @@ function _reduceTrim(state: ApplyCommandState, cmd: TrimCommand, ctx?: ApplyComm
         operation: op,
         affectedChapters: [chapter],
         validationDelta: { resolved, introduced: [] },
-        patch: _emptyPatch([chapter]),
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(next)],
+            [],
+            [],
+            [chapter],
+        ),
     };
 }
 
@@ -256,7 +260,13 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
         operation: op,
         affectedChapters: [chapter],
         validationDelta: { resolved: [...resolved], introduced: [] },
-        patch: _emptyPatch([chapter]),
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(firstHalf), _snapshot(secondHalf)],
+            [],
+            [secondUid],
+            [chapter],
+        ),
     };
 }
 
@@ -325,7 +335,13 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
         operation: op,
         affectedChapters: [chapter],
         validationDelta: { resolved, introduced: [] },
-        patch: _emptyPatch([chapter]),
+        patch: _buildPatch(
+            [_snapshot(first), _snapshot(second)],
+            [_snapshot(merged)],
+            consumedUid ? [consumedUid] : [],
+            [],
+            [chapter],
+        ),
     };
 }
 
@@ -375,7 +391,13 @@ function _reduceEditReference(
         operation: op,
         affectedChapters: [chapter],
         validationDelta: { resolved, introduced: [] },
-        patch: _emptyPatch([chapter]),
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(next)],
+            [],
+            [],
+            [chapter],
+        ),
     };
 }
 
@@ -408,7 +430,13 @@ function _reduceDelete(state: ApplyCommandState, cmd: DeleteCommand, ctx?: Apply
         operation: op,
         affectedChapters: [chapter],
         validationDelta: { resolved: [], introduced: [] },
-        patch: _emptyPatch([chapter]),
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [],
+            [cmd.segmentUid],
+            [],
+            [chapter],
+        ),
     };
 }
 
@@ -445,7 +473,13 @@ function _reduceIgnoreIssue(
         operation: op,
         affectedChapters: [chapter],
         validationDelta: { resolved: [cmd.category], introduced: [] },
-        patch: _emptyPatch([chapter]),
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(next)],
+            [],
+            [],
+            [chapter],
+        ),
     };
 }
 
@@ -482,7 +516,13 @@ function _reduceAutoFixMissingWord(
         operation: op,
         affectedChapters: [chapter],
         validationDelta: { resolved: [], introduced: [] },
-        patch: _emptyPatch([chapter]),
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(next)],
+            [],
+            [],
+            [chapter],
+        ),
     };
 }
 

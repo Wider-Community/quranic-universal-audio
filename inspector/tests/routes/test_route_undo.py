@@ -20,7 +20,6 @@ def test_undo_batch_legacy_records(flask_client, tmp_reciter_dir):
     assert res.status_code in (200, 400, 404)
 
 
-@pytest.mark.xfail(reason="phase-5", strict=False)
 def test_undo_batch_patch_records(flask_client, tmp_reciter_dir):
     """A post-Phase-5 record (with patch) goes through the inverse-patch path; full segment restoration."""
     reciter = "fixture_reciter"

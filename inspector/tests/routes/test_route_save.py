@@ -59,7 +59,6 @@ def test_save_accepts_patch_payload(flask_client, tmp_reciter_dir):
     assert res.status_code in (200, 404)
 
 
-@pytest.mark.xfail(reason="phase-5", strict=False)
 def test_save_includes_patch_field_in_history(flask_client, tmp_reciter_dir):
     """Phase 5 contract: save handler injects a patch field on every op without one.
 

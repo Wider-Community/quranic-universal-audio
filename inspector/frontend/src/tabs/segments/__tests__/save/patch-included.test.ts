@@ -1,11 +1,10 @@
 // Phase 5 save tests: payload includes patch field.
 
 import { describe, it, expect } from 'vitest';
-import { xfail } from '../helpers/xfail';
 import { loadOptional } from '../helpers/optional';
 
 describe('save patch field', () => {
-  it('payload includes patch field when applyCommand produces one', xfail('phase-5', async () => {
+  it('payload includes patch field when applyCommand produces one', async () => {
     const exec = await loadOptional<any>('../../utils/save/execute');
     if (!exec || !exec.buildPayloadFromCommandResult) {
       throw new Error('phase-5: builder not yet present');
@@ -18,7 +17,7 @@ describe('save patch field', () => {
     const payload = exec.buildPayloadFromCommandResult(result);
     expect(payload.operations[0].patch).toBeTruthy();
     expect(payload.operations[0].patch.before[0].segment_uid).toBe('a');
-  }));
+  });
 
   it('legacy save without patch still works (backward compat)', () => {
     const payload = {

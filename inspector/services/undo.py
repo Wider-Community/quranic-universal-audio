@@ -9,6 +9,7 @@ from pathlib import Path
 
 from config import RECITATION_SEGMENTS_PATH
 from constants import HISTORY_SCHEMA_VERSION, VALIDATION_CATEGORIES
+from domain.command import apply_inverse_patch
 from services import cache
 from services.data_loader import load_detailed
 from services.save import persist_detailed
@@ -227,8 +228,16 @@ def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> Non
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+def _reverse_via_patch(entries: list[dict], op: dict) -> None:
+    """Apply the inverse of an op by running the patch in reverse."""
+    apply_inverse_patch(entries, op["patch"])
+
+
 def apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     """Apply the reverse of a single operation.  Raises ``ValueError`` on conflict."""
+    if "patch" in op:
+        _reverse_via_patch(entries, op)
+        return
     op_type = op.get("op_type", "")
     if op_type in ("trim_segment", "auto_fix_missing_word"):
         _reverse_trim(entries, op, chapter_set)
