@@ -15,7 +15,7 @@ ID prefix: `B`
 | B-1 | Frontend repetitions classifier extends `wrap_word_ranges` with `has_repeated_words` | 2 | RESOLVED-fix-3a5dca8 |
 | B-2 | `boundary_adj` phoneme tail check is backend-only | 2 | RESOLVED-fix-3a5dca8 |
 | B-3 | `audio_bleeding` algorithm differs across 3 stacks | 2 | RESOLVED-fix-3a5dca8 |
-| B-4 | Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope | 3 | RESOLVED-fix-PHASE7SHA |
+| B-4 | Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope | 3 | RESOLVED-fix-2c191aa |
 | B-5 | Validation-panel mid-load race: empty `liveUids` while `segAllData` is loading | 7 | OPEN-LOW-PRIORITY |
 
 ---
@@ -49,7 +49,7 @@ ID prefix: `B`
 ### B-4 — Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope
 
 **Surfaced in:** Phase 3
-**Status:** RESOLVED-fix-PHASE7SHA
+**Status:** RESOLVED-fix-2c191aa
 
 **Symptom**
 - Four pytest files retain `@pytest.mark.xfail(reason="phase-3", strict=False)` markers after Phase 3 lands:
@@ -88,7 +88,7 @@ ID prefix: `B`
 - All 4 ``phase-3`` xfail decorators removed; total xfail count now 0.
 
 **Resolution**
-- PHASE7SHA
+- 2c191aa
 
 **Test coverage**
 - ``inspector/tests/command/test_apply_command.py::test_history_record_reflects_command_result_metadata`` — HTTP 400 on missing ``command`` envelope.
