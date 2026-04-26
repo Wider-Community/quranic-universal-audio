@@ -53,7 +53,6 @@ def test_save_payload_carries_op_log_in_canonical_shape(flask_client, tmp_recite
     assert "segmentUid" in op["command"]
 
 
-@pytest.mark.xfail(reason="phase-3", strict=False)
 def test_history_record_reflects_command_result_metadata(flask_client, tmp_reciter_dir):
     """Save handler rejects ops that lack a ``command`` envelope.
 

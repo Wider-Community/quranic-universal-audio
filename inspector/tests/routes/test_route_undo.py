@@ -33,6 +33,7 @@ def test_undo_batch_patch_records(flask_client, tmp_reciter_dir):
             {
                 "op_id": "op-1",
                 "type": "delete",
+                "command": {"type": "delete", "segmentUid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"},
                 "patch": {
                     "before": [{"segment_uid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"}],
                     "after": [],

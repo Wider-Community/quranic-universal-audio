@@ -16,6 +16,7 @@ def _save_with_patch(flask_client, reciter, chapter, op_type, patch):
             {
                 "op_id": f"op-{op_type}-1",
                 "type": op_type,
+                "command": {"type": op_type, "segmentUid": "x"},
                 "patch": patch,
             }
         ],

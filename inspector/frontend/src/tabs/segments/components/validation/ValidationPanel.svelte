@@ -333,7 +333,7 @@
         : openTotal;
     // Expand the window to cover the editing card so scrolling away doesn't
     // unmount it. Bound check against openTotal handles items added/removed
-    // via fixups while still in edit mode.
+    // by re-validation while still in edit mode.
     $: startIdx = virtualize && editingItemIdx >= 0
         ? Math.min(baseStartIdx, editingItemIdx)
         : baseStartIdx;

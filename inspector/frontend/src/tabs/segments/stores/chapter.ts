@@ -11,9 +11,6 @@ import type {
 } from '../../../lib/types/api';
 import type { Segment,SegReciter } from '../../../lib/types/domain';
 
-/** Shape of segAllData — no internal cache fields exposed. */
-export type SegAllDataState = SegAllResponse;
-
 /** Alias for clarity — `SegDataResponse` may be mutated with a proxy URL. */
 export type SegDataState = SegDataResponse;
 
@@ -34,7 +31,7 @@ export const selectedChapter = writable<string>('');
 export const selectedVerse = writable<string>('');
 
 /** Full reciter corpus (segments across all chapters). */
-export const segAllData = writable<SegAllDataState | null>(null);
+export const segAllData = writable<SegAllResponse | null>(null);
 
 /** Per-chapter loaded data (audio_url, pad_ms, segments). */
 export const segData = writable<SegDataState | null>(null);
@@ -43,50 +40,25 @@ export const segData = writable<SegDataState | null>(null);
 export const segCurrentIdx = writable<number>(-1);
 
 // ---------------------------------------------------------------------------
-// Module-level index caches — keyed by SegAllDataState identity
-// ---------------------------------------------------------------------------
-
-let _cachedRef: SegAllDataState | null = null;
-let _byChapter: Record<string, Segment[]> = {};
-let _byChapterIndex: Map<string, Segment> = new Map();
-
-function _resetCache(): void {
-    _cachedRef = null;
-    _byChapter = {};
-    _byChapterIndex = new Map();
-}
-
-function _buildIndex(all: SegAllDataState): void {
-    if (_cachedRef === all) return;
-    const byChapter: Record<string, Segment[]> = {};
-    const byIndex = new Map<string, Segment>();
-    for (const s of all.segments) {
-        const ch = s.chapter;
-        if (ch == null) continue;
-        const key = String(ch);
-        if (!byChapter[key]) byChapter[key] = [];
-        byChapter[key]!.push(s);
-        byIndex.set(`${ch}:${s.index}`, s);
-    }
-    for (const ch of Object.keys(byChapter)) {
-        const list = byChapter[ch];
-        if (list) list.sort((a, b) => a.index - b.index);
-    }
-    _byChapter = byChapter;
-    _byChapterIndex = byIndex;
-    _cachedRef = all;
-}
-
-// ---------------------------------------------------------------------------
 // Public selectors — preserved compat surface for ~50 subscriber sites
 // ---------------------------------------------------------------------------
+
+/** Build the ordered segment list for *chapter* from a flat ``segments``
+ *  array.  Allocates a fresh array every call — callers that need stable
+ *  identity should subscribe to ``currentChapterSegments`` instead. */
+function _sliceChapter(segments: Segment[], chapter: number | string): Segment[] {
+    const ch = typeof chapter === 'number' ? chapter : parseInt(chapter);
+    if (!Number.isFinite(ch)) return [];
+    const slice = segments.filter((s) => s.chapter === ch);
+    slice.sort((a, b) => a.index - b.index);
+    return slice;
+}
 
 /** Lazy per-chapter segment lookup. */
 export function getChapterSegments(chapter: number | string): Segment[] {
     const all = get(segAllData);
     if (!all || !all.segments) return [];
-    _buildIndex(all);
-    return _byChapter[String(chapter)] ?? [];
+    return _sliceChapter(all.segments, chapter);
 }
 
 /** Lazy single-segment lookup by (chapter, index). */
@@ -94,10 +66,8 @@ export function getSegByChapterIndex(
     chapter: number | string,
     index: number,
 ): Segment | null {
-    const all = get(segAllData);
-    if (!all || !all.segments) return null;
-    _buildIndex(all);
-    return _byChapterIndex.get(`${chapter}:${index}`) ?? null;
+    const segs = getChapterSegments(chapter);
+    return segs.find((s) => s.index === index) ?? null;
 }
 
 export interface AdjacentSegments {
@@ -117,46 +87,21 @@ export function getAdjacentSegments(
     };
 }
 
-/** Drop the chapter index so the next call to `getChapterSegments` rebuilds it. */
+/** No-op shim: kept for API compatibility with ~30 call sites that invoke
+ *  it after edits.  The chapter slice is now derived from ``segAllData``
+ *  on every read, so explicit invalidation is unnecessary. */
 export function invalidateChapterIndex(): void {
-    _resetCache();
+    /* intentionally empty */
 }
 
-/** Surgical re-cache: drop the given chapter's entries and repopulate
- *  from the current `all.segments` so subsequent `getChapterSegments(chapter)`
- *  reads return the post-edit slice.
- *
- *  Leaves other chapters' cached slices + index rows untouched. Used after
- *  structural edits (split/merge/delete/trim) which reindex a single chapter
- *  in place. */
-export function invalidateChapterIndexFor(chapter: number | string): void {
-    const all = get(segAllData);
-    if (!all) return;
-    const ch = typeof chapter === 'number' ? chapter : parseInt(chapter);
-    if (!ch) {
-        _resetCache();
-        return;
-    }
-    // Evict just this chapter's rows from the index map
-    const prefix = `${ch}:`;
-    for (const key of _byChapterIndex.keys()) {
-        if (key.startsWith(prefix)) _byChapterIndex.delete(key);
-    }
-    // Rebuild this chapter's slice from the source array
-    const slice = all.segments.filter((s) => s.chapter === ch);
-    slice.sort((a, b) => a.index - b.index);
-    _byChapter[String(ch)] = slice;
-    for (const s of slice) _byChapterIndex.set(`${ch}:${s.index}`, s);
+/** No-op shim: kept for API compatibility (see ``invalidateChapterIndex``). */
+export function invalidateChapterIndexFor(_chapter: number | string): void {
+    /* intentionally empty */
+    void _chapter;
 }
 
-/** Refresh a segment in segAllData.segments by replacing its object ref,
- *  triggering Svelte reactivity for all SegmentRow instances rendering
- *  this seg.
- *
- *  Surgical cache patch: the common non-structural case (trim / ref-edit /
- *  confidence bump) only mutates one entry — we replace the per-chapter
- *  slice entry and the `"chapter:index"` index entry in place instead of
- *  nulling both caches. */
+/** Refresh a segment in ``segAllData.segments`` by replacing its object ref,
+ *  triggering Svelte reactivity for all rows rendering this seg. */
 export function refreshSegInStore(seg: Segment): void {
     const all = get(segAllData);
     if (!all?.segments) return;
@@ -166,26 +111,7 @@ export function refreshSegInStore(seg: Segment): void {
         (s.chapter === seg.chapter && s.index === seg.index),
     );
     if (idx < 0) return;
-    const fresh = { ...seg };
-    all.segments[idx] = fresh;
-
-    // Surgical patch: update just this entry in the module-level caches.
-    if (fresh.chapter != null && _cachedRef === all) {
-        const chKey = String(fresh.chapter);
-        const list = _byChapter[chKey];
-        if (list) {
-            const localIdx = list.findIndex((s) =>
-                (uid && s.segment_uid === uid) ||
-                (s.chapter === fresh.chapter && s.index === fresh.index),
-            );
-            if (localIdx >= 0) list[localIdx] = fresh;
-            else {
-                // Edge case: seg added to this chapter after cache build.
-                delete _byChapter[chKey];
-            }
-        }
-        _byChapterIndex.set(`${fresh.chapter}:${fresh.index}`, fresh);
-    }
+    all.segments[idx] = { ...seg };
     segAllData.update((d) => d);
 }
 
@@ -224,20 +150,6 @@ export function syncChapterSegsToAll(): void {
             ...other.slice(insertIdx),
         ];
     }
-    // Structural reindex changed THIS chapter only — drop just its entries.
-    if (_cachedRef === all) {
-        const prefix = `${chapter}:`;
-        for (const key of _byChapterIndex.keys()) {
-            if (key.startsWith(prefix)) _byChapterIndex.delete(key);
-        }
-        const sorted = [...updated].sort((a, b) => a.index - b.index);
-        _byChapter[String(chapter)] = sorted;
-        for (const s of updated) {
-            if (s.chapter != null) _byChapterIndex.set(`${s.chapter}:${s.index}`, s);
-        }
-    } else {
-        _resetCache();
-    }
 }
 
 /** Read the current chapter's segments from segData or segAllData. */
@@ -247,7 +159,8 @@ export function getCurrentChapterSegs(): Segment[] {
     const ch = parseInt(get(selectedChapter));
     if (!ch) return [];
     const all = get(segAllData);
-    return all?.segments.filter((s) => s.chapter === ch) ?? [];
+    if (!all?.segments) return [];
+    return _sliceChapter(all.segments, ch);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,8 +173,7 @@ export const currentChapterSegments = derived(
     [segAllData, selectedChapter],
     ([$all, $ch]) => {
         if (!$all || !$ch) return [];
-        _buildIndex($all);
-        return _byChapter[$ch] ?? [];
+        return _sliceChapter($all.segments, $ch);
     },
 );
 

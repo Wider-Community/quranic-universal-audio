@@ -9,7 +9,6 @@ from tests.conftest import PER_SEGMENT_CATEGORIES, AUTO_SUPPRESS_CATEGORIES
 
 
 @pytest.mark.parametrize("category", PER_SEGMENT_CATEGORIES, ids=PER_SEGMENT_CATEGORIES)
-@pytest.mark.xfail(reason="phase-3", strict=False)
 def test_edit_from_card_records_suppression_per_registry(
     category, flask_client, tmp_reciter_dir, load_fixture
 ):

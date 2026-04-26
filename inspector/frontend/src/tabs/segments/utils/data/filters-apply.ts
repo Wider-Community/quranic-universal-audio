@@ -18,8 +18,6 @@ import { resetHighlightRefs } from '../playback/playback';
 
 // Re-export shared helpers so existing import sites keep working.
 export {
-    computeSilenceAfter,
-    recomputeSilenceForRange,
     segDerivedProps,
 } from '../../stores/filters';
 export type { SegDerivedProps } from '../../stores/filters';

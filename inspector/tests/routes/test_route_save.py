@@ -79,6 +79,7 @@ def test_save_includes_patch_field_in_history(flask_client, tmp_reciter_dir):
                 "op_id": "op-1",
                 "type": "delete",
                 "segment_uid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5",
+                "command": {"type": "delete", "segmentUid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"},
                 # Note: NO patch field — Phase 5 backend must synthesize.
             },
         ],
@@ -96,7 +97,6 @@ def test_save_includes_patch_field_in_history(flask_client, tmp_reciter_dir):
     assert "patch" in op, "Phase 5: every history op must carry a patch field"
 
 
-@pytest.mark.xfail(reason="phase-3", strict=False)
 def test_save_payload_is_correctly_built_from_command_results(flask_client, tmp_reciter_dir):
     """Phase 3: save handler validates CommandResult-shaped payloads via schema.
 

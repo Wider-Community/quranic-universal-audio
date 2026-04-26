@@ -25,7 +25,6 @@ def _payload_with_command(op_type: str, chapter: int) -> dict:
 
 
 @pytest.mark.parametrize("op_type", OP_TYPES, ids=OP_TYPES)
-@pytest.mark.xfail(reason="phase-3", strict=False)
 def test_command_save_round_trip(op_type, flask_client, tmp_reciter_dir):
     """Save handler rejects ops whose ``command.type`` does not match ``op.type``.
 

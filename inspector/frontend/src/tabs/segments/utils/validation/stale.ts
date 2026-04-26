@@ -6,6 +6,16 @@
  * considered stale and must not be rendered. Issues that carry no
  * `segment_uid` (legacy seg_index path) are kept so the fallback
  * resolution path in `resolve-issue.ts` can still handle them.
+ *
+ * Mid-load race: validation responses are fetched in parallel with
+ * ``segAllData`` (see ``reciter-actions.ts:reloadCurrentReciter``).
+ * In the brief window where validation has resolved but ``segAllData``
+ * has not, ``liveUids`` is empty and every uid-bearing issue is dropped.
+ * Today both fetches share the same `await Promise.allSettled` boundary
+ * so the panel never renders during the gap; if lazy chapter loading
+ * (per-chapter ``segAllData`` instead of full corpus) is added later,
+ * this filter would need to wait for the relevant chapter's uids
+ * before deciding. Tracked as B-5 in ``.refactor/bug-log.md``.
  */
 
 import type { SegValAnyItem } from '../../../../lib/types/api';
@@ -25,7 +35,12 @@ export function filterStaleIssues(
 ): SegValAnyItem[] {
     return issues.filter((issue) => {
         const uid = (issue as { segment_uid?: string | null }).segment_uid;
-        if (uid == null) return true;
+        // Defense-in-depth: an empty-string uid is treated like a missing
+        // one. Production payloads never carry it (the backend canonicalizes
+        // ``""`` → ``None`` on serialize), so this branch is unreachable
+        // today; the explicit guard avoids a silent drop if a future loader
+        // ships through a stray empty string.
+        if (uid == null || uid === '') return true;
         return liveUids.has(uid);
     });
 }

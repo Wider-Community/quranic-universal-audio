@@ -65,26 +65,19 @@ interface SegmentTiming {
     silence_after_raw_ms: number | null;
 }
 
-/** Pure adjacency timing computation: consumes a segments list + ``pad_ms`` and
- *  returns ``(silence_after_ms, silence_after_raw_ms)`` for the slice
- *  ``segs[lo..=hi]`` (inclusive bounds).  ``onResult`` is called once per
- *  segment in range with its position and computed timing.
- *
- *  Pure: does not read or write Svelte stores; does not mutate inputs.
- *  Used by ``derivedTimings`` (collects results into a Map keyed by uid) and
- *  by ``computeSilenceAfter`` / ``recomputeSilenceForRange`` (writes results
- *  in place onto each segment so render-path consumers reading
- *  ``seg.silence_after_ms`` directly observe the same values). */
-function _walkSilenceRange(
-    segs: Segment[],
-    pad: number,
-    lo: number,
-    hi: number,
-    onResult: (i: number, seg: Segment, t: SegmentTiming) => void,
-): void {
-    for (let i = lo; i <= hi; i++) {
+/** Per-uid silence timing derived from segment adjacency within each entry.
+ *  Maps ``segment_uid`` → ``{ silence_after_ms, silence_after_raw_ms }``.
+ *  Single source of truth for the silence computation; render-path consumers
+ *  read from this map via the store, and filter logic reads from it via
+ *  ``segDerivedProps``. */
+export const derivedTimings = derived(segAllData, ($all) => {
+    const timings = new Map<string, SegmentTiming>();
+    if (!$all) return timings;
+    const segs = $all.segments;
+    const pad = $all.pad_ms ?? 0;
+    for (let i = 0; i < segs.length; i++) {
         const cur = segs[i];
-        if (!cur) continue;
+        if (!cur || !cur.segment_uid) continue;
         const next = segs[i + 1];
         const sameEntry = !!next && cur.audio_url === next.audio_url
                                && cur.entry_idx === next.entry_idx;
@@ -94,22 +87,8 @@ function _walkSilenceRange(
                 silence_after_raw_ms: next.time_start - cur.time_end,
             }
             : { silence_after_ms: null, silence_after_raw_ms: null };
-        onResult(i, cur, t);
+        timings.set(cur.segment_uid, t);
     }
-}
-
-/** Per-uid silence timing derived from segment adjacency within each entry.
- *  Maps ``segment_uid`` → ``{ silence_after_ms, silence_after_raw_ms }``.
- *  Single source of truth for the silence computation — ``computeSilenceAfter``
- *  and ``recomputeSilenceForRange`` use the same ``_walkSilenceRange`` helper
- *  so both the derived view and the in-place fields stay aligned. */
-export const derivedTimings = derived(segAllData, ($all) => {
-    const timings = new Map<string, SegmentTiming>();
-    if (!$all) return timings;
-    const segs = $all.segments;
-    _walkSilenceRange(segs, $all.pad_ms ?? 0, 0, segs.length - 1, (_i, seg, t) => {
-        if (seg.segment_uid) timings.set(seg.segment_uid, t);
-    });
     return timings;
 });
 
@@ -132,7 +111,9 @@ export function segDerivedProps(seg: SegWithDerived): SegDerivedProps {
     const p = parseSegRef(seg.matched_ref);
     const num_verses = p ? p.ayah_to - p.ayah_from + 1 : 0;
     const confidence_pct = (seg.confidence || 0) * 100;
-    const silence_after_ms = seg.silence_after_ms;
+    const silence_after_ms = seg.segment_uid
+        ? get(derivedTimings).get(seg.segment_uid)?.silence_after_ms ?? null
+        : null;
     seg._derived = { duration_s, num_words, num_verses, confidence_pct, silence_after_ms };
     return seg._derived;
 }
@@ -147,64 +128,6 @@ function _compareFilter(actual: number | null | undefined, op: string, value: nu
         case '=':  return actual === value;
         default:   return true;
     }
-}
-
-/** Mutate `segAllData.segments` in-place with silence-after-ms fields.
- *
- *  Render-path consumers (``SegmentsList.svelte`` template) read
- *  ``seg.silence_after_ms`` directly off each segment.  The in-place fields
- *  are computed via the same ``_walkSilenceRange`` helper that powers
- *  ``derivedTimings`` so the two views stay in lockstep. */
-export function computeSilenceAfter(): void {
-    const all = get(segAllData);
-    if (!all) return;
-    const segs = all.segments;
-    _walkSilenceRange(segs, all.pad_ms ?? 0, 0, segs.length - 1, (_i, seg, t) => {
-        seg.silence_after_ms = t.silence_after_ms;
-        seg.silence_after_raw_ms = t.silence_after_raw_ms;
-    });
-}
-
-/**
- * Targeted silence recompute for a small edited window — O(k) not O(n).
- *
- * Updates silence_after_ms/silence_after_raw_ms for the affected segments and
- * their immediate outer neighbours (prev of first, next of last). The caller
- * passes the post-mutation result segments; this function locates them in
- * `segAllData.segments` by identity and expands the window by ±1 to cover
- * neighbour relationships that changed due to the edit.
- *
- * Falls back to the full `computeSilenceAfter()` when `affectedSegs` is empty
- * (delete path) or when none of the segments can be found in the global array.
- */
-export function recomputeSilenceForRange(affectedSegs: Segment[]): void {
-    const all = get(segAllData);
-    if (!all) return;
-    const segs = all.segments;
-    if (affectedSegs.length === 0) {
-        // Delete removed the segment; the gap between its neighbours changed —
-        // full scan is the safe fallback for this uncommon op.
-        computeSilenceAfter();
-        return;
-    }
-
-    // Find global indices of the first and last affected segment by identity.
-    const firstGlobal = segs.indexOf(affectedSegs[0]!);
-    const lastGlobal  = segs.indexOf(affectedSegs[affectedSegs.length - 1]!);
-    if (firstGlobal === -1 || lastGlobal === -1) {
-        // Segments not found (shouldn't happen, but be safe).
-        computeSilenceAfter();
-        return;
-    }
-
-    // Expand window by 1 on each side to capture neighbour relationships.
-    const lo = Math.max(0, firstGlobal - 1);
-    const hi = Math.min(segs.length - 1, lastGlobal + 1);
-
-    _walkSilenceRange(segs, all.pad_ms ?? 0, lo, hi, (_i, seg, t) => {
-        seg.silence_after_ms = t.silence_after_ms;
-        seg.silence_after_raw_ms = t.silence_after_raw_ms;
-    });
 }
 
 // ---------------------------------------------------------------------------
@@ -318,9 +241,10 @@ export function computeDisplayed(
                         groups.push(group);
                     }
                 }
-                groups.sort((a, b) =>
-                    ((a[0]?.silence_after_ms ?? Infinity) - (b[0]?.silence_after_ms ?? Infinity)),
-                );
+                const timings = get(derivedTimings);
+                const _silenceFor = (s: Segment | undefined): number =>
+                    (s?.segment_uid && timings.get(s.segment_uid)?.silence_after_ms) ?? Infinity;
+                groups.sort((a, b) => _silenceFor(a[0]) - _silenceFor(b[0]));
                 segs = groups.flat();
                 _neighbourMemo = { segsRef: preFilterSegs, filtersKey: neighbourFiltersKey, result: segs, neighbourSet };
             }

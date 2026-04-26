@@ -15,16 +15,41 @@ ID prefix: `B`
 | B-1 | Frontend repetitions classifier extends `wrap_word_ranges` with `has_repeated_words` | 2 | RESOLVED-fix-3a5dca8 |
 | B-2 | `boundary_adj` phoneme tail check is backend-only | 2 | RESOLVED-fix-3a5dca8 |
 | B-3 | `audio_bleeding` algorithm differs across 3 stacks | 2 | RESOLVED-fix-3a5dca8 |
-| B-4 | Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope | 3 | DEFERRED |
+| B-4 | Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope | 3 | RESOLVED-fix-PHASE7SHA |
+| B-5 | Validation-panel mid-load race: empty `liveUids` while `segAllData` is loading | 7 | OPEN-LOW-PRIORITY |
 
 ---
 
 ## Section 2 — Active
 
+### B-5 — Validation-panel mid-load race: empty `liveUids` while `segAllData` is loading
+
+**Surfaced in:** Phase 7 (Opus finding from Phase 6 review)
+**Status:** OPEN-LOW-PRIORITY
+
+**Symptom**
+- ``filterStaleIssues`` (``inspector/frontend/src/tabs/segments/utils/validation/stale.ts``) drops every issue whose ``segment_uid`` is not in ``liveUids``. The set is built from ``$segAllData.segments`` in ``ValidationPanel.svelte``.
+- During the brief window where the validation response has resolved but ``segAllData`` has not, ``liveUids`` is empty and every uid-bearing issue would be filtered out.
+
+**Root cause**
+- Validation and ``segAllData`` are fetched in parallel inside ``reloadCurrentReciter`` (``utils/data/reciter-actions.ts``). Both share the same ``await Promise.allSettled`` boundary, so the panel doesn't render between the two resolutions in the current code path.
+- The race is reachable only if a future change splits the two fetches (e.g. lazy per-chapter ``segAllData`` loading) so the validation response can land while ``liveUids`` is still empty.
+
+**Fix**
+- Documented inline in ``utils/validation/stale.ts`` (module docstring) and via this entry. No production code change today — the panel never renders during the empty-uids gap because both fetches resolve together.
+- If lazy chapter loading is added later, the filter must consult a per-chapter uid set or wait for the relevant chapter's uids before filtering.
+
+**Test coverage**
+- None today (race is unreachable in the current load path). A regression test would gate-add when lazy loading lands.
+
+---
+
+## Section 3 — Resolved
+
 ### B-4 — Phase 3 backend pytest markers require route-level changes that fall outside Phase 3 scope
 
 **Surfaced in:** Phase 3
-**Status:** DEFERRED
+**Status:** RESOLVED-fix-PHASE7SHA
 
 **Symptom**
 - Four pytest files retain `@pytest.mark.xfail(reason="phase-3", strict=False)` markers after Phase 3 lands:
@@ -39,41 +64,40 @@ ID prefix: `B`
   - Schema validation on the new `command` envelope.
   - Registry-driven write of `ignored_categories` from the SAVE handler (rather than from the payload as today).
   - Strict rejection of malformed `command` shapes.
-- Plan §Invariants pins MUST-1 (HTTP routes additive). The Phase 3 dispatch
-  brief restates: "Phase 3 should NOT change route shapes (no `services/`
-  or `routes/` touches)" and "If you find that the save endpoint requires
-  a change to accept the new op-record shape, surface it as a SCOPE
-  EXPANSION REQUEST (S4)."
-- The frontend `applyCommand` reducer now produces operations with `type`,
-  `kind`, `snapshots`, `targetSegmentIndex` fields, plus the existing
-  `op_id`, `op_type`, `targets_before`, `targets_after`. Save-route
-  acceptance is unchanged; the new fields ride along as additive shape.
-  The route does not yet validate the `command` envelope, look up the
-  registry to filter `ignored_categories` writes, or reject malformed
-  payloads — those changes belong in a route-validation phase (Phase 4
-  adapters or a dedicated 3.5 scope expansion).
+- The Phase 3 dispatch brief restated MUST-1 (HTTP routes additive only) and explicitly fenced the SAVE route off from Phase 3 scope. The route did not yet validate the `command` envelope, look up the registry to filter `ignored_categories` writes, or reject malformed payloads.
 
 **Fix**
-- DEFERRED. Frontend Phase 3 work is complete. Backend route-validation
-  changes are out-of-scope; surface as scope expansion if/when the
-  orchestrator decides the SAVE handler should validate the `command`
-  envelope.
-- Route-additive properties (MUST-1) are preserved: the new fields on
-  operations are accepted and round-tripped through the history record
-  without rejection. `test_save_payload_carries_op_log_in_canonical_shape`
-  (which only verifies round-trip persistence) xpassed pre-Phase-3 and
-  cleanly passes post-Phase-3 with its marker removed.
+- Phase 7 added two helpers in ``inspector/services/save.py``:
+  - ``_validate_command_envelopes(operations)`` rejects (HTTP 400) any op
+    that declares a ``type`` discriminator without a matching ``command``
+    envelope, with a known string ``command.type`` from the allowed set
+    (``trim``/``split``/``merge``/``delete`` and the snake- and camelCase
+    variants of ``edit_reference``/``ignore_issue``/``auto_fix_missing_word``).
+  - ``_apply_registry_auto_suppress(matching, operations, explicit_ic_uids)``
+    runs after ``_apply_full_replace`` / ``_apply_patch`` and before
+    persistence. For each op carrying ``command.sourceCategory``, it calls
+    the registry's ``apply_auto_suppress`` against the targeted segment
+    when the payload omitted ``ignored_categories`` for that uid (MUST-7
+    compliance). The result is then re-filtered through
+    ``filter_persistent_ignores`` so non-persistent categories don't bleed
+    through to disk.
+- Pre-existing fixtures in ``test_route_save.py`` (Phase 5 patch-synth test) and
+  the Phase 5 patch tests (``test_route_undo.py``, ``test_route_history.py``,
+  ``test_patch_undo.py``) gained a ``command`` envelope to comply with the new
+  contract — assertion behavior unchanged, only fixture shape.
+- All 4 ``phase-3`` xfail decorators removed; total xfail count now 0.
+
+**Resolution**
+- PHASE7SHA
 
 **Test coverage**
-- Frontend tests under `inspector/frontend/src/tabs/segments/__tests__/command/`
-  cover the `applyCommand` reducer, command shapes, and auto-suppress
-  behavior end-to-end. 61 tests pass; 0 phase-3 vitest markers remain.
-- Backend round-trip persistence is covered by the unmarked
-  `test_save_payload_carries_op_log_in_canonical_shape`.
+- ``inspector/tests/command/test_apply_command.py::test_history_record_reflects_command_result_metadata`` — HTTP 400 on missing ``command`` envelope.
+- ``inspector/tests/command/test_command_per_op.py::test_command_save_round_trip`` — HTTP 400 on ``command.type != op.type`` mismatch (parametrized over 6 op types).
+- ``inspector/tests/routes/test_route_save.py::test_save_payload_is_correctly_built_from_command_results`` — HTTP 400 on unknown ``command.type`` value.
+- ``inspector/tests/command/test_auto_suppress.py::test_edit_from_card_records_suppression_per_registry`` — registry-driven ``ignored_categories`` write, parametrized over all per-segment categories. Negative assertions for ``failed`` / ``muqattaat`` confirm non-persistent / non-auto-suppress categories are NOT written.
+- ``inspector/tests/persistence/test_save_clears_ignores.py`` (existing, unchanged) verifies MUST-7 — explicit ``[]`` continues to clear.
 
 ---
-
-## Section 3 — Resolved
 
 ### B-1 — Frontend repetitions classifier extends `wrap_word_ranges` with `has_repeated_words`
 

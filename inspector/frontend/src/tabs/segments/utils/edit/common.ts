@@ -23,7 +23,7 @@ import {
     editingSegUid,
 } from '../../stores/edit';
 import { segAudioElement } from '../../stores/playback';
-import { applyVerseFilterAndRender, recomputeSilenceForRange } from '../data/filters-apply';
+import { applyVerseFilterAndRender } from '../data/filters-apply';
 import {
     _playRange as _playRangeImpl,
     clearPlayRangeRAF,
@@ -102,9 +102,11 @@ export const _playRange = _playRangeImpl;
  * Finalize an edit op and refresh the UI after a segment mutation.
  *
  * Stamps the op (applied_at + targets_after), appends it to the chapter op
- * log via `finalizeOp` (which also clears the pending-op ref), recomputes
- * silence gaps, re-renders the filtered list, refreshes open accordion
- * cards, and publishes the completion status message.
+ * log via `finalizeOp` (which also clears the pending-op ref), re-renders
+ * the filtered list, and publishes the completion status message.  Silence
+ * gaps are derived from ``derivedTimings`` (a Svelte derived store over
+ * ``segAllData``) so they refresh automatically when the store update
+ * fires; no explicit recompute call is required here.
  *
  * Callers still own `markDirty` (timing varies) and whichever exit path
  * they need (`clearEdit` for merge/delete, `exitEditMode` for trim/split
@@ -123,7 +125,9 @@ export function finalizeEdit(
 ): void {
     op.applied_at_utc = new Date().toISOString();
     op.targets_after = targetsAfter.map(snapshotSeg);
-    if (!opts?.skipSilence) recomputeSilenceForRange(targetsAfter);
+    // skipSilence is retained on the type for call-site compatibility; the
+    // derivedTimings store reactively refreshes from segAllData on its own.
+    void opts?.skipSilence;
     if (!opts?.skipFilterRender) applyVerseFilterAndRender();
     finalizeOp(chapter, op);
 }

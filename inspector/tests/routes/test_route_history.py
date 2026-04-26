@@ -31,7 +31,7 @@ def test_history_record_includes_classified_issues_on_snapshots(flask_client, tm
 
     save = flask_client.post(
         f"/api/seg/save/{reciter}/112",
-        data=json.dumps({"full_replace": True, "segments": [], "operations": [{"op_id": "op-1", "type": "edit_reference", "snapshots": {"before": {}, "after": {}}}]}),
+        data=json.dumps({"full_replace": True, "segments": [], "operations": [{"op_id": "op-1", "type": "edit_reference", "command": {"type": "edit_reference", "segmentUid": "x"}, "snapshots": {"before": {}, "after": {}}}]}),
         content_type="application/json",
     )
     assert save.status_code == 200
