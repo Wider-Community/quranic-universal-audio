@@ -16,11 +16,13 @@ const baseState = () => ({
 
 describe.skipIf(!applyCommand)('command/auto-suppress', () => {
   for (const cat of CAN_IGNORE_CATEGORIES) {
-    it(`for category ${cat} with auto_suppress=Y, edit-from-card adds C to seg.ignored_categories`, () => {
+    it(`for category ${cat} with auto_suppress=Y, an edit dispatched with sourceCategory adds C to seg.ignored_categories`, () => {
       const r = applyCommand(baseState(), {
-        type: 'editFromCard',
+        type: 'editReference',
         segmentUid: 'uid-as',
-        category: cat,
+        matched_ref: '1:1:1-1:1:1',
+        matched_text: 'x',
+        sourceCategory: cat,
       } as any);
       const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
       if (AUTO_SUPPRESS_CATEGORIES.includes(cat as any)) {
@@ -31,8 +33,14 @@ describe.skipIf(!applyCommand)('command/auto-suppress', () => {
     });
   }
 
-  it('for category C with auto_suppress=N, edit-from-card does not add C', () => {
-    const r = applyCommand(baseState(), { type: 'editFromCard', segmentUid: 'uid-as', category: 'muqattaat' } as any);
+  it('for category C with auto_suppress=N, an edit dispatched with sourceCategory does not add C', () => {
+    const r = applyCommand(baseState(), {
+      type: 'editReference',
+      segmentUid: 'uid-as',
+      matched_ref: '1:1:1-1:1:1',
+      matched_text: 'x',
+      sourceCategory: 'muqattaat',
+    } as any);
     const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
     expect((updated.ignored_categories ?? [])).not.toContain('muqattaat');
   });

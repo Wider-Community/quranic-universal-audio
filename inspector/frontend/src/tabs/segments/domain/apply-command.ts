@@ -25,7 +25,6 @@ import type {
     CommandOperation,
     CommandResult,
     DeleteCommand,
-    EditFromCardCommand,
     EditReferenceCommand,
     IgnoreIssueCommand,
     MergeCommand,
@@ -54,7 +53,6 @@ const OP_TYPE_BY_COMMAND: Readonly<Record<Operation, string>> = Object.freeze({
     delete: 'delete_segment',
     ignoreIssue: 'ignore_issue',
     autoFixMissingWord: 'auto_fix_missing_word',
-    editFromCard: 'edit_from_card',
 });
 
 const STRUCTURAL_COMMANDS: ReadonlySet<Operation> = new Set([
@@ -292,13 +290,9 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
         display_text: cmd.mergedDisplayText ?? [first.display_text, second.display_text].filter(Boolean).join(' '),
         confidence: 1.0,
     };
+    merged.ignored_categories = mergedIc.size ? [...mergedIc] : undefined;
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
-    if (ctxCat) {
-        const defn = IssueRegistry[ctxCat];
-        if (defn?.autoSuppress && defn.scope === 'per_segment') mergedIc.add(ctxCat);
-    }
-    if (mergedIc.size) merged.ignored_categories = [...mergedIc];
-    else merged.ignored_categories = undefined;
+    const resolved = _maybeAutoSuppress(merged, ctxCat, 'card');
 
     const op = _baseOperation(cmd, first, chapter, first.index, ctx);
     op.snapshots.before = [_snapshot(first), _snapshot(second)];
@@ -329,7 +323,7 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
         nextState,
         operation: op,
         affectedChapters: [chapter],
-        validationDelta: { resolved: ctxCat ? [ctxCat] : [], introduced: [] },
+        validationDelta: { resolved, introduced: [] },
         patch: _emptyPatch([chapter]),
     };
 }
@@ -361,6 +355,10 @@ function _reduceEditReference(
     const resolved = _maybeAutoSuppress(next, cmd.sourceCategory ?? cmd.contextCategory, 'card');
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
+    if (cmd.opType === 'confirm_reference') {
+        op.op_type = 'confirm_reference';
+        op.fix_kind = cmd.fixKind ?? 'audit';
+    }
     op.snapshots.before = [_snapshot(target)];
     op.snapshots.after = [_snapshot(next)];
     op.targets_before = op.snapshots.before;
@@ -487,39 +485,6 @@ function _reduceAutoFixMissingWord(
     };
 }
 
-function _reduceEditFromCard(
-    state: ApplyCommandState,
-    cmd: EditFromCardCommand,
-    ctx?: ApplyCommandContext,
-): CommandResult {
-    const target = _findSeg(state, cmd.segmentUid);
-    if (!target) throw new Error(`applyCommand[editFromCard]: segment '${cmd.segmentUid}' not found`);
-    const chapter = _chapterFor(target, state);
-
-    const next = _cloneSeg(target);
-    const resolved = _maybeAutoSuppress(next, cmd.category, 'card');
-
-    const op = _baseOperation(cmd, target, chapter, target.index, ctx);
-    op.op_context_category = cmd.category;
-    op.snapshots.before = [_snapshot(target)];
-    op.snapshots.after = [_snapshot(next)];
-    op.targets_before = op.snapshots.before;
-    op.targets_after = op.snapshots.after;
-    op.affected_chapters = [chapter];
-
-    const nextState: CommandNextState = {
-        byId: { [next.segment_uid ?? cmd.segmentUid]: next },
-        affectedChapter: chapter,
-    };
-    return {
-        nextState,
-        operation: op,
-        affectedChapters: [chapter],
-        validationDelta: { resolved, introduced: [] },
-        patch: _emptyPatch([chapter]),
-    };
-}
-
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -544,8 +509,6 @@ export function applyCommand(
             return _reduceIgnoreIssue(state, command, ctx);
         case 'autoFixMissingWord':
             return _reduceAutoFixMissingWord(state, command, ctx);
-        case 'editFromCard':
-            return _reduceEditFromCard(state, command, ctx);
         default: {
             const _exhaustive: never = command;
             throw new Error(`applyCommand: unsupported command type ${(_exhaustive as { type: string }).type}`);

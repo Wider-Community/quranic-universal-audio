@@ -19,7 +19,6 @@ import {
 import {
     getPendingOp,
     markDirty,
-    setPendingOp,
 } from '../../stores/dirty';
 import {
     editCanvas,
@@ -36,7 +35,6 @@ import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigatio
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { applyCommand } from '../../domain/apply-command';
-import { IssueRegistry } from '../../domain/registry';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts } from '../data/references';
 import {
@@ -297,85 +295,70 @@ export async function confirmSplit(
     // refresh the active pair if the playing seg's index shifts due to reindex.
     const prePlayingUid = seg.segment_uid ?? null;
 
-    // UID preservation: firstHalf inherits the parent's UID so accordion twins
-    // (keyed by UID) stay bound; secondHalf gets a fresh one. Deep-copy the
-    // ignored_categories array on both halves so later mutations (e.g. Ignore
-    // button on one half) don't alias and bleed into the other.
-    const firstHalf: Segment = {
-        ...seg,
-        segment_uid: seg.segment_uid,
-        time_end: splitTime,
-        ignored_categories: [...(seg.ignored_categories || [])],
-    };
-    const secondHalf: Segment = {
-        ...seg,
-        segment_uid: crypto.randomUUID(),
-        index: seg.index + 1,
-        time_start: splitTime,
-        ignored_categories: [...(seg.ignored_categories || [])],
-    };
     const splitOp = getPendingOp();
-    const ctxCat = splitOp?.op_context_category;
-    if (ctxCat) {
-        // Mirror the registry's per-segment auto-suppress rule onto both
-        // halves through the command reducer. `editFromCard` is the
-        // appropriate surrogate: the resolved-refs flow above already
-        // mutated time / matched_text on each half; the reducer's job
-        // here is solely to record the suppression on `ignored_categories`.
-        const defn = IssueRegistry[ctxCat];
-        if (defn?.autoSuppress && defn.scope === 'per_segment') {
-            for (const half of [firstHalf, secondHalf]) {
-                const halfUid = half.segment_uid;
-                if (!halfUid) continue;
-                const r = applyCommand(
-                    {
-                        byId: { [halfUid]: half },
-                        idsByChapter: { [chapter]: [halfUid] },
-                        selectedChapter: chapter,
-                    },
-                    { type: 'editFromCard', segmentUid: halfUid, category: ctxCat },
-                );
-                const updated = r.nextState.byId[halfUid];
-                if (updated?.ignored_categories) {
-                    half.ignored_categories = [...updated.ignored_categories];
-                }
-            }
-        }
-    }
+    const ctxCat = splitOp?.op_context_category ?? null;
+    const uid = seg.segment_uid;
+    if (!uid) return;
 
-    // Auto-suggest per-verse refs for cross-verse splits.
-    //
-    // Invariant: `matched_ref` and `matched_text` / `display_text` MUST be
-    // updated together. If resolve_ref fails for a half, we clear the text
-    // fields instead of leaving them to inherit the pre-split cross-verse
-    // text via the `...seg` spread — otherwise the row would render the new
-    // (per-verse) ref with the original cross-verse body text, which is the
-    // exact kind of divergence we're trying to eliminate.
+    // Async ref resolution at the edge: cross-verse splits get per-verse
+    // refs auto-suggested. Resolved text lives on the command so the reducer
+    // produces halves with matching ref+text in one atomic step. Failed
+    // resolves yield empty text fields — never inherited cross-verse text.
     const suggested = _suggestSplitRefs(seg.matched_ref);
+    let firstRef: string | undefined;
+    let secondRef: string | undefined;
+    let firstText: string | undefined;
+    let firstDisplay: string | undefined;
+    let secondText: string | undefined;
+    let secondDisplay: string | undefined;
     if (suggested) {
-        firstHalf.matched_ref = suggested.first;
-        secondHalf.matched_ref = suggested.second;
+        firstRef = suggested.first;
+        secondRef = suggested.second;
         const [r1, r2] = await Promise.allSettled([
             fetchJsonOrNull<SegResolveRefResponse>(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.first)}`),
             fetchJsonOrNull<SegResolveRefResponse>(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.second)}`),
         ]);
         if (r1.status === 'fulfilled' && r1.value?.text) {
-            firstHalf.matched_text = r1.value.text;
-            firstHalf.display_text = r1.value.display_text || r1.value.text;
+            firstText = r1.value.text;
+            firstDisplay = r1.value.display_text || r1.value.text;
         } else {
-            firstHalf.matched_text = '';
-            firstHalf.display_text = '';
+            firstText = '';
+            firstDisplay = '';
         }
         if (r2.status === 'fulfilled' && r2.value?.text) {
-            secondHalf.matched_text = r2.value.text;
-            secondHalf.display_text = r2.value.display_text || r2.value.text;
+            secondText = r2.value.text;
+            secondDisplay = r2.value.display_text || r2.value.text;
         } else {
-            secondHalf.matched_text = '';
-            secondHalf.display_text = '';
+            secondText = '';
+            secondDisplay = '';
         }
     }
 
-    setPendingOp(null);
+    const secondHalfUid = crypto.randomUUID();
+    const result = applyCommand(
+        {
+            byId: { [uid]: seg },
+            idsByChapter: { [chapter]: [uid] },
+            selectedChapter: chapter,
+        },
+        {
+            type: 'split',
+            segmentUid: uid,
+            splitMs: splitTime,
+            secondHalfUid,
+            firstRef,
+            secondRef,
+            firstText,
+            firstDisplayText: firstDisplay,
+            secondText,
+            secondDisplayText: secondDisplay,
+            sourceCategory: ctxCat ?? undefined,
+            contextCategory: ctxCat ?? undefined,
+        },
+    );
+    const firstHalf = result.nextState.byId[uid] as Segment;
+    const secondHalf = result.nextState.byId[secondHalfUid] as Segment;
+    if (!firstHalf || !secondHalf) return;
 
     if (useSegData && curData) {
         const segIdx = curData.segments.findIndex(s => s.index === seg.index);
@@ -408,11 +391,9 @@ export async function confirmSplit(
     _fixupValIndicesForSplit(chapter, seg.index);
 
     exitEditMode();
-    if (splitOp) {
-        finalizeEdit(splitOp, chapter, [firstHalf, secondHalf]);
-    }
+    finalizeEdit(result.operation, chapter, [firstHalf, secondHalf]);
 
-    const chainCat = splitOp?.op_context_category || null;
+    const chainCat = ctxCat;
 
     // Scroll to the first half via the store-driven path. The main-list
     // SegmentRow reactive (`instanceRole === 'main'`) observes

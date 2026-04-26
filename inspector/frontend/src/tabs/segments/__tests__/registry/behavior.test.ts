@@ -30,7 +30,13 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
       const seg = makeSegment(0, 0, 1000, { segment_uid: `uid-${cat}` });
       const result = acMod.applyCommand(
         { byId: { [`uid-${cat}`]: seg }, idsByChapter: { 1: [`uid-${cat}`] }, selectedChapter: 1 },
-        { type: 'editFromCard', segmentUid: `uid-${cat}`, category: cat } as any,
+        {
+          type: 'editReference',
+          segmentUid: `uid-${cat}`,
+          matched_ref: '1:1:1-1:1:1',
+          matched_text: 'x',
+          sourceCategory: cat,
+        } as any,
       );
       const row = registry[cat];
       expect(result.operation).toBeTruthy();

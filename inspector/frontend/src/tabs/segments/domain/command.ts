@@ -30,8 +30,7 @@ export type Operation =
     | 'editReference'
     | 'delete'
     | 'ignoreIssue'
-    | 'autoFixMissingWord'
-    | 'editFromCard';
+    | 'autoFixMissingWord';
 
 // ---------------------------------------------------------------------------
 // Command shapes
@@ -73,7 +72,9 @@ export interface SplitCommand extends CommandBase {
 
 export interface MergeCommand extends CommandBase {
     type: 'merge';
-    /** Adjacent pair: kept side (`toUid`) inherits the merged segment. */
+    /** Adjacent pair. The reducer determines the kept side by chapter order
+     *  (the earlier seg's UID is preserved on the merged result). Either UID
+     *  may be passed as `fromUid` or `toUid` — order isn't load-bearing. */
     fromUid: string;
     toUid: string;
     /** Resolved merged values from the dispatcher edge. */
@@ -90,6 +91,10 @@ export interface EditReferenceCommand extends CommandBase {
     matched_ref: string;
     matched_text?: string;
     display_text?: string;
+    /** Wire-level op_type to record. Defaults to 'edit_reference'; the
+     *  dispatcher passes 'confirm_reference' when the user confirmed an
+     *  unchanged ref to clear an audit/low-confidence flag. */
+    opType?: 'edit_reference' | 'confirm_reference';
 }
 
 export interface DeleteCommand extends CommandBase {
@@ -112,20 +117,6 @@ export interface AutoFixMissingWordCommand extends CommandBase {
     display_text?: string;
 }
 
-/**
- * Edit-launched-from-an-accordion-card surrogate command.
- *
- * Used by per-segment auto-suppress flows when the launching path doesn't
- * carry a concrete edit (e.g. a card opened the editor, the user closed
- * it without changes, and the registry still wants the category recorded).
- * Mutates only `ignored_categories` per the registry's auto-suppress rule.
- */
-export interface EditFromCardCommand extends CommandBase {
-    type: 'editFromCard';
-    segmentUid: string;
-    category: string;
-}
-
 export type SegmentCommand =
     | TrimCommand
     | SplitCommand
@@ -133,8 +124,7 @@ export type SegmentCommand =
     | EditReferenceCommand
     | DeleteCommand
     | IgnoreIssueCommand
-    | AutoFixMissingWordCommand
-    | EditFromCardCommand;
+    | AutoFixMissingWordCommand;
 
 // ---------------------------------------------------------------------------
 // Result shapes
