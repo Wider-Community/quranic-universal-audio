@@ -1,13 +1,16 @@
-"""Validation engine: 10-category segment validation, chapter validation counts,
+"""Validation engine: 11-category segment validation, chapter validation counts,
 and validation log generation.
 
 No Flask imports -- all functions accept parameters and return plain dicts.
 
 Public API (routes use ``from inspector.services.validation import X``):
 - ``is_ignored_for``
+- ``classify_segment``, ``classify_segment_full``, ``classify_entry``
+- ``classify_snapshot``
 - ``chapter_validation_counts``
 - ``validate_reciter_segments``
 - ``run_validation_log``
+- registry symbols (re-exported)
 """
 
 from __future__ import annotations
@@ -16,23 +19,40 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from config import BOUNDARY_TAIL_K, LOW_CONFIDENCE_THRESHOLD, SHOW_BOUNDARY_PHONEMES, SURAH_INFO_PATH
+from config import LOW_CONFIDENCE_THRESHOLD, SURAH_INFO_PATH
 from constants import VALIDATION_CATEGORIES
 from services import cache
 from services.data_loader import get_word_counts, load_detailed
-from services.phoneme_matching import get_phoneme_tails
 from services.phonemizer_service import get_canonical_phonemes
-from utils.formatting import format_ms
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
-from services.validation._classify import (
+from services.validation.classifier import (
     is_ignored_for,
-    _classify_segment,
+    classify_flags,
+    classify_segment,
+    classify_segment_full,
+    classify_entry,
     _check_boundary_adj,
 )
+from services.validation.snapshot_classifier import classify_snapshot
+from services.validation.detail import _build_detail_lists
 from services.validation._missing import _build_missing_words
 from services.validation._structural import _check_structural_errors
-from services.validation._detail import _build_detail_lists
+from services.validation.registry import (
+    IssueDefinition,
+    IssueRegistry,
+    ALL_CATEGORIES,
+    PER_SEGMENT_CATEGORIES,
+    PER_VERSE_CATEGORIES,
+    PER_CHAPTER_CATEGORIES,
+    CAN_IGNORE_CATEGORIES,
+    AUTO_SUPPRESS_CATEGORIES,
+    PERSISTS_IGNORE_CATEGORIES,
+    apply_auto_suppress,
+    filter_persistent_ignores,
+)
+
+ISSUE_REGISTRY = IssueRegistry
 
 
 def chapter_validation_counts(entries: list, chapter: int, meta: dict,
@@ -75,7 +95,7 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
             except (ValueError, IndexError):
                 continue
 
-            flags = _classify_segment(
+            flags = classify_flags(
                 seg, entry_ref, is_by_ayah,
                 surah, s_ayah, e_ayah, s_word, e_word,
                 single_word_verses, canonical,
@@ -133,8 +153,26 @@ def validate_reciter_segments(reciter: str) -> dict:
     missing_words = _build_missing_words(detail["verse_segments"], word_counts)
     errors, missing_verses, stats = _check_structural_errors(reciter, entries)
 
-    return {
+    # Aggregate counts in registry-declared accordion order. Additive on top
+    # of the per-category arrays; the frontend uses it to render badge totals
+    # and category-summary widgets without walking every detail array.
+    category_counts = {
+        "failed": len(detail["failed"]),
+        "missing_verses": len(missing_verses),
+        "missing_words": len(missing_words),
+        "structural_errors": len(errors),
+        "low_confidence": len(detail["low_confidence"]),
+        "repetitions": len(detail["repetitions"]),
+        "audio_bleeding": len(detail["audio_bleeding"]),
+        "boundary_adj": len(detail["boundary_adj"]),
+        "cross_verse": len(detail["cross_verse"]),
+        "qalqala": len(detail["qalqala"]),
+        "muqattaat": len(detail["muqattaat"]),
+    }
+
+    result = {
         "errors": errors,
+        "structural_errors": errors,  # alias — same list; MUST-1 additive
         "missing_verses": missing_verses,
         "missing_words": missing_words,
         "failed": detail["failed"],
@@ -145,8 +183,10 @@ def validate_reciter_segments(reciter: str) -> dict:
         "repetitions": detail["repetitions"],
         "muqattaat": detail["muqattaat"],
         "qalqala": detail["qalqala"],
+        "category_counts": category_counts,
         "stats": stats,
     }
+    return result
 
 
 def run_validation_log(reciter_dir: Path) -> None:
@@ -168,3 +208,29 @@ def run_validation_log(reciter_dir: Path) -> None:
 
     content = f"Generated: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n" + buf.getvalue()
     report_path.write_text(content, encoding="utf-8")
+
+
+__all__ = [
+    "is_ignored_for",
+    "classify_flags",
+    "classify_segment",
+    "classify_segment_full",
+    "classify_entry",
+    "classify_snapshot",
+    "chapter_validation_counts",
+    "validate_reciter_segments",
+    "run_validation_log",
+    "_build_detail_lists",
+    "IssueDefinition",
+    "IssueRegistry",
+    "ISSUE_REGISTRY",
+    "ALL_CATEGORIES",
+    "PER_SEGMENT_CATEGORIES",
+    "PER_VERSE_CATEGORIES",
+    "PER_CHAPTER_CATEGORIES",
+    "CAN_IGNORE_CATEGORIES",
+    "AUTO_SUPPRESS_CATEGORIES",
+    "PERSISTS_IGNORE_CATEGORIES",
+    "apply_auto_suppress",
+    "filter_persistent_ignores",
+]

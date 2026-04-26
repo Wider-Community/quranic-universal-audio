@@ -1,0 +1,80 @@
+{
+  "_meta": {
+    "created_at": "2026-04-04T00:00:00Z",
+    "asr_model": "fixture",
+    "vad_model": "fixture",
+    "min_silence_ms": 400,
+    "min_speech_ms": 400,
+    "pad_ms": 160,
+    "audio_source": "by_surah/fixture"
+  },
+  "_fixture_meta": {
+    "source": "hand-crafted",
+    "purpose": "Coverage for chapter-level / per-verse categories: missing_verses, missing_words, structural_errors",
+    "redactions": [],
+    "synthetic_injections": [
+      {"index": "entry-1 missing seg covering 1:2", "purpose": "missing_verses — Surah 1 verse 2 has no covering segment"},
+      {"index": "entry-1 seg[1] partial coverage of 1:3", "purpose": "missing_words — verse 1:3 word-range 1..7 only partially covered (words 2..4 omitted)"},
+      {"index": "entry-1 seg[2] malformed matched_ref", "purpose": "structural_errors — matched_ref does not parse"}
+    ],
+    "segments_by_entry": [
+      {
+        "ref": "1",
+        "segments": [
+          {"index": 0, "expected_categories": [], "notes": "Covers 1:1 fully"},
+          {"index": 1, "expected_categories": [], "notes": "Covers 1:3 words 1..1 and 5..7 (split). The verse-coverage check at the chapter level reports words 2..4 as missing — which lands in `missing_words`, not on this segment."},
+          {"index": 2, "expected_categories": ["structural_errors"], "notes": "matched_ref does not parse as N:N:N-N:N:N → structural_errors"},
+          {"index": 3, "expected_categories": [], "notes": "Covers 1:5 normally"}
+        ]
+      }
+    ],
+    "missing_verses_expected": ["1:2", "1:4", "1:6", "1:7"],
+    "missing_words_expected": [
+      {"verse": "1:3", "missing_word_indices": [2, 3, 4]}
+    ]
+  },
+  "entries": [
+    {
+      "ref": "1",
+      "audio": "https://fixture.local/audio/1.mp3",
+      "segments": [
+        {
+          "time_start": 1000,
+          "time_end": 6000,
+          "matched_ref": "1:1:1-1:1:4",
+          "matched_text": "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ",
+          "phonemes_asr": "b i s m i ll a h i rr a ħ m a: n i rr a ħ i: m",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-a000-000000000001"
+        },
+        {
+          "time_start": 7000,
+          "time_end": 11000,
+          "matched_ref": "1:3:1-1:3:1",
+          "matched_text": "ٱلرَّحْمَـٰنِ",
+          "phonemes_asr": "a rr a ħ m a: n i",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-a000-000000000002"
+        },
+        {
+          "time_start": 11500,
+          "time_end": 13000,
+          "matched_ref": "garbage::not-a-ref",
+          "matched_text": "...",
+          "phonemes_asr": "",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-a000-000000000003"
+        },
+        {
+          "time_start": 13500,
+          "time_end": 17000,
+          "matched_ref": "1:5:1-1:5:4",
+          "matched_text": "إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ",
+          "phonemes_asr": "ʔ i jj a: k a n a ʕ b u d u w a ʔ i jj a: k a n a s t a ʕ i: n",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-a000-000000000004"
+        }
+      ]
+    }
+  ]
+}

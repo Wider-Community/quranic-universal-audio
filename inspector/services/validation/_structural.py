@@ -76,18 +76,18 @@ def _check_structural_errors(reciter: str, entries: list[dict]) -> tuple[list, l
             seg_durations.append(t_to - t_from)
 
             if t_from >= t_to:
-                errors.append({"verse_key": verse_key, "chapter": surah, "msg": "time_from >= time_to"})
+                errors.append({"verse_key": verse_key, "chapter": surah, "segment_uid": None, "msg": "time_from >= time_to"})
             if w_from < 1:
-                errors.append({"verse_key": verse_key, "chapter": surah, "msg": "word_from < 1"})
+                errors.append({"verse_key": verse_key, "chapter": surah, "segment_uid": None, "msg": "word_from < 1"})
             if not is_cross and w_to < w_from:
-                errors.append({"verse_key": verse_key, "chapter": surah, "msg": "word_to < word_from"})
+                errors.append({"verse_key": verse_key, "chapter": surah, "segment_uid": None, "msg": "word_to < word_from"})
             elif is_cross and w_to < 1:
-                errors.append({"verse_key": verse_key, "chapter": surah, "msg": "word_to < 1"})
+                errors.append({"verse_key": verse_key, "chapter": surah, "segment_uid": None, "msg": "word_to < 1"})
 
             if idx + 1 < len(segs) and len(segs[idx + 1]) >= 4:
                 next_t_from = segs[idx + 1][2]
                 if next_t_from < t_to:
-                    errors.append({"verse_key": verse_key, "chapter": surah, "msg": "time overlap"})
+                    errors.append({"verse_key": verse_key, "chapter": surah, "segment_uid": None, "msg": "time overlap"})
                 else:
                     true_pause = (next_t_from - t_to) + 2 * pad_ms
                     pause_durations.append(true_pause)
@@ -115,7 +115,7 @@ def _check_structural_errors(reciter: str, entries: list[dict]) -> tuple[list, l
         if surah not in covered_surahs:
             continue
         if (surah, ayah) not in all_verse_keys_in_file:
-            missing_verses.append({"verse_key": f"{surah}:{ayah}", "chapter": surah, "msg": "missing verse"})
+            missing_verses.append({"verse_key": f"{surah}:{ayah}", "chapter": surah, "segment_uid": None, "msg": "missing verse"})
 
     stats = {
         "segments": total_segments,

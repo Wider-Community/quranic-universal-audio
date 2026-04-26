@@ -1,0 +1,30 @@
+{
+  "by_segment_uid": {
+    "019d5c88-1111-7000-a000-000000000001": {
+      "categories": [],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-a000-000000000002": {
+      "categories": [
+        "boundary_adj"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-a000-000000000003": {
+      "categories": [],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-a000-000000000004": {
+      "categories": [],
+      "qalqala_letter": null
+    }
+  },
+  "category_counts": {
+    "boundary_adj": 1
+  },
+  "_meta": {
+    "fixture": "synthetic-structural",
+    "generator": "inspector.tests.parity.snapshot_expected_outputs",
+    "policy": "post-Phase-2 unified classifier"
+  }
+}

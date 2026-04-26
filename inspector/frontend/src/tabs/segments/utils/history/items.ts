@@ -5,7 +5,12 @@ import type {
     SplitChain,
     SplitChainOp,
 } from '../../types/segments';
-import { _deriveOpIssueDelta } from '../validation/classify';
+import { deriveOpIssueDelta, usesStoredClassifiedIssues } from '../validation/classified-issues';
+
+/** Marker re-exported for parity tests that assert the post-Phase-2 helper
+ *  is in place (the history-row delta path reads `classified_issues` from
+ *  saved snapshots; no live classifier call). */
+export { usesStoredClassifiedIssues };
 
 // Re-export for consumers that want these types from a utils path.
 export type { HistorySnapshot, OpFlatItem, SplitChain, SplitChainOp };
@@ -152,7 +157,7 @@ export function itemMatchesOpFilter(item: OpFlatItem, opTypes: Set<string>): boo
 
 export function itemMatchesCatFilter(item: OpFlatItem, cats: Set<string>): boolean {
     for (const op of item.group) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
-    const delta = _deriveOpIssueDelta(item.group);
+    const delta = deriveOpIssueDelta(item.group);
     for (const cat of cats) { if (delta.resolved.includes(cat) || delta.introduced.includes(cat)) return true; }
     return false;
 }

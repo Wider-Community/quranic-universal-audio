@@ -1,0 +1,113 @@
+{
+  "_meta": {
+    "created_at": "2026-04-04T03:41:26Z",
+    "asr_model": "hetchyy/r7",
+    "vad_model": "obadx/recitation-segmenter-v2",
+    "min_silence_ms": 400,
+    "min_speech_ms": 400,
+    "pad_ms": 160,
+    "audio_source": "by_surah/mp3quran"
+  },
+  "_fixture_meta": {
+    "source": "real+synthetic",
+    "origin": "data/recitation_segments/mohammed_siddiq_al_minshawi/detailed.json (Surah 113) plus injected synthetic segments",
+    "redactions": ["entry.audio rewritten to https://fixture.local/audio/<ref>.mp3"],
+    "synthetic_injections": [
+      {"index": 5, "purpose": "audio_bleeding — segment with matched_ref outside of entry_ref; uses entry 113 but matched_ref points at 1:1:1-1:1:1"},
+      {"index": 6, "purpose": "cross_verse — single segment spans 113:1:4 through 113:2:1"},
+      {"index": 7, "purpose": "boundary_adj — single-word matched_ref (113:1:1-113:1:1) on a non-standalone word"}
+    ],
+    "segments": [
+      {"index": 0, "expected_categories": [], "notes": "Real segment; final letter qāf (ق) triggers qalqala classification, but ignored_categories=[\"qalqala\"] suppresses it — classifier emits no categories"},
+      {"index": 1, "expected_categories": [], "notes": "Real segment; final letter qāf triggers qalqala classification, but ignored_categories=[\"qalqala\"] suppresses it — classifier emits no categories"},
+      {"index": 2, "expected_categories": [], "notes": "Real segment; final letter is bā' (ب), qalqala letter"},
+      {"index": 3, "expected_categories": [], "notes": "Real segment"},
+      {"index": 4, "expected_categories": [], "notes": "Real segment; final letter dāl, qalqala letter"},
+      {"index": 5, "expected_categories": ["audio_bleeding"], "notes": "Synthetic: matched_ref 1:1:1-1:1:1 belongs to a different surah; entry_ref is 113 → audio_bleeding fires"},
+      {"index": 6, "expected_categories": ["cross_verse"], "notes": "Synthetic: matched_ref 113:1:4-113:2:1 spans verses; cross_verse fires"},
+      {"index": 7, "expected_categories": ["boundary_adj"], "notes": "Synthetic: single-word matched_ref 113:1:1-113:1:1; not in STANDALONE_REFS; boundary_adj fires"}
+    ]
+  },
+  "entries": [
+    {
+      "ref": "113",
+      "audio": "https://fixture.local/audio/113.mp3",
+      "segments": [
+        {
+          "time_start": 4840,
+          "time_end": 8580,
+          "matched_ref": "113:1:1-113:1:4",
+          "matched_text": "قُلْ أَعُوذُ بِرَبِّ ٱلْفَلَقِ",
+          "phonemes_asr": "q u l ʔ a ʕ u: ð u b i rˤ aˤ bb i l f a l a q Q",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f55f-74c0-8b9e-60454dc8948c",
+          "ignored_categories": ["qalqala"]
+        },
+        {
+          "time_start": 8800,
+          "time_end": 12240,
+          "matched_ref": "113:2:1-113:2:4",
+          "matched_text": "مِن شَرِّ مَا خَلَقَ",
+          "phonemes_asr": "m i ŋ ʃ a rr i m a: x aˤ l a q Q",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f560-709d-ab81-97a344b49be3",
+          "ignored_categories": ["qalqala"]
+        },
+        {
+          "time_start": 12420,
+          "time_end": 17640,
+          "matched_ref": "113:3:1-113:3:5",
+          "matched_text": "وَمِن شَرِّ غَاسِقٍ إِذَا وَقَبَ",
+          "phonemes_asr": "w a m i ŋ ʃ a rr i ɣ aˤ: s i q i n ʔ i ð a: w a q aˤ b Q",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f560-7a07-a64b-7145452b8693"
+        },
+        {
+          "time_start": 17860,
+          "time_end": 24135,
+          "matched_ref": "113:4:1-113:4:5",
+          "matched_text": "وَمِن شَرِّ ٱلنَّفَّـٰثَـٰتِ فِى ٱلْعُقَدِ",
+          "phonemes_asr": "w a m i ŋ ʃ a rr i ñ a ff a: θ a: t i f i l ʕ u q aˤ d Q",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f560-79eb-9a7e-3d584c87b531"
+        },
+        {
+          "time_start": 24355,
+          "time_end": 29475,
+          "matched_ref": "113:5:1-113:5:5",
+          "matched_text": "وَمِن شَرِّ حَاسِدٍ إِذَا حَسَدَ",
+          "phonemes_asr": "w a m i ŋ ʃ a rr i ħ a: s i d i n ʔ i ð a: ħ a s a d Q",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f560-7d44-99a3-e65d4bb2a425"
+        },
+        {
+          "time_start": 29600,
+          "time_end": 30200,
+          "matched_ref": "1:1:1-1:1:1",
+          "matched_text": "بِسْمِ",
+          "phonemes_asr": "b i s m i",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f560-7000-a000-000000000005"
+        },
+        {
+          "time_start": 30300,
+          "time_end": 31000,
+          "matched_ref": "113:1:4-113:2:1",
+          "matched_text": "ٱلْفَلَقِ مِن",
+          "phonemes_asr": "a l f a l a q m i n",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f560-7000-a000-000000000006"
+        },
+        {
+          "time_start": 31100,
+          "time_end": 31800,
+          "matched_ref": "113:1:1-113:1:1",
+          "matched_text": "قُلْ",
+          "phonemes_asr": "q u l",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-f560-7000-a000-000000000007"
+        }
+      ]
+    }
+  ]
+}

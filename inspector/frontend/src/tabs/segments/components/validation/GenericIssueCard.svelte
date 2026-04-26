@@ -10,18 +10,16 @@
     } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import {
-        createOp,
         dirtyTick,
-        finalizeOp,
         getChapterOpsSnapshot,
         isSegmentDirty,
-        markDirty,
-        snapshotSeg,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
-    import { _isIgnoredFor } from '../../utils/validation/classify';
+    import { IssueRegistry } from '../../domain/registry';
+    import { isIgnoredFor } from '../../utils/validation/classified-issues';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
+    import { ignoreIssueOnSegment } from '../../utils/edit/ignore';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import SegmentRow from '../list/SegmentRow.svelte';
@@ -65,14 +63,13 @@
     // hides via `{#if resolvedSeg}`.
     $: if (!_boundUid && resolvedSeg) _boundUid = resolvedSeg.segment_uid ?? null;
 
+    // Base gate from the registry; ``low_confidence`` adds a runtime guard so
+    // a segment whose confidence has been promoted to 1.0 (e.g. after a save
+    // edit) doesn't keep offering the Ignore button.
     $: canIgnore =
         resolvedSeg != null &&
-        (category === 'boundary_adj' ||
-            category === 'cross_verse' ||
-            category === 'audio_bleeding' ||
-            category === 'repetitions' ||
-            category === 'qalqala' ||
-            (category === 'low_confidence' && (resolvedSeg.confidence ?? 1) < 1.0));
+        (IssueRegistry[category]?.canIgnore ?? false) &&
+        (category !== 'low_confidence' || (resolvedSeg.confidence ?? 1) < 1.0);
 
     $: segChapterForBtn =
         resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(get(selectedChapter))) : 0;
@@ -170,7 +167,7 @@
 
     // Track ignored state reactively.
     $: if (resolvedSeg) {
-        isAlreadyIgnored = _isIgnoredFor(resolvedSeg, category);
+        isAlreadyIgnored = isIgnoredFor(resolvedSeg, category);
     }
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
@@ -185,29 +182,14 @@
 
     // ---- Ignore handler ----
     function handleIgnore(): void {
-        if (!resolvedSeg || _isIgnoredFor(resolvedSeg, category)) return;
-        const segChapter = resolvedSeg.chapter ?? parseInt(get(selectedChapter));
-        let ignoreOp;
+        if (!resolvedSeg) return;
         try {
-            ignoreOp = createOp('ignore_issue', { contextCategory: category, fixKind: 'ignore' });
-            ignoreOp.targets_before = [snapshotSeg(resolvedSeg)];
-            ignoreOp.applied_at_utc = ignoreOp.started_at_utc;
-        } catch (err) {
-            console.warn('Ignore: edit history snapshot failed:', err);
-        }
-        if (!resolvedSeg.ignored_categories) resolvedSeg.ignored_categories = [];
-        resolvedSeg.ignored_categories.push(category);
-        delete (resolvedSeg as Segment & { _derived?: unknown })._derived;
-        markDirty(segChapter, resolvedSeg.index);
-        if (ignoreOp) {
-            try {
-                ignoreOp.targets_after = [snapshotSeg(resolvedSeg)];
-                finalizeOp(segChapter, ignoreOp);
-            } catch (err) {
-                console.warn('Ignore: edit history finalize failed:', err);
+            if (ignoreIssueOnSegment(resolvedSeg, category)) {
+                isAlreadyIgnored = true;
             }
+        } catch (err) {
+            console.warn('Ignore: dispatch failed:', err);
         }
-        isAlreadyIgnored = true;
     }
 </script>
 

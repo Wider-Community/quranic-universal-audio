@@ -1,0 +1,38 @@
+{
+  "by_segment_uid": {
+    "019d5c88-f55f-7ee0-81d1-d99f423e8dd5": {
+      "categories": [
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    },
+    "019d5c88-f55f-7913-a019-4f2c462c8a3c": {
+      "categories": [
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    },
+    "019d5c88-f55f-7e4b-b8c8-0ed347c1a56f": {
+      "categories": [
+        "low_confidence",
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    },
+    "019d5c88-f55f-771b-8c2f-8c99456c8776": {
+      "categories": [
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    }
+  },
+  "category_counts": {
+    "qalqala": 4,
+    "low_confidence": 1
+  },
+  "_meta": {
+    "fixture": "112-ikhlas",
+    "generator": "inspector.tests.parity.snapshot_expected_outputs",
+    "policy": "post-Phase-2 unified classifier"
+  }
+}

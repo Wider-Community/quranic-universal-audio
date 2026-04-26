@@ -63,6 +63,46 @@ interface SavePayloadPatch {
 }
 
 // ---------------------------------------------------------------------------
+// CommandResult → save payload bridge
+// ---------------------------------------------------------------------------
+
+interface CommandResultLike {
+    operation: EditOp & { type?: string; [k: string]: unknown };
+    affectedChapters?: number[];
+    patch?: unknown;
+    [k: string]: unknown;
+}
+
+/**
+ * Build a partial save payload from a `CommandResult`.
+ *
+ * Used by command-layer call sites that want to inspect the payload shape
+ * (or pre-bundle it for save) without going through the full
+ * dirty-map iteration in `executeSave`. The returned object carries the
+ * same `{segments, operations}` envelope that `/api/seg/save` accepts;
+ * the segments slice is left empty here — callers fill it from the
+ * mutated chapter ids carried by `result.affectedChapters`.
+ *
+ * When `result.patch` is present it is included on the op record so the
+ * server can persist it on the history entry.
+ */
+export function buildPayloadFromCommandResult(result: CommandResultLike): {
+    segments: SaveSegmentPayloadPatch[];
+    operations: (EditOp & { patch?: unknown })[];
+    affected_chapters: number[];
+} {
+    const op: EditOp & { patch?: unknown } = { ...result.operation };
+    if (result.patch !== undefined) {
+        op.patch = result.patch;
+    }
+    return {
+        segments: [],
+        operations: [op],
+        affected_chapters: result.affectedChapters ?? [],
+    };
+}
+
+// ---------------------------------------------------------------------------
 // executeSave
 // ---------------------------------------------------------------------------
 

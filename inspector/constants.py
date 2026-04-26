@@ -1,7 +1,10 @@
 """Domain constants for the inspector: validation categories, Quranic reference sets."""
 
-# Canonical validation categories -- single source of truth.
-# Every counting, summary, and delta function derives from this tuple.
+# Classifier-emitted categories that the per-chapter counter accumulates.
+# These are the keys produced by ``chapter_validation_counts`` (per-segment
+# flags + ``missing_words``, which is verse-derived but counted alongside).
+# Held here for backward compatibility with un-migrated callers; the canonical
+# category metadata lives in ``services.validation.registry.IssueRegistry``.
 VALIDATION_CATEGORIES = (
     "failed", "low_confidence", "boundary_adj", "cross_verse",
     "missing_words", "audio_bleeding", "repetitions",
@@ -46,3 +49,24 @@ AUDIO_SOURCE_AYAH_MARKER = "by_ayah"
 
 # Edit-history JSONL schema version — immutable record-format fact.
 HISTORY_SCHEMA_VERSION = 1
+
+
+def _assert_categories_match_registry() -> None:
+    """Guard against drift between this module's literal and the registry.
+
+    ``VALIDATION_CATEGORIES`` must be a subset of the registry's category set;
+    every entry is also expected to be either per-segment or the verse-scoped
+    ``missing_words`` (the one verse-scope category the per-chapter counter
+    surfaces alongside per-segment flags).
+    """
+    try:
+        from services.validation.registry import IssueRegistry  # noqa: WPS433
+    except Exception:
+        return
+    registry_keys = set(IssueRegistry.keys())
+    literal_keys = set(VALIDATION_CATEGORIES)
+    drift = literal_keys - registry_keys
+    assert not drift, f"VALIDATION_CATEGORIES has categories not in IssueRegistry: {sorted(drift)}"
+
+
+_assert_categories_match_registry()

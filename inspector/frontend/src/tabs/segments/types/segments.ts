@@ -1,5 +1,5 @@
-import type { SegAllResponse, SegDataResponse } from '../../../lib/types/api';
-import type { EditOp, HistoryBatch, PeakBucket, Segment } from '../../../lib/types/domain';
+import type { SegDataResponse } from '../../../lib/types/api';
+import type { EditOp, HistoryBatch, PeakBucket } from '../../../lib/types/domain';
 
 // ---------------------------------------------------------------------------
 // Split chain + history types
@@ -72,12 +72,6 @@ export interface SegSavedFilterView {
 // ---------------------------------------------------------------------------
 // Data state types
 // ---------------------------------------------------------------------------
-
-/** Augmented `SegAllResponse` — client adds lazy chapter indices. */
-export interface SegAllDataState extends SegAllResponse {
-    _byChapter?: Record<string, Segment[]> | null;
-    _byChapterIndex?: Map<string, Segment> | null;
-}
 
 /** Augmented `SegDataResponse` — client may overwrite audio_url with a proxy URL. */
 export type SegDataState = SegDataResponse;

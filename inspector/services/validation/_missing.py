@@ -84,6 +84,7 @@ def _build_missing_words(
         issue: dict = {
             "verse_key": f"{surah}:{ayah}",
             "chapter": surah,
+            "segment_uid": None,
             "msg": f"missing words: {sorted(missing)}",
             "seg_indices": sorted(gap_indices),
         }

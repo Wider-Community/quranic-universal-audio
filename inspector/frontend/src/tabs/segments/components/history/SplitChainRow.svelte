@@ -25,7 +25,7 @@
         type SplitChain,
     } from '../../stores/history';
     import { onChainUndoClick } from '../../utils/save/undo';
-    import { _classifySnapIssues } from '../../utils/validation/classify';
+    import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
     import type { SplitHighlight } from '../../types/segments-waveform';
     import type { Segment } from '../../../../lib/types/domain';
 
@@ -86,14 +86,16 @@
     }
 
     // Validation-delta badges (resolved / regressed issues over the chain).
+    // Reads `classified_issues` directly off saved snapshots; absent on
+    // unsaved chains (next save+validate cycle resurfaces any pending state).
     $: valDelta = (() => {
         const beforeIssues = new Set<string>();
         if (rootSnap) {
-            for (const i of _classifySnapIssues(rootSnap)) beforeIssues.add(i);
+            for (const i of classifiedIssuesOf(rootSnap)) beforeIssues.add(i);
         }
         const afterIssues = new Set<string>();
         for (const ls of leafSnaps) {
-            for (const i of _classifySnapIssues(ls)) afterIssues.add(i);
+            for (const i of classifiedIssuesOf(ls)) afterIssues.add(i);
         }
         const improved = [...beforeIssues].filter((i) => !afterIssues.has(i));
         const regressed = [...afterIssues].filter((i) => !beforeIssues.has(i));

@@ -24,7 +24,7 @@ import {
     selectedReciter,
     selectedVerse,
 } from '../../stores/chapter';
-import { activeFilters, computeSilenceAfter } from '../../stores/filters';
+import { activeFilters } from '../../stores/filters';
 import { savedFilterView } from '../../stores/navigation';
 import { setStats } from '../../stores/stats';
 import { setValidation } from '../../stores/validation';
@@ -75,7 +75,6 @@ export async function reloadCurrentReciter(): Promise<void> {
     if (allResult.status === 'fulfilled') {
         segAllData.set(allResult.value);
         _rewriteAudioUrls();
-        computeSilenceAfter();
         preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
         if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
     } else {

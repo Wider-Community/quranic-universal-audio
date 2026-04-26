@@ -11,7 +11,7 @@ import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
-import type { EditOp, Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/domain';
 import {
     refreshSegInStore,
     selectedChapter,
@@ -33,6 +33,7 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/playback';
+import { applyCommand } from '../../domain/apply-command';
 import { _normalizeRef as _normalizeRefLib, getVerseWordCounts } from '../data/references';
 import { stopSegAnimation } from '../playback/playback';
 import type { RowEntry, RowInstanceRole } from '../playback/row-registry';
@@ -84,43 +85,98 @@ export function beginRefEdit(
 // ---------------------------------------------------------------------------
 
 /**
- * Shared tail for both commitRefEdit branches: append the op-context category
- * to ignored_categories (except muqattaat which tracks confidence instead),
- * clear derived cache, mark dirty, re-publish the seg to the store, and
- * finalize the pending op.
+ * Apply a reference change through `applyCommand` and finalize the op.
+ * Mutates `seg` in place from the reducer's `nextState`, clears derived
+ * cache, marks dirty, refreshes the seg in the chapter store, and feeds
+ * `result.operation` into `finalizeEdit`.
+ *
+ * `opType` selects 'confirm_reference' for the audit-confirm path (user
+ * pressed Enter on an unchanged ref to clear a low-confidence flag) vs
+ * 'edit_reference' for an actual ref change.
  */
-function _applyRefChange(seg: Segment, pending: EditOp | null, chapter: number): void {
-    const ctxCat = pending?.op_context_category;
-    if (ctxCat && ctxCat !== 'muqattaat') {
-        if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(ctxCat))
-            seg.ignored_categories.push(ctxCat);
+function _dispatchRefEdit(
+    seg: Segment,
+    chapter: number,
+    matched_ref: string,
+    matched_text: string,
+    display_text: string,
+    contextCategory: string | null,
+    opType: 'edit_reference' | 'confirm_reference',
+): void {
+    const uid = seg.segment_uid;
+    if (!uid) {
+        // Defensive: legacy fixtures without uids skip the reducer; mutate
+        // in place and mark dirty so the row still renders the new values.
+        seg.matched_ref = matched_ref;
+        seg.matched_text = matched_text;
+        seg.display_text = display_text;
+        seg.confidence = 1.0;
+        delete seg._derived;
+        markDirty(chapter, seg.index);
+        refreshSegInStore(seg);
+        setPendingOp(null);
+        return;
+    }
+    const result = applyCommand(
+        {
+            byId: { [uid]: seg },
+            idsByChapter: { [chapter]: [uid] },
+            selectedChapter: chapter,
+        },
+        {
+            type: 'editReference',
+            segmentUid: uid,
+            matched_ref,
+            matched_text,
+            display_text,
+            sourceCategory: contextCategory ?? undefined,
+            contextCategory: contextCategory ?? undefined,
+            opType,
+            fixKind: opType === 'confirm_reference' ? 'audit' : 'manual',
+        },
+    );
+    const updated = result.nextState.byId[uid];
+    if (updated) {
+        seg.matched_ref = updated.matched_ref;
+        seg.matched_text = updated.matched_text;
+        seg.display_text = updated.display_text;
+        seg.confidence = updated.confidence;
+        if (updated.ignored_categories) {
+            seg.ignored_categories = [...updated.ignored_categories];
+        }
     }
     delete seg._derived;
     markDirty(chapter, seg.index);
     refreshSegInStore(seg);
-    if (pending) {
-        finalizeEdit(pending, chapter, [seg], {
-            skipSilence: true,
-            skipFilterRender: true,
-            skipAccordion: true,
-        });
-    }
+    setPendingOp(null);
+    finalizeEdit(result.operation, chapter, [seg], {
+        skipSilence: true,
+        skipFilterRender: true,
+        skipAccordion: true,
+    });
 }
 
 export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<void> {
     const oldRef = seg.matched_ref || '';
     const chapter = seg.chapter || parseInt(get(selectedChapter));
     const newRef = _normalizeRef(newRefIn) ?? '';
+    const pending = getPendingOp();
+    const ctxCat = pending?.op_context_category ?? null;
+
     if (newRef === oldRef) {
         if ((seg.confidence ?? 0) < 1.0) {
-            const pending = getPendingOp();
-            if (pending) {
-                pending.op_type = 'confirm_reference';
-                pending.fix_kind = 'audit';
-            }
-            seg.confidence = 1.0;
-            _applyRefChange(seg, pending, chapter);
+            // Audit confirm: user pressed Enter on an unchanged low-confidence
+            // ref. Records a 'confirm_reference' op with fix_kind='audit' and
+            // bumps confidence to 1.0. Ref + text fields stay as-is.
+            _dispatchRefEdit(
+                seg,
+                chapter,
+                seg.matched_ref || '',
+                seg.matched_text || '',
+                seg.display_text || '',
+                ctxCat,
+                'confirm_reference',
+            );
         } else {
             setPendingOp(null);
         }
@@ -129,34 +185,29 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<voi
         return;
     }
 
-    seg.matched_ref = newRef;
-    seg.confidence = 1.0;
-    const pending = getPendingOp();
-
+    let matchedText = '';
+    let displayText = '';
     if (newRef) {
         try {
             const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
                 `/api/seg/resolve_ref?ref=${encodeURIComponent(newRef)}`,
             );
             if (data.text) {
-                seg.matched_text = data.text;
-                seg.display_text = data.display_text || data.text;
+                matchedText = data.text;
+                displayText = data.display_text || data.text;
             } else if (data.error) {
                 console.warn('resolve_ref error:', data.error);
-                seg.matched_text = '(invalid ref)';
-                seg.display_text = '';
+                matchedText = '(invalid ref)';
+                displayText = '';
             }
         } catch (e) {
             console.error('Failed to resolve ref:', e);
-            seg.matched_text = '(resolve failed)';
-            seg.display_text = '';
+            matchedText = '(resolve failed)';
+            displayText = '';
         }
-    } else {
-        seg.matched_text = '';
-        seg.display_text = '';
     }
 
-    _applyRefChange(seg, pending, chapter);
+    _dispatchRefEdit(seg, chapter, newRef, matchedText, displayText, ctxCat, 'edit_reference');
     clearEdit();
     _handoffPendingChain();
 }

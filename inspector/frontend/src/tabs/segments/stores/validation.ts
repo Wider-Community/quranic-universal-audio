@@ -1,13 +1,11 @@
 /**
  * Segments tab — validation data store.
  *
- * Validation data store for the segments tab.
- *
  * Shape: single `SegValidateResponse | null`.
  *
- * In-place mutation pattern: `_fixupValIndicesFor*` helpers mutate arrays
- * inside the store value in-place. After mutation, callers MUST call
- * `segValidation.update(v => v)` to notify subscribers.
+ * Items carry `segment_uid` for stable identity through structural edits.
+ * Stale items (uid absent from live state) are filtered before render by
+ * `filterStaleIssues` in ValidationPanel.
  */
 
 import { writable } from 'svelte/store';

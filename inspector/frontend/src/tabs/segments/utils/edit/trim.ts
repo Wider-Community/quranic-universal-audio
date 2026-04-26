@@ -20,7 +20,6 @@ import { segConfig } from '../../stores/config';
 import {
     getPendingOp,
     markDirty,
-    setPendingOp,
 } from '../../stores/dirty';
 import {
     editCanvas,
@@ -34,6 +33,7 @@ import {
 } from '../../stores/edit';
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
+import { applyCommand } from '../../domain/apply-command';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
     clearPlayRangeRAF,
@@ -349,19 +349,43 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
         return;
     }
 
-    seg.time_start = newStart;
-    seg.time_end = newEnd;
-    seg.confidence = 1.0;
     const pending = getPendingOp();
-    if (pending?.op_context_category && pending.op_context_category !== 'muqattaat') {
-        if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(pending.op_context_category))
-            seg.ignored_categories.push(pending.op_context_category);
+    const ctxCat = pending?.op_context_category ?? null;
+    const uid = seg.segment_uid;
+    if (!uid) {
+        seg.time_start = newStart;
+        seg.time_end = newEnd;
+        seg.confidence = 1.0;
+        markDirty(chapter, undefined, true);
+        exitEditMode();
+        refreshSegInStore(seg);
+        return;
+    }
+
+    const result = applyCommand(
+        {
+            byId: { [uid]: seg },
+            idsByChapter: { [chapter]: [uid] },
+            selectedChapter: chapter,
+        },
+        {
+            type: 'trim',
+            segmentUid: uid,
+            delta: { time_start: newStart, time_end: newEnd },
+            sourceCategory: ctxCat ?? undefined,
+            contextCategory: ctxCat ?? undefined,
+        },
+    );
+    const updated = result.nextState.byId[uid];
+    if (updated) {
+        seg.time_start = updated.time_start;
+        seg.time_end = updated.time_end;
+        seg.confidence = updated.confidence;
+        if (updated.ignored_categories) {
+            seg.ignored_categories = [...updated.ignored_categories];
+        }
     }
     markDirty(chapter, undefined, true);
-
-    const trimOp = pending;
-    setPendingOp(null);
 
     const curData = get(segData);
     if (chapter !== currentChapter || !curData?.segments) {
@@ -376,9 +400,7 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 
     exitEditMode();
     refreshSegInStore(seg);
-    if (trimOp) {
-        finalizeEdit(trimOp, chapter, [seg], { skipAccordion: true });
-    }
+    finalizeEdit(result.operation, chapter, [seg], { skipAccordion: true });
 }
 
 // ---------------------------------------------------------------------------

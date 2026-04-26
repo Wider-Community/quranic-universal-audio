@@ -25,7 +25,7 @@
     import { afterUpdate, onDestroy, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { displayedSegments } from '../../stores/filters';
+    import { derivedTimings, displayedSegments } from '../../stores/filters';
     import { selectedChapter } from '../../stores/chapter';
     import { editingSegUid } from '../../stores/edit';
     import { pendingScrollTop, targetSegmentIndex } from '../../stores/navigation';
@@ -353,7 +353,8 @@
     /** Whether to render a silence-gap wrapper between `seg` and the next
      *  segment — only when the next-displayed is the consecutive index. */
     function showSilenceGap(seg: Segment, displayIdx: number): boolean {
-        if (seg.silence_after_ms == null) return false;
+        const t = seg.segment_uid ? $derivedTimings.get(seg.segment_uid) : null;
+        if (!t || t.silence_after_ms == null) return false;
         const nextDisplayed = $displayedSegments[displayIdx + 1];
         return !!nextDisplayed && nextDisplayed.index === seg.index + 1;
     }
@@ -429,10 +430,11 @@
                     instanceRole="main"
                 />
                 {#if showSilenceGap(seg, startIdx + localIdx)}
+                    {@const t = seg.segment_uid ? $derivedTimings.get(seg.segment_uid) : null}
                     <div class="seg-silence-gap-wrapper">
                         <div class="seg-silence-gap">
-                            &#9208; {Math.round(seg.silence_after_ms ?? 0)}ms
-                            (raw: {Math.round(seg.silence_after_raw_ms ?? 0)}ms)
+                            &#9208; {Math.round(t?.silence_after_ms ?? 0)}ms
+                            (raw: {Math.round(t?.silence_after_raw_ms ?? 0)}ms)
                         </div>
                     </div>
                 {/if}

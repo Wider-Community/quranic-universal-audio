@@ -20,15 +20,13 @@ import {
     selectedChapter,
 } from '../../stores/chapter';
 import {
-    createOp,
     markDirty,
-    snapshotSeg,
 } from '../../stores/dirty';
 import { clearEdit, setEdit } from '../../stores/edit';
+import { applyCommand } from '../../domain/apply-command';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { formatRef as _formatRefLib, getVerseWordCounts } from '../data/references';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
-import { _fixupValIndicesForDelete } from '../validation/fixups';
 import { finalizeEdit } from './common';
 
 function formatRef(ref: Parameters<typeof _formatRefLib>[0]): string {
@@ -51,10 +49,10 @@ export function deleteSegment(
     const currentChapter = parseInt(chStr);
     const label = seg.chapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
-    const deleteOp = createOp('delete_segment', contextCategory ? { contextCategory } : undefined);
-    deleteOp.targets_before = [snapshotSeg(seg)];
-
     if (!confirm(`Delete segment ${label} (${formatRef(seg.matched_ref) || 'no match'})?`)) return;
+
+    const uid = seg.segment_uid;
+    if (!uid) { return; }
 
     // Signal delete mode to EditOverlay (confirmed — committed to executing).
     // `mountId` pins the initiating row so accordion twins stay passive;
@@ -64,6 +62,20 @@ export function deleteSegment(
     // Capture pre-mutation playing UID so reconcilePlayingAfterMutation can
     // clear + stop if the playing seg was the one being deleted.
     const prePlayingUid = seg.segment_uid ?? null;
+
+    const result = applyCommand(
+        {
+            byId: { [uid]: seg },
+            idsByChapter: { [chapter]: [uid] },
+            selectedChapter: chapter,
+        },
+        {
+            type: 'delete',
+            segmentUid: uid,
+            sourceCategory: contextCategory ?? undefined,
+            contextCategory: contextCategory ?? undefined,
+        },
+    );
 
     // Unified splice+reindex against segAllData (single source of truth).
     const allData = get(segAllData);
@@ -87,8 +99,7 @@ export function deleteSegment(
     clearFlashForChapter(chapter);
 
     markDirty(chapter, undefined, true);
-    _fixupValIndicesForDelete(chapter, seg.index);
 
-    finalizeEdit(deleteOp, chapter, []);
+    finalizeEdit(result.operation, chapter, []);
     clearEdit();
 }
