@@ -1,102 +1,82 @@
 [
   {
     "name": "Hafs A'n Assem",
-    "mp3quran_type": [11, 14, 213, 222],
     "slug": "hafs_an_asim"
   },
   {
     "name": "Sho'bah A'n Asim",
-    "mp3quran_type": [151],
     "slug": "shubah_an_asim"
   },
   {
     "name": "Warsh A'n Nafi'",
-    "mp3quran_type": [21, 101, 181],
     "slug": "warsh_an_nafi"
   },
   {
     "name": "Qalon A'n Nafi'",
-    "mp3quran_type": [51, 81],
     "slug": "qalon_an_nafi"
   },
   {
     "name": "Aldori A'n Abi Amr",
-    "mp3quran_type": [131],
     "slug": "duri_abu_amr"
   },
   {
     "name": "Assosi A'n Abi Amr",
-    "mp3quran_type": [71],
     "slug": "susi_abu_amr"
   },
   {
     "name": "Hesham A'n Ibn Amer",
-    "mp3quran_type": [191],
     "slug": "hisham_ibn_amir"
   },
   {
     "name": "Ibn Thakwan A'n Ibn Amer",
-    "mp3quran_type": [161],
     "slug": "ibn_dhakwan_ibn_amir"
   },
   {
     "name": "Albizi A'n Ibn Katheer",
-    "mp3quran_type": [41],
     "slug": "bazzi_ibn_kathir"
   },
   {
     "name": "Qunbol A'n Ibn Katheer",
-    "mp3quran_type": [61],
     "slug": "qunbul_ibn_kathir"
   },
   {
     "name": "Khalaf A'n Hamzah",
-    "mp3quran_type": [31],
     "slug": "khalaf_an_hamzah"
   },
   {
     "name": "Khallad A'n Hamzah",
-    "mp3quran_type": [],
     "slug": "khallad_an_hamzah"
   },
   {
     "name": "Al-Layth A'n Al-Kisa'ai",
-    "mp3quran_type": [],
     "slug": "layth_al_kisai"
   },
   {
     "name": "AlDorai A'n Al-Kisa'ai",
-    "mp3quran_type": [121],
     "slug": "duri_al_kisai"
   },
   {
     "name": "Isa Ibn Wardan A'n Abi Ja'far",
-    "mp3quran_type": [],
     "slug": "isa_abu_jafar"
   },
   {
     "name": "Ibn Jammaz A'n Abi Ja'far",
-    "mp3quran_type": [201],
     "slug": "ibn_jummaz_abu_jafar"
   },
   {
     "name": "Rowis A'n Yakoob",
-    "mp3quran_type": [91],
     "slug": "ruways_an_yaqub"
   },
   {
     "name": "Rawh A'n Yakoob",
-    "mp3quran_type": [91],
     "slug": "rawh_an_yaqub"
   },
   {
     "name": "Ishaq A'n Khalaf",
-    "mp3quran_type": [],
     "slug": "ishaq_an_khalaf"
   },
   {
     "name": "Idris A'n Khalaf",
-    "mp3quran_type": [],
     "slug": "idris_an_khalaf"
   }
 ]

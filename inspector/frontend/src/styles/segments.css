@@ -1,0 +1,597 @@
+/* ============ Segments tab ============ */
+.seg-selector-bar {
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.seg-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+}
+
+/* Audio cache panel */
+.seg-cache-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #0d1b2a;
+    border: 1px solid #1b2838;
+    border-radius: 6px;
+    margin: 8px 12px 4px;
+}
+.seg-cache-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+.seg-cache-download-btn {
+    padding: 8px 28px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    background: #1a5c2a;
+    color: #8f8;
+    border: 1px solid #2a8c3a;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.seg-cache-download-btn:hover { background: #237a35; }
+.seg-cache-download-btn:disabled { opacity: 0.6; cursor: default; }
+.seg-cache-delete-btn {
+    padding: 6px 16px;
+    font-size: 0.8rem;
+    background: #3a1515;
+    color: #e88;
+    border: 1px solid #5a2020;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.seg-cache-delete-btn:hover { background: #5a2020; }
+.seg-cache-delete-btn:disabled { opacity: 0.6; cursor: default; }
+.seg-cache-progress {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.seg-cache-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #1b2838;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.seg-cache-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2a8c3a, #4caf50);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+.seg-cache-progress-text {
+    font-size: 0.82rem;
+    color: #8ab4f8;
+}
+.seg-cache-status {
+    font-size: 0.8rem;
+    color: #7a8a9a;
+}
+
+.seg-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 20px;
+    margin-bottom: 15px;
+}
+.seg-controls .btn {
+    margin-left: 0;
+}
+
+.seg-controls audio {
+    display: none;
+}
+
+.seg-controls label {
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+}
+
+.seg-controls select {
+    padding: 6px 10px;
+    background: #1a1a3e;
+    color: #4cc9f0;
+    border: 1px solid #333;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+#seg-autoplay-btn.seg-autoplay-on,
+#seg-autoscroll-btn.seg-autoscroll-on {
+    background: #4361ee;
+}
+#seg-autoplay-btn.seg-autoplay-off,
+#seg-autoscroll-btn.seg-autoscroll-off {
+    background: #555;
+}
+
+/* Segment list */
+.seg-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding-right: 4px;
+    /* SegmentsList.svelte drives its own scroll anchoring via the row-group
+     * ResizeObserver (see `_handleGroupResize`). The browser's default
+     * `overflow-anchor: auto` also kicks in when a row grows — the two
+     * stack and scrollTop jumps by more than the content grew. Disable
+     * the browser behavior so our JS anchor is the sole actor adjusting
+     * scrollTop in response to row-height changes. */
+    overflow-anchor: none;
+}
+
+/* Layout-transparent wrapper around a row + its optional silence-gap
+ * sibling. Observed as a single unit by the ResizeObserver in
+ * SegmentsList.svelte so the virtualization height cache tracks the row +
+ * gap together. Preserves the 6px gap between row and silence-gap that
+ * `.seg-list`'s flex gap used to supply directly. */
+.seg-row-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.seg-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    padding: 8px;
+    background: #16213e;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    /* Virtualization in SegmentsList keeps the rendered row count small
+     * (viewport + buffer only), so content-visibility/contain-intrinsic-size
+     * are no longer needed to elide off-screen work — they would only
+     * confuse the per-row height measurement used by the window math. */
+}
+
+.seg-row:hover {
+    background: #1a2a4e;
+}
+
+.seg-row.playing {
+    border-color: #4cc9f0;
+    background: #1a2a4e;
+}
+
+.seg-left {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 380px;
+    gap: 8px;
+}
+
+.seg-row canvas {
+    width: 100%;
+    height: 60px;
+    background: #0f0f23;
+    border-radius: 10px;
+    cursor: crosshair;
+}
+
+/* Segment text box */
+.seg-text {
+    flex: 1;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border-left: 4px solid #666;
+    min-width: 0;
+}
+
+.seg-text-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-self: start;
+}
+
+.seg-text.conf-high {
+    border-color: #4caf50;
+    background: rgba(76, 175, 80, 0.08);
+}
+
+.seg-text.conf-mid {
+    border-color: #ff9800;
+    background: rgba(255, 152, 0, 0.08);
+}
+
+.seg-text.conf-low {
+    border-color: #f44336;
+    background: rgba(244, 67, 54, 0.08);
+}
+
+.seg-text.conf-fail {
+    border-color: #555;
+    background: rgba(100, 100, 100, 0.08);
+}
+
+.seg-text-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.seg-text-index {
+    font-size: 0.75rem;
+    color: #666;
+    font-family: monospace;
+}
+
+.seg-text-ref {
+    font-size: 0.75rem;
+    color: #4cc9f0;
+    font-family: monospace;
+    cursor: pointer;
+}
+
+.seg-text-ref:hover {
+    text-decoration: underline;
+}
+
+.seg-text-ref-input {
+    font-size: 0.75rem;
+    color: #4cc9f0;
+    font-family: monospace;
+    background: #0f0f23;
+    border: 1px solid #4cc9f0;
+    border-radius: 3px;
+    padding: 1px 4px;
+    outline: none;
+    width: 140px;
+}
+
+.seg-row.dirty {
+    border-color: #f0a500;
+}
+
+.seg-text-conf {
+    font-size: 0.85rem;
+    font-family: monospace;
+    font-weight: bold;
+}
+
+.seg-text-conf.conf-high { color: #4caf50; }
+.seg-text-conf.conf-mid { color: #ff9800; }
+.seg-text-conf.conf-low { color: #f44336; }
+.seg-text-conf.conf-fail { color: #666; }
+
+.seg-text-body {
+    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    font-size: var(--seg-font-size, 1.84rem);
+    word-spacing: var(--seg-word-spacing, 0.15em);
+    color: #eee;
+    direction: rtl;
+    line-height: 1.5;
+    text-align: right;
+}
+
+.seg-text-duration {
+    font-size: 0.75rem;
+    color: #888;
+    font-family: monospace;
+}
+
+.seg-text-sep {
+    color: #444;
+    font-size: 0.75rem;
+    user-select: none;
+}
+
+.seg-text-times {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+}
+
+.seg-text-time-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    color: #bbb;
+}
+
+.seg-text-time {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    color: #bbb;
+    cursor: pointer;
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+
+.seg-text-time.clickable:hover {
+    background: rgba(76, 201, 240, 0.12);
+    color: #4cc9f0;
+}
+
+.seg-text-time-editing {
+    background: rgba(76, 201, 240, 0.08);
+    border: 1px solid rgba(76, 201, 240, 0.35);
+    padding: 1px 3px;
+    border-radius: 3px;
+    color: #ddd;
+}
+
+.seg-text-time-editing.invalid {
+    background: rgba(244, 67, 54, 0.15);
+    border-color: #f44336;
+}
+
+.seg-time-group {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+.seg-time-group.editable {
+    color: #4cc9f0;
+    cursor: pointer;
+}
+
+.seg-time-group.editable:hover {
+    background: rgba(76, 201, 240, 0.18);
+}
+
+.seg-time-group.greyed {
+    color: #555;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.seg-time-sep {
+    color: #666;
+    user-select: none;
+}
+
+.seg-time-group-input {
+    font-family: monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: inherit;
+    color: #4cc9f0;
+    background: #0f0f23;
+    border: 1px solid #4cc9f0;
+    border-radius: 2px;
+    padding: 0 2px;
+    outline: none;
+    text-align: center;
+}
+
+
+.seg-tag {
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    font-weight: bold;
+    vertical-align: middle;
+}
+
+.seg-tag-missing {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+    border: 1px solid #f44336;
+}
+
+/* Loading overlay for segments */
+.seg-loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-size: 1rem;
+}
+
+/* ============ Segment Edit Modes ============ */
+
+/* Fixed overlay for edit dimming -- O(1) instead of O(N rows).
+ * `pointer-events: auto` makes the overlay itself swallow clicks to anything
+ * below it; the edit-target row sits at z-index 11 to stay clickable. This
+ * replaces a former `body.seg-edit-active …` rule whose descendant selectors
+ * triggered a main-thread style recalc of every card in #seg-validation when
+ * large accordions were open. */
+.seg-edit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 10;
+    pointer-events: auto;
+}
+
+.seg-row.seg-edit-target {
+    position: relative;
+    z-index: 11;
+    pointer-events: auto;
+}
+
+/* Controls beneath the waveform */
+.seg-row-controls {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.seg-row-play-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.seg-row-play-actions .seg-card-play-btn,
+.seg-row-play-actions .seg-card-goto-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 6px 8px;
+}
+
+/* Action buttons (Trim/Split/Merge/Delete/Edit Ref) per segment row */
+.seg-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+    flex: 1;
+}
+
+.seg-row-controls .seg-actions {
+    min-width: 0;
+}
+
+/* Inline edit controls (replaces .seg-actions when Adjust/Split is active) */
+.seg-edit-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.seg-edit-inline .seg-edit-duration,
+.seg-edit-inline .seg-edit-info {
+    color: #888;
+    font-size: 0.75rem;
+    font-family: monospace;
+    flex: none;
+}
+
+.seg-edit-inline .seg-edit-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.seg-edit-inline .seg-edit-buttons .btn-sm {
+    flex: 1;
+}
+
+/* Compact Cancel / Apply — sized to text + a small breather, not stretched. */
+.seg-edit-inline .seg-edit-buttons .btn-cancel,
+.seg-edit-inline .seg-edit-buttons .btn-confirm {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+}
+
+/* Trim cursor steppers — green for start side, red for end side. Square-ish
+ * icon buttons, no flex stretch. Disabled state dims to ~50%. */
+.seg-edit-inline .seg-edit-buttons .seg-trim-step {
+    flex: 0 0 auto;
+    padding: 4px 6px;
+    min-width: 22px;
+    font-family: monospace;
+    font-weight: bold;
+    line-height: 1;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-start {
+    background: #1a3d1f;
+    color: #4caf50;
+    border: 1px solid #2a6c2f;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-start:hover:not(:disabled) {
+    background: #2a6c2f;
+    color: #b3eab6;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-end {
+    background: #3d1a1a;
+    color: #f44336;
+    border: 1px solid #6c2a2a;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step-end:hover:not(:disabled) {
+    background: #6c2a2a;
+    color: #f9b3b0;
+}
+.seg-edit-inline .seg-edit-buttons .seg-trim-step:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Split cursor stepper — yellow to match the #ffeb3b split line drawn on
+ * the canvas. Single cursor (no start/end pair), so both < and > share the
+ * one theme. Same sizing + disabled treatment as .seg-trim-step. */
+.seg-edit-inline .seg-edit-buttons .seg-split-step {
+    flex: 0 0 auto;
+    padding: 4px 6px;
+    min-width: 22px;
+    font-family: monospace;
+    font-weight: bold;
+    line-height: 1;
+    background: #3d3a1a;
+    color: #ffeb3b;
+    border: 1px solid #6c662a;
+}
+.seg-edit-inline .seg-edit-buttons .seg-split-step:hover:not(:disabled) {
+    background: #6c662a;
+    color: #fff3a0;
+}
+.seg-edit-inline .seg-edit-buttons .seg-split-step:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.seg-edit-inline .seg-edit-status {
+    color: #ff4444;
+    font-size: 0.75rem;
+    flex: none;
+    width: 100%;
+}
+
+/* Edit-target card gets an active border */
+.seg-row.seg-edit-target {
+    border-color: #4cc9f0;
+    background: #1a2a4e;
+}
+
+.seg-row.seg-edit-target canvas {
+    cursor: col-resize;
+}
+
+/* Virtualization spacer — reserves scroll height for rows outside the
+ * render window so the scrollbar matches the true list size. flex-shrink: 0
+ * keeps the flex container from collapsing it. */
+.seg-list-spacer {
+    flex-shrink: 0;
+}
+
+.seg-silence-gap-wrapper {
+    display: flex;
+    justify-content: flex-start;
+    margin: 2px 0;
+    padding-left: 290px;
+}
+.seg-silence-gap {
+    padding: 1px 10px;
+    font-size: 0.65rem;
+    font-weight: bold;
+    color: #888;
+    border: 1px solid #555;
+    border-radius: 10px;
+}
+.seg-row.seg-neighbour { border-left: 3px solid #f0a500; opacity: 0.85; }

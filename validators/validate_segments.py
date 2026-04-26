@@ -154,6 +154,10 @@ def parse_detailed(path: Path) -> list[dict]:
             }
             if seg.get("wrap_word_ranges"):
                 d["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            if seg.get("ignored_categories"):
+                d["ignored_categories"] = list(seg["ignored_categories"])
+            elif seg.get("ignored"):
+                d["ignored_categories"] = ["_all"]
             segments.append(d)
     return segments
 
@@ -186,6 +190,7 @@ def _confidence_stats(detailed_segs: list[dict]) -> dict:
     failed = [s for s in detailed_segs if not s["matched_ref"]]
     empty_phonemes = [s for s in matched if not s.get("phonemes_asr", "").strip()]
     confidences = [s["confidence"] for s in matched]
+    lc_visible = [s for s in matched if not _is_ignored_for(s, "low_confidence")]
     return {
         "matched": matched,
         "failed": failed,
@@ -194,8 +199,8 @@ def _confidence_stats(detailed_segs: list[dict]) -> dict:
         "conf_med": statistics.median(confidences) if confidences else 0,
         "conf_mean": statistics.mean(confidences) if confidences else 0,
         "conf_max": max(confidences) if confidences else 0,
-        "conf_below_60": sum(1 for c in confidences if c < 0.60),
-        "conf_below_80": sum(1 for c in confidences if c < 0.80),
+        "conf_below_60": sum(1 for s in lc_visible if s["confidence"] < 0.60),
+        "conf_below_80": sum(1 for s in lc_visible if s["confidence"] < 0.80),
         "failed_segments": len(failed),
         "empty_phonemes_count": len(empty_phonemes),
     }
@@ -231,7 +236,7 @@ def _classify_detailed_segs(
             continue  # failed alignments tracked via _confidence_stats
 
         # Detected Repetitions — wrap_word_ranges set by the alignment pipeline
-        if seg.get("wrap_word_ranges"):
+        if seg.get("wrap_word_ranges") and not _is_ignored_for(seg, "repetitions"):
             repetitions.append(seg)
 
         parsed = _parse_matched_ref(matched_ref)
@@ -246,7 +251,10 @@ def _classify_detailed_segs(
                 try:
                     ep = entry_ref.split(":")
                     entry_surah, entry_ayah_n = int(ep[0]), int(ep[1])
-                    if entry_surah != surah or entry_ayah_n != s_ayah:
+                    if (
+                        (entry_surah != surah or entry_ayah_n != s_ayah)
+                        and not _is_ignored_for(seg, "audio_bleeding")
+                    ):
                         audio_bleeding.append({**seg, "matched_verse": f"{surah}:{s_ayah}"})
                 except (ValueError, IndexError):
                     pass
@@ -686,7 +694,10 @@ def _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
 
         # 5. Low Confidence (<80%)
         below_80 = sorted(
-            [s for s in cstats["matched"] if s["confidence"] < 0.80],
+            [
+                s for s in cstats["matched"]
+                if s["confidence"] < 0.80 and not _is_ignored_for(s, "low_confidence")
+            ],
             key=lambda s: s["confidence"],
         )
         n = len(below_80)
