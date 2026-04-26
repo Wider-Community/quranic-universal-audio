@@ -6,8 +6,10 @@ No Flask imports -- all functions accept parameters and return plain dicts.
 import json
 from collections import defaultdict
 from datetime import datetime, timezone
-from pathlib import Path
 
+from adapters.save_payload import build_seg_lookups as _adapter_build_seg_lookups
+from adapters.save_payload import make_seg as _adapter_make_seg
+from adapters.segments_json import rebuild as _adapter_rebuild_segments
 from config import RECITATION_SEGMENTS_PATH
 from constants import HISTORY_SCHEMA_VERSION
 from services import cache
@@ -16,7 +18,7 @@ from services.validation import chapter_validation_counts
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
 from utils.io import atomic_json_write, backup_file, file_sha256
-from utils.references import chapter_from_ref, normalize_ref, seg_sort_key
+from utils.references import chapter_from_ref, normalize_ref
 from utils.uuid7 import uuid7
 
 
@@ -92,56 +94,15 @@ def normalize_ref_with_wc(ref: str) -> str:
 
 
 def rebuild_segments_json(reciter: str, entries: list[dict]) -> None:
-    """Regenerate segments.json from detailed entries (verse-aggregated format)."""
-    verse_data: dict[str, list] = defaultdict(list)
-    for entry in entries:
-        for seg in entry.get("segments", []):
-            ref = seg.get("matched_ref", "")
-            if not ref:
-                continue
-            parts = ref.split("-")
-            if len(parts) != 2:
-                continue
-            start_parts = parts[0].split(":")
-            end_parts = parts[1].split(":")
-            if len(start_parts) != 3 or len(end_parts) != 3:
-                continue
-            try:
-                start_sura = int(start_parts[0])
-                start_ayah = int(start_parts[1])
-                start_word = int(start_parts[2])
-                end_ayah = int(end_parts[1])
-                end_word = int(end_parts[2])
-            except ValueError:
-                continue
+    """Regenerate segments.json from detailed entries (verse-aggregated format).
 
-            t_from = seg.get("time_start", 0)
-            t_to = seg.get("time_end", 0)
-
-            if start_ayah == end_ayah:
-                verse_data[f"{start_sura}:{start_ayah}"].append(
-                    [start_word, end_word, t_from, t_to]
-                )
-            else:
-                verse_data[ref].append(
-                    [start_word, end_word, t_from, t_to]
-                )
-
-    segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
-    # Preserve metadata from existing file
-    existing_meta = {}
-    if segments_path.exists():
-        with open(segments_path, "r", encoding="utf-8") as f:
-            try:
-                existing_doc = json.load(f)
-                existing_meta = existing_doc.get("_meta", {})
-            except json.JSONDecodeError:
-                pass
-    seg_doc = {"_meta": existing_meta}
-    for key in sorted(verse_data.keys(), key=seg_sort_key):
-        seg_doc[key] = verse_data[key]
-    with open(segments_path, "w", encoding="utf-8") as f:
-        json.dump(seg_doc, f, ensure_ascii=False)
+    Thin wrapper over ``adapters.segments_json.rebuild`` — preserves the
+    ``(reciter, entries)`` calling convention used internally and by
+    ``services.undo``.  The adapter accepts a ``Path`` so the reciter→path
+    resolution lives here at the route boundary.
+    """
+    reciter_dir = RECITATION_SEGMENTS_PATH / reciter
+    _adapter_rebuild_segments(reciter_dir, entries)
 
 
 # ---------------------------------------------------------------------------
@@ -152,65 +113,32 @@ def rebuild_segments_json(reciter: str, entries: list[dict]) -> None:
 
 
 def _build_seg_lookups(matching: list[dict]) -> tuple[dict, dict]:
-    """Build ``(by_time, by_uid)`` lookups of existing segments for field preservation."""
-    existing_by_time = {}
-    existing_by_uid = {}
-    for e in matching:
-        for seg in e.get("segments", []):
-            key = (seg.get("time_start", 0), seg.get("time_end", 0))
-            existing_by_time[key] = seg
-            uid = seg.get("segment_uid", "")
-            if uid:
-                existing_by_uid[uid] = seg
-    return existing_by_time, existing_by_uid
+    """Build ``(by_time, by_uid)`` lookups of existing segments for field preservation.
+
+    Thin wrapper over ``adapters.save_payload.build_seg_lookups`` — kept under
+    the ``_build_seg_lookups`` name because internal helpers reference it and
+    pytest patches it in some cases.
+    """
+    return _adapter_build_seg_lookups(matching)
 
 
-def _make_seg(s: dict, existing_by_time: dict, existing_by_uid: dict) -> dict:
-    """Build a canonical segment dict, preserving fields from an existing match if any."""
-    existing = existing_by_time.get((s.get("time_start", 0), s.get("time_end", 0)), {})
-    if not existing:
-        uid = s.get("segment_uid", "")
-        if uid:
-            existing = existing_by_uid.get(uid, {})
-    phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
-    seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
-    result = {
-        "segment_uid": seg_uid,
-        "time_start": s.get("time_start", 0),
-        "time_end": s.get("time_end", 0),
-        "matched_ref": normalize_ref_with_wc(s.get("matched_ref", "")),
-        "matched_text": s.get("matched_text", ""),
-        "confidence": s.get("confidence", 0.0),
-        "phonemes_asr": phonemes,
-    }
-    wrap = s.get("wrap_word_ranges") or existing.get("wrap_word_ranges")
-    if wrap:
-        result["wrap_word_ranges"] = wrap
-    if s.get("has_repeated_words") or existing.get("has_repeated_words"):
-        result["has_repeated_words"] = True
-    # ``ignored_categories`` is filtered against the registry's
-    # ``persists_ignore`` flag before serialization: categories whose registry
-    # entry is non-persisting drop out of the on-disk representation, while
-    # the legacy ``"_all"`` marker passes through.
-    #
-    # MUST-7 semantics:
-    #   - Key present in payload (including []) → respect what was sent.
-    #     Empty array or all-non-persisting result → write [] (clears persisted).
-    #   - Key absent → preserve existing entry-side value.
-    if "ignored_categories" in s:
-        ic = filter_persistent_ignores(s.get("ignored_categories") or [])
-        result["ignored_categories"] = list(ic)
-    else:
-        ic = filter_persistent_ignores(existing.get("ignored_categories") or [])
-        if ic:
-            result["ignored_categories"] = ic
-    if (
-        "ignored_categories" not in result
-        and "ignored_categories" not in s
-        and (s.get("ignored") or existing.get("ignored"))
-    ):
-        result["ignored_categories"] = ["_all"]
-    return result
+def _make_seg(
+    s: dict,
+    existing_by_time: dict,
+    existing_by_uid: dict,
+    word_counts: dict | None = None,
+) -> dict:
+    """Build a canonical segment dict, preserving fields from an existing match if any.
+
+    Delegates to ``adapters.save_payload.make_seg``.  ``word_counts`` is
+    resolved lazily via ``get_word_counts()`` when the caller does not supply
+    one — preserving the historical behaviour where each call site relied on
+    the ``services.cache``-backed lazy load.  Hot loops that build a single
+    save batch should resolve once and pass the resolved dict explicitly.
+    """
+    if word_counts is None:
+        word_counts = get_word_counts()
+    return _adapter_make_seg(s, existing_by_time, existing_by_uid, word_counts)
 
 
 def _apply_full_replace(matching: list[dict], updates: dict,
@@ -220,9 +148,11 @@ def _apply_full_replace(matching: list[dict], updates: dict,
     Returns ``None`` on success or an ``(error_dict, http_status)`` tuple on
     input validation failure (propagated by the caller as the route response).
     """
+    word_counts = get_word_counts()
     if len(matching) == 1:
         matching[0]["segments"] = [
-            _make_seg(s, existing_by_time, existing_by_uid) for s in updates["segments"]
+            _make_seg(s, existing_by_time, existing_by_uid, word_counts)
+            for s in updates["segments"]
         ]
         return None
 
@@ -253,7 +183,9 @@ def _apply_full_replace(matching: list[dict], updates: dict,
                 "matched multiple chapter entries."
             )}, 400
 
-        candidates[0]["segments"].append(_make_seg(s, existing_by_time, existing_by_uid))
+        candidates[0]["segments"].append(
+            _make_seg(s, existing_by_time, existing_by_uid, word_counts)
+        )
     return None
 
 

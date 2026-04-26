@@ -1,10 +1,13 @@
 // Phase 4: derived selectors return correct slices over SegmentState.
 
 import { describe, it, expect } from 'vitest';
+import { get } from 'svelte/store';
 import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
 const segmentsStore = await loadOptional<any>('../../stores/segments');
+const chapterStore = await loadOptional<any>('../../stores/chapter');
+const filtersStore = await loadOptional<any>('../../stores/filters');
 const selectors = segmentsStore;
 
 const sampleState = () => ({
@@ -48,6 +51,68 @@ describe.skipIf(!segmentsStore)('normalized-state selectors', () => {
   });
 });
 
-describe.skipIf(segmentsStore)('normalized-state selectors (deferred)', () => {
-  it.todo('phase-4: stores/segments.ts not yet present');
+describe.skipIf(!segmentsStore || !chapterStore)('segmentsStore load-path wiring (IS-7)', () => {
+  it('segmentsStore populates from segAllData when load-path fires', () => {
+    const store = segmentsStore.segmentsStore;
+    const segs = [
+      { ...makeSegment(0, 0, 1000, { segment_uid: 'load-uid-1' }), chapter: 7 },
+      { ...makeSegment(1, 1000, 2000, { segment_uid: 'load-uid-2' }), chapter: 7 },
+    ];
+    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, pad_ms: 0 });
+    chapterStore.selectedChapter.set('7');
+    const state: any = get(store);
+    expect(Object.keys(state.byId).sort()).toEqual(['load-uid-1', 'load-uid-2']);
+    expect(state.idsByChapter[7]).toEqual(['load-uid-1', 'load-uid-2']);
+    expect(state.selectedChapter).toBe(7);
+    chapterStore.segAllData.set(null);
+    chapterStore.selectedChapter.set('');
+  });
+
+  it('segmentsStore returns empty state when segAllData is cleared', () => {
+    const store = segmentsStore.segmentsStore;
+    chapterStore.segAllData.set(null);
+    chapterStore.selectedChapter.set('');
+    const state: any = get(store);
+    expect(state.byId).toEqual({});
+    expect(state.idsByChapter).toEqual({});
+    expect(state.selectedChapter).toBeNull();
+  });
+});
+
+describe.skipIf(!filtersStore || !chapterStore)('derivedTimings (silence_after derivation)', () => {
+  it('derives silence_after_ms from segment adjacency within an entry', () => {
+    const audio = 'https://example/a.mp3';
+    const segs = [
+      { ...makeSegment(0, 0, 1000, { segment_uid: 't-uid-1' }), chapter: 1, audio_url: audio, entry_idx: 0 },
+      { ...makeSegment(1, 1500, 2500, { segment_uid: 't-uid-2' }), chapter: 1, audio_url: audio, entry_idx: 0 },
+      { ...makeSegment(2, 3000, 4000, { segment_uid: 't-uid-3' }), chapter: 1, audio_url: audio, entry_idx: 0 },
+    ];
+    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, pad_ms: 100 });
+    const map: any = get(filtersStore.derivedTimings);
+    expect(map.get('t-uid-1')).toEqual({
+      silence_after_ms: (1500 - 1000) + 2 * 100,
+      silence_after_raw_ms: 1500 - 1000,
+    });
+    expect(map.get('t-uid-2')).toEqual({
+      silence_after_ms: (3000 - 2500) + 2 * 100,
+      silence_after_raw_ms: 3000 - 2500,
+    });
+    // Last segment in the entry has no "next" -> null timing.
+    expect(map.get('t-uid-3')).toEqual({
+      silence_after_ms: null,
+      silence_after_raw_ms: null,
+    });
+    chapterStore.segAllData.set(null);
+  });
+
+  it('returns null timings across entry boundaries (different audio_url)', () => {
+    const segs = [
+      { ...makeSegment(0, 0, 1000, { segment_uid: 'x-uid-1' }), chapter: 1, audio_url: 'a', entry_idx: 0 },
+      { ...makeSegment(1, 1500, 2500, { segment_uid: 'x-uid-2' }), chapter: 1, audio_url: 'b', entry_idx: 0 },
+    ];
+    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, pad_ms: 0 });
+    const map: any = get(filtersStore.derivedTimings);
+    expect(map.get('x-uid-1')?.silence_after_ms).toBeNull();
+    chapterStore.segAllData.set(null);
+  });
 });

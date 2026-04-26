@@ -60,32 +60,65 @@ export const activeFilters = writable<SegActiveFilter[]>([]);
 // Derived timing values — silence_after_ms per segment (IS-7 derivation)
 // ---------------------------------------------------------------------------
 
-/** Per-uid silence timing derived from segment adjacency within each entry.
- *  Maps ``segment_uid`` → ``{ silence_after_ms, silence_after_raw_ms }``.
- *  Consumers that need the current silence value for a segment should read
- *  from this store rather than relying on the in-place field. */
-export const derivedTimings = derived(segAllData, ($all) => {
-    const timings = new Map<string, { silence_after_ms: number | null; silence_after_raw_ms: number | null }>();
-    if (!$all) return timings;
-    const pad = $all.pad_ms ?? 0;
-    const segs = $all.segments;
-    for (let i = 0; i < segs.length; i++) {
-        const cur = segs[i]!;
+interface SegmentTiming {
+    silence_after_ms: number | null;
+    silence_after_raw_ms: number | null;
+}
+
+/** Pure adjacency timing computation: consumes a segments list + ``pad_ms`` and
+ *  returns ``(silence_after_ms, silence_after_raw_ms)`` for the slice
+ *  ``segs[lo..=hi]`` (inclusive bounds).  ``onResult`` is called once per
+ *  segment in range with its position and computed timing.
+ *
+ *  Pure: does not read or write Svelte stores; does not mutate inputs.
+ *  Used by ``derivedTimings`` (collects results into a Map keyed by uid) and
+ *  by ``computeSilenceAfter`` / ``recomputeSilenceForRange`` (writes results
+ *  in place onto each segment so render-path consumers reading
+ *  ``seg.silence_after_ms`` directly observe the same values). */
+function _walkSilenceRange(
+    segs: Segment[],
+    pad: number,
+    lo: number,
+    hi: number,
+    onResult: (i: number, seg: Segment, t: SegmentTiming) => void,
+): void {
+    for (let i = lo; i <= hi; i++) {
+        const cur = segs[i];
+        if (!cur) continue;
         const next = segs[i + 1];
         const sameEntry = !!next && cur.audio_url === next.audio_url
                                && cur.entry_idx === next.entry_idx;
-        const silence_after_ms = sameEntry && next
-            ? (next.time_start - cur.time_end) + 2 * pad
-            : null;
-        const silence_after_raw_ms = sameEntry && next
-            ? next.time_start - cur.time_end
-            : null;
-        if (cur.segment_uid) {
-            timings.set(cur.segment_uid, { silence_after_ms, silence_after_raw_ms });
-        }
+        const t: SegmentTiming = sameEntry && next
+            ? {
+                silence_after_ms: (next.time_start - cur.time_end) + 2 * pad,
+                silence_after_raw_ms: next.time_start - cur.time_end,
+            }
+            : { silence_after_ms: null, silence_after_raw_ms: null };
+        onResult(i, cur, t);
     }
+}
+
+/** Per-uid silence timing derived from segment adjacency within each entry.
+ *  Maps ``segment_uid`` → ``{ silence_after_ms, silence_after_raw_ms }``.
+ *  Single source of truth for the silence computation — ``computeSilenceAfter``
+ *  and ``recomputeSilenceForRange`` use the same ``_walkSilenceRange`` helper
+ *  so both the derived view and the in-place fields stay aligned. */
+export const derivedTimings = derived(segAllData, ($all) => {
+    const timings = new Map<string, SegmentTiming>();
+    if (!$all) return timings;
+    const segs = $all.segments;
+    _walkSilenceRange(segs, $all.pad_ms ?? 0, 0, segs.length - 1, (_i, seg, t) => {
+        if (seg.segment_uid) timings.set(seg.segment_uid, t);
+    });
     return timings;
 });
+
+/** Read the current silence-after timing for the segment with the given uid.
+ *  Returns ``null`` when the uid is not in the derived map (segment not
+ *  loaded, or has no ``segment_uid``). */
+export function getTimingForUid(uid: string): SegmentTiming | null {
+    return get(derivedTimings).get(uid) ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -117,26 +150,19 @@ function _compareFilter(actual: number | null | undefined, op: string, value: nu
 }
 
 /** Mutate `segAllData.segments` in-place with silence-after-ms fields.
- *  Runs once after `segAllData` is set in the chapter store. */
+ *
+ *  Render-path consumers (``SegmentsList.svelte`` template) read
+ *  ``seg.silence_after_ms`` directly off each segment.  The in-place fields
+ *  are computed via the same ``_walkSilenceRange`` helper that powers
+ *  ``derivedTimings`` so the two views stay in lockstep. */
 export function computeSilenceAfter(): void {
     const all = get(segAllData);
     if (!all) return;
-    const pad = all.pad_ms ?? 0;
     const segs = all.segments;
-    for (let i = 0; i < segs.length; i++) {
-        const cur = segs[i];
-        if (!cur) continue;
-        const next = segs[i + 1];
-        const sameEntry = !!next && cur.audio_url === next.audio_url
-                               && cur.entry_idx === next.entry_idx;
-        if (sameEntry && next) {
-            cur.silence_after_ms = (next.time_start - cur.time_end) + 2 * pad;
-            cur.silence_after_raw_ms = next.time_start - cur.time_end;
-        } else {
-            cur.silence_after_ms = null;
-            cur.silence_after_raw_ms = null;
-        }
-    }
+    _walkSilenceRange(segs, all.pad_ms ?? 0, 0, segs.length - 1, (_i, seg, t) => {
+        seg.silence_after_ms = t.silence_after_ms;
+        seg.silence_after_raw_ms = t.silence_after_raw_ms;
+    });
 }
 
 /**
@@ -163,8 +189,8 @@ export function recomputeSilenceForRange(affectedSegs: Segment[]): void {
     }
 
     // Find global indices of the first and last affected segment by identity.
-    let firstGlobal = segs.indexOf(affectedSegs[0]!);
-    let lastGlobal  = segs.indexOf(affectedSegs[affectedSegs.length - 1]!);
+    const firstGlobal = segs.indexOf(affectedSegs[0]!);
+    const lastGlobal  = segs.indexOf(affectedSegs[affectedSegs.length - 1]!);
     if (firstGlobal === -1 || lastGlobal === -1) {
         // Segments not found (shouldn't happen, but be safe).
         computeSilenceAfter();
@@ -175,21 +201,10 @@ export function recomputeSilenceForRange(affectedSegs: Segment[]): void {
     const lo = Math.max(0, firstGlobal - 1);
     const hi = Math.min(segs.length - 1, lastGlobal + 1);
 
-    const pad = all.pad_ms ?? 0;
-    for (let i = lo; i <= hi; i++) {
-        const cur = segs[i];
-        if (!cur) continue;
-        const next = segs[i + 1];
-        const sameEntry = !!next && cur.audio_url === next.audio_url
-                               && cur.entry_idx === next.entry_idx;
-        if (sameEntry && next) {
-            cur.silence_after_ms = (next.time_start - cur.time_end) + 2 * pad;
-            cur.silence_after_raw_ms = next.time_start - cur.time_end;
-        } else {
-            cur.silence_after_ms = null;
-            cur.silence_after_raw_ms = null;
-        }
-    }
+    _walkSilenceRange(segs, all.pad_ms ?? 0, lo, hi, (_i, seg, t) => {
+        seg.silence_after_ms = t.silence_after_ms;
+        seg.silence_after_raw_ms = t.silence_after_raw_ms;
+    });
 }
 
 // ---------------------------------------------------------------------------

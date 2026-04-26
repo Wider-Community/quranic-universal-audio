@@ -18,8 +18,8 @@ from config import (
     SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
 )
+from adapters.detailed_json import load_entries as _load_detailed_entries
 from constants import AUDIO_META_CATEGORIES, STOP_SIGNS, TS_AUDIO_CATEGORIES
-from domain.identity import backfill_entries_uids
 from services import cache
 from utils.formatting import slug_to_name
 from utils.references import chapter_from_ref
@@ -195,12 +195,9 @@ def load_detailed(reciter: str) -> list[dict]:
     path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
     if not path.exists():
         return []
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
-    if "_meta" in doc:
-        cache.set_seg_meta(reciter, doc["_meta"])
-    entries = doc.get("entries", [])
-    backfill_entries_uids(entries)
+    meta, entries = _load_detailed_entries(path)
+    if meta:
+        cache.set_seg_meta(reciter, meta)
     cache.set_seg_cache(reciter, entries)
     # Fallback: if detailed.json had no _meta, try segments.json
     if not cache.get_seg_meta(reciter):

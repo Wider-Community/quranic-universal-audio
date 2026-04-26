@@ -16,6 +16,71 @@ def _segments(detailed: dict) -> list[dict]:
     return out
 
 
+def test_uid_matches_typescript_implementation():
+    """Cross-platform parity vector. If this changes, frontend identity.ts must too.
+
+    The frontend test in
+    ``frontend/src/tabs/segments/__tests__/normalized-state/uid-backfill.test.ts``
+    asserts the same value for the same input. Both implementations must agree.
+    """
+    from domain.identity import derive_uid
+    assert derive_uid(1, 0, 0) == "418dc3a4-5e80-5d8e-9a3f-209a6403206e"
+
+
+def test_save_round_trips_through_adapters(tmp_reciter_dir, flask_client, load_fixture):
+    """Adapter consolidation regression: save -> reload -> normalized result.
+
+    Exercises ``services.save.save_seg_data`` (which now delegates ``_make_seg``
+    and ``rebuild_segments_json`` to the ``adapters/`` module).  Verifies that
+    a normal save round-trip preserves matched_ref, matched_text, and
+    segment_uid through the adapter path, and that ``segments.json`` is
+    regenerated with the verse-aggregated tuple format.
+    """
+    reciter = "fixture_reciter"
+    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    chapter = 112
+    fixture = load_fixture("112-ikhlas")
+    pre_uids = [s["segment_uid"] for s in fixture["entries"][0]["segments"]]
+
+    seg_payload = [
+        {
+            "time_start": s["time_start"],
+            "time_end": s["time_end"],
+            "matched_ref": s["matched_ref"],
+            "matched_text": s["matched_text"],
+            "confidence": s["confidence"],
+            "phonemes_asr": s.get("phonemes_asr", ""),
+            "segment_uid": s["segment_uid"],
+        }
+        for s in fixture["entries"][0]["segments"]
+    ]
+
+    res = flask_client.post(
+        f"/api/seg/save/{reciter}/{chapter}",
+        data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
+        content_type="application/json",
+    )
+    assert res.status_code == 200
+
+    saved_detailed = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
+    post_uids = [s["segment_uid"] for s in saved_detailed["entries"][0]["segments"]]
+    assert pre_uids == post_uids, "adapter make_seg dropped or remapped segment_uid"
+
+    # segments.json should still contain the verse-aggregated tuple format
+    saved_segments = json.loads(
+        (tmp_reciter_dir.root / reciter / "segments.json").read_text(encoding="utf-8")
+    )
+    keys = [k for k in saved_segments.keys() if k != "_meta"]
+    assert keys, "adapter rebuild_segments_json produced no verse blocks"
+    for key in keys:
+        for entry in saved_segments[key]:
+            assert isinstance(entry, list) and len(entry) == 4, (
+                f"adapter wrote wrong tuple shape under {key}: {entry!r}"
+            )
+
+
 def test_uid_present_in_modern_fixture_unchanged(load_fixture):
     """A modern fixture's UIDs are present and well-formed."""
     fixture = load_fixture("112-ikhlas")

@@ -7,14 +7,21 @@
  * ``getAdjacentSegments``, ``findByUid``) derive from this shape so that
  * the ~50 existing subscriber call sites need no changes.
  *
- * Write path: dispatchers call ``segmentsStore.update(...)`` after applying
- * a ``CommandResult.nextState`` slice.  The store never mutates segments
- * directly — it receives already-mutated clones from ``applyCommand``.
+ * Read path: ``segmentsStore`` is a derived store over ``segAllData`` +
+ * ``selectedChapter`` from ``stores/chapter.ts``.  It rebuilds whenever the
+ * upstream chapter store fires.  No imperative population is required —
+ * setting ``segAllData`` automatically refreshes ``segmentsStore``.
+ *
+ * Write path (Phase 5+): dispatchers call ``applyNextState(current, slice)``
+ * — a pure reducer — to compute the next ``SegmentState`` from a
+ * ``CommandNextState`` slice.  The store itself is not written through
+ * directly; the upstream ``segAllData`` mutation drives the derivation.
  */
 
-import { writable } from 'svelte/store';
+import { derived } from 'svelte/store';
 
 import type { Segment } from '../../../lib/types/domain';
+import { segAllData, selectedChapter as selectedChapterStr } from './chapter';
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -35,7 +42,47 @@ const _emptyState: SegmentState = {
     selectedChapter: null,
 };
 
-export const segmentsStore = writable<SegmentState>({ ..._emptyState });
+/** Build a ``SegmentState`` value from the upstream ``segAllData`` payload.
+ *
+ *  Segments without a ``segment_uid`` (legacy fixtures that escaped backfill)
+ *  are skipped to keep ``byId`` keys non-empty.  Order within each chapter is
+ *  preserved from the input ``segments`` array — callers should sort upstream
+ *  if a different order is required. */
+export function buildSegmentState(
+    all: { segments: Segment[] } | null,
+    selectedChapter: number | null,
+): SegmentState {
+    if (!all || !all.segments) {
+        return { byId: {}, idsByChapter: {}, selectedChapter };
+    }
+    const byId: Record<string, Segment> = {};
+    const idsByChapter: Record<number, string[]> = {};
+    for (const seg of all.segments) {
+        const uid = seg.segment_uid;
+        if (!uid) continue;
+        byId[uid] = seg;
+        const ch = seg.chapter;
+        if (ch == null) continue;
+        if (!idsByChapter[ch]) idsByChapter[ch] = [];
+        idsByChapter[ch].push(uid);
+    }
+    return { byId, idsByChapter, selectedChapter };
+}
+
+/** Normalized segment state — derived from ``segAllData`` + ``selectedChapter``.
+ *
+ *  Refreshes whenever the upstream stores fire (load, save, edit republish).
+ *  Read via the pure selectors below; do not subscribe directly unless you
+ *  need raw state access. */
+export const segmentsStore = derived(
+    [segAllData, selectedChapterStr],
+    ([$all, $chapterStr]) => {
+        const ch = $chapterStr ? parseInt($chapterStr) : NaN;
+        const selected = Number.isFinite(ch) ? ch : null;
+        return buildSegmentState($all, selected);
+    },
+    { ..._emptyState },
+);
 
 // ---------------------------------------------------------------------------
 // Pure selectors (operate on a SegmentState value, not the store itself)
@@ -101,7 +148,13 @@ export function findByUid(state: SegmentState, uid: string): Segment | null {
 import type { CommandNextState } from '../domain/command';
 
 /** Apply a ``CommandNextState`` slice to the given ``SegmentState`` and return
- *  the next state.  Does not mutate the input. */
+ *  the next state.  Does not mutate the input.
+ *
+ *  This is a pure reducer used by Phase 5 patch-undo.  It is intentionally
+ *  decoupled from ``segmentsStore``: the store derives from ``segAllData``,
+ *  so production write flow goes through the existing ``segAllData.update``
+ *  path.  Future direct-write consumers can call ``applyNextState`` against
+ *  any ``SegmentState`` value. */
 export function applyNextState(
     current: SegmentState,
     nextState: CommandNextState,
