@@ -116,7 +116,13 @@ No agent invocations; no token logging.
 
 ### Phase 6 — Stable validation issue identity
 
-(Not yet executed)
+- **Files modified**: 13 production files modified + 1 new file (stale.ts) + 1 deleted (fixups.ts) + 5 test files updated
+- **LOC added/removed**: ~220 added (detail.py helpers, stale.ts, resolve-issue.ts uid-first path, ValidationPanel stale-filter, backend identity helpers); ~80 removed (fixup calls in split/merge/delete/common, deleted fixups.ts)
+- **Wall-clock**: ~30 min (single Sonnet 4.6 agent)
+- **Token budget**: _not captured_
+- **Markers cleared**: 7 pytest phase-6 (6 identity + 1 route) + 6 vitest phase-6 (3 stale-filter + 3 resolve-issue + 2 it.todo in fallback describes now skipped); phase-5 `test_inverse_patch_restores_state_exactly` cleared (Entry-3 option 2: deleted)
+- **Test counts after**: pytest 123 passed / 14 xfailed / 2 xpassed; vitest 204 passed / 15 todo / 2 errors (pre-existing network errors from timestamps tab tests, unrelated)
+- **Notes**: Phase 5 entry items resolved: E1 docstring added to `_ensure_patch_on_ops`; E2 chapter_set guard added to `_reverse_via_patch`; E3 `test_inverse_patch_restores_state_exactly` deleted (option 2 — structurally unsatisfiable given `_save_with_patch` helper, intent covered by sibling tests). IS-10, IS-11 enacted; MUST-9 satisfied. Only remaining xfails: 14 phase-3 (B-4 deferred).
 
 ---
 

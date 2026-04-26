@@ -25,7 +25,6 @@ import {
 import { applyCommand } from '../../domain/apply-command';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
-import { _fixupValIndicesForMerge } from '../validation/fixups';
 import { finalizeEdit } from './common';
 
 // ---------------------------------------------------------------------------
@@ -161,7 +160,6 @@ export async function mergeAdjacent(
     clearFlashForChapter(chapter);
 
     markDirty(chapter, undefined, true);
-    _fixupValIndicesForMerge(chapter, keptOldIdx, consumedOldIdx);
     if (chapter === currentChapter && curData) {
         curData.segments = getChapterSegments(chapter);
     }

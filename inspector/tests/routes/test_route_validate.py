@@ -74,7 +74,6 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
     )
 
 
-@pytest.mark.xfail(reason="phase-6", strict=False)
 def test_validate_issue_carries_segment_uid(flask_client, tmp_reciter_dir):
     """Phase 6: every issue item carries a segment_uid (null for chapter-level)."""
     reciter = "fixture_reciter"

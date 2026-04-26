@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from config import BOUNDARY_TAIL_DISPLAY_EXTRA, BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, SHOW_BOUNDARY_PHONEMES
+from services.data_loader import load_detailed
 from services.phoneme_matching import get_phoneme_tails
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
@@ -75,6 +76,7 @@ def _build_detail_lists(
             confidence = seg.get("confidence", 0.0)
             t_start = seg.get("time_start", 0)
             t_end = seg.get("time_end", 0)
+            seg_uid = seg.get("segment_uid") or None
 
             if not matched_ref:
                 # Respect is_ignored_for so _all / ignored=True suppresses the
@@ -83,6 +85,7 @@ def _build_detail_lists(
                 if not is_ignored_for(seg, "failed"):
                     failed.append({
                         "chapter": chapter, "seg_index": i,
+                        "segment_uid": seg_uid,
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                         "classified_issues": classify_segment(seg),
                     })
@@ -98,7 +101,8 @@ def _build_detail_lists(
                     seg_parts = seg_start.split(":")
                     matched_verse = f"{seg_parts[0]}:{seg_parts[1]}" if len(seg_parts) >= 2 else matched_ref
                     audio_bleeding.append({
-                        "chapter": chapter, "seg_index": i, "entry_ref": entry_ref,
+                        "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                        "entry_ref": entry_ref,
                         "matched_verse": matched_verse, "ref": matched_ref,
                         "confidence": round(confidence, 4),
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
@@ -108,7 +112,8 @@ def _build_detail_lists(
                     fallback_issues.append("audio_bleeding")
                 if seg.get("wrap_word_ranges"):
                     repetitions.append({
-                        "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                        "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                        "ref": matched_ref,
                         "display_ref": matched_ref, "confidence": round(confidence, 4),
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                         "text": seg.get("matched_text", ""),
@@ -118,6 +123,7 @@ def _build_detail_lists(
                 if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD:
                     low_confidence.append({
                         "ref": matched_ref, "chapter": chapter, "seg_index": i,
+                        "segment_uid": seg_uid,
                         "confidence": round(confidence, 4),
                         "classified_issues": ["low_confidence"] + fallback_issues,
                     })
@@ -148,7 +154,8 @@ def _build_detail_lists(
                 sp = seg_start.split(":")
                 matched_verse = f"{sp[0]}:{sp[1]}" if len(sp) >= 2 else matched_ref
                 audio_bleeding.append({
-                    "chapter": chapter, "seg_index": i, "entry_ref": entry_ref,
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "entry_ref": entry_ref,
                     "matched_verse": matched_verse, "ref": matched_ref,
                     "confidence": round(confidence, 4),
                     "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
@@ -165,7 +172,8 @@ def _build_detail_lists(
                     if len(s_rp) >= 2 and len(e_rp) >= 2 and s_rp[1] == e_rp[1]:
                         display_ref = f"{s_rp[0]}:{s_rp[1]}"
                 repetitions.append({
-                    "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
                     "display_ref": display_ref, "confidence": round(confidence, 4),
                     "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
                     "text": seg.get("matched_text", ""),
@@ -182,19 +190,22 @@ def _build_detail_lists(
                         display_ref = f"{s[0]}:{s[1]}" if s[1] == e[1] else f"{s[0]}:{s[1]}-{e[1]}"
                 low_confidence.append({
                     "ref": display_ref, "chapter": chapter, "seg_index": i,
+                    "segment_uid": seg_uid,
                     "confidence": round(confidence, 4),
                     "classified_issues": classified,
                 })
 
             if flags["cross_verse"]:
                 cross_verse.append({
-                    "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
                     "classified_issues": classified,
                 })
 
             if flags["boundary_adj"]:
                 item: dict = {
-                    "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
                     "verse_key": f"{surah}:{s_ayah}",
                     "classified_issues": classified,
                 }
@@ -208,13 +219,15 @@ def _build_detail_lists(
 
             if flags["muqattaat"]:
                 muqattaat.append({
-                    "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
                     "classified_issues": classified,
                 })
 
             if flags["qalqala"]:
                 qalqala.append({
-                    "chapter": chapter, "seg_index": i, "ref": matched_ref,
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
                     "qalqala_letter": flags["qalqala_letter"],
                     "end_of_verse": (e_word == word_counts.get((surah, e_ayah), 0)),
                     "classified_issues": classified,
@@ -246,3 +259,65 @@ def _build_detail_lists(
         "muqattaat": muqattaat,
         "qalqala": qalqala,
     }
+
+
+# ---------------------------------------------------------------------------
+# Identity helpers (IS-10, MUST-9)
+# ---------------------------------------------------------------------------
+
+def resolve_segment_by_uid(reciter: str, uid: str) -> dict | None:
+    """Return the live segment dict matching *uid*, or ``None`` if absent."""
+    entries = load_detailed(reciter)
+    if not entries:
+        return None
+    for entry in entries:
+        for seg in entry.get("segments", []):
+            if seg.get("segment_uid") == uid:
+                return seg
+    return None
+
+
+def resolve_segment_for_issue(reciter: str, issue: dict) -> dict | None:
+    """Return the live segment for *issue*, using uid when present, else seg_index.
+
+    Uid-first: if the issue carries ``segment_uid``, look up by uid.
+    Falls back to ``(chapter, seg_index)`` for legacy issues without a uid.
+    """
+    uid = issue.get("segment_uid")
+    if uid:
+        return resolve_segment_by_uid(reciter, uid)
+
+    chapter = issue.get("chapter")
+    seg_index = issue.get("seg_index")
+    if chapter is None or seg_index is None:
+        return None
+
+    entries = load_detailed(reciter)
+    if not entries:
+        return None
+
+    idx = 0
+    for entry in entries:
+        if chapter_from_ref(entry["ref"]) != chapter:
+            continue
+        for seg in entry.get("segments", []):
+            if idx == seg_index:
+                return seg
+            idx += 1
+    return None
+
+
+def filter_stale_issues(issues: list[dict], live_uids: set[str]) -> list[dict]:
+    """Drop issue items whose ``segment_uid`` is not in *live_uids*.
+
+    Items without a ``segment_uid`` (legacy seg_index path) are kept
+    untouched so existing resolution logic still applies to them.
+    """
+    result: list[dict] = []
+    for issue in issues:
+        uid = issue.get("segment_uid")
+        if uid is None:
+            result.append(issue)
+        elif uid in live_uids:
+            result.append(issue)
+    return result

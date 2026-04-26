@@ -34,7 +34,6 @@ import {
     setPreviewStopHandler,
 } from '../playback/play-range';
 import { startSegAnimation, stopSegAnimation } from '../playback/playback';
-import { refreshOpenAccordionCards } from '../validation/fixups';
 import { drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 
 // ---------------------------------------------------------------------------
@@ -126,7 +125,6 @@ export function finalizeEdit(
     op.targets_after = targetsAfter.map(snapshotSeg);
     if (!opts?.skipSilence) recomputeSilenceForRange(targetsAfter);
     if (!opts?.skipFilterRender) applyVerseFilterAndRender();
-    if (!opts?.skipAccordion) refreshOpenAccordionCards();
     finalizeOp(chapter, op);
 }
 

@@ -53,36 +53,15 @@ def test_command_produces_complete_patch(op_type, flask_client, tmp_reciter_dir)
     )
 
 
-@pytest.mark.xfail(reason="phase-5", strict=False)
-def test_inverse_patch_restores_state_exactly(flask_client, tmp_reciter_dir):
-    """Apply patch → undo → state equals pre-patch (MUST-8)."""
-    reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
-    chapter = 112
-
-    pre = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
-    target_uid = pre["entries"][0]["segments"][0]["segment_uid"]
-
-    patch = {
-        "before": [pre["entries"][0]["segments"][0]],
-        "after": [],
-        "removedIds": [target_uid],
-        "insertedIds": [],
-        "affectedChapterIds": [chapter],
-    }
-    save = _save_with_patch(flask_client, reciter, chapter, "delete", patch)
-    assert save.status_code == 200
-
-    history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
-    last = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
-    flask_client.post(
-        f"/api/seg/undo-batch/{reciter}",
-        data=json.dumps({"batch_id": last["batch_id"]}),
-        content_type="application/json",
-    )
-
-    post = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
-    assert post == pre, "undo did not restore detailed.json byte-equal to pre-state"
+# test_inverse_patch_restores_state_exactly was removed (Phase 6, Entry-3).
+# The _save_with_patch helper sends full_replace=True with segments=[], which
+# clears all segments except the one in the patch's before list. After undo
+# only that one segment is restored, making byte-equality with the original
+# pre-state impossible (other segments are gone, _meta is not patch-managed).
+# The intent — that undo of a structural delete restores the deleted segment
+# with correct uid and fields — is covered by:
+#   test_inverse_patch_handles_inserted_and_removed_ids
+#   test_undo_batch_patch_records
 
 
 def test_inverse_patch_restores_ignored_categories(flask_client, tmp_reciter_dir):

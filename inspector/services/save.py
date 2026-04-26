@@ -44,6 +44,13 @@ def _ensure_patch_on_ops(operations: list) -> list:
     receive a minimal empty-patch envelope so the history record always has
     the field (forward-only: new records carry it; inverse-patch path in
     ``services/undo.py`` detects presence via ``"patch" in op``).
+
+    # Forward-only: ops carrying a real patch from applyCommand round-trip
+    # correctly through apply_inverse_patch. Ops missing a patch get an empty
+    # envelope so undo detection (`if "patch" in op`) routes uniformly. Clients
+    # that bypass applyCommand and don't send a patch will see no-op undo;
+    # all production save flows must originate from applyCommand to preserve
+    # undo correctness.
     """
     out: list = []
     for op in operations or []:

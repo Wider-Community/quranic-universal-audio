@@ -36,6 +36,16 @@ import type { Segment } from '../../../../lib/types/domain';
 import { getChapterSegments, getSegByChapterIndex, selectedChapter } from '../../stores/chapter';
 
 /**
+ * Look up a segment by uid. Returns the segment if found, null otherwise.
+ * A null return means the uid is stale — the segment was deleted or
+ * consumed by a merge after the issue was last fetched from the server.
+ */
+export function resolveByUidStrict(uid: string, chapter: number): Segment | null {
+    const seg = getChapterSegments(chapter).find((s) => s.segment_uid === uid);
+    return seg ?? null;
+}
+
+/**
  * Resolve a validation item to its live segment.
  *
  * Preference order:
@@ -43,8 +53,11 @@ import { getChapterSegments, getSegByChapterIndex, selectedChapter } from '../..
  *      so subsequent resolutions stay on the same logical segment across
  *      split / merge reindexes. Returns null on UID miss (seg deleted or
  *      consumed by merge — card body should hide).
- *   2. `(chapter, seg_index)` lookup — initial / unbound path.
- *   3. `structural_errors` category special-case: match by verse-key prefix.
+ *   2. `item.segment_uid` uid-first lookup — present on server-emitted
+ *      items after Phase 6. Returns null on UID miss (stale issue).
+ *   3. `(chapter, seg_index)` lookup — legacy fallback for items that
+ *      predate uid emission (no `segment_uid` field).
+ *   4. `structural_errors` category special-case: match by verse-key prefix.
  *
  * Does NOT fall back to `matched_ref === item.ref` (the legacy
  * ref-fallback heuristic). That fallback could re-point resolution to
@@ -55,12 +68,19 @@ export function resolveIssueSeg(
     category: string,
     boundUid: string | null = null,
 ): Segment | null {
-    const anyItem = item as { seg_index?: number; chapter: number; ref?: string; verse_key?: string };
+    const anyItem = item as { seg_index?: number; chapter: number; ref?: string; verse_key?: string; segment_uid?: string | null };
     const chapter = anyItem.chapter ?? parseInt(get(selectedChapter));
 
     if (boundUid) {
         const seg = getChapterSegments(chapter).find((s) => s.segment_uid === boundUid);
         return seg ?? null;
+    }
+
+    // Uid-first: when the issue carries a segment_uid, use it exclusively.
+    // A miss means the segment is stale (deleted or merged); do not fall back
+    // to seg_index — that could silently re-point to the wrong segment.
+    if (anyItem.segment_uid != null) {
+        return resolveByUidStrict(anyItem.segment_uid, chapter);
     }
 
     if (anyItem.seg_index != null && anyItem.seg_index < 0) return null;

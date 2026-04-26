@@ -43,6 +43,7 @@
         jumpToVerse,
     } from '../../utils/data/navigation-actions';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
+    import { filterStaleIssues } from '../../utils/validation/stale';
     import ErrorCard from './ErrorCard.svelte';
     import type {
         SegValAnyItem,
@@ -213,9 +214,19 @@
         const ordered = Object.values(IssueRegistry).slice()
             .sort((a, b) => a.accordionOrder - b.accordionOrder);
 
+        // Build the live-uid set once per category rebuild so stale-filter
+        // has O(1) membership checks. Only per-segment categories use uids;
+        // chapter-level categories (missing_verses, structural_errors) carry
+        // segment_uid: null and are always kept by filterStaleIssues.
+        const allSegs = get(segAllData)?.segments ?? [];
+        const liveUids = new Set(
+            allSegs.map((s) => s.segment_uid).filter((u): u is string => !!u),
+        );
+
         const LC_DEFAULT = get(segConfig).lcDefaultThreshold;
         const all: CategoryDescriptor[] = ordered.map((defn) => {
-            const items = _itemsFor(defn.kind, data);
+            const rawItems = _itemsFor(defn.kind, data);
+            const items = filterStaleIssues(rawItems, liveUids);
             let visibleItems: SegValAnyItem[] = items;
             let summaryCount = items.length;
             let isLowConf = false;
@@ -297,8 +308,8 @@
         return { chapter: seg.chapter, index: seg.index };
     })();
     // Find the editing card's index within the open category's visible list.
-    // `seg_index` is the validation item's segment index (mutated in place by
-    // the split/merge/delete fixups in `utils/validation/fixups.ts`).
+    // `seg_index` is used for the legacy fallback path; uid-carrying items
+    // resolve via filterStaleIssues + resolveIssueSeg uid-first.
     $: editingItemIdx = ((): number => {
         if (!virtualize || !editingCoords || !openCat) return -1;
         const items = openCat.visibleItems as ReadonlyArray<{

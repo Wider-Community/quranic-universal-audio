@@ -27,7 +27,6 @@ import { applyCommand } from '../../domain/apply-command';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { formatRef as _formatRefLib, getVerseWordCounts } from '../data/references';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
-import { _fixupValIndicesForDelete } from '../validation/fixups';
 import { finalizeEdit } from './common';
 
 function formatRef(ref: Parameters<typeof _formatRefLib>[0]): string {
@@ -100,7 +99,6 @@ export function deleteSegment(
     clearFlashForChapter(chapter);
 
     markDirty(chapter, undefined, true);
-    _fixupValIndicesForDelete(chapter, seg.index);
 
     finalizeEdit(result.operation, chapter, []);
     clearEdit();

@@ -228,15 +228,32 @@ def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> Non
 # Dispatcher
 # ---------------------------------------------------------------------------
 
-def _reverse_via_patch(entries: list[dict], op: dict) -> None:
-    """Apply the inverse of an op by running the patch in reverse."""
-    apply_inverse_patch(entries, op["patch"])
+def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
+    """Apply the inverse of an op by running the patch in reverse.
+
+    Validates that the patch's affectedChapterIds are within the batch's
+    chapter_set. A mismatch indicates a malformed patch claiming chapters
+    outside the batch scope; raise ValueError so the caller can surface it.
+    """
+    import logging
+    patch = op["patch"]
+    patch_chapters = set(patch.get("affectedChapterIds") or [])
+    if patch_chapters and chapter_set and not patch_chapters.issubset(chapter_set):
+        outside = patch_chapters - chapter_set
+        logging.getLogger(__name__).warning(
+            "patch affectedChapterIds %s outside batch chapter_set %s — skipping op",
+            outside, chapter_set,
+        )
+        raise ValueError(
+            f"patch claims chapters {outside} outside the batch scope {chapter_set}"
+        )
+    apply_inverse_patch(entries, patch)
 
 
 def apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     """Apply the reverse of a single operation.  Raises ``ValueError`` on conflict."""
     if "patch" in op:
-        _reverse_via_patch(entries, op)
+        _reverse_via_patch(entries, op, chapter_set)
         return
     op_type = op.get("op_type", "")
     if op_type in ("trim_segment", "auto_fix_missing_word"):

@@ -45,7 +45,6 @@ import {
 } from '../playback/play-range';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { getRowEntryForMount } from '../playback/row-registry';
-import { _fixupValIndicesForSplit } from '../validation/fixups';
 import { _ensureSplitBaseCache, drawSplitWaveform } from '../waveform/split-draw';
 import { _fetchPeaksForClick } from '../waveform/utils';
 import { _playRange, exitEditMode, finalizeEdit } from './common';
@@ -388,7 +387,6 @@ export async function confirmSplit(
     clearFlashForChapter(chapter);
 
     markDirty(chapter, undefined, true);
-    _fixupValIndicesForSplit(chapter, seg.index);
 
     exitEditMode();
     finalizeEdit(result.operation, chapter, [firstHalf, secondHalf]);

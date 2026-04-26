@@ -19,7 +19,6 @@ def _issue_items(body) -> list[dict]:
     return items
 
 
-@pytest.mark.xfail(reason="phase-6", strict=False)
 def test_validation_response_carries_segment_uid(flask_client, tmp_reciter_dir):
     """Phase 6: every issue item carries a segment_uid (or null for chapter-level)."""
     reciter = "fixture_reciter"
@@ -34,7 +33,6 @@ def test_validation_response_carries_segment_uid(flask_client, tmp_reciter_dir):
         assert "segment_uid" in item, f"issue item missing segment_uid: {item}"
 
 
-@pytest.mark.xfail(reason="phase-6", strict=False)
 def test_resolve_issue_uses_uid_first(flask_client, tmp_reciter_dir):
     """Backend exposes a uid-first resolver helper that returns the live segment for a given uid."""
     pytest.importorskip(
@@ -50,7 +48,6 @@ def test_resolve_issue_uses_uid_first(flask_client, tmp_reciter_dir):
     assert seg.get("segment_uid") == fixture_uid
 
 
-@pytest.mark.xfail(reason="phase-6", strict=False)
 def test_resolve_issue_falls_back_to_seg_index_for_legacy_issues(flask_client, tmp_reciter_dir):
     """Issues without segment_uid (legacy response shape) still resolve via seg_index."""
     pytest.importorskip(
@@ -66,7 +63,6 @@ def test_resolve_issue_falls_back_to_seg_index_for_legacy_issues(flask_client, t
     assert seg is not None
 
 
-@pytest.mark.xfail(reason="phase-6", strict=False)
 def test_stale_issue_filtered_after_split(flask_client, tmp_reciter_dir):
     """After a structural edit (split) the original-uid issue is filtered, not rendered."""
     pytest.importorskip(
@@ -81,7 +77,6 @@ def test_stale_issue_filtered_after_split(flask_client, tmp_reciter_dir):
     assert filtered == [], "stale uid issue should be filtered out"
 
 
-@pytest.mark.xfail(reason="phase-6", strict=False)
 def test_stale_issue_filtered_after_delete(flask_client, tmp_reciter_dir):
     pytest.importorskip(
         "services.validation.detail",
@@ -99,7 +94,6 @@ def test_stale_issue_filtered_after_delete(flask_client, tmp_reciter_dir):
     assert filtered[0]["segment_uid"] == "alive"
 
 
-@pytest.mark.xfail(reason="phase-6", strict=False)
 def test_no_index_fixups_after_phase_6():
     """Phase 6 deletes _fixupValIndicesFor* helpers; they must not be referenced."""
     repo_root = __file__

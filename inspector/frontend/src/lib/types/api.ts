@@ -181,8 +181,7 @@ export interface SegTriggerValidationResponse {
 
 /**
  * Auto-fix descriptor attached to some `missing_words` entries.
- * `target_seg_index` is re-indexed client-side on split/merge/delete via
- * `_forEachValItem` / `_fixupValIndicesFor*`.
+ * `target_seg_index` is the chapter-local index of the segment to adjust.
  */
 export interface SegValAutoFix {
     target_seg_index: number;
@@ -193,8 +192,10 @@ export interface SegValAutoFix {
 /** Common fields present on every validation item row. */
 export interface SegValItemBase {
     chapter: number;
-    /** Server-emitted; client mutates during index-fixup after split/merge/delete. */
+    /** Server-emitted positional index; legacy fallback when segment_uid is absent. */
     seg_index?: number;
+    /** Stable segment identity (IS-10). Present on per-segment items; null on chapter-level items. */
+    segment_uid?: string | null;
 }
 
 export interface SegValFailedItem extends SegValItemBase {
