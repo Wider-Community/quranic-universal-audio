@@ -315,8 +315,10 @@ export async function confirmSplit(
     const splitOp = getPendingOp();
     const ctxCat = splitOp?.op_context_category;
     if (ctxCat && ctxCat !== 'muqattaat') {
-        if (!firstHalf.ignored_categories.includes(ctxCat)) firstHalf.ignored_categories.push(ctxCat);
-        if (!secondHalf.ignored_categories.includes(ctxCat)) secondHalf.ignored_categories.push(ctxCat);
+        const firstIgnored = firstHalf.ignored_categories ?? (firstHalf.ignored_categories = []);
+        const secondIgnored = secondHalf.ignored_categories ?? (secondHalf.ignored_categories = []);
+        if (!firstIgnored.includes(ctxCat)) firstIgnored.push(ctxCat);
+        if (!secondIgnored.includes(ctxCat)) secondIgnored.push(ctxCat);
     }
 
     // Auto-suggest per-verse refs for cross-verse splits.
