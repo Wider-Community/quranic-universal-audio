@@ -1,4 +1,4 @@
-Generated: 2026-04-28 19:30:31
+Generated: 2026-04-28 20:25:45
 
 ========================================================================
   bandar_balilah
@@ -16,101 +16,35 @@ Generated: 2026-04-28 19:30:31
   Word gaps:      0 verses
 
 --- Segments ---
-  Total:            12499
+  Total:            12492
   Single-seg:       2826
-  Multi-seg verses: 3393 (9673 segs)
+  Multi-seg verses: 3393 (9666 segs)
   Cross-verse keys: 106
   Max segs/verse:   19
 
 --- Segment Duration ---
   Min:    0.82s
-  Median: 6.76s
-  Mean:   7.15s
+  Median: 6.78s
+  Mean:   7.16s
   Max:    27.85s
 
 --- True Silence Duration (padding reversed) ---
-  Min:    0.20s
+  Min:    0.18s
   Median: 0.50s
   Mean:   0.56s
   Max:    18.73s
 
 --- Alignment Confidence ---
   Min:       0.6700
-  Median:    0.9900
-  Mean:      0.9797
+  Median:    1.0000
+  Mean:      0.9800
   Max:       1.0000
   Below 60%: 0
-  Below 80%: 23
+  Below 80%: 0
   Failed:    0 (no alignment)
   Empty ASR: 1 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
-
---- Low Confidence <80% (23) ---
-  [0.6700]  7:1:1-7:1:1  @ 0:03.0 - 0:14.5
-           audio: https://server6.mp3quran.net/balilah/007.mp3
-           text:  الٓمٓصٓ
-  [0.6700]  25:60:5-25:60:5  @ 15:07.1 - 15:09.5
-           audio: https://server6.mp3quran.net/balilah/025.mp3
-           text:  لِلرَّحْمَـٰنِ
-  [0.6700]  50:1:1-50:1:1  @ 0:04.2 - 0:07.7
-           audio: https://server6.mp3quran.net/balilah/050.mp3
-           text:  قٓ ۚ
-  [0.7000]  12:1:1-12:1:1  @ 0:03.1 - 0:08.7
-           audio: https://server6.mp3quran.net/balilah/012.mp3
-           text:  الٓر ۚ
-  [0.7000]  14:1:1-14:1:1  @ 0:03.1 - 0:10.2
-           audio: https://server6.mp3quran.net/balilah/014.mp3
-           text:  الٓر ۚ
-  [0.7000]  24:35:10-24:35:12  @ 13:43.3 - 13:46.5
-           audio: https://server6.mp3quran.net/balilah/024.mp3
-           text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
-  [0.7000]  29:1:1-29:1:1  @ 0:03.8 - 0:13.3
-           audio: https://server6.mp3quran.net/balilah/029.mp3
-           text:  الٓمٓ
-  [0.7000]  30:1:1-30:1:1  @ 0:04.2 - 0:13.6
-           audio: https://server6.mp3quran.net/balilah/030.mp3
-           text:  الٓمٓ
-  [0.7100]  46:35:22-46:35:22  @ 12:47.7 - 12:49.4
-           audio: https://server6.mp3quran.net/balilah/046.mp3
-           text:  بَلَـٰغٌ ۚ
-  [0.7500]  2:258:4-2:258:12  @ 1:31:01.1 - 1:31:10.2
-           audio: https://server6.mp3quran.net/balilah/002.mp3
-           text:  ٱلَّذِى حَآجَّ إِبْرَٰهِـۧمَ فِى رَبِّهِۦٓ أَنْ ءَاتَىٰهُ ٱللَّهُ ٱلْمُلْكَ
-  ... and 13 more
-
---- May Require Boundary Adjustment (15) ---
-  [1.0000]  3:76:1-3:76:1  @ 22:21.7 - 22:22.5
-           audio: https://server6.mp3quran.net/balilah/003.mp3
-           text:  بَلَىٰ
-  [1.0000]  3:125:1-3:125:1  @ 36:47.3 - 36:48.6
-           audio: https://server6.mp3quran.net/balilah/003.mp3
-           text:  بَلَىٰٓ ۚ
-  [0.9200]  4:176:1-4:176:1  @ 1:08:27.4 - 1:08:29.0
-           audio: https://server6.mp3quran.net/balilah/004.mp3
-           text:  يَسْتَفْتُونَكَ
-  [1.0000]  16:28:13-16:28:13  @ 8:05.8 - 8:07.2
-           audio: https://server6.mp3quran.net/balilah/016.mp3
-           text:  بَلَىٰٓ
-  [0.6700]  25:60:5-25:60:5  @ 15:07.1 - 15:09.5
-           audio: https://server6.mp3quran.net/balilah/025.mp3
-           text:  لِلرَّحْمَـٰنِ
-  [1.0000]  36:81:11-36:81:11  @ 17:31.1 - 17:32.3
-           audio: https://server6.mp3quran.net/balilah/036.mp3
-           text:  بَلَىٰ
-  [1.0000]  37:11:1-37:11:1  @ 1:09.0 - 1:10.7
-           audio: https://server6.mp3quran.net/balilah/037.mp3
-           text:  فَٱسْتَفْتِهِمْ
-  [0.8900]  37:138:1-37:138:1  @ 15:26.1 - 15:28.3
-           audio: https://server6.mp3quran.net/balilah/037.mp3
-           text:  وَبِٱلَّيْلِ ۗ
-  [0.7500]  38:55:1-38:55:1  @ 10:21.1 - 10:22.4
-           audio: https://server6.mp3quran.net/balilah/038.mp3
-           text:  هَـٰذَا ۚ
-  [1.0000]  43:80:8-43:80:8  @ 12:35.5 - 12:36.4
-           audio: https://server6.mp3quran.net/balilah/043.mp3
-           text:  بَلَىٰ
-  ... and 5 more
 
 --- Cross-verse (106) ---
   [1.0000]  2:8:9-2:9:4  @ 1:20.4 - 1:28.5
@@ -178,7 +112,7 @@ Generated: 2026-04-28 19:30:31
            text:  كٓهيعٓصٓ
   ... and 17 more
 
---- Qalqala (763) ---
+--- Qalqala (762) ---
   [0.9500]  2:2:1-2:2:4  [ب]  @ 0:10.8 - 0:14.1
            audio: https://server6.mp3quran.net/balilah/002.mp3
            text:  ذَٰلِكَ ٱلْكِتَـٰبُ لَا رَيْبَ ۛ
@@ -209,7 +143,7 @@ Generated: 2026-04-28 19:30:31
   [0.9900]  2:96:9-2:96:19  [ب]  @ 27:47.1 - 27:55.6
            audio: https://server6.mp3quran.net/balilah/002.mp3
            text:  يَوَدُّ أَحَدُهُمْ لَوْ يُعَمَّرُ أَلْفَ سَنَةٍ وَمَا هُوَ بِمُزَحْزِحِهِۦ مِنَ ٱلْعَذَابِ
-  ... and 753 more
+  ... and 752 more
 
 --- Empty ASR Phonemes (1) ---
   [1.0000]  97:5:1-97:5:5  @ 0:40.9 - 0:47.0
