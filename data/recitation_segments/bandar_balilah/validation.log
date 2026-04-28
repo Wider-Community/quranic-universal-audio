@@ -1,0 +1,155 @@
+Generated: 2026-04-28 20:25:45
+
+========================================================================
+  bandar_balilah
+  bandar_balilah
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   200 ms
+  Min speech:    0 ms
+  Padding:       80 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      0 verses
+
+--- Segments ---
+  Total:            12492
+  Single-seg:       2826
+  Multi-seg verses: 3393 (9666 segs)
+  Cross-verse keys: 106
+  Max segs/verse:   19
+
+--- Segment Duration ---
+  Min:    0.82s
+  Median: 6.78s
+  Mean:   7.16s
+  Max:    27.85s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.18s
+  Median: 0.50s
+  Mean:   0.56s
+  Max:    18.73s
+
+--- Alignment Confidence ---
+  Min:       0.6700
+  Median:    1.0000
+  Mean:      0.9800
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 0
+  Failed:    0 (no alignment)
+  Empty ASR: 1 (matched but no phonemes)
+
+--- Failed Alignments (0) ---
+
+--- Cross-verse (106) ---
+  [1.0000]  2:8:9-2:9:4  @ 1:20.4 - 1:28.5
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَمَا هُم بِمُؤْمِنِينَ يُخَـٰدِعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟
+  [0.9900]  2:15:4-2:16:5  @ 2:36.7 - 2:47.1
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَيَمُدُّهُمْ فِى طُغْيَـٰنِهِمْ يَعْمَهُونَ أُو۟لَـٰٓئِكَ ٱلَّذِينَ ٱشْتَرَوُا۟ ٱلضَّلَـٰلَةَ بِٱلْهُدَىٰ
+  [0.9700]  2:108:11-2:109:15  @ 31:50.8 - 32:12.8
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَمَن يَتَبَدَّلِ ٱلْكُفْرَ بِٱلْإِيمَـٰنِ فَقَدْ ضَلَّ سَوَآءَ ٱلسَّبِيلِ وَدَّ كَثِيرٌ مِّنْ أَهْلِ ٱلْكِتَـٰبِ لَوْ يَرُدُّونَكُم مِّن بَعْدِ إِيمَـٰنِكُمْ كُفَّارًا حَسَدًا مِّنْ عِندِ أَنفُسِهِم
+  [0.9900]  2:114:22-2:115:8  @ 34:04.9 - 34:20.5
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  لَهُمْ فِى ٱلدُّنْيَا خِزْىٌ وَلَهُمْ فِى ٱلْـَٔاخِرَةِ عَذَابٌ عَظِيمٌ وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ فَأَيْنَمَا تُوَلُّوا۟ فَثَمَّ وَجْهُ ٱللَّهِ ۚ
+  [0.9900]  2:170:15-2:171:9  @ 52:44.0 - 52:57.7
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  أَوَلَوْ كَانَ ءَابَآؤُهُمْ لَا يَعْقِلُونَ شَيْـًٔا وَلَا يَهْتَدُونَ وَمَثَلُ ٱلَّذِينَ كَفَرُوا۟ كَمَثَلِ ٱلَّذِى يَنْعِقُ بِمَا لَا يَسْمَعُ
+  [1.0000]  2:182:13-2:183:14  @ 57:07.7 - 57:25.4
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  إِنَّ ٱللَّهَ غَفُورٌ رَّحِيمٌ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ كُتِبَ عَلَيْكُمُ ٱلصِّيَامُ كَمَا كُتِبَ عَلَى ٱلَّذِينَ مِن قَبْلِكُمْ لَعَلَّكُمْ تَتَّقُونَ
+  [0.9600]  2:219:20-2:220:3  @ 1:12:06.7 - 1:12:15.3
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  كَذَٰلِكَ يُبَيِّنُ ٱللَّهُ لَكُمُ ٱلْـَٔايَـٰتِ لَعَلَّكُمْ تَتَفَكَّرُونَ فِى ٱلدُّنْيَا وَٱلْـَٔاخِرَةِ ۗ
+  [0.9700]  3:3:9-3:4:6  @ 0:22.8 - 0:33.8
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  وَأَنزَلَ ٱلتَّوْرَىٰةَ وَٱلْإِنجِيلَ مِن قَبْلُ هُدًى لِّلنَّاسِ وَأَنزَلَ ٱلْفُرْقَانَ ۗ
+  [0.9900]  3:151:17-3:152:7  @ 44:07.7 - 44:18.6
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  وَبِئْسَ مَثْوَى ٱلظَّـٰلِمِينَ وَلَقَدْ صَدَقَكُمُ ٱللَّهُ وَعْدَهُۥٓ إِذْ تَحُسُّونَهُم بِإِذْنِهِۦ ۖ
+  [0.9800]  3:166:8-3:167:3  @ 50:12.9 - 50:18.8
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  وَلِيَعْلَمَ ٱلْمُؤْمِنِينَ وَلِيَعْلَمَ ٱلَّذِينَ نَافَقُوا۟ ۚ
+  ... and 96 more
+
+--- Muqatta'at (27) ---
+  [0.8000]  2:1:1-2:1:1  @ 0:03.8 - 0:10.2
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  الٓمٓ
+  [0.8000]  3:1:1-3:1:1  @ 0:02.7 - 0:09.2
+           audio: https://server6.mp3quran.net/balilah/003.mp3
+           text:  الٓمٓ
+  [0.6700]  7:1:1-7:1:1  @ 0:03.0 - 0:14.5
+           audio: https://server6.mp3quran.net/balilah/007.mp3
+           text:  الٓمٓصٓ
+  [0.8000]  10:1:1-10:1:1  @ 0:03.6 - 0:09.0
+           audio: https://server6.mp3quran.net/balilah/010.mp3
+           text:  الٓر ۚ
+  [0.8000]  11:1:1-11:1:1  @ 0:03.0 - 0:08.1
+           audio: https://server6.mp3quran.net/balilah/011.mp3
+           text:  الٓر ۚ
+  [0.7000]  12:1:1-12:1:1  @ 0:03.1 - 0:08.7
+           audio: https://server6.mp3quran.net/balilah/012.mp3
+           text:  الٓر ۚ
+  [0.8300]  13:1:1-13:1:1  @ 0:03.2 - 0:13.2
+           audio: https://server6.mp3quran.net/balilah/013.mp3
+           text:  الٓمٓر ۚ
+  [0.7000]  14:1:1-14:1:1  @ 0:03.1 - 0:10.2
+           audio: https://server6.mp3quran.net/balilah/014.mp3
+           text:  الٓر ۚ
+  [0.8000]  15:1:1-15:1:1  @ 0:03.9 - 0:10.6
+           audio: https://server6.mp3quran.net/balilah/015.mp3
+           text:  الٓر ۚ
+  [0.8700]  19:1:1-19:1:1  @ 0:07.3 - 0:16.7
+           audio: https://server6.mp3quran.net/balilah/019.mp3
+           text:  كٓهيعٓصٓ
+  ... and 17 more
+
+--- Qalqala (762) ---
+  [0.9500]  2:2:1-2:2:4  [ب]  @ 0:10.8 - 0:14.1
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  ذَٰلِكَ ٱلْكِتَـٰبُ لَا رَيْبَ ۛ
+  [0.9600]  2:19:5-2:19:8  [ق]  @ 3:19.5 - 3:23.4
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
+  [0.9500]  2:44:6-2:44:8  [ب]  @ 10:57.8 - 11:01.5
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَأَنتُمْ تَتْلُونَ ٱلْكِتَـٰبَ ۚ
+  [0.9400]  2:49:1-2:49:8  [ب]  @ 12:05.8 - 12:13.3
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَإِذْ نَجَّيْنَـٰكُم مِّنْ ءَالِ فِرْعَوْنَ يَسُومُونَكُمْ سُوٓءَ ٱلْعَذَابِ
+  [0.9500]  2:61:1-2:61:8  [د]  @ 15:14.2 - 15:20.1
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَإِذْ قُلْتُمْ يَـٰمُوسَىٰ لَن نَّصْبِرَ عَلَىٰ طَعَامٍ وَٰحِدٍ
+  [0.9700]  2:61:51-2:61:54  [ق]  @ 16:04.3 - 16:08.9
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [0.9500]  2:71:17-2:71:20  [ق]  @ 19:14.9 - 19:17.9
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  قَالُوا۟ ٱلْـَٔـٰنَ جِئْتَ بِٱلْحَقِّ ۚ
+  [0.9800]  2:85:39-2:85:44  [ب]  @ 24:11.3 - 24:16.6
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  وَيَوْمَ ٱلْقِيَـٰمَةِ يُرَدُّونَ إِلَىٰٓ أَشَدِّ ٱلْعَذَابِ ۗ
+  [0.9200]  2:90:21-2:90:24  [ب]  @ 25:57.3 - 26:01.7
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  فَبَآءُو بِغَضَبٍ عَلَىٰ غَضَبٍ ۚ
+  [0.9900]  2:96:9-2:96:19  [ب]  @ 27:47.1 - 27:55.6
+           audio: https://server6.mp3quran.net/balilah/002.mp3
+           text:  يَوَدُّ أَحَدُهُمْ لَوْ يُعَمَّرُ أَلْفَ سَنَةٍ وَمَا هُوَ بِمُزَحْزِحِهِۦ مِنَ ٱلْعَذَابِ
+  ... and 752 more
+
+--- Empty ASR Phonemes (1) ---
+  [1.0000]  97:5:1-97:5:5  @ 0:40.9 - 0:47.0
+           audio: https://server6.mp3quran.net/balilah/097.mp3
+           text:  سَلَـٰمٌ هِىَ حَتَّىٰ مَطْلَعِ ٱلْفَجْرِ
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
