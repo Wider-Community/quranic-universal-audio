@@ -8,10 +8,10 @@ CLAUDE.md
 captures/
 
 # Local-only scripts
-sync_mfa.sh
-fetch_results.sh
-mfa_train.pbs
-prepare_labs.py
-audit_reciters.py
 .process_state.json
 .timestamps_state.json
+sync_mfa.sh
+fetch_results.sh
+analyse_loudness.py
+audit_reciters.py
+attach_tajweed.py
