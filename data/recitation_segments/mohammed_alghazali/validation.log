@@ -1,0 +1,421 @@
+Generated: 2026-04-10 03:02:56
+
+========================================================================
+  mohammed_alghazali
+  data/recitation_segments/mohammed_alghazali
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   200 ms
+  Min speech:    0 ms
+  Padding:       80 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      8 verses
+
+--- Segments ---
+  Total:            12129
+  Single-seg:       2928
+  Multi-seg verses: 3287 (9201 segs)
+  Cross-verse keys: 41
+  Max segs/verse:   20
+
+--- Segment Duration ---
+  Min:    1.08s
+  Median: 8.79s
+  Mean:   8.98s
+  Max:    27.41s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.20s
+  Median: 0.48s
+  Mean:   0.48s
+  Max:    1.10s
+
+--- Alignment Confidence ---
+  Min:       0.6700
+  Median:    1.0000
+  Mean:      0.9826
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 8
+  Failed:    11 (no alignment)
+  Empty ASR: 0 (matched but no phonemes)
+
+--- Failed Alignments (11) ---
+  1:23:27.3 - 1:23:27.7  (0.38s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+    asr:   q Q
+  2:10:39.6 - 2:10:39.8  (0.22s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+    asr:   q Q
+  45:18.8 - 45:19.2  (0.40s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/003.mp3
+    asr:   q Q
+  24:40.7 - 24:41.0  (0.32s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/006.mp3
+    asr:   q Q
+  2:39.8 - 2:40.1  (0.29s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/010.mp3
+    asr:   q Q
+  11:40.7 - 11:40.9  (0.22s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/017.mp3
+    asr:   q Q
+  24:00.6 - 24:01.0  (0.40s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/020.mp3
+    asr:   q Q
+  12:20.1 - 12:23.4  (3.38s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/031.mp3
+    asr:   w j θ
+  5:40.1 - 5:40.5  (0.38s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/040.mp3
+    asr:   q Q
+  0:19.9 - 0:21.7  (1.78s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/042.mp3
+    asr:   f
+  7:18.0 - 7:18.4  (0.38s)
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/042.mp3
+    asr:   q Q
+
+--- Missing Words (8) ---
+  2:68  @ 28:57.7 - 29:22.7
+    missing words: [8]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+  2:271  @ 2:24:42.4 - 2:25:12.1
+    missing words: [5]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+  4:36  @ 22:31.1 - 23:16.4
+    missing words: [6]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/004.mp3
+  6:80  @ 31:46.2 - 32:27.7
+    missing words: [18]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/006.mp3
+  11:57  @ 23:22.0 - 23:49.4
+    missing words: [15]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/011.mp3
+  22:26  @ 10:04.1 - 10:26.4
+    missing words: [10]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/022.mp3
+  24:55  @ 23:33.8 - 24:24.8
+    missing words: [31]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/024.mp3
+  31:33  @ 10:59.0 - 11:40.8
+    missing words: [18]
+    audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/031.mp3
+
+--- Low Confidence <80% (8) ---
+  [0.6700]  7:1:1-7:1:1  @ 0:02.7 - 0:14.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/007.mp3
+           text:  الٓمٓصٓ
+  [0.7000]  24:35:10-24:35:12  @ 14:37.8 - 14:41.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/024.mp3
+           text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
+  [0.7100]  5:3:29-5:3:30  @ 2:33.5 - 2:35.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/005.mp3
+           text:  ذَٰلِكُمْ فِسْقٌ ۗ
+  [0.7100]  46:35:22-46:35:22  @ 14:43.3 - 14:45.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/046.mp3
+           text:  بَلَـٰغٌ ۚ
+  [0.7500]  2:259:23-2:259:25  @ 2:16:08.0 - 2:16:10.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  قَالَ كَمْ لَبِثْتَ ۖ
+  [0.7500]  60:7:11-60:7:12  @ 4:28.3 - 4:31.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/060.mp3
+           text:  وَٱللَّهُ قَدِيرٌ ۚ
+  [0.7700]  24:35:33-24:35:35  @ 15:17.2 - 15:21.3
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/024.mp3
+           text:  نُّورٌ عَلَىٰ نُورٍ ۗ
+  [0.7900]  10:4:4-10:4:6  @ 1:39.4 - 1:42.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/010.mp3
+           text:  وَعْدَ ٱللَّهِ حَقًّا ۚ
+
+--- Detected Repetitions (1) ---
+  [0.9600]  5:111:1-5:111:13  @ 1:03:28.1 - 1:03:50.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/005.mp3
+           text:  وَإِذْ أَوْحَيْتُ إِلَى ٱلْحَوَارِيِّـۧنَ أَنْ ءَامِنُوا۟ بِى وَبِرَسُولِى قَالُوٓا۟ ءَامَنَّا وَٱشْهَدْ بِأَنَّنَا مُسْلِمُونَ
+
+--- May Require Boundary Adjustment (2) ---
+  [1.0000]  11:49:16-11:49:16  @ 20:41.0 - 20:42.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/011.mp3
+           text:  فَٱصْبِرْ ۖ
+  [1.0000]  42:13:38-42:13:38  @ 4:44.1 - 4:47.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/042.mp3
+           text:  يُنِيبُ
+
+--- Cross-verse (41) ---
+  [0.9900]  2:255:45-2:256:9  @ 2:13:29.7 - 2:13:46.9
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَلَا يَـُٔودُهُۥ حِفْظُهُمَا ۚ وَهُوَ ٱلْعَلِىُّ ٱلْعَظِيمُ لَآ إِكْرَاهَ فِى ٱلدِّينِ ۖ قَد تَّبَيَّنَ ٱلرُّشْدُ مِنَ ٱلْغَىِّ ۚ
+  [1.0000]  3:148:8-3:149:8  @ 1:01:18.0 - 1:01:34.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/003.mp3
+           text:  وَٱللَّهُ يُحِبُّ ٱلْمُحْسِنِينَ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوٓا۟ إِن تُطِيعُوا۟ ٱلَّذِينَ كَفَرُوا۟ يَرُدُّوكُمْ
+  [1.0000]  5:23:16-5:24:9  @ 16:51.5 - 17:15.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/005.mp3
+           text:  وَعَلَى ٱللَّهِ فَتَوَكَّلُوٓا۟ إِن كُنتُم مُّؤْمِنِينَ قَالُوا۟ يَـٰمُوسَىٰٓ إِنَّا لَن نَّدْخُلَهَآ أَبَدًا مَّا دَامُوا۟ فِيهَا ۖ
+  [1.0000]  20:27:1-20:28:2  @ 4:00.1 - 4:08.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/020.mp3
+           text:  وَٱحْلُلْ عُقْدَةً مِّن لِّسَانِى يَفْقَهُوا۟ قَوْلِى
+  [0.9500]  24:36:10-24:37:1  @ 15:47.6 - 15:57.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/024.mp3
+           text:  يُسَبِّحُ لَهُۥ فِيهَا بِٱلْغُدُوِّ وَٱلْـَٔاصَالِ رِجَالٌ
+  [0.9500]  30:4:10-30:5:2  @ 0:42.0 - 0:49.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/030.mp3
+           text:  وَيَوْمَئِذٍ يَفْرَحُ ٱلْمُؤْمِنُونَ بِنَصْرِ ٱللَّهِ ۚ
+  [1.0000]  35:2:17-35:3:6  @ 0:56.1 - 1:09.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/035.mp3
+           text:  وَهُوَ ٱلْعَزِيزُ ٱلْحَكِيمُ يَـٰٓأَيُّهَا ٱلنَّاسُ ٱذْكُرُوا۟ نِعْمَتَ ٱللَّهِ عَلَيْكُمْ ۚ
+  [0.9700]  36:3:1-36:4:3  @ 0:12.8 - 0:21.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/036.mp3
+           text:  إِنَّكَ لَمِنَ ٱلْمُرْسَلِينَ عَلَىٰ صِرَٰطٍ مُّسْتَقِيمٍ
+  [1.0000]  40:1:1-40:2:6  @ 0:03.2 - 0:15.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/040.mp3
+           text:  حمٓ تَنزِيلُ ٱلْكِتَـٰبِ مِنَ ٱللَّهِ ٱلْعَزِيزِ ٱلْعَلِيمِ
+  [0.9600]  41:1:1-41:2:4  @ 0:03.2 - 0:14.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/041.mp3
+           text:  حمٓ تَنزِيلٌ مِّنَ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ
+  [0.9300]  44:43:1-44:44:2  @ 6:54.6 - 7:01.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/044.mp3
+           text:  إِنَّ شَجَرَتَ ٱلزَّقُّومِ طَعَامُ ٱلْأَثِيمِ
+  [1.0000]  51:12:1-51:13:5  @ 0:52.9 - 1:03.9
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/051.mp3
+           text:  يَسْـَٔلُونَ أَيَّانَ يَوْمُ ٱلدِّينِ يَوْمَ هُمْ عَلَى ٱلنَّارِ يُفْتَنُونَ
+  [1.0000]  51:20:1-51:21:2  @ 2:03.3 - 2:15.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/051.mp3
+           text:  وَفِى ٱلْأَرْضِ ءَايَـٰتٌ لِّلْمُوقِنِينَ وَفِىٓ أَنفُسِكُمْ ۚ
+  [0.9700]  51:24:1-51:25:5  @ 2:48.8 - 3:02.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/051.mp3
+           text:  هَلْ أَتَىٰكَ حَدِيثُ ضَيْفِ إِبْرَٰهِيمَ ٱلْمُكْرَمِينَ إِذْ دَخَلُوا۟ عَلَيْهِ فَقَالُوا۟ سَلَـٰمًا ۖ
+  [0.9800]  52:20:5-52:21:8  @ 2:27.0 - 2:45.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/052.mp3
+           text:  وَزَوَّجْنَـٰهُم بِحُورٍ عِينٍ وَٱلَّذِينَ ءَامَنُوا۟ وَٱتَّبَعَتْهُمْ ذُرِّيَّتُهُم بِإِيمَـٰنٍ أَلْحَقْنَا بِهِمْ ذُرِّيَّتَهُمْ
+  [0.9600]  55:3:1-55:4:2  @ 0:13.2 - 0:21.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/055.mp3
+           text:  خَلَقَ ٱلْإِنسَـٰنَ عَلَّمَهُ ٱلْبَيَانَ
+  [1.0000]  55:75:1-55:76:6  @ 11:17.6 - 11:36.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/055.mp3
+           text:  فَبِأَىِّ ءَالَآءِ رَبِّكُمَا تُكَذِّبَانِ مُتَّكِـِٔينَ عَلَىٰ رَفْرَفٍ خُضْرٍ وَعَبْقَرِىٍّ حِسَانٍ
+  [0.9700]  56:13:1-56:14:3  @ 1:10.0 - 1:19.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/056.mp3
+           text:  ثُلَّةٌ مِّنَ ٱلْأَوَّلِينَ وَقَلِيلٌ مِّنَ ٱلْـَٔاخِرِينَ
+  [0.9700]  56:39:1-56:40:3  @ 3:58.3 - 4:08.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/056.mp3
+           text:  ثُلَّةٌ مِّنَ ٱلْأَوَّلِينَ وَثُلَّةٌ مِّنَ ٱلْـَٔاخِرِينَ
+  [0.9800]  56:49:1-56:50:5  @ 5:15.8 - 5:30.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/056.mp3
+           text:  قُلْ إِنَّ ٱلْأَوَّلِينَ وَٱلْـَٔاخِرِينَ لَمَجْمُوعُونَ إِلَىٰ مِيقَـٰتِ يَوْمٍ مَّعْلُومٍ
+  [0.9900]  59:2:33-59:3:9  @ 0:56.5 - 1:24.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/059.mp3
+           text:  يُخْرِبُونَ بُيُوتَهُم بِأَيْدِيهِمْ وَأَيْدِى ٱلْمُؤْمِنِينَ فَٱعْتَبِرُوا۟ يَـٰٓأُو۟لِى ٱلْأَبْصَـٰرِ وَلَوْلَآ أَن كَتَبَ ٱللَّهُ عَلَيْهِمُ ٱلْجَلَآءَ لَعَذَّبَهُمْ فِى ٱلدُّنْيَا ۖ
+  [0.9700]  61:13:8-61:14:9  @ 4:49.1 - 5:05.3
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/061.mp3
+           text:  وَبَشِّرِ ٱلْمُؤْمِنِينَ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ كُونُوٓا۟ أَنصَارَ ٱللَّهِ كَمَا قَالَ عِيسَى
+  [0.9800]  68:5:1-68:6:2  @ 0:34.3 - 0:41.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/068.mp3
+           text:  فَسَتُبْصِرُ وَيُبْصِرُونَ بِأَييِّكُمُ ٱلْمَفْتُونُ
+  [1.0000]  69:36:1-69:37:4  @ 5:15.0 - 5:28.9
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/069.mp3
+           text:  وَلَا طَعَامٌ إِلَّا مِنْ غِسْلِينٍ لَّا يَأْكُلُهُۥٓ إِلَّا ٱلْخَـٰطِـُٔونَ
+  [0.9800]  69:38:1-69:39:3  @ 5:29.6 - 5:39.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/069.mp3
+           text:  فَلَآ أُقْسِمُ بِمَا تُبْصِرُونَ وَمَا لَا تُبْصِرُونَ
+  [0.9400]  74:29:1-74:30:3  @ 2:15.3 - 2:21.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/074.mp3
+           text:  لَوَّاحَةٌ لِّلْبَشَرِ عَلَيْهَا تِسْعَةَ عَشَرَ
+  [0.9700]  74:40:1-74:41:2  @ 4:37.7 - 4:47.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/074.mp3
+           text:  فِى جَنَّـٰتٍ يَتَسَآءَلُونَ عَنِ ٱلْمُجْرِمِينَ
+  [1.0000]  74:49:1-74:50:3  @ 5:31.6 - 5:46.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/074.mp3
+           text:  فَمَا لَهُمْ عَنِ ٱلتَّذْكِرَةِ مُعْرِضِينَ كَأَنَّهُمْ حُمُرٌ مُّسْتَنفِرَةٌ
+  [1.0000]  75:26:1-75:27:3  @ 2:31.0 - 2:43.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/075.mp3
+           text:  كَلَّآ إِذَا بَلَغَتِ ٱلتَّرَاقِىَ وَقِيلَ مَنْ ۜ رَاقٍ
+  [1.0000]  75:34:1-75:35:4  @ 3:20.4 - 3:28.3
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/075.mp3
+           text:  أَوْلَىٰ لَكَ فَأَوْلَىٰ ثُمَّ أَوْلَىٰ لَكَ فَأَوْلَىٰٓ
+  ... and 11 more
+
+--- Muqatta'at (28) ---
+  [0.8000]  2:1:1-2:1:1  @ 0:05.6 - 0:16.9
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  الٓمٓ
+  [0.8000]  3:1:1-3:1:1  @ 0:02.6 - 0:14.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/003.mp3
+           text:  الٓمٓ
+  [0.6700]  7:1:1-7:1:1  @ 0:02.7 - 0:14.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/007.mp3
+           text:  الٓمٓصٓ
+  [0.8000]  10:1:1-10:1:1  @ 0:03.0 - 0:09.6
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/010.mp3
+           text:  الٓر ۚ
+  [0.8000]  11:1:1-11:1:1  @ 0:03.1 - 0:09.9
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/011.mp3
+           text:  الٓر ۚ
+  [0.8000]  12:1:1-12:1:1  @ 0:03.0 - 0:09.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/012.mp3
+           text:  الٓر ۚ
+  [0.8300]  13:1:1-13:1:1  @ 0:03.0 - 0:14.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/013.mp3
+           text:  الٓمٓر ۚ
+  [0.8000]  14:1:1-14:1:1  @ 0:03.0 - 0:11.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/014.mp3
+           text:  الٓر ۚ
+  [0.8000]  15:1:1-15:1:1  @ 0:03.0 - 0:10.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/015.mp3
+           text:  الٓر ۚ
+  [1.0000]  19:1:1-19:1:1  @ 0:08.3 - 0:20.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/019.mp3
+           text:  كٓهيعٓصٓ
+  [1.0000]  20:1:1-20:1:1  @ 0:02.9 - 0:04.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/020.mp3
+           text:  طه
+  [1.0000]  26:1:1-26:1:1  @ 0:03.1 - 0:12.3
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/026.mp3
+           text:  طسٓمٓ
+  [1.0000]  27:1:1-27:1:1  @ 0:03.1 - 0:07.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/027.mp3
+           text:  طسٓ ۚ
+  [1.0000]  28:1:1-28:1:1  @ 0:03.2 - 0:12.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/028.mp3
+           text:  طسٓمٓ
+  [0.8000]  29:1:1-29:1:1  @ 0:03.2 - 0:12.6
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/029.mp3
+           text:  الٓمٓ
+  [0.8000]  30:1:1-30:1:1  @ 0:03.2 - 0:13.3
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/030.mp3
+           text:  الٓمٓ
+  [0.8000]  31:1:1-31:1:1  @ 0:03.2 - 0:13.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/031.mp3
+           text:  الٓمٓ
+  [0.8000]  32:1:1-32:1:1  @ 0:03.1 - 0:12.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/032.mp3
+           text:  الٓمٓ
+  [1.0000]  36:1:1-36:1:1  @ 0:03.1 - 0:07.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/036.mp3
+           text:  يسٓ
+  [1.0000]  38:1:1-38:1:1  @ 0:03.2 - 0:07.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/038.mp3
+           text:  صٓ ۚ
+  [1.0000]  42:1:1-42:1:1  @ 0:03.3 - 0:08.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/042.mp3
+           text:  حمٓ
+  [0.8000]  42:2:1-42:2:1  @ 0:08.4 - 0:19.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/042.mp3
+           text:  عٓسٓقٓ
+  [1.0000]  43:1:1-43:1:1  @ 0:03.3 - 0:07.6
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/043.mp3
+           text:  حمٓ
+  [1.0000]  44:1:1-44:1:1  @ 0:03.2 - 0:07.6
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/044.mp3
+           text:  حمٓ
+  [1.0000]  45:1:1-45:1:1  @ 0:03.3 - 0:07.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/045.mp3
+           text:  حمٓ
+  [1.0000]  46:1:1-46:1:1  @ 0:03.3 - 0:08.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/046.mp3
+           text:  حمٓ
+  [1.0000]  50:1:1-50:1:1  @ 0:03.2 - 0:06.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/050.mp3
+           text:  قٓ ۚ
+  [1.0000]  68:1:1-68:1:1  @ 0:02.7 - 0:07.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/068.mp3
+           text:  نٓ ۚ
+
+--- Qalqala (726) ---
+  [0.9800]  2:44:1-2:44:8  [ب]  @ 18:06.7 - 18:20.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  ۞ أَتَأْمُرُونَ ٱلنَّاسَ بِٱلْبِرِّ وَتَنسَوْنَ أَنفُسَكُمْ وَأَنتُمْ تَتْلُونَ ٱلْكِتَـٰبَ ۚ
+  [0.9700]  2:61:51-2:61:54  [ق]  @ 26:22.2 - 26:28.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [0.9800]  2:85:39-2:85:44  [ب]  @ 38:30.4 - 38:40.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَيَوْمَ ٱلْقِيَـٰمَةِ يُرَدُّونَ إِلَىٰٓ أَشَدِّ ٱلْعَذَابِ ۗ
+  [0.9600]  2:90:21-2:90:24  [ب]  @ 41:20.5 - 41:26.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  فَبَآءُو بِغَضَبٍ عَلَىٰ غَضَبٍ ۚ
+  [0.9800]  2:91:8-2:91:17  [ق]  @ 41:42.3 - 41:55.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  قَالُوا۟ نُؤْمِنُ بِمَآ أُنزِلَ عَلَيْنَا وَيَكْفُرُونَ بِمَا وَرَآءَهُۥ وَهُوَ ٱلْحَقُّ
+  [0.9800]  2:102:57-2:102:66  [ق]  @ 47:37.8 - 47:47.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَلَقَدْ عَلِمُوا۟ لَمَنِ ٱشْتَرَىٰهُ مَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ ۚ
+  [0.9500]  2:109:11-2:109:21  [ق]  @ 50:22.5 - 50:35.3
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  كُفَّارًا حَسَدًا مِّنْ عِندِ أَنفُسِهِم مِّن بَعْدِ مَا تَبَيَّنَ لَهُمُ ٱلْحَقُّ ۖ
+  [0.9600]  2:113:7-2:113:15  [ب]  @ 52:12.2 - 52:23.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
+  [0.9600]  2:115:1-2:115:3  [ب]  @ 53:21.7 - 53:25.6
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  [1.0000]  2:125:20-2:125:22  [د]  @ 58:18.7 - 58:24.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَٱلْعَـٰكِفِينَ وَٱلرُّكَّعِ ٱلسُّجُودِ
+  [0.9700]  2:136:4-2:136:13  [ب]  @ 1:03:12.6 - 1:03:27.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَمَآ أُنزِلَ إِلَيْنَا وَمَآ أُنزِلَ إِلَىٰٓ إِبْرَٰهِـۧمَ وَإِسْمَـٰعِيلَ وَإِسْحَـٰقَ وَيَعْقُوبَ
+  [0.9100]  2:137:9-2:137:14  [ق]  @ 1:04:18.1 - 1:04:26.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَّإِن تَوَلَّوْا۟ فَإِنَّمَا هُمْ فِى شِقَاقٍ ۖ
+  [0.9600]  2:142:12-2:142:15  [ب]  @ 1:06:29.0 - 1:06:33.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  قُل لِّلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  [0.9700]  2:162:1-2:162:6  [ب]  @ 1:16:03.7 - 1:16:12.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  خَـٰلِدِينَ فِيهَا ۖ لَا يُخَفَّفُ عَنْهُمُ ٱلْعَذَابُ
+  [0.9100]  2:163:1-2:163:3  [د]  @ 1:16:22.3 - 1:16:27.9
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَإِلَـٰهُكُمْ إِلَـٰهٌ وَٰحِدٌ ۖ
+  [1.0000]  2:165:24-2:165:31  [ب]  @ 1:18:35.5 - 1:18:47.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  أَنَّ ٱلْقُوَّةَ لِلَّهِ جَمِيعًا وَأَنَّ ٱللَّهَ شَدِيدُ ٱلْعَذَابِ
+  [1.0000]  2:166:1-2:166:12  [ب]  @ 1:18:47.3 - 1:19:01.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  إِذْ تَبَرَّأَ ٱلَّذِينَ ٱتُّبِعُوا۟ مِنَ ٱلَّذِينَ ٱتَّبَعُوا۟ وَرَأَوُا۟ ٱلْعَذَابَ وَتَقَطَّعَتْ بِهِمُ ٱلْأَسْبَابُ
+  [0.9500]  2:176:1-2:176:6  [ق]  @ 1:23:20.6 - 1:23:27.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  ذَٰلِكَ بِأَنَّ ٱللَّهَ نَزَّلَ ٱلْكِتَـٰبَ بِٱلْحَقِّ ۗ
+  [0.9800]  2:176:7-2:176:14  [د]  @ 1:23:28.0 - 1:23:39.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَإِنَّ ٱلَّذِينَ ٱخْتَلَفُوا۟ فِى ٱلْكِتَـٰبِ لَفِى شِقَاقٍ بَعِيدٍ
+  [0.9500]  2:186:1-2:186:6  [ب]  @ 1:29:46.8 - 1:29:58.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَإِذَا سَأَلَكَ عِبَادِى عَنِّى فَإِنِّى قَرِيبٌ ۖ
+  [0.9800]  2:187:48-2:187:53  [د]  @ 1:31:17.7 - 1:31:26.8
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَلَا تُبَـٰشِرُوهُنَّ وَأَنتُمْ عَـٰكِفُونَ فِى ٱلْمَسَـٰجِدِ ۗ
+  [0.9600]  2:189:4-2:189:8  [ج]  @ 1:32:20.9 - 1:32:27.1
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  قُلْ هِىَ مَوَٰقِيتُ لِلنَّاسِ وَٱلْحَجِّ ۗ
+  [1.0000]  2:196:67-2:196:73  [ب]  @ 1:36:16.7 - 1:36:28.4
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَٱتَّقُوا۟ ٱللَّهَ وَٱعْلَمُوٓا۟ أَنَّ ٱللَّهَ شَدِيدُ ٱلْعِقَابِ
+  [0.9700]  2:197:4-2:197:15  [ج]  @ 1:36:36.6 - 1:36:48.3
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  فَمَن فَرَضَ فِيهِنَّ ٱلْحَجَّ فَلَا رَفَثَ وَلَا فُسُوقَ وَلَا جِدَالَ فِى ٱلْحَجِّ ۗ
+  [1.0000]  2:197:27-2:197:29  [ب]  @ 1:37:03.6 - 1:37:09.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَٱتَّقُونِ يَـٰٓأُو۟لِى ٱلْأَلْبَـٰبِ
+  [1.0000]  2:200:11-2:200:24  [ق]  @ 1:38:24.2 - 1:38:38.9
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  فَمِنَ ٱلنَّاسِ مَن يَقُولُ رَبَّنَآ ءَاتِنَا فِى ٱلدُّنْيَا وَمَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ
+  [1.0000]  2:202:6-2:202:8  [ب]  @ 1:39:11.5 - 1:39:16.0
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَٱللَّهُ سَرِيعُ ٱلْحِسَابِ
+  [1.0000]  2:205:11-2:205:14  [د]  @ 1:40:19.9 - 1:40:25.2
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَٱللَّهُ لَا يُحِبُّ ٱلْفَسَادَ
+  [1.0000]  2:206:9-2:206:12  [د]  @ 1:40:32.7 - 1:40:39.5
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  فَحَسْبُهُۥ جَهَنَّمُ ۚ وَلَبِئْسَ ٱلْمِهَادُ
+  [0.9500]  2:207:9-2:207:11  [د]  @ 1:40:50.6 - 1:40:57.7
+           audio: https://ia601406.us.archive.org/16/items/Mohammed-Al-Ghazali/002.mp3
+           text:  وَٱللَّهُ رَءُوفٌ بِٱلْعِبَادِ
+  ... and 696 more
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
