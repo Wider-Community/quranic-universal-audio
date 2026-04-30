@@ -1,0 +1,219 @@
+Generated: 2026-04-15 10:37:45
+
+========================================================================
+  mohammed_ayyub
+  data\recitation_segments\mohammed_ayyub
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   100 ms
+  Min speech:    0 ms
+  Padding:       40 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      0 verses
+
+--- Segments ---
+  Total:            9429
+  Single-seg:       3478
+  Multi-seg verses: 2255 (5951 segs)
+  Cross-verse keys: 481
+  Max segs/verse:   16
+
+--- Segment Duration ---
+  Min:    0.96s
+  Median: 7.33s
+  Mean:   7.69s
+  Max:    35.31s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.08s
+  Median: 0.36s
+  Mean:   0.43s
+  Max:    15.38s
+
+--- Alignment Confidence ---
+  Min:       0.6000
+  Median:    0.9900
+  Mean:      0.9787
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 2
+  Failed:    0 (no alignment)
+  Empty ASR: 33 (matched but no phonemes)
+
+--- Failed Alignments (0) ---
+
+--- Low Confidence <80% (2) ---
+  [0.6000]  40:35:1-40:35:15  @ 6:49.3 - 7:00.1
+           audio:  https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/040.mp3
+           text:  ٱلَّذِينَ يُجَـٰدِلُونَ فِىٓ ءَايَـٰتِ ٱللَّهِ بِغَيْرِ سُلْطَـٰنٍ أَتَىٰهُمْ ۖ كَبُرَ مَقْتًا عِندَ ٱللَّهِ وَعِندَ ٱلَّذِينَ ءَامَنُوا۟ ۚ
+  [0.7800]  52:46:1-52:46:9  @ 3:03.5 - 3:07.7
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/052.mp3
+           text:  يَوْمَ لَا يُغْنِى عَنْهُمْ كَيْدُهُمْ شَيْـًٔا وَلَا هُمْ يُنصَرُونَ
+
+--- Detected Repetitions (6) ---
+  [1.0000]  48:29:1-48:29:3  @ 7:30.4 - 7:34.9
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/048.mp3
+           text:  مُّحَمَّدٌ رَّسُولُ ٱللَّهِ ۚ
+  [1.0000]  48:29:4-48:29:11  @ 7:34.9 - 7:43.0
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/048.mp3
+           text:  وَٱلَّذِينَ مَعَهُۥٓ أَشِدَّآءُ عَلَى ٱلْكُفَّارِ رُحَمَآءُ بَيْنَهُمْ ۖ تَرَىٰهُمْ
+  [1.0000]  48:29:11-48:29:18  @ 7:43.0 - 7:50.4
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/048.mp3
+           text:  تَرَىٰهُمْ رُكَّعًا سُجَّدًا يَبْتَغُونَ فَضْلًا مِّنَ ٱللَّهِ وَرِضْوَٰنًا ۖ
+  [1.0000]  48:29:19-48:29:24  @ 7:50.4 - 7:55.7
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/048.mp3
+           text:  سِيمَاهُمْ فِى وُجُوهِهِم مِّنْ أَثَرِ ٱلسُّجُودِ ۚ
+  [0.9400]  57:20:1-57:20:18  @ 5:40.3 - 5:59.1
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/057.mp3
+           text:  ٱعْلَمُوٓا۟ أَنَّمَا ٱلْحَيَوٰةُ ٱلدُّنْيَا لَعِبٌ وَلَهْوٌ وَزِينَةٌ وَتَفَاخُرٌ بَيْنَكُمْ وَتَكَاثُرٌ فِى ٱلْأَمْوَٰلِ وَٱلْأَوْلَـٰدِ ۖ كَمَثَلِ غَيْثٍ أَعْجَبَ ٱلْكُفَّارَ نَبَاتُهُۥ
+  [0.9300]  57:27:10-57:27:27  @ 8:33.4 - 8:55.5
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/057.mp3
+           text:  وَءَاتَيْنَـٰهُ ٱلْإِنجِيلَ وَجَعَلْنَا فِى قُلُوبِ ٱلَّذِينَ ٱتَّبَعُوهُ رَأْفَةً وَرَحْمَةً وَرَهْبَانِيَّةً ٱبْتَدَعُوهَا مَا كَتَبْنَـٰهَا عَلَيْهِمْ إِلَّا ٱبْتِغَآءَ رِضْوَٰنِ ٱللَّهِ
+
+--- May Require Boundary Adjustment (2) ---
+  [1.0000]  22:72:23-22:72:23  @ 18:43.7 - 18:46.0
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/022.mp3
+           text:  ٱلنَّارُ
+  [0.9100]  25:20:17-25:20:17  @ 4:34.5 - 4:36.3
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/025.mp3
+           text:  أَتَصْبِرُونَ ۗ
+
+--- Cross-verse (481) ---
+  [0.9000]  1:3:1-1:4:3  @ 0:11.6 - 0:16.8
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/001.mp3
+           text:  ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ مَـٰلِكِ يَوْمِ ٱلدِّينِ
+  [0.9800]  1:6:1-1:7:4  @ 0:24.1 - 0:30.7
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/001.mp3
+           text:  ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ
+  [0.9600]  2:219:20-2:220:3  @ 1:12:11.6 - 1:12:19.2
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  كَذَٰلِكَ يُبَيِّنُ ٱللَّهُ لَكُمُ ٱلْـَٔايَـٰتِ لَعَلَّكُمْ تَتَفَكَّرُونَ فِى ٱلدُّنْيَا وَٱلْـَٔاخِرَةِ ۗ
+  [0.9700]  3:3:1-3:4:6  @ 0:16.9 - 0:31.5
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  نَزَّلَ عَلَيْكَ ٱلْكِتَـٰبَ بِٱلْحَقِّ مُصَدِّقًا لِّمَا بَيْنَ يَدَيْهِ وَأَنزَلَ ٱلتَّوْرَىٰةَ وَٱلْإِنجِيلَ مِن قَبْلُ هُدًى لِّلنَّاسِ وَأَنزَلَ ٱلْفُرْقَانَ ۗ
+  [0.9900]  3:48:1-3:49:10  @ 13:50.6 - 14:05.1
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  وَيُعَلِّمُهُ ٱلْكِتَـٰبَ وَٱلْحِكْمَةَ وَٱلتَّوْرَىٰةَ وَٱلْإِنجِيلَ وَرَسُولًا إِلَىٰ بَنِىٓ إِسْرَٰٓءِيلَ أَنِّى قَدْ جِئْتُكُم بِـَٔايَةٍ مِّن رَّبِّكُمْ ۖ
+  [0.9900]  3:63:1-3:64:13  @ 17:51.1 - 18:11.3
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  فَإِن تَوَلَّوْا۟ فَإِنَّ ٱللَّهَ عَلِيمٌ بِٱلْمُفْسِدِينَ قُلْ يَـٰٓأَهْلَ ٱلْكِتَـٰبِ تَعَالَوْا۟ إِلَىٰ كَلِمَةٍ سَوَآءٍ بَيْنَنَا وَبَيْنَكُمْ أَلَّا نَعْبُدَ إِلَّا ٱللَّهَ
+  [0.9800]  3:148:8-3:149:12  @ 41:19.1 - 41:36.4
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  وَٱللَّهُ يُحِبُّ ٱلْمُحْسِنِينَ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوٓا۟ إِن تُطِيعُوا۟ ٱلَّذِينَ كَفَرُوا۟ يَرُدُّوكُمْ عَلَىٰٓ أَعْقَـٰبِكُمْ فَتَنقَلِبُوا۟ خَـٰسِرِينَ
+  [0.9900]  3:155:18-3:156:23  @ 44:10.7 - 44:29.7
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  إِنَّ ٱللَّهَ غَفُورٌ حَلِيمٌ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ لَا تَكُونُوا۟ كَٱلَّذِينَ كَفَرُوا۟ وَقَالُوا۟ لِإِخْوَٰنِهِمْ إِذَا ضَرَبُوا۟ فِى ٱلْأَرْضِ أَوْ كَانُوا۟ غُزًّى لَّوْ كَانُوا۟ عِندَنَا مَا مَاتُوا۟ وَمَا قُتِلُوا۟
+  [0.9600]  4:117:1-4:118:2  @ 40:08.4 - 40:20.6
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/004.mp3
+           text:  إِن يَدْعُونَ مِن دُونِهِۦٓ إِلَّآ إِنَـٰثًا وَإِن يَدْعُونَ إِلَّا شَيْطَـٰنًا مَّرِيدًا لَّعَنَهُ ٱللَّهُ ۘ
+  [0.9200]  5:15:17-5:16:14  @ 6:44.1 - 6:59.0
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/005.mp3
+           text:  قَدْ جَآءَكُم مِّنَ ٱللَّهِ نُورٌ وَكِتَـٰبٌ مُّبِينٌ يَهْدِى بِهِ ٱللَّهُ مَنِ ٱتَّبَعَ رِضْوَٰنَهُۥ سُبُلَ ٱلسَّلَـٰمِ وَيُخْرِجُهُم مِّنَ ٱلظُّلُمَـٰتِ إِلَى ٱلنُّورِ بِإِذْنِهِۦ
+  ... and 471 more
+
+--- Muqatta'at (21) ---
+  [1.0000]  2:1:1-2:1:1  @ 0:03.6 - 0:10.8
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  الٓمٓ
+  [1.0000]  3:1:1-3:1:1  @ 0:03.9 - 0:10.6
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  الٓمٓ
+  [1.0000]  7:1:1-7:1:1  @ 0:03.8 - 0:12.4
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/007.mp3
+           text:  الٓمٓصٓ
+  [1.0000]  10:1:1-10:1:1  @ 0:03.4 - 0:07.6
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/010.mp3
+           text:  الٓر ۚ
+  [1.0000]  11:1:1-11:1:1  @ 0:03.2 - 0:07.9
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/011.mp3
+           text:  الٓر ۚ
+  [0.8000]  12:1:1-12:1:1  @ 0:03.3 - 0:08.0
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/012.mp3
+           text:  الٓر ۚ
+  [1.0000]  13:1:1-13:1:1  @ 0:03.0 - 0:11.2
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/013.mp3
+           text:  الٓمٓر ۚ
+  [0.8000]  14:1:1-14:1:1  @ 0:03.4 - 0:06.9
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/014.mp3
+           text:  الٓر ۚ
+  [0.8000]  15:1:1-15:1:1  @ 0:03.3 - 0:07.8
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/015.mp3
+           text:  الٓر ۚ
+  [0.8000]  19:1:1-19:1:1  @ 0:03.1 - 0:12.6
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/019.mp3
+           text:  كٓهيعٓصٓ
+  ... and 11 more
+
+--- Qalqala (543) ---
+  [0.9900]  2:61:45-2:61:54  [ق]  @ 16:03.6 - 16:13.0
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  ذَٰلِكَ بِأَنَّهُمْ كَانُوا۟ يَكْفُرُونَ بِـَٔايَـٰتِ ٱللَّهِ وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [0.9800]  2:85:39-2:85:44  [ب]  @ 23:56.1 - 24:02.9
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَيَوْمَ ٱلْقِيَـٰمَةِ يُرَدُّونَ إِلَىٰٓ أَشَدِّ ٱلْعَذَابِ ۗ
+  [0.9600]  2:90:21-2:90:24  [ب]  @ 26:01.3 - 26:06.2
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  فَبَآءُو بِغَضَبٍ عَلَىٰ غَضَبٍ ۚ
+  [0.9800]  2:101:1-2:101:15  [ب]  @ 29:29.5 - 29:44.5
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلَمَّا جَآءَهُمْ رَسُولٌ مِّنْ عِندِ ٱللَّهِ مُصَدِّقٌ لِّمَا مَعَهُمْ نَبَذَ فَرِيقٌ مِّنَ ٱلَّذِينَ أُوتُوا۟ ٱلْكِتَـٰبَ
+  [0.9800]  2:102:57-2:102:66  [ق]  @ 30:59.8 - 31:06.7
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلَقَدْ عَلِمُوا۟ لَمَنِ ٱشْتَرَىٰهُ مَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ ۚ
+  [0.9800]  2:109:6-2:109:21  [ق]  @ 33:14.7 - 33:29.9
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  لَوْ يَرُدُّونَكُم مِّن بَعْدِ إِيمَـٰنِكُمْ كُفَّارًا حَسَدًا مِّنْ عِندِ أَنفُسِهِم مِّن بَعْدِ مَا تَبَيَّنَ لَهُمُ ٱلْحَقُّ ۖ
+  [0.9700]  2:113:1-2:113:15  [ب]  @ 34:42.9 - 34:57.1
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَقَالَتِ ٱلْيَهُودُ لَيْسَتِ ٱلنَّصَـٰرَىٰ عَلَىٰ شَىْءٍ وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
+  [0.9600]  2:115:1-2:115:3  [ب]  @ 35:43.7 - 35:46.7
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  [0.9400]  2:125:12-2:125:22  [د]  @ 39:08.3 - 39:24.4
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَعَهِدْنَآ إِلَىٰٓ إِبْرَٰهِـۧمَ وَإِسْمَـٰعِيلَ أَن طَهِّرَا بَيْتِىَ لِلطَّآئِفِينَ وَٱلْعَـٰكِفِينَ وَٱلرُّكَّعِ ٱلسُّجُودِ
+  [0.9700]  2:136:1-2:136:14  [ط]  @ 42:42.9 - 43:01.7
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  قُولُوٓا۟ ءَامَنَّا بِٱللَّهِ وَمَآ أُنزِلَ إِلَيْنَا وَمَآ أُنزِلَ إِلَىٰٓ إِبْرَٰهِـۧمَ وَإِسْمَـٰعِيلَ وَإِسْحَـٰقَ وَيَعْقُوبَ وَٱلْأَسْبَاطِ
+  ... and 533 more
+
+--- Empty ASR Phonemes (33) ---
+  [1.0000]  1:7:5-1:7:9  @ 0:31.6 - 0:42.0
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/001.mp3
+           text:  غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ
+  [1.0000]  2:119:1-2:119:10  @ 36:50.2 - 37:02.2
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  إِنَّآ أَرْسَلْنَـٰكَ بِٱلْحَقِّ بَشِيرًا وَنَذِيرًا ۖ وَلَا تُسْـَٔلُ عَنْ أَصْحَـٰبِ ٱلْجَحِيمِ
+  [1.0000]  2:226:8-2:226:13  @ 1:14:35.4 - 1:14:41.9
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  فَإِن فَآءُو فَإِنَّ ٱللَّهَ غَفُورٌ رَّحِيمٌ
+  [1.0000]  2:227:1-2:227:7  @ 1:14:41.9 - 1:14:48.6
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَإِنْ عَزَمُوا۟ ٱلطَّلَـٰقَ فَإِنَّ ٱللَّهَ سَمِيعٌ عَلِيمٌ
+  [1.0000]  5:48:18-5:48:24  @ 19:48.2 - 19:56.6
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/005.mp3
+           text:  وَلَا تَتَّبِعْ أَهْوَآءَهُمْ عَمَّا جَآءَكَ مِنَ ٱلْحَقِّ ۚ
+  [1.0000]  5:71:16-5:71:19  @ 30:14.7 - 30:20.2
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/005.mp3
+           text:  وَٱللَّهُ بَصِيرٌ بِمَا يَعْمَلُونَ
+  [1.0000]  5:81:9-5:81:15  @ 33:34.3 - 33:44.9
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/005.mp3
+           text:  مَا ٱتَّخَذُوهُمْ أَوْلِيَآءَ وَلَـٰكِنَّ كَثِيرًا مِّنْهُمْ فَـٰسِقُونَ
+  [1.0000]  9:1:1-9:1:9  @ 0:03.4 - 0:13.5
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/009.mp3
+           text:  بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم بَرَآءَةٌ مِّنَ ٱللَّهِ وَرَسُولِهِۦٓ إِلَى ٱلَّذِينَ عَـٰهَدتُّم مِّنَ ٱلْمُشْرِكِينَ
+  [1.0000]  12:51:17-12:51:22  @ 16:22.3 - 16:27.3
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/012.mp3
+           text:  قَالَتِ ٱمْرَأَتُ ٱلْعَزِيزِ ٱلْـَٔـٰنَ حَصْحَصَ ٱلْحَقُّ
+  [1.0000]  13:1:1-13:1:1  @ 0:03.0 - 0:11.2
+           audio: https://server16.mp3quran.net/ayyoub2/Rewayat-Hafs-A-n-Assem/013.mp3
+           text:  الٓمٓر ۚ
+  ... and 23 more
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
