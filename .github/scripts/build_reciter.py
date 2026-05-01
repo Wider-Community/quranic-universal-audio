@@ -75,6 +75,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
 from reciter_eligibility import (  # noqa: E402
+    compute_coverage,
     find_eligible_reciters,
     has_tracked_timestamps,
 )
@@ -800,12 +801,11 @@ def get_style(slug):
 
 
 def get_coverage(slug):
-    """Get verse count from segments.json (keys minus _meta)."""
+    """Verse count from segments.json (compound keys expanded)."""
     seg_file = ROOT / "data" / "recitation_segments" / slug / "segments.json"
     if seg_file.exists():
         try:
-            data = json.loads(seg_file.read_text())
-            return len([k for k in data if k != "_meta"])
+            return compute_coverage(json.loads(seg_file.read_text()))["ayahs"]
         except (json.JSONDecodeError, OSError):
             pass
     return 0
@@ -914,6 +914,7 @@ def _build_reciter_info(eligible):
             "style": get_style(slug),
             "source": get_audio_source_label(slug),
             "verses": f"{verses:,}",
+            "num_examples": verses,
         })
     return by_riwayah
 
@@ -946,7 +947,7 @@ def update_dataset_readme():
             split_lines.append(
                 f"  - name: {info['slug']}\n"
                 f"    num_bytes: 0\n"
-                f"    num_examples: 6236"
+                f"    num_examples: {info['num_examples']}"
             )
 
     # Replace configs block (riwayah configs + reciters catalog)
@@ -981,7 +982,7 @@ def update_dataset_readme():
             new_splits += (
                 f"  - name: {info['slug']}\n"
                 f"    num_bytes: {nb}\n"
-                f"    num_examples: 6236\n"
+                f"    num_examples: {info['num_examples']}\n"
             )
     yaml_text = re.sub(
         r"  splits:\n(?:  - name: [^\n]+\n    num_bytes: \d+\n    num_examples: \d+\n)+",

@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
-from reciter_eligibility import find_eligible_reciters  # noqa: E402
+from reciter_eligibility import compute_coverage, find_eligible_reciters  # noqa: E402
 
 _cfg = repo_config()
 REPO_OWNER = _cfg["repo_owner"]
@@ -88,15 +88,9 @@ def load_meta(path):
         return {}
 
 
-def compute_coverage(slug):
-    """Count surahs and ayahs in segments.json."""
+def coverage_for(slug):
     seg_file = ROOT / "data" / "recitation_segments" / slug / "segments.json"
-    data = json.loads(seg_file.read_text(encoding="utf-8"))
-    verse_keys = [k for k in data if not k.startswith("_")]
-    surahs = set()
-    for k in verse_keys:
-        surahs.add(k.split(":")[0])
-    return {"surahs": len(surahs), "ayahs": len(verse_keys)}
+    return compute_coverage(json.loads(seg_file.read_text(encoding="utf-8")))
 
 
 def build_info_json(slug, version):
@@ -119,7 +113,7 @@ def build_info_json(slug, version):
         "style": audio_meta.get("style", "unknown"),
         "country": audio_meta.get("country", "unknown"),
         "audio_source": audio_source,
-        "coverage": compute_coverage(slug),
+        "coverage": coverage_for(slug),
         "version": version,
         "created": str(date.today()),
     }

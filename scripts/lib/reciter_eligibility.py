@@ -36,6 +36,49 @@ def has_tracked_timestamps(slug: str, repo_root: Path) -> bool:
     return tracked_timestamps_audio_type(slug, repo_root) is not None
 
 
+def expand_segment_ayahs(segments: dict) -> set[tuple[int, int]]:
+    """Return {(surah, ayah)} from a segments.json dict, expanding compound keys.
+
+    Compound cross-verse keys like "37:151:3-37:152:2" are expanded to all
+    intermediate ayahs. Cross-surah ranges (rare) only count endpoints.
+    """
+    seen: set[tuple[int, int]] = set()
+    for key in segments:
+        if key == "_meta":
+            continue
+        if "-" in key:
+            parts = key.split("-")
+            if len(parts) == 2:
+                sp = parts[0].split(":")
+                ep = parts[1].split(":")
+                if len(sp) >= 2 and len(ep) >= 2:
+                    try:
+                        s_surah, s_ayah = int(sp[0]), int(sp[1])
+                        e_surah, e_ayah = int(ep[0]), int(ep[1])
+                    except ValueError:
+                        continue
+                    if s_surah == e_surah:
+                        for a in range(s_ayah, e_ayah + 1):
+                            seen.add((s_surah, a))
+                    else:
+                        seen.add((s_surah, s_ayah))
+                        seen.add((e_surah, e_ayah))
+                    continue
+        sp = key.split(":")
+        if len(sp) >= 2:
+            try:
+                seen.add((int(sp[0]), int(sp[1])))
+            except ValueError:
+                pass
+    return seen
+
+
+def compute_coverage(segments: dict) -> dict[str, int]:
+    """Return {"surahs": N, "ayahs": M} from a segments.json dict."""
+    ayahs = expand_segment_ayahs(segments)
+    return {"surahs": len({s for s, _ in ayahs}), "ayahs": len(ayahs)}
+
+
 def find_eligible_reciters(repo_root: Path) -> list[str]:
     """Slugs with both segments.json and timestamps.json git-tracked."""
     tracked = git_tracked_data_files(repo_root)
