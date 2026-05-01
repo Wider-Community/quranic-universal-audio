@@ -53,7 +53,7 @@ The repository uses the following components:
 | Component | Description |
 |-----------|-------------|
 | [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
-| [`quranic_universal_aligner/`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](docs/client_api.md) |
+| [`.local/spaces/quranic_universal_aligner/`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Local Hugging Face Space copy demonstrating the full pipeline with free GPU processing, also available as an [API](docs/client_api.md) |
 | [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
 | [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |
 | [`reciter_requests`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |

@@ -18,14 +18,16 @@ AGENTS.md
 .venv
 
 # Local
-jobs/
+.local/
+.tmp/
 notebooks/
-extract_segments.py
-extract_segments_taraweeh.py
-cut_taraweeh.py
+codebase-map.html
 
 # Release packaging output
 dist/
 
-mfa_aligner/
-quranic_universal_aligner/
+# Per-probe-beam timestamps (run-local diagnostics — only canonical
+# timestamps.json / timestamps_full.json ship to main).
+data/timestamps/**/beam_review.json
+data/timestamps/**/timestamps.beam_*.json
+data/timestamps/**/timestamps_full.beam_*.json

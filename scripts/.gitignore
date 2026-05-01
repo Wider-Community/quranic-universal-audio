@@ -10,8 +10,5 @@ captures/
 # Local-only scripts
 .process_state.json
 .timestamps_state.json
-sync_mfa.sh
-fetch_results.sh
-analyse_loudness.py
 audit_reciters.py
 attach_tajweed.py
