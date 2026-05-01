@@ -715,10 +715,11 @@ def write_reciters_md(all_records: list[dict]) -> int:
 
     total = available_count + processed_count
 
-    # Compute badge counts: Unsegmented = audio without segments, Segmented = with segments
-    unseg_hours = round(
-        sum(slug_hours.get(r["slug"], 0) for r in all_records if r["slug"] not in processed_slugs) / 3600
-    )
+    # Compute badge counts: Unsegmented = audio without segments, Segmented = with segments.
+    # slug_hours is keyed by slug; iterate over distinct slugs to avoid double-counting
+    # reciters that appear under multiple manifest sources (e.g. by_surah + by_ayah).
+    unseg_slugs = {r["slug"] for r in all_records} - processed_slugs
+    unseg_hours = round(sum(slug_hours.get(s, 0) for s in unseg_slugs) / 3600)
     seg_hours = round(sum(slug_hours.get(p["slug"], 0) for p in processed) / 3600)
 
     riwayat_with_data = len({r["riwayah"] for r in all_records})
