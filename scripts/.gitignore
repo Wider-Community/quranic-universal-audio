@@ -12,3 +12,5 @@ captures/
 .timestamps_state.json
 audit_reciters.py
 attach_tajweed.py
+request_helpers.py
+process_requests.py
