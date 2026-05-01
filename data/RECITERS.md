@@ -1,6 +1,6 @@
 # Reciters
 
-**379** reciter entries (2 aligned, 377 available). Generated from `scripts/list_reciters.py`.
+**379** reciter entries (2 aligned, 377 available). Generated from `.github/scripts/list_reciters.py`.
 
 > **Note:** A "reciter entry" is a unique combination of reciter × riwayah × style × granularity, not a unique person. For example, Mahmoud Khalil Al-Hussary appears as 5 entries: Hafs Murattal Ayah, Hafs Murattal Surah, Hafs Mujawwad Surah, Hafs Muallim Ayah, and Warsh Murattal Surah.
 >
@@ -40,7 +40,7 @@ Timestamps: `✓✓` = words + letters/phonemes, `✓` = words only.
 | Reciter | Style | Source | Granularity | Coverage | Hours | Segmented | Manually Validated | Timestamped |
 |---------|-------|--------|-------------|:--------:|:-----:|:---------:|:------------------:|:-----------:|
 | Mohammed Siddiq Al-Minshawi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 28.9 | ✓ | ✓ | ✓✓ |
-| Saad Al-Ghamdi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 24.8 | ✓ | ✓ | ✗ |
+| Saad Al-Ghamdi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,235 | 24.8 | ✓ | ✓ | ✗ |
 
 
 ---

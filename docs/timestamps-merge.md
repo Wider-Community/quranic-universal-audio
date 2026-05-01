@@ -11,7 +11,7 @@ The pipeline writes two files per reciter:
 - `timestamps.json` — compact: `[word_idx, start_ms, end_ms]` per verse
 - `timestamps_full.json` — same plus per-letter and per-phoneme timings
 
-Downstream, `scripts/build_reciter.py` turns these into the HF dataset, **one row per ayah**.
+Downstream, `.github/scripts/build_reciter.py` turns these into the HF dataset, **one row per ayah**.
 
 ## Home vs. cross-verse segments
 
