@@ -74,6 +74,10 @@ def _cross_verse_text(matched_ref: str, matched_text: str,
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
+from reciter_eligibility import (  # noqa: E402
+    find_eligible_reciters,
+    has_tracked_timestamps,
+)
 
 REPO_ID = repo_config()["hf_dataset"]
 SAMPLE_PCT = int(os.environ.get("SAMPLE_PCT", "0"))
@@ -128,29 +132,6 @@ def get_riwayah(slug):
                 except (json.JSONDecodeError, OSError):
                     pass
     return "hafs_an_asim"
-
-
-def find_eligible_reciters():
-    """Find all reciters with timestamps + segments (eligible for dataset)."""
-    eligible = []
-    seg_dir = ROOT / "data" / "recitation_segments"
-    if not seg_dir.is_dir():
-        return eligible
-
-    for d in sorted(seg_dir.iterdir()):
-        if not d.is_dir():
-            continue
-        slug = d.name
-        if not (d / "detailed.json").exists() or not (d / "segments.json").exists():
-            continue
-        # Check timestamps exist (timestamps.json is sufficient)
-        for audio_type in ("by_ayah_audio", "by_surah_audio"):
-            ts_dir = ROOT / "data" / "timestamps" / audio_type / slug
-            if (ts_dir / "timestamps.json").exists():
-                eligible.append(slug)
-                break
-
-    return eligible
 
 
 # ---------------------------------------------------------------------------
@@ -920,31 +901,6 @@ def _derive_url_template(manifest_data, audio_cat):
     return template
 
 
-_git_tracked_cache = None
-
-
-def _get_git_tracked_files():
-    """Return cached set of git-tracked files under data/."""
-    global _git_tracked_cache
-    if _git_tracked_cache is None:
-        import subprocess
-        result = subprocess.run(
-            ["git", "ls-files", "data/timestamps/", "data/recitation_segments/"],
-            capture_output=True, text=True, cwd=ROOT,
-        )
-        _git_tracked_cache = set(result.stdout.strip().splitlines())
-    return _git_tracked_cache
-
-
-def _has_git_tracked_timestamps(slug):
-    """Check if timestamps.json is git-tracked for this reciter."""
-    tracked = _get_git_tracked_files()
-    for audio_type in ("by_ayah_audio", "by_surah_audio"):
-        if f"data/timestamps/{audio_type}/{slug}/timestamps.json" in tracked:
-            return True
-    return False
-
-
 def _build_reciter_info(eligible):
     """Build a list of info dicts for eligible reciters, grouped by riwayah."""
     from collections import defaultdict
@@ -975,7 +931,7 @@ def update_dataset_readme():
     yaml_text = parts[1]
     body = parts[2]
 
-    eligible = find_eligible_reciters()
+    eligible = find_eligible_reciters(ROOT)
     by_riwayah = _build_reciter_info(eligible)
 
     # --- Rebuild YAML configs and data_files ---
@@ -1057,81 +1013,54 @@ def update_dataset_readme():
     )
 
     # Update badge counts
-    processed_count = len(eligible)
     all_slugs = set()
-    slug_full_coverage = {}
     riwayat_with_data = set()
     audio_dir = ROOT / "data" / "audio"
     if audio_dir.is_dir():
         for source_type in audio_dir.iterdir():
             if not source_type.is_dir():
                 continue
-            audio_cat = source_type.name  # "by_surah" or "by_ayah"
             for source in source_type.iterdir():
                 if source.is_dir():
                     for f in source.glob("*.json"):
-                        slug = f.stem
-                        all_slugs.add(slug)
+                        all_slugs.add(f.stem)
                         try:
-                            data = json.loads(f.read_text())
-                            meta = data.get("_meta", {})
-                            rw = meta.get("riwayah", "hafs_an_asim")
-                            riwayat_with_data.add(rw)
-                            entries = {k: v for k, v in data.items() if k != "_meta"}
-                            cov = len(entries)
-                            is_full = (audio_cat == "by_surah" and cov == 114) or \
-                                      (audio_cat == "by_ayah" and cov == 6236)
-                            if is_full:
-                                slug_full_coverage[slug] = True
+                            meta = json.loads(f.read_text()).get("_meta", {})
+                            riwayat_with_data.add(meta.get("riwayah", "hafs_an_asim"))
                         except (json.JSONDecodeError, OSError):
                             pass
 
-    # Compute badge counts (inclusive: all reciters for Audio Only, subset for Timestamped)
     all_total = len(all_slugs)
-    all_full = sum(1 for s in all_slugs if slug_full_coverage.get(s, False))
-    all_partial = all_total - all_full
 
-    # Aligned full coverage: check segments
-    eligible_set = set(eligible)
-    aligned_full = 0
+    # Segmented = reciters with segments.json on disk
     seg_dir = ROOT / "data" / "recitation_segments"
-    for slug in eligible:
-        seg_file = seg_dir / slug / "segments.json"
-        if seg_file.exists():
-            try:
-                doc = json.loads(seg_file.read_text())
-                surahs = set()
-                ayah_count = 0
-                for key in doc:
-                    if key == "_meta":
-                        continue
-                    ayah_count += 1
-                    surahs.add(key.split(":")[0])
-                if len(surahs) == 114 or ayah_count == 6236:
-                    aligned_full += 1
-            except (json.JSONDecodeError, OSError):
-                pass
-    ts_partial = processed_count - aligned_full
+    segmented_slugs = {
+        d.name for d in seg_dir.iterdir()
+        if d.is_dir() and (d / "segments.json").exists()
+    } if seg_dir.is_dir() else set()
+    segmented_count = len(segmented_slugs)
+    unsegmented_slugs = all_slugs - segmented_slugs
+    unsegmented_count = len(unsegmented_slugs)
 
     # Load hours from cache
     cache_path = ROOT / "data" / ".audio_durations.json"
-    total_hours = 0
-    ts_hours = 0
+    unseg_hours = 0
+    seg_hours = 0
     if cache_path.exists():
         try:
             cache = json.loads(cache_path.read_text())
-            total_hours = round(sum(e["duration_s"] for e in cache.values()) / 3600)
-            ts_hours = round(sum(cache[s]["duration_s"] for s in eligible_set if s in cache) / 3600)
+            unseg_hours = round(sum(cache[s]["duration_s"] for s in unsegmented_slugs if s in cache) / 3600)
+            seg_hours = round(sum(cache[s]["duration_s"] for s in segmented_slugs if s in cache) / 3600)
         except Exception as e:
             log.warning("Could not read audio durations cache: %s", e)
 
-    # Audio Only badge
-    audio_val = f"{all_full}%20Full%20%C2%B7%20{all_partial}%20Partial%20%C2%B7%20{total_hours:,}h"
-    body = re.sub(r"Audio%20Only-[^-]+-d4842a", f"Audio%20Only-{audio_val}-d4842a", body)
+    # Unsegmented badge
+    unseg_val = f"{unsegmented_count}%20reciters%20%C2%B7%20{unseg_hours:,}h"
+    body = re.sub(r"Unsegmented-[^-]+-d4842a", f"Unsegmented-{unseg_val}-d4842a", body)
 
-    # Timestamped badge
-    ts_val = f"{aligned_full}%20Full%20%C2%B7%20{ts_partial}%20Partial%20%C2%B7%20{ts_hours:,}h"
-    body = re.sub(r"Timestamped-[^-]+-d4842a", f"Timestamped-{ts_val}-d4842a", body)
+    # Segmented badge
+    seg_val = f"{segmented_count}%20reciters%20%C2%B7%20{seg_hours:,}h"
+    body = re.sub(r"Segmented-[^-]+-d4842a", f"Segmented-{seg_val}-d4842a", body)
 
     # Riwayat badge
     riwayat_total_path = ROOT / "data" / "riwayat.json"
@@ -1263,7 +1192,7 @@ def build_reciters_config():
         data["url_template"].append(url_template)
         data["coverage_surahs"].append(coverage_surahs)
         data["coverage_ayahs"].append(coverage_ayahs)
-        data["is_timestamped"].append(_has_git_tracked_timestamps(slug))
+        data["is_timestamped"].append(has_tracked_timestamps(slug, ROOT))
 
     log.info("Built %d reciters catalog rows", len(data["reciter"]))
 
@@ -1330,7 +1259,7 @@ def main():
         return
 
     if args.all:
-        eligible = find_eligible_reciters()
+        eligible = find_eligible_reciters(ROOT)
         if not eligible:
             log.info("No eligible reciters found")
             return

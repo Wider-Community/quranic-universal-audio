@@ -37,32 +37,20 @@ CACHE_PATH = REPO / "data" / ".audio_durations.json"
 
 sys.path.insert(0, str(REPO / "scripts" / "lib"))
 from config_loader import load_config  # noqa: E402
+from reciter_eligibility import git_tracked_data_files  # noqa: E402
 
 MAX_WORKERS = 64
 FFPROBE_TIMEOUT = 15
 AYAH_SAMPLE_SIZE = 20
 
-# Cache for git-tracked file checks
-_git_tracked_cache: set[str] | None = None
-
 
 def _is_git_tracked(path: Path) -> bool:
     """Check if a file is tracked by git (not just on disk)."""
-    global _git_tracked_cache
-    if _git_tracked_cache is None:
-        try:
-            result = subprocess.run(
-                ["git", "ls-files", "data/timestamps/"],
-                capture_output=True, text=True, cwd=REPO,
-            )
-            _git_tracked_cache = set(result.stdout.strip().splitlines())
-        except OSError:
-            _git_tracked_cache = set()
     try:
         rel = str(path.relative_to(REPO))
     except ValueError:
         return False
-    return rel in _git_tracked_cache
+    return rel in git_tracked_data_files(REPO)
 
 _labels = load_config("labels")
 # Qira'ah hierarchy: canonical reader -> list of riwayah slugs (display order)
@@ -95,12 +83,6 @@ def load_riwayat_names() -> dict[str, str]:
         return {}
     data = json.loads(riwayat_path.read_text())
     return {r["slug"]: r["name"] for r in data}
-
-
-def _is_full_coverage(audio_cat: str, coverage: int) -> bool:
-    """Check if coverage count represents full Qur'an coverage."""
-    return (audio_cat == "by_surah" and coverage == 114) or \
-           (audio_cat == "by_ayah" and coverage == 6236)
 
 
 def discover_reciters() -> list[dict]:
@@ -323,19 +305,6 @@ def _discover_unique_manifests() -> dict[str, Path]:
                 if slug not in manifests:
                     manifests[slug] = f
     return manifests
-
-
-def _get_timestamped_slugs() -> set[str]:
-    """Find reciters that have timestamps.json."""
-    slugs: set[str] = set()
-    for audio_type in ("by_ayah_audio", "by_surah_audio"):
-        ts_dir = TIMESTAMPS_PATH / audio_type
-        if not ts_dir.exists():
-            continue
-        for d in ts_dir.iterdir():
-            if d.is_dir() and (d / "timestamps.json").exists():
-                slugs.add(d.name)
-    return slugs
 
 
 def compute_audio_hours() -> dict[str, float]:
@@ -773,21 +742,11 @@ def write_reciters_md(all_records: list[dict]) -> int:
 
     total = available_count + processed_count
 
-    # Compute badge counts (inclusive: all reciters for Audio Only, subset for Timestamped)
-    all_full = sum(
-        1 for r in all_records
-        if _is_full_coverage(r["audio_cat"], r["coverage"])
+    # Compute badge counts: Unsegmented = audio without segments, Segmented = with segments
+    unseg_hours = round(
+        sum(slug_hours.get(r["slug"], 0) for r in all_records if r["slug"] not in processed_slugs) / 3600
     )
-    all_partial = total - all_full
-    total_hours = round(sum(slug_hours.values()) / 3600)
-
-    ts_slugs = _get_timestamped_slugs()
-    ts_full = sum(
-        1 for p in processed
-        if p["surah_count"] == 114 or p["ayah_count"] == 6236
-    )
-    ts_partial = processed_count - ts_full
-    ts_hours = round(sum(slug_hours.get(s, 0) for s in ts_slugs) / 3600)
+    seg_hours = round(sum(slug_hours.get(p["slug"], 0) for p in processed) / 3600)
 
     riwayat_with_data = len({r["riwayah"] for r in all_records})
     riwayat_total = len(json.loads((REPO / "data" / "riwayat.json").read_text()))
@@ -797,13 +756,13 @@ def write_reciters_md(all_records: list[dict]) -> int:
     if readme_path.exists():
         readme = readme_path.read_text()
 
-        # Audio Only badge: "X Full · Y Partial · Z,ZZZh"
-        audio_val = f"{all_full}%20Full%20%C2%B7%20{all_partial}%20Partial%20%C2%B7%20{total_hours:,}h"
-        readme = re.sub(r"Audio%20Only-[^-]+-d4842a", f"Audio%20Only-{audio_val}-d4842a", readme)
+        # Unsegmented badge: "X reciters · Yh"
+        unseg_val = f"{available_count}%20reciters%20%C2%B7%20{unseg_hours:,}h"
+        readme = re.sub(r"Unsegmented-[^-]+-d4842a", f"Unsegmented-{unseg_val}-d4842a", readme)
 
-        # Timestamped badge: "X Full · Y Partial · Zh"
-        ts_val = f"{ts_full}%20Full%20%C2%B7%20{ts_partial}%20Partial%20%C2%B7%20{ts_hours:,}h"
-        readme = re.sub(r"Timestamped-[^-]+-d4842a", f"Timestamped-{ts_val}-d4842a", readme)
+        # Segmented badge: "X reciters · Yh"
+        seg_val = f"{processed_count}%20reciters%20%C2%B7%20{seg_hours:,}h"
+        readme = re.sub(r"Segmented-[^-]+-d4842a", f"Segmented-{seg_val}-d4842a", readme)
 
         # Riwayat badge
         readme = re.sub(
@@ -831,8 +790,8 @@ def write_reciters_md(all_records: list[dict]) -> int:
         )
         readme_path.write_text(readme)
         print(f"Updated: {readme_path} "
-              f"(audio: {all_full} full / {all_partial} partial / {total_hours:,}h, "
-              f"timestamped: {ts_full} full / {ts_partial} partial / {ts_hours:,}h, "
+              f"(unsegmented: {available_count} reciters / {unseg_hours:,}h, "
+              f"segmented: {processed_count} reciters / {seg_hours:,}h, "
               f"riwayat: {riwayat_with_data}/{riwayat_total})")
 
     return total

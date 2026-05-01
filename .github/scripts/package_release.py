@@ -28,37 +28,12 @@ log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
+from reciter_eligibility import find_eligible_reciters  # noqa: E402
 
 _cfg = repo_config()
 REPO_OWNER = _cfg["repo_owner"]
 REPO_NAME = _cfg["repo_name"]
 DEFAULT_OUTPUT_DIR = ROOT / "dist"
-
-
-# ---------------------------------------------------------------------------
-# Eligibility detection
-# ---------------------------------------------------------------------------
-def find_release_eligible():
-    """Find reciters with segments.json + timestamps.json tracked in git."""
-    eligible = []
-    seg_dir = ROOT / "data" / "recitation_segments"
-    if not seg_dir.is_dir():
-        return eligible
-
-    for d in sorted(seg_dir.iterdir()):
-        if not d.is_dir():
-            continue
-        slug = d.name
-        if not (d / "segments.json").exists():
-            continue
-        # Check timestamps.json exists in either audio type
-        for audio_type in ("by_ayah_audio", "by_surah_audio"):
-            ts_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps.json"
-            if ts_path.exists():
-                eligible.append(slug)
-                break
-
-    return eligible
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +360,7 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Output directory")
     args = parser.parse_args()
 
-    eligible = find_release_eligible()
+    eligible = find_eligible_reciters(ROOT)
     log.info("Found %d eligible reciter(s): %s", len(eligible), ", ".join(eligible) or "(none)")
 
     if not eligible:
