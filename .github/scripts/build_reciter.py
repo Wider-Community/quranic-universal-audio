@@ -286,6 +286,12 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                 log.warning("No timing data for %s, skipping", ref)
                 continue
 
+            # Inspector edits can leave fractional-ms timestamps in the
+            # source JSON (linear-interpolated word/letter boundaries).
+            # Schema is int32, so coerce every ms field at row-build time.
+            def _i(x):
+                return int(round(x)) if isinstance(x, float) else int(x)
+
             # Filter segments to those overlapping the clip range
             verse_segments = []
             if ref in segments and ref != "_meta":
@@ -293,9 +299,9 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                     if seg[3] <= clip_start or seg[2] >= clip_end:
                         continue  # segment fully outside clip
                     verse_segments.append([
-                        seg[0], seg[1],
-                        max(0, seg[2] - clip_start),
-                        min(seg[3], clip_end) - clip_start,
+                        _i(seg[0]), _i(seg[1]),
+                        _i(max(0, seg[2] - clip_start)),
+                        _i(min(seg[3], clip_end) - clip_start),
                     ])
 
             # Text from detailed.json segments that overlap the clip range.
@@ -331,9 +337,9 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
             if ref in timestamps and ref != "_meta":
                 for word in timestamps[ref]["words"]:
                     verse_words.append([
-                        word[0],
-                        word[1] - clip_start,
-                        word[2] - clip_start,
+                        _i(word[0]),
+                        _i(word[1] - clip_start),
+                        _i(word[2] - clip_start),
                     ])
 
             # Synthesize segments for cross-verse words not covered by
@@ -367,16 +373,16 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                 for word_idx, letters in letter_data[ref]:
                     for ch, s, e in letters:
                         verse_letters.append({
-                            "word_idx": word_idx,
+                            "word_idx": _i(word_idx),
                             "char": ch,
-                            "start_ms": s - clip_start,
-                            "end_ms": e - clip_start,
+                            "start_ms": _i(s - clip_start),
+                            "end_ms": _i(e - clip_start),
                         })
 
             rows.append({
                 "surah": int(surah_num),
                 "ayah": ayah,
-                "duration_ms": clip_end - clip_start,
+                "duration_ms": _i(clip_end - clip_start),
                 "text_uthmani": text,
                 "segments": verse_segments,
                 "word_timestamps": verse_words,
@@ -715,7 +721,8 @@ def push_reciter(slug, audio_type, full_rebuild=False):
                 src_url = src_url[len(prefix):]
                 break
         data["source_url"].append(src_url)
-        data["source_offset_ms"].append(row["clip_start"])
+        cs = row["clip_start"]
+        data["source_offset_ms"].append(int(round(cs)) if isinstance(cs, float) else int(cs))
 
     if skipped:
         log.warning("Skipped %d verses due to download failures", skipped)
