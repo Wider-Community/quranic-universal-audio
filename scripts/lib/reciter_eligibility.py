@@ -9,11 +9,16 @@ import subprocess
 from pathlib import Path
 
 _TRACKED_CACHE: dict[Path, set[str]] = {}
+_DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def git_tracked_data_files(repo_root: Path) -> set[str]:
+def _resolve_root(repo_root: Path | None) -> Path:
+    return (repo_root or _DEFAULT_REPO_ROOT).resolve()
+
+
+def git_tracked_data_files(repo_root: Path | None = None) -> set[str]:
     """Cached `git ls-files` for data/timestamps + data/recitation_segments."""
-    repo_root = repo_root.resolve()
+    repo_root = _resolve_root(repo_root)
     if repo_root not in _TRACKED_CACHE:
         result = subprocess.run(
             ["git", "ls-files", "data/timestamps/", "data/recitation_segments/"],
@@ -23,7 +28,7 @@ def git_tracked_data_files(repo_root: Path) -> set[str]:
     return _TRACKED_CACHE[repo_root]
 
 
-def tracked_timestamps_audio_type(slug: str, repo_root: Path) -> str | None:
+def tracked_timestamps_audio_type(slug: str, repo_root: Path | None = None) -> str | None:
     """Return the audio_type whose `timestamps.json` is tracked, else None."""
     tracked = git_tracked_data_files(repo_root)
     for audio_type in ("by_ayah_audio", "by_surah_audio"):
@@ -32,7 +37,7 @@ def tracked_timestamps_audio_type(slug: str, repo_root: Path) -> str | None:
     return None
 
 
-def has_tracked_timestamps(slug: str, repo_root: Path) -> bool:
+def has_tracked_timestamps(slug: str, repo_root: Path | None = None) -> bool:
     return tracked_timestamps_audio_type(slug, repo_root) is not None
 
 
@@ -79,7 +84,7 @@ def compute_coverage(segments: dict) -> dict[str, int]:
     return {"surahs": len({s for s, _ in ayahs}), "ayahs": len(ayahs)}
 
 
-def find_eligible_reciters(repo_root: Path) -> list[str]:
+def find_eligible_reciters(repo_root: Path | None = None) -> list[str]:
     """Slugs with both segments.json and timestamps.json git-tracked."""
     tracked = git_tracked_data_files(repo_root)
     candidates = set()
