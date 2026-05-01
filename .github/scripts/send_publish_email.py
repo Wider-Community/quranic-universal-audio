@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import smtplib
+import subprocess
 import sys
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -114,6 +115,19 @@ def _build_links_html(reciter: dict) -> str:
     )
 
 
+def _timestamps_existed_at(slug: str, ref: str) -> bool:
+    """Did this slug's timestamps.json exist in either audio_type at <ref>?"""
+    for audio_type in ("by_ayah_audio", "by_surah_audio"):
+        rel = f"data/timestamps/{audio_type}/{slug}/timestamps.json"
+        result = subprocess.run(
+            ["git", "cat-file", "-e", f"{ref}:{rel}"],
+            cwd=REPO_ROOT, capture_output=True,
+        )
+        if result.returncode == 0:
+            return True
+    return False
+
+
 def _render(template_name: str, **fields) -> str:
     tpl_path = TEMPLATES_DIR / template_name
     if not tpl_path.exists():
@@ -146,9 +160,22 @@ def main() -> int:
                     help="Template filename under .github/templates/emails/")
     ap.add_argument("--subject",
                     help="Email subject (default: derived from reciter)")
+    ap.add_argument("--first-publish-only", action="store_true",
+                    help="Skip if timestamps.json already existed at --before-ref")
+    ap.add_argument("--before-ref",
+                    help="Git ref to compare against for --first-publish-only")
     ap.add_argument("--dry-run", action="store_true",
                     help="Print rendered email instead of sending")
     args = ap.parse_args()
+
+    if args.first_publish_only:
+        if not args.before_ref:
+            log.warning("--first-publish-only requires --before-ref; skipping.")
+            return 0
+        if _timestamps_existed_at(args.reciter, args.before_ref):
+            log.info("Not first publish for %s (already at %s); skipping email",
+                     args.reciter, args.before_ref)
+            return 0
 
     reciter = _load_reciter(args.reciter)
     name_en = reciter.get("name_en") or args.reciter

@@ -140,7 +140,10 @@ jobs:
           override="${{ github.event.inputs.email_to }}"
           flags=""
           if [ -n "$override" ]; then
-            flags="--to $override"
+            flags="$flags --to $override"
+          fi
+          if [ "${{ github.event_name }}" = "push" ]; then
+            flags="$flags --first-publish-only --before-ref ${{ github.event.before }}"
           fi
           for slug in ${{ steps.detect.outputs.slugs }}; do
             echo "Notifying for $slug..."
