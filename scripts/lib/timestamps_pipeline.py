@@ -186,7 +186,13 @@ def _init_worker(mfa_app_path: str, mfa_threads: int = 1):
     """
     import importlib.util
     pid = os.getpid()
-    home = f"/tmp/mfa_w{pid}"
+    # Worker HOMEs go under MFA_WORKER_BASE if set, else $TMPDIR (PBS
+    # job-scratch — node-local SSD, plenty of space), else /tmp (last resort:
+    # often a small tmpfs that fills up with N parallel model extractions).
+    base = (os.environ.get("MFA_WORKER_BASE")
+            or os.environ.get("TMPDIR")
+            or "/tmp")
+    home = f"{base}/mfa_w{pid}"
     os.makedirs(home + "/Documents/MFA", exist_ok=True)
     os.environ["HOME"] = home
     os.environ["MFA_NUM_THREADS"] = str(mfa_threads)
@@ -615,10 +621,11 @@ def process(input_dir: Path,
     """Process all chapters from detailed.json through MFA alignment.
 
     Each value in ``beams`` runs as an independent alignment pass over
-    the same audio. ``beams[0]`` is the canonical pass and drives
-    ``timestamps[_full].json``. Each additional beam writes
-    ``timestamps[_full].beam_<N>.json`` and contributes failures to
-    ``beam_review.json``.
+    the same audio. The widest beam (``max(beams)``) is the canonical
+    pass — it always drives ``timestamps[_full].json`` regardless of the
+    order ``beams`` was supplied in. Every other beam writes
+    ``timestamps[_full].beam_<N>.json`` and its failures feed the
+    cascade in ``beam_diff_report.txt``.
 
     When ``mfa_app_path`` is set and ``workers > 1``, the alignment
     fan-out runs across a ProcessPoolExecutor (true parallelism, GIL
@@ -631,7 +638,10 @@ def process(input_dir: Path,
     """
     if not beams:
         raise ValueError("beams must contain at least one value")
-    canonical_beam = beams[0]
+    # Canonical = widest beam, regardless of input order.
+    canonical_beam = max(beams)
+    probe_beams = sorted((b for b in beams if b != canonical_beam),
+                         reverse=True)
     use_pool = mfa_app_path is not None and workers > 1
     if not use_pool and backend is None:
         raise ValueError("backend is required when not using the process pool")
@@ -1138,7 +1148,7 @@ def process(input_dir: Path,
 
         return full_data, words_data, mfa_failures
 
-    # Canonical (beams[0]) — drives timestamps[_full].json + reuses
+    # Canonical (widest beam) — drives timestamps[_full].json + reuses
     # existing_data when resuming/refreshing.
     full_data, words_data, mfa_failures = _build_outputs(
         canonical_results,
@@ -1159,7 +1169,7 @@ def process(input_dir: Path,
     # Probe beams: each gets its own pair of files. Failure cascade is
     # computed at compare-time from the per-beam mfa_failures; we don't
     # write a separate review sidecar.
-    for b in beams[1:]:
+    for b in probe_beams:
         pf, pw, fails = _build_outputs(results_by_beam[b], None)
         full_p = output_dir / f"timestamps_full.beam_{b}.json"
         words_p = output_dir / f"timestamps.beam_{b}.json"
