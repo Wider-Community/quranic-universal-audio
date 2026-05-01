@@ -11,10 +11,10 @@ Also scans data/recitation_segments/ and data/timestamps/ to build the
 Processed Reciters section.
 
 Usage:
-    python scripts/list_reciters.py              # summary table
-    python scripts/list_reciters.py --detail      # list every reciter
-    python scripts/list_reciters.py --json        # machine-readable output
-    python scripts/list_reciters.py --write       # regenerate RECITERS.md + README badges
+    python .github/scripts/list_reciters.py              # summary table
+    python .github/scripts/list_reciters.py --detail      # list every reciter
+    python .github/scripts/list_reciters.py --json        # machine-readable output
+    python .github/scripts/list_reciters.py --write       # regenerate RECITERS.md + README badges
 """
 
 import argparse
@@ -29,7 +29,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 AUDIO_PATH = REPO / "data" / "audio"
 SEGMENTS_PATH = REPO / "data" / "recitation_segments"
 TIMESTAMPS_PATH = REPO / "data" / "timestamps"
@@ -749,7 +749,7 @@ def write_reciters_md(all_records: list[dict]) -> int:
         "\n"
         f"**{available_count + processed_count}** reciter entries "
         f"({processed_count} aligned, {available_count} available). "
-        "Generated from `scripts/list_reciters.py`.\n"
+        "Generated from `.github/scripts/list_reciters.py`.\n"
         "\n"
         "> **Note:** A \"reciter entry\" is a unique combination of reciter \u00d7 riwayah \u00d7 style \u00d7 granularity, "
         "not a unique person. For example, Mahmoud Khalil Al-Hussary appears as 5 entries: "

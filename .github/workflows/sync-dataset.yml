@@ -54,7 +54,7 @@ jobs:
               eligible="$reciter"
             else
               eligible=$(python -c "
-          import sys; sys.path.insert(0, 'scripts')
+          import sys; sys.path.insert(0, '.github/scripts')
           from build_reciter import find_eligible_reciters
           print(' '.join(find_eligible_reciters()))
           ")
@@ -100,7 +100,7 @@ jobs:
           fi
           for slug in ${{ steps.detect.outputs.slugs }}; do
             echo "Building $slug..."
-            python scripts/build_reciter.py $flags "$slug"
+            python .github/scripts/build_reciter.py $flags "$slug"
           done
 
       - name: Delete removed reciters
@@ -110,10 +110,10 @@ jobs:
         run: |
           for slug in ${{ steps.detect.outputs.deleted }}; do
             echo "Deleting $slug..."
-            python scripts/build_reciter.py --delete "$slug"
+            python .github/scripts/build_reciter.py --delete "$slug"
           done
 
       - name: Rebuild reciters catalog
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python scripts/build_reciter.py --reciters-config
+        run: python .github/scripts/build_reciter.py --reciters-config

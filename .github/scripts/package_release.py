@@ -3,10 +3,10 @@
 Package release zips for GitHub Releases.
 
 Usage:
-    python scripts/package_release.py                      # Build all, auto-version
-    python scripts/package_release.py --dry-run             # Preview only
-    python scripts/package_release.py --version v0.2.0      # Override version
-    python scripts/package_release.py --output-dir /tmp/r   # Custom output dir
+    python .github/scripts/package_release.py                      # Build all, auto-version
+    python .github/scripts/package_release.py --dry-run             # Preview only
+    python .github/scripts/package_release.py --version v0.2.0      # Override version
+    python .github/scripts/package_release.py --output-dir /tmp/r   # Custom output dir
 """
 
 import argparse
@@ -25,7 +25,7 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
 
@@ -62,7 +62,7 @@ def find_release_eligible():
 
 
 # ---------------------------------------------------------------------------
-# Audio source detection (pattern from scripts/build_reciter.py)
+# Audio source detection (pattern from .github/scripts/build_reciter.py)
 # ---------------------------------------------------------------------------
 def detect_audio_source(slug):
     """Read _meta.audio_source from segments.json."""

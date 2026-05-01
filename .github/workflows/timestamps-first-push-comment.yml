@@ -94,7 +94,7 @@ jobs:
             echo "::group::Validating $rec ($cat)"
             python3 validators/validate_timestamps.py "$ts_dir" --json \
               > /tmp/stats.json
-            python3 scripts/render_timestamps_validation_comment.py \
+            python3 .github/scripts/render_timestamps_validation_comment.py \
               --reciter "$rec" \
               --audio-category "$cat" \
               --stats /tmp/stats.json \
@@ -102,7 +102,7 @@ jobs:
             cat /tmp/comment.md
             echo "::endgroup::"
 
-            pr=$(python3 scripts/find_segments_pr.py "$rec" || true)
+            pr=$(python3 .github/scripts/find_segments_pr.py "$rec" || true)
             if [ -z "$pr" ]; then
               echo "::warning::No segments PR found for reciter '$rec' — skipping comment."
               continue

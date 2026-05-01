@@ -3,10 +3,10 @@
 Build and upload a reciter config to the HuggingFace dataset.
 
 Usage:
-    python scripts/build_reciter.py <slug>              # Upload one reciter
-    python scripts/build_reciter.py --all               # Upload all eligible
-    python scripts/build_reciter.py --delete <slug>     # Delete a reciter's data
-    python scripts/build_reciter.py --update-readme     # Update dataset card only
+    python .github/scripts/build_reciter.py <slug>              # Upload one reciter
+    python .github/scripts/build_reciter.py --all               # Upload all eligible
+    python .github/scripts/build_reciter.py --delete <slug>     # Delete a reciter's data
+    python .github/scripts/build_reciter.py --update-readme     # Update dataset card only
 
 Environment:
     HF_TOKEN       — HuggingFace API token
@@ -71,7 +71,7 @@ def _cross_verse_text(matched_ref: str, matched_text: str,
         return " ".join(words[-e_word:]) if e_word > 0 else ""
     return matched_text
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from config_loader import repo_config  # noqa: E402
 

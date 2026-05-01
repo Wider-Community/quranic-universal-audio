@@ -1,7 +1,7 @@
 """Generate a markdown summary of edits and validation for a merged segments PR.
 
 Usage:
-    python scripts/summarize_pr_edits.py <reciter_slug> [<reciter_slug2> ...]
+    python .github/scripts/summarize_pr_edits.py <reciter_slug> [<reciter_slug2> ...]
 
 Reads edit_history.jsonl and runs validate_segments to produce a concise
 markdown summary suitable for posting on GitHub issues/PRs.
@@ -14,7 +14,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "validators"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "lib"))
 

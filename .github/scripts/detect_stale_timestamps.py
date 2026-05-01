@@ -6,7 +6,7 @@ the affected surahs and changed verse keys. Used by the CI workflow to
 determine which surahs need MFA re-extraction.
 
 Usage:
-    python scripts/detect_stale_timestamps.py <before_ref> <segments_path>
+    python .github/scripts/detect_stale_timestamps.py <before_ref> <segments_path>
 
     before_ref:    Git ref for the old version (e.g. HEAD~1, abc123)
     segments_path: Path to segments.json (current working tree version)

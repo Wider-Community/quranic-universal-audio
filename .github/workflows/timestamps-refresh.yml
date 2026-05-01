@@ -99,7 +99,7 @@ jobs:
             fi
 
             # Detect changed verses
-            output=$(python3 scripts/detect_stale_timestamps.py "$before" "$f" 2>/dev/null) || continue
+            output=$(python3 .github/scripts/detect_stale_timestamps.py "$before" "$f" 2>/dev/null) || continue
             changed_verses=$(echo "$output" | grep '^changed=' | cut -d= -f2)
 
             if [ -n "$changed_verses" ]; then
