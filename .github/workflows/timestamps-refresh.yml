@@ -265,7 +265,22 @@ jobs:
 
           git add data/timestamps/
           git commit -m "$msg" -m "$body"
-          git push
+
+          # Retry-with-rebase: another workflow may have pushed during this
+          # run. Rebase our single timestamps commit onto whatever's on main
+          # and try again. Up to 5 attempts with jittered backoff.
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              echo "Pushed on attempt $attempt"
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) — rebasing on origin/main"
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; exit 1; }
+            sleep $((RANDOM % 5 + attempt))
+          done
+          echo "::error::push failed after 5 attempts"
+          exit 1
 
       - name: Update issue labels
         if: steps.detect.outputs.has_changes == 'true' && steps.beamcheck.outputs.has_failures != 'true'
