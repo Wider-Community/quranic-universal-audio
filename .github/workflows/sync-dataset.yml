@@ -14,6 +14,13 @@ on:
         description: 'Only update dataset README (no reciter data)'
         type: boolean
         default: false
+      email_to:
+        description: 'Override recipient for the publication email (test mode). Leave blank to use the configured requester address.'
+        required: false
+      skip_email:
+        description: 'Skip the publication email entirely'
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -117,3 +124,25 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python .github/scripts/build_reciter.py --reciters-config
+
+      - name: Email requesters of publication
+        if: |
+          success()
+          && steps.detect.outputs.slugs != ''
+          && github.event.inputs.readme_only != 'true'
+          && github.event.inputs.skip_email != 'true'
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_REQUESTS_DB_ID: ${{ secrets.NOTION_REQUESTS_DB_ID }}
+        run: |
+          override="${{ github.event.inputs.email_to }}"
+          flags=""
+          if [ -n "$override" ]; then
+            flags="--to $override"
+          fi
+          for slug in ${{ steps.detect.outputs.slugs }}; do
+            echo "Notifying for $slug..."
+            python3 .github/scripts/send_publish_email.py --reciter "$slug" $flags
+          done
