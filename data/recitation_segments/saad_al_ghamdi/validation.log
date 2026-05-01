@@ -1,0 +1,117 @@
+Generated: 2026-04-29 12:15:59
+
+========================================================================
+  saad_al_ghamdi
+  saad_al_ghamdi
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   125 ms
+  Min speech:    0 ms
+  Padding:       50 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      0 verses
+
+--- Segments ---
+  Total:            10984
+  Single-seg:       3049
+  Multi-seg verses: 2861 (7935 segs)
+  Cross-verse keys: 281
+  Max segs/verse:   17
+
+--- Segment Duration ---
+  Min:    1.02s
+  Median: 7.36s
+  Mean:   7.56s
+  Max:    19.48s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.10s
+  Median: 0.52s
+  Mean:   0.57s
+  Max:    2.07s
+
+--- Alignment Confidence ---
+  Min:       0.8000
+  Median:    1.0000
+  Mean:      0.9850
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 0
+  Failed:    0 (no alignment)
+  Empty ASR: 53 (matched but no phonemes)
+
+--- Failed Alignments (0) ---
+
+--- Muqatta'at (25) ---
+  [0.8000]  3:1:1-3:1:1  @ 0:06.8 - 0:14.1
+           audio: https://server7.mp3quran.net/s_gmd/003.mp3
+           text:  الٓمٓ
+  [1.0000]  7:1:1-7:1:1  @ 0:09.7 - 0:20.8
+           audio: https://server7.mp3quran.net/s_gmd/007.mp3
+           text:  الٓمٓصٓ
+  [0.8000]  10:1:1-10:1:1  @ 0:10.3 - 0:14.9
+           audio: https://server7.mp3quran.net/s_gmd/010.mp3
+           text:  الٓر ۚ
+  [0.8000]  11:1:1-11:1:1  @ 0:05.8 - 0:10.7
+           audio: https://server7.mp3quran.net/s_gmd/011.mp3
+           text:  الٓر ۚ
+  [0.8000]  12:1:1-12:1:1  @ 0:09.6 - 0:13.8
+           audio: https://server7.mp3quran.net/s_gmd/012.mp3
+           text:  الٓر ۚ
+  [0.8300]  13:1:1-13:1:1  @ 0:06.3 - 0:14.4
+           audio: https://server7.mp3quran.net/s_gmd/013.mp3
+           text:  الٓمٓر ۚ
+  [0.8000]  14:1:1-14:1:1  @ 0:05.5 - 0:09.9
+           audio: https://server7.mp3quran.net/s_gmd/014.mp3
+           text:  الٓر ۚ
+  [0.8000]  15:1:1-15:1:1  @ 0:10.1 - 0:14.6
+           audio: https://server7.mp3quran.net/s_gmd/015.mp3
+           text:  الٓر ۚ
+  [0.8800]  19:1:1-19:1:1  @ 0:05.5 - 0:16.4
+           audio: https://server7.mp3quran.net/s_gmd/019.mp3
+           text:  كٓهيعٓصٓ
+  [1.0000]  20:1:1-20:1:1  @ 0:05.3 - 0:06.7
+           audio: https://server7.mp3quran.net/s_gmd/020.mp3
+           text:  طه
+  ... and 15 more
+
+--- Empty ASR Phonemes (53) ---
+  [1.0000]  1:4:1-1:4:3  @ 0:16.4 - 0:20.2
+           audio: https://server7.mp3quran.net/s_gmd/001.mp3
+           text:  مَـٰلِكِ يَوْمِ ٱلدِّينِ
+  [1.0000]  1:5:1-1:5:4  @ 0:20.2 - 0:24.7
+           audio: https://server7.mp3quran.net/s_gmd/001.mp3
+           text:  إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ
+  [1.0000]  2:229:23-2:229:34  @ 1:24:30.2 - 1:24:38.8
+           audio: https://server7.mp3quran.net/s_gmd/002.mp3
+           text:  فَإِنْ خِفْتُمْ أَلَّا يُقِيمَا حُدُودَ ٱللَّهِ فَلَا جُنَاحَ عَلَيْهِمَا فِيمَا ٱفْتَدَتْ بِهِۦ ۗ
+  [1.0000]  4:44:1-4:44:14  @ 21:46.4 - 21:59.8
+           audio: https://server7.mp3quran.net/s_gmd/004.mp3
+           text:  أَلَمْ تَرَ إِلَى ٱلَّذِينَ أُوتُوا۟ نَصِيبًا مِّنَ ٱلْكِتَـٰبِ يَشْتَرُونَ ٱلضَّلَـٰلَةَ وَيُرِيدُونَ أَن تَضِلُّوا۟ ٱلسَّبِيلَ
+  [1.0000]  4:171:1-4:171:12  @ 1:09:49.6 - 1:10:00.1
+           audio: https://server7.mp3quran.net/s_gmd/004.mp3
+           text:  يَـٰٓأَهْلَ ٱلْكِتَـٰبِ لَا تَغْلُوا۟ فِى دِينِكُمْ وَلَا تَقُولُوا۟ عَلَى ٱللَّهِ إِلَّا ٱلْحَقَّ ۚ
+  [1.0000]  5:18:12-5:18:16  @ 10:22.2 - 10:26.9
+           audio: https://server7.mp3quran.net/s_gmd/005.mp3
+           text:  بَلْ أَنتُم بَشَرٌ مِّمَّنْ خَلَقَ ۚ
+  [1.0000]  7:97:1-7:97:9  @ 31:37.0 - 31:48.5
+           audio: https://server7.mp3quran.net/s_gmd/007.mp3
+           text:  أَفَأَمِنَ أَهْلُ ٱلْقُرَىٰٓ أَن يَأْتِيَهُم بَأْسُنَا بَيَـٰتًا وَهُمْ نَآئِمُونَ
+  [1.0000]  7:165:1-7:165:13  @ 51:58.6 - 52:11.3
+           audio: https://server7.mp3quran.net/s_gmd/007.mp3
+           text:  فَلَمَّا نَسُوا۟ مَا ذُكِّرُوا۟ بِهِۦٓ أَنجَيْنَا ٱلَّذِينَ يَنْهَوْنَ عَنِ ٱلسُّوٓءِ وَأَخَذْنَا ٱلَّذِينَ ظَلَمُوا۟
+  [1.0000]  9:14:1-9:14:11  @ 4:45.0 - 4:58.2
+           audio: https://server7.mp3quran.net/s_gmd/009.mp3
+           text:  قَـٰتِلُوهُمْ يُعَذِّبْهُمُ ٱللَّهُ بِأَيْدِيكُمْ وَيُخْزِهِمْ وَيَنصُرْكُمْ عَلَيْهِمْ وَيَشْفِ صُدُورَ قَوْمٍ مُّؤْمِنِينَ
+  [1.0000]  9:21:1-9:21:10  @ 7:21.3 - 7:34.3
+           audio: https://server7.mp3quran.net/s_gmd/009.mp3
+           text:  يُبَشِّرُهُمْ رَبُّهُم بِرَحْمَةٍ مِّنْهُ وَرِضْوَٰنٍ وَجَنَّـٰتٍ لَّهُمْ فِيهَا نَعِيمٌ مُّقِيمٌ
+  ... and 43 more
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
