@@ -9,10 +9,10 @@ Triggered after `Sync HF Dataset` succeeds. Loads
 
 Recipient resolution:
   --to <email>      explicit override (for testing)
-  (default)         look up the reciter's email in Notion via NOTION_API_KEY
-                    + NOTION_REQUESTS_DB_ID. NOT YET IMPLEMENTED — script
-                    exits 0 with a warning if no override is given. Wire
-                    Notion later when going live to real requesters.
+  (default)         look up the reciter's email + display name in the
+                    requests Notion DB via NOTION_API_KEY +
+                    NOTION_REQUESTS_DB_ID (or NOTION_DATABASE_ID).
+                    No-ops with a warning if creds missing or no row matches.
 
 Usage:
     python3 .github/scripts/send_publish_email.py \
@@ -40,6 +40,54 @@ GH_REPO = "Wider-Community/quranic-universal-audio"
 
 logging.basicConfig(format="%(levelname)s %(message)s", level=logging.INFO)
 log = logging.getLogger("send_publish_email")
+
+
+def _notion_lookup(slug: str) -> tuple[str | None, str | None]:
+    """Return (email, requester_name) from the Notion requests DB, or (None, None).
+
+    Schema (matches reciter_requests/app.py:548):
+      - Slug (rich_text)
+      - Email (email)
+      - Requester Name (title)
+    """
+    api_key = os.environ.get("NOTION_API_KEY")
+    db_id = (os.environ.get("NOTION_REQUESTS_DB_ID")
+             or os.environ.get("NOTION_DATABASE_ID"))
+    if not api_key or not db_id:
+        log.info("Notion creds not set; skipping lookup")
+        return None, None
+    try:
+        import urllib.request
+        body = json.dumps({
+            "filter": {"property": "Slug",
+                       "rich_text": {"equals": slug}},
+            "page_size": 1,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"https://api.notion.com/v1/databases/{db_id}/query",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+    except Exception as e:
+        log.warning("Notion query failed: %s", e)
+        return None, None
+
+    results = data.get("results") or []
+    if not results:
+        log.info("Notion: no row for slug %s", slug)
+        return None, None
+    props = results[0].get("properties") or {}
+    email = (props.get("Email") or {}).get("email")
+    title = (props.get("Requester Name") or {}).get("title") or []
+    name = title[0].get("plain_text") if title else None
+    return email, name
 
 
 def _load_reciter(slug: str) -> dict:
@@ -91,8 +139,9 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--reciter", required=True, help="Reciter slug")
     ap.add_argument("--to", help="Recipient email (overrides Notion lookup)")
-    ap.add_argument("--requester-name", default="there",
-                    help="Name to greet the requester by (default: 'there')")
+    ap.add_argument("--requester-name",
+                    help="Name to greet the requester by (default: from Notion, "
+                         "else 'there')")
     ap.add_argument("--template", default="timestamps-done.html",
                     help="Template filename under .github/templates/emails/")
     ap.add_argument("--subject",
@@ -104,22 +153,29 @@ def main() -> int:
     reciter = _load_reciter(args.reciter)
     name_en = reciter.get("name_en") or args.reciter
 
-    if not args.to:
-        log.warning("No --to override and Notion lookup not yet implemented; "
-                    "skipping. Pass --to <email> to send.")
+    # Resolve recipient + greeting name. CLI overrides win; otherwise fall
+    # back to Notion. If neither yields anything, no-op.
+    notion_email, notion_name = (None, None)
+    if not args.to or not args.requester_name:
+        notion_email, notion_name = _notion_lookup(args.reciter)
+
+    to_email = args.to or notion_email
+    if not to_email:
+        log.warning("No recipient (no --to and no Notion match); skipping.")
         return 0
+    requester_name = args.requester_name or notion_name or "there"
 
     subject = args.subject or f"{name_en} is now in the dataset"
     html_body = _render(
         args.template,
-        requester_name=args.requester_name,
+        requester_name=requester_name,
         reciter_name=name_en,
         links_html=_build_links_html(reciter),
         issue_link="",  # only used by some templates
     )
 
     if args.dry_run:
-        print(f"To: {args.to}\nSubject: {subject}\n\n{html_body}")
+        print(f"To: {to_email}\nSubject: {subject}\n\n{html_body}")
         return 0
 
     sender = os.environ.get("GMAIL_ADDRESS")
@@ -128,8 +184,8 @@ def main() -> int:
         log.warning("GMAIL_ADDRESS / GMAIL_APP_PASSWORD not set; skipping send.")
         return 0
 
-    _send(args.to, subject, html_body, sender, password)
-    log.info("Sent publication email for %s to %s", args.reciter, args.to)
+    _send(to_email, subject, html_body, sender, password)
+    log.info("Sent publication email for %s to %s", args.reciter, to_email)
     return 0
 
 
