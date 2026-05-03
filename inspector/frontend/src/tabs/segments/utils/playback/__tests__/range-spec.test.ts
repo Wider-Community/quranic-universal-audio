@@ -80,7 +80,7 @@ describe('resolveSegNextRange', () => {
 
 describe('buildSegPolicy', () => {
     const baseOpts = {
-        currentIndex: 0,
+        getCurrentIndex: () => 0,
         getDisplayed: () => null,
     };
 
@@ -111,7 +111,7 @@ describe('buildSegPolicy', () => {
         const policy = buildSegPolicy({
             autoPlayEnabled: true,
             isAccordionPlay: false,
-            currentIndex: 0,
+            getCurrentIndex: () => 0,
             getDisplayed: () => displayed,
         });
         if (policy.kind !== 'advance') throw new Error('expected advance');
@@ -119,6 +119,35 @@ describe('buildSegPolicy', () => {
 
         // Simulate filter change between boundary fires.
         displayed = [makeSegment({ index: 0, time_start: 0, time_end: 1000 })];
+        expect(policy.nextRange()).toBeNull();
+    });
+
+    it('advance policy uses the live current index — no infinite loop on consecutive boundaries', () => {
+        // Regression: a stale captured currentIndex made the resolver return
+        // the same "next" seg on every boundary, looping seg N+1 forever.
+        const segs = [
+            makeSegment({ index: 0, time_start: 0, time_end: 1000, audio_url: 'a' }),
+            makeSegment({ index: 1, time_start: 1000, time_end: 2000, audio_url: 'a' }),
+            makeSegment({ index: 2, time_start: 2000, time_end: 3000, audio_url: 'a' }),
+        ];
+        let activeIdx = 0;
+        const policy = buildSegPolicy({
+            autoPlayEnabled: true,
+            isAccordionPlay: false,
+            getCurrentIndex: () => activeIdx,
+            getDisplayed: () => segs,
+        });
+        if (policy.kind !== 'advance') throw new Error('expected advance');
+
+        // First boundary: playing seg 0, advance returns seg 1.
+        expect(policy.nextRange()?.startMs).toBe(1000);
+
+        // Caller advances to seg 1; second boundary should now return seg 2.
+        activeIdx = 1;
+        expect(policy.nextRange()?.startMs).toBe(2000);
+
+        // Caller advances to seg 2 (last); third boundary returns null.
+        activeIdx = 2;
         expect(policy.nextRange()).toBeNull();
     });
 });

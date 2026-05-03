@@ -151,7 +151,14 @@ export function playFromSegment(
     const policy = buildSegPolicy({
         autoPlayEnabled: get(autoPlayEnabled),
         isAccordionPlay,
-        currentIndex: segIndex,
+        // Lazy: AudioRange reuses the same policy across N consecutive
+        // boundary fires during an autoplay run. Read the live active-pair
+        // index each time so the resolver sees the segment we just advanced
+        // INTO, not the one we originally started on. Falls back to segIndex
+        // for the very first boundary (before _onRangeBoundary has updated
+        // playingSegmentIndex) and for cross-chapter accordion plays where
+        // the active pair is set elsewhere.
+        getCurrentIndex: () => get(playingSegmentIndex)?.index ?? segIndex,
         getDisplayed: () => get(displayedSegments),
     });
 

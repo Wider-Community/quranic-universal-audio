@@ -46,7 +46,12 @@ export function resolveSegNextRange({ getDisplayed, currentIndex }: NextRangeOpt
 export interface BuildSegPolicyOptions {
     autoPlayEnabled: boolean;
     isAccordionPlay: boolean;
-    currentIndex: number;
+    /** Read the index of the segment whose boundary is firing, lazily.
+     *  Must be a getter because the policy outlives a single segment —
+     *  AudioRange reuses the same policy across N consecutive boundary
+     *  fires during an autoplay run, and a stale captured index would
+     *  resolve to the same "next" segment every time and loop forever. */
+    getCurrentIndex: () => number;
     getDisplayed: () => Segment[] | null;
 }
 
@@ -59,7 +64,7 @@ export function buildSegPolicy(opts: BuildSegPolicyOptions): RangePolicy {
         gapMs: AUTOPLAY_GAP_PAUSE_MS,
         nextRange: () => resolveSegNextRange({
             getDisplayed: opts.getDisplayed,
-            currentIndex: opts.currentIndex,
+            currentIndex: opts.getCurrentIndex(),
         }),
     };
 }
