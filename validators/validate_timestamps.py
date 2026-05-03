@@ -858,6 +858,11 @@ def main():
         "--top", "-n", type=int, default=30,
         help="Number of issues to show per category (default: 30)",
     )
+    parser.add_argument(
+        "--json", action="store_true",
+        help="Print machine-readable JSON for a single reciter dir "
+             "(skips the human report, no validation.log written).",
+    )
     args = parser.parse_args()
 
     word_counts = load_word_counts(args.surah_info)
@@ -869,6 +874,10 @@ def main():
 
     # Single reciter dir: contains timestamps.json directly
     if (target / "timestamps.json").exists():
+        if args.json:
+            stats = validate_reciter(target, word_counts, verbose=False)
+            print(json.dumps(stats, ensure_ascii=False))
+            return
         report_path = target / "validation.log"
         with _tee_to_file(report_path):
             validate_reciter(target, word_counts, verbose=True, top_n=args.top)

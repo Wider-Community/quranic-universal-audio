@@ -170,7 +170,9 @@ def ts_validate(reciter):
             "diff_ms": count * MISSING_WORD_DIFF_MS_WEIGHT,
             "label": f"{vk} [-{count}w]",
         })
-    missing_words.sort(key=lambda x: x["diff_ms"], reverse=True)
+    missing_words.sort(key=lambda x: (x["chapter"],
+                                      int(x["verse_key"].split(":")[1])
+                                      if ":" in x["verse_key"] else 0))
 
     boundary_mismatches = []
     for bm in result.get("_boundary_mismatches", []):
