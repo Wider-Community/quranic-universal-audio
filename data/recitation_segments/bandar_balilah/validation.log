@@ -1,4 +1,4 @@
-Generated: 2026-05-03 11:27:58
+Generated: 2026-05-03 11:47:28
 
 ========================================================================
   bandar_balilah
@@ -16,16 +16,16 @@ Generated: 2026-05-03 11:27:58
   Word gaps:      0 verses
 
 --- Segments ---
-  Total:            12522
-  Single-seg:       2802
-  Multi-seg verses: 3414 (9720 segs)
-  Cross-verse keys: 76
+  Total:            12539
+  Single-seg:       2807
+  Multi-seg verses: 3418 (9732 segs)
+  Cross-verse keys: 62
   Max segs/verse:   19
 
 --- Segment Duration ---
   Min:    0.82s
-  Median: 6.76s
-  Mean:   7.14s
+  Median: 6.75s
+  Mean:   7.13s
   Max:    26.68s
 
 --- True Silence Duration (padding reversed) ---
@@ -37,49 +37,49 @@ Generated: 2026-05-03 11:27:58
 --- Alignment Confidence ---
   Min:       0.6700
   Median:    1.0000
-  Mean:      0.9800
+  Mean:      0.9801
   Max:       1.0000
   Below 60%: 0
   Below 80%: 0
   Failed:    0 (no alignment)
-  Empty ASR: 31 (matched but no phonemes)
+  Empty ASR: 48 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
 
---- Cross-verse (47) ---
-  [0.9900]  40:28:32-40:29:7  @ 8:17.2 - 8:33.0
-           audio: https://server6.mp3quran.net/balilah/040.mp3
-           text:  إِنَّ ٱللَّهَ لَا يَهْدِى مَنْ هُوَ مُسْرِفٌ كَذَّابٌ يَـٰقَوْمِ لَكُمُ ٱلْمُلْكُ ٱلْيَوْمَ ظَـٰهِرِينَ فِى ٱلْأَرْضِ
-  [1.0000]  40:31:10-40:32:6  @ 9:29.8 - 9:45.7
-           audio: https://server6.mp3quran.net/balilah/040.mp3
-           text:  وَمَا ٱللَّهُ يُرِيدُ ظُلْمًا لِّلْعِبَادِ وَيَـٰقَوْمِ إِنِّىٓ أَخَافُ عَلَيْكُمْ يَوْمَ ٱلتَّنَادِ
-  [0.9900]  40:71:1-40:72:6  @ 25:33.0 - 25:44.3
-           audio: https://server6.mp3quran.net/balilah/040.mp3
-           text:  إِذِ ٱلْأَغْلَـٰلُ فِىٓ أَعْنَـٰقِهِمْ وَٱلسَّلَـٰسِلُ يُسْحَبُونَ فِى ٱلْحَمِيمِ ثُمَّ فِى ٱلنَّارِ يُسْجَرُونَ
-  [0.9600]  40:73:1-40:74:3  @ 25:44.9 - 25:54.4
-           audio: https://server6.mp3quran.net/balilah/040.mp3
-           text:  ثُمَّ قِيلَ لَهُمْ أَيْنَ مَا كُنتُمْ تُشْرِكُونَ مِن دُونِ ٱللَّهِ ۖ
-  [0.9900]  41:6:15-41:7:8  @ 1:43.0 - 1:56.2
-           audio: https://server6.mp3quran.net/balilah/041.mp3
-           text:  وَوَيْلٌ لِّلْمُشْرِكِينَ ٱلَّذِينَ لَا يُؤْتُونَ ٱلزَّكَوٰةَ وَهُم بِٱلْـَٔاخِرَةِ هُمْ كَـٰفِرُونَ
-  [0.7800]  42:1:1-42:2:1  @ 0:04.3 - 0:15.3
-           audio: https://server6.mp3quran.net/balilah/042.mp3
-           text:  حمٓ عٓسٓقٓ
-  [1.0000]  43:87:7-43:88:7  @ 13:43.4 - 13:53.9
-           audio: https://server6.mp3quran.net/balilah/043.mp3
-           text:  فَأَنَّىٰ يُؤْفَكُونَ وَقِيلِهِۦ يَـٰرَبِّ إِنَّ هَـٰٓؤُلَآءِ قَوْمٌ لَّا يُؤْمِنُونَ
-  [0.9000]  44:41:8-44:42:4  @ 5:10.0 - 5:16.5
-           audio: https://server6.mp3quran.net/balilah/044.mp3
-           text:  وَلَا هُمْ يُنصَرُونَ إِلَّا مَن رَّحِمَ ٱللَّهُ ۚ
-  [0.9700]  44:43:1-44:46:2  @ 5:22.7 - 5:35.0
-           audio: https://server6.mp3quran.net/balilah/044.mp3
-           text:  إِنَّ شَجَرَتَ ٱلزَّقُّومِ طَعَامُ ٱلْأَثِيمِ كَٱلْمُهْلِ يَغْلِى فِى ٱلْبُطُونِ كَغَلْىِ ٱلْحَمِيمِ
-  [1.0000]  45:1:1-45:2:6  @ 0:04.6 - 0:16.0
-           audio: https://server6.mp3quran.net/balilah/045.mp3
-           text:  حمٓ تَنزِيلُ ٱلْكِتَـٰبِ مِنَ ٱللَّهِ ٱلْعَزِيزِ ٱلْحَكِيمِ
-  ... and 37 more
+--- Cross-verse (15) ---
+  [0.9800]  77:18:1-77:19:3  @ 1:12.1 - 1:22.3
+           audio: https://server6.mp3quran.net/balilah/077.mp3
+           text:  كَذَٰلِكَ نَفْعَلُ بِٱلْمُجْرِمِينَ وَيْلٌ يَوْمَئِذٍ لِّلْمُكَذِّبِينَ
+  [0.9500]  77:47:1-77:49:3  @ 3:57.9 - 4:12.9
+           audio: https://server6.mp3quran.net/balilah/077.mp3
+           text:  وَيْلٌ يَوْمَئِذٍ لِّلْمُكَذِّبِينَ وَإِذَا قِيلَ لَهُمُ ٱرْكَعُوا۟ لَا يَرْكَعُونَ وَيْلٌ يَوْمَئِذٍ لِّلْمُكَذِّبِينَ
+  [1.0000]  79:37:1-79:38:3  @ 2:52.0 - 2:58.7
+           audio: https://server6.mp3quran.net/balilah/079.mp3
+           text:  فَأَمَّا مَن طَغَىٰ وَءَاثَرَ ٱلْحَيَوٰةَ ٱلدُّنْيَا
+  [0.9800]  81:8:1-81:9:3  @ 0:30.7 - 0:38.8
+           audio: https://server6.mp3quran.net/balilah/081.mp3
+           text:  وَإِذَا ٱلْمَوْءُۥدَةُ سُئِلَتْ بِأَىِّ ذَنبٍ قُتِلَتْ
+  [0.9700]  84:7:1-84:8:4  @ 0:33.2 - 0:45.0
+           audio: https://server6.mp3quran.net/balilah/084.mp3
+           text:  فَأَمَّا مَنْ أُوتِىَ كِتَـٰبَهُۥ بِيَمِينِهِۦ فَسَوْفَ يُحَاسَبُ حِسَابًا يَسِيرًا
+  [0.9600]  84:10:1-84:11:3  @ 0:51.4 - 1:01.6
+           audio: https://server6.mp3quran.net/balilah/084.mp3
+           text:  وَأَمَّا مَنْ أُوتِىَ كِتَـٰبَهُۥ وَرَآءَ ظَهْرِهِۦ فَسَوْفَ يَدْعُوا۟ ثُبُورًا
+  [1.0000]  85:11:12-85:12:4  @ 1:51.7 - 2:05.4
+           audio: https://server6.mp3quran.net/balilah/085.mp3
+           text:  ذَٰلِكَ ٱلْفَوْزُ ٱلْكَبِيرُ إِنَّ بَطْشَ رَبِّكَ لَشَدِيدٌ
+  [0.9700]  89:29:1-89:30:2  @ 3:21.3 - 3:28.9
+           audio: https://server6.mp3quran.net/balilah/089.mp3
+           text:  فَٱدْخُلِى فِى عِبَـٰدِى وَٱدْخُلِى جَنَّتِى
+  [0.9300]  90:15:1-90:16:4  @ 1:17.2 - 1:25.4
+           audio: https://server6.mp3quran.net/balilah/090.mp3
+           text:  يَتِيمًا ذَا مَقْرَبَةٍ أَوْ مِسْكِينًا ذَا مَتْرَبَةٍ
+  [0.9700]  96:17:1-96:18:2  @ 1:06.7 - 1:11.1
+           audio: https://server6.mp3quran.net/balilah/096.mp3
+           text:  فَلْيَدْعُ نَادِيَهُۥ سَنَدْعُ ٱلزَّبَانِيَةَ
+  ... and 5 more
 
---- Muqatta'at (27) ---
+--- Muqatta'at (28) ---
   [0.8000]  2:1:1-2:1:1  @ 0:03.8 - 0:10.2
            audio: https://server6.mp3quran.net/balilah/002.mp3
            text:  الٓمٓ
@@ -110,9 +110,9 @@ Generated: 2026-05-03 11:27:58
   [0.8700]  19:1:1-19:1:1  @ 0:07.3 - 0:16.7
            audio: https://server6.mp3quran.net/balilah/019.mp3
            text:  كٓهيعٓصٓ
-  ... and 17 more
+  ... and 18 more
 
---- Qalqala (763) ---
+--- Qalqala (767) ---
   [0.9500]  2:2:1-2:2:4  [ب]  @ 0:10.8 - 0:14.1
            audio: https://server6.mp3quran.net/balilah/002.mp3
            text:  ذَٰلِكَ ٱلْكِتَـٰبُ لَا رَيْبَ ۛ
@@ -143,9 +143,9 @@ Generated: 2026-05-03 11:27:58
   [0.9900]  2:96:9-2:96:19  [ب]  @ 27:47.1 - 27:55.6
            audio: https://server6.mp3quran.net/balilah/002.mp3
            text:  يَوَدُّ أَحَدُهُمْ لَوْ يُعَمَّرُ أَلْفَ سَنَةٍ وَمَا هُوَ بِمُزَحْزِحِهِۦ مِنَ ٱلْعَذَابِ
-  ... and 753 more
+  ... and 757 more
 
---- Empty ASR Phonemes (31) ---
+--- Empty ASR Phonemes (48) ---
   [1.0000]  2:9:1-2:9:4  @ 1:24.2 - 1:28.5
            audio: https://server6.mp3quran.net/balilah/002.mp3
            text:  يُخَـٰدِعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟
@@ -176,7 +176,7 @@ Generated: 2026-05-03 11:27:58
   [1.0000]  15:80:1-15:80:5  @ 11:30.6 - 11:36.9
            audio: https://server6.mp3quran.net/balilah/015.mp3
            text:  وَلَقَدْ كَذَّبَ أَصْحَـٰبُ ٱلْحِجْرِ ٱلْمُرْسَلِينَ
-  ... and 21 more
+  ... and 38 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
