@@ -163,6 +163,9 @@ export interface CommandOperation extends EditOp {
     affected_chapters?: number[];
     /** Direction tag for merge ops (kept here for save payload compatibility). */
     merge_direction?: 'prev' | 'next';
+    /** Command envelope — required by the save handler validator (Phase 7).
+     *  `command.type` must match the enclosing `op.type`. */
+    command: { type: Operation; [k: string]: unknown };
 }
 
 /** Mutated state slice — `byId` carries inserted/updated segments; deleted

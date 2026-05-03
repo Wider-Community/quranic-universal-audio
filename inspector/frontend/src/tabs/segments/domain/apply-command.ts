@@ -131,6 +131,7 @@ function _baseOperation(
         kind: _kindFor(cmd.type),
         snapshots: { before: [], after: [] },
         targetSegmentIndex: { chapter, index: targetIndex },
+        command: { ...cmd, type: cmd.type },
     };
     return op;
 }
