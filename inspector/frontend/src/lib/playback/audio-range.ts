@@ -172,7 +172,7 @@ export class AudioRange {
     private _handleBoundary(): boolean | void {
         switch (this.policy.kind) {
             case 'stop': {
-                this.audioEl.pause();
+                this._pauseAndFlush();
                 this.onBoundary?.({ reason: 'stop' });
                 return false;
             }
@@ -185,17 +185,30 @@ export class AudioRange {
             case 'advance': {
                 const next = this.policy.nextRange();
                 if (!next) {
-                    this.audioEl.pause();
+                    this._pauseAndFlush();
                     this.onBoundary?.({ reason: 'stop' });
                     return false;
                 }
                 const gapMs = this.policy.gapMs;
-                this.audioEl.pause();
+                this._pauseAndFlush();
                 this.onBoundary?.({ reason: 'advance', nextRange: next });
                 this._scheduleAdvance(next, gapMs);
                 return;
             }
         }
+    }
+
+    /** Pause the element AND clip `currentTime` to `range.endMs`.
+     *
+     * Browsers buffer ~50–200ms of decoded audio past the pause() call —
+     * the OS audio device keeps draining the buffer before going silent.
+     * Setting `currentTime` forces a seek which discards that buffer, so
+     * the user does not hear audio content from positions past the segment
+     * boundary. Without this, segment playback ends with an audible "tail"
+     * of ~100–200ms of audio from the next part of the file. */
+    private _pauseAndFlush(): void {
+        this.audioEl.pause();
+        this.audioEl.currentTime = this.range.endMs / 1000;
     }
 
     // -----------------------------------------------------------------------

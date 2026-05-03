@@ -103,6 +103,20 @@ describe('AudioRange — policy stop', () => {
         expect(onBoundary).toHaveBeenCalledTimes(1);
         expect(r.isRunning()).toBe(false);
     });
+
+    it('clips currentTime to endMs after pause to flush the audio output buffer', () => {
+        // Browsers buffer ~50–200ms of audio output past pause(). Setting
+        // currentTime forces a seek which clears that buffer, eliminating
+        // the trailing audible "extra sound" past the segment boundary.
+        const r = buildRange({ range: { startMs: 0, endMs: 1000 }, policy: { kind: 'stop' } });
+        r.start();
+
+        audio.currentTime = 1.05;  // already a hair past endMs (rAF granularity)
+        raf.flushFrames(1);
+
+        expect(audio.pause).toHaveBeenCalled();
+        expect(audio.currentTime).toBeCloseTo(1.0, 5);  // clipped exactly to endMs
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -212,6 +226,23 @@ describe('AudioRange — policy advance', () => {
         // OR once with reason stop. Either way, we end up paused and not running.
         expect(audio.paused).toBe(true);
         expect(r.isRunning()).toBe(false);
+    });
+
+    it('clips currentTime to endMs at the gap-pause to flush the output buffer', () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const next: AudioRangeSpec = { startMs: 2000, endMs: 3000 };
+        const r = buildRange({
+            range: { startMs: 0, endMs: 1000 },
+            policy: { kind: 'advance', gapMs: 200, nextRange: () => next },
+        });
+        r.start();
+
+        audio.currentTime = 1.05;
+        raf.flushFrames(1);
+
+        // Pause + buffer flush happen synchronously at the boundary.
+        expect(audio.pause).toHaveBeenCalled();
+        expect(audio.currentTime).toBeCloseTo(1.0, 5);
     });
 
     it('cancels pending gap timer when stop() is called mid-gap', () => {
