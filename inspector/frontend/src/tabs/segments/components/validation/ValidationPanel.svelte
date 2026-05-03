@@ -42,9 +42,8 @@
         jumpToSegment,
         jumpToVerse,
     } from '../../utils/data/navigation-actions';
-    import { sessionResolvedCards } from '../../stores/session-resolved';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
-    import { filterSessionResolved, filterStaleIssues } from '../../utils/validation/stale';
+    import { filterStaleIssues } from '../../utils/validation/stale';
     import ErrorCard from './ErrorCard.svelte';
     import type {
         SegValAnyItem,
@@ -209,7 +208,6 @@
         _lcThreshold: number,
         _activeQalqalaLetter: string | null,
         _qalqalaEndOfVerse: boolean,
-        sessionResolved: ReadonlyMap<string, ReadonlySet<string>>,
     ): CategoryDescriptor[] {
         if (!data) return [];
 
@@ -228,8 +226,7 @@
         const LC_DEFAULT = get(segConfig).lcDefaultThreshold;
         const all: CategoryDescriptor[] = ordered.map((defn) => {
             const rawItems = _itemsFor(defn.kind, data);
-            const stale = filterStaleIssues(rawItems, liveUids);
-            const items = filterSessionResolved(stale, defn.kind, sessionResolved);
+            const items = filterStaleIssues(rawItems, liveUids);
             let visibleItems: SegValAnyItem[] = items;
             let summaryCount = items.length;
             let isLowConf = false;
@@ -272,7 +269,7 @@
 
     let categories: CategoryDescriptor[] = [];
     $: {
-        categories = buildCategories($segValidation, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse, $sessionResolvedCards);
+        categories = buildCategories($segValidation, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
         // Filter signature: the subset of inputs that truly narrow the item
         // list (chapter / LC threshold / qalqala letter / end-of-verse).
         // If none of these change, preserve each type's context-shown map so

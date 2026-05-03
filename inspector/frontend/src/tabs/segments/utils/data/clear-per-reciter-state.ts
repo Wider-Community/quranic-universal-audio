@@ -33,9 +33,8 @@ import {
 } from '../../stores/save';
 import { clearStats } from '../../stores/stats';
 import { clearValidation } from '../../stores/validation';
-import { clearSessionResolved } from '../../stores/session-resolved';
 import { clearAudioCachePollTimer } from '../playback/audio-cache-ui';
-import { clearSegPrefetchCache, stopSegAnimation } from '../playback/playback';
+import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { clearRowRegistry } from '../playback/row-registry';
 import { resetWaveformState } from '../waveform/utils';
 
@@ -48,7 +47,6 @@ export function clearPerReciterState(): void {
     clearOpLog();
     setPendingOp(null);
     clearEdit();
-    clearSessionResolved();
 
     clearValidation();
     clearStats();
@@ -69,5 +67,6 @@ export function clearPerReciterState(): void {
     cacheStatus.set('hidden');
     clearAudioCachePollTimer();
 
+    disposeSegRange();
     stopSegAnimation();
 }

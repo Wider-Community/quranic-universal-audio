@@ -23,20 +23,6 @@ export interface IssueDefinition {
     canIgnore: boolean;
     autoSuppress: boolean;
     persistsIgnore: boolean;
-    /**
-     * When `true`, an edit dispatched from this category's accordion card
-     * hides the card for the rest of the session even if the validator still
-     * flags the segment after save. Purely client-side / in-memory — never
-     * writes to `ignored_categories` and never persists.
-     *
-     * Use for soft validation rules where a user-intentional edit should
-     * dismiss the card (boundary_adj, audio_bleeding, qalqala, repetitions).
-     * Hard rules (cross_verse, structural / chapter-level categories) leave
-     * this `false` so the card persists until the validator clears it.
-     * Self-resolving categories (low_confidence, failed) also leave it
-     * `false` because confidence=1.0 after edit naturally drops them.
-     */
-    softResolveOnEdit: boolean;
     scope: Scope;
     displayTitle: string;
     description: string;
@@ -51,7 +37,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: false,
         autoSuppress: true,
         persistsIgnore: false,
-        softResolveOnEdit: false,
         scope: 'per_segment',
         displayTitle: 'Failed Alignments',
         description: '',
@@ -64,7 +49,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: false,
         autoSuppress: true,
         persistsIgnore: false,
-        softResolveOnEdit: false,
         scope: 'per_verse',
         displayTitle: 'Missing Verses',
         description: '',
@@ -77,7 +61,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: false,
         autoSuppress: false,
         persistsIgnore: false,
-        softResolveOnEdit: false,
         scope: 'per_verse',
         displayTitle: 'Missing Words',
         description: '',
@@ -90,7 +73,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: false,
         autoSuppress: true,
         persistsIgnore: false,
-        softResolveOnEdit: false,
         scope: 'per_chapter',
         displayTitle: 'Structural Errors',
         description: '',
@@ -103,7 +85,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: true,
         autoSuppress: true,
         persistsIgnore: true,
-        softResolveOnEdit: false,
         scope: 'per_segment',
         displayTitle: 'Low Confidence',
         description: '',
@@ -116,7 +97,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: true,
         autoSuppress: true,
         persistsIgnore: true,
-        softResolveOnEdit: true,
         scope: 'per_segment',
         displayTitle: 'Detected Repetitions',
         description: '',
@@ -129,7 +109,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: true,
         autoSuppress: true,
         persistsIgnore: true,
-        softResolveOnEdit: true,
         scope: 'per_segment',
         displayTitle: 'Audio Bleeding',
         description: '',
@@ -142,7 +121,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: true,
         autoSuppress: true,
         persistsIgnore: true,
-        softResolveOnEdit: true,
         scope: 'per_segment',
         displayTitle: 'May Require Boundary Adjustment',
         description: '',
@@ -155,7 +133,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: true,
         autoSuppress: true,
         persistsIgnore: true,
-        softResolveOnEdit: false,
         scope: 'per_segment',
         displayTitle: 'Cross-verse',
         description: '',
@@ -168,7 +145,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: true,
         autoSuppress: true,
         persistsIgnore: true,
-        softResolveOnEdit: true,
         scope: 'per_segment',
         displayTitle: 'Qalqala',
         description: '',
@@ -181,7 +157,6 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         canIgnore: false,
         autoSuppress: false,
         persistsIgnore: false,
-        softResolveOnEdit: false,
         scope: 'per_segment',
         displayTitle: 'Muqattaʼat',
         description: '',
@@ -203,8 +178,6 @@ export const AUTO_SUPPRESS_CATEGORIES: readonly string[] = _entries
     .filter(([, v]) => v.autoSuppress).map(([k]) => k);
 export const PERSISTS_IGNORE_CATEGORIES: readonly string[] = _entries
     .filter(([, v]) => v.persistsIgnore).map(([k]) => k);
-export const SOFT_RESOLVE_ON_EDIT_CATEGORIES: readonly string[] = _entries
-    .filter(([, v]) => v.softResolveOnEdit).map(([k]) => k);
 
 /**
  * Drop categories whose registry entry has ``persistsIgnore=false``.

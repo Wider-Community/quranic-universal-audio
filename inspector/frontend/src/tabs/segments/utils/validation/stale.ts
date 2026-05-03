@@ -45,30 +45,3 @@ export function filterStaleIssues(
     });
 }
 
-/**
- * Drop validation items whose `(segment_uid, category)` is in the
- * session-resolved set. Used by the ValidationPanel after `filterStaleIssues`
- * so soft-rule cards (boundary_adj / audio_bleeding / qalqala / repetitions)
- * disappear immediately after an edit dispatched from that card, even when
- * the post-save validator still flags them.
- *
- * Items without a `segment_uid` (per-chapter / per-verse cards) pass through.
- *
- * @param issues  Validation items (any category).
- * @param category  The category being filtered (one of the registry keys).
- *                  The accordion already groups items by category before
- *                  rendering, so this is the panel's current accordion key.
- * @param resolvedMap  Snapshot of the session-resolved store: uid → set of categories.
- */
-export function filterSessionResolved(
-    issues: SegValAnyItem[],
-    category: string,
-    resolvedMap: ReadonlyMap<string, ReadonlySet<string>>,
-): SegValAnyItem[] {
-    if (resolvedMap.size === 0) return issues;
-    return issues.filter((issue) => {
-        const uid = (issue as { segment_uid?: string | null }).segment_uid;
-        if (!uid) return true;
-        return !(resolvedMap.get(uid)?.has(category));
-    });
-}
