@@ -342,7 +342,14 @@
         if (isSelfPlaying) {
             audioEl.pause();
         } else {
-            playFromSegment(idx, chapter);
+            // Accordion-mounted rows are self-contained playback surfaces.
+            // Marking the play as accordion-origin keeps the main list from
+            // autoscrolling when the same chapter is open, and keeps the
+            // policy gate from advancing into the main display's chapter
+            // when global autoplay is on.
+            playFromSegment(idx, chapter, undefined, {
+                isAccordionPlay: instanceRole !== 'main',
+            });
         }
     }
 

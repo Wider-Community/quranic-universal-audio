@@ -175,8 +175,14 @@ export function playFromSegment(
     segCurrentIdx.set(segIndex);
     // Authoritative (chapter, index) for the active play — every downstream
     // reader (drawActivePlayhead, SegmentRow's class:playing) consults this
-    // instead of inferring chapter from selectedChapter.
-    setPlayingSegment({ chapter: resolvedChapter, index: segIndex });
+    // instead of inferring chapter from selectedChapter. `origin` lets the
+    // main-list autoscroll (and any future follow-the-playhead UI) stay put
+    // when the play came from an accordion-mounted row.
+    setPlayingSegment({
+        chapter: resolvedChapter,
+        index: segIndex,
+        origin: isAccordionPlay ? 'accordion' : 'main',
+    });
 
     prefetchNextSegAudio(displayed, segIndex, audioEl.src || '', _segPrefetchCache);
 
