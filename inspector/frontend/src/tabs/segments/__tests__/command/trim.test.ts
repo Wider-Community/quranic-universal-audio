@@ -31,14 +31,15 @@ describe.skipIf(!applyCommand)('command/trim', () => {
     expect(r.operation.kind === 'single-index' || r.operation.kind === 'structural').toBe(true);
   });
 
-  it('op honors auto-suppress per registry', () => {
+  it('op records sourceCategory as op_context_category but does not mutate ignored_categories', () => {
     const r = applyCommand(baseState(), {
       type: 'trim', segmentUid: 'uid-trim',
       delta: { time_start: 250 },
       sourceCategory: 'low_confidence',
     } as any);
     const updated = r.nextState.byId?.['uid-trim'] ?? r.nextState['uid-trim'];
-    expect(updated.ignored_categories).toContain('low_confidence');
+    expect(r.operation.op_context_category).toBe('low_confidence');
+    expect(updated.ignored_categories ?? []).not.toContain('low_confidence');
   });
 
   it('op preserves _mountId routing through dispatcher', () => {

@@ -59,42 +59,18 @@ def test_can_ignore_drives_save_serialization(category):
         )
 
 
-@pytest.mark.parametrize("category", PER_SEGMENT_CATEGORIES, ids=PER_SEGMENT_CATEGORIES)
-def test_auto_suppress_on_edit_per_segment_categories(category):
-    """For per_segment C with auto_suppress=Y, an edit-from-card op writes C to seg.ignored_categories."""
-    reg = _registry()
-    row = reg[category]
-    auto = getattr(row, "auto_suppress", None) or row["auto_suppress"]
-    scope = getattr(row, "scope", None) or row["scope"]
-    if scope != "per_segment":
-        pytest.skip(f"{category} is not per_segment")
+def test_apply_auto_suppress_helper_is_gone():
+    """The backend ``apply_auto_suppress`` helper has been removed.
 
-    from services.validation.registry import apply_auto_suppress  # type: ignore
-
-    seg = {"ignored_categories": []}
-    new = apply_auto_suppress(seg, category, edit_origin="card")
-    if auto:
-        assert category in (new.get("ignored_categories") or [])
-    else:
-        assert category not in (new.get("ignored_categories") or [])
-
-
-@pytest.mark.parametrize(
-    "category", PER_VERSE_CATEGORIES + PER_CHAPTER_CATEGORIES,
-    ids=PER_VERSE_CATEGORIES + PER_CHAPTER_CATEGORIES,
-)
-def test_auto_suppress_is_noop_for_chapter_scope_categories(category):
-    """For per_verse / per_chapter C, edit-from-card does NOT write to any ignored_categories.
-
-    Re-validation on the next save cycle is the source of truth for whether the
-    issue resolved.
+    Editing no longer mutates ``ignored_categories`` -- that contract is
+    reserved for explicit Ignore actions. Card dismissal for soft-rule
+    categories is handled by the frontend session-resolved store.
     """
-    from services.validation.registry import apply_auto_suppress  # type: ignore
+    from services.validation import registry as reg_mod  # type: ignore
 
-    seg = {"ignored_categories": []}
-    new = apply_auto_suppress(seg, category, edit_origin="card")
-    assert (new.get("ignored_categories") or []) == [], (
-        f"{category} is chapter-scope but auto_suppress wrote to ignored_categories"
+    assert not hasattr(reg_mod, "apply_auto_suppress"), (
+        "apply_auto_suppress must not exist: edits no longer mutate "
+        "ignored_categories. Soft-rule card dismissal is a frontend-only concern."
     )
 
 

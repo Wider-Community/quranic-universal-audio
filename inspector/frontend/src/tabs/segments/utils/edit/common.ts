@@ -12,11 +12,13 @@ import { get } from 'svelte/store';
 import type { EditOp, Segment } from '../../../../lib/types/domain';
 import { getSegByChapterIndex, segAllData } from '../../stores/chapter';
 import type { SegmentState } from '../../stores/segments';
+import { IssueRegistry } from '../../domain/registry';
 import {
     finalizeOp,
     setPendingOp,
     snapshotSeg,
 } from '../../stores/dirty';
+import { markSessionResolved } from '../../stores/session-resolved';
 import {
     clearEdit,
     editCanvas,
@@ -129,7 +131,30 @@ export function finalizeEdit(
     // derivedTimings store reactively refreshes from segAllData on its own.
     void opts?.skipSilence;
     if (!opts?.skipFilterRender) applyVerseFilterAndRender();
+    _maybeMarkSoftResolved(op, targetsAfter);
     finalizeOp(chapter, op);
+}
+
+/**
+ * If this edit was dispatched from a validation accordion card and the
+ * card's category has `softResolveOnEdit: true` in the registry, record
+ * `(uid, category)` in the session-resolved store so the
+ * ValidationPanel hides those cards for the rest of the session — even
+ * if the post-save validator still flags them.
+ *
+ * Hard-resolve categories (cross_verse, structural / chapter-level) and
+ * self-resolve categories (low_confidence, failed) are no-ops here:
+ * the validator drops them naturally when appropriate, and we keep the
+ * card visible until then.
+ */
+function _maybeMarkSoftResolved(op: EditOp, targetsAfter: Segment[]): void {
+    const cat = op.op_context_category;
+    if (!cat) return;
+    const defn = IssueRegistry[cat];
+    if (!defn || !defn.softResolveOnEdit) return;
+    for (const seg of targetsAfter) {
+        markSessionResolved(seg.segment_uid, cat);
+    }
 }
 
 // ---------------------------------------------------------------------------

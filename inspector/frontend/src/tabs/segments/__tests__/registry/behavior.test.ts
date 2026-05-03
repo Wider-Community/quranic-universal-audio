@@ -24,7 +24,7 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
       expect(wants).toBe(expected);
     });
 
-    it(`auto-suppress fires per registry through applyCommand (${cat})`, async () => {
+    it(`edit through applyCommand never mutates ignored_categories (${cat})`, async () => {
       const acMod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
       if (!acMod) throw new Error('phase-3 module not present');
       const seg = makeSegment(0, 0, 1000, { segment_uid: `uid-${cat}` });
@@ -38,12 +38,10 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
           sourceCategory: cat,
         } as any,
       );
-      const row = registry[cat];
       expect(result.operation).toBeTruthy();
-      if (row.autoSuppress && row.scope === 'per_segment') {
-        const updated = result.nextState.byId[`uid-${cat}`];
-        expect(updated?.ignored_categories ?? []).toContain(cat);
-      }
+      expect(result.operation.op_context_category).toBe(cat);
+      const updated = result.nextState.byId[`uid-${cat}`];
+      expect(updated?.ignored_categories ?? []).not.toContain(cat);
     });
 
     it(`card type dispatched from registry (${cat})`, () => {

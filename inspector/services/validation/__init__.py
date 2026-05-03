@@ -48,7 +48,6 @@ from services.validation.registry import (
     CAN_IGNORE_CATEGORIES,
     AUTO_SUPPRESS_CATEGORIES,
     PERSISTS_IGNORE_CATEGORIES,
-    apply_auto_suppress,
     filter_persistent_ignores,
 )
 
@@ -231,6 +230,5 @@ __all__ = [
     "CAN_IGNORE_CATEGORIES",
     "AUTO_SUPPRESS_CATEGORIES",
     "PERSISTS_IGNORE_CATEGORIES",
-    "apply_auto_suppress",
     "filter_persistent_ignores",
 ]

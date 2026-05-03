@@ -30,10 +30,11 @@ describe.skipIf(!applyCommand)('command/reference', () => {
     expect(r.operation.kind).toBeTruthy();
   });
 
-  it('op honors auto-suppress per registry', () => {
+  it('op records sourceCategory but does not mutate ignored_categories', () => {
     const r = applyCommand(baseState(), { type: 'editReference', segmentUid: 'uid-ref', matched_ref: '1:2:1-1:2:1', matched_text: 'y', sourceCategory: 'audio_bleeding' } as any);
     const updated = r.nextState.byId?.['uid-ref'] ?? r.nextState['uid-ref'];
-    expect(updated.ignored_categories).toContain('audio_bleeding');
+    expect(r.operation.op_context_category).toBe('audio_bleeding');
+    expect(updated.ignored_categories ?? []).not.toContain('audio_bleeding');
   });
 
   it('op preserves _mountId routing through dispatcher', () => {

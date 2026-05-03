@@ -241,35 +241,6 @@ PERSISTS_IGNORE_CATEGORIES: tuple[str, ...] = tuple(
 )
 
 
-def apply_auto_suppress(seg: dict, category: str, edit_origin: str) -> dict:
-    """Append ``category`` to ``seg['ignored_categories']`` when the registry
-    entry has ``auto_suppress=True`` and ``scope='per_segment'``.
-
-    Per-verse and per-chapter categories are no-ops here: their suppression is
-    decided by the next validation pass, which compares the saved state against
-    the disk fixture. Categories with ``auto_suppress=False`` (e.g. ``muqattaat``
-    and ``missing_words``) are also no-ops.
-
-    ``edit_origin`` documents the call site (``"card"`` from the accordion,
-    ``"main_list"`` from row-level edit affordances). It is reserved for future
-    branching; today it is informational only.
-
-    Returns the same ``seg`` dict (mutated in place) for fluent chaining and so
-    callers can write ``seg = apply_auto_suppress(seg, ...)``.
-    """
-    defn = _REGISTRY.get(category)
-    if defn is None:
-        return seg
-    if not defn.auto_suppress:
-        return seg
-    if defn.scope != "per_segment":
-        return seg
-    ignored = seg.setdefault("ignored_categories", [])
-    if category not in ignored:
-        ignored.append(category)
-    return seg
-
-
 def filter_persistent_ignores(categories: list[str] | None) -> list[str]:
     """Return ``categories`` minus any whose registry entry has
     ``persists_ignore=False``.
@@ -306,7 +277,6 @@ __all__ = [
     "CAN_IGNORE_CATEGORIES",
     "AUTO_SUPPRESS_CATEGORIES",
     "PERSISTS_IGNORE_CATEGORIES",
-    "apply_auto_suppress",
     "filter_persistent_ignores",
     "registry_as_dict",
 ]

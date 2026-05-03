@@ -33,6 +33,7 @@ import {
 } from '../../stores/save';
 import { clearStats } from '../../stores/stats';
 import { clearValidation } from '../../stores/validation';
+import { clearSessionResolved } from '../../stores/session-resolved';
 import { clearAudioCachePollTimer } from '../playback/audio-cache-ui';
 import { clearSegPrefetchCache, stopSegAnimation } from '../playback/playback';
 import { clearRowRegistry } from '../playback/row-registry';
@@ -47,6 +48,7 @@ export function clearPerReciterState(): void {
     clearOpLog();
     setPendingOp(null);
     clearEdit();
+    clearSessionResolved();
 
     clearValidation();
     clearStats();

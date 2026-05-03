@@ -16,10 +16,7 @@ from domain.command import validate_patch_dict
 from services import cache
 from services.data_loader import get_word_counts, load_detailed
 from services.validation import chapter_validation_counts
-from services.validation.registry import (
-    apply_auto_suppress,
-    filter_persistent_ignores,
-)
+from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
 from utils.io import atomic_json_write, backup_file, file_sha256
 from utils.references import chapter_from_ref, normalize_ref
@@ -78,75 +75,6 @@ def _validate_command_envelopes(operations: list) -> str | None:
                 f"command.type {cmd_type!r} does not match op.type {op_type!r}"
             )
     return None
-
-
-def _uids_with_explicit_ignored_categories(updates: dict) -> set[str]:
-    """Return the set of segment_uids whose payload explicitly carries
-    ``ignored_categories`` (including ``[]``).
-
-    Used by ``_apply_registry_auto_suppress`` to honour MUST-7: when the
-    payload sets the field explicitly we never override it from the registry.
-    """
-    out: set[str] = set()
-    for s in (updates.get("segments") or []):
-        if not isinstance(s, dict):
-            continue
-        if "ignored_categories" not in s:
-            continue
-        uid = s.get("segment_uid") or ""
-        if uid:
-            out.add(uid)
-    return out
-
-
-def _apply_registry_auto_suppress(
-    matching: list[dict],
-    operations: list,
-    explicit_ic_uids: set[str],
-) -> None:
-    """Defensively write ``ignored_categories`` driven by the registry.
-
-    For each operation that carries ``command.sourceCategory`` (or the
-    wire-level ``op_context_category``) and targets a per-segment auto-suppress
-    category, find the affected segment by ``command.segmentUid`` and append
-    the category to its ``ignored_categories`` -- but only when the original
-    payload omitted the field for that segment.  When the payload explicitly
-    sent ``ignored_categories: []`` we leave it alone (MUST-7).
-
-    The frontend reducer already runs this same registry gate; this backend
-    pass is the defensive write for clients that bypass the reducer.
-    """
-    by_uid: dict[str, dict] = {}
-    for entry in matching:
-        for seg in entry.get("segments", []):
-            uid = seg.get("segment_uid") or ""
-            if uid:
-                by_uid[uid] = seg
-
-    for op in operations or []:
-        if not isinstance(op, dict):
-            continue
-        cmd = op.get("command")
-        if not isinstance(cmd, dict):
-            continue
-        category = cmd.get("sourceCategory") or op.get("op_context_category")
-        if not isinstance(category, str) or not category:
-            continue
-        uid = cmd.get("segmentUid") or ""
-        if not uid or uid in explicit_ic_uids:
-            continue
-        seg = by_uid.get(uid)
-        if seg is None:
-            continue
-        apply_auto_suppress(seg, category, "card")
-        # Re-filter so non-persistent categories (e.g. ``failed``) don't bleed
-        # through to disk -- ``apply_auto_suppress`` only checks ``auto_suppress``,
-        # but persistence is a separate gate.
-        ic = filter_persistent_ignores(seg.get("ignored_categories") or [])
-        if ic:
-            seg["ignored_categories"] = ic
-        else:
-            seg.pop("ignored_categories", None)
 
 
 def _validate_op_patches(operations: list) -> str | None:
@@ -465,12 +393,10 @@ def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
     else:
         _apply_patch(matching, updates)
 
-    # Defensive registry-driven auto-suppress write.  Honours MUST-7: when
-    # the payload explicitly carries ``ignored_categories`` for a segment
-    # (including ``[]``), we never override it from the registry.
-    explicit_ic_uids = _uids_with_explicit_ignored_categories(updates)
-    _apply_registry_auto_suppress(
-        matching, updates.get("operations") or [], explicit_ic_uids,
-    )
-
+    # ``ignored_categories`` is mutated only when the payload explicitly
+    # carries it (Ignore action, or explicit ``[]`` clear -- MUST-7).
+    # Edits dispatched from validation accordion cards no longer write to
+    # ``ignored_categories``: that contract is reserved for explicit Ignore.
+    # Card dismissal for soft-rule categories is purely a frontend
+    # session-state concern.
     return _persist_and_record(reciter, chapter, entries, meta, val_before, updates)
