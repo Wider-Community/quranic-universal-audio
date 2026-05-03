@@ -408,7 +408,9 @@
         if (get(editMode) || readOnly) return;
         const t = e.target as Element;
         if (t.closest('.seg-row-controls') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
-        playFromSegment(seg.index, seg.chapter ?? 0);
+        playFromSegment(seg.index, seg.chapter ?? 0, undefined, {
+            isAccordionPlay: instanceRole !== 'main',
+        });
     }
 
     function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
@@ -429,7 +431,9 @@
         if (isSelfPlaying) {
             audioEl.currentTime = timeMs / 1000;
         } else {
-            playFromSegment(seg.index, chapter, timeMs);
+            playFromSegment(seg.index, chapter, timeMs, {
+                isAccordionPlay: instanceRole !== 'main',
+            });
         }
     }
 
