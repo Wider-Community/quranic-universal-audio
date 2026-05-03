@@ -394,7 +394,7 @@ def cmd_generate_pbs(args):
         print(f"  {req['name']:<40} {silence:>8} {speech:>8} {pad:>6} {req['source']}")
 
     # Rewrite PBS file
-    pbs_path = REPO_ROOT / "jobs" / "extract_segments.pbs"
+    pbs_path = REPO_ROOT / ".local" / "extraction" / "extract_segments.pbs"
     if not pbs_path.exists():
         print(f"\nERROR: PBS file not found at {pbs_path}")
         return
@@ -422,8 +422,8 @@ def cmd_generate_pbs(args):
     print(f"\nPBS file updated: {pbs_path}")
     print(f"Array range: 1-{len(accepted)}")
     print("\nReview the PBS file, then submit:")
-    print("  bash scripts/sync_mfa.sh")
-    print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub jobs/extract_segments.pbs"')
+    print("  bash .local/extraction/sync_mfa.sh")
+    print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub .local/extraction/extract_segments.pbs"')
 
     # Receipt emails are now sent at form submission (HF Space),
     # not here.  Use `notify receipt` to manually re-send if needed.

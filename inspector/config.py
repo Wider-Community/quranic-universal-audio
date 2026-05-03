@@ -35,7 +35,11 @@ CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))
 # missing, so these paths are advisory rather than required. Override the base dir via
 # INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.
 _QUA_DATA_OVERRIDE = os.getenv("INSPECTOR_QUA_DATA_PATH")
-_QUA_DATA = Path(_QUA_DATA_OVERRIDE) if _QUA_DATA_OVERRIDE else _REPO / "quranic_universal_aligner" / "data"
+_QUA_DATA = (
+    Path(_QUA_DATA_OVERRIDE)
+    if _QUA_DATA_OVERRIDE
+    else _REPO / ".local" / "spaces" / "quranic_universal_aligner" / "data"
+)
 QPC_HAFS_PATH = _QUA_DATA / "qpc_hafs.json"
 DK_SCRIPT_PATH = _QUA_DATA / "digital_khatt_v2_script.json"
 PHONEME_SUB_COSTS_PATH = _QUA_DATA / "phoneme_sub_costs.json"
