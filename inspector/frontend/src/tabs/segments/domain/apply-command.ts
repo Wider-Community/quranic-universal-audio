@@ -2,9 +2,16 @@
  * applyCommand — pure reducer over a segment-slice + a SegmentCommand.
  *
  * Builds the EditOp record (snapshots + targetSegmentIndex), computes
- * mutated segments per command type, runs the registry's auto-suppress
- * rule when a `sourceCategory` is supplied, and returns a `CommandResult`
- * the dispatcher applies to the live stores.
+ * mutated segments per command type, and returns a `CommandResult` the
+ * dispatcher applies to the live stores.
+ *
+ * The reducer never mutates `seg.ignored_categories`. Editing from a
+ * validation accordion card records `cmd.sourceCategory` /
+ * `cmd.contextCategory` on the op (so history pills know which card the
+ * user was working from) but does not write to the segment's persisted
+ * ignore list — that's reserved for the explicit Ignore action. Card
+ * dismissal for soft-rule categories is handled out-of-band via the
+ * session-resolved store.
  *
  * The reducer is pure: it does not touch the dirty/edit/playback stores,
  * does not perform I/O, does not mutate inputs. Side effects are the
@@ -15,10 +22,7 @@ import type { EditOp, Segment } from '../../../lib/types/domain';
 import { snapshotSeg } from '../stores/dirty';
 import type { SegSnapshot } from '../stores/dirty';
 import type { SegmentState } from '../stores/segments';
-import {
-    applyAutoSuppress,
-    IssueRegistry,
-} from './registry';
+import { IssueRegistry } from './registry';
 import type {
     ApplyCommandContext,
     ApplyCommandState,
@@ -137,18 +141,19 @@ function _baseOperation(
 }
 
 /**
- * Auto-suppress is only meaningful for per-segment categories. The registry
- * gate happens inside `applyAutoSuppress` itself; this helper records the
- * resolved-categories list for the validation delta.
+ * Compute the validation-delta `resolved` list from a command's source
+ * category. Ops dispatched from an accordion card report that card's
+ * category here so callers can update card-counts. This does NOT mutate
+ * `seg.ignored_categories` — that's reserved for explicit Ignore actions.
+ *
+ * Per-segment categories only; per-verse / per-chapter categories return
+ * empty (the next validation pass is the source of truth for those).
  */
-function _maybeAutoSuppress(seg: Segment, category: string | null | undefined, origin: 'card' | 'main_list'): string[] {
+function _resolvedFromContext(category: string | null | undefined): string[] {
     if (!category) return [];
     const defn = IssueRegistry[category];
-    if (!defn || !defn.autoSuppress || defn.scope !== 'per_segment') return [];
-    const before = new Set(seg.ignored_categories ?? []);
-    applyAutoSuppress(seg, category, origin);
-    const after = seg.ignored_categories ?? [];
-    return after.filter((c) => !before.has(c));
+    if (!defn || defn.scope !== 'per_segment') return [];
+    return [category];
 }
 
 function _cloneSeg(seg: Segment): Segment {
@@ -175,7 +180,7 @@ function _reduceTrim(state: ApplyCommandState, cmd: TrimCommand, ctx?: ApplyComm
     if (cmd.delta.time_start != null) next.time_start = cmd.delta.time_start;
     if (cmd.delta.time_end != null) next.time_end = cmd.delta.time_end;
     next.confidence = 1.0;
-    const resolved = _maybeAutoSuppress(next, cmd.sourceCategory ?? cmd.contextCategory, 'card');
+    const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     op.snapshots.before = [_snapshot(target)];
@@ -230,9 +235,7 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     if (cmd.secondDisplayText !== undefined) secondHalf.display_text = cmd.secondDisplayText;
 
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
-    const resolved = new Set<string>();
-    for (const c of _maybeAutoSuppress(firstHalf, ctxCat, 'card')) resolved.add(c);
-    for (const c of _maybeAutoSuppress(secondHalf, ctxCat, 'card')) resolved.add(c);
+    const resolved = new Set<string>(_resolvedFromContext(ctxCat));
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     op.snapshots.before = [_snapshot(target)];
@@ -304,7 +307,7 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
     };
     merged.ignored_categories = mergedIc.size ? [...mergedIc] : undefined;
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
-    const resolved = _maybeAutoSuppress(merged, ctxCat, 'card');
+    const resolved = _resolvedFromContext(ctxCat);
 
     const op = _baseOperation(cmd, first, chapter, first.index, ctx);
     op.snapshots.before = [_snapshot(first), _snapshot(second)];
@@ -370,7 +373,7 @@ function _reduceEditReference(
     if (cmd.matched_text !== undefined) next.matched_text = cmd.matched_text;
     if (cmd.display_text !== undefined) next.display_text = cmd.display_text;
     next.confidence = 1.0;
-    const resolved = _maybeAutoSuppress(next, cmd.sourceCategory ?? cmd.contextCategory, 'card');
+    const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     if (cmd.opType === 'confirm_reference') {

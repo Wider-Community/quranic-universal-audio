@@ -100,6 +100,19 @@ export class AudioRange {
         }
     }
 
+    /**
+     * Start the rAF boundary-watcher loop WITHOUT seeking or calling play().
+     * Use when the caller manages seek + play separately (e.g. an existing
+     * AudioPlayer component already loaded the source and seeked to the verse
+     * start) and only needs AudioRange's frame-precise boundary enforcement.
+     *
+     * Idempotent — calling while already attached is a no-op.
+     */
+    attach(): void {
+        if (this.disposed) return;
+        if (!this.loop.running()) this.loop.start();
+    }
+
     stop(): void {
         this._cancelGap();
         this._detachCanplay();

@@ -329,6 +329,44 @@ describe('AudioRange — pause-resilient loop', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 8a. attach (no seek, no play)
+// ---------------------------------------------------------------------------
+
+describe('AudioRange — attach', () => {
+    it('starts the rAF loop without seeking or calling play()', () => {
+        audio.currentTime = 4.2;       // pretend caller already seeked
+        audio.paused = false;          // pretend caller already started playback
+        const onTick = vi.fn();
+        const r = buildRange({ range: { startMs: 1000, endMs: 5000 }, onTick });
+        r.attach();
+
+        expect(audio.play).not.toHaveBeenCalled();
+        expect(audio.currentTime).toBeCloseTo(4.2, 5);  // not reseeked
+
+        raf.flushFrames(1);
+        expect(onTick).toHaveBeenCalledTimes(1);
+        expect(onTick.mock.calls[0]?.[0]).toBeCloseTo(4200, 5);
+    });
+
+    it('still enforces boundary at frame precision under loop policy', () => {
+        audio.currentTime = 0;
+        audio.paused = false;
+        const onBoundary = vi.fn();
+        const r = buildRange({
+            range: { startMs: 200, endMs: 1000 },
+            policy: { kind: 'loop' },
+            onBoundary,
+        });
+        r.attach();
+
+        audio.currentTime = 1.001;
+        raf.flushFrames(1);
+        expect(audio.currentTime).toBeCloseTo(0.2, 5);
+        expect(onBoundary).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // 8. dispose
 // ---------------------------------------------------------------------------
 

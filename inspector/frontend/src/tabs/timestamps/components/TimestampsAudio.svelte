@@ -113,8 +113,11 @@
     // ---- Audio event handlers ----
 
     function onPlay(): void {
+        // attach (not start) — `_player.load(url, atTime, autoplay)` has
+        // already seeked to the verse start and kicked off playback. We only
+        // want the boundary-watcher rAF on top.
         const r = _ensureRangeForCurrentState();
-        r?.start();
+        r?.attach();
     }
 
     function onPause(): void {
