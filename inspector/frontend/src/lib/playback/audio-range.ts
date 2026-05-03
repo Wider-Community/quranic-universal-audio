@@ -19,6 +19,7 @@
 
 import { createAnimationLoop, type AnimationLoop } from '../utils/animation';
 import { audioSrcMatches, safePlay } from '../utils/audio';
+import { cutAudio, uncutAudio } from './audio-graph';
 
 export interface AudioRangeSpec {
     startMs: number;
@@ -140,6 +141,11 @@ export class AudioRange {
     dispose(): void {
         this.disposed = true;
         this.stop();
+        // Restore gain so any subsequent direct play() (edit-preview, manual
+        // seek, native audio controls) gets full audio. Without this, a
+        // disposal mid-cut-ramp would leave the GainNode at 0 and the next
+        // playback would be silent until something called uncutAudio.
+        uncutAudio(this.audioEl);
     }
 
     // -----------------------------------------------------------------------
@@ -198,15 +204,20 @@ export class AudioRange {
         }
     }
 
-    /** Pause the element AND clip `currentTime` to `range.endMs`.
+    /** Pause the element with a Web Audio kill-switch + visual playhead pin.
      *
-     * Browsers buffer ~50–200ms of decoded audio past the pause() call —
-     * the OS audio device keeps draining the buffer before going silent.
-     * Setting `currentTime` forces a seek which discards that buffer, so
-     * the user does not hear audio content from positions past the segment
-     * boundary. Without this, segment playback ends with an audible "tail"
-     * of ~100–200ms of audio from the next part of the file. */
+     *  The OS audio sink (Windows WASAPI, etc.) holds 50–200 ms of
+     *  pre-decoded samples that keep playing after `audio.pause()` —
+     *  source-side controls (`pause`, `volume`, `muted`, `currentTime`)
+     *  cannot flush it. `cutAudio` schedules a 5 ms gain ramp to 0 on
+     *  the GainNode upstream of the platform sink, silencing the queue
+     *  with sample accuracy.
+     *
+     *  After the kill, we still pause the element (so `currentTime`
+     *  stops advancing) and pin `currentTime` to `range.endMs` so the
+     *  visual playhead lands exactly on the boundary. */
     private _pauseAndFlush(): void {
+        cutAudio(this.audioEl);
         this.audioEl.pause();
         this.audioEl.currentTime = this.range.endMs / 1000;
     }
@@ -266,6 +277,9 @@ export class AudioRange {
     private _seekAndPlay(startMs: number): void {
         this.audioEl.currentTime = startMs / 1000;
         if (this.playbackRate) this.audioEl.playbackRate = this.playbackRate();
+        // Restore gain before play(), in case a previous kill-switch left
+        // the GainNode at 0. The 5 ms ramp avoids a plosive on resume.
+        uncutAudio(this.audioEl);
         safePlay(this.audioEl);
     }
 }
