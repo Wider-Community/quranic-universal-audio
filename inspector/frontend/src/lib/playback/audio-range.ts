@@ -19,7 +19,6 @@
 
 import { createAnimationLoop, type AnimationLoop } from '../utils/animation';
 import { audioSrcMatches, safePlay } from '../utils/audio';
-import { cutAudio, uncutAudio } from './audio-graph';
 
 export interface AudioRangeSpec {
     startMs: number;
@@ -141,11 +140,6 @@ export class AudioRange {
     dispose(): void {
         this.disposed = true;
         this.stop();
-        // Restore gain so any subsequent direct play() (edit-preview, manual
-        // seek, native audio controls) gets full audio. Without this, a
-        // disposal mid-cut-ramp would leave the GainNode at 0 and the next
-        // playback would be silent until something called uncutAudio.
-        uncutAudio(this.audioEl);
     }
 
     // -----------------------------------------------------------------------
@@ -204,20 +198,17 @@ export class AudioRange {
         }
     }
 
-    /** Pause the element with a Web Audio kill-switch + visual playhead pin.
+    /** Pause the element and pin `currentTime` to `range.endMs`.
      *
-     *  The OS audio sink (Windows WASAPI, etc.) holds 50–200 ms of
-     *  pre-decoded samples that keep playing after `audio.pause()` —
-     *  source-side controls (`pause`, `volume`, `muted`, `currentTime`)
-     *  cannot flush it. `cutAudio` schedules a 5 ms gain ramp to 0 on
-     *  the GainNode upstream of the platform sink, silencing the queue
-     *  with sample accuracy.
-     *
-     *  After the kill, we still pause the element (so `currentTime`
-     *  stops advancing) and pin `currentTime` to `range.endMs` so the
-     *  visual playhead lands exactly on the boundary. */
+     *  Note: `pause()` does NOT flush the OS audio sink — Windows WASAPI
+     *  holds ~50–200 ms of pre-decoded samples that keep playing out.
+     *  We tried routing through Web Audio + GainNode kill-switch but the
+     *  audio element lacks `crossorigin="anonymous"`, and
+     *  `MediaElementAudioSourceNode` silences non-CORS-tagged audio as a
+     *  security feature. Reverted; the audible-tail artifact is a known
+     *  limitation until we either CORS-tag the audio or switch to fetching
+     *  via Web Audio buffers. */
     private _pauseAndFlush(): void {
-        cutAudio(this.audioEl);
         this.audioEl.pause();
         this.audioEl.currentTime = this.range.endMs / 1000;
     }
@@ -277,9 +268,6 @@ export class AudioRange {
     private _seekAndPlay(startMs: number): void {
         this.audioEl.currentTime = startMs / 1000;
         if (this.playbackRate) this.audioEl.playbackRate = this.playbackRate();
-        // Restore gain before play(), in case a previous kill-switch left
-        // the GainNode at 0. The 5 ms ramp avoids a plosive on resume.
-        uncutAudio(this.audioEl);
         safePlay(this.audioEl);
     }
 }

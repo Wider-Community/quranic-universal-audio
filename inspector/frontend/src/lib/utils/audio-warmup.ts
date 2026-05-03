@@ -16,8 +16,6 @@
  * Decoded by the same MP3 decoder the chapter audio will use.
  */
 
-import { _getCtx } from '../playback/audio-graph';
-
 const SILENT_MP3 =
     'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjQ1LjEwMAAAAAAAAAAAAAAA//tQwAAAAAAAAAAAAAAAAAAAAABJbmZvAAAADwAAAAEAAAJAAJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiY//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjkxAAAAAAAAAAAAAAAAJAYwAAAAAAAAAkBJSwQ4//tQxAADwAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//tSxAADwAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
 
@@ -36,14 +34,6 @@ function _warm(): void {
         a.load();
     };
     a.play().then(cleanup, cleanup);
-
-    // Bootstrap the AudioContext inside this user gesture so Chrome's
-    // autoplay policy doesn't leave the segments-tab kill-switch suspended
-    // when the user later clicks a segment-row play button. Wrapped in
-    // try/catch because some environments (older Safari, jsdom) may not
-    // expose AudioContext at all.
-    const ctx = _getCtx();
-    if (ctx && ctx.state === 'suspended') void ctx.resume();
 }
 
 /**
