@@ -195,10 +195,14 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     pendingChainTarget.set(null);
 
     // Use dirty store helpers (number keys only).
+    // Discard is client-only -- server history is unchanged, so do NOT
+    // mark `historyDataStale`. Doing so caused `hideSavePreview()` (which
+    // runs from confirmSaveFromPreview) to fire a fire-and-forget
+    // `reloadCurrentReciter()` that races with `executeSave()` and
+    // clears the dirty map / op log of the OTHER chapters before their
+    // ops reach the server -- effectively discarding everything.
     deleteDirtyEntry(chapter);
     deleteOpLogEntry(chapter);
-
-    historyDataStale.set(true);
 
     if (!isDirty()) {
         hideSavePreview();
