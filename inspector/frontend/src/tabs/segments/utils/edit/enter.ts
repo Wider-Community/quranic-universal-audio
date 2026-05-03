@@ -15,7 +15,7 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/playback';
-import { stopSegAnimation } from '../playback/playback';
+import { disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { enterSplitMode } from './split';
 import { enterTrimMode } from './trim';
 
@@ -32,6 +32,9 @@ export function enterEditWithBuffer(
     const prePausePlayMs = !audioEl || audioEl.paused ? null : audioEl.currentTime * 1000;
 
     if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
+    // Dispose the segments-main AudioRange so its rAF + pending advance gap
+    // can't fire onto the audio element while edit-preview owns it.
+    disposeSegRange();
     continuousPlay.set(false);
 
     const pending = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment',
