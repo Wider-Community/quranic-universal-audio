@@ -22,6 +22,7 @@ from services.validation.classifier import (
     classify_flags,
     classify_segment,
     is_ignored_for,
+    is_suppressed_for,
 )
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 
@@ -96,7 +97,11 @@ def _build_detail_lists(
                 # Malformed structural ref — fall back to a minimal flag check
                 # so audio_bleeding / repetitions / low_confidence still surface.
                 fallback_issues: list[str] = []
-                if is_by_ayah and ":" in entry_ref and not seg_belongs_to_entry(matched_ref, entry_ref):
+                if (
+                    is_by_ayah and ":" in entry_ref
+                    and not seg_belongs_to_entry(matched_ref, entry_ref)
+                    and not is_suppressed_for(seg, "audio_bleeding")
+                ):
                     seg_start = matched_ref.split("-")[0]
                     seg_parts = seg_start.split(":")
                     matched_verse = f"{seg_parts[0]}:{seg_parts[1]}" if len(seg_parts) >= 2 else matched_ref
@@ -110,7 +115,7 @@ def _build_detail_lists(
                         "classified_issues": ["audio_bleeding"],
                     })
                     fallback_issues.append("audio_bleeding")
-                if seg.get("wrap_word_ranges"):
+                if seg.get("wrap_word_ranges") and not is_suppressed_for(seg, "repetitions"):
                     repetitions.append({
                         "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
                         "ref": matched_ref,

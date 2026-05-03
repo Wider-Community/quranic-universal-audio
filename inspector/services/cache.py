@@ -82,6 +82,7 @@ _seg: _KeyedCache[list[dict]] = _KeyedCache()
 _seg_meta: _KeyedCache[dict] = _KeyedCache()
 _seg_reciters: _SingletonCache[list[dict]] = _SingletonCache()
 _seg_verses: _KeyedCache[tuple] = _KeyedCache()
+_seg_resolved_by_edit: _KeyedCache[dict[str, set[str]]] = _KeyedCache()
 
 
 def get_seg_cache(reciter: str) -> list[dict] | None:
@@ -116,11 +117,20 @@ def set_seg_verses_cache(reciter: str, data: tuple) -> None:
     _seg_verses.set(reciter, data)
 
 
+def get_seg_resolved_by_edit(reciter: str) -> dict[str, set[str]] | None:
+    return _seg_resolved_by_edit.get(reciter)
+
+
+def set_seg_resolved_by_edit(reciter: str, index: dict[str, set[str]]) -> None:
+    _seg_resolved_by_edit.set(reciter, index)
+
+
 def invalidate_seg_caches(reciter: str) -> None:
     """Remove all segment-related caches for *reciter* and reset reciters list."""
     _seg.pop(reciter)
     _seg_meta.pop(reciter)
     _seg_verses.pop(reciter)
+    _seg_resolved_by_edit.pop(reciter)
     _seg_reciters.clear()  # MUST be a full reset — not a per-reciter pop
 
 

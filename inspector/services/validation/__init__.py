@@ -23,11 +23,14 @@ from config import LOW_CONFIDENCE_THRESHOLD, SURAH_INFO_PATH
 from constants import VALIDATION_CATEGORIES
 from services import cache
 from services.data_loader import get_word_counts, load_detailed
+from services.history_query import build_resolved_by_edit_index
 from services.phonemizer_service import get_canonical_phonemes
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
 from services.validation.classifier import (
     is_ignored_for,
+    is_resolved_by_edit,
+    is_suppressed_for,
     classify_flags,
     classify_segment,
     classify_segment_full,
@@ -148,6 +151,27 @@ def validate_reciter_segments(reciter: str) -> dict:
     meta = cache.get_seg_meta(reciter)
     is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
 
+    # Inject resolved-by-edit categories from edit_history.jsonl. The
+    # transient ``_resolved_by_edit`` field is consulted by
+    # ``is_resolved_by_edit`` during this validate pass and stripped from
+    # every seg before returning so it never reaches disk via the cached
+    # entries list. Categories are limited to the soft set in
+    # ``RESOLVES_BY_EDIT_CATEGORIES`` (boundary_adj / audio_bleeding /
+    # qalqala / repetitions) -- this is what makes those cards disappear
+    # from the accordion once the user has edited from them.
+    resolved_idx = cache.get_seg_resolved_by_edit(reciter)
+    if resolved_idx is None:
+        resolved_idx = build_resolved_by_edit_index(reciter)
+        cache.set_seg_resolved_by_edit(reciter, resolved_idx)
+    _injected_segs: list[dict] = []
+    if resolved_idx:
+        for entry in entries:
+            for seg in entry.get("segments", []):
+                uid = seg.get("segment_uid")
+                if uid and uid in resolved_idx:
+                    seg["_resolved_by_edit"] = resolved_idx[uid]
+                    _injected_segs.append(seg)
+
     detail = _build_detail_lists(entries, is_by_ayah, word_counts, canonical, single_word_verses)
     missing_words = _build_missing_words(detail["verse_segments"], word_counts)
     errors, missing_verses, stats = _check_structural_errors(reciter, entries)
@@ -185,6 +209,12 @@ def validate_reciter_segments(reciter: str) -> dict:
         "category_counts": category_counts,
         "stats": stats,
     }
+
+    # Strip the transient injection so the cached entries dict stays clean
+    # for the save flow (which serializes ``entries`` directly to disk).
+    for seg in _injected_segs:
+        seg.pop("_resolved_by_edit", None)
+
     return result
 
 
@@ -211,6 +241,8 @@ def run_validation_log(reciter_dir: Path) -> None:
 
 __all__ = [
     "is_ignored_for",
+    "is_resolved_by_edit",
+    "is_suppressed_for",
     "classify_flags",
     "classify_segment",
     "classify_segment_full",

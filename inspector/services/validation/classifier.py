@@ -75,6 +75,31 @@ def is_ignored_for(seg: dict, category: str) -> bool:
     return bool(seg.get("ignored"))
 
 
+def is_resolved_by_edit(seg: dict, category: str) -> bool:
+    """Return True when the user has edited this segment from a card of
+    ``category`` and the validator should drop the flag without writing to
+    ``ignored_categories``.
+
+    The validate route injects ``seg["_resolved_by_edit"]`` (set or list) from
+    the edit-history index built by
+    ``services.history_query.build_resolved_by_edit_index``. Save and CLI
+    paths that don't inject the field treat it as empty -- the helper is a
+    no-op there, so non-validate flows are unaffected.
+    """
+    rbe = seg.get("_resolved_by_edit")
+    if not rbe:
+        return False
+    return category in rbe
+
+
+def is_suppressed_for(seg: dict, category: str) -> bool:
+    """Combined gate: the segment opts out of ``category`` either via an
+    explicit Ignore (``ignored_categories``) or via a prior edit dispatched
+    from that card (resolved-by-edit history).
+    """
+    return is_ignored_for(seg, category) or is_resolved_by_edit(seg, category)
+
+
 # ---------------------------------------------------------------------------
 # Boundary-adjustment rule
 # ---------------------------------------------------------------------------
@@ -99,7 +124,7 @@ def _check_boundary_adj(
     last ``BOUNDARY_TAIL_K`` ASR phonemes diverge from the canonical tail —
     a heuristic for word-boundary drift the structural rule alone misses.
     """
-    if is_ignored_for(seg, "boundary_adj"):
+    if is_suppressed_for(seg, "boundary_adj"):
         return False
     if (surah, s_ayah) in MUQATTAAT_VERSES:
         return False
@@ -197,10 +222,10 @@ def classify_flags(
         return result
 
     if is_by_ayah and ":" in entry_ref and not seg_belongs_to_entry(matched_ref, entry_ref):
-        if not is_ignored_for(seg, "audio_bleeding"):
+        if not is_suppressed_for(seg, "audio_bleeding"):
             result["audio_bleeding"] = True
 
-    if seg.get("wrap_word_ranges") and not is_ignored_for(seg, "repetitions"):
+    if seg.get("wrap_word_ranges") and not is_suppressed_for(seg, "repetitions"):
         result["repetitions"] = True
 
     if confidence < LOW_CONFIDENCE_THRESHOLD and not is_ignored_for(seg, "low_confidence"):
@@ -221,7 +246,7 @@ def classify_flags(
             result["muqattaat"] = True
 
     last_letter = last_arabic_letter(seg.get("matched_text", ""))
-    if last_letter and last_letter in QALQALA_LETTERS and not is_ignored_for(seg, "qalqala"):
+    if last_letter and last_letter in QALQALA_LETTERS and not is_suppressed_for(seg, "qalqala"):
         result["qalqala"] = True
         result["qalqala_letter"] = last_letter
 
@@ -398,6 +423,8 @@ def classify_entry(
 
 __all__ = [
     "is_ignored_for",
+    "is_resolved_by_edit",
+    "is_suppressed_for",
     "classify_flags",
     "classify_segment",
     "classify_segment_full",
