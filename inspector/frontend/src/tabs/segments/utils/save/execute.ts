@@ -23,6 +23,7 @@ import {
 import { saveButtonLabel } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
 import { refreshValidation } from '../validation/refresh';
+import { collectOpPeaks, type OpPeakRecord } from '../waveform/op-peaks';
 
 // ---------------------------------------------------------------------------
 // Payload types
@@ -55,11 +56,13 @@ interface SavePayloadFull {
     full_replace: true;
     segments: SaveSegmentPayloadFull[];
     operations: EditOp[];
+    op_peaks?: OpPeakRecord[];
 }
 
 interface SavePayloadPatch {
     segments: SaveSegmentPayloadPatch[];
     operations: EditOp[];
+    op_peaks?: OpPeakRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +170,13 @@ export async function executeSave(): Promise<void> {
                 payload = { segments: updates, operations: chOps };
                 savedChanges += chOps.length;
             }
+
+            // Pull peaks from in-memory caches for every op that has them.
+            // Edits the user just made always have peaks loaded (they had to
+            // play the audio to edit). Missing entries (rare) fall through to
+            // compute-on-play in a future session.
+            const opPeaks = collectOpPeaks(chOps);
+            if (opPeaks.length > 0) payload.op_peaks = opPeaks;
 
             const result = await fetchJson<SegSaveResponse & { error?: string }>(
                 `/api/seg/save/${reciter}/${ch}`,

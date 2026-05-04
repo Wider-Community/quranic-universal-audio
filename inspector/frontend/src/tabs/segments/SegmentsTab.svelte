@@ -15,7 +15,7 @@
     import { showHistoryView, hideHistoryView } from './utils/history/actions';
     import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview } from './utils/save/actions';
     import { loadSegConfig } from './utils/data/config-loader';
-    import { buildGroupedReciters } from '../../lib/utils/grouped-reciters';
+    import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson } from '../../lib/api';
     import {
@@ -54,6 +54,10 @@
     let segAudioEl: HTMLAudioElement | null = null;
 
     $: groupedReciters = buildGroupedReciters($segAllReciters);
+    $: reciterSelectOptions = reciterGroupsToOptions(groupedReciters);
+    $: verseSelectOptions = $verseOptions.map((v) => ({ value: String(v), label: String(v) }));
+    // Jump-trigger state: resets immediately after use so SearchableSelect shows placeholder
+    let verseJump = '';
     $: chaptersOptions = $segAllData
         ? [...new Set($segAllData.segments.filter(s => s.chapter != null).map(s => s.chapter as number))]
             .sort((a, b) => a - b)
@@ -75,8 +79,7 @@
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }
 
-    function onReciterSelectChange(e: Event): void {
-        const v = (e.currentTarget as HTMLSelectElement).value;
+    function onReciterSelectChange(v: string): void {
         selectedReciter.set(v);
         onReciterChange(v);
     }
@@ -90,12 +93,10 @@
     async function onChapterChange(chapter: string): Promise<void> {
         await loadChapterData(get(selectedReciter), chapter);
     }
-    function onVerseSelectChange(e: Event): void {
-        const sel = e.currentTarget as HTMLSelectElement;
-        const v = sel.value;
-        // Reset immediately so the dropdown snaps back to "All" — we don't
-        // want the verse filter to engage; this is a jump-and-play trigger.
-        sel.value = '';
+    function onVerseSelectChange(v: string): void {
+        // Reset immediately so the SearchableSelect snaps back to placeholder
+        // ("All") — this is a jump-and-play trigger, not a filter toggle.
+        verseJump = '';
         if (!v) return;
         const chStr = get(selectedChapter);
         const chapter = parseInt(chStr);
@@ -149,21 +150,14 @@
     <ShortcutsGuide />
 
     <div class="info-bar seg-selector-bar">
+        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
         <label>Reciter:
-            <select
-                id="seg-reciter-select"
+            <SearchableSelect
+                options={reciterSelectOptions}
                 value={$selectedReciter}
-                on:change={onReciterSelectChange}
-            >
-                <option value="">{$segAllReciters.length ? PLACEHOLDER_SELECT : 'Loading...'}</option>
-                {#each groupedReciters as g}
-                    <optgroup label={g.group}>
-                        {#each g.items as r}
-                            <option value={r.slug}>{r.name}</option>
-                        {/each}
-                    </optgroup>
-                {/each}
-            </select>
+                placeholder={$segAllReciters.length ? PLACEHOLDER_SELECT : 'Loading...'}
+                on:change={(e) => onReciterSelectChange(e.detail)}
+            />
         </label>
         <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
         <label>Surah:
@@ -174,17 +168,14 @@
                 on:change={onChapterSelectChange}
             />
         </label>
+        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
         <label>Ayah:
-            <select
-                id="seg-verse-select"
-                value={$selectedVerse}
-                on:change={onVerseSelectChange}
-            >
-                <option value="">All</option>
-                {#each $verseOptions as v}
-                    <option value={String(v)}>{v}</option>
-                {/each}
-            </select>
+            <SearchableSelect
+                options={verseSelectOptions}
+                value={verseJump}
+                placeholder="All"
+                on:change={(e) => onVerseSelectChange(e.detail)}
+            />
         </label>
         <div class="seg-bar-actions">
             {#if $savePreviewVisible}

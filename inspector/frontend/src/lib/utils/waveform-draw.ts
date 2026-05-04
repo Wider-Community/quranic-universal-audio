@@ -4,7 +4,7 @@
  */
 
 import type { PeakBucket } from '../types/domain';
-import { WAVEFORM_BG_COLOR, WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from './constants';
+import { WAVEFORM_BG_COLOR, WAVEFORM_FILL_COLOR, WAVEFORM_SILENCE_THRESHOLD, WAVEFORM_STROKE_COLOR } from './constants';
 
 /**
  * Options for drawWaveformPeaks().
@@ -68,7 +68,14 @@ export function drawWaveformPeaks(
     if (drawPeaks.length === 0) return;
 
     const buckets = width;
-    const scale = (height / 2) * 0.9;
+    const halfH = height / 2;
+    let maxAmp = 0;
+    for (const bk of drawPeaks) {
+        if (!bk) continue;
+        const a = Math.max(Math.abs(bk[1] ?? 0), Math.abs(bk[0] ?? 0));
+        if (a > maxAmp) maxAmp = a;
+    }
+    const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD ? halfH * 0.9 : halfH / maxAmp;
 
     function sampleAt(arr: PeakBucket[], idx: number, component: 0 | 1): number {
         const fi = (idx / buckets) * (arr.length - 1);

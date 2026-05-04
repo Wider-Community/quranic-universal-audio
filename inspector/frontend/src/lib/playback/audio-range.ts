@@ -127,6 +127,13 @@ export class AudioRange {
         // seeked-this-frame guard from a prior loop.
         this._cancelGap();
         this.seekedThisFrame = false;
+        // Mirror dispose(): a fresh range is the signal another play path is
+        // about to use this element. Lift any in-flight gain ramp from the
+        // previous range's _pauseAndFlush so the next play() isn't silent.
+        // Repros as silent audio after auto-next/auto-random in the
+        // Timestamps tab, where AudioPlayer.load() drives the next play()
+        // (so AudioRange's internal _seekAndPlay → uncutAudio never runs).
+        uncutAudio(this.audioEl);
     }
 
     setPolicy(p: RangePolicy): void {

@@ -9,7 +9,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { AudioRange, type AudioRangeSpec, type RangePolicy } from '../audio-range';
+import { cutAudio, uncutAudio } from '../audio-graph';
 import { installRafMock, makeAudioStub, type AudioStub, type RafMock } from './raf-harness';
+
+// Mock audio-graph so we can assert when AudioRange invokes the kill-switch
+// and gain-restore primitives. happy-dom has no Web Audio, so the real
+// module's getAudioGraph would no-op anyway — replacing with spies costs
+// nothing for the existing tests and lets the regression test below assert.
+vi.mock('../audio-graph', () => ({
+    cutAudio: vi.fn(),
+    uncutAudio: vi.fn(),
+    getAudioGraph: vi.fn(() => null),
+    _getCtx: vi.fn(() => null),
+}));
 
 let raf: RafMock;
 let audio: AudioStub;
@@ -17,6 +29,8 @@ let audio: AudioStub;
 beforeEach(() => {
     raf = installRafMock();
     audio = makeAudioStub({ src: 'http://x/seg.mp3', readyState: 4 });
+    vi.mocked(cutAudio).mockClear();
+    vi.mocked(uncutAudio).mockClear();
 });
 
 afterEach(() => {
@@ -286,6 +300,34 @@ describe('AudioRange — setRange', () => {
         raf.flushFrames(1);
 
         expect(onBoundary).toHaveBeenCalledTimes(1);
+    });
+
+    it('lifts a pending kill-switch gain ramp from a prior _pauseAndFlush', () => {
+        // Repro for the Timestamps-tab silent-audio bug after auto-next:
+        // the prior verse's `stop` boundary calls cutAudio → GainNode = 0;
+        // when AudioPlayer.load() drives the next play(), AudioRange's
+        // internal _seekAndPlay (which would call uncutAudio) never runs.
+        // setRange must lift the ramp so the next play() isn't silent.
+        const r = buildRange({
+            range: { startMs: 0, endMs: 1000 },
+            policy: { kind: 'stop' },
+        });
+        r.start();
+
+        // Cross the boundary — _pauseAndFlush → cutAudio fires once.
+        audio.currentTime = 1.001;
+        raf.flushFrames(1);
+        expect(vi.mocked(cutAudio)).toHaveBeenCalledTimes(1);
+
+        // Reset the uncut counter so we can isolate setRange's effect from
+        // the uncut() that fires inside r.start()'s initial _seekAndPlay.
+        vi.mocked(uncutAudio).mockClear();
+
+        // External orchestrator (TimestampsTab) loads the next verse and
+        // re-specs the range. The ramp must be lifted before play() lands.
+        r.setRange({ startMs: 0, endMs: 2000 });
+        expect(vi.mocked(uncutAudio)).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(uncutAudio)).toHaveBeenCalledWith(audio);
     });
 });
 

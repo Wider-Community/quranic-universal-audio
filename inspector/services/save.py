@@ -15,6 +15,7 @@ from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
 from services import cache
 from services.data_loader import get_word_counts, load_detailed
+from services.peaks_history import append_peaks_records
 from services.validation import chapter_validation_counts
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
@@ -351,6 +352,13 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     backup_file(history_path)
     with open(history_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(batch, ensure_ascii=False) + "\n")
+
+    # Persist any op-level peaks the client gathered from its in-memory cache
+    # so cross-session History viewing works without re-computing. Best-effort:
+    # malformed entries are silently skipped (lazy compute-on-play fills gaps).
+    op_peaks = updates.get("op_peaks")
+    if isinstance(op_peaks, list) and op_peaks:
+        append_peaks_records(reciter, op_peaks, batch_id=batch["batch_id"])
 
     # Invalidate cache
     cache.invalidate_seg_caches(reciter)

@@ -33,31 +33,6 @@
     cursor: grabbing !important;
 }
 
-.phoneme-labels {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 30px;
-    display: flex;
-    pointer-events: none;
-}
-
-.phoneme-label {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    color: #888;
-    border-left: 1px solid #333;
-    overflow: hidden;
-    text-overflow: clip;
-}
-
-.phoneme-label.active {
-    background: rgba(76, 201, 240, 0.3);
-    color: #fff;
-}
 
 /* Unified display */
 .unified-display {

@@ -113,15 +113,6 @@ export interface SegPeaksRangeEntry {
     durationMs: number;
 }
 
-/** Queue item for the observer-driven segment-peaks batch fetcher. Field
- *  names match the wire format (`POST /api/seg/segment-peaks/`) so the
- *  queue can be sent straight through as `segments:[]`. */
-export interface ObserverPeaksQueueItem {
-    url: string;
-    start_ms: number;
-    end_ms: number;
-}
-
 // ---------------------------------------------------------------------------
 // Timer handles
 // ---------------------------------------------------------------------------

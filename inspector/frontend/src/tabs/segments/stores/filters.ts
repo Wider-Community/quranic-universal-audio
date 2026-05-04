@@ -242,8 +242,10 @@ export function computeDisplayed(
                     }
                 }
                 const timings = get(derivedTimings);
-                const _silenceFor = (s: Segment | undefined): number =>
-                    (s?.segment_uid && timings.get(s.segment_uid)?.silence_after_ms) ?? Infinity;
+                const _silenceFor = (s: Segment | undefined): number => {
+                    if (!s?.segment_uid) return Infinity;
+                    return timings.get(s.segment_uid)?.silence_after_ms ?? Infinity;
+                };
                 groups.sort((a, b) => _silenceFor(a[0]) - _silenceFor(b[0]));
                 segs = groups.flat();
                 _neighbourMemo = { segsRef: preFilterSegs, filtersKey: neighbourFiltersKey, result: segs, neighbourSet };

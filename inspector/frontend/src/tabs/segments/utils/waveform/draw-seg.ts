@@ -6,7 +6,6 @@ import {
     WAVEFORM_BG_COLOR,
     WAVEFORM_DIM_OVERLAY_COLOR,
     WAVEFORM_FILL_COLOR,
-    WAVEFORM_HEADROOM,
     WAVEFORM_SILENCE_THRESHOLD,
 } from '../../../../lib/utils/constants';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
@@ -59,6 +58,73 @@ export function drawWaveformFromPeaksForSeg(canvas: SegCanvas, seg: Segment, cha
     return false;
 }
 
+/**
+ * Bg fill → waveform → history overlays → capture `_wfCache`.
+ *
+ * `startMs`/`endMs` describe the canvas's *visual* range — wider than the
+ * playback range for split leaves (parent's union peak with the leaf
+ * slice highlighted in green). The split / trim / merge overlay
+ * descriptors live on the canvas itself (`_splitHL`, `_trimHL`,
+ * `_mergeHL`); applying them here means they're baked into the cached
+ * ImageData and survive every subsequent `putImageData` blit during
+ * playback.
+ *
+ * Returns true when real peaks were drawn — the IntersectionObserver
+ * uses this to decide whether to keep observing. `drawSegPlayhead`
+ * ignores the return; its cache always captures something so the
+ * playhead has a clean base to draw on.
+ */
+export function drawSegBaseAndOverlays(
+    canvas: SegCanvas,
+    startMs: number,
+    endMs: number,
+    audioUrl: string,
+): boolean {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    ctx.fillStyle = WAVEFORM_BG_COLOR;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let drew = false;
+    if (audioUrl) {
+        const pe = getWaveformPeaks(audioUrl);
+        if (pe?.peaks?.length) {
+            drawWaveformPeaks(ctx, pe.peaks, {
+                width: canvas.width,
+                height: canvas.height,
+                startMs,
+                endMs,
+                totalDurationMs: pe.duration_ms,
+            });
+            drew = true;
+        } else {
+            const covering = _findCoveringPeaks(audioUrl, startMs, endMs);
+            if (covering?.peaks?.length) {
+                const rs = covering.start_ms ?? 0;
+                drawWaveformPeaks(ctx, covering.peaks as Peaks, {
+                    width: canvas.width,
+                    height: canvas.height,
+                    startMs: startMs - rs,
+                    endMs: endMs - rs,
+                    totalDurationMs: covering.duration_ms,
+                });
+                drew = true;
+            }
+        }
+    }
+
+    // Synthetic seg matching the canvas's visual range — overlay math
+    // reads `seg.time_start/time_end` as the canvas's full-width bounds.
+    const visSeg = { time_start: startMs, time_end: endMs, audio_url: audioUrl } as Segment;
+    _drawSplitHighlight(canvas, visSeg);
+    _drawTrimHighlight(canvas, visSeg);
+    _drawMergeHighlight(canvas, visSeg);
+
+    canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    canvas._wfCacheKey = `${startMs}:${endMs}`;
+    return drew;
+}
+
 export function drawSegPlayhead(
     canvas: SegCanvas,
     startMs: number,
@@ -72,22 +138,12 @@ export function drawSegPlayhead(
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
     } else {
-        // Always clear to background first so the captured _wfCache is
-        // cursor-free even when no peaks are available yet. Without this,
-        // a cursor drawn by the previous tick gets baked into _wfCache and
-        // putImageData'd back on every subsequent tick — leaving a ghost
-        // cursor while a second live cursor moves alongside it.
-        ctx.fillStyle = WAVEFORM_BG_COLOR;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        if (audioUrl) {
-            const pe = _findCoveringPeaks(audioUrl, startMs, endMs);
-            if (pe?.peaks?.length) {
-                const rs = pe.start_ms ?? 0;
-                drawSegmentWaveformFromPeaks(canvas, startMs - rs, endMs - rs, pe.peaks as PeakBucket[], pe.duration_ms);
-            }
-        }
-        canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        canvas._wfCacheKey = cacheKey;
+        // Cache miss: rebuild bg + waveform + overlays so the cached
+        // ImageData carries history overlays through every subsequent
+        // tick. Without this, green/red overlays disappear the moment
+        // playback starts (the cache rebuild used to capture the base
+        // waveform only).
+        drawSegBaseAndOverlays(canvas, startMs, endMs, audioUrl);
     }
 
     if (currentTimeMs < startMs || currentTimeMs > endMs) return;
@@ -153,9 +209,7 @@ export function drawEditPeakBase(
         const a = Math.max(Math.abs(data.maxVals[i] ?? 0), Math.abs(data.minVals[i] ?? 0));
         if (a > maxAmp) maxAmp = a;
     }
-    const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD
-        ? halfH * 0.9
-        : halfH * (1 - WAVEFORM_HEADROOM) / maxAmp;
+    const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD ? halfH * 0.9 : halfH / maxAmp;
 
     ctx.beginPath();
     for (let i = 0; i < width; i++) {

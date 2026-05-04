@@ -172,6 +172,7 @@
                             mode="history"
                             instanceRole="history"
                             splitHL={rootSplitHL}
+                            opId={chain.ops[0]?.op.op_id ?? null}
                             {previewCtx}
                         />
                     </div>
@@ -200,6 +201,7 @@
                                 mode="history"
                                 instanceRole="history"
                                 splitHL={leafSplitHL(leaf)}
+                                opId={chain.ops[0]?.op.op_id ?? null}
                                 {previewCtx}
                             />
                         </div>

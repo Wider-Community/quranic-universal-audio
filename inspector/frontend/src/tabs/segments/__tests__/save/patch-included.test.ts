@@ -27,6 +27,6 @@ describe('save patch field', () => {
         { op_id: 'x', type: 'trim' },
       ],
     };
-    expect('patch' in payload.operations[0]).toBe(false);
+    expect('patch' in payload.operations[0]!).toBe(false);
   });
 });

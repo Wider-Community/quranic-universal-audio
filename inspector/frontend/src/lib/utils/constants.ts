@@ -56,3 +56,7 @@ export const WAVEFORM_DIM_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.45)';
 
 /** Letter-level highlight color used by the Timestamps display + waveform. */
 export const LETTER_HIGHLIGHT_COLOR = '#2ec4b6';
+
+// Waveform per-segment normalization: segments below this peak amplitude are
+// treated as silent — the display scale is not amplified to avoid noise blowup.
+export const WAVEFORM_SILENCE_THRESHOLD = 0.05;

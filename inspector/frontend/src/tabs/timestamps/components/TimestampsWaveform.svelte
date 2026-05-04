@@ -57,7 +57,6 @@
     // ---- Local layout constants ----
     const TS_WAVEFORM_DEFAULT_WIDTH = 1200;
     const TS_WAVEFORM_HEIGHT = 200;
-    const TS_PHONEME_LABEL_STRIP_HEIGHT = 30;
     /** Max in-component peaks slices retained across verse switches. */
     const PEAKS_LRU_SIZE = 5;
 
@@ -305,8 +304,7 @@
         if (!ctx) return;
 
         const width = canvas.width;
-        const heightAll = canvas.height;
-        const height = heightAll - TS_PHONEME_LABEL_STRIP_HEIGHT;
+        const height = canvas.height;
         const lv = get(loadedVerse);
         if (!lv) return;
 
@@ -331,7 +329,7 @@
         //    bands. Forcing the fallback path guarantees each mid-sweep
         //    frame starts from a full canvas clear.
         const animating = isTsZoomAnimating();
-        if (!animating && _baseImageData && _baseImageData.width === width && _baseImageData.height === heightAll) {
+        if (!animating && _baseImageData && _baseImageData.width === width && _baseImageData.height === height) {
             ctx.putImageData(_baseImageData, 0, 0);
         } else if (peaks) {
             const zoomMs = _zoom
@@ -339,14 +337,14 @@
                 : { startMs: undefined, endMs: undefined };
             drawWaveformPeaks(ctx, peaks, {
                 width,
-                height: heightAll,
+                height: height,
                 startMs: zoomMs.startMs,
                 endMs: zoomMs.endMs,
                 totalDurationMs: Math.round(duration * 1000),
             });
         } else {
             ctx.fillStyle = '#0f0f23';
-            ctx.fillRect(0, 0, width, heightAll);
+            ctx.fillRect(0, 0, width, height);
         }
 
         // Zoom-aware time → pixel. When `_zoom` is null, maps the full slice to
@@ -365,7 +363,7 @@
         //      gives the classic DAW "quiet zone" look without a rectangular wash.
         const dimSilence = (start: number, end: number): void => {
             if (end <= start) return;
-            _fillBand(ctx, tToX(start), tToX(end), heightAll, WAVEFORM_BG_COLOR, SILENCE_DIM_ALPHA);
+            _fillBand(ctx, tToX(start), tToX(end), height, WAVEFORM_BG_COLOR, SILENCE_DIM_ALPHA);
         };
         if (words.length > 0) {
             const first = words[0];
@@ -781,5 +779,4 @@
 >
     <WaveformCanvas bind:this={waveformRef} {peaks} width={canvasWidth} height={canvasHeight}
         startMs={wcStartMs} endMs={wcEndMs} totalDurationMs={wcTotalDurationMs} />
-    <div class="phoneme-labels" id="phoneme-labels"></div>
 </div>

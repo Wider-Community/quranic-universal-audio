@@ -133,6 +133,14 @@
      * SavePreview and HistoryPanel pass a context.
      */
     export let previewCtx: PreviewPlaybackContext | undefined = undefined;
+    /**
+     * History op_id this row belongs to. Set only by History views
+     * (HistoryOp / SplitChainRow). When present and `previewCtx` is wired,
+     * peaks computed for this row on play are persisted server-side under
+     * this op_id — so future sessions render the same row without
+     * re-computing. Live-edit and SavePreview rows leave this null.
+     */
+    export let opId: string | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -340,7 +348,24 @@
                 ?? get(segAllData)?.audio_by_chapter?.[String(rowChapter)]
                 ?? '';
             if (audioUrl) {
-                previewCtx.registerRow(rowPreviewUid, canvasEl, audioUrl, seg.time_start, seg.time_end);
+                // Split-leaf history rows render the parent's union peak
+                // (via splitHL.wfStart/wfEnd substitution in the observer),
+                // but audio playback only spans the leaf slice. Pass both
+                // ranges so the preview ctx can drive the playhead against
+                // the wider visual range while AudioRange stops at the
+                // narrower playback range.
+                const wfStartMs = splitHL?.wfStart ?? seg.time_start;
+                const wfEndMs = splitHL?.wfEnd ?? seg.time_end;
+                previewCtx.registerRow(
+                    rowPreviewUid,
+                    canvasEl,
+                    audioUrl,
+                    seg.time_start,
+                    seg.time_end,
+                    opId ?? undefined,
+                    wfStartMs,
+                    wfEndMs,
+                );
             }
         }
         if (!canvasEl) return;
@@ -540,6 +565,7 @@
     data-hist-time-start={readOnly ? String(seg.time_start) : undefined}
     data-hist-time-end={readOnly ? String(seg.time_end) : undefined}
     data-hist-audio-url={readOnly && seg.audio_url ? seg.audio_url : undefined}
+    data-hist-op-id={opId ?? undefined}
     bind:this={rowEl}
     on:click={onRowClick}
 >

@@ -177,6 +177,7 @@
                         mode="history"
                         instanceRole="history"
                         trimHL={i === 0 ? trimHighlights.before : null}
+                        opId={primary?.op_id ?? null}
                         {previewCtx}
                     />
                 </div>
@@ -207,6 +208,7 @@
                             trimHL={isOneToOne && i === 0 ? trimHighlights.after : null}
                             mergeHL={i === 0 ? mergeAfterHL : null}
                             changedFields={isOneToOne && i === 0 ? afterChangedFields : null}
+                            opId={primary?.op_id ?? null}
                             {previewCtx}
                         />
                     </div>

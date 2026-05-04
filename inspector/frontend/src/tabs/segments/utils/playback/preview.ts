@@ -44,8 +44,15 @@ export interface PreviewPlaybackContext {
      *  Idempotent — re-registering with the same uid replaces the prior entry.
      *  When `opId` is supplied (history rows), peaks fetched here are also
      *  persisted server-side so future sessions render the row without
-     *  re-computing. */
-    registerRow(uid: string, canvas: HTMLCanvasElement, audioUrl: string, startMs: number, endMs: number, opId?: string): void;
+     *  re-computing.
+     *
+     *  `wfStartMs`/`wfEndMs` describe the canvas's *visual* range, which is
+     *  wider than `startMs`/`endMs` for split-leaf history rows (they show
+     *  the parent's union peak with the leaf slice highlighted in green
+     *  while playback only spans the leaf slice itself). Defaults to the
+     *  playback range when omitted — the common case for SavePreview and
+     *  non-split history rows. */
+    registerRow(uid: string, canvas: HTMLCanvasElement, audioUrl: string, startMs: number, endMs: number, opId?: string, wfStartMs?: number, wfEndMs?: number): void;
     /** Drop a row entry; if it was the active one, stop playback and clear the playhead. */
     deregisterRow(uid: string): void;
     /** Click-handler for a row's play button. Toggles play/pause for the
@@ -65,8 +72,14 @@ export interface PreviewPlaybackContext {
 interface RowEntry {
     canvas: HTMLCanvasElement;
     audioUrl: string;
+    /** Playback range — `AudioRange` boundaries (audio plays only this slice). */
     startMs: number;
     endMs: number;
+    /** Visual range — canvas width and `drawSegPlayhead` arguments. Equal to
+     *  `startMs`/`endMs` for non-split rows; wider for split-leaf history
+     *  rows showing the parent's union peak. */
+    wfStartMs: number;
+    wfEndMs: number;
     opId?: string;
 }
 
@@ -86,10 +99,15 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
 
     function _onTick(timeMs: number): void {
         if (!curRow) return;
+        // Use the visual range for the canvas rebuild + playhead
+        // positioning. For split leaves wfStart/wfEnd is the parent's
+        // union range; the green child slice (drawn by the split overlay)
+        // sits inside it and the playhead sweeps only across that slice
+        // because AudioRange stops audio at the playback range.
         drawSegPlayhead(
             curRow.canvas as SegCanvas,
-            curRow.startMs,
-            curRow.endMs,
+            curRow.wfStartMs,
+            curRow.wfEndMs,
             timeMs,
             curRow.audioUrl,
         );
@@ -119,11 +137,15 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         if (!curRow) return;
         const canvas = curRow.canvas as SegCanvas;
         canvas._wfCache = null;
+        // Pass the visual range; `drawSegPlayhead` rebuilds the cache
+        // with overlays baked in (split green / trim red+green / merge
+        // green), then the currentTime-outside-range early-return leaves
+        // the canvas overlay-intact and cursor-free.
         drawSegPlayhead(
             canvas,
-            curRow.startMs,
-            curRow.endMs,
-            curRow.startMs - 1,
+            curRow.wfStartMs,
+            curRow.wfEndMs,
+            curRow.wfStartMs - 1,
             curRow.audioUrl,
         );
     }
@@ -201,11 +223,21 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         startMs: number,
         endMs: number,
         opId?: string,
+        wfStartMs?: number,
+        wfEndMs?: number,
     ): void {
         // No fetch on register. Persisted peaks (if any) were hydrated at
         // reciter load; rows without persisted peaks render flat until the
         // user clicks play. `toggle()` triggers the on-demand compute path.
-        rows.set(uid, { canvas, audioUrl, startMs, endMs, opId });
+        rows.set(uid, {
+            canvas,
+            audioUrl,
+            startMs,
+            endMs,
+            wfStartMs: wfStartMs ?? startMs,
+            wfEndMs: wfEndMs ?? endMs,
+            opId,
+        });
     }
 
     function deregisterRow(uid: string): void {
@@ -254,12 +286,13 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         curRow = row;
         _activeSeg.set({ uid });
 
-        // On-demand peaks compute. Cache hits (persisted-and-hydrated, or
-        // a prior play this session) short-circuit inside `_ensurePeaks`.
-        // Misses fetch via Range and — when this is a History row (opId
-        // set) — also persist so the next session hydrates without a
-        // round-trip.
-        void _ensurePeaks(row.audioUrl, row.startMs, row.endMs, row.opId);
+        // On-demand peaks compute, against the *visual* range so the
+        // wider canvas (split leaves) gets full coverage. Cache hits
+        // (persisted-and-hydrated, or a prior play this session)
+        // short-circuit inside `_ensurePeaks`. Misses fetch via Range
+        // and — when this is a History row (opId set) — also persist so
+        // the next session hydrates without a round-trip.
+        void _ensurePeaks(row.audioUrl, row.wfStartMs, row.wfEndMs, row.opId);
 
         range = new AudioRange({
             audioEl,
