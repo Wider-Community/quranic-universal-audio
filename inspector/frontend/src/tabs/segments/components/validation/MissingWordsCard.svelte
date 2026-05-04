@@ -136,9 +136,10 @@
     }
 
     // ---- Auto-fix handler ----
-    async function handleAutoFix(): Promise<void> {
-        if (!item.auto_fix || autoFixApplied) return;
-        const autoFix = item.auto_fix;
+    let appliedAutoFix: SegValAutoFix | null = null;
+
+    async function handleAutoFix(autoFix: SegValAutoFix): Promise<void> {
+        if (autoFixApplied) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const segChapter = targetSeg.chapter ?? item.chapter;
@@ -155,12 +156,13 @@
             ignoredCats: dispatched.before.ignored_categories,
             wasDirty,
         };
+        appliedAutoFix = autoFix;
         autoFixApplied = true;
     }
 
     function handleAutoFixUndo(): void {
-        if (!item.auto_fix || !autoFixOldState) return;
-        const autoFix = item.auto_fix;
+        if (!appliedAutoFix || !autoFixOldState) return;
+        const autoFix = appliedAutoFix;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const { ref, text, display, conf, ignoredCats, wasDirty } = autoFixOldState;
@@ -180,6 +182,7 @@
         autoFixApplied = false;
         autoFixOldState = null;
         autoFixOpId = null;
+        appliedAutoFix = null;
     }
 </script>
 
@@ -219,8 +222,28 @@
                 <button
                     class="val-action-btn"
                     title="Extend segment ref to cover the missing word"
-                    on:click={handleAutoFix}
+                    on:click={() => handleAutoFix(item.auto_fix)}
                 >Auto Fill</button>
+            {:else}
+                <button class="val-action-btn" disabled>Fixed (save to apply)</button>
+                <button
+                    class="val-action-btn val-action-btn-danger"
+                    title="Revert auto-fill"
+                    on:click={handleAutoFixUndo}
+                >Undo</button>
+            {/if}
+        {:else if item.auto_fix_up && item.auto_fix_down}
+            {#if !autoFixApplied}
+                <button
+                    class="val-action-btn"
+                    title="Extend previous segment to cover the missing word"
+                    on:click={() => handleAutoFix(item.auto_fix_up)}
+                >Auto Fill Up</button>
+                <button
+                    class="val-action-btn"
+                    title="Extend next segment to cover the missing word"
+                    on:click={() => handleAutoFix(item.auto_fix_down)}
+                >Auto Fill Down</button>
             {:else}
                 <button class="val-action-btn" disabled>Fixed (save to apply)</button>
                 <button

@@ -34,15 +34,28 @@ import { get } from 'svelte/store';
 import type { SegValAnyItem } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { getChapterSegments, getSegByChapterIndex, selectedChapter } from '../../stores/chapter';
+import { resolveMergeRedirect } from '../../stores/merge-redirect';
 
 /**
  * Look up a segment by uid. Returns the segment if found, null otherwise.
  * A null return means the uid is stale — the segment was deleted or
  * consumed by a merge after the issue was last fetched from the server.
+ *
+ * When the uid is not found directly, checks the merge redirect map so
+ * that accordion cards pinned to a consumed uid can follow the redirect
+ * to the surviving segment.
  */
 export function resolveByUidStrict(uid: string, chapter: number): Segment | null {
-    const seg = getChapterSegments(chapter).find((s) => s.segment_uid === uid);
-    return seg ?? null;
+    const segs = getChapterSegments(chapter);
+    const direct = segs.find((s) => s.segment_uid === uid);
+    if (direct) return direct;
+
+    // Follow merge redirect — the uid may have been consumed by a merge.
+    const redirected = resolveMergeRedirect(uid);
+    if (redirected !== uid) {
+        return segs.find((s) => s.segment_uid === redirected) ?? null;
+    }
+    return null;
 }
 
 /**
@@ -72,8 +85,7 @@ export function resolveIssueSeg(
     const chapter = anyItem.chapter ?? parseInt(get(selectedChapter));
 
     if (boundUid) {
-        const seg = getChapterSegments(chapter).find((s) => s.segment_uid === boundUid);
-        return seg ?? null;
+        return resolveByUidStrict(boundUid, chapter);
     }
 
     // Uid-first: when the issue carries a segment_uid, use it exclusively.

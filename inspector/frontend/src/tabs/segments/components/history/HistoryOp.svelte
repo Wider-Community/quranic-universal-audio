@@ -106,8 +106,6 @@
     // 2→1 merge highlight on result card.
     $: mergeAfterHL = (() => {
         if (!primary) return null;
-        const mergeLike = primary.op_type === 'merge_segments' || primary.op_type === 'waqf_sakt';
-        if (!mergeLike) return null;
         if (diff.before.length !== 2 || diff.after.length !== 1) return null;
         if (!primary.merge_direction) return null;
         const hlSnap = primary.merge_direction === 'prev' ? diff.before[1]! : diff.before[0]!;

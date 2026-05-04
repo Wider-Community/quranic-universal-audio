@@ -25,6 +25,7 @@
     import {
         commitRefEdit,
         consumePendingInitialSelection,
+        consumePendingInitialValue,
     } from '../../utils/edit/reference';
     import { formatRef } from '../../utils/data/references';
     import type { Segment } from '../../../../lib/types/domain';
@@ -32,7 +33,7 @@
     export let seg: Segment;
 
     let inputEl: HTMLInputElement | undefined;
-    let value = formatRef(seg.matched_ref, get(segAllData)?.verse_word_counts);
+    let value = consumePendingInitialValue() ?? formatRef(seg.matched_ref, get(segAllData)?.verse_word_counts);
     let committed = false;
     let invalid = false;
 
@@ -51,17 +52,18 @@
 
     async function commit(): Promise<void> {
         if (committed) return;
+        committed = true;
         const result = await commitRefEdit(seg, value.trim());
         if (result.status === 'invalid') {
             // Don't latch `committed` — let the user retry. Re-focus and select
             // so the next keystroke replaces the invalid value, while the red
             // border signals the rejection.
+            committed = false;
             invalid = true;
             inputEl?.focus();
             inputEl?.select();
             return;
         }
-        committed = true;
     }
 
     function cancel(): void {

@@ -26,7 +26,7 @@
      */
 
     import { afterUpdate, onDestroy } from 'svelte';
-    import { segValidation } from '../../stores/validation';
+    import { segValidation, valUiOpenCategory, valUiLcThreshold, valUiScrollTop, valUiMeasuredCardHeight } from '../../stores/validation';
     import { get } from 'svelte/store';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
@@ -61,17 +61,21 @@
     /** Optional section label shown above the accordions. */
     export let label: string | null = null;
 
-    // ---- Open-state (component-local) ----
-    let openCategory: string | null = null;
+    // ---- Open-state (in-memory persistent) ----
+    let openCategory: string | null = $valUiOpenCategory;
+    $: valUiOpenCategory.set(openCategory);
 
     // Reset on chapter change
-    $: {
-        void chapter;
+    let _prevChapter = chapter;
+    $: if (chapter !== _prevChapter) {
+        _prevChapter = chapter;
         openCategory = null;
+        cardsScrollTop = 0;
     }
 
     // ---- LC slider ----
-    let lcThreshold: number = get(segConfig).lcDefaultThreshold;
+    let lcThreshold: number = $valUiLcThreshold ?? get(segConfig).lcDefaultThreshold;
+    $: valUiLcThreshold.set(lcThreshold);
 
     // ---- Qalqala filter ----
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
@@ -88,10 +92,21 @@
     // ---- Per-category virtualization state ----
     // scrollTop and viewport height of the open category's cards container.
     const CARDS_VIEWPORT_HEIGHT_FALLBACK = 500;
-    let cardsScrollTop = 0;
+    let cardsScrollTop = $valUiScrollTop;
+    $: valUiScrollTop.set(cardsScrollTop);
+
     let cardsViewportHeight = CARDS_VIEWPORT_HEIGHT_FALLBACK;
-    let measuredCardHeight = FALLBACK_CARD_HEIGHT;
+    let measuredCardHeight = $valUiMeasuredCardHeight ?? FALLBACK_CARD_HEIGHT;
+    $: valUiMeasuredCardHeight.set(measuredCardHeight);
+
     let cardsContainerEl: HTMLDivElement | null = null;
+    let _hasRestoredScroll = false;
+    $: if (cardsContainerEl && !_hasRestoredScroll) {
+        if (cardsScrollTop > 0) {
+            cardsContainerEl.scrollTop = cardsScrollTop;
+        }
+        _hasRestoredScroll = true;
+    }
 
     let scrollRaf: number | null = null;
     function onCardsScroll(): void {
@@ -129,11 +144,14 @@
 
     // Reset scroll position and measured height when the open category changes
     // so the new category starts at the top and re-measures its own card sizes.
-    let _prevOpenCategory: string | null = null;
+    let _prevOpenCategory: string | null = openCategory;
     $: if (openCategory !== _prevOpenCategory) {
         _prevOpenCategory = openCategory;
         cardsScrollTop = 0;
         measuredCardHeight = FALLBACK_CARD_HEIGHT;
+        if (cardsContainerEl) {
+            cardsContainerEl.scrollTop = 0;
+        }
     }
 
     // ---- Per-type context-shown state (survives virtualization re-mounts) ----

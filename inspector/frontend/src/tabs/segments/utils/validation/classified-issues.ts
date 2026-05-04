@@ -50,6 +50,7 @@ export function isIgnoredFor(
 export interface OpIssueDelta {
     resolved: string[];
     introduced: string[];
+    involved: string[];
 }
 
 /**
@@ -59,6 +60,7 @@ export interface OpIssueDelta {
  *                appear on the after-snapshots (issues the edit fixed).
  * `introduced` — categories present on the after-snapshots that didn't
  *                appear on the before-snapshots (regressions).
+ * `involved`   — categories present on either before or after snapshots.
  *
  * Reads `classified_issues` directly off each snapshot — populated by the
  * backend at save time. Snapshots without the field contribute nothing
@@ -78,12 +80,12 @@ export interface OpIssueDelta {
 const _deltaMemo = new WeakMap<EditOp[], OpIssueDelta>();
 
 export function deriveOpIssueDelta(group: EditOp[] | null | undefined): OpIssueDelta {
-    if (!group || group.length === 0) return { resolved: [], introduced: [] };
+    if (!group || group.length === 0) return { resolved: [], introduced: [], involved: [] };
     const cached = _deltaMemo.get(group);
     if (cached) return cached;
 
     const primary = group[0];
-    if (!primary) return { resolved: [], introduced: [] };
+    if (!primary) return { resolved: [], introduced: [], involved: [] };
 
     const beforeIssues = new Set<string>();
     for (const snap of (primary.targets_before || [])) {
@@ -108,9 +110,12 @@ export function deriveOpIssueDelta(group: EditOp[] | null | undefined): OpIssueD
         for (const cat of classifiedIssuesOf(snap)) afterIssues.add(cat);
     }
 
+    const involved = new Set<string>([...beforeIssues, ...afterIssues]);
+
     const result: OpIssueDelta = {
         resolved:   [...beforeIssues].filter((i) => !afterIssues.has(i)),
         introduced: [...afterIssues].filter((i) => !beforeIssues.has(i)),
+        involved:   [...involved],
     };
     _deltaMemo.set(group, result);
     return result;

@@ -91,12 +91,25 @@
     border-color: #4361ee;
     color: #fff;
 }
+.seg-history-filter-pill.empty {
+    opacity: 0.4;
+    background: transparent;
+    border-color: #3a3a5a;
+    color: #888;
+}
+.seg-history-filter-pill.empty:hover {
+    background: transparent;
+    color: #888;
+}
 .seg-history-filter-pill .pill-count {
     color: #4cc9f0;
     font-weight: 600;
 }
 .seg-history-filter-pill.active .pill-count {
     color: #fff;
+}
+.seg-history-filter-pill.empty .pill-count {
+    color: #666;
 }
 
 /* Empty state (shared between filter-no-results and delete placeholder) */

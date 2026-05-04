@@ -88,10 +88,14 @@ export async function reloadCurrentReciter(): Promise<void> {
     }
 
     if (allResult.status === 'fulfilled') {
-        segAllData.set(allResult.value);
-        _rewriteAudioUrls();
-        preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
-        if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
+        if ('error' in allResult.value) {
+            console.error('Error loading all segments:', (allResult.value as any).error);
+        } else {
+            segAllData.set(allResult.value);
+            _rewriteAudioUrls();
+            preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
+            if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
+        }
     } else {
         console.error('Error loading all segments:', allResult.reason);
     }

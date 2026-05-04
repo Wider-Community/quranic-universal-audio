@@ -24,8 +24,8 @@ def load_entries(path: Path) -> tuple[dict, list[dict]]:
     mutated entries to disk (on the next save) so that UIDs are stable across
     reload cycles (MUST-4).
     """
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
+    import orjson
+    doc = orjson.loads(path.read_bytes())
     meta: dict = doc.get("_meta", {})
     entries: list[dict] = doc.get("entries", [])
     backfill_entries_uids(entries)

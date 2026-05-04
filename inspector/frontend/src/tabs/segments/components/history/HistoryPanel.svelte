@@ -44,15 +44,13 @@
     } from '../list/virtualization';
     import {
         buildDisplayItems,
-        computeFilteredItemSummary,
+        computeFilteredSummary,
         countVersesFromBatches,
         filterErrCats,
         filterOpTypes,
         flatItems,
         historyData,
         historyVisible,
-        itemMatchesCatFilter,
-        itemMatchesOpFilter,
         sortMode,
         splitChains,
         type DisplayEntry,
@@ -61,24 +59,27 @@
 
     // Filtered flat items -----------------------------------------------------
     $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0;
-    $: filteredItems = hasFilters
-        ? $flatItems.filter((it) => {
-              if ($filterOpTypes.size > 0 && !itemMatchesOpFilter(it, $filterOpTypes)) return false;
-              if ($filterErrCats.size > 0 && !itemMatchesCatFilter(it, $filterErrCats)) return false;
-              return true;
-          })
-        : $flatItems;
+
+    // Batches display ---------------------------------------------------------
+    $: displayEntries = (!$historyData || !$historyData.batches) ? [] : buildDisplayItems(
+        $flatItems,
+        $historyData.batches,
+        $sortMode,
+        $splitChains,
+        $filterOpTypes,
+        $filterErrCats,
+    );
 
     // Summary derivation ------------------------------------------------------
     interface SummaryCard { value: number | string; label: string }
-    $: summary = computeSummary();
+    $: summary = computeSummary(displayEntries);
 
-    function computeSummary(): SummaryCard[] | null {
+    function computeSummary(entries: DisplayEntry[]): SummaryCard[] | null {
         if (!$historyData || !$historyData.batches || $historyData.batches.length === 0) {
             return null;
         }
         if (hasFilters) {
-            const fs: FilteredItemSummary = computeFilteredItemSummary(filteredItems);
+            const fs: FilteredItemSummary = computeFilteredSummary(entries);
             return [
                 { value: fs.total_operations, label: 'Operations' },
                 { value: fs.chapters_edited, label: 'Chapters' },
@@ -94,21 +95,6 @@
             { value: s?.chapters_edited ?? 0, label: 'Chapters' },
             { value: versesEdited, label: 'Verses' },
         ];
-    }
-
-    // Batches display ---------------------------------------------------------
-    $: displayEntries = displayEntriesFor(filteredItems);
-
-    function displayEntriesFor(items: typeof filteredItems): DisplayEntry[] {
-        if (!$historyData || !$historyData.batches) return [];
-        return buildDisplayItems(
-            items,
-            $historyData.batches,
-            $sortMode,
-            $splitChains,
-            $filterOpTypes,
-            $filterErrCats,
-        );
     }
 
     function entryKey(di: DisplayEntry): string {
@@ -306,7 +292,7 @@
         bind:this={batchesEl}
         on:scroll={onScroll}
     >
-        {#if filteredItems.length === 0 && hasFilters}
+        {#if displayEntries.length === 0 && hasFilters}
             <div class="seg-history-empty">No edits match the active filters.</div>
         {:else}
             {#if topSpacerPx > 0}

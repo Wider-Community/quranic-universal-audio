@@ -13,10 +13,7 @@ import {
     selectedReciter,
 } from '../../stores/chapter';
 import {
-    clearDirtyMap,
-    clearOpLog,
-    deleteDirtyEntry,
-    deleteOpLogEntry,
+    clearSavedOps,
     getChapterOps,
     getDirtyMap,
 } from '../../stores/dirty';
@@ -112,9 +109,65 @@ export function buildPayloadFromCommandResult(result: CommandResultLike): {
 // executeSave
 // ---------------------------------------------------------------------------
 
-export async function executeSave(): Promise<void> {
+function isChapterHalfDirty(chOps: EditOp[]): boolean {
+    const splitOps = chOps.filter(o => o.op_type === 'split_segment');
+    if (splitOps.length === 0) return false;
+
+    for (const splitOp of splitOps) {
+        const afterSegs = splitOp.targets_after as Record<string, any>[] | undefined;
+        if (!afterSegs || afterSegs.length < 2) continue;
+        
+        const uid1 = afterSegs[0].segment_uid as string;
+        const uid2 = afterSegs[1].segment_uid as string;
+        
+        if (!uid1 || !uid2) continue;
+
+        let uid1Confirmed = false;
+        let uid2Confirmed = false;
+
+        const splitIndex = chOps.indexOf(splitOp);
+        for (let i = splitIndex + 1; i < chOps.length; i++) {
+            const o = chOps[i];
+            
+            if (o.op_type === 'edit_reference' || o.op_type === 'confirm_reference') {
+                const ta = o.targets_after as Record<string, any>[] | undefined;
+                if (ta && ta[0] && ta[0].segment_uid === uid1) uid1Confirmed = true;
+                if (ta && ta[0] && ta[0].segment_uid === uid2) uid2Confirmed = true;
+            }
+            
+            if (o.op_type === 'merge_segments' || o.op_type === 'delete_segment') {
+                const tb = o.targets_before as Record<string, any>[] | undefined;
+                if (tb) {
+                    if (tb.some(t => t.segment_uid === uid1)) uid1Confirmed = true;
+                    if (tb.some(t => t.segment_uid === uid2)) uid2Confirmed = true;
+                }
+            }
+        }
+
+        if (!uid1Confirmed || !uid2Confirmed) return true;
+    }
+    
+    return false;
+}
+
+let _isSaving = false;
+let _saveQueued = false;
+let _queuedIsAutoSave = true;
+
+export async function executeSave(isAutoSave = false): Promise<void> {
+    if (_isSaving) {
+        _saveQueued = true;
+        if (!isAutoSave) _queuedIsAutoSave = false;
+        return;
+    }
+    
     const reciter = storeGet(selectedReciter);
     if (!reciter) return;
+
+    _isSaving = true;
+    _saveQueued = false;
+    const isCurrentRunAutoSave = isAutoSave;
+    _queuedIsAutoSave = true;
 
     saveButtonLabel.set('Saving...');
 
@@ -123,10 +176,20 @@ export async function executeSave(): Promise<void> {
     let allOk = true;
 
     try {
+        // Snapshot the operations and build payloads BEFORE yielding to network IO
+        // so that concurrent edits arriving during the fetch don't get mixed in.
+        const pendingSaves = [];
+
         for (const [ch, entry] of getDirtyMap()) {
+            const chOps = [...getChapterOps(ch)]; // copy array of current ops
+            
+            // Skip autosave for chapters with an incomplete (half-dirty) split
+            if (isCurrentRunAutoSave && isChapterHalfDirty(chOps)) {
+                continue;
+            }
+            
             const chSegs: Segment[] = getChapterSegments(ch);
-            let payload: SavePayloadFull | SavePayloadPatch;
-            const chOps = getChapterOps(ch);
+            let payload: SavePayloadFull | SavePayloadPatch | null = null;
 
             if (entry.structural) {
                 payload = {
@@ -149,7 +212,6 @@ export async function executeSave(): Promise<void> {
                     }),
                     operations: chOps,
                 };
-                savedChanges += chOps.length;
             } else {
                 const updates: SaveSegmentPayloadPatch[] = [];
                 for (const idx of entry.indices) {
@@ -166,18 +228,22 @@ export async function executeSave(): Promise<void> {
                         updates.push(upd);
                     }
                 }
-                if (updates.length === 0) continue;
-                payload = { segments: updates, operations: chOps };
-                savedChanges += chOps.length;
+                if (updates.length > 0) {
+                    payload = { segments: updates, operations: chOps };
+                }
             }
 
+            if (!payload) continue;
+
             // Pull peaks from in-memory caches for every op that has them.
-            // Edits the user just made always have peaks loaded (they had to
-            // play the audio to edit). Missing entries (rare) fall through to
-            // compute-on-play in a future session.
             const opPeaks = collectOpPeaks(chOps);
             if (opPeaks.length > 0) payload.op_peaks = opPeaks;
 
+            pendingSaves.push({ chapter: ch, payload, ops: chOps });
+        }
+
+        // Execute network requests for captured snapshots
+        for (const { chapter: ch, payload, ops } of pendingSaves) {
             const result = await fetchJson<SegSaveResponse & { error?: string }>(
                 `/api/seg/save/${reciter}/${ch}`,
                 {
@@ -191,22 +257,23 @@ export async function executeSave(): Promise<void> {
                 allOk = false;
                 break;
             }
-            deleteDirtyEntry(ch);
-            deleteOpLogEntry(ch);
+            // Safely clear only the operations we just saved
+            clearSavedOps(ch, ops);
+            savedChanges += ops.length;
             savedChapters++;
         }
 
-        if (allOk) {
-            clearDirtyMap();
-            clearOpLog();
+        if (allOk && savedChapters > 0) {
             const msg = savedChapters > 1
                 ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
                 : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
             saveButtonLabel.set(msg);
             setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
+            
             fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
                 .then(() => refreshValidation())
                 .catch((err: unknown) => { console.warn('trigger-validation failed:', err); });
+            
             try {
                 const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
                     `/api/seg/edit-history/${reciter}`,
@@ -215,11 +282,22 @@ export async function executeSave(): Promise<void> {
                     renderEditHistoryPanel(hist);
                 }
             } catch (_) { /* non-critical */ }
+        } else if (allOk && savedChapters === 0) {
+            // Nothing to save
+            saveButtonLabel.set('Save');
         } else {
+            // Error occurred
             saveButtonLabel.set('Save');
         }
     } catch (e) {
         console.error('Save failed:', e);
         saveButtonLabel.set('Save');
+    } finally {
+        _isSaving = false;
+        if (_saveQueued) {
+            // Give a short breather, then process queued save
+            const isAuto = _queuedIsAutoSave;
+            setTimeout(() => { void executeSave(isAuto); }, 50);
+        }
     }
 }

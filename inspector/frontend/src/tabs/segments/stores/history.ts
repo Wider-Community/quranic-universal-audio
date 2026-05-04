@@ -33,7 +33,7 @@ export {
 // Re-export item helpers so existing consumers keep one import site.
 export {
     buildDisplayItems,
-    computeFilteredItemSummary,
+    computeFilteredSummary,
     countVersesFromBatches,
     countVersesFromItems,
     flattenBatchesToItems,
@@ -99,6 +99,16 @@ export const flatItems = derived(
  * Pass `null` to clear (e.g. on reciter change).
  */
 export function setHistoryData(data: SegEditHistoryResponse | null): void {
+    if (data && data.batches) {
+        for (const batch of data.batches) {
+            const isStripSpecials = batch.batch_type === 'strip_specials';
+            for (const op of (batch.operations || [])) {
+                if (isStripSpecials || op.op_type === 'waqf_sakt') {
+                    op.op_type = 'pipeline';
+                }
+            }
+        }
+    }
     historyData.set(data);
     if (!data || !data.batches || data.batches.length === 0) {
         splitChains.set(null);
@@ -115,9 +125,11 @@ export function setHistoryData(data: SegEditHistoryResponse | null): void {
 export function toggleFilter(kind: 'op' | 'cat', value: string): void {
     const store = kind === 'op' ? filterOpTypes : filterErrCats;
     store.update((s) => {
-        const next = new Set(s);
-        if (next.has(value)) next.delete(value); else next.add(value);
-        return next;
+        if (s.has(value)) {
+            return new Set();
+        } else {
+            return new Set([value]);
+        }
     });
 }
 

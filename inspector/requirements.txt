@@ -1,2 +1,3 @@
 flask
 quranic-phonemizer>=2.0
+orjson

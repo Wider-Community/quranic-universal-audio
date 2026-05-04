@@ -272,3 +272,41 @@ export function clearDirtyMap(): void {
 export function clearOpLog(): void {
     _opLog.clear();
 }
+
+/** Clear only the specified operations from a chapter's op log and recompute dirty state.
+ *  Used by autosave to safely drop successfully saved edits without clobbering new
+ *  edits that were queued concurrently. */
+export function clearSavedOps(chapter: number, savedOps: EditOp[]): void {
+    const currentOps = _opLog.get(chapter);
+    if (!currentOps) return;
+
+    const savedOpIds = new Set(savedOps.map(o => o.op_id));
+    const remainingOps = currentOps.filter(o => !savedOpIds.has(o.op_id));
+
+    if (remainingOps.length === 0) {
+        _opLog.delete(chapter);
+        _dirtyMap.delete(chapter);
+    } else {
+        _opLog.set(chapter, remainingOps);
+        // Do not call recomputeDirtyEntryFromOps directly because it also bumps dirtyTick, 
+        // we'll just inline the logic here or let it bump twice.
+        const indices = new Set<number>();
+        let structural = false;
+        for (const op of remainingOps) {
+            const t = op.op_type;
+            if (
+                t === 'split_segment' ||
+                t === 'merge_segments' ||
+                t === 'delete_segment' ||
+                t === 'trim_segment' ||
+                t === 'auto_fix_missing_word'
+            ) {
+                structural = true;
+            }
+            const tsi = (op as EditOp & { targetSegmentIndex?: { index: number } }).targetSegmentIndex;
+            if (tsi && typeof tsi.index === 'number') indices.add(tsi.index);
+        }
+        _dirtyMap.set(chapter, { indices, structural });
+    }
+    _bump();
+}

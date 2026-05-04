@@ -23,6 +23,7 @@ import {
     setEdit,
 } from '../../stores/edit';
 import { applyCommand } from '../../domain/apply-command';
+import { recordMergeRedirect } from '../../stores/merge-redirect';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { finalizeEdit } from './common';
@@ -125,8 +126,13 @@ export async function mergeAdjacent(
         },
     );
     const keptUid = first.segment_uid!;
+    const consumedUid = second.segment_uid!;
     const merged = result.nextState.byId[keptUid] as Segment;
     if (!merged) { clearEdit(); return; }
+
+    // Record the merge redirect so accordion cards pinned to the consumed
+    // UID can follow the redirect to the surviving segment.
+    recordMergeRedirect(consumedUid, keptUid);
 
     const keptOldIdx = first.index;
     const consumedOldIdx = second.index;

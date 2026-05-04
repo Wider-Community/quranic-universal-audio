@@ -93,8 +93,9 @@
             scrollToHighlight();
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            const opt = filtered[highlightIdx];
-            if (highlightIdx >= 0 && opt) pick(opt);
+            const idx = highlightIdx >= 0 ? highlightIdx : 0;
+            const opt = filtered[idx];
+            if (opt) pick(opt);
         } else if (e.key === 'Escape') {
             close();
         }

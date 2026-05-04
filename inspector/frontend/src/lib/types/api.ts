@@ -214,6 +214,8 @@ export interface SegValMissingWordsItem extends SegValItemBase {
     /** Client mutates entries during index-fixup. */
     seg_indices?: number[];
     auto_fix?: SegValAutoFix;
+    auto_fix_up?: SegValAutoFix;
+    auto_fix_down?: SegValAutoFix;
 }
 
 export interface SegValStructuralErrorItem extends SegValItemBase {

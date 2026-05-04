@@ -60,16 +60,17 @@ def rebuild(reciter_dir: Path, entries: list[dict]) -> None:
 
     existing_meta: dict = {}
     if segments_path.exists():
-        with open(segments_path, "r", encoding="utf-8") as f:
-            try:
-                existing_doc = json.load(f)
-                existing_meta = existing_doc.get("_meta", {})
-            except json.JSONDecodeError:
-                pass
+        try:
+            import orjson
+            existing_doc = orjson.loads(segments_path.read_bytes())
+            existing_meta = existing_doc.get("_meta", {})
+        except Exception:
+            pass
 
     seg_doc: dict = {"_meta": existing_meta}
     for key in sorted(verse_data.keys(), key=seg_sort_key):
         seg_doc[key] = verse_data[key]
 
-    with open(segments_path, "w", encoding="utf-8") as f:
-        json.dump(seg_doc, f, ensure_ascii=False)
+    import orjson
+    with open(segments_path, "wb") as f:
+        f.write(orjson.dumps(seg_doc))

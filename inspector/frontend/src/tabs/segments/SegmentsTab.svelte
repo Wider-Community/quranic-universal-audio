@@ -10,10 +10,11 @@
     import { get } from 'svelte/store';
     import { onMount, tick } from 'svelte';
 
-    import { isDirtyStore } from './stores/dirty';
+    import { isDirtyStore, dirtyTick } from './stores/dirty';
+    import { autoSaveEnabled, toggleAutoSave } from './stores/autosave';
     import { handleSegmentsKey } from './utils/keyboard';
     import { showHistoryView, hideHistoryView } from './utils/history/actions';
-    import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview } from './utils/save/actions';
+    import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview, executeSave } from './utils/save/actions';
     import { loadSegConfig } from './utils/data/config-loader';
     import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
@@ -127,6 +128,16 @@
     // Keep chapter-segment cache hot after chapter changes.
     $: if ($segAllData) { void getChapterSegments($selectedChapter || 0); }
 
+    let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    $: if ($autoSaveEnabled && $dirtyTick > 0 && $isDirtyStore) {
+        if (autoSaveTimer) clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+            if ($isDirtyStore) {
+                void executeSave(true);
+            }
+        }, 1000); // 1s debounce
+    }
+
     function onKeydown(e: KeyboardEvent): void {
         if (handleSegmentsKey(e)) e.preventDefault();
     }
@@ -183,11 +194,23 @@
                 <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
             {:else}
                 <button
+                    class="btn {$autoSaveEnabled ? 'btn-save' : 'btn-cancel'}"
+                    on:click={() => toggleAutoSave(!$autoSaveEnabled)}
+                >
+                    Auto Save
+                </button>
+                <button
                     id="seg-save-btn"
                     class="btn btn-save"
-                    disabled={saveBtnDisabled}
+                    disabled={$autoSaveEnabled || saveBtnDisabled}
                     on:click={onSegSaveClick}
-                >{$saveButtonLabel}</button>
+                >
+                    {#if $autoSaveEnabled}
+                        {$saveButtonLabel === 'Save' ? (saveBtnDisabled ? 'Saved' : 'Saving...') : $saveButtonLabel}
+                    {:else}
+                        {$saveButtonLabel}
+                    {/if}
+                </button>
             {/if}
             <button
                 id="seg-history-btn"

@@ -58,10 +58,18 @@
     $: resolvedSeg = (void segStoreTick, _resolveLocal(item, category));
     // Pin to the first resolution's UID. After this, resolvedSeg only tracks
     // that specific segment — even if the seg is split (firstHalf keeps the
-    // UID) or merged into (first.uid is kept). If the seg is deleted or
-    // consumed by a merge, resolvedSeg collapses to null and the card body
-    // hides via `{#if resolvedSeg}`.
-    $: if (!_boundUid && resolvedSeg) _boundUid = resolvedSeg.segment_uid ?? null;
+    // UID) or merged into (first.uid is kept). If the seg is deleted,
+    // resolvedSeg collapses to null and the card body hides via `{#if resolvedSeg}`.
+    //
+    // Merge redirect: when the bound UID was consumed by a merge,
+    // resolveIssueSeg follows the redirect and returns the surviving segment.
+    // Update _boundUid to the survivor's UID so future lookups are direct hits.
+    $: if (resolvedSeg) {
+        const resolvedUid = resolvedSeg.segment_uid ?? null;
+        if (!_boundUid || (_boundUid !== resolvedUid && resolvedUid)) {
+            _boundUid = resolvedUid;
+        }
+    }
 
     // Base gate from the registry; ``low_confidence`` adds a runtime guard so
     // a segment whose confidence has been promoted to 1.0 (e.g. after a save

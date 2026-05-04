@@ -8,6 +8,7 @@
  */
 
 import { get } from 'svelte/store';
+import { tick } from 'svelte';
 
 import { fetchJson } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
@@ -19,6 +20,7 @@ import {
 } from '../../stores/chapter';
 import {
     createOp,
+    getChapterOps,
     getPendingOp,
     markDirty,
     setPendingOp,
@@ -58,10 +60,17 @@ import { finalizeEdit } from './common';
  * whole prefilled value. Cleared by ReferenceEditor on mount.
  */
 let _pendingInitialSelection: { from: number; to: number } | null = null;
+let _pendingInitialValue: string | null = null;
 
 export function consumePendingInitialSelection(): { from: number; to: number } | null {
     const v = _pendingInitialSelection;
     _pendingInitialSelection = null;
+    return v;
+}
+
+export function consumePendingInitialValue(): string | null {
+    const v = _pendingInitialValue;
+    _pendingInitialValue = null;
     return v;
 }
 
@@ -88,6 +97,13 @@ export function beginRefEdit(
     const audioEl = get(segAudioElement);
     if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
+
+    // Seed the initial value with the exact object we just passed to beginRefEdit,
+    // bypassing Svelte's reactive prop delay. If _pendingInitialValue is already
+    // set (e.g. by _handoffPendingChain), we leave it untouched.
+    if (_pendingInitialValue === null) {
+        _pendingInitialValue = seg.matched_ref ?? null;
+    }
 
     setEdit('reference', seg.segment_uid ?? null, mountId);
     setEditingSegIndex(seg.index);
@@ -187,9 +203,16 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<Com
     const ctxCat = pending?.op_context_category ?? null;
 
     if (normalized === oldRef) {
-        if ((seg.confidence ?? 0) < 1.0) {
+        const chOps = getChapterOps(chapter);
+        const isFromSplit = chOps.some(o => 
+            o.op_type === 'split_segment' && 
+            (o.targets_after as Record<string, any>[] | undefined)?.some(t => t.segment_uid === seg.segment_uid)
+        );
+
+        if ((seg.confidence ?? 0) < 1.0 || isFromSplit) {
             // Audit confirm: user pressed Enter on an unchanged low-confidence
-            // ref. Records a 'confirm_reference' op with fix_kind='audit' and
+            // ref, or accepted an auto-suggested ref from a recent split.
+            // Records a 'confirm_reference' op with fix_kind='audit' and
             // bumps confidence to 1.0. Ref + text fields stay as-is.
             _dispatchRefEdit(
                 seg,
@@ -306,6 +329,14 @@ async function _handoffPendingChain(): Promise<void> {
     pendingChainTarget.set(null);
     if (!chain) return;
 
+    // Flush Svelte's pending DOM updates so that newly-inserted rows (e.g. the
+    // second half after a split) are mounted and registered in the row registry
+    // before we try to look them up. Without this, the cross-verse "no-change"
+    // confirm path runs fully synchronously and the registry lookup returns null,
+    // silently aborting the chain. The non-cross-verse path only worked by
+    // accident because its async fetchJson call gave Svelte time to flush.
+    await tick();
+
     const chapter = chain.seg.chapter ?? parseInt(get(selectedChapter));
     const entries = getRowEntriesFor(chapter, chain.seg.index);
     const mountId = _pickHandoffMountId(entries);
@@ -352,21 +383,10 @@ async function _handoffPendingChain(): Promise<void> {
             );
             if (next) {
                 const rebuilt = `${next.surah}:${next.ayah}:${next.word}-${chain.originalEndRef}`;
-                chain.seg.matched_ref = rebuilt;
-                // Re-resolve text so the editor opens with matching matched_text
-                // and display_text. Failures fall back silently to the existing
-                // values; the user can correct the ref themselves.
-                try {
-                    const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
-                        `/api/seg/resolve_ref?ref=${encodeURIComponent(rebuilt)}`,
-                    );
-                    if (data.text) {
-                        chain.seg.matched_text = data.text;
-                        chain.seg.display_text = data.display_text || data.text;
-                    }
-                } catch (e) {
-                    console.warn('chain re-resolve failed', e);
-                }
+                // DO NOT mutate chain.seg.matched_ref here! Mutating it in place makes
+                // commitRefEdit think no change occurred when the user accepts the hint,
+                // causing it to discard the edit_reference operation.
+                _pendingInitialValue = rebuilt;
                 // Cursor lands right after the dash so the user can edit only
                 // the end portion. Selection runs from `from` to end of value.
                 const dash = rebuilt.indexOf('-');

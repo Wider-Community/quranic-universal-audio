@@ -14,6 +14,7 @@ export const LS_KEYS = {
     SEG_SPEED:       'insp_seg_speed',
     SEG_AUTOPLAY:    'insp_seg_autoplay',
     SEG_AUTOSCROLL:  'insp_seg_autoscroll',
+    SEG_AUTOSAVE:    'insp_seg_autosave',
     AUD_RECITER:     'insp_aud_reciter',
 } as const;
 
