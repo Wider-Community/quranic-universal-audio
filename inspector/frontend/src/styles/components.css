@@ -300,3 +300,7 @@
     background: #16213e;
     color: #4cc9f0;
 }
+
+.reciter-select .ss-input {
+    width: 520px;
+}

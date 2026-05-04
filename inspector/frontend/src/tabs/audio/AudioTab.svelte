@@ -341,6 +341,7 @@
             options={reciterOptions}
             bind:value={selectedReciter}
             placeholder={PLACEHOLDER_RECITER}
+            className="reciter-select"
             on:change={(e) => { void onReciterChange(e.detail); }}
         />
     </label>

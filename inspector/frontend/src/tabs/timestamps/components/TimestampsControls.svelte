@@ -41,6 +41,7 @@
             options={reciterOptions}
             bind:value={$selectedReciter}
             placeholder={$reciters.length ? PLACEHOLDER_SELECT : 'Loading...'}
+            className="reciter-select"
             on:change={(e) => dispatch('reciterChange', e.detail)}
         />
     </label>

@@ -12,6 +12,7 @@
     export let options: SelectOption[] = [];
     export let value = '';
     export let placeholder = '--';
+    export let className = '';
 
     const dispatch = createEventDispatcher<{ change: string }>();
 
@@ -119,7 +120,7 @@
     });
 </script>
 
-<div class="ss-wrapper">
+<div class="ss-wrapper {className}">
     <input
         bind:this={inputEl}
         class="ss-input"

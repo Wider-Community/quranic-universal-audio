@@ -167,6 +167,7 @@
                 options={reciterSelectOptions}
                 value={$selectedReciter}
                 placeholder={$segAllReciters.length ? PLACEHOLDER_SELECT : 'Loading...'}
+                className="reciter-select"
                 on:change={(e) => onReciterSelectChange(e.detail)}
             />
         </label>
