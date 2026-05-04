@@ -41,8 +41,11 @@ export interface PreviewPlaybackContext {
     /** Bind the panel's hidden `<audio>` element after mount. */
     attachAudioEl(el: HTMLAudioElement): void;
     /** Register a row's canvas + range for playhead drawing and peak loading.
-     *  Idempotent — re-registering with the same uid replaces the prior entry. */
-    registerRow(uid: string, canvas: HTMLCanvasElement, audioUrl: string, startMs: number, endMs: number): void;
+     *  Idempotent — re-registering with the same uid replaces the prior entry.
+     *  When `opId` is supplied (history rows), peaks fetched here are also
+     *  persisted server-side so future sessions render the row without
+     *  re-computing. */
+    registerRow(uid: string, canvas: HTMLCanvasElement, audioUrl: string, startMs: number, endMs: number, opId?: string): void;
     /** Drop a row entry; if it was the active one, stop playback and clear the playhead. */
     deregisterRow(uid: string): void;
     /** Click-handler for a row's play button. Toggles play/pause for the
@@ -64,6 +67,7 @@ interface RowEntry {
     audioUrl: string;
     startMs: number;
     endMs: number;
+    opId?: string;
 }
 
 export function createPreviewPlaybackContext(): PreviewPlaybackContext {
@@ -97,6 +101,14 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         // outside the range — drawSegPlayhead returns early after the
         // putImageData restore, leaving the waveform clean.
         _clearPlayheadOnCurrent();
+        // Dispose and null the range here so that toggle() on the same row
+        // detects "no live range" rather than finding the already-stopped
+        // instance, which would require an extra dispose() call and leave
+        // the gain node in an ambiguous state.
+        if (range) {
+            range.dispose();
+            range = null;
+        }
         curUid = null;
         curRow = null;
         _activeSeg.set(null);
@@ -135,7 +147,12 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         el.addEventListener('pause', _onAudioPause);
     }
 
-    async function _ensurePeaks(audioUrl: string, startMs: number, endMs: number): Promise<void> {
+    async function _ensurePeaks(
+        audioUrl: string,
+        startMs: number,
+        endMs: number,
+        opId?: string,
+    ): Promise<void> {
         if (!audioUrl || endMs <= startMs) return;
         if (_findCoveringPeaks(audioUrl, startMs, endMs)) return;
         const key = `${audioUrl}:${startMs}:${endMs}`;
@@ -155,6 +172,26 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         // cache the IntersectionObserver pipeline reads from.
         indexSegPeaksBulk({ [`${audioUrl}:${fetchStart}:${fetchEnd}`]: peaks });
         redrawPeaksWaveforms();
+
+        // History rows (opId set) — persist so future sessions hydrate
+        // these peaks at panel open. Fire-and-forget; failures are silent
+        // (next play computes again).
+        if (opId) {
+            void fetch(`/api/seg/history-peaks/${reciter}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    records: [{
+                        op_id: opId,
+                        url: audioUrl,
+                        start_ms: peaks.start_ms ?? fetchStart,
+                        end_ms: peaks.end_ms ?? fetchEnd,
+                        peaks: peaks.peaks,
+                        duration_ms: peaks.duration_ms,
+                    }],
+                }),
+            }).catch(() => {});
+        }
     }
 
     function registerRow(
@@ -163,9 +200,12 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         audioUrl: string,
         startMs: number,
         endMs: number,
+        opId?: string,
     ): void {
-        rows.set(uid, { canvas, audioUrl, startMs, endMs });
-        void _ensurePeaks(audioUrl, startMs, endMs);
+        // No fetch on register. Persisted peaks (if any) were hydrated at
+        // reciter load; rows without persisted peaks render flat until the
+        // user clicks play. `toggle()` triggers the on-demand compute path.
+        rows.set(uid, { canvas, audioUrl, startMs, endMs, opId });
     }
 
     function deregisterRow(uid: string): void {
@@ -213,6 +253,13 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         curUid = uid;
         curRow = row;
         _activeSeg.set({ uid });
+
+        // On-demand peaks compute. Cache hits (persisted-and-hydrated, or
+        // a prior play this session) short-circuit inside `_ensurePeaks`.
+        // Misses fetch via Range and — when this is a History row (opId
+        // set) — also persist so the next session hydrates without a
+        // round-trip.
+        void _ensurePeaks(row.audioUrl, row.startMs, row.endMs, row.opId);
 
         range = new AudioRange({
             audioEl,

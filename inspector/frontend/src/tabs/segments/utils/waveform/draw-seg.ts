@@ -4,8 +4,10 @@ import type { AudioPeaks, PeakBucket, Segment } from '../../../../lib/types/doma
 import {
     PREVIEW_PLAYHEAD_COLOR,
     WAVEFORM_BG_COLOR,
-    WAVEFORM_FILL_COLOR,
     WAVEFORM_DIM_OVERLAY_COLOR,
+    WAVEFORM_FILL_COLOR,
+    WAVEFORM_HEADROOM,
+    WAVEFORM_SILENCE_THRESHOLD,
 } from '../../../../lib/utils/constants';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { drawWaveformPeaks } from '../../../../lib/utils/waveform-draw';
@@ -70,6 +72,13 @@ export function drawSegPlayhead(
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
     } else {
+        // Always clear to background first so the captured _wfCache is
+        // cursor-free even when no peaks are available yet. Without this,
+        // a cursor drawn by the previous tick gets baked into _wfCache and
+        // putImageData'd back on every subsequent tick — leaving a ghost
+        // cursor while a second live cursor moves alongside it.
+        ctx.fillStyle = WAVEFORM_BG_COLOR;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         if (audioUrl) {
             const pe = _findCoveringPeaks(audioUrl, startMs, endMs);
             if (pe?.peaks?.length) {
@@ -138,7 +147,15 @@ export function drawEditPeakBase(
     const data = _slicePeaks(audioUrl, startMs, endMs, width);
     if (!data) return null;
 
-    const scale = (height / 2) * 0.9;
+    const halfH = height / 2;
+    let maxAmp = 0;
+    for (let i = 0; i < data.maxVals.length; i++) {
+        const a = Math.max(Math.abs(data.maxVals[i] ?? 0), Math.abs(data.minVals[i] ?? 0));
+        if (a > maxAmp) maxAmp = a;
+    }
+    const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD
+        ? halfH * 0.9
+        : halfH * (1 - WAVEFORM_HEADROOM) / maxAmp;
 
     ctx.beginPath();
     for (let i = 0; i < width; i++) {
