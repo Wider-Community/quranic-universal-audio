@@ -29,7 +29,10 @@ def file_sha256(path: Path) -> str:
 def backup_file(path: Path) -> None:
     """Create a ``.bak`` copy of *path* if it exists."""
     if path.exists():
-        shutil.copy2(path, path.with_name(path.name + ".bak"))
+        # Use copyfile() instead of copy() or copy2() to avoid PermissionError
+        # on copystat (utime) or copymode (chmod), which often fails on 
+        # Docker-mounted volumes or specific filesystems (e.g. CIFS/WSL).
+        shutil.copyfile(path, path.with_name(path.name + ".bak"))
 
 
 def safe_filename(name: str, fallback: str = "file") -> str:
