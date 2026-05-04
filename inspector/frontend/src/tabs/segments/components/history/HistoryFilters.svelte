@@ -17,68 +17,123 @@
 
     import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import {
+        buildDisplayItems,
         clearFilters,
         filterErrCats,
         filterOpTypes,
         flatItems,
-        itemMatchesCatFilter,
-        itemMatchesOpFilter,
+        historyData,
         setSortMode,
         sortMode,
         splitChains,
         toggleFilter,
     } from '../../stores/history';
-    import { _deriveOpIssueDelta } from '../../utils/validation/classify';
+    import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
     // Derived pill data ------------------------------------------------------
 
-    // Op-type counts (faceted by active category filter).
-    $: opCounts = (() => {
-        const catActive = $filterErrCats.size > 0;
-        const source = catActive
-            ? $flatItems.filter((it) => itemMatchesCatFilter(it, $filterErrCats))
-            : $flatItems;
+    $: unfilteredEntries = (() => {
+        if (!$historyData || !$historyData.batches) return [];
+        return buildDisplayItems(
+            $flatItems,
+            $historyData.batches,
+            'time',
+            $splitChains,
+            new Set(),
+            new Set()
+        );
+    })();
+
+    // Base counts (for stable ordering and showing 0-count pills)
+    $: baseOpCounts = (() => {
         const counts: Record<string, number> = {};
-        for (const item of source) {
-            if (item.group.length === 0) continue;
-            const op = item.group[0];
-            if (!op) continue;
-            counts[op.op_type] = (counts[op.op_type] || 0) + 1;
-        }
-        // Chain count adds into split_segment (preserves imperative impl).
-        if ($splitChains && !catActive) {
-            counts['split_segment'] = (counts['split_segment'] || 0) + $splitChains.size;
+        for (const entry of unfilteredEntries) {
+            if (entry.type === 'chain') {
+                for (const { op } of entry.chain.ops) counts[op.op_type] = (counts[op.op_type] || 0) + 1;
+            } else {
+                for (const op of entry.item.group) counts[op.op_type] = (counts[op.op_type] || 0) + 1;
+            }
         }
         return counts;
     })();
 
-    // Category counts (faceted by active op-type filter).
-    $: catCounts = (() => {
-        const opActive = $filterOpTypes.size > 0;
-        const source = opActive
-            ? $flatItems.filter((it) => itemMatchesOpFilter(it, $filterOpTypes))
-            : $flatItems;
+    $: baseCatCounts = (() => {
         const counts: Record<string, number> = {};
-        for (const item of source) {
-            if (item.group.length === 0) continue;
-            const delta = _deriveOpIssueDelta(item.group);
+        for (const entry of unfilteredEntries) {
+            const ops = entry.type === 'chain' ? entry.chain.ops.map(c => c.op) : entry.item.group;
+            if (ops.length === 0) continue;
+            const delta = deriveOpIssueDelta(ops);
             const touched = new Set<string>([
-                ...delta.resolved,
-                ...delta.introduced,
-                ...item.group.map((op) => op.op_context_category).filter((c): c is string => !!c),
+                ...delta.involved,
+                ...ops.map((op) => op.op_context_category).filter((c): c is string => !!c),
             ]);
             for (const cat of touched) counts[cat] = (counts[cat] || 0) + 1;
         }
         return counts;
     })();
 
-    // Sort ordered entries for stable pill order.
-    $: opEntries = Object.entries(opCounts).sort((a, b) => b[1] - a[1]);
-    $: catEntries = Object.entries(catCounts).sort((a, b) => b[1] - a[1]);
+    $: sourceForOps = (() => {
+        if (!$historyData || !$historyData.batches) return [];
+        return buildDisplayItems(
+            $flatItems,
+            $historyData.batches,
+            'time',
+            $splitChains,
+            new Set(), // No op-type filter
+            $filterErrCats // Respect active category filter
+        );
+    })();
+
+    // Op-type counts (faceted by active category filter).
+    $: opCounts = (() => {
+        const counts: Record<string, number> = {};
+        for (const key of Object.keys(baseOpCounts)) counts[key] = 0;
+        for (const entry of sourceForOps) {
+            if (entry.type === 'chain') {
+                for (const { op } of entry.chain.ops) counts[op.op_type] = (counts[op.op_type] || 0) + 1;
+            } else {
+                for (const op of entry.item.group) counts[op.op_type] = (counts[op.op_type] || 0) + 1;
+            }
+        }
+        return counts;
+    })();
+
+    $: sourceForCats = (() => {
+        if (!$historyData || !$historyData.batches) return [];
+        return buildDisplayItems(
+            $flatItems,
+            $historyData.batches,
+            'time',
+            $splitChains,
+            $filterOpTypes, // Respect active op-type filter
+            new Set() // No category filter
+        );
+    })();
+
+    // Category counts (faceted by active op-type filter).
+    $: catCounts = (() => {
+        const counts: Record<string, number> = {};
+        for (const key of Object.keys(baseCatCounts)) counts[key] = 0;
+        for (const entry of sourceForCats) {
+            const ops = entry.type === 'chain' ? entry.chain.ops.map(c => c.op) : entry.item.group;
+            if (ops.length === 0) continue;
+            const delta = deriveOpIssueDelta(ops);
+            const touched = new Set<string>([
+                ...delta.involved,
+                ...ops.map((op) => op.op_context_category).filter((c): c is string => !!c),
+            ]);
+            for (const cat of touched) counts[cat] = (counts[cat] || 0) + 1;
+        }
+        return counts;
+    })();
+
+    // Sort ordered entries for stable pill order using base counts.
+    $: opEntries = Object.entries(opCounts).sort((a, b) => (baseOpCounts[b[0]] || 0) - (baseOpCounts[a[0]] || 0));
+    $: catEntries = Object.entries(catCounts).sort((a, b) => (baseCatCounts[b[0]] || 0) - (baseCatCounts[a[0]] || 0));
 
     $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0;
-    $: showOps = opEntries.length >= 2;
-    $: showCats = catEntries.length >= 2;
+    $: showOps = Object.keys(baseOpCounts).length >= 2;
+    $: showCats = Object.keys(baseCatCounts).length >= 2;
     $: hasAny = showOps || showCats;
 </script>
 
@@ -91,6 +146,7 @@
                     <button
                         class="seg-history-filter-pill"
                         class:active={$filterOpTypes.has(opType)}
+                        class:empty={count === 0}
                         data-filter-type="op"
                         data-filter-value={opType}
                         on:click={() => toggleFilter('op', opType)}
@@ -110,6 +166,7 @@
                     <button
                         class="seg-history-filter-pill"
                         class:active={$filterErrCats.has(cat)}
+                        class:empty={count === 0}
                         data-filter-type="cat"
                         data-filter-value={cat}
                         on:click={() => toggleFilter('cat', cat)}

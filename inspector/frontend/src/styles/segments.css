@@ -266,6 +266,12 @@
     width: 140px;
 }
 
+.seg-text-ref-input.invalid {
+    color: #f44336;
+    border-color: #f44336;
+    background: rgba(244, 67, 54, 0.15);
+}
+
 .seg-row.dirty {
     border-color: #f0a500;
 }

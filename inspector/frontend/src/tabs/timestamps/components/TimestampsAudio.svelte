@@ -3,7 +3,7 @@
     import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
     import AudioPlayer from '../../../lib/components/AudioPlayer.svelte';
-    import { createAnimationLoop } from '../../../lib/utils/animation';
+    import { AudioRange } from '../../../lib/playback/audio-range';
     import { LS_KEYS } from '../../../lib/utils/constants';
     import {
         autoAdvancing,
@@ -13,6 +13,7 @@
         tsAudioElement,
     } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
+    import { buildTimestampsRangeSpec } from '../utils/range-spec';
 
     // ---- Props ----
     /** Disabled state of the Prev button. */
@@ -22,6 +23,7 @@
 
     // ---- Component ref ----
     let _player: AudioPlayer;
+    let _range: AudioRange | null = null;
 
     const dispatch = createEventDispatcher<{
         prev: void;
@@ -49,86 +51,91 @@
         await _player?.load(url, atTime, autoplay);
     }
 
-    // ---- Animation frame loop ----
-    const _animLoop = createAnimationLoop(() => {
-        _tick();
-    });
+    // ---- AudioRange wiring ----
 
-    function _tick(): void {
-        const audio = _player?.element();
-        if (!audio) return;
-        // Loop-boundary check — runs at ~16ms granularity under normal rAF
-        // (vs ~250ms for `timeupdate` in Chrome). Overshoot at most one frame,
-        // imperceptible even for the shortest phoneme loops. `onTimeUpdate`
-        // performs the same check as a safety net if rAF is ever throttled.
-        if (_enforceLoop(audio)) return;
-        currentTime.set(audio.currentTime);
+    function _onTick(timeMs: number): void {
+        currentTime.set(timeMs / 1000);
         dispatch('tick');
     }
 
-    /** Returns true if a loop wrap was applied this frame. */
-    function _enforceLoop(audio: HTMLAudioElement): boolean {
-        const lt = get(loopTarget);
-        if (!lt) return false;
-        const lv = get(loadedVerse);
-        if (!lv || audio.paused) return false;
-        const endAbs = lt.endSec + lv.tsSegOffset;
-        if (audio.currentTime >= endAbs) {
-            audio.currentTime = lt.startSec + lv.tsSegOffset;
-            return true;
+    function _onBoundary(ev: { reason: string }): void {
+        if (ev.reason !== 'stop') return;
+        // Mirrors the legacy onTimeUpdate auto-advance branch — fires once
+        // per verse-end crossing, guarded by autoAdvancing against re-entry.
+        if (get(autoAdvancing)) return;
+        const mode = get(autoMode);
+        if (mode === 'next') {
+            autoAdvancing.set(true);
+            dispatch('autoNext');
+        } else if (mode === 'random-any') {
+            autoAdvancing.set(true);
+            dispatch('autoRandomAny');
+        } else if (mode === 'random-current') {
+            autoAdvancing.set(true);
+            dispatch('autoRandomCurrent');
         }
-        return false;
+    }
+
+    function _disposeRange(): void {
+        _range?.dispose();
+        _range = null;
+    }
+
+    function _ensureRangeForCurrentState(): AudioRange | null {
+        const audio = _player?.element();
+        if (!audio) return null;
+        const spec = buildTimestampsRangeSpec(get(loadedVerse), get(loopTarget));
+        if (!spec) return null;
+        if (_range) {
+            _range.setRange(spec.range);
+            _range.setPolicy(spec.policy);
+            return _range;
+        }
+        _range = new AudioRange({
+            audioEl: audio,
+            range: spec.range,
+            policy: spec.policy,
+            onTick: _onTick,
+            onBoundary: _onBoundary,
+        });
+        return _range;
+    }
+
+    // Re-spec the running range whenever loop or verse state changes — avoids
+    // a stale loop window after the user toggles loopTarget mid-playback or
+    // navigates verses.
+    $: {
+        void $loopTarget;
+        void $loadedVerse;
+        if (_range) _ensureRangeForCurrentState();
     }
 
     // ---- Audio event handlers ----
 
     function onPlay(): void {
-        _animLoop.start();
+        // attach (not start) — `_player.load(url, atTime, autoplay)` has
+        // already seeked to the verse start and kicked off playback. We only
+        // want the boundary-watcher rAF on top.
+        const r = _ensureRangeForCurrentState();
+        r?.attach();
     }
 
     function onPause(): void {
-        _animLoop.stop();
-        _tick();
+        _range?.stop();
+        const audio = _player?.element();
+        if (audio) currentTime.set(audio.currentTime);
     }
 
     function onEnded(): void {
-        _animLoop.stop();
+        _range?.stop();
     }
 
     function onTimeUpdate(): void {
+        // AudioRange's rAF loop owns boundary enforcement at frame precision.
+        // Keep the handler only as a tick when audio is paused (so the playhead
+        // store catches a manual seek the rAF doesn't see while paused).
         const audio = _player?.element();
-        if (!audio) return;
-        const lv = get(loadedVerse);
-        if (!lv) return;
-
-        // While looping, enforce the loop wrap here as a safety net in case
-        // rAF is throttled (e.g. background tab). Then skip the verse-end /
-        // auto-advance path so a loop whose end aligns with `tsSegEnd`
-        // doesn't accidentally trigger Auto Next/Random.
-        if (get(loopTarget)) {
-            _enforceLoop(audio);
-            if (audio.paused) _tick();
-            return;
-        }
-
-        if (lv.tsSegEnd > 0 && audio.currentTime >= lv.tsSegEnd) {
-            audio.pause();
-            audio.currentTime = lv.tsSegEnd;
-            if (!get(autoAdvancing)) {
-                const mode = get(autoMode);
-                if (mode === 'next') {
-                    autoAdvancing.set(true);
-                    dispatch('autoNext');
-                } else if (mode === 'random-any') {
-                    autoAdvancing.set(true);
-                    dispatch('autoRandomAny');
-                } else if (mode === 'random-current') {
-                    autoAdvancing.set(true);
-                    dispatch('autoRandomCurrent');
-                }
-            }
-        }
-        if (audio.paused) _tick();
+        if (audio?.paused) currentTime.set(audio.currentTime);
     }
 
     function onError(): void {
@@ -152,6 +159,7 @@
     });
 
     onDestroy(() => {
+        _disposeRange();
         tsAudioElement.set(null);
     });
 </script>

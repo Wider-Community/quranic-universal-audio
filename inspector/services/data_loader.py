@@ -18,6 +18,7 @@ from config import (
     SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
 )
+from adapters.detailed_json import load_entries as _load_detailed_entries
 from constants import AUDIO_META_CATEGORIES, STOP_SIGNS, TS_AUDIO_CATEGORIES
 from services import cache
 from utils.formatting import slug_to_name
@@ -34,8 +35,8 @@ def load_qpc() -> dict[str, dict]:
     if cached is not None:
         return cached
     if QPC_HAFS_PATH.exists():
-        with open(QPC_HAFS_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        import orjson
+        data = orjson.loads(QPC_HAFS_PATH.read_bytes())
     else:
         data = {}
     cache.set_qpc_cache(data)
@@ -48,8 +49,8 @@ def load_dk() -> dict[str, dict]:
     if cached is not None:
         return cached
     if DK_SCRIPT_PATH.exists():
-        with open(DK_SCRIPT_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        import orjson
+        data = orjson.loads(DK_SCRIPT_PATH.read_bytes())
     else:
         data = {}
     cache.set_dk_cache(data)
@@ -157,8 +158,8 @@ def load_timestamps(reciter: str) -> dict:
             break
     if path is None:
         return {}
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
+    import orjson
+    doc = orjson.loads(path.read_bytes())
     meta = doc.pop("_meta", {})
     verses = doc
     result = {"meta": meta, "verses": verses, "audio_category": category}
@@ -178,8 +179,8 @@ def load_seg_verses(reciter: str) -> tuple[dict, int]:
     seg_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
     if not seg_path.exists():
         return {}, 0
-    with open(seg_path, encoding="utf-8") as f:
-        doc = json.load(f)
+    import orjson
+    doc = orjson.loads(seg_path.read_bytes())
     pad_ms = doc.get("_meta", {}).get("pad_ms", 0)
     verses = {k: v for k, v in doc.items() if k != "_meta"}
     cache.set_seg_verses_cache(reciter, (verses, pad_ms))
@@ -194,23 +195,21 @@ def load_detailed(reciter: str) -> list[dict]:
     path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
     if not path.exists():
         return []
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
-    if "_meta" in doc:
-        cache.set_seg_meta(reciter, doc["_meta"])
-    entries = doc.get("entries", [])
+    meta, entries = _load_detailed_entries(path)
+    if meta:
+        cache.set_seg_meta(reciter, meta)
     cache.set_seg_cache(reciter, entries)
     # Fallback: if detailed.json had no _meta, try segments.json
     if not cache.get_seg_meta(reciter):
         seg_path = path.parent / "segments.json"
         if seg_path.exists():
-            with open(seg_path, encoding="utf-8") as sf:
-                try:
-                    seg_doc = json.load(sf)
-                    if "_meta" in seg_doc:
-                        cache.set_seg_meta(reciter, seg_doc["_meta"])
-                except json.JSONDecodeError:
-                    pass
+            try:
+                import orjson
+                seg_doc = orjson.loads(seg_path.read_bytes())
+                if "_meta" in seg_doc:
+                    cache.set_seg_meta(reciter, seg_doc["_meta"])
+            except Exception:
+                pass
     return entries
 
 
@@ -223,8 +222,8 @@ def load_audio_urls(audio_source: str, reciter: str) -> dict:
     path = AUDIO_METADATA_PATH / audio_source / f"{reciter}.json"
     if not path.exists():
         return {}
-    with open(path, encoding="utf-8") as f:
-        urls = json.load(f)
+    import orjson
+    urls = orjson.loads(path.read_bytes())
     urls.pop("_meta", None)
     cache.set_audio_url_cache(key, urls)
     return urls
@@ -244,8 +243,8 @@ def get_word_counts() -> dict[tuple[int, int], int]:
     if not sip.exists():
         sip = RECITATION_SEGMENTS_PATH.parent / "surah_info.json"
     if sip.exists():
-        with open(sip, encoding="utf-8") as f:
-            si = json.load(f)
+        import orjson
+        si = orjson.loads(sip.read_bytes())
         for surah_str, data in si.items():
             for v in data["verses"]:
                 wc[(int(surah_str), v["verse"])] = v["num_words"]
@@ -258,8 +257,8 @@ def load_surah_info_lite() -> dict:
     cached = cache.get_surah_info_lite_cache()
     if cached is not None:
         return cached
-    with open(SURAH_INFO_PATH, encoding="utf-8") as f:
-        raw = json.load(f)
+    import orjson
+    raw = orjson.loads(SURAH_INFO_PATH.read_bytes())
     result = {}
     for num, info in raw.items():
         result[num] = {

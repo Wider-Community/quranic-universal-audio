@@ -1,5 +1,6 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -13,8 +14,9 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.ts'],
   },
   resolve: {
-    // Ensure Svelte's browser condition wins so component tests pick up
-    // client-side exports (SSR exports would skip the DOM effects).
+    alias: {
+      '@fixtures': resolve(here, '../tests/fixtures/segments'),
+    },
     conditions: ['browser'],
   },
 });

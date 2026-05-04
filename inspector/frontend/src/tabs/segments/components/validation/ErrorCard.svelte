@@ -18,6 +18,7 @@
     import GenericIssueCard from './GenericIssueCard.svelte';
     import MissingVersesCard from './MissingVersesCard.svelte';
     import MissingWordsCard from './MissingWordsCard.svelte';
+    import { IssueRegistry } from '../../domain/registry';
     import type {
         SegValAnyItem,
         SegValMissingVerseItem,
@@ -41,9 +42,12 @@
     $: mwItem = item as SegValMissingWordsItem;
     $: mvItem = item as SegValMissingVerseItem;
 
+    /** Card-type from the registry drives which subcomponent renders. */
+    $: cardType = IssueRegistry[category]?.cardType ?? 'generic';
+
     function _active(): { getIsContextShown(): boolean; showContextForced(): void; hideContextForced(): void } | null {
-        if (category === 'missing_words') return mwCard ?? null;
-        if (category === 'missing_verses') return mvCard ?? null;
+        if (cardType === 'missingWords') return mwCard ?? null;
+        if (cardType === 'missingVerses') return mvCard ?? null;
         return genCard ?? null;
     }
 
@@ -70,13 +74,13 @@
 </script>
 
 <div class="val-card-wrapper">
-    {#if category === 'missing_words'}
+    {#if cardType === 'missingWords'}
         <MissingWordsCard
             bind:this={mwCard}
             item={mwItem}
             on:contextchange={(e) => dispatch('contextchange', e.detail)}
         />
-    {:else if category === 'missing_verses'}
+    {:else if cardType === 'missingVerses'}
         <MissingVersesCard
             bind:this={mvCard}
             item={mvItem}

@@ -22,7 +22,7 @@
     import { EDIT_OP_LABELS } from '../../utils/constants';
     import {
         onOpUndoClick,
-        onPendingBatchDiscard,
+        onPendingOpsDiscard,
     } from '../../utils/save/undo';
     import {
         formatHistDate,
@@ -31,12 +31,14 @@
         type HistorySnapshot,
         type OpFlatItem,
     } from '../../stores/history';
-    import { _deriveOpIssueDelta } from '../../utils/validation/classify';
+    import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
     import type { EditOp } from '../../../../lib/types/domain';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
 
     // Props ------------------------------------------------------------------
 
     export let item: OpFlatItem;
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
 
     // Derived header bits ----------------------------------------------------
 
@@ -60,7 +62,7 @@
         }
         return [...set];
     })();
-    $: issueDelta = group.length > 0 ? _deriveOpIssueDelta(group) : { resolved: [], introduced: [] };
+    $: issueDelta = group.length > 0 ? deriveOpIssueDelta(group) : { resolved: [], introduced: [] };
 
     // Strip-specials single-snapshot diff (shared "before" card + empty-after).
     $: stripSnap = item.type === 'strip-specials-card'
@@ -71,7 +73,8 @@
     function handleDiscardClick(e: MouseEvent): void {
         if (item.chapter == null) return;
         const btn = e.currentTarget as HTMLButtonElement;
-        onPendingBatchDiscard(item.chapter, btn);
+        const opIds = (group as EditOp[]).map((op) => op.op_id);
+        onPendingOpsDiscard(item.chapter, opIds, btn);
     }
     function handleUndoClick(e: MouseEvent): void {
         const bid = item.batchId;
@@ -153,6 +156,7 @@
                                 showPlayBtn={true}
                                 mode="history"
                                 instanceRole="history"
+                                {previewCtx}
                             />
                         {/if}
                     </div>
@@ -172,6 +176,7 @@
                     chapter={item.chapter}
                     batchId={item.batchId}
                     skipLabel={true}
+                    {previewCtx}
                 />
             {:else if group.length > 1}
                 <HistoryOp
@@ -179,6 +184,7 @@
                     chapter={item.chapter}
                     batchId={item.batchId}
                     skipLabel={true}
+                    {previewCtx}
                 />
             {/if}
         </div>

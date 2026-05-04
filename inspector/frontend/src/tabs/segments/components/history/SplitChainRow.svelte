@@ -24,14 +24,16 @@
         type HistorySnapshot,
         type SplitChain,
     } from '../../stores/history';
-    import { onChainUndoClick } from '../../utils/save/undo';
-    import { _classifySnapIssues } from '../../utils/validation/classify';
+    import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
+    import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
     import type { SplitHighlight } from '../../types/segments-waveform';
     import type { Segment } from '../../../../lib/types/domain';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
 
     // Props ------------------------------------------------------------------
 
     export let chain: SplitChain;
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
 
     // Derived ----------------------------------------------------------------
 
@@ -39,6 +41,12 @@
     $: leafSnaps = computeChainLeafSnaps(chain);
     $: chapter = chain.rootBatch?.chapter ?? null;
     $: chainBatchIds = getChainBatchIds(chain);
+    /** Op ids whose enclosing batch is unsaved (`batch_id == null`). The
+     *  save-preview Discard button hands these to `onPendingOpsDiscard`
+     *  so the entire pending chain reverts atomically. */
+    $: pendingOpIds = chain.ops
+        .filter(({ batch }) => !batch.batch_id)
+        .map(({ op }) => op.op_id);
 
     // Compute waveform range (may exceed root when a leaf went outside).
     $: wfRange = (() => {
@@ -86,14 +94,16 @@
     }
 
     // Validation-delta badges (resolved / regressed issues over the chain).
+    // Reads `classified_issues` directly off saved snapshots; absent on
+    // unsaved chains (next save+validate cycle resurfaces any pending state).
     $: valDelta = (() => {
         const beforeIssues = new Set<string>();
         if (rootSnap) {
-            for (const i of _classifySnapIssues(rootSnap)) beforeIssues.add(i);
+            for (const i of classifiedIssuesOf(rootSnap)) beforeIssues.add(i);
         }
         const afterIssues = new Set<string>();
         for (const ls of leafSnaps) {
-            for (const i of _classifySnapIssues(ls)) afterIssues.add(i);
+            for (const i of classifiedIssuesOf(ls)) afterIssues.add(i);
         }
         const improved = [...beforeIssues].filter((i) => !afterIssues.has(i));
         const regressed = [...afterIssues].filter((i) => !beforeIssues.has(i));
@@ -113,6 +123,12 @@
     function handleChainUndoClick(e: MouseEvent): void {
         const btn = e.currentTarget as HTMLButtonElement;
         void onChainUndoClick(chainBatchIds, chapter, btn);
+    }
+
+    function handleChainDiscardClick(e: MouseEvent): void {
+        if (chapter == null || pendingOpIds.length === 0) return;
+        const btn = e.currentTarget as HTMLButtonElement;
+        onPendingOpsDiscard(chapter, pendingOpIds, btn);
     }
 </script>
 
@@ -135,6 +151,12 @@
                 on:click|stopPropagation={handleChainUndoClick}
             >Undo</button>
         {/if}
+        {#if pendingOpIds.length > 0 && chapter != null}
+            <button
+                class="btn btn-sm seg-history-undo-btn"
+                on:click|stopPropagation={handleChainDiscardClick}
+            >Discard</button>
+        {/if}
     </div>
 
     <div class="seg-history-batch-body">
@@ -150,6 +172,8 @@
                             mode="history"
                             instanceRole="history"
                             splitHL={rootSplitHL}
+                            opId={chain.ops[0]?.op.op_id ?? null}
+                            {previewCtx}
                         />
                     </div>
                 {/if}
@@ -177,6 +201,8 @@
                                 mode="history"
                                 instanceRole="history"
                                 splitHL={leafSplitHL(leaf)}
+                                opId={chain.ops[0]?.op.op_id ?? null}
+                                {previewCtx}
                             />
                         </div>
                     {/each}

@@ -7,14 +7,17 @@ import shutil
 from pathlib import Path
 
 
+import orjson
+
 def atomic_json_write(path: Path, data, *, ensure_ascii: bool = False) -> None:
     """Write *data* to *path* as JSON via a temp file + atomic rename.
 
     This avoids partial reads if the server crashes mid-write.
     """
     tmp_path = path.with_suffix(".json.tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=ensure_ascii)
+    with open(tmp_path, "wb") as f:
+        # orjson defaults to UTF-8 without ASCII escaping.
+        f.write(orjson.dumps(data))
     os.replace(tmp_path, path)
 
 

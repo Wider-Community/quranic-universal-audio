@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 from services import cache
 from services.data_loader import load_detailed
 from services.peaks import get_peaks_for_reciter, compute_segment_peaks
+from services.peaks_history import append_peaks_records, load_peaks_records
 from utils.references import chapter_from_ref
 
 peaks_bp = Blueprint("peaks", __name__, url_prefix="/api/seg")
@@ -76,3 +77,31 @@ def seg_segment_peaks(reciter):
         if data:
             results[key] = data
     return jsonify({"peaks": results})
+
+
+@peaks_bp.route("/history-peaks/<reciter>", methods=["GET"])
+def seg_history_peaks_get(reciter):
+    """Return persisted per-op peaks for the History panel.
+
+    Returns ``{"records": [...]}`` — empty list if the reciter has no
+    edit_history_peaks.jsonl yet. The frontend pushes each record into the
+    covering-range cache so history rows render without re-computing.
+    """
+    return jsonify({"records": load_peaks_records(reciter)})
+
+
+@peaks_bp.route("/history-peaks/<reciter>", methods=["POST"])
+def seg_history_peaks_post(reciter):
+    """Append peak records computed lazily during History playback.
+
+    Payload: ``{"records": [{op_id, url, start_ms, end_ms, peaks, duration_ms,
+    batch_id?}, ...]}``. Used when a History canvas computes peaks on play —
+    persisting them here makes future sessions render the same row without a
+    Range fetch.
+    """
+    body = request.get_json(silent=True) or {}
+    records = body.get("records", [])
+    if not isinstance(records, list):
+        return jsonify({"error": "records must be a list"}), 400
+    written = append_peaks_records(reciter, records)
+    return jsonify({"ok": True, "written": written})

@@ -27,7 +27,6 @@ import io
 import json
 import statistics
 import sys
-import unicodedata as _ud
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
@@ -35,23 +34,17 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# ---------------------------------------------------------------------------
-# Inspector accordion constants — keep in sync with inspector/server.py
-# ---------------------------------------------------------------------------
+# Make ``inspector/`` packages importable so the CLI shares the unified
+# classifier with the backend / tests.
+_INSPECTOR_DIR = _PROJECT_ROOT / "inspector"
+if str(_INSPECTOR_DIR) not in sys.path:
+    sys.path.insert(0, str(_INSPECTOR_DIR))
 
-_MUQATTAAT_VERSES = {
-    (2,1),(3,1),(7,1),(10,1),(11,1),(12,1),(13,1),(14,1),(15,1),
-    (19,1),(20,1),(26,1),(27,1),(28,1),(29,1),(30,1),(31,1),(32,1),
-    (36,1),(38,1),(40,1),(41,1),(42,1),(42,2),(43,1),(44,1),(45,1),
-    (46,1),(50,1),(68,1),
-}
-_QALQALA_LETTERS = {"ق", "ط", "ب", "ج", "د"}
-_STANDALONE_WORDS = {"كلا", "ذلك", "كذلك", "سبحنهۥ"}
-_STANDALONE_REFS = {
-    (9,13,13),(16,16,1),(43,35,1),(70,11,1),(79,27,6),
-    (37,9,1),(37,24,1),(44,37,9),(46,35,22),(44,28,1),
-}
-_STRIP_CHARS = {"\u0640", "\u06de", "\u06e6", "\u06e9", "\u200f"}
+from services.validation import (  # noqa: E402  — sys.path setup must precede imports
+    classify_segment_full,
+    is_ignored_for,
+)
+from utils.arabic_text import last_arabic_letter as _last_arabic_letter  # noqa: E402
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -76,41 +69,6 @@ def _ms_to_hms(ms: float) -> str:
 
 def _ms_to_s(ms: float) -> str:
     return f"{ms / 1000:.2f}s"
-
-
-def _strip_diacritics(text: str) -> str:
-    text = _ud.normalize("NFD", text)
-    out = []
-    for ch in text:
-        if ch in _STRIP_CHARS:
-            continue
-        if _ud.category(ch) == "Mn":
-            continue
-        out.append(ch)
-    return "".join(out).strip()
-
-
-def _last_arabic_letter(text: str) -> str | None:
-    """Return the last Arabic letter, ignoring diacritics and non-letter marks."""
-    for ch in reversed(_strip_diacritics(text)):
-        if _ud.category(ch).startswith("L"):
-            return ch
-    return None
-
-
-def _parse_matched_ref(ref: str) -> tuple[int, int, int, int, int] | None:
-    """Parse 'surah:s_ayah:s_word-surah:e_ayah:e_word' → 5-tuple or None."""
-    parts = ref.split("-")
-    if len(parts) != 2:
-        return None
-    sp = parts[0].split(":")
-    ep = parts[1].split(":")
-    if len(sp) != 3 or len(ep) != 3:
-        return None
-    try:
-        return int(sp[0]), int(sp[1]), int(sp[2]), int(ep[1]), int(ep[2])
-    except ValueError:
-        return None
 
 
 # ── Parsers ──────────────────────────────────────────────────────────────
@@ -190,7 +148,7 @@ def _confidence_stats(detailed_segs: list[dict]) -> dict:
     failed = [s for s in detailed_segs if not s["matched_ref"]]
     empty_phonemes = [s for s in matched if not s.get("phonemes_asr", "").strip()]
     confidences = [s["confidence"] for s in matched]
-    lc_visible = [s for s in matched if not _is_ignored_for(s, "low_confidence")]
+    lc_visible = [s for s in matched if not is_ignored_for(s, "low_confidence")]
     return {
         "matched": matched,
         "failed": failed,
@@ -206,93 +164,57 @@ def _confidence_stats(detailed_segs: list[dict]) -> dict:
     }
 
 
-def _is_ignored_for(seg: dict, category: str) -> bool:
-    """Check if a segment is ignored for a specific validation category."""
-    ic = seg.get("ignored_categories")
-    if ic:
-        return "_all" in ic or category in ic
-    return bool(seg.get("ignored"))
-
-
 def _classify_detailed_segs(
     detailed_segs: list[dict],
     word_counts: dict[tuple[int, int], int],
     is_by_ayah: bool,
 ) -> dict[str, list[dict]]:
-    """Classify segments into inspector accordion categories from detailed.json."""
+    """Classify segments into inspector accordion category buckets.
+
+    Routes through the unified ``services.validation.classify_segment_full``
+    so the CLI shares the same predicates as the backend route and history
+    snapshots. Output buckets match the legacy CLI shape so the report
+    formatter below stays unchanged.
+    """
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
 
-    repetitions = []
-    boundary_adj = []
-    cross_verse_det = []
-    audio_bleeding = []
-    muqattaat = []
-    qalqala = []
+    buckets: dict[str, list[dict]] = {
+        "repetitions": [],
+        "boundary_adj": [],
+        "cross_verse_det": [],
+        "audio_bleeding": [],
+        "muqattaat": [],
+        "qalqala": [],
+    }
 
     for seg in detailed_segs:
-        matched_ref = seg.get("matched_ref", "")
-
-        if not matched_ref:
+        if not seg.get("matched_ref"):
             continue  # failed alignments tracked via _confidence_stats
 
-        # Detected Repetitions — wrap_word_ranges set by the alignment pipeline
-        if seg.get("wrap_word_ranges") and not _is_ignored_for(seg, "repetitions"):
-            repetitions.append(seg)
+        info = classify_segment_full(
+            seg,
+            entry_ref=seg.get("ref", ""),
+            is_by_ayah=is_by_ayah,
+            single_word_verses=single_word_verses,
+        )
+        cats = set(info["categories"])
+        if "repetitions" in cats:
+            buckets["repetitions"].append(seg)
+        if "boundary_adj" in cats:
+            buckets["boundary_adj"].append(seg)
+        if "cross_verse" in cats:
+            buckets["cross_verse_det"].append(seg)
+        if "audio_bleeding" in cats:
+            # Build the same enriched display dict the backend route emits.
+            sp = seg["matched_ref"].split("-")[0].split(":")
+            matched_verse = f"{sp[0]}:{sp[1]}" if len(sp) >= 2 else seg["matched_ref"]
+            buckets["audio_bleeding"].append({**seg, "matched_verse": matched_verse})
+        if "muqattaat" in cats:
+            buckets["muqattaat"].append(seg)
+        if "qalqala" in cats:
+            buckets["qalqala"].append(seg)
 
-        parsed = _parse_matched_ref(matched_ref)
-        if parsed is None:
-            continue
-        surah, s_ayah, s_word, e_ayah, e_word = parsed
-
-        # Audio Bleeding — by_ayah only
-        if is_by_ayah:
-            entry_ref = seg.get("ref", "")
-            if ":" in entry_ref:
-                try:
-                    ep = entry_ref.split(":")
-                    entry_surah, entry_ayah_n = int(ep[0]), int(ep[1])
-                    if (
-                        (entry_surah != surah or entry_ayah_n != s_ayah)
-                        and not _is_ignored_for(seg, "audio_bleeding")
-                    ):
-                        audio_bleeding.append({**seg, "matched_verse": f"{surah}:{s_ayah}"})
-                except (ValueError, IndexError):
-                    pass
-
-        # Cross-verse (matched_ref spans multiple ayahs)
-        if s_ayah != e_ayah:
-            if not _is_ignored_for(seg, "cross_verse"):
-                cross_verse_det.append(seg)
-            continue  # cross-verse segs don't fit single-ayah categories below
-
-        # May Require Boundary Adjustment — 1-word, not muqatta'at/single-word/standalone
-        if (s_word == e_word
-                and not _is_ignored_for(seg, "boundary_adj")
-                and (surah, s_ayah) not in _MUQATTAAT_VERSES
-                and (surah, s_ayah) not in single_word_verses
-                and (surah, s_ayah, s_word) not in _STANDALONE_REFS
-                and _strip_diacritics(seg.get("matched_text", "")) not in _STANDALONE_WORDS):
-            boundary_adj.append(seg)
-
-        # Muqatta'at — word 1 of a muqatta'at verse
-        if s_word == 1 and (surah, s_ayah) in _MUQATTAAT_VERSES:
-            if not _is_ignored_for(seg, "muqattaat"):
-                muqattaat.append(seg)
-
-        # Qalqala — last Arabic letter of matched_text is a qalqala letter
-        last_ltr = _last_arabic_letter(seg.get("matched_text", ""))
-        if last_ltr and last_ltr in _QALQALA_LETTERS:
-            if not _is_ignored_for(seg, "qalqala"):
-                qalqala.append(seg)
-
-    return {
-        "repetitions": repetitions,
-        "boundary_adj": boundary_adj,
-        "cross_verse_det": cross_verse_det,
-        "audio_bleeding": audio_bleeding,
-        "muqattaat": muqattaat,
-        "qalqala": qalqala,
-    }
+    return buckets
 
 
 # ── Core validation ─────────────────────────────────────────────────────
@@ -696,7 +618,7 @@ def _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
         below_80 = sorted(
             [
                 s for s in cstats["matched"]
-                if s["confidence"] < 0.80 and not _is_ignored_for(s, "low_confidence")
+                if s["confidence"] < 0.80 and not is_ignored_for(s, "low_confidence")
             ],
             key=lambda s: s["confidence"],
         )
@@ -785,6 +707,27 @@ def _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
     if has_detailed:
         print(f"\n--- Cross-file Consistency (detailed.json ↔ segments.json) ---")
         print(f"  Mismatches: {stats.get('consistency_mismatches', 0)}")
+
+    # Machine-readable category-counts footer. Each line has the canonical
+    # registry-key form (matches the backend route's ``category_counts``)
+    # so cross-stack parity tests can grep one stable shape.
+    if has_detailed:
+        print("\n--- Category Counts (machine-readable) ---")
+        cat_count_pairs = [
+            ("failed", stats.get("failed_segments", 0)),
+            ("missing_verses", len(missing_verses)),
+            ("missing_words", stats.get("word_gaps", 0)),
+            ("structural_errors", len(errors)),
+            ("low_confidence", stats.get("conf_below_80", 0)),
+            ("repetitions", stats.get("repetitions", 0)),
+            ("audio_bleeding", stats.get("audio_bleeding", 0)),
+            ("boundary_adj", stats.get("boundary_adj", 0)),
+            ("cross_verse", stats.get("cross_verse_det", 0)),
+            ("qalqala", stats.get("qalqala", 0)),
+            ("muqattaat", stats.get("muqattaat", 0)),
+        ]
+        for key, count in cat_count_pairs:
+            print(f"  {key} {count}")
 
     # ── Other Warnings (extra words, meta, etc.) ──
     other_warnings = [w for w in warnings if "missing words" not in w["msg"]]
@@ -958,12 +901,27 @@ def _tee_to_file(path: Path):
     buf = io.StringIO()
     orig = sys.stdout
 
+    # Console encoding fallback: on Windows, ``sys.stdout`` defaults to
+    # cp1252 and chokes on Arabic text in matched_text output. Coerce to
+    # utf-8 with replacement so the CLI never crashes on terminal encoding —
+    # the on-disk validation.log still receives the unmodified text.
+    orig_encoding = (getattr(orig, "encoding", None) or "").lower()
+
+    def _safe_write_to_orig(s: str) -> None:
+        try:
+            orig.write(s)
+        except UnicodeEncodeError:
+            orig.write(s.encode(orig_encoding or "ascii", errors="replace").decode(orig_encoding or "ascii", errors="replace"))
+
     class _Tee:
         def write(self, s):
-            orig.write(s)
+            _safe_write_to_orig(s)
             buf.write(s)
         def flush(self):
-            orig.flush()
+            try:
+                orig.flush()
+            except Exception:
+                pass
 
     sys.stdout = _Tee()
     try:
@@ -991,6 +949,19 @@ def main():
 
     word_counts = load_word_counts(args.surah_info)
     target = args.path.resolve()
+
+    # Slug fallback: if the positional argument doesn't resolve to an
+    # existing directory, look it up under
+    # ``$INSPECTOR_DATA_DIR/recitation_segments/<slug>``. Lets callers
+    # invoke the CLI with a bare reciter slug when the data dir is
+    # configured via the standard inspector env var.
+    if not target.is_dir():
+        import os
+        data_dir = os.environ.get("INSPECTOR_DATA_DIR")
+        if data_dir:
+            candidate = Path(data_dir) / "recitation_segments" / str(args.path)
+            if candidate.is_dir():
+                target = candidate.resolve()
 
     if not target.is_dir():
         print(f"Path not found or not a directory: {_rel_path(target)}")

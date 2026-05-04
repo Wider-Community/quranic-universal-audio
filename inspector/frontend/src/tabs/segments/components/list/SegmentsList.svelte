@@ -25,7 +25,7 @@
     import { afterUpdate, onDestroy, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { displayedSegments } from '../../stores/filters';
+    import { derivedTimings, displayedSegments } from '../../stores/filters';
     import { selectedChapter } from '../../stores/chapter';
     import { editingSegUid } from '../../stores/edit';
     import { pendingScrollTop, targetSegmentIndex } from '../../stores/navigation';
@@ -157,12 +157,16 @@
     }
 
     // Only auto-scroll when the playing segment belongs to the currently-
-    // viewed chapter. Cross-chapter accordion plays (e.g. the validation
-    // panel with chapter=null triggers a play from another chapter) must NOT
-    // yank the visible list away from what the user is looking at.
+    // viewed chapter AND the play originated from the main list. Accordion
+    // plays — same chapter or not — must NOT yank the visible list around;
+    // they own their own embedded waveform and are self-contained. The
+    // chapter-equality guard alone wasn't enough: when the accordion's
+    // chapter matches the open one, the main row would still snap-scroll
+    // even though the user clicked play inside the accordion.
     $: if (
         $autoScrollEnabled
         && $playingSegmentIndex
+        && $playingSegmentIndex.origin !== 'accordion'
         && $playingSegmentIndex.index !== _lastAutoScrolledIdx
         && ($selectedChapter === '' || $playingSegmentIndex.chapter === parseInt($selectedChapter))
         && listEl
@@ -353,7 +357,8 @@
     /** Whether to render a silence-gap wrapper between `seg` and the next
      *  segment — only when the next-displayed is the consecutive index. */
     function showSilenceGap(seg: Segment, displayIdx: number): boolean {
-        if (seg.silence_after_ms == null) return false;
+        const t = seg.segment_uid ? $derivedTimings.get(seg.segment_uid) : null;
+        if (!t || t.silence_after_ms == null) return false;
         const nextDisplayed = $displayedSegments[displayIdx + 1];
         return !!nextDisplayed && nextDisplayed.index === seg.index + 1;
     }
@@ -429,10 +434,11 @@
                     instanceRole="main"
                 />
                 {#if showSilenceGap(seg, startIdx + localIdx)}
+                    {@const t = seg.segment_uid ? $derivedTimings.get(seg.segment_uid) : null}
                     <div class="seg-silence-gap-wrapper">
                         <div class="seg-silence-gap">
-                            &#9208; {Math.round(seg.silence_after_ms ?? 0)}ms
-                            (raw: {Math.round(seg.silence_after_raw_ms ?? 0)}ms)
+                            &#9208; {Math.round(t?.silence_after_ms ?? 0)}ms
+                            (raw: {Math.round(t?.silence_after_raw_ms ?? 0)}ms)
                         </div>
                     </div>
                 {/if}

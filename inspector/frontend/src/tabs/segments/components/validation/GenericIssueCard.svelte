@@ -10,18 +10,16 @@
     } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import {
-        createOp,
         dirtyTick,
-        finalizeOp,
         getChapterOpsSnapshot,
         isSegmentDirty,
-        markDirty,
-        snapshotSeg,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
-    import { _isIgnoredFor } from '../../utils/validation/classify';
+    import { IssueRegistry } from '../../domain/registry';
+    import { isIgnoredFor } from '../../utils/validation/classified-issues';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
+    import { ignoreIssueOnSegment } from '../../utils/edit/ignore';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import SegmentRow from '../list/SegmentRow.svelte';
@@ -60,19 +58,26 @@
     $: resolvedSeg = (void segStoreTick, _resolveLocal(item, category));
     // Pin to the first resolution's UID. After this, resolvedSeg only tracks
     // that specific segment — even if the seg is split (firstHalf keeps the
-    // UID) or merged into (first.uid is kept). If the seg is deleted or
-    // consumed by a merge, resolvedSeg collapses to null and the card body
-    // hides via `{#if resolvedSeg}`.
-    $: if (!_boundUid && resolvedSeg) _boundUid = resolvedSeg.segment_uid ?? null;
+    // UID) or merged into (first.uid is kept). If the seg is deleted,
+    // resolvedSeg collapses to null and the card body hides via `{#if resolvedSeg}`.
+    //
+    // Merge redirect: when the bound UID was consumed by a merge,
+    // resolveIssueSeg follows the redirect and returns the surviving segment.
+    // Update _boundUid to the survivor's UID so future lookups are direct hits.
+    $: if (resolvedSeg) {
+        const resolvedUid = resolvedSeg.segment_uid ?? null;
+        if (!_boundUid || (_boundUid !== resolvedUid && resolvedUid)) {
+            _boundUid = resolvedUid;
+        }
+    }
 
+    // Base gate from the registry; ``low_confidence`` adds a runtime guard so
+    // a segment whose confidence has been promoted to 1.0 (e.g. after a save
+    // edit) doesn't keep offering the Ignore button.
     $: canIgnore =
         resolvedSeg != null &&
-        (category === 'boundary_adj' ||
-            category === 'cross_verse' ||
-            category === 'audio_bleeding' ||
-            category === 'repetitions' ||
-            category === 'qalqala' ||
-            (category === 'low_confidence' && (resolvedSeg.confidence ?? 1) < 1.0));
+        (IssueRegistry[category]?.canIgnore ?? false) &&
+        (category !== 'low_confidence' || (resolvedSeg.confidence ?? 1) < 1.0);
 
     $: segChapterForBtn =
         resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(get(selectedChapter))) : 0;
@@ -108,17 +113,17 @@
         const parsed = parseInt(get(selectedChapter));
         return Number.isFinite(parsed) ? parsed : 0;
     })();
-    // Memoize the split-group computation by a length-based fingerprint key.
+    // Memoize the split-group computation by a split-op-only fingerprint.
     // `getSplitGroupMembers` runs a multi-pass fixpoint over every split op
     // in both the edit-history batches and the current op log; firing it on
     // every `$segAllData` / `$dirtyTick` / `$historyData` tick multiplies
     // with N accordion cards mounted.
     //
-    // Length fingerprints are safe because every mutation path that grows a
-    // group (split op) ALSO grows `opLog` or `historyBatches` by at least
-    // one entry — the cache gets invalidated on the same tick. Pure in-place
-    // mutations of existing segs (trim / ref-edit) don't change group
-    // membership, so the stale memo is correct for them.
+    // Earlier the key tracked total `batches.length` + `ops.length`, which
+    // invalidated on every trim/ref-edit op (i.e. nearly every edit) even
+    // though those don't change split-group membership. We now count split
+    // ops only — the only ops that can grow the group — so trim and ref-edit
+    // ops are cache hits.
     let _splitGroupMemoKey = '';
     let _splitGroupMemoResult: Segment[] = [];
     $: {
@@ -127,7 +132,16 @@
             const chapterSegs = getChapterSegments(_groupChapter);
             const batches = $historyData?.batches ?? [];
             const ops = getChapterOpsSnapshot(_groupChapter);
-            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${batches.length}|${ops.length}`;
+            let splitOpsCount = 0;
+            for (const b of batches) {
+                for (const op of b.operations) {
+                    if (op.op_type === 'split_segment') splitOpsCount++;
+                }
+            }
+            for (const op of ops) {
+                if (op.op_type === 'split_segment') splitOpsCount++;
+            }
+            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${splitOpsCount}`;
             if (key !== _splitGroupMemoKey) {
                 _splitGroupMemoKey = key;
                 _splitGroupMemoResult = getSplitGroupMembers(
@@ -170,7 +184,7 @@
 
     // Track ignored state reactively.
     $: if (resolvedSeg) {
-        isAlreadyIgnored = _isIgnoredFor(resolvedSeg, category);
+        isAlreadyIgnored = isIgnoredFor(resolvedSeg, category);
     }
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
@@ -185,29 +199,14 @@
 
     // ---- Ignore handler ----
     function handleIgnore(): void {
-        if (!resolvedSeg || _isIgnoredFor(resolvedSeg, category)) return;
-        const segChapter = resolvedSeg.chapter ?? parseInt(get(selectedChapter));
-        let ignoreOp;
+        if (!resolvedSeg) return;
         try {
-            ignoreOp = createOp('ignore_issue', { contextCategory: category, fixKind: 'ignore' });
-            ignoreOp.targets_before = [snapshotSeg(resolvedSeg)];
-            ignoreOp.applied_at_utc = ignoreOp.started_at_utc;
-        } catch (err) {
-            console.warn('Ignore: edit history snapshot failed:', err);
-        }
-        if (!resolvedSeg.ignored_categories) resolvedSeg.ignored_categories = [];
-        resolvedSeg.ignored_categories.push(category);
-        delete (resolvedSeg as Segment & { _derived?: unknown })._derived;
-        markDirty(segChapter, resolvedSeg.index);
-        if (ignoreOp) {
-            try {
-                ignoreOp.targets_after = [snapshotSeg(resolvedSeg)];
-                finalizeOp(segChapter, ignoreOp);
-            } catch (err) {
-                console.warn('Ignore: edit history finalize failed:', err);
+            if (ignoreIssueOnSegment(resolvedSeg, category)) {
+                isAlreadyIgnored = true;
             }
+        } catch (err) {
+            console.warn('Ignore: dispatch failed:', err);
         }
-        isAlreadyIgnored = true;
     }
 </script>
 

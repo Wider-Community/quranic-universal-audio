@@ -6,16 +6,13 @@
         getSegByChapterIndex,
         segAllData,
     } from '../../stores/chapter';
-    import { commitRefEdit } from '../../utils/edit/reference';
+    import { autoFixMissingWord } from '../../utils/edit/auto-fix';
     import { segConfig } from '../../stores/config';
     import {
-        createOp,
         dirtyTick,
         getChapterOpsSnapshot,
         getOpLog,
         isSegmentDirty,
-        setPendingOp,
-        snapshotSeg,
         unmarkDirty,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
@@ -56,10 +53,11 @@
     // by UID — groups themselves are time-sorted, so relative position is
     // meaningful.
     //
-    // Memoized by length fingerprint over (chapterSegs, batches, ops, base
-    // UIDs) — see GenericIssueCard for the invariant rationale. Prevents a
-    // N-card accordion × M-gap-segment re-walk of every split op on every
-    // reactive tick.
+    // Memoized by split-op-only fingerprint over (chapterSegs, splitOps, base
+    // UIDs) — see GenericIssueCard for the invariant rationale. Counting only
+    // split ops (not all batches/ops) keeps trim/ref-edit ops as cache hits.
+    // Prevents a N-card accordion × M-gap-segment re-walk of every split op
+    // on every reactive tick.
     $: segStoreTick = $segAllData;
     let _segRangeMemoKey = '';
     let _segRangeMemoResult: Segment[] = [];
@@ -75,7 +73,16 @@
             const base = getSegByChapterIndex(item.chapter, idx);
             baseUids.push(base?.segment_uid ?? `_${idx}`);
         }
-        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${batches.length}|${ops.length}`;
+        let splitOpsCount = 0;
+        for (const b of batches) {
+            for (const op of b.operations) {
+                if (op.op_type === 'split_segment') splitOpsCount++;
+            }
+        }
+        for (const op of ops) {
+            if (op.op_type === 'split_segment') splitOpsCount++;
+        }
+        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${splitOpsCount}`;
         if (key !== _segRangeMemoKey) {
             _segRangeMemoKey = key;
             const out: Segment[] = [];
@@ -129,36 +136,33 @@
     }
 
     // ---- Auto-fix handler ----
-    async function handleAutoFix(): Promise<void> {
-        if (!item.auto_fix || autoFixApplied) return;
-        const autoFix = item.auto_fix;
+    let appliedAutoFix: SegValAutoFix | null = null;
+
+    async function handleAutoFix(autoFix: SegValAutoFix): Promise<void> {
+        if (autoFixApplied) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const segChapter = targetSeg.chapter ?? item.chapter;
         const wasDirty = isSegmentDirty(segChapter, targetSeg.index);
-        const pending = createOp('auto_fix_missing_word', {
-            contextCategory: 'missing_words',
-            fixKind: 'auto_fix',
-        });
-        pending.targets_before = [snapshotSeg(targetSeg)];
-        setPendingOp(pending);
-        autoFixOpId = pending.op_id;
+        const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
+        const dispatched = await autoFixMissingWord(targetSeg, newRef);
+        if (!dispatched) return;
+        autoFixOpId = dispatched.opId;
         autoFixOldState = {
-            ref: targetSeg.matched_ref || '',
-            text: targetSeg.matched_text || '',
-            display: targetSeg.display_text || '',
-            conf: targetSeg.confidence,
-            ignoredCats: targetSeg.ignored_categories ? [...targetSeg.ignored_categories] : null,
+            ref: dispatched.before.matched_ref,
+            text: dispatched.before.matched_text,
+            display: dispatched.before.display_text,
+            conf: dispatched.before.confidence,
+            ignoredCats: dispatched.before.ignored_categories,
             wasDirty,
         };
-        const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
-        await commitRefEdit(targetSeg, newRef);
+        appliedAutoFix = autoFix;
         autoFixApplied = true;
     }
 
     function handleAutoFixUndo(): void {
-        if (!item.auto_fix || !autoFixOldState) return;
-        const autoFix = item.auto_fix;
+        if (!appliedAutoFix || !autoFixOldState) return;
+        const autoFix = appliedAutoFix;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const { ref, text, display, conf, ignoredCats, wasDirty } = autoFixOldState;
@@ -178,6 +182,7 @@
         autoFixApplied = false;
         autoFixOldState = null;
         autoFixOpId = null;
+        appliedAutoFix = null;
     }
 </script>
 
@@ -217,8 +222,28 @@
                 <button
                     class="val-action-btn"
                     title="Extend segment ref to cover the missing word"
-                    on:click={handleAutoFix}
+                    on:click={() => handleAutoFix(item.auto_fix)}
                 >Auto Fill</button>
+            {:else}
+                <button class="val-action-btn" disabled>Fixed (save to apply)</button>
+                <button
+                    class="val-action-btn val-action-btn-danger"
+                    title="Revert auto-fill"
+                    on:click={handleAutoFixUndo}
+                >Undo</button>
+            {/if}
+        {:else if item.auto_fix_up && item.auto_fix_down}
+            {#if !autoFixApplied}
+                <button
+                    class="val-action-btn"
+                    title="Extend previous segment to cover the missing word"
+                    on:click={() => handleAutoFix(item.auto_fix_up)}
+                >Auto Fill Up</button>
+                <button
+                    class="val-action-btn"
+                    title="Extend next segment to cover the missing word"
+                    on:click={() => handleAutoFix(item.auto_fix_down)}
+                >Auto Fill Down</button>
             {:else}
                 <button class="val-action-btn" disabled>Fixed (save to apply)</button>
                 <button

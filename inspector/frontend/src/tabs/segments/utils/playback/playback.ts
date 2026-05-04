@@ -1,18 +1,28 @@
 /**
  * Audio playback, animation, highlight tracking, and play status.
+ *
+ * Boundary enforcement and rAF-driven playhead drawing live in the unified
+ * `AudioRange` primitive (`lib/playback/audio-range.ts`). This module is the
+ * caller — it constructs the range from the active segment + autoplay state,
+ * wires `onTick` / `onBoundary` to the local stores, and explicitly disposes
+ * the range on edit-mode entry and per-reciter resets.
+ *
+ * `startSegAnimation` / `stopSegAnimation` are UI-state-only helpers driven
+ * by the audio element's `play` / `pause` DOM events; they no longer own a
+ * rAF loop and never touch `_segRange`. Explicit teardown is `disposeSegRange()`.
  */
 
 import { get } from 'svelte/store';
 
-import { createAnimationLoop } from '../../../../lib/utils/animation';
-import { audioSrcMatches, safePlay } from '../../../../lib/utils/audio';
+import { AudioRange } from '../../../../lib/playback/audio-range';
+import { audioSrcMatches } from '../../../../lib/utils/audio';
 import {
     getSegByChapterIndex,
     segAllData,
     segCurrentIdx,
     selectedChapter,
 } from '../../stores/chapter';
-import { editingSegIndex, editMode } from '../../stores/edit';
+import { editMode } from '../../stores/edit';
 import { displayedSegments } from '../../stores/filters';
 import {
     activeAudioSource,
@@ -26,54 +36,19 @@ import {
     segAudioElement,
     setPlayingSegment,
 } from '../../stores/playback';
-import type { RafHandle } from '../../types/segments';
-import { AUTOPLAY_GAP_PAUSE_MS } from '../constants';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
-import { resolveAutoplayGapAdvance } from './autoplay-gap';
 import { nextDisplayedSeg, prefetchNextSegAudio } from './prefetch';
+import { buildSegPolicy, buildSegRangeSpec } from './range-spec';
 import { getRowEntriesFor } from './row-registry';
 
 // ---------------------------------------------------------------------------
 // Module-local state
 // ---------------------------------------------------------------------------
 
-let _segAnimId: RafHandle | null = null;
+let _segRange: AudioRange | null = null;
 let _segPrefetchCache: Record<string, Promise<unknown>> = {};
-/** Pending autoplay inter-segment gap timeout id, or null when no gap is
- *  scheduled. Tracked so that manual pause / manual play / edit-mode entry
- *  can cancel a pending resume (otherwise audio would resume mid-action). */
-let _autoplayGapTimeout: ReturnType<typeof setTimeout> | null = null;
 
-/** Suppress the next auto-clear triggered by our OWN `audioEl.pause()` inside
- *  the gap-advance branch. The 'pause' DOM event is async, and the pause
- *  listener (`el.addEventListener('pause', stopSegAnimation)` in
- *  SegmentsAudioControls.svelte) routes through `stopSegAnimation` which
- *  calls `_clearAutoplayGap`. Without this flag, our own gap-initiated pause
- *  would immediately cancel the resume timer we just set. */
-let _suppressNextGapClear = false;
-
-/** Cancel a pending autoplay gap resume. Safe to call when none is pending.
- *  Honors the one-shot suppress flag set by the gap-advance branch so the
- *  very pause event our branch triggered doesn't kill the pending resume. */
-function _clearAutoplayGap(): void {
-    if (_suppressNextGapClear) { _suppressNextGapClear = false; return; }
-    if (_autoplayGapTimeout !== null) {
-        clearTimeout(_autoplayGapTimeout);
-        _autoplayGapTimeout = null;
-    }
-}
-
-/** Force-cancel a pending autoplay gap resume regardless of suppress flags.
- *  Used when a fresh user-initiated action takes ownership of playback and any
- *  queued auto-resume would be stale. */
-function _cancelAutoplayGap(): void {
-    _suppressNextGapClear = false;
-    if (_autoplayGapTimeout !== null) {
-        clearTimeout(_autoplayGapTimeout);
-        _autoplayGapTimeout = null;
-    }
-}
 /** Last drawn (chapter, index) pair so the animation loop can erase the
  *  playhead on the previous row when playback advances. Carries the chapter
  *  so cross-chapter advance (accordion -> another chapter's row) erases from
@@ -94,12 +69,72 @@ export function resetHighlightRefs(): void {
     _prevPlaying = null;
 }
 
+/** Tear down the active AudioRange. Called explicitly on edit-mode entry,
+ *  per-reciter clear, and at the start of every fresh `playFromSegment`. */
+export function disposeSegRange(): void {
+    _segRange?.dispose();
+    _segRange = null;
+}
+
+// ---------------------------------------------------------------------------
+// AudioRange wiring
+// ---------------------------------------------------------------------------
+
+function _onRangeTick(): void {
+    drawActivePlayhead();
+    updateSegHighlight();
+}
+
+function _onRangeBoundary(ev: { reason: string }): void {
+    // Stop boundary: autoplay finished its run (or single-segment play ended).
+    // Flip the global UI flag so the autoplay toggle visually reflects state;
+    // the audio element's 'pause' event will fire stopSegAnimation in parallel.
+    if (ev.reason === 'stop') {
+        playEndMs.set(0);
+        // If the user toggled autoplay ON after this play started (continuousPlay
+        // flipped true while the old policy had already stopped at a boundary),
+        // advance to the next segment instead of just clearing the flag.
+        const curIdx = get(segCurrentIdx);
+        if (get(continuousPlay) && curIdx >= 0) {
+            const next = nextDisplayedSeg(get(displayedSegments), curIdx);
+            if (next && next.audio_url) {
+                playFromSegment(next.index, next.chapter);
+                return;
+            }
+        }
+        continuousPlay.set(false);
+        return;
+    }
+    // Advance boundary: the primitive will load the next range after the gap.
+    // Update the active-pair + segCurrentIdx + prefetch+peaks NOW (before the
+    // gap fires) so the UI reflects the upcoming segment immediately.
+    if (ev.reason === 'advance') {
+        const audioEl = get(segAudioElement);
+        const active = get(playingSegmentIndex);
+        const displayed = get(displayedSegments);
+        if (!audioEl || !active || !displayed) return;
+        const next = nextDisplayedSeg(displayed, active.index);
+        if (!next || next.index !== active.index + 1) return;
+        const nextChapter = next.chapter ?? active.chapter;
+        setPlayingSegment({ chapter: nextChapter, index: next.index });
+        segCurrentIdx.set(next.index);
+        playEndMs.set(next.time_end);
+        prefetchNextSegAudio(displayed, next.index, audioEl.src || '', _segPrefetchCache);
+        if (nextChapter) void _fetchPeaksForClick(next, nextChapter);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Public play API
+// ---------------------------------------------------------------------------
+
 export function playFromSegment(
     segIndex: number,
     chapterOverride?: number | null,
     seekToMs?: number | null,
+    opts?: { isAccordionPlay?: boolean },
 ): void {
-    _cancelAutoplayGap();
+    disposeSegRange();
     const allData = get(segAllData);
     if (!allData) return;
     const audioEl = get(segAudioElement);
@@ -116,23 +151,49 @@ export function playFromSegment(
     // must always carry a concrete chapter so SegmentRow's class:playing match
     // disambiguates same-index rows in other chapters.
     const resolvedChapter = chapter ?? seg.chapter ?? 0;
+    const isAccordionPlay = opts?.isAccordionPlay ?? false;
 
-    continuousPlay.set(get(autoPlayEnabled));
+    // Autoplay is intentionally main-list only: accordion plays always stop
+    // at time_end regardless of the global autoplay toggle.
+    continuousPlay.set(get(autoPlayEnabled) && !isAccordionPlay);
     playEndMs.set(seg.time_end);
 
-    const segAudioUrl = seg.audio_url || '';
-    if (segAudioUrl && !audioEl.src.endsWith(segAudioUrl)) {
-        audioEl.src = segAudioUrl;
-    }
+    const range = buildSegRangeSpec(seg, seekToMs);
+    const policy = buildSegPolicy({
+        getAutoPlayEnabled: () => get(autoPlayEnabled),
+        isAccordionPlay,
+        // Lazy: AudioRange reuses the same policy across N consecutive
+        // boundary fires during an autoplay run. Read the live active-pair
+        // index each time so the resolver sees the segment we just advanced
+        // INTO, not the one we originally started on. Falls back to segIndex
+        // for the very first boundary (before _onRangeBoundary has updated
+        // playingSegmentIndex) and for cross-chapter accordion plays where
+        // the active pair is set elsewhere.
+        getCurrentIndex: () => get(playingSegmentIndex)?.index ?? segIndex,
+        getDisplayed: () => get(displayedSegments),
+    });
 
-    audioEl.playbackRate = get(playbackSpeed);
-    audioEl.currentTime = (seekToMs != null ? seekToMs : seg.time_start) / 1000;
-    safePlay(audioEl);
+    _segRange = new AudioRange({
+        audioEl,
+        range,
+        policy,
+        onTick: _onRangeTick,
+        onBoundary: _onRangeBoundary,
+        playbackRate: () => get(playbackSpeed),
+    });
+    _segRange.start();
+
     segCurrentIdx.set(segIndex);
     // Authoritative (chapter, index) for the active play — every downstream
-    // reader (onSegTimeUpdate, drawActivePlayhead, SegmentRow's class:playing)
-    // consults this instead of inferring chapter from selectedChapter.
-    setPlayingSegment({ chapter: resolvedChapter, index: segIndex });
+    // reader (drawActivePlayhead, SegmentRow's class:playing) consults this
+    // instead of inferring chapter from selectedChapter. `origin` lets the
+    // main-list autoscroll (and any future follow-the-playhead UI) stay put
+    // when the play came from an accordion-mounted row.
+    setPlayingSegment({
+        chapter: resolvedChapter,
+        index: segIndex,
+        origin: isAccordionPlay ? 'accordion' : 'main',
+    });
 
     prefetchNextSegAudio(displayed, segIndex, audioEl.src || '', _segPrefetchCache);
 
@@ -140,13 +201,7 @@ export function playFromSegment(
     void _fetchPeaksForClick(seg, resolvedChapter);
 }
 
-/** Thin wrapper binding state to the extracted nextDisplayedSeg. */
-function _nextDisplayedSeg(afterIndex: number) {
-    return nextDisplayedSeg(get(displayedSegments), afterIndex);
-}
-
 export function onSegPlayClick(): void {
-    _cancelAutoplayGap();
     const audioEl = get(segAudioElement);
     if (!audioEl) return;
     const displayed = get(displayedSegments);
@@ -155,15 +210,16 @@ export function onSegPlayClick(): void {
         if (displayed && displayed.length > 0 && curIdx < 0) {
             const first = displayed[0];
             if (first) playFromSegment(first.index, first.chapter);
-        } else {
-            continuousPlay.set(get(autoPlayEnabled));
-            activeAudioSource.set('main');
-            if (curIdx >= 0 && displayed) {
-                const curSeg = displayed.find(s => s.index === curIdx);
-                if (curSeg) playEndMs.set(curSeg.time_end);
-            }
+        } else if (_segRange) {
+            // Resume an existing run — the range's pause-resilient frame loop
+            // ticks idly while audio was paused, no rebuild needed.
             audioEl.playbackRate = get(playbackSpeed);
-            safePlay(audioEl);
+            void audioEl.play();
+        } else if (curIdx >= 0 && displayed) {
+            // No range alive (e.g. user manually paused before any play) —
+            // rebuild from the segCurrentIdx pointer.
+            const curSeg = displayed.find(s => s.index === curIdx);
+            if (curSeg) playFromSegment(curSeg.index, curSeg.chapter);
         }
     } else {
         continuousPlay.set(false);
@@ -171,123 +227,26 @@ export function onSegPlayClick(): void {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Audio event handlers
+// ---------------------------------------------------------------------------
+
 export function onSegTimeUpdate(): void {
-    // During trim/split preview, the edit-preview rAF (animatePlayhead in
-    // play-range.ts) owns loop-boundary enforcement. Letting the main
-    // time-update logic run can spuriously pause the preview audio when
-    // it reads past the seg.time_end that `lastSegOnAudio` points at.
-    // Mirrors the editMode gate in startSegAnimation.
+    // Edit-preview's rAF owns boundary enforcement on the edit canvas.
     if (get(editMode)) return;
     const audioEl = get(segAudioElement);
     if (!audioEl) return;
     const timeMs = audioEl.currentTime * 1000;
     const currentSrc = audioEl.src || '';
     const displayed = get(displayedSegments);
-
-    // Authoritative (chapter, index) set at playFromSegment() time — covers
-    // cross-chapter accordion plays, where the playing segment is NOT in
-    // `displayed` (the main-list filtered slice of the currently-viewed
-    // chapter). When present, we trust it for highlight/segCurrentIdx and
-    // only fall back to searching `displayed` when absent (e.g. user
-    // manually dragged the toolbar audio element mid-seek).
     const active = get(playingSegmentIndex);
 
-    let lastSegOnAudio = null;
-    if (displayed && displayed.length > 0) {
-        for (let i = displayed.length - 1; i >= 0; i--) {
-            const s = displayed[i];
-            if (s && audioSrcMatches(s.audio_url, currentSrc)) {
-                lastSegOnAudio = s;
-                break;
-            }
-        }
-        if (!lastSegOnAudio) lastSegOnAudio = displayed[displayed.length - 1] ?? null;
-    }
-
-    if (lastSegOnAudio && timeMs >= lastSegOnAudio.time_end) {
-        const nextSeg = _nextDisplayedSeg(lastSegOnAudio.index);
-        const isConsecutive = nextSeg && nextSeg.index === lastSegOnAudio.index + 1;
-        if (get(continuousPlay) && isConsecutive && nextSeg && !audioSrcMatches(nextSeg.audio_url, currentSrc)) {
-            playFromSegment(nextSeg.index, nextSeg.chapter);
-            return;
-        }
-        // Only stop playback when the audio we're advancing PAST belongs to the
-        // same segment the active pair points to. On cross-chapter accordion
-        // plays `lastSegOnAudio` is synthesized from the main-list filtered
-        // slice and has no bearing on the actually-playing segment — stopping
-        // here would kill accordion playback. The check below cross-references
-        // with the active pair so we only pause when the "last on audio"
-        // actually matches what's playing.
-        if (!active || (lastSegOnAudio.chapter === active.chapter && lastSegOnAudio.index === active.index)) {
-            audioEl.pause();
-            stopSegAnimation();
-            continuousPlay.set(false);
-            playEndMs.set(0);
-            return;
-        }
-    }
-
-    const curPlayEnd = get(playEndMs);
-    const autoplayGapAdvance = get(continuousPlay)
-        ? resolveAutoplayGapAdvance({
-            active,
-            currentSrc,
-            displayedSegments: displayed,
-            playEndMs: curPlayEnd,
-            timeMs,
-        })
-        : null;
-    if (autoplayGapAdvance && _autoplayGapTimeout === null) {
-        const { justEnded, next } = autoplayGapAdvance;
-        const activeBeforePause = active ?? {
-            chapter: justEnded.chapter ?? 0,
-            index: justEnded.index,
-        };
-
-        // Flip the controls into their paused state immediately so the user sees
-        // the segment boundary before the timed resume starts.
-        stopSegAnimation();
-        _suppressNextGapClear = true;
-        audioEl.pause();
-
-        const nextStartMs = next.time_start;
-        const nextEndMs = next.time_end;
-        const nextChapter = next.chapter ?? activeBeforePause.chapter;
-        _autoplayGapTimeout = setTimeout(() => {
-            _autoplayGapTimeout = null;
-            if (!get(continuousPlay) || get(editMode)) return;
-            const aEl = get(segAudioElement);
-            if (!aEl || !aEl.paused) return;
-            const currentActive = get(playingSegmentIndex);
-            if (!currentActive
-                    || currentActive.index !== activeBeforePause.index
-                    || currentActive.chapter !== activeBeforePause.chapter) {
-                return;
-            }
-            setPlayingSegment({ chapter: nextChapter, index: next.index });
-            segCurrentIdx.set(next.index);
-            playEndMs.set(nextEndMs);
-            prefetchNextSegAudio(displayed, next.index, aEl.src || '', _segPrefetchCache);
-            if (nextChapter) void _fetchPeaksForClick(next, nextChapter);
-            aEl.currentTime = nextStartMs / 1000;
-            startSegAnimation();
-            void safePlay(aEl);
-        }, AUTOPLAY_GAP_PAUSE_MS);
-        return;
-    }
-
-    // A trailing timeupdate can still arrive after we've paused and scheduled
-    // the resume. Ignore it so the generic end-of-range branch below does not
-    // disable continuousPlay before the timeout fires.
-    if (_autoplayGapTimeout !== null) return;
-
+    // Cross-segment-within-same-audio detection. AudioRange owns per-segment
+    // boundary fires, but a manual seek (user dragging the audio scrubber
+    // across multiple segment windows) bypasses the rAF — this branch keeps
+    // segCurrentIdx and the active pair in sync with the audio's actual
+    // position. Also runs as a safety net if rAF is throttled.
     const prevIdx = get(segCurrentIdx);
-    // Fast path: the active pair (written by playFromSegment) is the authority
-    // for the currently-playing segment. Use it directly so cross-chapter
-    // accordion plays keep segCurrentIdx correct even though the playing
-    // segment isn't in `displayed`. The inner search below still runs so that
-    // continuous-play auto-advance within the same chapter detects when the
-    // audio has crossed into the NEXT segment and updates the pair/index.
     let nextCurrentIdx = -1;
     let nextCurrentChapter = active?.chapter ?? null;
     if (displayed) {
@@ -302,12 +261,8 @@ export function onSegTimeUpdate(): void {
     }
     // Fallback: when the displayed-slice search missed (accordion playback
     // targeting a chapter other than the displayed one), hold the active pair
-    // instead of clobbering it with -1. Only clear when there's genuinely no
-    // authoritative source AND no match in displayed.
+    // instead of clobbering it with -1.
     if (nextCurrentIdx === -1 && active) {
-        // Active pair is known — check if audio is still within that segment's
-        // window; if so, keep it. If audio has advanced past it, fall through
-        // to the end-of-range logic below.
         const activeSeg = getSegByChapterIndex(active.chapter, active.index);
         if (activeSeg && audioSrcMatches(activeSeg.audio_url, currentSrc)
                 && timeMs >= activeSeg.time_start && timeMs < activeSeg.time_end) {
@@ -317,108 +272,65 @@ export function onSegTimeUpdate(): void {
     }
     segCurrentIdx.set(nextCurrentIdx);
 
-    if (nextCurrentIdx === -1 && curPlayEnd > 0 && timeMs >= curPlayEnd) {
-        audioEl.pause();
-        stopSegAnimation();
-        continuousPlay.set(false);
-        playEndMs.set(0);
-        return;
-    }
-
-    if (nextCurrentIdx !== prevIdx) {
-        if (!get(continuousPlay) && prevIdx >= 0 && nextCurrentIdx >= 0) {
-            audioEl.pause();
-            stopSegAnimation();
-            playEndMs.set(0);
-            return;
-        }
-        if (nextCurrentIdx >= 0 && displayed) {
-            const curSeg = displayed.find(s => s.index === nextCurrentIdx);
-            if (curSeg) playEndMs.set(curSeg.time_end);
-        }
-        // Update the authoritative pair so drawActivePlayhead / class:playing
-        // follow the auto-advance (continuous play within the displayed slice).
-        if (nextCurrentIdx >= 0 && nextCurrentChapter != null) {
-            setPlayingSegment({ chapter: nextCurrentChapter, index: nextCurrentIdx });
-        }
-        if (nextCurrentIdx >= 0) {
+    if (nextCurrentIdx !== prevIdx && nextCurrentIdx >= 0 && nextCurrentChapter != null) {
+        // Auto-advanced into a new segment via shared-audio playback (no
+        // boundary fire — the segments share an audio file). Update the
+        // active pair so the playhead and class:playing follow.
+        setPlayingSegment({ chapter: nextCurrentChapter, index: nextCurrentIdx });
+        if (displayed) {
             prefetchNextSegAudio(displayed, nextCurrentIdx, audioEl.src || '', _segPrefetchCache);
-            // Trigger on-demand peaks fetch for the segment we just entered during
-            // continuous play (auto-advance on same audio file doesn't go through
-            // playFromSegment, so peaks would otherwise never load here).
-            const curSeg = displayed?.find(s => s.index === nextCurrentIdx);
+            const curSeg = displayed.find(s => s.index === nextCurrentIdx);
             if (curSeg) {
                 const chapterForPeaks = curSeg.chapter ?? (get(selectedChapter) ? parseInt(get(selectedChapter)) : 0);
                 if (chapterForPeaks) void _fetchPeaksForClick(curSeg, chapterForPeaks);
+                playEndMs.set(curSeg.time_end);
             }
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Animation loop
-// ---------------------------------------------------------------------------
-// Each frame calls updateSegHighlight + drawActivePlayhead, and returns
-// `false` to self-stop when continuous-play has ended. `_segAnimId` is
-// tracked so external checks (truthy means "running") behave identically.
-const _segAnimLoop = createAnimationLoop(() => {
-    updateSegHighlight();
-    drawActivePlayhead();
-    const audioEl = get(segAudioElement);
-    const curPlayEnd = get(playEndMs);
-    if (!get(continuousPlay) && curPlayEnd > 0 && audioEl && !audioEl.paused
-            && audioEl.currentTime * 1000 >= curPlayEnd) {
-        audioEl.pause();
-        // stopSegAnimation will set _segAnimId=null and update UI; return false
-        // so the loop itself cancels cleanly.
-        stopSegAnimation();
-        playEndMs.set(0);
-        return false;
-    }
-    return;
-});
-
 export function startSegAnimation(): void {
-    // Edit-mode preview owns all canvas writes on the edit row; if we let the
-    // main loop run in parallel, its `drawActivePlayhead` pair-change erase
-    // branch can clobber the trim handles by drawing plain peaks onto the
-    // edit canvas when onSegTimeUpdate transiently flips `playingSegmentIndex`
-    // during the seek-to-trim-start.
+    // UI state only — AudioRange owns the rAF. The editMode gate keeps the
+    // segment-row playhead off the edit canvas while the preview rAF runs.
     if (get(editMode)) return;
     playButtonLabel.set('Pause');
     activeAudioSource.set('main');
     isMainAudioPlaying.set(true);
-    _segAnimLoop.start();
-    _segAnimId = 1;
 }
 
 export function stopSegAnimation(): void {
+    // UI state only — does NOT dispose the AudioRange. The 'pause' DOM event
+    // fires this both for user pauses (range stays alive, ready to resume)
+    // and the autoplay-gap pause (range scheduled the resume internally).
+    // Explicit teardown is `disposeSegRange()`.
     playButtonLabel.set('Play');
     if (get(activeAudioSource) === 'main') activeAudioSource.set(null);
     isMainAudioPlaying.set(false);
-    _segAnimLoop.stop();
-    _segAnimId = null;
-    // Any pending autoplay-gap resume would fire after the user has already
-    // paused/stopped. Cancel here so the timer doesn't silently restart audio.
-    _clearAutoplayGap();
 }
 
 export function onSegAudioEnded(): void {
+    // Audio element fired 'ended' — the underlying file finished. AudioRange's
+    // boundary fires before this in the normal autoplay flow; we only get
+    // here when the file ended without a boundary advance taking over.
     const curIdx = get(segCurrentIdx);
     if (get(continuousPlay) && curIdx >= 0) {
-        const next = _nextDisplayedSeg(curIdx);
+        const next = nextDisplayedSeg(get(displayedSegments), curIdx);
         if (next && next.audio_url) {
             playFromSegment(next.index, next.chapter);
             return;
         }
     }
     continuousPlay.set(false);
-    stopSegAnimation();
+    disposeSegRange();
     // Audio actually finished — clear the active-pair highlight. This is the
     // genuine "nothing is playing" signal (distinct from cross-chapter accordion
     // plays, which must NOT clear the pair on a displayed-slice miss).
     setPlayingSegment(null);
 }
+
+// ---------------------------------------------------------------------------
+// Highlight + playhead helpers
+// ---------------------------------------------------------------------------
 
 export function updateSegHighlight(): void {
     // setPlayingSegment() is identity-guarded — a same-value rAF tick is a
@@ -428,17 +340,8 @@ export function updateSegHighlight(): void {
     // originate outside the time-update path (e.g. manual seek handler).
     const curIdx = get(segCurrentIdx);
     const active = get(playingSegmentIndex);
-    if (curIdx < 0) {
-        // Don't null the active pair on a momentary displayed-slice miss —
-        // only explicit stop paths (stopSegAnimation on end, clearPerReciter-
-        // State) clear it.
-        return;
-    }
+    if (curIdx < 0) return;
     if (!active || active.index !== curIdx) {
-        // segCurrentIdx moved forward via path other than onSegTimeUpdate.
-        // Resolve chapter from whichever source is closest: the existing
-        // active pair first (keeps cross-chapter plays intact), then the
-        // playing segment in the displayed slice.
         const chapter = active?.chapter
             ?? (get(displayedSegments).find((s) => s.index === curIdx)?.chapter)
             ?? (get(selectedChapter) ? parseInt(get(selectedChapter)) : null);
@@ -454,7 +357,7 @@ export function updateSegHighlight(): void {
  * Because split/merge preserve UIDs on the firstHalf / kept side, the playing
  * segment usually still exists under the same UID with a new index — we look
  * it up and update the active pair. If the playing seg was removed (delete,
- * or merge consumed it), we clear the pair and stop the animation so the UI
+ * or merge consumed it), we clear the pair and dispose the range so the UI
  * doesn't keep drawing a playhead on a stale (chapter, index) pointer.
  */
 export function reconcilePlayingAfterMutation(
@@ -472,7 +375,7 @@ export function reconcilePlayingAfterMutation(
         setPlayingSegment({ chapter, index: found.index });
     } else {
         setPlayingSegment(null);
-        stopSegAnimation();
+        disposeSegRange();
     }
 }
 
@@ -481,11 +384,7 @@ export function drawActivePlayhead(): void {
     // the preview rAF owns the edit canvas, and the erase branch iterates
     // `getRowEntriesFor(_prevPlaying)` — which includes the edit canvas when
     // adjusting the previously-active segment — and clobbers trim handles
-    // with plain peaks via `drawWaveformFromPeaksForSeg`. The old guard was
-    // checked AFTER the erase branch and only matched on index equality, so
-    // a transient `setPlayingSegment` flip in `onSegTimeUpdate` let the
-    // erase fire once. Gating the whole function on editMode removes the
-    // race entirely.
+    // with plain peaks via `drawWaveformFromPeaksForSeg`.
     if (get(editMode)) return;
     const allData = get(segAllData);
     const active = get(playingSegmentIndex);

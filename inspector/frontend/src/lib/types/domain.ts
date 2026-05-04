@@ -76,6 +76,17 @@ export interface SegmentsChapterSummary {
     missing_verses: VerseRef[];
 }
 
+/** Forward-change patch envelope produced by `applyCommand` and consumed by
+ *  inverse-patch logic on both sides of the wire. Structural mirror of the
+ *  Python `SegmentPatch` dataclass in `inspector/domain/command.py`. */
+export interface EditOpPatch {
+    before: Array<Record<string, unknown>>;
+    after: Array<Record<string, unknown>>;
+    removedIds: string[];
+    insertedIds: string[];
+    affectedChapterIds: number[];
+}
+
 /** Edit operation record (client builds via createOp; server echoes back in history). */
 export interface EditOp {
     op_id: string;
@@ -89,6 +100,10 @@ export interface EditOp {
     targets_after: Array<Record<string, unknown>>;
     /** Set on merge ops — `'prev'` or `'next'`. */
     merge_direction?: 'prev' | 'next';
+    /** Forward-change patch attached at finalize time. Used by the pending-discard
+     *  path (which inverts it client-side) and by the save payload (server records
+     *  it on the history entry for batch undo). */
+    patch?: EditOpPatch;
 }
 
 /** Validation summary snapshot — server records before/after each save. */

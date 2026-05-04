@@ -24,14 +24,28 @@ import {
     selectedReciter,
     selectedVerse,
 } from '../../stores/chapter';
-import { activeFilters, computeSilenceAfter } from '../../stores/filters';
+import { activeFilters } from '../../stores/filters';
 import { savedFilterView } from '../../stores/navigation';
 import { setStats } from '../../stores/stats';
 import { setValidation } from '../../stores/validation';
 import { renderEditHistoryPanel } from '../history/render';
 import { _fetchCacheStatus, _rewriteAudioUrls } from '../playback/audio-cache-ui';
+import { indexHistoryPeaksRecords } from '../waveform/utils';
 import { clearPerReciterState } from './clear-per-reciter-state';
 import { _isCurrentReciterBySurah } from './reciter';
+
+/** Wire shape of GET /api/seg/history-peaks/<reciter>. Loose-typed because
+ *  the route is additive and we tolerate missing fields per record. */
+interface HistoryPeaksResponse {
+    records: Array<{
+        op_id?: string;
+        url?: string;
+        start_ms?: number;
+        end_ms?: number;
+        peaks?: unknown;
+        duration_ms?: number;
+    }>;
+}
 
 /**
  * Re-fetch data for the currently selected reciter. Used for the stale-data
@@ -48,13 +62,14 @@ export async function reloadCurrentReciter(): Promise<void> {
     savedFilterView.set(null);
     clearPerReciterState();
 
-    // Fetch chapters + validate + stats + all + history in parallel.
-    const [chResult, valResult, statsResult, allResult, histResult] = await Promise.allSettled([
+    // Fetch chapters + validate + stats + all + history + history-peaks in parallel.
+    const [chResult, valResult, statsResult, allResult, histResult, histPeaksResult] = await Promise.allSettled([
         fetchJson<SegChaptersResponse>(`/api/seg/chapters/${reciter}`),
         fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`),
         fetchJson<SegStatsResponse>(`/api/seg/stats/${reciter}`),
         fetchJson<SegAllResponse>(`/api/seg/all/${reciter}`),
         fetchJsonOrNull<SegEditHistoryResponse>(`/api/seg/edit-history/${reciter}`),
+        fetchJsonOrNull<HistoryPeaksResponse>(`/api/seg/history-peaks/${reciter}`),
     ]);
 
     if (get(selectedReciter) !== reciter) return;
@@ -73,16 +88,23 @@ export async function reloadCurrentReciter(): Promise<void> {
     }
 
     if (allResult.status === 'fulfilled') {
-        segAllData.set(allResult.value);
-        _rewriteAudioUrls();
-        computeSilenceAfter();
-        preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
-        if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
+        if ('error' in allResult.value) {
+            console.error('Error loading all segments:', (allResult.value as any).error);
+        } else {
+            segAllData.set(allResult.value);
+            _rewriteAudioUrls();
+            preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
+            if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
+        }
     } else {
         console.error('Error loading all segments:', allResult.reason);
     }
 
     if (histResult.status === 'fulfilled' && histResult.value) {
         renderEditHistoryPanel(histResult.value);
+    }
+
+    if (histPeaksResult.status === 'fulfilled' && histPeaksResult.value) {
+        indexHistoryPeaksRecords(histPeaksResult.value.records);
     }
 }

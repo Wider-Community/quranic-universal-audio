@@ -69,6 +69,7 @@
     import { beginRefEdit } from '../../utils/edit/reference';
     import { jumpToSegment } from '../../utils/data/navigation-actions';
     import { playFromSegment } from '../../utils/playback/playback';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
     import { SEG_ROW_CANVAS_WIDTH, SEG_ROW_CANVAS_HEIGHT } from '../../utils/constants';
     import type { Segment } from '../../../../lib/types/domain';
@@ -123,6 +124,23 @@
      * auto-ignore the issue for the original seg.
      */
     export let validationCategory: string | null = null;
+    /**
+     * Optional preview-playback context. When supplied AND `readOnly`,
+     * the play button becomes a wired toggle that drives the panel-owned
+     * AudioRange (see `utils/playback/preview.ts`). Without this, readOnly
+     * rows render an inert play button — that's the historical default for
+     * accordion validation rows that share uids with main-list twins. Only
+     * SavePreview and HistoryPanel pass a context.
+     */
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
+    /**
+     * History op_id this row belongs to. Set only by History views
+     * (HistoryOp / SplitChainRow). When present and `previewCtx` is wired,
+     * peaks computed for this row on play are persisted server-side under
+     * this op_id — so future sessions render the same row without
+     * re-computing. Live-edit and SavePreview rows leave this null.
+     */
+    export let opId: string | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -217,10 +235,17 @@
     // panel can be mounted with chapter=null (all chapters), so same-index
     // rows in other chapters must not collide.
     $: rowChapter = seg.chapter ?? fallbackChapter;
-    $: isPlaying = !readOnly
-        && !!$playingSegmentIndex
-        && $playingSegmentIndex.chapter === rowChapter
-        && $playingSegmentIndex.index === seg.index;
+    /** Stable identity for this preview snapshot row. Snapshots can share
+     *  segment_uid with the live row but their (time_start, time_end) are
+     *  immutable in this panel, so they make a unique key per ctx. */
+    $: rowPreviewUid = `${rowChapter}:${seg.index}:${seg.time_start}:${seg.time_end}`;
+    $: previewActive = readOnly && !!previewCtx && _previewActiveUid === rowPreviewUid;
+    $: previewPlaying = readOnly && !!previewCtx && _previewPlayingUid === rowPreviewUid;
+    $: isPlaying = previewActive
+        || (!readOnly
+            && !!$playingSegmentIndex
+            && $playingSegmentIndex.chapter === rowChapter
+            && $playingSegmentIndex.index === seg.index);
     // flashSegmentIndices is keyed by "chapter:index" — both the main-list
     // and accordion twin for the correctly-matched pair still light up, but
     // a same-index row in a different chapter (validation panel with
@@ -228,7 +253,9 @@
     $: rowFlashKey = chapterIndexKey(rowChapter, seg.index);
     $: isFlashing = !readOnly && $flashSegmentIndices.has(rowFlashKey);
     $: highlighted = isPlaying || isFlashing;
-    $: playGlyph = isPlaying && $isMainAudioPlaying ? '\u25A0' : '\u25B6';
+    $: playGlyph = (previewPlaying || (isPlaying && $isMainAudioPlaying))
+        ? '\u25A0'
+        : '\u25B6';
 
     // Scroll into view when jump target matches, then clear the store so the
     // next write re-fires reliably. Only the main-list instance reacts —
@@ -254,6 +281,34 @@
     // directly. No reactive store indirection, no subscriber race. The
     // accordion path routes via `mountId=null` which the secondHalf's
     // main-list row claims through the `instanceRole === 'main'` fallback.
+
+    // ---------------------------------------------------------------------
+    // Preview-mode subscription (SavePreview / HistoryPanel only)
+    // ---------------------------------------------------------------------
+    // `previewCtx.activeSeg` / `playingSeg` are svelte stores, but we can't
+    // use the `$` prefix on a prop-typed store directly — manual subscribe
+    // with a teardown. Re-subscribes if the prop swaps mid-lifetime
+    // (defensive; in practice the parent panel mounts the ctx once).
+    let _previewActiveUid: string | null = null;
+    let _previewPlayingUid: string | null = null;
+    let _unsubPreviewActive: (() => void) | null = null;
+    let _unsubPreviewPlaying: (() => void) | null = null;
+    $: {
+        _unsubPreviewActive?.();
+        _unsubPreviewPlaying?.();
+        _unsubPreviewActive = null;
+        _unsubPreviewPlaying = null;
+        _previewActiveUid = null;
+        _previewPlayingUid = null;
+        if (previewCtx) {
+            _unsubPreviewActive = previewCtx.activeSeg.subscribe((v) => {
+                _previewActiveUid = v?.uid ?? null;
+            });
+            _unsubPreviewPlaying = previewCtx.playingSeg.subscribe((v) => {
+                _previewPlayingUid = v?.uid ?? null;
+            });
+        }
+    }
 
     // ---------------------------------------------------------------------
     // Waveform observer registration
@@ -284,6 +339,34 @@
             registerRow(rowChapter, seg.index, rowEl, canvasEl, _mountId, instanceRole);
             _prevRegChapter = rowChapter;
             _prevRegIdx = seg.index;
+        }
+        // Preview-mode registration: snapshot rows in SavePreview / HistoryPanel
+        // register with the panel's PreviewPlaybackContext so the play button
+        // can drive playback and the rAF onTick can target this row's canvas.
+        if (readOnly && previewCtx && canvasEl) {
+            const audioUrl = seg.audio_url
+                ?? get(segAllData)?.audio_by_chapter?.[String(rowChapter)]
+                ?? '';
+            if (audioUrl) {
+                // Split-leaf history rows render the parent's union peak
+                // (via splitHL.wfStart/wfEnd substitution in the observer),
+                // but audio playback only spans the leaf slice. Pass both
+                // ranges so the preview ctx can drive the playhead against
+                // the wider visual range while AudioRange stops at the
+                // narrower playback range.
+                const wfStartMs = splitHL?.wfStart ?? seg.time_start;
+                const wfEndMs = splitHL?.wfEnd ?? seg.time_end;
+                previewCtx.registerRow(
+                    rowPreviewUid,
+                    canvasEl,
+                    audioUrl,
+                    seg.time_start,
+                    seg.time_end,
+                    opId ?? undefined,
+                    wfStartMs,
+                    wfEndMs,
+                );
+            }
         }
         if (!canvasEl) return;
         const observer = _ensureWaveformObserver();
@@ -319,11 +402,22 @@
         if (!readOnly && _prevRegChapter !== null && _prevRegIdx !== null) {
             deregisterRow(_prevRegChapter, _prevRegIdx, _mountId);
         }
+        if (readOnly && previewCtx) {
+            previewCtx.deregisterRow(rowPreviewUid);
+        }
+        _unsubPreviewActive?.();
+        _unsubPreviewPlaying?.();
     });
 
     // ---------------------------------------------------------------------
     // Per-button handlers (replace delegated click router for #seg-list rows)
     // ---------------------------------------------------------------------
+
+    function onPreviewPlayClick(e: MouseEvent): void {
+        e.stopPropagation();
+        if (!previewCtx) return;
+        previewCtx.toggle(rowPreviewUid);
+    }
 
     function onPlayClick(e: MouseEvent): void {
         e.stopPropagation();
@@ -342,7 +436,14 @@
         if (isSelfPlaying) {
             audioEl.pause();
         } else {
-            playFromSegment(idx, chapter);
+            // Accordion-mounted rows are self-contained playback surfaces.
+            // Marking the play as accordion-origin keeps the main list from
+            // autoscrolling when the same chapter is open, and keeps the
+            // policy gate from advancing into the main display's chapter
+            // when global autoplay is on.
+            playFromSegment(idx, chapter, undefined, {
+                isAccordionPlay: instanceRole !== 'main',
+            });
         }
     }
 
@@ -401,7 +502,9 @@
         if (get(editMode) || readOnly) return;
         const t = e.target as Element;
         if (t.closest('.seg-row-controls') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
-        playFromSegment(seg.index, seg.chapter ?? 0);
+        playFromSegment(seg.index, seg.chapter ?? 0, undefined, {
+            isAccordionPlay: instanceRole !== 'main',
+        });
     }
 
     function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
@@ -422,7 +525,9 @@
         if (isSelfPlaying) {
             audioEl.currentTime = timeMs / 1000;
         } else {
-            playFromSegment(seg.index, chapter, timeMs);
+            playFromSegment(seg.index, chapter, timeMs, {
+                isAccordionPlay: instanceRole !== 'main',
+            });
         }
     }
 
@@ -460,12 +565,22 @@
     data-hist-time-start={readOnly ? String(seg.time_start) : undefined}
     data-hist-time-end={readOnly ? String(seg.time_end) : undefined}
     data-hist-audio-url={readOnly && seg.audio_url ? seg.audio_url : undefined}
+    data-hist-op-id={opId ?? undefined}
     bind:this={rowEl}
     on:click={onRowClick}
 >
     <div class="seg-left">
         {#if readOnly && showPlayBtn}
-            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
+            {#if previewCtx}
+                <button
+                    class="btn btn-sm seg-card-play-btn"
+                    class:playing={previewActive}
+                    title="Play segment audio"
+                    on:click={onPreviewPlayClick}
+                >{playGlyph}</button>
+            {:else}
+                <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
+            {/if}
         {/if}
         <canvas
             bind:this={canvasEl}

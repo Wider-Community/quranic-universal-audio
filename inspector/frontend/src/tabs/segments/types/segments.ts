@@ -1,5 +1,5 @@
-import type { SegAllResponse, SegDataResponse } from '../../../lib/types/api';
-import type { EditOp, HistoryBatch, PeakBucket, Segment } from '../../../lib/types/domain';
+import type { SegDataResponse } from '../../../lib/types/api';
+import type { EditOp, HistoryBatch, PeakBucket } from '../../../lib/types/domain';
 
 // ---------------------------------------------------------------------------
 // Split chain + history types
@@ -73,12 +73,6 @@ export interface SegSavedFilterView {
 // Data state types
 // ---------------------------------------------------------------------------
 
-/** Augmented `SegAllResponse` — client adds lazy chapter indices. */
-export interface SegAllDataState extends SegAllResponse {
-    _byChapter?: Record<string, Segment[]> | null;
-    _byChapterIndex?: Map<string, Segment> | null;
-}
-
 /** Augmented `SegDataResponse` — client may overwrite audio_url with a proxy URL. */
 export type SegDataState = SegDataResponse;
 
@@ -117,15 +111,6 @@ export interface SegPeaksRangeEntry {
     endMs: number;
     peaks: PeakBucket[];
     durationMs: number;
-}
-
-/** Queue item for the observer-driven segment-peaks batch fetcher. Field
- *  names match the wire format (`POST /api/seg/segment-peaks/`) so the
- *  queue can be sent straight through as `segments:[]`. */
-export interface ObserverPeaksQueueItem {
-    url: string;
-    start_ms: number;
-    end_ms: number;
 }
 
 // ---------------------------------------------------------------------------

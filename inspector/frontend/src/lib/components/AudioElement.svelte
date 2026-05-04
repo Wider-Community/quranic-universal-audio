@@ -14,8 +14,15 @@
     export let src: string | undefined = undefined;
     /** Preload hint. */
     export let preload: 'none' | 'metadata' | 'auto' = 'metadata';
-    /** CORS attribute value. null removes the attribute. */
-    export let crossorigin: string | null = null;
+    /** CORS attribute value. null removes the attribute.
+     *
+     *  Defaults to 'anonymous' so the resource is fetched in CORS mode and
+     *  Web Audio's `MediaElementAudioSourceNode` can read its samples (the
+     *  GainNode kill-switch in `lib/playback/audio-graph.ts` would otherwise
+     *  emit silent zeros, per spec). The Flask audio route at
+     *  `inspector/app.py::serve_audio` sends `Access-Control-Allow-Origin: *`
+     *  to satisfy the CORS check even on same-origin loads. */
+    export let crossorigin: string | null = 'anonymous';
     /** Optional DOM id forwarded to the underlying <audio> element. */
     export let id: string | undefined = undefined;
     /** Show native browser controls (play/pause/scrubber). */
