@@ -33,7 +33,7 @@ export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
     }
 
     const centerY = height / 2;
-    const scale = (height / 2) * 0.9;
+    const scale = data.scale ?? (height / 2) * 0.9;
 
     // Split strokes only the top (max) outline for a thinner visual.
     ctx.strokeStyle = WAVEFORM_STROKE_COLOR;

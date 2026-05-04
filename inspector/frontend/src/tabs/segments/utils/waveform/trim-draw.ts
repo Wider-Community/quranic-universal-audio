@@ -32,7 +32,7 @@ export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
     const width = canvas.width;
     const height = canvas.height;
     const centerY = height / 2;
-    const scale = (height / 2) * 0.9;
+    const scale = data.scale ?? (height / 2) * 0.9;
 
     // Trim strokes the full max+min outline (top and bottom) for a closed look.
     ctx.beginPath();

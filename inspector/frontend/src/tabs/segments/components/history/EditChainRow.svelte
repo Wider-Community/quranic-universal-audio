@@ -61,10 +61,13 @@
         return { wfStart, wfEnd, expanded };
     })();
 
-    // Root card gets splitHL only when the range is expanded (so the
-    // original segment's boundaries are highlighted inside the wider wf).
+    $: chainOpType = chain.ops[0]?.op.op_type;
+    $: isSplit = chainOpType === 'split_segment';
+    $: isMerge = chainOpType === 'merge_segments';
+
+    // Root card gets splitHL only when the range is expanded (and only for splits)
     $: rootSplitHL = (() => {
-        if (!rootSnap || !wfRange.expanded) return null;
+        if (!isSplit || !rootSnap || !wfRange.expanded) return null;
         const hl: SplitHighlight = {
             wfStart: wfRange.wfStart,
             wfEnd: wfRange.wfEnd,
@@ -74,9 +77,9 @@
         return hl;
     })();
 
-    // Each leaf card gets a splitHL pointing to its own range within wfRange.
+    // Each leaf card gets a splitHL pointing to its own range within wfRange (only for splits)
     function leafSplitHL(leaf: HistorySnapshot): SplitHighlight | null {
-        if (!rootSnap) return null;
+        if (!isSplit || !rootSnap) return null;
         return {
             wfStart: wfRange.wfStart,
             wfEnd: wfRange.wfEnd,
@@ -84,6 +87,25 @@
             hlEnd: leaf.time_end,
         };
     }
+
+    // Merge highlight for the result card
+    $: leafMergeHL = (() => {
+        if (!isMerge) return null;
+        const mergeOp = chain.ops.find(co => co.op.op_type === 'merge_segments')?.op;
+        if (!mergeOp || !mergeOp.targets_before || mergeOp.targets_before.length < 2) return null;
+        const b = mergeOp.targets_before as HistorySnapshot[];
+        const hlSnap = mergeOp.merge_direction === 'prev' ? b[1]! : b[0]!;
+        const mergePoint = mergeOp.merge_direction === 'prev' ? hlSnap.time_start : hlSnap.time_end;
+        return { mergePoint };
+    })();
+
+    // Trim highlight for chains that include an adjust operation
+    $: leafTrimHL = (() => {
+        const trimOp = chain.ops.find(co => co.op.op_type === 'boundary_adjustment' || co.op.op_type === 'trim_segment')?.op;
+        if (!trimOp || !trimOp.targets_before || trimOp.targets_before.length === 0) return null;
+        const b = trimOp.targets_before[0] as HistorySnapshot;
+        return { color: 'green', otherStart: b.time_start, otherEnd: b.time_end } as TrimHighlight;
+    })();
 
     // Leaf cards need a wider seg range when expanded so the canvas
     // renders against the chain's union. The IntersectionObserver callback
@@ -209,6 +231,8 @@
                                 mode="history"
                                 instanceRole="history"
                                 splitHL={leafSplitHL(leaf)}
+                                mergeHL={leafMergeHL}
+                                trimHL={leafTrimHL}
                                 opId={chain.ops[0]?.op.op_id ?? null}
                                 {previewCtx}
                             />

@@ -18,6 +18,7 @@ import {
     setSortMode,
 } from '../../stores/history';
 import { reloadCurrentReciter } from '../data/reciter-actions';
+import { refreshValidation } from '../validation/refresh';
 
 // ---------------------------------------------------------------------------
 // showHistoryView
@@ -36,6 +37,7 @@ export function showHistoryView(): void {
 export function hideHistoryView(): void {
     clearFilters();
     setHistoryVisible(false);
+    void refreshValidation();
     if (get(historyDataStale)) {
         historyDataStale.set(false);
         void reloadCurrentReciter();

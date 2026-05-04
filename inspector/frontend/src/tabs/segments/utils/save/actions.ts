@@ -30,6 +30,7 @@ import {
 import { reloadCurrentReciter } from '../data/reciter-actions';
 import { executeSave } from './execute';
 import { buildSavePreviewData } from './preview';
+import { refreshValidation } from '../validation/refresh';
 
 // Re-export pure utils so callers that used to import from segments/save
 // keep one import site.
@@ -83,6 +84,7 @@ export function showSavePreview(): void {
 export function hideSavePreview(restoreScroll = true): void {
     hidePreview();
     clearSavePreviewData();
+    void refreshValidation();
 
     const snap = storeGet(savedChains);
     if (snap) {

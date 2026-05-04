@@ -128,7 +128,7 @@ _REGISTRY: dict[str, IssueDefinition] = {
         persists_ignore=True,
         scope="per_segment",
         display_title="Detected Repetitions",
-        description="",
+        description="Detected part of the text repeated in the audio. Split if so, ignore if a false flag.",
     ),
     "audio_bleeding": IssueDefinition(
         kind="audio_bleeding",
@@ -164,7 +164,7 @@ _REGISTRY: dict[str, IssueDefinition] = {
         persists_ignore=True,
         scope="per_segment",
         display_title="Cross-verse",
-        description="",
+        description="Split cross verses at the verse boundary. If the reciter recites continuously, still split at the most sensible boundary. Auto split is for speeding things up.",
     ),
     "qalqala": IssueDefinition(
         kind="qalqala",
@@ -176,7 +176,7 @@ _REGISTRY: dict[str, IssueDefinition] = {
         persists_ignore=True,
         scope="per_segment",
         display_title="Qalqala",
-        description="",
+        description="Batch pad segments to ensure Qalqala sound is present.",
     ),
     "muqattaat": IssueDefinition(
         kind="muqattaat",

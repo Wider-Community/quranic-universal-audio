@@ -28,16 +28,6 @@
 
     // ---- State ----
     let showContext = false;
-    let autoFixApplied = false;
-    let autoFixOpId: string | null = null;
-    let autoFixOldState: {
-        ref: string;
-        text: string;
-        display: string;
-        conf: number;
-        ignoredCats: string[] | null;
-        wasDirty: boolean;
-    } | null = null;
 
     $: ctxMode = $segConfig.accordionContext?.['missing_words'] ?? 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
@@ -136,57 +126,16 @@
     }
 
     // ---- Auto-fix handler ----
-    let appliedAutoFix: SegValAutoFix | null = null;
-
     async function handleAutoFix(autoFix: SegValAutoFix): Promise<void> {
-        if (autoFixApplied) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
-        const segChapter = targetSeg.chapter ?? item.chapter;
-        const wasDirty = isSegmentDirty(segChapter, targetSeg.index);
         const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
-        const dispatched = await autoFixMissingWord(targetSeg, newRef);
-        if (!dispatched) return;
-        autoFixOpId = dispatched.opId;
-        autoFixOldState = {
-            ref: dispatched.before.matched_ref,
-            text: dispatched.before.matched_text,
-            display: dispatched.before.display_text,
-            conf: dispatched.before.confidence,
-            ignoredCats: dispatched.before.ignored_categories,
-            wasDirty,
-        };
-        appliedAutoFix = autoFix;
-        autoFixApplied = true;
+        await autoFixMissingWord(targetSeg, newRef);
     }
 
-    function handleAutoFixUndo(): void {
-        if (!appliedAutoFix || !autoFixOldState) return;
-        const autoFix = appliedAutoFix;
-        const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
-        if (!targetSeg) return;
-        const { ref, text, display, conf, ignoredCats, wasDirty } = autoFixOldState;
-        const segChapter = targetSeg.chapter ?? item.chapter;
-        targetSeg.matched_ref = ref;
-        targetSeg.matched_text = text;
-        targetSeg.display_text = display;
-        targetSeg.confidence = conf;
-        if (ignoredCats) targetSeg.ignored_categories = ignoredCats;
-        else delete targetSeg.ignored_categories;
-        if (!wasDirty) unmarkDirty(segChapter, targetSeg.index);
-        const ops = getOpLog().get(segChapter);
-        if (ops && autoFixOpId) {
-            const idx = ops.findIndex((o) => o.op_id === autoFixOpId);
-            if (idx !== -1) ops.splice(idx, 1);
-        }
-        autoFixApplied = false;
-        autoFixOldState = null;
-        autoFixOpId = null;
-        appliedAutoFix = null;
-    }
 </script>
 
-<div style:opacity={autoFixApplied ? 0.5 : null}>
+<div>
     <div class="val-card-gap-label">{item.msg || 'Missing words between segments'}</div>
     {#if prevSeg}
         <SegmentRow
@@ -218,40 +167,22 @@
     {/if}
     <div class="val-card-actions">
         {#if item.auto_fix}
-            {#if !autoFixApplied}
-                <button
-                    class="val-action-btn"
-                    title="Extend segment ref to cover the missing word"
-                    on:click={() => handleAutoFix(item.auto_fix)}
-                >Auto Fill</button>
-            {:else}
-                <button class="val-action-btn" disabled>Fixed (save to apply)</button>
-                <button
-                    class="val-action-btn val-action-btn-danger"
-                    title="Revert auto-fill"
-                    on:click={handleAutoFixUndo}
-                >Undo</button>
-            {/if}
+            <button
+                class="val-action-btn"
+                title="Extend segment ref to cover the missing word"
+                on:click={() => handleAutoFix(item.auto_fix)}
+            >Auto Fill</button>
         {:else if item.auto_fix_up && item.auto_fix_down}
-            {#if !autoFixApplied}
-                <button
-                    class="val-action-btn"
-                    title="Extend previous segment to cover the missing word"
-                    on:click={() => handleAutoFix(item.auto_fix_up)}
-                >Auto Fill Up</button>
-                <button
-                    class="val-action-btn"
-                    title="Extend next segment to cover the missing word"
-                    on:click={() => handleAutoFix(item.auto_fix_down)}
-                >Auto Fill Down</button>
-            {:else}
-                <button class="val-action-btn" disabled>Fixed (save to apply)</button>
-                <button
-                    class="val-action-btn val-action-btn-danger"
-                    title="Revert auto-fill"
-                    on:click={handleAutoFixUndo}
-                >Undo</button>
-            {/if}
+            <button
+                class="val-action-btn"
+                title="Extend previous segment to cover the missing word"
+                on:click={() => handleAutoFix(item.auto_fix_up)}
+            >Auto Fill Up</button>
+            <button
+                class="val-action-btn"
+                title="Extend next segment to cover the missing word"
+                on:click={() => handleAutoFix(item.auto_fix_down)}
+            >Auto Fill Down</button>
         {/if}
         <button
             class="val-action-btn val-action-btn-muted val-ctx-toggle-btn"

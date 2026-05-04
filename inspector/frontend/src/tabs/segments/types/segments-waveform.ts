@@ -34,8 +34,7 @@ export interface SplitHighlight {
 
 /** Highlight descriptor for a merge-history result card. */
 export interface MergeHighlight {
-    hlStart: number;
-    hlEnd: number;
+    mergePoint: number;
 }
 
 /** Edit-mode trim window snapshot (currentStart/End are mutable as user drags).

@@ -213,12 +213,19 @@
         ? 'Cannot merge segments from different audio files'
         : '';
     $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
+    let previewState: { text: string; ref: string } | null = null;
+    $: if (!isEditingThisRow || $editMode !== 'reference') {
+        previewState = null;
+    }
+
     // History-mode changed-field markers.
     $: changedRef = !!changedFields?.has('ref');
     $: changedDur = !!changedFields?.has('duration');
     $: changedConf = !!changedFields?.has('conf');
     $: changedBody = !!changedFields?.has('body');
-    $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
+    $: bodyText = previewState
+        ? _addVerseMarkers(previewState.text, previewState.ref, $segAllData?.verse_word_counts) || '(alignment failed)'
+        : _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
@@ -632,7 +639,7 @@
                 <span class="seg-text-index">{indexLabel}</span>
                 <span class="seg-text-sep">|</span>
                 {#if isEditingThisRow && $editMode === 'reference'}
-                    <ReferenceEditor {seg} />
+                    <ReferenceEditor {seg} on:preview={(e) => previewState = e.detail} />
                 {:else}
                     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                     <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
