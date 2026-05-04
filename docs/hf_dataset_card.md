@@ -108,9 +108,9 @@ dataset_info:
   <a href="https://huggingface.co/spaces/hetchyy/quranic-universal-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'anic%20Universal%20Aligner-E8C32E" alt="Demo - Qur'anic Universal Aligner"></a>
   <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Align%20a%20Reciter-E8C32E" alt="Request - Align a Reciter"></a>
   <br>
-  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Audio%20Only-252%20Full%20%C2%B7%2086%20Partial%20%C2%B7%207,853h-d4842a" alt="Audio Only"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Unsegmented-377%20reciters%20%C2%B7%209,021h-d4842a" alt="Unsegmented"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-14%20%2F%2020-f0ad4e" alt="Riwayat"></a>
-  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Timestamped-2%20Full%20%C2%B7%200%20Partial%20%C2%B7%2025h-d4842a" alt="Timestamped"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/data/RECITERS.md"><img src="https://img.shields.io/badge/Segmented-2%20reciters%20%C2%B7%2054h-d4842a" alt="Segmented"></a>
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
