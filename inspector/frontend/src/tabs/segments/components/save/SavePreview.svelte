@@ -111,11 +111,13 @@
 
     <div id="seg-save-preview-batches" class="seg-history-batches">
         {#each displayEntries as entry (entryKey(entry))}
-            {#if entry.type === 'chain'}
-                <SplitChainRow chain={entry.chain} {previewCtx} />
-            {:else}
-                <HistoryBatch item={entry.item} {previewCtx} />
-            {/if}
+            <div>
+                {#if entry.type === 'chain'}
+                    <SplitChainRow chain={entry.chain} {previewCtx} />
+                {:else}
+                    <HistoryBatch item={entry.item} {previewCtx} />
+                {/if}
+            </div>
         {/each}
     </div>
 </div>
