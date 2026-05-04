@@ -5,13 +5,12 @@
   <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Align%20a%20Reciter-E8C32E" alt="Request - Align a Reciter"></a>
   <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-E8C32E" alt="Dataset - Qur'anic Universal Ayahs"></a>
   <br>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Audio%20Only-295%20Full%20%C2%B7%2085%20Partial%20%C2%B7%207,853h-d4842a" alt="Audio Only"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Unsegmented-377%20reciters%20%C2%B7%207,799h-d4842a" alt="Unsegmented"></a>
   <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-14%20%2F%2020-f0ad4e" alt="Riwayat"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Timestamped-1%20Full%20%C2%B7%200%20Partial%20%C2%B7%2029h-d4842a" alt="Timestamped"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Segmented-2%20reciters%20%C2%B7%2054h-d4842a" alt="Segmented"></a>
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-4a5568" alt="License"></a>
 </p>
 
 <p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A community-verified dataset of 350+ reciters with word- and letter-level timestamps across 14 riwayat.</p>
@@ -38,9 +37,8 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 To access the audio or timestamps:
 
-1. **Direct download** — JSON files in [`data/`](data/), or packaged in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
+1. **Direct download** — JSON files in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
 2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
-3. **QUD API** — *(coming soon)*
 
 ## Technical Overview
 
@@ -53,13 +51,11 @@ The repository uses the following components:
 | Component | Description |
 |-----------|-------------|
 | [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
-| [`quranic_universal_aligner/`](quranic_universal_aligner/) | Hugging Face space demonstrating the full pipeline with free GPU processing, also available as an [API](quranic_universal_aligner/docs/client_api.md) |
-| [`mfa_aligner/`](mfa_aligner/) | MFA forced alignment service for timestamps computation |
+| [`Quranic Universal Aligner`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Demo running on Hugging Face GPU demonstrating, also available via [API](docs/client_api.md) |
 | [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
 | [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |
-| [`reciter_requests`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
-| [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Qur'an-specific G2P; the foundation that makes phoneme-level alignment possible |
-
+| [`Request Form`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
+| [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Qur'an-specific G2P; the foundation that allows phoneme-level alignment |
 
 ## Contributing
 
@@ -69,4 +65,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started, or [open an issue
 
 ## License
 
-[Apache 2.0](LICENSE)

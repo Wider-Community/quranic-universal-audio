@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Validate edit_history.jsonl integrity for PRs touching recitation_segments.
 
-Runs 6 checks per reciter:
+Runs 7 checks per reciter:
   1. Genesis record presence
   2. History chain integrity (no missing/duplicate batch_ids)
   3. File hash verification (last record matches detailed.json)
   4. _meta tampering detection
   5. Diff-vs-history cross-reference (all changes explained by operations)
   6. History-only change detection (history changed but data didn't)
+  7. Peaks file integrity (edit_history_peaks.jsonl shape — when present)
 
 Usage:
     python validators/validate_edit_history.py --base-sha <SHA> --reciters slug1 [slug2 ...]
@@ -316,6 +317,55 @@ def check_history_only_change(reciter: str, base_sha: str) -> tuple[bool, str]:
     return True, "OK"
 
 
+def check_peaks_file(reciter: str) -> tuple[bool, str]:
+    """Check 7: edit_history_peaks.jsonl is well-formed when present.
+
+    File is optional (older reciters won't have one yet). When present,
+    every non-blank line must be a JSON object carrying op_id (str), url
+    (str), start_ms/end_ms/duration_ms (int), and peaks (non-empty list)
+    — matching ``services.peaks_history._validate_record``.
+    """
+    path = SEGMENTS_DIR / reciter / "edit_history_peaks.jsonl"
+    if not path.exists():
+        return True, "no peaks file (skipped)"
+
+    bad_lines: list[int] = []
+    total = 0
+    for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.strip()
+        if not line:
+            continue
+        total += 1
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            bad_lines.append(lineno)
+            continue
+        if not isinstance(rec, dict):
+            bad_lines.append(lineno)
+            continue
+        if not isinstance(rec.get("op_id"), str) or not rec["op_id"]:
+            bad_lines.append(lineno); continue
+        if not isinstance(rec.get("url"), str) or not rec["url"]:
+            bad_lines.append(lineno); continue
+        ok = True
+        for k in ("start_ms", "end_ms", "duration_ms"):
+            v = rec.get(k)
+            if not isinstance(v, int) or v < 0:
+                ok = False; break
+        if not ok or rec["end_ms"] <= rec["start_ms"]:
+            bad_lines.append(lineno); continue
+        peaks = rec.get("peaks")
+        if not isinstance(peaks, list) or not peaks:
+            bad_lines.append(lineno)
+
+    if bad_lines:
+        sample = ", ".join(str(n) for n in bad_lines[:5])
+        suffix = f" (showing 5/{len(bad_lines)})" if len(bad_lines) > 5 else ""
+        return False, f"{len(bad_lines)}/{total} malformed line(s) at: {sample}{suffix}"
+    return True, f"{total} record(s) OK"
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
@@ -337,6 +387,7 @@ def validate_reciter(reciter: str, base_sha: str) -> tuple[bool, list[str]]:
         ("Meta tampering", check_meta_tampering(reciter, base_sha)),
         ("Diff vs history", check_diff_vs_history(reciter, base_sha)),
         ("History-only change", check_history_only_change(reciter, base_sha)),
+        ("Peaks file", check_peaks_file(reciter)),
     ]
 
     for name, (passed, detail) in checks:

@@ -1,0 +1,58 @@
+{
+  "by_segment_uid": {
+    "019d5c88-f55f-74c0-8b9e-60454dc8948c": {
+      "categories": [],
+      "qalqala_letter": null
+    },
+    "019d5c88-f560-709d-ab81-97a344b49be3": {
+      "categories": [],
+      "qalqala_letter": null
+    },
+    "019d5c88-f560-7a07-a64b-7145452b8693": {
+      "categories": [
+        "qalqala"
+      ],
+      "qalqala_letter": "ب"
+    },
+    "019d5c88-f560-79eb-9a7e-3d584c87b531": {
+      "categories": [
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    },
+    "019d5c88-f560-7d44-99a3-e65d4bb2a425": {
+      "categories": [
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    },
+    "019d5c88-f560-7000-a000-000000000005": {
+      "categories": [
+        "boundary_adj"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-f560-7000-a000-000000000006": {
+      "categories": [
+        "cross_verse"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-f560-7000-a000-000000000007": {
+      "categories": [
+        "boundary_adj"
+      ],
+      "qalqala_letter": null
+    }
+  },
+  "category_counts": {
+    "qalqala": 3,
+    "boundary_adj": 2,
+    "cross_verse": 1
+  },
+  "_meta": {
+    "fixture": "113-falaq",
+    "generator": "inspector.tests.parity.snapshot_expected_outputs",
+    "policy": "post-Phase-2 unified classifier"
+  }
+}

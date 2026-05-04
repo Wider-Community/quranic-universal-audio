@@ -1,0 +1,69 @@
+{
+  "by_segment_uid": {
+    "019d5c88-2222-7000-a000-000000000001": {
+      "categories": [
+        "muqattaat"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-b000-000000000001": {
+      "categories": [
+        "failed"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-b000-000000000002": {
+      "categories": [
+        "low_confidence",
+        "boundary_adj",
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    },
+    "019d5c88-1111-7000-b000-000000000003": {
+      "categories": [
+        "repetitions",
+        "boundary_adj"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-b000-000000000004": {
+      "categories": [
+        "boundary_adj"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-b000-000000000005": {
+      "categories": [
+        "boundary_adj"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-b000-000000000006": {
+      "categories": [
+        "cross_verse"
+      ],
+      "qalqala_letter": null
+    },
+    "019d5c88-1111-7000-b000-000000000007": {
+      "categories": [
+        "qalqala"
+      ],
+      "qalqala_letter": "د"
+    }
+  },
+  "category_counts": {
+    "muqattaat": 1,
+    "failed": 1,
+    "low_confidence": 1,
+    "boundary_adj": 4,
+    "qalqala": 2,
+    "repetitions": 1,
+    "cross_verse": 1
+  },
+  "_meta": {
+    "fixture": "synthetic-classifier",
+    "generator": "inspector.tests.parity.snapshot_expected_outputs",
+    "policy": "post-Phase-2 unified classifier"
+  }
+}
