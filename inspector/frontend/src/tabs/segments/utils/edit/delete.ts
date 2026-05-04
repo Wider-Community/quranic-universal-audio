@@ -100,6 +100,6 @@ export function deleteSegment(
 
     markDirty(chapter, undefined, true);
 
-    finalizeEdit(result.operation, chapter, []);
+    finalizeEdit(result.operation, chapter, [], { patch: result.patch });
     clearEdit();
 }

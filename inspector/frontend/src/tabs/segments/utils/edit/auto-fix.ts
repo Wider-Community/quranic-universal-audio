@@ -111,6 +111,7 @@ export async function autoFixMissingWord(
     refreshSegInStore(seg);
 
     setPendingOp(null);
+    if (result.patch) result.operation.patch = result.patch;
     finalizeOp(segChapter, result.operation);
     return { opId: result.operation.op_id, before };
 }

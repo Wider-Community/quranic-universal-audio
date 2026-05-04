@@ -389,7 +389,7 @@ export async function confirmSplit(
     markDirty(chapter, undefined, true);
 
     exitEditMode();
-    finalizeEdit(result.operation, chapter, [firstHalf, secondHalf]);
+    finalizeEdit(result.operation, chapter, [firstHalf, secondHalf], { patch: result.patch });
 
     const chainCat = ctxCat;
 

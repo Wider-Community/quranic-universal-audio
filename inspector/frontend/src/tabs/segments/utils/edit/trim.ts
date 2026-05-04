@@ -400,7 +400,7 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 
     exitEditMode();
     refreshSegInStore(seg);
-    finalizeEdit(result.operation, chapter, [seg], { skipAccordion: true });
+    finalizeEdit(result.operation, chapter, [seg], { skipAccordion: true, patch: result.patch });
 }
 
 // ---------------------------------------------------------------------------

@@ -211,6 +211,57 @@ export function deleteOpLogEntry(chapter: number): void {
     _opLog.delete(chapter);
 }
 
+/** Replace the chapter's op log with *ops* (or delete if empty).
+ *
+ *  Used by the pending-discard path after reverse-applying a card's ops:
+ *  it filters them out and writes the remainder back. Bumps `dirtyTick`
+ *  so subscribers see the change. */
+export function setChapterOps(chapter: number, ops: EditOp[]): void {
+    if (ops.length === 0) {
+        _opLog.delete(chapter);
+    } else {
+        _opLog.set(chapter, ops);
+    }
+    _bump();
+}
+
+/** Recompute `_dirtyMap[chapter]` from the kept *ops*. Drops the entry
+ *  entirely when the list is empty. The `structural` flag is set if any
+ *  op is structural (`split_segment`, `merge_segments`, `delete_segment`,
+ *  `trim_segment`, `auto_fix_missing_word` — see save full_replace
+ *  semantics). `indices` is rebuilt from `op.targetSegmentIndex` when
+ *  available; otherwise advisory-empty (structural=true forces
+ *  full_replace anyway).
+ *
+ *  Used after a partial discard to bring the dirty entry back in line
+ *  with the kept ops. */
+export function recomputeDirtyEntryFromOps(chapter: number, ops: EditOp[]): void {
+    if (ops.length === 0) {
+        _dirtyMap.delete(chapter);
+        _bump();
+        return;
+    }
+    const indices = new Set<number>();
+    let structural = false;
+    for (const op of ops) {
+        const t = op.op_type;
+        if (
+            t === 'split_segment' ||
+            t === 'merge_segments' ||
+            t === 'delete_segment' ||
+            t === 'trim_segment' ||
+            t === 'auto_fix_missing_word'
+        ) {
+            structural = true;
+        }
+        const tsi = (op as EditOp & { targetSegmentIndex?: { index: number } })
+            .targetSegmentIndex;
+        if (tsi && typeof tsi.index === 'number') indices.add(tsi.index);
+    }
+    _dirtyMap.set(chapter, { indices, structural });
+    _bump();
+}
+
 /** Clear all dirty state (after successful save). */
 export function clearDirtyMap(): void {
     _dirtyMap.clear();

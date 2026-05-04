@@ -22,7 +22,7 @@
     import { EDIT_OP_LABELS } from '../../utils/constants';
     import {
         onOpUndoClick,
-        onPendingBatchDiscard,
+        onPendingOpsDiscard,
     } from '../../utils/save/undo';
     import {
         formatHistDate,
@@ -71,7 +71,8 @@
     function handleDiscardClick(e: MouseEvent): void {
         if (item.chapter == null) return;
         const btn = e.currentTarget as HTMLButtonElement;
-        onPendingBatchDiscard(item.chapter, btn);
+        const opIds = (group as EditOp[]).map((op) => op.op_id);
+        onPendingOpsDiscard(item.chapter, opIds, btn);
     }
     function handleUndoClick(e: MouseEvent): void {
         const bid = item.batchId;

@@ -83,17 +83,20 @@ interface CommandResultLike {
  * the segments slice is left empty here — callers fill it from the
  * mutated chapter ids carried by `result.affectedChapters`.
  *
- * When `result.patch` is present it is included on the op record so the
- * server can persist it on the history entry.
+ * In production, dispatchers attach `result.patch` to `result.operation`
+ * at finalize time (`finalizeEdit` / direct dispatcher writes), so
+ * `executeSave`'s loop reads patch off the op naturally. This helper
+ * also accepts the legacy `result.patch` shape as a fallback for callers
+ * that still pass it at the result level.
  */
 export function buildPayloadFromCommandResult(result: CommandResultLike): {
     segments: SaveSegmentPayloadPatch[];
-    operations: (EditOp & { patch?: unknown })[];
+    operations: EditOp[];
     affected_chapters: number[];
 } {
     const op: EditOp & { patch?: unknown } = { ...result.operation };
-    if (result.patch !== undefined) {
-        op.patch = result.patch;
+    if (op.patch === undefined && result.patch != null) {
+        op.patch = result.patch as EditOp['patch'];
     }
     return {
         segments: [],

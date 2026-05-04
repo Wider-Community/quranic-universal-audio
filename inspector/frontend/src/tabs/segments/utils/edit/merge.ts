@@ -163,6 +163,6 @@ export async function mergeAdjacent(
     if (chapter === currentChapter && curData) {
         curData.segments = getChapterSegments(chapter);
     }
-    finalizeEdit(result.operation, chapter, [merged]);
+    finalizeEdit(result.operation, chapter, [merged], { patch: result.patch });
     clearEdit();
 }

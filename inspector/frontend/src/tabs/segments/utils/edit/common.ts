@@ -9,7 +9,7 @@
 
 import { get } from 'svelte/store';
 
-import type { EditOp, Segment } from '../../../../lib/types/domain';
+import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/domain';
 import { getSegByChapterIndex, segAllData } from '../../stores/chapter';
 import type { SegmentState } from '../../stores/segments';
 import {
@@ -121,10 +121,15 @@ export function finalizeEdit(
         skipSilence?: boolean;
         skipFilterRender?: boolean;
         skipAccordion?: boolean;
+        /** Forward-change patch from the reducer; attached to the op so the
+         *  pending-discard path (and the save payload) can consume it without
+         *  re-running the command. */
+        patch?: EditOpPatch;
     },
 ): void {
     op.applied_at_utc = new Date().toISOString();
     op.targets_after = targetsAfter.map(snapshotSeg);
+    if (opts?.patch) op.patch = opts.patch;
     // skipSilence is retained on the type for call-site compatibility; the
     // derivedTimings store reactively refreshes from segAllData on its own.
     void opts?.skipSilence;

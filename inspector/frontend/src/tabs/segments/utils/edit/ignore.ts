@@ -58,6 +58,7 @@ export function ignoreIssueOnSegment(seg: Segment, category: string): boolean {
     refreshSegInStore(seg);
 
     setPendingOp(null);
+    if (result.patch) result.operation.patch = result.patch;
     finalizeOp(segChapter, result.operation);
     return true;
 }

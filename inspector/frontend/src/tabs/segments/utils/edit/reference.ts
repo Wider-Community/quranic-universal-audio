@@ -170,6 +170,7 @@ function _dispatchRefEdit(
         skipSilence: true,
         skipFilterRender: true,
         skipAccordion: true,
+        patch: result.patch,
     });
 }
 
