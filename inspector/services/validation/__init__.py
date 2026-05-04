@@ -1,0 +1,266 @@
+"""Validation engine: 11-category segment validation, chapter validation counts,
+and validation log generation.
+
+No Flask imports -- all functions accept parameters and return plain dicts.
+
+Public API (routes use ``from inspector.services.validation import X``):
+- ``is_ignored_for``
+- ``classify_segment``, ``classify_segment_full``, ``classify_entry``
+- ``classify_snapshot``
+- ``chapter_validation_counts``
+- ``validate_reciter_segments``
+- ``run_validation_log``
+- registry symbols (re-exported)
+"""
+
+from __future__ import annotations
+
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+from config import LOW_CONFIDENCE_THRESHOLD, SURAH_INFO_PATH
+from constants import VALIDATION_CATEGORIES
+from services import cache
+from services.data_loader import get_word_counts, load_detailed
+from services.history_query import build_resolved_by_edit_index
+from services.phonemizer_service import get_canonical_phonemes
+from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
+
+from services.validation.classifier import (
+    is_ignored_for,
+    is_resolved_by_edit,
+    is_suppressed_for,
+    classify_flags,
+    classify_segment,
+    classify_segment_full,
+    classify_entry,
+    _check_boundary_adj,
+)
+from services.validation.snapshot_classifier import classify_snapshot
+from services.validation.detail import _build_detail_lists
+from services.validation._missing import _build_missing_words
+from services.validation._structural import _check_structural_errors
+from services.validation.registry import (
+    IssueDefinition,
+    IssueRegistry,
+    ALL_CATEGORIES,
+    PER_SEGMENT_CATEGORIES,
+    PER_VERSE_CATEGORIES,
+    PER_CHAPTER_CATEGORIES,
+    CAN_IGNORE_CATEGORIES,
+    AUTO_SUPPRESS_CATEGORIES,
+    PERSISTS_IGNORE_CATEGORIES,
+    filter_persistent_ignores,
+)
+
+ISSUE_REGISTRY = IssueRegistry
+
+
+def chapter_validation_counts(entries: list, chapter: int, meta: dict,
+                              canonical: dict | None = None) -> dict:
+    """Count validation issues for a single chapter.  Returns ``{category: count}``."""
+    word_counts = get_word_counts()
+    single_word_verses = {k for k, v in word_counts.items() if v == 1}
+    is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
+
+    counts = {cat: 0 for cat in VALIDATION_CATEGORIES}
+    verse_segments: dict[tuple, list] = defaultdict(list)
+
+    for entry in entries:
+        ch = chapter_from_ref(entry["ref"])
+        if ch != chapter:
+            continue
+        entry_ref = entry.get("ref", "")
+        for seg in entry.get("segments", []):
+            matched_ref = seg.get("matched_ref", "")
+            if not matched_ref:
+                counts["failed"] += 1
+                continue
+
+            parts = matched_ref.split("-")
+            if len(parts) != 2:
+                if is_by_ayah and ":" in entry_ref and not seg_belongs_to_entry(matched_ref, entry_ref):
+                    counts["audio_bleeding"] += 1
+                if seg.get("wrap_word_ranges"):
+                    counts["repetitions"] += 1
+                if seg.get("confidence", 0.0) < LOW_CONFIDENCE_THRESHOLD:
+                    counts["low_confidence"] += 1
+                continue
+            sp = parts[0].split(":")
+            ep = parts[1].split(":")
+            if len(sp) != 3 or len(ep) != 3:
+                continue
+            try:
+                surah, s_ayah, s_word = int(sp[0]), int(sp[1]), int(sp[2])
+                e_ayah, e_word = int(ep[1]), int(ep[2])
+            except (ValueError, IndexError):
+                continue
+
+            flags = classify_flags(
+                seg, entry_ref, is_by_ayah,
+                surah, s_ayah, e_ayah, s_word, e_word,
+                single_word_verses, canonical,
+            )
+
+            for cat in ("audio_bleeding", "repetitions", "low_confidence",
+                        "cross_verse", "boundary_adj", "muqattaat", "qalqala"):
+                if flags[cat]:
+                    counts[cat] += 1
+
+            if s_ayah != e_ayah:
+                for ayah in range(s_ayah, e_ayah + 1):
+                    if ayah == s_ayah:
+                        wc = word_counts.get((surah, ayah), s_word)
+                        verse_segments[(surah, ayah)].append((s_word, wc))
+                    elif ayah == e_ayah:
+                        verse_segments[(surah, ayah)].append((1, e_word))
+                    else:
+                        wc = word_counts.get((surah, ayah), 1)
+                        verse_segments[(surah, ayah)].append((1, wc))
+            else:
+                verse_segments[(surah, s_ayah)].append((s_word, e_word))
+
+    for (surah, ayah), seg_list in verse_segments.items():
+        expected = word_counts.get((surah, ayah))
+        if not expected:
+            continue
+        covered = set()
+        for wf, wt in seg_list:
+            covered.update(range(wf, wt + 1))
+        missing = set(range(1, expected + 1)) - covered
+        if missing:
+            counts["missing_words"] += len(missing)
+
+    return counts
+
+
+def validate_reciter_segments(reciter: str) -> dict:
+    """Validate all chapters for a reciter, returning issues grouped by category.
+
+    Returns a plain dict suitable for ``jsonify()``.
+    """
+    entries = load_detailed(reciter)
+    if not entries:
+        return None
+
+    word_counts = get_word_counts()
+    canonical = get_canonical_phonemes(reciter)
+    single_word_verses = {k for k, v in word_counts.items() if v == 1}
+
+    meta = cache.get_seg_meta(reciter)
+    is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
+
+    # Inject resolved-by-edit categories from edit_history.jsonl. The
+    # transient ``_resolved_by_edit`` field is consulted by
+    # ``is_resolved_by_edit`` during this validate pass and stripped from
+    # every seg before returning so it never reaches disk via the cached
+    # entries list. Categories are limited to the soft set in
+    # ``RESOLVES_BY_EDIT_CATEGORIES`` (boundary_adj / audio_bleeding /
+    # qalqala / repetitions) -- this is what makes those cards disappear
+    # from the accordion once the user has edited from them.
+    resolved_idx = cache.get_seg_resolved_by_edit(reciter)
+    if resolved_idx is None:
+        resolved_idx = build_resolved_by_edit_index(reciter)
+        cache.set_seg_resolved_by_edit(reciter, resolved_idx)
+    _injected_segs: list[dict] = []
+    if resolved_idx:
+        for entry in entries:
+            for seg in entry.get("segments", []):
+                uid = seg.get("segment_uid")
+                if uid and uid in resolved_idx:
+                    seg["_resolved_by_edit"] = resolved_idx[uid]
+                    _injected_segs.append(seg)
+
+    detail = _build_detail_lists(entries, is_by_ayah, word_counts, canonical, single_word_verses)
+    missing_words = _build_missing_words(detail["verse_segments"], word_counts)
+    errors, missing_verses, stats = _check_structural_errors(reciter, entries)
+
+    # Aggregate counts in registry-declared accordion order. Additive on top
+    # of the per-category arrays; the frontend uses it to render badge totals
+    # and category-summary widgets without walking every detail array.
+    category_counts = {
+        "failed": len(detail["failed"]),
+        "missing_verses": len(missing_verses),
+        "missing_words": len(missing_words),
+        "structural_errors": len(errors),
+        "low_confidence": len(detail["low_confidence"]),
+        "repetitions": len(detail["repetitions"]),
+        "audio_bleeding": len(detail["audio_bleeding"]),
+        "boundary_adj": len(detail["boundary_adj"]),
+        "cross_verse": len(detail["cross_verse"]),
+        "qalqala": len(detail["qalqala"]),
+        "muqattaat": len(detail["muqattaat"]),
+    }
+
+    result = {
+        "errors": errors,
+        "structural_errors": errors,  # alias — same list; MUST-1 additive
+        "missing_verses": missing_verses,
+        "missing_words": missing_words,
+        "failed": detail["failed"],
+        "low_confidence": detail["low_confidence"],
+        "boundary_adj": detail["boundary_adj"],
+        "cross_verse": detail["cross_verse"],
+        "audio_bleeding": detail["audio_bleeding"],
+        "repetitions": detail["repetitions"],
+        "muqattaat": detail["muqattaat"],
+        "qalqala": detail["qalqala"],
+        "category_counts": category_counts,
+        "stats": stats,
+    }
+
+    # Strip the transient injection so the cached entries dict stays clean
+    # for the save flow (which serializes ``entries`` directly to disk).
+    for seg in _injected_segs:
+        seg.pop("_resolved_by_edit", None)
+
+    return result
+
+
+def run_validation_log(reciter_dir: Path) -> None:
+    """Run segment validation and write validation.log without printing to console."""
+    import io as _io
+    from datetime import datetime as _dt
+    from validators.validate_segments import validate_reciter, load_word_counts
+
+    wc = load_word_counts(SURAH_INFO_PATH)
+    report_path = reciter_dir / "validation.log"
+
+    buf = _io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buf
+    try:
+        validate_reciter(reciter_dir, wc, verbose=True)
+    finally:
+        sys.stdout = old_stdout
+
+    content = f"Generated: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n" + buf.getvalue()
+    report_path.write_text(content, encoding="utf-8")
+
+
+__all__ = [
+    "is_ignored_for",
+    "is_resolved_by_edit",
+    "is_suppressed_for",
+    "classify_flags",
+    "classify_segment",
+    "classify_segment_full",
+    "classify_entry",
+    "classify_snapshot",
+    "chapter_validation_counts",
+    "validate_reciter_segments",
+    "run_validation_log",
+    "_build_detail_lists",
+    "IssueDefinition",
+    "IssueRegistry",
+    "ISSUE_REGISTRY",
+    "ALL_CATEGORIES",
+    "PER_SEGMENT_CATEGORIES",
+    "PER_VERSE_CATEGORIES",
+    "PER_CHAPTER_CATEGORIES",
+    "CAN_IGNORE_CATEGORIES",
+    "AUTO_SUPPRESS_CATEGORIES",
+    "PERSISTS_IGNORE_CATEGORIES",
+    "filter_persistent_ignores",
+]

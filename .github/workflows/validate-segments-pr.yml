@@ -12,6 +12,9 @@ on:
       pr_number:
         description: 'PR number to post validation comment on (blank = skip comment)'
         required: false
+      ref:
+        description: 'Git ref to checkout (branch name, default = default branch)'
+        required: false
 
 permissions:
   contents: read
@@ -23,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0  # Full history for git diff against base
 
       - uses: actions/setup-python@v5
@@ -96,7 +100,7 @@ jobs:
         if: steps.detect.outputs.reciters != ''
         run: |
           reciters="${{ steps.detect.outputs.reciters }}"
-          summary=$(python scripts/summarize_pr_edits.py $reciters)
+          summary=$(python .github/scripts/summarize_pr_edits.py $reciters)
 
           # Build header from template
           # For multi-reciter PRs, use generic name; for single, use slug
