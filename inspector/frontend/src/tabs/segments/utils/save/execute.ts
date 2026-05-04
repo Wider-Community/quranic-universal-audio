@@ -272,7 +272,11 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
             
             fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
-                .then(() => refreshValidation())
+                .then(() => {
+                    if (!isCurrentRunAutoSave) {
+                        return refreshValidation();
+                    }
+                })
                 .catch((err: unknown) => { console.warn('trigger-validation failed:', err); });
             
             try {

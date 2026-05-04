@@ -16,13 +16,11 @@ import {
     setChapterOps,
 } from '../../stores/dirty';
 import { pendingChainTarget } from '../../stores/edit';
-import {
-    buildSplitChains,
-    buildSplitLineage,
+    buildEditChains,
     historyData,
     historyDataStale,
-    setSplitChains,
-    type SplitChain,
+    setEditChains,
+    type EditChain,
 } from '../../stores/history';
 import { setSavePreviewData } from '../../stores/save';
 import { applyInversePatchToSegments } from '../../domain/inverse-patch';
@@ -125,7 +123,7 @@ export async function onOpUndoClick(batchId: string, opIds: string[], btn: HTMLB
 // _getChainBatchIds
 // ---------------------------------------------------------------------------
 
-export function _getChainBatchIds(chain: SplitChain): string[] {
+export function _getChainBatchIds(chain: EditChain): string[] {
     const seen = new Set<string>();
     const ids: string[] = [];
     for (let i = chain.ops.length - 1; i >= 0; i--) {
@@ -263,8 +261,7 @@ export function onPendingOpsDiscard(
     }
     const data = buildSavePreviewData();
     const allBatches = [...(storeGet(historyData)?.batches || []), ...(data.batches as HistoryBatch[])];
-    const splitLineage = buildSplitLineage(allBatches);
-    const built = buildSplitChains(allBatches, splitLineage);
-    setSplitChains(built.chains, built.chainedOpIds);
+    const built = buildEditChains(allBatches);
+    setEditChains(built.chains, built.chainedOpIds);
     setSavePreviewData(data);
 }

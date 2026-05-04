@@ -32,7 +32,7 @@
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
     import HistoryBatch from './HistoryBatch.svelte';
     import HistoryFilters from './HistoryFilters.svelte';
-    import SplitChainRow from './SplitChainRow.svelte';
+    import EditChainRow from './EditChainRow.svelte';
     import { waveformContainer } from '../../stores/playback';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import { VIRT_BUFFER_ROWS } from '../../utils/constants';
@@ -52,7 +52,7 @@
         historyData,
         historyVisible,
         sortMode,
-        splitChains,
+        editChains,
         type DisplayEntry,
         type FilteredItemSummary,
     } from '../../stores/history';
@@ -65,7 +65,7 @@
         $flatItems,
         $historyData.batches,
         $sortMode,
-        $splitChains,
+        $editChains,
         $filterOpTypes,
         $filterErrCats,
     );
@@ -301,7 +301,7 @@
             {#each visibleEntries as entry (entryKey(entry))}
                 <div use:observeEntry={entryKey(entry)}>
                     {#if entry.type === 'chain'}
-                        <SplitChainRow chain={entry.chain} {previewCtx} />
+                        <EditChainRow chain={entry.chain} {previewCtx} />
                     {:else}
                         <HistoryBatch item={entry.item} {previewCtx} />
                     {/if}

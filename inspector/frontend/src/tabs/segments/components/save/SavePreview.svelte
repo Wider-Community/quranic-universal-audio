@@ -16,12 +16,12 @@
 
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
     import HistoryBatch from '../history/HistoryBatch.svelte';
-    import SplitChainRow from '../history/SplitChainRow.svelte';
+    import EditChainRow from '../history/EditChainRow.svelte';
     import {
         buildDisplayItems,
         chainedOpIds,
         flattenBatchesToItems,
-        splitChains,
+        editChains,
         type DisplayEntry,
     } from '../../stores/history';
     import { waveformContainer } from '../../stores/playback';
@@ -43,7 +43,7 @@
         flatPreviewItems,
         previewBatches,
         'time',
-        $splitChains,
+        $editChains,
         new Set<string>(),
         new Set<string>(),
     ) as DisplayEntry[];
@@ -107,7 +107,7 @@
         {#each displayEntries as entry (entryKey(entry))}
             <div>
                 {#if entry.type === 'chain'}
-                    <SplitChainRow chain={entry.chain} {previewCtx} />
+                    <EditChainRow chain={entry.chain} {previewCtx} />
                 {:else}
                     <HistoryBatch item={entry.item} {previewCtx} />
                 {/if}

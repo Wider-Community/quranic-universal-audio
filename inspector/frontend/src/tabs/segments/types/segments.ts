@@ -5,8 +5,7 @@ import type { EditOp, HistoryBatch, PeakBucket } from '../../../lib/types/domain
 // Split chain + history types
 // ---------------------------------------------------------------------------
 
-/** One op + its enclosing batch, as held inside a SplitChain. */
-export interface SplitChainOp {
+export interface EditChainOp {
     op: EditOp;
     batch: HistoryBatch;
 }
@@ -28,11 +27,11 @@ export interface HistorySnapshot {
     [k: string]: unknown;
 }
 
-/** Group of related split/trim/refine ops chained by segment lineage. */
-export interface SplitChain {
+/** Group of related operations chained by segment lineage. */
+export interface EditChain {
     rootSnap?: HistorySnapshot;
     rootBatch: HistoryBatch;
-    ops: SplitChainOp[];
+    ops: EditChainOp[];
     latestDate: string;
 }
 
@@ -90,9 +89,9 @@ export interface DirtyEntry {
 // Accordion / edit context
 // ---------------------------------------------------------------------------
 
-/** Snapshot of the split-chain state captured while showing the save preview. */
+/** Snapshot of the edit-chain state captured while showing the save preview. */
 export interface SavedChainsSnapshot {
-    splitChains: Map<string, SplitChain> | null;
+    editChains: Map<string, EditChain> | null;
     chainedOpIds: Set<string> | null;
 }
 
