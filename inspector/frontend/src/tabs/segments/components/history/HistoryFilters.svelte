@@ -25,7 +25,7 @@
         historyData,
         setSortMode,
         sortMode,
-        splitChains,
+        editChains,
         toggleFilter,
     } from '../../stores/history';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
@@ -38,7 +38,7 @@
             $flatItems,
             $historyData.batches,
             'time',
-            $splitChains,
+            $editChains,
             new Set(),
             new Set()
         );
@@ -78,7 +78,7 @@
             $flatItems,
             $historyData.batches,
             'time',
-            $splitChains,
+            $editChains,
             new Set(), // No op-type filter
             $filterErrCats // Respect active category filter
         );
@@ -104,7 +104,7 @@
             $flatItems,
             $historyData.batches,
             'time',
-            $splitChains,
+            $editChains,
             $filterOpTypes, // Respect active op-type filter
             new Set() // No category filter
         );
