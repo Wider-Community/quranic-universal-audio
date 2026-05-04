@@ -9,20 +9,24 @@ __pycache__/
 # IDEs / Agents
 .vscode/
 .claude/
+.agents/
 CLAUDE.md
+AGENTS.md
 
 # envs
 .env
 .venv
 
 # Local
-jobs/
-extract_segments.py
+.local/
+.tmp/
+notebooks/
+codebase-map.html
 
 # Release packaging output
 dist/
 
-# Large binaries tracked in HF Spaces but not in parent repo
-mfa_aligner/quran_aligner_model.zip
-quranic_universal_aligner/data/*.pkl
-quranic_universal_aligner/data/*.mp3
+data/timestamps/**/beam_review.json
+data/timestamps/**/timestamps.beam_*.json
+data/timestamps/**/timestamps_full.beam_*.json
+data/timestamps/**/beam_diff_report.txt

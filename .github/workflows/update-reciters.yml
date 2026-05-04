@@ -31,7 +31,7 @@ jobs:
         run: pip install pyyaml
 
       - name: Regenerate RECITERS.md and update README badges
-        run: python scripts/list_reciters.py --write
+        run: python .github/scripts/list_reciters.py --write
 
       - name: Create PR if changed
         env:
