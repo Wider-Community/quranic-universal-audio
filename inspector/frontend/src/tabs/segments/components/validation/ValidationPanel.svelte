@@ -25,7 +25,7 @@
      * Map so cards restore their state on re-mount as the window slides.
      */
 
-    import { afterUpdate } from 'svelte';
+    import { afterUpdate, onDestroy } from 'svelte';
     import { segValidation } from '../../stores/validation';
     import { get } from 'svelte/store';
     import { segConfig } from '../../stores/config';
@@ -170,6 +170,22 @@
         qalqalaLetters: string[];
     }
 
+    /** Base-layer descriptor — everything except the per-filter projection.
+     *  Computed once per (validationIdentity, segAllDataIdentity, chapter)
+     *  so qalqala/letter and LC/slider clicks don't rebuild filterStaleIssues
+     *  or the qalqala letter set. */
+    interface BaseDescriptor {
+        name: string;
+        kind: string;
+        countClass: string;
+        items: SegValAnyItem[];
+        /** LC-default-threshold count (badge value when slider hasn't moved off default). */
+        defaultLowConfCount: number;
+        isLowConf: boolean;
+        isQalqala: boolean;
+        qalqalaLetters: string[];
+    }
+
     // ---- Chapter filter ----
     function matchChapter<T extends { chapter: number }>(arr: T[] | undefined): T[] {
         return chapter === null ? (arr ?? []) : (arr ?? []).filter((i) => i.chapter === chapter);
@@ -202,74 +218,147 @@
         return matchChapter(slot);
     }
 
-    // ---- Build category list from store ----
-    function buildCategories(
+    // ---- Two-layer rebuild ----
+    //
+    // Layer 1 (`buildBaseDescriptors`): does the heavy work — `filterStaleIssues`
+    // per category and the qalqala letter set computation. Memoized on
+    // (validationIdentity, segAllDataIdentity, chapter), so it runs once per
+    // validation refresh / chapter switch and NOT on filter button clicks or
+    // LC slider drags.
+    //
+    // Layer 2 (`projectVisible`): cheap per-category projection that depends
+    // on the filter inputs (lcThreshold, qalqala letter/EoV). Non-LC/non-
+    // qalqala categories get `visibleItems = items` byref so the descriptor
+    // is byref-equal to the previous tick when only filters changed for
+    // *another* category — keeping Svelte's keyed-each diffs minimal.
+
+    let _baseMemoVal: SegValidateResponse | null = null;
+    let _baseMemoSegData: typeof $segAllData = null;
+    let _baseMemoChapter: number | null = null;
+    let _baseMemoResult: BaseDescriptor[] = [];
+
+    function buildBaseDescriptors(
         data: SegValidateResponse | null,
-        _lcThreshold: number,
-        _activeQalqalaLetter: string | null,
-        _qalqalaEndOfVerse: boolean,
-    ): CategoryDescriptor[] {
-        if (!data) return [];
+        segDataRef: typeof $segAllData,
+        chapterFilter: number | null,
+    ): BaseDescriptor[] {
+        if (data === _baseMemoVal && segDataRef === _baseMemoSegData && chapterFilter === _baseMemoChapter) {
+            return _baseMemoResult;
+        }
+        _baseMemoVal = data;
+        _baseMemoSegData = segDataRef;
+        _baseMemoChapter = chapterFilter;
+
+        if (!data) {
+            _baseMemoResult = [];
+            return _baseMemoResult;
+        }
 
         const ordered = Object.values(IssueRegistry).slice()
             .sort((a, b) => a.accordionOrder - b.accordionOrder);
 
-        // Build the live-uid set once per category rebuild so stale-filter
-        // has O(1) membership checks. Only per-segment categories use uids;
-        // chapter-level categories (missing_verses, structural_errors) carry
-        // segment_uid: null and are always kept by filterStaleIssues.
-        const allSegs = get(segAllData)?.segments ?? [];
+        // Build the live-uid set once so stale-filter has O(1) membership
+        // checks. Only per-segment categories use uids; chapter-level
+        // categories (missing_verses, structural_errors) carry segment_uid:
+        // null and are always kept by filterStaleIssues.
+        const allSegs = segDataRef?.segments ?? [];
         const liveUids = new Set(
             allSegs.map((s) => s.segment_uid).filter((u): u is string => !!u),
         );
 
         const LC_DEFAULT = get(segConfig).lcDefaultThreshold;
-        const all: CategoryDescriptor[] = ordered.map((defn) => {
+        _baseMemoResult = ordered.map((defn) => {
             const rawItems = _itemsFor(defn.kind, data);
             const items = filterStaleIssues(rawItems, liveUids);
-            let visibleItems: SegValAnyItem[] = items;
-            let summaryCount = items.length;
+            let defaultLowConfCount = 0;
             let isLowConf = false;
             let isQalqala = false;
             let qalqalaLetters: string[] = [];
 
             if (defn.kind === 'low_confidence') {
-                const lowConf = items as SegValLowConfidenceItem[];
-                visibleItems = lowConf
-                    .filter((i) => (i.confidence * 100) < _lcThreshold)
-                    .sort((a, b) => a.confidence - b.confidence);
-                summaryCount = lowConf.filter((i) => (i.confidence * 100) < LC_DEFAULT).length;
                 isLowConf = true;
+                const lowConf = items as SegValLowConfidenceItem[];
+                for (const i of lowConf) {
+                    if (i.confidence * 100 < LC_DEFAULT) defaultLowConfCount++;
+                }
             } else if (defn.kind === 'qalqala') {
-                const qal = items as SegValQalqalaItem[];
-                let q: SegValQalqalaItem[] = qal;
-                if (_activeQalqalaLetter) q = q.filter((i) => i.qalqala_letter === _activeQalqalaLetter);
-                if (_qalqalaEndOfVerse) q = q.filter((i) => i.end_of_verse === true);
-                visibleItems = q;
-                summaryCount = qal.length;
                 isQalqala = true;
-                qalqalaLetters = QALQALA_LETTERS_ORDER.filter((l) => qal.some((i) => i.qalqala_letter === l));
+                const qal = items as SegValQalqalaItem[];
+                // Single O(n) pass to find which letters are present —
+                // beats QALQALA_LETTERS_ORDER.filter(l => qal.some(...))'s
+                // O(5*n) nested loop on every reactive tick.
+                const present = new Set<string>();
+                for (const i of qal) {
+                    if (i.qalqala_letter) present.add(i.qalqala_letter);
+                }
+                qalqalaLetters = QALQALA_LETTERS_ORDER.filter((l) => present.has(l));
             }
 
             return {
                 name: defn.displayTitle,
-                type: defn.kind,
+                kind: defn.kind,
                 countClass: _countClassFor(defn.kind),
                 items,
-                visibleItems,
-                summaryCount,
+                defaultLowConfCount,
                 isLowConf,
                 isQalqala,
                 qalqalaLetters,
             };
         });
-
-        return all.filter((c) => c.items.length > 0);
+        return _baseMemoResult;
     }
 
-    let categories: CategoryDescriptor[] = [];
+    /** Per-category visible-items projection. Cheap; runs on every filter
+     *  change but only walks the affected category's already-narrowed items. */
+    function projectVisible(
+        base: BaseDescriptor[],
+        _lcThreshold: number,
+        _activeQalqalaLetter: string | null,
+        _qalqalaEndOfVerse: boolean,
+    ): CategoryDescriptor[] {
+        const out: CategoryDescriptor[] = [];
+        for (const b of base) {
+            if (b.items.length === 0) continue;
+            let visibleItems: SegValAnyItem[] = b.items;
+            let summaryCount = b.items.length;
+            if (b.isLowConf) {
+                const lowConf = b.items as SegValLowConfidenceItem[];
+                visibleItems = lowConf
+                    .filter((i) => (i.confidence * 100) < _lcThreshold)
+                    .sort((a, b2) => a.confidence - b2.confidence);
+                summaryCount = b.defaultLowConfCount;
+            } else if (b.isQalqala && (_activeQalqalaLetter || _qalqalaEndOfVerse)) {
+                const qal = b.items as SegValQalqalaItem[];
+                // Single-pass combined filter (letter + end-of-verse) instead
+                // of two chained `.filter()` calls.
+                const filtered: SegValQalqalaItem[] = [];
+                for (const i of qal) {
+                    if (_activeQalqalaLetter && i.qalqala_letter !== _activeQalqalaLetter) continue;
+                    if (_qalqalaEndOfVerse && i.end_of_verse !== true) continue;
+                    filtered.push(i);
+                }
+                visibleItems = filtered;
+                // Qalqala: badge tracks the active filter (parallel to LC).
+                summaryCount = filtered.length;
+            }
+            out.push({
+                name: b.name,
+                type: b.kind,
+                countClass: b.countClass,
+                items: b.items,
+                visibleItems,
+                summaryCount,
+                isLowConf: b.isLowConf,
+                isQalqala: b.isQalqala,
+                qalqalaLetters: b.qalqalaLetters,
+            });
+        }
+        return out;
+    }
+
+    $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter);
+    $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
     $: {
-        categories = buildCategories($segValidation, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
         // Filter signature: the subset of inputs that truly narrow the item
         // list (chapter / LC threshold / qalqala letter / end-of-verse).
         // If none of these change, preserve each type's context-shown map so
@@ -459,6 +548,44 @@
         openCategory = isOpen ? type : (openCategory === type ? null : openCategory);
     }
 
+    // ---- Stable composite each-key for issue cards ----
+    // Object-reference keying caused every ErrorCard to remount whenever
+    // `$segValidation` republished (re-validate after save). A composite
+    // key based on the underlying segment identity survives republishes,
+    // so cards stay mounted and their transient state is preserved.
+    function issueKey(it: SegValAnyItem, kind: string): string {
+        const any = it as {
+            segment_uid?: string | null;
+            chapter: number;
+            seg_index?: number;
+            verse_key?: string;
+        };
+        if (any.segment_uid) return `${kind}:${any.segment_uid}`;
+        if (any.seg_index != null) return `${kind}:${any.chapter}:${any.seg_index}`;
+        return `${kind}:${any.chapter}:${any.verse_key ?? ''}`;
+    }
+
+    // ---- LC slider debounce ----
+    // Drag updates the input's value live (visible thumb stays smooth) but
+    // we only republish `lcThreshold` after a short idle so visibleItems
+    // doesn't re-filter+sort on every intermediate keystroke value.
+    let lcSliderRaw: number = lcThreshold;
+    let _lcDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const LC_DEBOUNCE_MS = 80;
+    function onLcSliderInput(e: Event): void {
+        const v = parseInt((e.currentTarget as HTMLInputElement).value, 10);
+        if (Number.isNaN(v)) return;
+        lcSliderRaw = v;
+        if (_lcDebounceTimer !== null) clearTimeout(_lcDebounceTimer);
+        _lcDebounceTimer = setTimeout(() => {
+            _lcDebounceTimer = null;
+            lcThreshold = lcSliderRaw;
+        }, LC_DEBOUNCE_MS);
+    }
+    onDestroy(() => {
+        if (_lcDebounceTimer !== null) clearTimeout(_lcDebounceTimer);
+    });
+
     // ---- Context state sync: card notifies panel when user toggles Show/Hide ----
     function onCardContextChange(type: string, absIdx: number, shown: boolean): void {
         getContextState(type).set(absIdx, shown);
@@ -480,7 +607,7 @@
                 <summary class="val-summary">
                     {cat.name}
                     <span class="val-count {cat.countClass}" data-lc-count>
-                        {cat.isLowConf ? cat.visibleItems.length : cat.summaryCount}
+                        {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
                     </span>
                 </summary>
 
@@ -490,7 +617,7 @@
                         <!-- svelte-ignore a11y-label-has-associated-control -->
                         <label class="lc-slider-label">
                             Show confidence &lt;
-                            <span class="lc-slider-val">{lcThreshold}%</span>
+                            <span class="lc-slider-val">{lcSliderRaw}%</span>
                         </label>
                         <input
                             type="range"
@@ -498,7 +625,8 @@
                             min="50"
                             max="99"
                             step="1"
-                            bind:value={lcThreshold}
+                            value={lcSliderRaw}
+                            on:input={onLcSliderInput}
                         />
                     </div>
                 {/if}
@@ -531,7 +659,7 @@
                     <!-- Item navigation buttons (non-qalqala) -->
                     {#if !cat.isQalqala}
                         <div class="val-items">
-                            {#each cat.visibleItems as issue (issue)}
+                            {#each cat.visibleItems as issue (issueKey(issue, cat.type))}
                                 <button
                                     class="val-btn {getItemBtnClass(cat.type, issue)}"
                                     title={getItemBtnTitle(cat.type, issue)}
@@ -557,7 +685,7 @@
                         {#if topSpacerPx > 0}
                             <div class="val-cards-spacer" style="height: {topSpacerPx}px" aria-hidden="true"></div>
                         {/if}
-                        {#each cat.visibleItems.slice(startIdx, endIdx) as issue, localIdx (issue)}
+                        {#each cat.visibleItems.slice(startIdx, endIdx) as issue, localIdx (issueKey(issue, cat.type))}
                             <ErrorCard
                                 bind:this={windowCardRefs[localIdx]}
                                 category={cat.type}
