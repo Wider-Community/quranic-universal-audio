@@ -9,7 +9,7 @@
      * groups degrade cleanly to a single pair of cards.
      */
 
-    import { tick } from 'svelte';
+    import { afterUpdate } from 'svelte';
 
     import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryArrows from './HistoryArrows.svelte';
@@ -127,16 +127,17 @@
     let emptyEl: HTMLElement | null = null;
 
     // After each render cycle, regroup non-null refs into arrays that
-    // HistoryArrows measures. A tick ensures <SegmentRow> children have
-    // committed their DOM by the time we read the wrappers.
+    // HistoryArrows measures. afterUpdate fires synchronously after the DOM
+    // has committed, so reading `bind:this` arrays is safe. Previous version
+    // used an async IIFE inside `$:` with `await tick()`, which raced when
+    // `diff` changed twice before the first tick resolved — the older write
+    // could land last and leave HistoryArrows pointing at stale wrappers.
     let arrowsBefore: HTMLElement[] = [];
     let arrowsAfter: HTMLElement[] = [];
-    $: void (async () => {
-        void diff;
-        await tick();
+    afterUpdate(() => {
         arrowsBefore = beforeCardEls.filter((e): e is HTMLElement => !!e);
         arrowsAfter = afterCardEls.filter((e): e is HTMLElement => !!e);
-    })();
+    });
 </script>
 
 <div class="seg-history-op" class:seg-history-grouped-op={isGroup}>
