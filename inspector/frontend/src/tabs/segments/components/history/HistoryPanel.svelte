@@ -34,7 +34,6 @@
     import HistoryFilters from './HistoryFilters.svelte';
     import SplitChainRow from './SplitChainRow.svelte';
     import { waveformContainer } from '../../stores/playback';
-    import { hideHistoryView } from '../../utils/history/actions';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import { VIRT_BUFFER_ROWS } from '../../utils/constants';
     import {
@@ -285,12 +284,6 @@
     use:waveformContainer
 >
     <AudioElement bind:this={audio} preload="metadata" />
-    <div class="seg-history-toolbar">
-        <button id="seg-history-back-btn" class="btn" on:click={() => hideHistoryView()}>
-            &larr; Back
-        </button>
-        <span class="seg-history-title">Edit History</span>
-    </div>
 
     <div id="seg-history-stats" class="seg-history-stats">
         {#if summary}

@@ -12,8 +12,8 @@
 
     import { isDirtyStore } from './stores/dirty';
     import { handleSegmentsKey } from './utils/keyboard';
-    import { showHistoryView } from './utils/history/actions';
-    import { onSegSaveClick } from './utils/save/actions';
+    import { showHistoryView, hideHistoryView } from './utils/history/actions';
+    import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview } from './utils/save/actions';
     import { loadSegConfig } from './utils/data/config-loader';
     import { buildGroupedReciters } from '../../lib/utils/grouped-reciters';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
@@ -187,18 +187,23 @@
             </select>
         </label>
         <div class="seg-bar-actions">
-            <button
-                id="seg-save-btn"
-                class="btn btn-save"
-                disabled={saveBtnDisabled}
-                on:click={onSegSaveClick}
-            >{$saveButtonLabel}</button>
+            {#if $savePreviewVisible}
+                <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>Cancel</button>
+                <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
+            {:else}
+                <button
+                    id="seg-save-btn"
+                    class="btn btn-save"
+                    disabled={saveBtnDisabled}
+                    on:click={onSegSaveClick}
+                >{$saveButtonLabel}</button>
+            {/if}
             <button
                 id="seg-history-btn"
                 class="btn btn-history"
-                hidden={historyBtnHidden}
-                on:click={showHistoryView}
-            >History</button>
+                hidden={historyBtnHidden && !$historyVisible}
+                on:click={$historyVisible ? hideHistoryView : showHistoryView}
+            >{$historyVisible ? '← Back' : 'History'}</button>
         </div>
     </div>
 

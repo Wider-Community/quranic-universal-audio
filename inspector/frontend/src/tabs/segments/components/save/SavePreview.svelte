@@ -26,11 +26,10 @@
     } from '../../stores/history';
     import { waveformContainer } from '../../stores/playback';
     import { savePreviewData, savePreviewVisible } from '../../stores/save';
-    import { confirmSaveFromPreview, hideSavePreview } from '../../utils/save/actions';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
 
     // Derive display entries from the preview data --------------------------
-    $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../types/domain').HistoryBatch[];
+    $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../../lib/types/domain').HistoryBatch[];
 
     // Filter chained ops out of the flat list so they only render via
     // <SplitChainRow>. Without this, ops belonging to a split chain would
@@ -84,11 +83,6 @@
 
 <div id="seg-save-preview" class="seg-history-view" hidden={!$savePreviewVisible} use:waveformContainer>
     <AudioElement bind:this={audio} preload="metadata" />
-    <div class="seg-history-toolbar seg-save-preview-toolbar">
-        <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>&larr; Cancel</button>
-        <span class="seg-history-title">Review Changes</span>
-        <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
-    </div>
 
     <div id="seg-save-preview-stats" class="seg-history-stats">
         {#if $savePreviewData?.warningChapters && $savePreviewData.warningChapters.length > 0}
