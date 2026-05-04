@@ -36,7 +36,7 @@ import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { applyCommand } from '../../domain/apply-command';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
-import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts } from '../data/references';
+import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts, parseSegRef } from '../data/references';
 import {
     clearPlayRangeRAF,
     getPreviewLooping,
@@ -420,7 +420,15 @@ export async function confirmSplit(
     // is consumed by `commitRefEdit` after the firstHalf edit resolves —
     // replaces the prior reactive-store chain that raced with `$editMode`
     // settling in SegmentRow.
-    pendingChainTarget.set({ seg: secondHalf, category: chainCat });
+    //
+    // Capture the pre-split segment's END endpoint so the handoff can rebuild
+    // the second half's ref as `(advance(committedFirstEnd))-(originalEnd)`,
+    // anchoring the right boundary regardless of how the user edits the first.
+    const origParsed = parseSegRef(seg.matched_ref);
+    const originalEndRef = origParsed
+        ? `${origParsed.surah}:${origParsed.ayah_to}:${origParsed.word_to}`
+        : null;
+    pendingChainTarget.set({ seg: secondHalf, category: chainCat, originalEndRef });
     beginRefEdit(firstHalf, chainCat, resolvedMountId);
 }
 

@@ -7,6 +7,10 @@
      * $editMode === 'reference'`). Owns its local input value; on Enter or
      * blur it calls `commitRefEdit`; on Escape it calls `exitEditMode` to
      * restore the span (the old `matched_ref` renders reactively).
+     *
+     * On invalid commit (malformed / unknown_verse / resolve_failed) the input
+     * goes red, stays focused, and the `committed` latch resets so the user
+     * can retry. On the next keystroke the red state clears.
      */
 
     import { get } from 'svelte/store';
@@ -18,7 +22,10 @@
         clearEdit,
         pendingChainTarget,
     } from '../../stores/edit';
-    import { commitRefEdit } from '../../utils/edit/reference';
+    import {
+        commitRefEdit,
+        consumePendingInitialSelection,
+    } from '../../utils/edit/reference';
     import { formatRef } from '../../utils/data/references';
     import type { Segment } from '../../../../lib/types/domain';
 
@@ -27,16 +34,34 @@
     let inputEl: HTMLInputElement | undefined;
     let value = formatRef(seg.matched_ref, get(segAllData)?.verse_word_counts);
     let committed = false;
+    let invalid = false;
 
     onMount(() => {
         inputEl?.focus();
-        inputEl?.select();
+        const sel = consumePendingInitialSelection();
+        if (sel && inputEl) {
+            // Chain-mounted: place cursor at the dash boundary. Selecting from
+            // `from` to value.length lets the user type the new end portion
+            // and have it replace the highlighted suffix.
+            inputEl.setSelectionRange(sel.from, sel.to);
+        } else {
+            inputEl?.select();
+        }
     });
 
-    function commit(): void {
+    async function commit(): Promise<void> {
         if (committed) return;
+        const result = await commitRefEdit(seg, value.trim());
+        if (result.status === 'invalid') {
+            // Don't latch `committed` — let the user retry. Re-focus and select
+            // so the next keystroke replaces the invalid value, while the red
+            // border signals the rejection.
+            invalid = true;
+            inputEl?.focus();
+            inputEl?.select();
+            return;
+        }
         committed = true;
-        void commitRefEdit(seg, value.trim());
     }
 
     function cancel(): void {
@@ -51,15 +76,23 @@
         e.stopPropagation();
         if (e.key === 'Enter') {
             e.preventDefault();
-            commit();
+            void commit();
         } else if (e.key === 'Escape') {
             e.preventDefault();
             cancel();
         }
     }
 
+    function onInput(): void {
+        if (invalid) invalid = false;
+    }
+
     function onBlur(): void {
-        commit();
+        // After an invalid attempt, the input loses focus when we re-focus
+        // immediately (browser quirks during async commit). Suppress the blur
+        // auto-commit while invalid so the editor stays open for re-entry.
+        if (invalid) return;
+        void commit();
     }
 
     function onClick(e: MouseEvent): void {
@@ -72,7 +105,9 @@
     bind:value
     type="text"
     class="seg-text-ref-input"
+    class:invalid
     on:keydown={onKeydown}
+    on:input={onInput}
     on:blur={onBlur}
     on:click={onClick}
 />

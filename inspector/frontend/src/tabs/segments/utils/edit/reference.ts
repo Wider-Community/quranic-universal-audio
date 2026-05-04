@@ -14,6 +14,7 @@ import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import {
     refreshSegInStore,
+    segAllData,
     selectedChapter,
 } from '../../stores/chapter';
 import {
@@ -34,19 +35,35 @@ import {
     segAudioElement,
 } from '../../stores/playback';
 import { applyCommand } from '../../domain/apply-command';
-import { _normalizeRef as _normalizeRefLib, getVerseWordCounts } from '../data/references';
+import {
+    _advanceRefByOneWord,
+    _normalizeRef as _normalizeRefLib,
+    _validateRefStructural,
+    getVerseWordCounts,
+    parseSegRef,
+} from '../data/references';
 import { stopSegAnimation } from '../playback/playback';
 import type { RowEntry, RowInstanceRole } from '../playback/row-registry';
 import { getRowEntriesFor } from '../playback/row-registry';
 import { finalizeEdit } from './common';
 
-function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]): ReturnType<typeof _normalizeRefLib> {
-    return _normalizeRefLib(ref, getVerseWordCounts());
-}
-
 // ---------------------------------------------------------------------------
 // beginRefEdit — enter reference-edit mode for a segment
 // ---------------------------------------------------------------------------
+
+/**
+ * Initial selection range for the ReferenceEditor input on the next mount.
+ * Set transiently by `_handoffPendingChain` so the chain-mounted second-half
+ * editor can place the cursor at the dash boundary instead of selecting the
+ * whole prefilled value. Cleared by ReferenceEditor on mount.
+ */
+let _pendingInitialSelection: { from: number; to: number } | null = null;
+
+export function consumePendingInitialSelection(): { from: number; to: number } | null {
+    const v = _pendingInitialSelection;
+    _pendingInitialSelection = null;
+    return v;
+}
 
 /**
  * Enter reference-edit mode for `seg`. Pauses audio, creates the pending op,
@@ -156,14 +173,19 @@ function _dispatchRefEdit(
     });
 }
 
-export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<void> {
+export type CommitRefResult =
+    | { status: 'ok' }
+    | { status: 'invalid'; reason: 'malformed' | 'unknown_verse' | 'resolve_failed' };
+
+export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<CommitRefResult> {
     const oldRef = seg.matched_ref || '';
     const chapter = seg.chapter || parseInt(get(selectedChapter));
-    const newRef = _normalizeRef(newRefIn) ?? '';
+    const vwc = getVerseWordCounts();
+    const normalized = _normalizeRefLib(newRefIn, vwc) ?? '';
     const pending = getPendingOp();
     const ctxCat = pending?.op_context_category ?? null;
 
-    if (newRef === oldRef) {
+    if (normalized === oldRef) {
         if ((seg.confidence ?? 0) < 1.0) {
             // Audit confirm: user pressed Enter on an unchanged low-confidence
             // ref. Records a 'confirm_reference' op with fix_kind='audit' and
@@ -181,35 +203,52 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<voi
             setPendingOp(null);
         }
         clearEdit();
-        _handoffPendingChain();
-        return;
+        await _handoffPendingChain();
+        return { status: 'ok' };
+    }
+
+    // Structural validation: malformed / unknown_verse → reject and let the
+    // editor surface a red badge for re-entry. word_overshoot → silently fix
+    // by clamping the word to the verse's max.
+    let candidate = normalized;
+    if (candidate) {
+        const v = _validateRefStructural(candidate, vwc);
+        if (!v.ok) {
+            if (v.reason === 'word_overshoot' && v.clamped) {
+                candidate = v.clamped;
+            } else if (v.reason === 'malformed' || v.reason === 'unknown_verse') {
+                return { status: 'invalid', reason: v.reason };
+            }
+        }
     }
 
     let matchedText = '';
     let displayText = '';
-    if (newRef) {
+    if (candidate) {
         try {
             const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
-                `/api/seg/resolve_ref?ref=${encodeURIComponent(newRef)}`,
+                `/api/seg/resolve_ref?ref=${encodeURIComponent(candidate)}`,
             );
             if (data.text) {
                 matchedText = data.text;
                 displayText = data.display_text || data.text;
-            } else if (data.error) {
-                console.warn('resolve_ref error:', data.error);
-                matchedText = '(invalid ref)';
-                displayText = '';
+            } else {
+                // Backend rejected the ref (or returned empty text). Treat as
+                // invalid so the user can re-enter rather than committing a
+                // junk display string into matched_text.
+                if (data.error) console.warn('resolve_ref error:', data.error);
+                return { status: 'invalid', reason: 'resolve_failed' };
             }
         } catch (e) {
             console.error('Failed to resolve ref:', e);
-            matchedText = '(resolve failed)';
-            displayText = '';
+            return { status: 'invalid', reason: 'resolve_failed' };
         }
     }
 
-    _dispatchRefEdit(seg, chapter, newRef, matchedText, displayText, ctxCat, 'edit_reference');
+    _dispatchRefEdit(seg, chapter, candidate, matchedText, displayText, ctxCat, 'edit_reference');
     clearEdit();
-    _handoffPendingChain();
+    await _handoffPendingChain();
+    return { status: 'ok' };
 }
 
 /** Priority order for picking a mount when handing the chain off to a
@@ -261,7 +300,7 @@ function _pickHandoffMountId(entries: Iterable<RowEntry>): symbol | null {
  *  `editMode='reference'` stuck with no UI, silently blocking subsequent
  *  Split/Adjust/Edit Ref clicks (the `enterEditWithBuffer` + other guards
  *  bail early on any non-null editMode). */
-function _handoffPendingChain(): void {
+async function _handoffPendingChain(): Promise<void> {
     const chain = get(pendingChainTarget);
     pendingChainTarget.set(null);
     if (!chain) return;
@@ -272,6 +311,60 @@ function _handoffPendingChain(): void {
     // No row mounted → nothing to claim a programmatic beginRefEdit. Abort
     // the chain; user can Edit Ref manually on the second half later.
     if (!mountId) return;
+
+    // Rebuild the second-half ref as `(advance(committedFirstEnd))-(originalEnd)`.
+    // The first half's just-committed ref is in chain.seg's predecessor — but we
+    // don't carry that pointer; instead, the chain target's seg is the second
+    // half whose .matched_ref still holds whatever _suggestSplitRefs produced
+    // (or the original ref). To advance from the first half's end we need the
+    // most recent first-half state. Look it up from segAllData by walking
+    // backwards from chain.seg.index.
+    if (chain.originalEndRef) {
+        const all = get(segAllData);
+        let firstEndRef: string | null = null;
+        if (all) {
+            const i = all.segments.findIndex(s =>
+                s.segment_uid === chain.seg.segment_uid ||
+                (s.chapter === chapter && s.index === chain.seg.index),
+            );
+            if (i > 0) {
+                const prev = all.segments[i - 1];
+                if (prev && prev.chapter === chapter) firstEndRef = prev.matched_ref ?? null;
+            }
+        }
+        const firstParsed = parseSegRef(firstEndRef);
+        const vwc = getVerseWordCounts();
+        if (firstParsed) {
+            const next = _advanceRefByOneWord(
+                { surah: firstParsed.surah, ayah: firstParsed.ayah_to, word: firstParsed.word_to },
+                vwc,
+            );
+            if (next) {
+                const rebuilt = `${next.surah}:${next.ayah}:${next.word}-${chain.originalEndRef}`;
+                chain.seg.matched_ref = rebuilt;
+                // Re-resolve text so the editor opens with matching matched_text
+                // and display_text. Failures fall back silently to the existing
+                // values; the user can correct the ref themselves.
+                try {
+                    const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
+                        `/api/seg/resolve_ref?ref=${encodeURIComponent(rebuilt)}`,
+                    );
+                    if (data.text) {
+                        chain.seg.matched_text = data.text;
+                        chain.seg.display_text = data.display_text || data.text;
+                    }
+                } catch (e) {
+                    console.warn('chain re-resolve failed', e);
+                }
+                // Cursor lands right after the dash so the user can edit only
+                // the end portion. Selection runs from `from` to end of value.
+                const dash = rebuilt.indexOf('-');
+                if (dash >= 0) {
+                    _pendingInitialSelection = { from: dash + 1, to: rebuilt.length };
+                }
+            }
+        }
+    }
 
     beginRefEdit(chain.seg, chain.category, mountId);
 }
