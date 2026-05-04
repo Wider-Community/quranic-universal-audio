@@ -117,8 +117,8 @@ function isChapterHalfDirty(chOps: EditOp[]): boolean {
         const afterSegs = splitOp.targets_after as Record<string, any>[] | undefined;
         if (!afterSegs || afterSegs.length < 2) continue;
         
-        const uid1 = afterSegs[0].segment_uid as string;
-        const uid2 = afterSegs[1].segment_uid as string;
+        const uid1 = afterSegs[0]!.segment_uid as string;
+        const uid2 = afterSegs[1]!.segment_uid as string;
         
         if (!uid1 || !uid2) continue;
 
@@ -128,6 +128,7 @@ function isChapterHalfDirty(chOps: EditOp[]): boolean {
         const splitIndex = chOps.indexOf(splitOp);
         for (let i = splitIndex + 1; i < chOps.length; i++) {
             const o = chOps[i];
+            if (!o) continue;
             
             if (o.op_type === 'edit_reference' || o.op_type === 'confirm_reference') {
                 const ta = o.targets_after as Record<string, any>[] | undefined;
