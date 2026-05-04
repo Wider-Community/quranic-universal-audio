@@ -346,6 +346,30 @@
     color: #f0a500 !important;
 }
 
+/* === Save Preview panel layout ===
+   Makes the panel fill the viewport minus the app header + selector bar above
+   (~200px), so Cancel / Confirm Save stay visible without page-scrolling and
+   only the batch list scrolls internally. */
+#seg-save-preview {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 200px);
+    min-height: 300px;
+}
+
+/* Toolbar and stats are fixed-height: don't let them flex-shrink */
+#seg-save-preview > .seg-history-toolbar,
+#seg-save-preview-stats {
+    flex-shrink: 0;
+}
+
+/* Batches fill remaining height and scroll; override the shared 70vh cap */
+#seg-save-preview-batches {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+}
+
 /* Save preview toolbar */
 .seg-save-preview-toolbar { justify-content: space-between; }
 .seg-save-preview-toolbar .seg-history-title { flex: 1; text-align: center; }
