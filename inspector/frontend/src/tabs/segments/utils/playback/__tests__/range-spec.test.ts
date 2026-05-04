@@ -84,22 +84,51 @@ describe('buildSegPolicy', () => {
         getDisplayed: () => null,
     };
 
-    it('stop policy when autoplay is disabled', () => {
-        const policy = buildSegPolicy({ ...baseOpts, autoPlayEnabled: false, isAccordionPlay: false });
-        expect(policy.kind).toBe('stop');
+    it('advance kind always for main-list play; nextRange returns null when autoplay off', () => {
+        // autoplay-off no longer produces {kind:'stop'} — it produces advance
+        // with nextRange gated on the live getter so toggling mid-play works.
+        const policy = buildSegPolicy({ ...baseOpts, getAutoPlayEnabled: () => false, isAccordionPlay: false });
+        expect(policy.kind).toBe('advance');
+        if (policy.kind === 'advance') {
+            expect(policy.nextRange()).toBeNull();
+        }
     });
 
     it('stop policy in accordion play even when autoplay is enabled', () => {
-        const policy = buildSegPolicy({ ...baseOpts, autoPlayEnabled: true, isAccordionPlay: true });
+        const policy = buildSegPolicy({ ...baseOpts, getAutoPlayEnabled: () => true, isAccordionPlay: true });
         expect(policy.kind).toBe('stop');
     });
 
     it('advance policy with AUTOPLAY_GAP_PAUSE_MS when autoplay enabled in main list', () => {
-        const policy = buildSegPolicy({ ...baseOpts, autoPlayEnabled: true, isAccordionPlay: false });
+        const policy = buildSegPolicy({ ...baseOpts, getAutoPlayEnabled: () => true, isAccordionPlay: false });
         expect(policy.kind).toBe('advance');
         if (policy.kind === 'advance') {
             expect(policy.gapMs).toBe(AUTOPLAY_GAP_PAUSE_MS);
         }
+    });
+
+    it('nextRange responds to live autoplay toggle — off mid-play stops at next boundary', () => {
+        const segs = [
+            makeSegment({ index: 0, time_start: 0, time_end: 1000, audio_url: 'a' }),
+            makeSegment({ index: 1, time_start: 1000, time_end: 2000, audio_url: 'a' }),
+        ];
+        let autoPlay = true;
+        const policy = buildSegPolicy({
+            getAutoPlayEnabled: () => autoPlay,
+            isAccordionPlay: false,
+            getCurrentIndex: () => 0,
+            getDisplayed: () => segs,
+        });
+        if (policy.kind !== 'advance') throw new Error('expected advance');
+        expect(policy.nextRange()?.startMs).toBe(1000);
+
+        // User toggles autoplay OFF mid-segment — next boundary stops.
+        autoPlay = false;
+        expect(policy.nextRange()).toBeNull();
+
+        // Toggle back ON — resumes advancing.
+        autoPlay = true;
+        expect(policy.nextRange()?.startMs).toBe(1000);
     });
 
     it('advance policy nextRange resolves dynamically — filter change between gaps takes effect', () => {
@@ -109,7 +138,7 @@ describe('buildSegPolicy', () => {
         ];
         let displayed: typeof segs | null = segs;
         const policy = buildSegPolicy({
-            autoPlayEnabled: true,
+            getAutoPlayEnabled: () => true,
             isAccordionPlay: false,
             getCurrentIndex: () => 0,
             getDisplayed: () => displayed,
@@ -132,7 +161,7 @@ describe('buildSegPolicy', () => {
         ];
         let activeIdx = 0;
         const policy = buildSegPolicy({
-            autoPlayEnabled: true,
+            getAutoPlayEnabled: () => true,
             isAccordionPlay: false,
             getCurrentIndex: () => activeIdx,
             getDisplayed: () => segs,

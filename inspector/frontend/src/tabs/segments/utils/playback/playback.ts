@@ -90,8 +90,19 @@ function _onRangeBoundary(ev: { reason: string }): void {
     // Flip the global UI flag so the autoplay toggle visually reflects state;
     // the audio element's 'pause' event will fire stopSegAnimation in parallel.
     if (ev.reason === 'stop') {
-        continuousPlay.set(false);
         playEndMs.set(0);
+        // If the user toggled autoplay ON after this play started (continuousPlay
+        // flipped true while the old policy had already stopped at a boundary),
+        // advance to the next segment instead of just clearing the flag.
+        const curIdx = get(segCurrentIdx);
+        if (get(continuousPlay) && curIdx >= 0) {
+            const next = nextDisplayedSeg(get(displayedSegments), curIdx);
+            if (next && next.audio_url) {
+                playFromSegment(next.index, next.chapter);
+                return;
+            }
+        }
+        continuousPlay.set(false);
         return;
     }
     // Advance boundary: the primitive will load the next range after the gap.
@@ -149,7 +160,7 @@ export function playFromSegment(
 
     const range = buildSegRangeSpec(seg, seekToMs);
     const policy = buildSegPolicy({
-        autoPlayEnabled: get(autoPlayEnabled),
+        getAutoPlayEnabled: () => get(autoPlayEnabled),
         isAccordionPlay,
         // Lazy: AudioRange reuses the same policy across N consecutive
         // boundary fires during an autoplay run. Read the live active-pair

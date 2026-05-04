@@ -3,12 +3,12 @@
  * `{range, policy}` shape the unified `AudioRange` primitive consumes.
  *
  * Two regimes:
- *   - Main-list autoplay (`autoPlayEnabled === true`, accordion === false) →
- *     `advance` policy with `gapMs = AUTOPLAY_GAP_PAUSE_MS` and a nextRange
- *     resolver that walks the displayed slice for the next consecutive seg.
- *   - Otherwise (autoplay off OR accordion play) → `stop` policy. Per the
- *     editing-refactor plan, autoplay is intentionally main-list only;
- *     accordion plays always stop at `time_end`.
+ *   - Main-list play (accordion === false) → `advance` policy with
+ *     `gapMs = AUTOPLAY_GAP_PAUSE_MS` and a nextRange resolver that checks
+ *     `getAutoPlayEnabled()` live so toggling autoplay mid-segment takes
+ *     effect at the very next boundary without rebuilding the range.
+ *   - Accordion play → `stop` policy. Autoplay is intentionally main-list
+ *     only; accordion plays always stop at `time_end`.
  */
 
 import type { Segment } from '../../../../lib/types/domain';
@@ -44,7 +44,9 @@ export function resolveSegNextRange({ getDisplayed, currentIndex }: NextRangeOpt
 }
 
 export interface BuildSegPolicyOptions {
-    autoPlayEnabled: boolean;
+    /** Live getter so toggling autoplay mid-segment takes effect at the next
+     *  boundary without rebuilding the AudioRange. */
+    getAutoPlayEnabled: () => boolean;
     isAccordionPlay: boolean;
     /** Read the index of the segment whose boundary is firing, lazily.
      *  Must be a getter because the policy outlives a single segment —
@@ -56,15 +58,18 @@ export interface BuildSegPolicyOptions {
 }
 
 export function buildSegPolicy(opts: BuildSegPolicyOptions): RangePolicy {
-    if (opts.isAccordionPlay || !opts.autoPlayEnabled) {
+    if (opts.isAccordionPlay) {
         return { kind: 'stop' };
     }
     return {
         kind: 'advance',
         gapMs: AUTOPLAY_GAP_PAUSE_MS,
-        nextRange: () => resolveSegNextRange({
-            getDisplayed: opts.getDisplayed,
-            currentIndex: opts.getCurrentIndex(),
-        }),
+        nextRange: () => {
+            if (!opts.getAutoPlayEnabled()) return null;
+            return resolveSegNextRange({
+                getDisplayed: opts.getDisplayed,
+                currentIndex: opts.getCurrentIndex(),
+            });
+        },
     };
 }

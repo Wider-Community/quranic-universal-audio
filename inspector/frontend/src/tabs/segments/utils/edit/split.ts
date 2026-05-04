@@ -32,17 +32,11 @@ import {
     updateSplitState,
 } from '../../stores/edit';
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
-import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { applyCommand } from '../../domain/apply-command';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts, parseSegRef } from '../data/references';
-import {
-    clearPlayRangeRAF,
-    getPreviewLooping,
-    setPreviewJustSeeked,
-    setPreviewLooping,
-} from '../playback/play-range';
+import { setPreviewLooping } from '../playback/play-range';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { getRowEntryForMount } from '../playback/row-registry';
 import { _ensureSplitBaseCache, drawSplitWaveform } from '../waveform/split-draw';
@@ -440,20 +434,12 @@ export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | n
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
     if (!sd || !c) return;
-    const loopKey = `split-${side}` as const;
-    const audioEl = get(segAudioElement);
-    if (getPreviewLooping() === loopKey && audioEl && !audioEl.paused) {
-        setPreviewLooping(false);
-        setPreviewJustSeeked(false);
-        audioEl.pause();
-        clearPlayRangeRAF();
-        if (c._splitData) drawSplitWaveform(c);
-        return;
-    }
-    setPreviewLooping(loopKey);
+    // Re-clicking the same side replays from the beginning rather than pausing:
+    // _playRange cancels the live RAF and seeks to startMs before resuming.
+    setPreviewLooping(`split-${side}` as const);
     const splitTime = sd.currentSplit;
     _playRange(
         side === 'left' ? sd.seg.time_start : splitTime,
-        side === 'left' ? splitTime : sd.seg.time_end
+        side === 'left' ? splitTime : sd.seg.time_end,
     );
 }
