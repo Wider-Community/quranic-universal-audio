@@ -53,10 +53,11 @@
     // by UID — groups themselves are time-sorted, so relative position is
     // meaningful.
     //
-    // Memoized by length fingerprint over (chapterSegs, batches, ops, base
-    // UIDs) — see GenericIssueCard for the invariant rationale. Prevents a
-    // N-card accordion × M-gap-segment re-walk of every split op on every
-    // reactive tick.
+    // Memoized by split-op-only fingerprint over (chapterSegs, splitOps, base
+    // UIDs) — see GenericIssueCard for the invariant rationale. Counting only
+    // split ops (not all batches/ops) keeps trim/ref-edit ops as cache hits.
+    // Prevents a N-card accordion × M-gap-segment re-walk of every split op
+    // on every reactive tick.
     $: segStoreTick = $segAllData;
     let _segRangeMemoKey = '';
     let _segRangeMemoResult: Segment[] = [];
@@ -72,7 +73,16 @@
             const base = getSegByChapterIndex(item.chapter, idx);
             baseUids.push(base?.segment_uid ?? `_${idx}`);
         }
-        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${batches.length}|${ops.length}`;
+        let splitOpsCount = 0;
+        for (const b of batches) {
+            for (const op of b.operations) {
+                if (op.op_type === 'split_segment') splitOpsCount++;
+            }
+        }
+        for (const op of ops) {
+            if (op.op_type === 'split_segment') splitOpsCount++;
+        }
+        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${splitOpsCount}`;
         if (key !== _segRangeMemoKey) {
             _segRangeMemoKey = key;
             const out: Segment[] = [];

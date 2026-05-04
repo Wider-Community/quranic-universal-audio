@@ -105,17 +105,17 @@
         const parsed = parseInt(get(selectedChapter));
         return Number.isFinite(parsed) ? parsed : 0;
     })();
-    // Memoize the split-group computation by a length-based fingerprint key.
+    // Memoize the split-group computation by a split-op-only fingerprint.
     // `getSplitGroupMembers` runs a multi-pass fixpoint over every split op
     // in both the edit-history batches and the current op log; firing it on
     // every `$segAllData` / `$dirtyTick` / `$historyData` tick multiplies
     // with N accordion cards mounted.
     //
-    // Length fingerprints are safe because every mutation path that grows a
-    // group (split op) ALSO grows `opLog` or `historyBatches` by at least
-    // one entry — the cache gets invalidated on the same tick. Pure in-place
-    // mutations of existing segs (trim / ref-edit) don't change group
-    // membership, so the stale memo is correct for them.
+    // Earlier the key tracked total `batches.length` + `ops.length`, which
+    // invalidated on every trim/ref-edit op (i.e. nearly every edit) even
+    // though those don't change split-group membership. We now count split
+    // ops only — the only ops that can grow the group — so trim and ref-edit
+    // ops are cache hits.
     let _splitGroupMemoKey = '';
     let _splitGroupMemoResult: Segment[] = [];
     $: {
@@ -124,7 +124,16 @@
             const chapterSegs = getChapterSegments(_groupChapter);
             const batches = $historyData?.batches ?? [];
             const ops = getChapterOpsSnapshot(_groupChapter);
-            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${batches.length}|${ops.length}`;
+            let splitOpsCount = 0;
+            for (const b of batches) {
+                for (const op of b.operations) {
+                    if (op.op_type === 'split_segment') splitOpsCount++;
+                }
+            }
+            for (const op of ops) {
+                if (op.op_type === 'split_segment') splitOpsCount++;
+            }
+            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${splitOpsCount}`;
             if (key !== _splitGroupMemoKey) {
                 _splitGroupMemoKey = key;
                 _splitGroupMemoResult = getSplitGroupMembers(
