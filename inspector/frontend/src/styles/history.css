@@ -114,12 +114,19 @@
     border-radius: 6px;
 }
 
-/* Batches container */
+/* Batches container — own scroll context so virtualization can map
+   scrollTop → window. Toolbar/filters/stats stay pinned above the list. */
 .seg-history-batches {
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding: 0 12px 12px;
+    max-height: 70vh;
+    overflow-y: auto;
+    overflow-anchor: none;
+}
+.seg-history-spacer {
+    flex-shrink: 0;
 }
 
 /* Individual batch */
