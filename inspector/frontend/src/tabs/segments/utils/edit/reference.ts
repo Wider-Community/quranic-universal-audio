@@ -313,14 +313,19 @@ async function _handoffPendingChain(): Promise<void> {
     // the chain; user can Edit Ref manually on the second half later.
     if (!mountId) return;
 
-    // Rebuild the second-half ref as `(advance(committedFirstEnd))-(originalEnd)`.
-    // The first half's just-committed ref is in chain.seg's predecessor — but we
-    // don't carry that pointer; instead, the chain target's seg is the second
-    // half whose .matched_ref still holds whatever _suggestSplitRefs produced
-    // (or the original ref). To advance from the first half's end we need the
-    // most recent first-half state. Look it up from segAllData by walking
-    // backwards from chain.seg.index.
+    // Rebuild the second-half ref as `(advance(committedFirstEnd))-(originalEnd)`
+    // ONLY when the user actually trimmed the first half — i.e. its committed
+    // end is strictly before the original segment's end. When the user kept
+    // first half = full original range (pressed Enter without changing the
+    // suggested ref, or the suggestion already covered the whole segment),
+    // advancing would push past the original range and produce an invalid ref
+    // like `2:5:8-2:5:7` (single-verse split where both halves inherited the
+    // full ref) or otherwise overshoot. In that case leave the second half's
+    // ref untouched so the editor opens with whatever was set at split time.
     if (chain.originalEndRef) {
+        const origEndParts = chain.originalEndRef.split(':').map(Number);
+        const origAyah = origEndParts[1];
+        const origWord = origEndParts[2];
         const all = get(segAllData);
         let firstEndRef: string | null = null;
         if (all) {
@@ -335,7 +340,12 @@ async function _handoffPendingChain(): Promise<void> {
         }
         const firstParsed = parseSegRef(firstEndRef);
         const vwc = getVerseWordCounts();
-        if (firstParsed) {
+        // Trim guard: only advance when first half ends BEFORE original end.
+        const firstTrimmed = !!firstParsed && origAyah != null && origWord != null && (
+            firstParsed.ayah_to < origAyah ||
+            (firstParsed.ayah_to === origAyah && firstParsed.word_to < origWord)
+        );
+        if (firstParsed && firstTrimmed) {
             const next = _advanceRefByOneWord(
                 { surah: firstParsed.surah, ayah: firstParsed.ayah_to, word: firstParsed.word_to },
                 vwc,

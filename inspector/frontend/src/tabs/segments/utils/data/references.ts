@@ -86,12 +86,7 @@ export function _addVerseMarkers(text: string | null | undefined, ref: Ref | nul
     const p = parseSegRef(normalized);
     if (!p || !vwc) return text;
 
-    // Strip any pre-existing ۝ markers before re-inserting from scratch.
-    // display_text may arrive from the backend or _cloneSeg with markers already
-    // embedded; the marker + Arabic-numeral token passes the Arabic char test and
-    // increments w, shifting every subsequent verse boundary.
-    const cleaned = text.replace(/۝[٠-٩]*/g, '').replace(/\s+/g, ' ').trim();
-    const words = cleaned.split(/\s+/).filter(Boolean);
+    const words = text.split(/\s+/).filter(Boolean);
     const out: string[] = [];
     let ay = p.ayah_from, w = p.word_from;
 
