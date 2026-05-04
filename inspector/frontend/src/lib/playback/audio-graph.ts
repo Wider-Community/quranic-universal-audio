@@ -61,18 +61,32 @@ export function _getCtx(): AudioContext | null {
 }
 
 /** Return the AudioGraph for `el`, building it lazily. Returns `null`
- *  when Web Audio is unavailable.
+ *  when Web Audio is unavailable OR when the AudioContext isn't running yet.
  *
- *  `MediaElementAudioSourceNode` may be constructed only ONCE per audio
- *  element for the lifetime of the page (Web Audio spec) — we cache via
- *  `WeakMap`. After routing, the element's default-output path is replaced
- *  by `source -> gain -> destination`. Disconnecting or zeroing the gain
- *  silences the element completely. */
+ *  CRITICAL: `MediaElementAudioSourceNode` redirects the element's audio
+ *  output to the Web Audio graph the instant it's constructed. If we built
+ *  the graph while the context was `suspended` (Chrome's autoplay policy
+ *  state), the element's audio would route to a graph that produces no
+ *  output — silence even after the context later resumed. So we refuse
+ *  to construct the graph until `ctx.state === 'running'`. The kill-
+ *  switch silently no-ops on the very first play (when the warmup may
+ *  still be resuming the context); subsequent plays get the kill-switch.
+ *
+ *  `MediaElementAudioSourceNode` may be constructed only ONCE per element
+ *  for the lifetime of the page (Web Audio spec) — we cache via WeakMap. */
 export function getAudioGraph(el: HTMLAudioElement): AudioGraph | null {
     const cached = _graphs.get(el);
     if (cached) return cached;
     const ctx = _getCtx();
     if (!ctx) return null;
+    if (ctx.state !== 'running') {
+        // Don't route the element through Web Audio while the context is
+        // suspended/closed — that would silence the next play(). Try to
+        // resume; the first invocation of cutAudio/uncutAudio that lands
+        // when the context is finally running will build the graph.
+        if (ctx.state === 'suspended') void ctx.resume();
+        return null;
+    }
     const source = ctx.createMediaElementSource(el);
     const gain = ctx.createGain();
     source.connect(gain).connect(ctx.destination);

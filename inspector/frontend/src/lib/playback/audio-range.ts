@@ -19,6 +19,7 @@
 
 import { createAnimationLoop, type AnimationLoop } from '../utils/animation';
 import { audioSrcMatches, safePlay } from '../utils/audio';
+import { cutAudio, uncutAudio } from './audio-graph';
 
 export interface AudioRangeSpec {
     startMs: number;
@@ -140,6 +141,10 @@ export class AudioRange {
     dispose(): void {
         this.disposed = true;
         this.stop();
+        // Lift any in-flight gain ramp before another path (edit-preview,
+        // direct seek) plays this element. Without this, a dispose that
+        // lands mid-cut would leave the next play() silent.
+        uncutAudio(this.audioEl);
     }
 
     // -----------------------------------------------------------------------
@@ -200,15 +205,16 @@ export class AudioRange {
 
     /** Pause the element and pin `currentTime` to `range.endMs`.
      *
-     *  Note: `pause()` does NOT flush the OS audio sink — Windows WASAPI
-     *  holds ~50–200 ms of pre-decoded samples that keep playing out.
-     *  We tried routing through Web Audio + GainNode kill-switch but the
-     *  audio element lacks `crossorigin="anonymous"`, and
-     *  `MediaElementAudioSourceNode` silences non-CORS-tagged audio as a
-     *  security feature. Reverted; the audible-tail artifact is a known
-     *  limitation until we either CORS-tag the audio or switch to fetching
-     *  via Web Audio buffers. */
+     *  `pause()` halts the source-side renderer but does NOT flush the OS
+     *  audio sink — Windows WASAPI holds ~50–200 ms of pre-decoded samples
+     *  that keep playing out, leaving an audible tail past `endMs`. We
+     *  silence those queued samples via a sample-accurate Web Audio gain
+     *  ramp (`cutAudio`) before pausing; the next `_seekAndPlay` undoes
+     *  the cut with `uncutAudio`. Requires `crossorigin="anonymous"` on
+     *  the audio element (set in `lib/components/AudioElement.svelte`)
+     *  and matching CORS headers from the audio route. */
     private _pauseAndFlush(): void {
+        cutAudio(this.audioEl);
         this.audioEl.pause();
         this.audioEl.currentTime = this.range.endMs / 1000;
     }
@@ -268,6 +274,7 @@ export class AudioRange {
     private _seekAndPlay(startMs: number): void {
         this.audioEl.currentTime = startMs / 1000;
         if (this.playbackRate) this.audioEl.playbackRate = this.playbackRate();
+        uncutAudio(this.audioEl);
         safePlay(this.audioEl);
     }
 }
