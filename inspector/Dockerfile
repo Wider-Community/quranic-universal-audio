@@ -84,6 +84,8 @@ RUN pip install --no-cache-dir flask "PyYAML>=6.0" orjson && \
 # app.py inserts /app (repo root) onto sys.path[0] at startup so that
 # `from validators.X import Y` resolves.
 COPY inspector/app.py inspector/config.py inspector/constants.py ./inspector/
+COPY inspector/adapters/ ./inspector/adapters/
+COPY inspector/domain/ ./inspector/domain/
 COPY inspector/routes/ ./inspector/routes/
 COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
