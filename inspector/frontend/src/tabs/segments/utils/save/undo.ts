@@ -16,6 +16,7 @@ import {
     setChapterOps,
 } from '../../stores/dirty';
 import { pendingChainTarget } from '../../stores/edit';
+import {
     buildEditChains,
     historyData,
     historyDataStale,

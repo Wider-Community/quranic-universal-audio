@@ -7,6 +7,7 @@ import { get as storeGet } from 'svelte/store';
 import type { HistoryBatch } from '../../../../lib/types/domain';
 import { selectedReciter } from '../../stores/chapter';
 import { isDirty } from '../../stores/dirty';
+import {
     buildEditChains,
     historyData,
     historyDataStale,
