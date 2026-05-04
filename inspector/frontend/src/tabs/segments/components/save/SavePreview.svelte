@@ -16,6 +16,7 @@
     import SplitChainRow from '../history/SplitChainRow.svelte';
     import {
         buildDisplayItems,
+        chainedOpIds,
         flattenBatchesToItems,
         splitChains,
         type DisplayEntry,
@@ -27,7 +28,13 @@
     // Derive display entries from the preview data --------------------------
     $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../types/domain').HistoryBatch[];
 
-    $: flatPreviewItems = flattenBatchesToItems(previewBatches, new Set<string>());
+    // Filter chained ops out of the flat list so they only render via
+    // <SplitChainRow>. Without this, ops belonging to a split chain would
+    // appear twice — once in the chain row, once as a duplicate op-card
+    // (the latter carrying its own Discard button). The chainedOpIds set
+    // is populated by `showSavePreview` (utils/save/actions.ts), which
+    // rebuilds chains across history + pending batches.
+    $: flatPreviewItems = flattenBatchesToItems(previewBatches, $chainedOpIds ?? new Set<string>());
 
     $: displayEntries = buildDisplayItems(
         flatPreviewItems,

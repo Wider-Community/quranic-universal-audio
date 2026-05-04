@@ -24,7 +24,7 @@
         type HistorySnapshot,
         type SplitChain,
     } from '../../stores/history';
-    import { onChainUndoClick } from '../../utils/save/undo';
+    import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
     import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
     import type { SplitHighlight } from '../../types/segments-waveform';
     import type { Segment } from '../../../../lib/types/domain';
@@ -39,6 +39,12 @@
     $: leafSnaps = computeChainLeafSnaps(chain);
     $: chapter = chain.rootBatch?.chapter ?? null;
     $: chainBatchIds = getChainBatchIds(chain);
+    /** Op ids whose enclosing batch is unsaved (`batch_id == null`). The
+     *  save-preview Discard button hands these to `onPendingOpsDiscard`
+     *  so the entire pending chain reverts atomically. */
+    $: pendingOpIds = chain.ops
+        .filter(({ batch }) => !batch.batch_id)
+        .map(({ op }) => op.op_id);
 
     // Compute waveform range (may exceed root when a leaf went outside).
     $: wfRange = (() => {
@@ -116,6 +122,12 @@
         const btn = e.currentTarget as HTMLButtonElement;
         void onChainUndoClick(chainBatchIds, chapter, btn);
     }
+
+    function handleChainDiscardClick(e: MouseEvent): void {
+        if (chapter == null || pendingOpIds.length === 0) return;
+        const btn = e.currentTarget as HTMLButtonElement;
+        onPendingOpsDiscard(chapter, pendingOpIds, btn);
+    }
 </script>
 
 <div class="seg-history-batch seg-history-split-chain">
@@ -136,6 +148,12 @@
                 class="btn btn-sm seg-history-undo-btn"
                 on:click|stopPropagation={handleChainUndoClick}
             >Undo</button>
+        {/if}
+        {#if pendingOpIds.length > 0 && chapter != null}
+            <button
+                class="btn btn-sm seg-history-undo-btn"
+                on:click|stopPropagation={handleChainDiscardClick}
+            >Discard</button>
         {/if}
     </div>
 
