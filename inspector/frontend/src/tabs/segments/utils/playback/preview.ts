@@ -1,0 +1,255 @@
+/**
+ * PreviewPlaybackContext — isolated playback for SavePreview / HistoryPanel.
+ *
+ * The main-list playback path (`playFromSegment`, `_segRange`,
+ * `playingSegmentIndex`) is bound to live segment state — it can't safely
+ * play snapshot rows whose `segment_uid`/`index` may not match the current
+ * store. SavePreview and HistoryPanel hide the main `<AudioPlayer>` mount
+ * while visible, so they also have no audio element to drive.
+ *
+ * This module provides a self-contained context that owns:
+ *   - one HTMLAudioElement (mounted by the calling panel)
+ *   - one AudioRange instance (single-segment, `policy: 'stop'`)
+ *   - reactive `activeSeg` / `playingSeg` stores so SegmentRow can derive
+ *     its play-glyph + class:playing state without touching the main-list
+ *     `playingSegmentIndex` store
+ *   - playhead drawing for the active row's canvas, via the same
+ *     `drawSegPlayhead` helper the main list uses
+ *   - a one-shot peaks fetch on row registration so snapshot rows render
+ *     a waveform even when the main-list cache is cold
+ *
+ * One context per panel; dispose on panel unmount.
+ */
+
+import { get, writable, type Readable, type Writable } from 'svelte/store';
+
+import { AudioRange } from '../../../../lib/playback/audio-range';
+import { fetchSegmentPeaks } from '../../../../lib/utils/peaks-fetch';
+import { selectedReciter } from '../../stores/chapter';
+import { playbackSpeed } from '../../stores/playback';
+import type { SegCanvas } from '../../types/segments-waveform';
+import { drawSegPlayhead } from '../waveform/draw-seg';
+import { _findCoveringPeaks } from '../waveform/peaks-cache';
+import { indexSegPeaksBulk, redrawPeaksWaveforms } from '../waveform/utils';
+
+export interface PreviewActiveSeg {
+    /** Stable per-row id minted by the caller (chapter:index:start:end). */
+    uid: string;
+}
+
+export interface PreviewPlaybackContext {
+    /** Bind the panel's hidden `<audio>` element after mount. */
+    attachAudioEl(el: HTMLAudioElement): void;
+    /** Register a row's canvas + range for playhead drawing and peak loading.
+     *  Idempotent — re-registering with the same uid replaces the prior entry. */
+    registerRow(uid: string, canvas: HTMLCanvasElement, audioUrl: string, startMs: number, endMs: number): void;
+    /** Drop a row entry; if it was the active one, stop playback and clear the playhead. */
+    deregisterRow(uid: string): void;
+    /** Click-handler for a row's play button. Toggles play/pause for the
+     *  same row, switches the active range to a different row otherwise. */
+    toggle(uid: string): void;
+    /** Tear down the AudioRange + listeners; call from panel onDestroy. */
+    dispose(): void;
+    /** Which row is the current playback target (set on play, cleared on
+     *  boundary stop or dispose). Drives `class:playing` highlight. */
+    activeSeg: Readable<PreviewActiveSeg | null>;
+    /** Subset of `activeSeg` — non-null only while audio is actively
+     *  playing (cleared on `pause`, restored on `play`). Drives the
+     *  pause-glyph swap on the row's play button. */
+    playingSeg: Readable<PreviewActiveSeg | null>;
+}
+
+interface RowEntry {
+    canvas: HTMLCanvasElement;
+    audioUrl: string;
+    startMs: number;
+    endMs: number;
+}
+
+export function createPreviewPlaybackContext(): PreviewPlaybackContext {
+    const rows = new Map<string, RowEntry>();
+    const _activeSeg: Writable<PreviewActiveSeg | null> = writable(null);
+    const _playingSeg: Writable<PreviewActiveSeg | null> = writable(null);
+
+    let audioEl: HTMLAudioElement | null = null;
+    let range: AudioRange | null = null;
+    let curUid: string | null = null;
+    let curRow: RowEntry | null = null;
+    /** Dedup peak fetches per (url, start, end) — registering the same
+     *  row twice (e.g. parent re-render) shouldn't trigger duplicate
+     *  network calls. */
+    const fetched = new Set<string>();
+
+    function _onTick(timeMs: number): void {
+        if (!curRow) return;
+        drawSegPlayhead(
+            curRow.canvas as SegCanvas,
+            curRow.startMs,
+            curRow.endMs,
+            timeMs,
+            curRow.audioUrl,
+        );
+    }
+
+    function _onBoundary(): void {
+        // Boundary fires only for `policy: 'stop'` end-of-range. Clear the
+        // playhead by repainting the cached waveform with a currentTimeMs
+        // outside the range — drawSegPlayhead returns early after the
+        // putImageData restore, leaving the waveform clean.
+        _clearPlayheadOnCurrent();
+        curUid = null;
+        curRow = null;
+        _activeSeg.set(null);
+        _playingSeg.set(null);
+    }
+
+    function _clearPlayheadOnCurrent(): void {
+        if (!curRow) return;
+        const canvas = curRow.canvas as SegCanvas;
+        canvas._wfCache = null;
+        drawSegPlayhead(
+            canvas,
+            curRow.startMs,
+            curRow.endMs,
+            curRow.startMs - 1,
+            curRow.audioUrl,
+        );
+    }
+
+    function _onAudioPlay(): void {
+        if (curUid) _playingSeg.set({ uid: curUid });
+    }
+
+    function _onAudioPause(): void {
+        _playingSeg.set(null);
+    }
+
+    function attachAudioEl(el: HTMLAudioElement): void {
+        if (audioEl === el) return;
+        if (audioEl) {
+            audioEl.removeEventListener('play', _onAudioPlay);
+            audioEl.removeEventListener('pause', _onAudioPause);
+        }
+        audioEl = el;
+        el.addEventListener('play', _onAudioPlay);
+        el.addEventListener('pause', _onAudioPause);
+    }
+
+    async function _ensurePeaks(audioUrl: string, startMs: number, endMs: number): Promise<void> {
+        if (!audioUrl || endMs <= startMs) return;
+        if (_findCoveringPeaks(audioUrl, startMs, endMs)) return;
+        const key = `${audioUrl}:${startMs}:${endMs}`;
+        if (fetched.has(key)) return;
+        fetched.add(key);
+        const reciter = get(selectedReciter);
+        if (!reciter) return;
+        // Pad the fetch window so the playhead has waveform around the
+        // boundaries. Generous on both sides — segment_peaks is disk-cached
+        // server-side, so over-fetching is cheap on subsequent loads.
+        const pad = 200;
+        const fetchStart = Math.max(0, startMs - pad);
+        const fetchEnd = endMs + pad;
+        const peaks = await fetchSegmentPeaks(reciter, audioUrl, fetchStart, fetchEnd);
+        if (!peaks?.peaks?.length) return;
+        // Reuse the bulk indexer so the entry lands in the same covering
+        // cache the IntersectionObserver pipeline reads from.
+        indexSegPeaksBulk({ [`${audioUrl}:${fetchStart}:${fetchEnd}`]: peaks });
+        redrawPeaksWaveforms();
+    }
+
+    function registerRow(
+        uid: string,
+        canvas: HTMLCanvasElement,
+        audioUrl: string,
+        startMs: number,
+        endMs: number,
+    ): void {
+        rows.set(uid, { canvas, audioUrl, startMs, endMs });
+        void _ensurePeaks(audioUrl, startMs, endMs);
+    }
+
+    function deregisterRow(uid: string): void {
+        rows.delete(uid);
+        if (curUid === uid) {
+            _stop();
+        }
+    }
+
+    function _stop(): void {
+        if (range) {
+            range.dispose();
+            range = null;
+        }
+        _clearPlayheadOnCurrent();
+        curUid = null;
+        curRow = null;
+        _activeSeg.set(null);
+        _playingSeg.set(null);
+    }
+
+    function toggle(uid: string): void {
+        if (!audioEl) return;
+        const row = rows.get(uid);
+        if (!row) return;
+
+        // Same row, currently playing → pause (range stays alive, ready to resume)
+        if (curUid === uid && range && !audioEl.paused) {
+            audioEl.pause();
+            return;
+        }
+        // Same row, paused (range still alive) → resume
+        if (curUid === uid && range && audioEl.paused) {
+            void audioEl.play();
+            return;
+        }
+
+        // Different row, or no live range → tear down + rebuild.
+        if (range) {
+            range.dispose();
+            range = null;
+        }
+        _clearPlayheadOnCurrent();
+
+        curUid = uid;
+        curRow = row;
+        _activeSeg.set({ uid });
+
+        range = new AudioRange({
+            audioEl,
+            range: { startMs: row.startMs, endMs: row.endMs, src: row.audioUrl },
+            policy: { kind: 'stop' },
+            onTick: _onTick,
+            onBoundary: _onBoundary,
+            playbackRate: () => get(playbackSpeed),
+        });
+        range.start();
+    }
+
+    function dispose(): void {
+        if (range) {
+            range.dispose();
+            range = null;
+        }
+        if (audioEl) {
+            audioEl.removeEventListener('play', _onAudioPlay);
+            audioEl.removeEventListener('pause', _onAudioPause);
+            audioEl = null;
+        }
+        rows.clear();
+        fetched.clear();
+        curUid = null;
+        curRow = null;
+        _activeSeg.set(null);
+        _playingSeg.set(null);
+    }
+
+    return {
+        attachAudioEl,
+        registerRow,
+        deregisterRow,
+        toggle,
+        dispose,
+        activeSeg: { subscribe: _activeSeg.subscribe },
+        playingSeg: { subscribe: _playingSeg.subscribe },
+    };
+}

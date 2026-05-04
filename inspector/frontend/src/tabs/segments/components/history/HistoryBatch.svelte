@@ -33,10 +33,12 @@
     } from '../../stores/history';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
     import type { EditOp } from '../../../../lib/types/domain';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
 
     // Props ------------------------------------------------------------------
 
     export let item: OpFlatItem;
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
 
     // Derived header bits ----------------------------------------------------
 
@@ -154,6 +156,7 @@
                                 showPlayBtn={true}
                                 mode="history"
                                 instanceRole="history"
+                                {previewCtx}
                             />
                         {/if}
                     </div>
@@ -173,6 +176,7 @@
                     chapter={item.chapter}
                     batchId={item.batchId}
                     skipLabel={true}
+                    {previewCtx}
                 />
             {:else if group.length > 1}
                 <HistoryOp
@@ -180,6 +184,7 @@
                     chapter={item.chapter}
                     batchId={item.batchId}
                     skipLabel={true}
+                    {previewCtx}
                 />
             {/if}
         </div>

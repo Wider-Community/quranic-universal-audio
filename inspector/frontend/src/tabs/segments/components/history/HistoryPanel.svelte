@@ -20,11 +20,15 @@
      *     gates the normal-content block with `{#if !$historyVisible && ...}`.
      */
 
+    import { onDestroy } from 'svelte';
+
+    import AudioElement from '../../../../lib/components/AudioElement.svelte';
     import HistoryBatch from './HistoryBatch.svelte';
     import HistoryFilters from './HistoryFilters.svelte';
     import SplitChainRow from './SplitChainRow.svelte';
     import { waveformContainer } from '../../stores/playback';
     import { hideHistoryView } from '../../utils/history/actions';
+    import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import {
         buildDisplayItems,
         computeFilteredItemSummary,
@@ -101,6 +105,16 @@
         }
         return `op:${di.item.batchId ?? 'p'}:${di.item.batchIdx}:${di.item.groupIdx}:${di.item.type}`;
     }
+
+    // Preview playback context — owns one hidden <audio> element and one
+    // AudioRange instance. SegmentRow children with `readOnly + previewCtx`
+    // route their play button through this. Disposed on panel unmount.
+    const previewCtx = createPreviewPlaybackContext();
+    let audio: AudioElement;
+    $: if (audio && $historyVisible) {
+        previewCtx.attachAudioEl(audio.element());
+    }
+    onDestroy(() => previewCtx.dispose());
 </script>
 
 <div
@@ -109,6 +123,7 @@
     hidden={!$historyVisible}
     use:waveformContainer
 >
+    <AudioElement bind:this={audio} preload="metadata" />
     <div class="seg-history-toolbar">
         <button id="seg-history-back-btn" class="btn" on:click={() => hideHistoryView()}>
             &larr; Back
@@ -137,9 +152,9 @@
         {:else}
             {#each displayEntries as entry (entryKey(entry))}
                 {#if entry.type === 'chain'}
-                    <SplitChainRow chain={entry.chain} />
+                    <SplitChainRow chain={entry.chain} {previewCtx} />
                 {:else}
-                    <HistoryBatch item={entry.item} />
+                    <HistoryBatch item={entry.item} {previewCtx} />
                 {/if}
             {/each}
         {/if}

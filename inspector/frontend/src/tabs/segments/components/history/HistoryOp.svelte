@@ -21,6 +21,7 @@
     } from '../../stores/history';
     import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
     import type { EditOp } from '../../../../lib/types/domain';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
 
     // Props ------------------------------------------------------------------
 
@@ -28,6 +29,7 @@
     export let chapter: number | null = null;
     export let batchId: string | null = null;
     export let skipLabel: boolean = false;
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
 
     // Derived diff inputs ----------------------------------------------------
 
@@ -174,6 +176,7 @@
                         mode="history"
                         instanceRole="history"
                         trimHL={i === 0 ? trimHighlights.before : null}
+                        {previewCtx}
                     />
                 </div>
             {/each}
@@ -203,6 +206,7 @@
                             trimHL={isOneToOne && i === 0 ? trimHighlights.after : null}
                             mergeHL={i === 0 ? mergeAfterHL : null}
                             changedFields={isOneToOne && i === 0 ? afterChangedFields : null}
+                            {previewCtx}
                         />
                     </div>
                 {/each}

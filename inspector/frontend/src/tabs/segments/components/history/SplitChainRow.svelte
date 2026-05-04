@@ -28,10 +28,12 @@
     import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
     import type { SplitHighlight } from '../../types/segments-waveform';
     import type { Segment } from '../../../../lib/types/domain';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
 
     // Props ------------------------------------------------------------------
 
     export let chain: SplitChain;
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
 
     // Derived ----------------------------------------------------------------
 
@@ -170,6 +172,7 @@
                             mode="history"
                             instanceRole="history"
                             splitHL={rootSplitHL}
+                            {previewCtx}
                         />
                     </div>
                 {/if}
@@ -197,6 +200,7 @@
                                 mode="history"
                                 instanceRole="history"
                                 splitHL={leafSplitHL(leaf)}
+                                {previewCtx}
                             />
                         </div>
                     {/each}

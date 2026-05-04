@@ -12,6 +12,9 @@
      *   showSavePreview; cleared by clearSavePreviewData in hideSavePreview.
      */
 
+    import { onDestroy } from 'svelte';
+
+    import AudioElement from '../../../../lib/components/AudioElement.svelte';
     import HistoryBatch from '../history/HistoryBatch.svelte';
     import SplitChainRow from '../history/SplitChainRow.svelte';
     import {
@@ -24,6 +27,7 @@
     import { waveformContainer } from '../../stores/playback';
     import { savePreviewData, savePreviewVisible } from '../../stores/save';
     import { confirmSaveFromPreview, hideSavePreview } from '../../utils/save/actions';
+    import { createPreviewPlaybackContext } from '../../utils/playback/preview';
 
     // Derive display entries from the preview data --------------------------
     $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../types/domain').HistoryBatch[];
@@ -66,9 +70,20 @@
         }
         return `op:${di.item.batchId ?? 'p'}:${di.item.batchIdx}:${di.item.groupIdx}:${di.item.type}`;
     }
+
+    // Preview playback context — owns one hidden <audio> element and one
+    // AudioRange instance. SegmentRow children with `readOnly + previewCtx`
+    // route their play button through this. Disposed on panel unmount.
+    const previewCtx = createPreviewPlaybackContext();
+    let audio: AudioElement;
+    $: if (audio && $savePreviewVisible) {
+        previewCtx.attachAudioEl(audio.element());
+    }
+    onDestroy(() => previewCtx.dispose());
 </script>
 
 <div id="seg-save-preview" class="seg-history-view" hidden={!$savePreviewVisible} use:waveformContainer>
+    <AudioElement bind:this={audio} preload="metadata" />
     <div class="seg-history-toolbar seg-save-preview-toolbar">
         <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>&larr; Cancel</button>
         <span class="seg-history-title">Review Changes</span>
@@ -97,9 +112,9 @@
     <div id="seg-save-preview-batches" class="seg-history-batches">
         {#each displayEntries as entry (entryKey(entry))}
             {#if entry.type === 'chain'}
-                <SplitChainRow chain={entry.chain} />
+                <SplitChainRow chain={entry.chain} {previewCtx} />
             {:else}
-                <HistoryBatch item={entry.item} />
+                <HistoryBatch item={entry.item} {previewCtx} />
             {/if}
         {/each}
     </div>
