@@ -75,7 +75,7 @@ COPY --from=ffmpeg-build /ff/bin/ffmpeg /ff/bin/ffprobe /usr/local/bin/
 # never calls. Skipping pandas (76MB) + numpy (73MB) saves ~150MB of nothing.
 # pip/setuptools/wheel are purged — not needed at runtime.
 RUN pip install --no-cache-dir flask "PyYAML>=6.0" orjson && \
-    pip install --no-cache-dir --no-deps "quranic-phonemizer>=2.0" && \
+    pip install --no-cache-dir --no-deps "quranic-phonemizer>=2.2" && \
     pip uninstall -y pip setuptools wheel && \
     find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
