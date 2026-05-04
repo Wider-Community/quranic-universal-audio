@@ -70,8 +70,18 @@ export interface OpIssueDelta {
  * for that uid wins). When no after-snapshot carries a uid, the group's
  * final op's `targets_after` is the fallback set.
  */
+// Group arrays are stable per OpFlatItem (built once in `flatItems` derivation).
+// The WeakMap caches the delta for the lifetime of the array reference; when
+// `flatItems` republishes (history change), old groups are GC'd automatically.
+// Same group is read twice per filter pass (HistoryBatch render + itemMatchesCatFilter),
+// so the memo also amortizes that without any manual eviction.
+const _deltaMemo = new WeakMap<EditOp[], OpIssueDelta>();
+
 export function deriveOpIssueDelta(group: EditOp[] | null | undefined): OpIssueDelta {
     if (!group || group.length === 0) return { resolved: [], introduced: [] };
+    const cached = _deltaMemo.get(group);
+    if (cached) return cached;
+
     const primary = group[0];
     if (!primary) return { resolved: [], introduced: [] };
 
@@ -98,10 +108,12 @@ export function deriveOpIssueDelta(group: EditOp[] | null | undefined): OpIssueD
         for (const cat of classifiedIssuesOf(snap)) afterIssues.add(cat);
     }
 
-    return {
+    const result: OpIssueDelta = {
         resolved:   [...beforeIssues].filter((i) => !afterIssues.has(i)),
         introduced: [...afterIssues].filter((i) => !beforeIssues.has(i)),
     };
+    _deltaMemo.set(group, result);
+    return result;
 }
 
 /** Marker re-exported for tests that assert the post-Phase-2 helper exists. */
