@@ -26,7 +26,7 @@
     } from '../../stores/history';
     import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
     import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
-    import type { SplitHighlight } from '../../types/segments-waveform';
+    import type { SplitHighlight, TrimHighlight } from '../../types/segments-waveform';
     import type { Segment } from '../../../../lib/types/domain';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
 
@@ -138,7 +138,6 @@
     let arrowsBefore: HTMLElement[] = [];
     let arrowsAfter: HTMLElement[] = [];
 
-    $: chainOpType = chain.ops[0]?.op.op_type;
     $: chainBadgeText = (() => {
         if (chainOpType === 'split_segment') return `Split \u2192 ${leafSnaps.length}`;
         if (chainOpType === 'merge_segments') return `Merge \u2192 ${leafSnaps.length}`;

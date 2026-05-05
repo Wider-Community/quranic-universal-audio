@@ -12,6 +12,7 @@
 
     import { isDirtyStore, dirtyTick } from './stores/dirty';
     import { autoSaveEnabled, toggleAutoSave } from './stores/autosave';
+    import { qalqalaBatch, cancelQalqalaBatch } from './stores/qalqala-batch';
     import { handleSegmentsKey } from './utils/keyboard';
     import { showHistoryView, hideHistoryView } from './utils/history/actions';
     import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview, executeSave } from './utils/save/actions';
@@ -66,7 +67,7 @@
         : [];
     $: filterBarHidden = $segAllData === null;
     $: historyBtnHidden = !$historyData || !$historyData.batches || $historyData.batches.length === 0;
-    $: saveBtnDisabled = !$isDirtyStore;
+    $: saveBtnDisabled = !$isDirtyStore || $qalqalaBatch.isActive;
 
     let cssFontSize: string = '';
     let cssWordSpacing: string = '';
@@ -85,6 +86,7 @@
         onReciterChange(v);
     }
     async function onReciterChange(reciter: string): Promise<void> {
+        cancelQalqalaBatch();
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
         await reloadCurrentReciter();
     }
@@ -92,6 +94,7 @@
         const v = e.detail; selectedChapter.set(v); onChapterChange(v);
     }
     async function onChapterChange(chapter: string): Promise<void> {
+        cancelQalqalaBatch();
         await loadChapterData(get(selectedReciter), chapter);
     }
     function onVerseSelectChange(v: string): void {
@@ -129,10 +132,10 @@
     $: if ($segAllData) { void getChapterSegments($selectedChapter || 0); }
 
     let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-    $: if ($autoSaveEnabled && $dirtyTick > 0 && $isDirtyStore) {
+    $: if ($autoSaveEnabled && $dirtyTick > 0 && $isDirtyStore && !$qalqalaBatch.isActive) {
         if (autoSaveTimer) clearTimeout(autoSaveTimer);
         autoSaveTimer = setTimeout(() => {
-            if ($isDirtyStore) {
+            if ($isDirtyStore && !get(qalqalaBatch).isActive) {
                 void executeSave(true);
             }
         }, 1000); // 1s debounce

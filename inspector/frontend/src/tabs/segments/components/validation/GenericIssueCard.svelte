@@ -19,7 +19,14 @@
     import { isIgnoredFor } from '../../utils/validation/classified-issues';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
+    import {
+        qalqalaBatch,
+        getPaddedEnd,
+        setSegOverride,
+        uidInBatch,
+    } from '../../stores/qalqala-batch';
     import { ignoreIssueOnSegment } from '../../utils/edit/ignore';
+    import { playFromSegment } from '../../utils/playback/playback';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import SegmentRow from '../list/SegmentRow.svelte';
@@ -83,7 +90,7 @@
         resolvedSeg != null ? (resolvedSeg.chapter ?? parseInt(get(selectedChapter))) : 0;
 
     $: isDirtySegment = (
-        $dirtyTick,
+        void $dirtyTick,
         resolvedSeg != null
             ? isSegmentDirty(segChapterForBtn, resolvedSeg.index)
             : false
@@ -198,6 +205,12 @@
     }
 
     // ---- Ignore handler ----
+    function handlePadEndInput(m: Segment, ev: Event): void {
+        const v = parseInt((ev.currentTarget as HTMLInputElement).value, 10);
+        if (!m.segment_uid || Number.isNaN(v)) return;
+        setSegOverride(m.segment_uid, m, v);
+    }
+
     function handleIgnore(): void {
         if (!resolvedSeg) return;
         try {
@@ -207,6 +220,13 @@
         } catch (err) {
             console.warn('Ignore: dispatch failed:', err);
         }
+    }
+
+    function makeQalqalaPadDragHandler(m: Segment): (t: number) => void {
+        return (t: number) => {
+            const u = m.segment_uid;
+            if (u) setSegOverride(u, m, t);
+        };
     }
 </script>
 
@@ -231,7 +251,35 @@
                 showPlayBtn={true}
                 showChapter={true}
                 validationCategory={category}
+                padHL={category === 'qalqala' && uidInBatch(m.segment_uid, $qalqalaBatch)
+                    ? { padStart: m.time_end, padEnd: getPaddedEnd(m.segment_uid, m, $qalqalaBatch) }
+                    : null}
+                onPadDrag={category === 'qalqala' && uidInBatch(m.segment_uid, $qalqalaBatch) && m.segment_uid
+                    ? makeQalqalaPadDragHandler(m)
+                    : null}
+                onPlayOverride={category === 'qalqala' && uidInBatch(m.segment_uid, $qalqalaBatch)
+                    ? () => playFromSegment(
+                        m.index,
+                        m.chapter ?? (parseInt(get(selectedChapter), 10) || 0),
+                        Math.max(m.time_start, m.time_end - 2000),
+                        { isAccordionPlay: true },
+                    )
+                    : null}
             />
+            {#if category === 'qalqala' && uidInBatch(m.segment_uid, $qalqalaBatch) && m.segment_uid}
+                <div class="qalqala-pad-end-field">
+                    <!-- svelte-ignore a11y-label-has-associated-control -->
+                    <label class="qalqala-pad-end-label">Padded end (ms)
+                        <input
+                            type="number"
+                            class="qalqala-pad-end-input"
+                            min={m.time_start + 50}
+                            value={Math.round(getPaddedEnd(m.segment_uid, m, $qalqalaBatch))}
+                            on:change={(e) => handlePadEndInput(m, e)}
+                        />
+                    </label>
+                </div>
+            {/if}
             {#if showPhonemes && boundaryItem && m.segment_uid === _boundUid}
                 <div class="val-phoneme-tail">
                     <span class="val-tail-label">GT:</span>

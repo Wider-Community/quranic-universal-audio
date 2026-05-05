@@ -46,12 +46,13 @@
     import { savedFilterView } from '../../stores/navigation';
     import type {
         MergeHighlight,
+        PadHighlight,
         SegCanvas,
         SplitHighlight,
         TrimHighlight,
     } from '../../types/segments-waveform';
     import { getConfClass } from '../../utils/validation/conf-class';
-    import { _ensureWaveformObserver } from '../../utils/waveform/utils';
+    import { _ensureWaveformObserver, redrawPeaksWaveforms } from '../../utils/waveform/utils';
     import {
         isMainAudioPlaying,
         playingSegmentIndex,
@@ -71,7 +72,7 @@
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
-    import { SEG_ROW_CANVAS_WIDTH, SEG_ROW_CANVAS_HEIGHT } from '../../utils/constants';
+    import { SEG_ROW_CANVAS_WIDTH, SEG_ROW_CANVAS_HEIGHT, TRIM_HANDLE_HIT_RADIUS_PX, EDIT_MIN_DURATION_MS } from '../../utils/constants';
     import type { Segment } from '../../../../lib/types/domain';
 
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
@@ -141,6 +142,12 @@
      * re-computing. Live-edit and SavePreview rows leave this null.
      */
     export let opId: string | null = null;
+    /** Qalqala batch padding preview — yellow overlay + drag end handle. */
+    export let padHL: PadHighlight | null = null;
+    /** Called with new absolute end time (ms) when user drags/clicks the pad handle. */
+    export let onPadDrag: ((newEndMs: number) => void) | null = null;
+    /** When set, play button invokes this instead of default segment play (e.g. pad preview). */
+    export let onPlayOverride: (() => void) | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -152,6 +159,12 @@
         c._splitHL = splitHL ?? undefined;
         c._trimHL = trimHL ?? undefined;
         c._mergeHL = mergeHL ?? undefined;
+        c._padHL = padHL ?? undefined;
+    }
+
+    $: if (canvasEl && padHL) {
+        (canvasEl as SegCanvas)._wfCache = null;
+        redrawPeaksWaveforms();
     }
 
     // True only when this specific mounted row is the editing target. The
@@ -428,6 +441,10 @@
 
     function onPlayClick(e: MouseEvent): void {
         e.stopPropagation();
+        if (onPlayOverride) {
+            onPlayOverride();
+            return;
+        }
         if (readOnly) return;
         const idx = seg.index;
         const chapter = seg.chapter ?? fallbackChapter;
@@ -538,15 +555,76 @@
         }
     }
 
+    function _wfVisualEnd(): number {
+        if (!padHL) return seg.time_end;
+        return Math.max(seg.time_end, padHL.padEnd);
+    }
+
+    function _timeFromCanvasClientX(canvas: SegCanvas, clientX: number): number {
+        const rect = canvas.getBoundingClientRect();
+        const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const t0 = seg.time_start;
+        const t1 = _wfVisualEnd();
+        return t0 + progress * (t1 - t0);
+    }
+
+    function _padEndHandleX(canvas: SegCanvas): number {
+        const w = canvas.width;
+        const dur = _wfVisualEnd() - seg.time_start;
+        if (dur <= 0 || !padHL) return 0;
+        return ((padHL.padEnd - seg.time_start) / dur) * w;
+    }
+
     function onCanvasMousedown(e: MouseEvent): void {
         if (readOnly || get(editMode)) return;
         const canvas = e.currentTarget as SegCanvas;
+        if (padHL && onPadDrag) {
+            e.preventDefault();
+            e.stopPropagation();
+            const xHandle = _padEndHandleX(canvas);
+            const rect = canvas.getBoundingClientRect();
+            const xClick = e.clientX - rect.left;
+            const nearHandle = Math.abs(xClick - xHandle) <= TRIM_HANDLE_HIT_RADIUS_PX;
+
+            let dragging = nearHandle;
+            const minEnd = seg.time_start + EDIT_MIN_DURATION_MS;
+
+            const applyFromClientX = (cx: number): void => {
+                let t = _timeFromCanvasClientX(canvas, cx);
+                if (!nearHandle && padHL) {
+                    t = Math.max(padHL.padStart, t);
+                }
+                t = Math.max(minEnd, t);
+                onPadDrag!(t);
+            };
+
+            applyFromClientX(e.clientX);
+
+            function onMove(ev: MouseEvent): void {
+                if (dragging || nearHandle) {
+                    dragging = true;
+                    applyFromClientX(ev.clientX);
+                }
+            }
+            function onUp(ev: MouseEvent): void {
+                if (!dragging && padHL && !nearHandle) {
+                    applyFromClientX(ev.clientX);
+                }
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            return;
+        }
+
+        const canvas2 = e.currentTarget as SegCanvas;
 
         e.preventDefault();
-        _seekFromCanvasEvent(e, canvas);
+        _seekFromCanvasEvent(e, canvas2);
 
         function onMove(ev: MouseEvent): void {
-            _seekFromCanvasEvent(ev, canvas);
+            _seekFromCanvasEvent(ev, canvas2);
         }
         function onUp(): void {
             document.removeEventListener('mousemove', onMove);

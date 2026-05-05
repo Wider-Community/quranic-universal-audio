@@ -41,6 +41,7 @@ _ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset({
     "ignoreIssue",
     "auto_fix_missing_word",
     "autoFixMissingWord",
+    "qalqala_pad",
     # ``confirm_reference`` is a reducer-edge variant of editReference recorded
     # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
 })
@@ -336,9 +337,11 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     # Ops also receive a ``patch`` envelope when absent.
     val_after = chapter_validation_counts(entries, chapter, meta)
     operations = _attach_classified_issues(_ensure_patch_on_ops(raw_ops))
+    batch_gid = updates.get("batch_group_id")
+    batch_id = batch_gid if isinstance(batch_gid, str) and batch_gid.strip() else uuid7()
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
-        "batch_id": uuid7(),
+        "batch_id": batch_id,
         "reciter": reciter,
         "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
@@ -348,6 +351,8 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
         "validation_summary_after": val_after,
         "operations": operations,
     }
+    if isinstance(batch_gid, str) and batch_gid.strip():
+        batch["batch_group_id"] = batch_gid.strip()
     history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
     backup_file(history_path)
     with open(history_path, "a", encoding="utf-8") as f:

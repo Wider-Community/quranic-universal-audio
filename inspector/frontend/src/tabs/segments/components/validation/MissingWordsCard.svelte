@@ -17,7 +17,7 @@
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
-    import type { SegValMissingWordsItem } from '../../../../lib/types/api';
+    import type { SegValMissingWordsItem, SegValAutoFix } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import SegmentRow from '../list/SegmentRow.svelte';
 
@@ -126,7 +126,8 @@
     }
 
     // ---- Auto-fix handler ----
-    async function handleAutoFix(autoFix: SegValAutoFix): Promise<void> {
+    async function handleAutoFix(autoFix: SegValAutoFix | undefined): Promise<void> {
+        if (!autoFix) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;

@@ -30,13 +30,28 @@
     import { get } from 'svelte/store';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
-    import { segAllData } from '../../stores/chapter';
     import { IssueRegistry } from '../../domain/registry';
     import {
         CONF_MID_THRESHOLD,
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
+    import {
+        qalqalaBatch,
+        startQalqalaBatch,
+        updateQalqalaPadAmount,
+        cancelQalqalaBatch,
+        resetQalqalaBatch,
+        setPeaksFetching,
+        setPeaksComplete,
+        getPaddedEnd,
+    } from '../../stores/qalqala-batch';
+    import { fetchPeaksForPaddedEnd } from '../../utils/waveform/utils';
+    import { applyCommand } from '../../domain/apply-command';
+    import { segAllData, selectedChapter, refreshSegInStore, syncChapterSegsToAll } from '../../stores/chapter';
+    import { markDirty } from '../../stores/dirty';
+    import { executeSave } from '../../utils/save/execute';
+    import { finalizeEdit, segSlice } from '../../utils/edit/common';
     import {
         jumpToMissingVerseContext,
         jumpToSegment,
@@ -54,6 +69,7 @@
         SegValRepetitionItem,
         SegValidateResponse,
     } from '../../../../lib/types/api';
+    import type { Segment } from '../../../../lib/types/domain';
 
     // ---- Props ----
     /** Filter results to this chapter number. null = all chapters. */
@@ -81,6 +97,112 @@
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
     let activeQalqalaLetter: string | null = null;
     let qalqalaEndOfVerse: boolean = false;
+
+    // ---- Qalqala pad slider (batch padding ms) ----
+    let padSliderRaw = 200;
+    let padAmount = 200;
+    let _padDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const PAD_DEBOUNCE_MS = 80;
+    function onPadSliderInput(e: Event): void {
+        const v = parseInt((e.currentTarget as HTMLInputElement).value, 10);
+        if (Number.isNaN(v)) return;
+        padSliderRaw = v;
+        if (_padDebounceTimer !== null) clearTimeout(_padDebounceTimer);
+        _padDebounceTimer = setTimeout(() => {
+            _padDebounceTimer = null;
+            padAmount = padSliderRaw;
+            updateQalqalaPadAmount(padAmount);
+        }, PAD_DEBOUNCE_MS);
+    }
+
+    // ---- Qalqala batch padding ----
+    async function handlePreviewQalqalaPadding(cat: CategoryDescriptor): Promise<void> {
+        if (!activeQalqalaLetter || cat.visibleItems.length === 0) return;
+        const items = cat.visibleItems as SegValQalqalaItem[];
+        const segs: Segment[] = [];
+        for (const it of items) {
+            const s = resolveIssueSeg(it, 'qalqala', null);
+            if (s?.segment_uid) segs.push(s);
+        }
+        if (segs.length === 0) return;
+
+        startQalqalaBatch(activeQalqalaLetter, padAmount, segs);
+        setPeaksFetching(true);
+        setPeaksComplete(false);
+
+        const concurrency = 5;
+        const queue = [...segs];
+        const workers = Array.from({ length: concurrency }, async () => {
+            while (queue.length > 0) {
+                const seg = queue.shift();
+                if (!seg?.segment_uid) continue;
+                const ch = seg.chapter ?? chapter ?? 0;
+                const batchSnap = get(qalqalaBatch);
+                const paddedEnd = getPaddedEnd(seg.segment_uid, seg, batchSnap);
+                await fetchPeaksForPaddedEnd(seg, ch, paddedEnd);
+            }
+        });
+        await Promise.all(workers);
+        setPeaksFetching(false);
+        setPeaksComplete(true);
+    }
+
+    async function handleConfirmQalqalaPadding(): Promise<void> {
+        const batch = get(qalqalaBatch);
+        if (!batch.isActive) return;
+
+        const allData = get(segAllData);
+        if (!allData) return;
+
+        let anyChange = false;
+        for (const seg of batch.segments) {
+            if (!seg.segment_uid) continue;
+            const newTimeEnd = getPaddedEnd(seg.segment_uid, seg, batch);
+            if (newTimeEnd !== seg.time_end) {
+                anyChange = true;
+                break;
+            }
+        }
+        if (!anyChange) {
+            resetQalqalaBatch();
+            return;
+        }
+
+        const batchGroupId = crypto.randomUUID();
+
+        for (const seg of batch.segments) {
+            if (!seg.segment_uid) continue;
+            const newTimeEnd = getPaddedEnd(seg.segment_uid, seg, batch);
+            if (newTimeEnd === seg.time_end) continue;
+
+            const ch = seg.chapter ?? (parseInt(get(selectedChapter), 10) || 0);
+            const result = applyCommand(segSlice(seg, ch), {
+                type: 'qalqala_pad',
+                segmentUid: seg.segment_uid,
+                newTimeEnd,
+                sourceCategory: 'qalqala',
+                contextCategory: `qalqala_pad_${batch.letter}`,
+                fixKind: 'batch_pad',
+            });
+
+            const updated = result.nextState.byId[seg.segment_uid];
+            if (updated) {
+                seg.time_end = updated.time_end;
+                seg.confidence = updated.confidence;
+            }
+            markDirty(ch, undefined, true);
+            refreshSegInStore(seg);
+            finalizeEdit(result.operation, ch, [seg], { skipAccordion: true, patch: result.patch });
+        }
+
+        syncChapterSegsToAll();
+        resetQalqalaBatch();
+        await executeSave(false, { batchGroupId });
+    }
+
+    function handleCancelQalqalaPadding(): void {
+        cancelQalqalaBatch();
+    }
 
     // ---- Virtualization constants ----
     /** Fallback card height (px) before real measurement. MissingVersesCard with
@@ -386,7 +508,7 @@
         for (const cat of categories) {
             if (_lastFilterSig[cat.type] !== sig) {
                 _lastFilterSig[cat.type] = sig;
-                if (contextStateByType[cat.type]) contextStateByType[cat.type].clear();
+                contextStateByType[cat.type]?.clear();
             }
         }
     }
@@ -602,11 +724,20 @@
     }
     onDestroy(() => {
         if (_lcDebounceTimer !== null) clearTimeout(_lcDebounceTimer);
+        if (_padDebounceTimer !== null) clearTimeout(_padDebounceTimer);
     });
 
     // ---- Context state sync: card notifies panel when user toggles Show/Hide ----
     function onCardContextChange(type: string, absIdx: number, shown: boolean): void {
         getContextState(type).set(absIdx, shown);
+    }
+
+    function relayCardContext(catType: string, absIdx: number, ev: CustomEvent<boolean>): void {
+        onCardContextChange(catType, absIdx, ev.detail);
+    }
+
+    function contextRelay(catType: string, absIdx: number): (ev: CustomEvent<boolean>) => void {
+        return (ev) => relayCardContext(catType, absIdx, ev);
     }
 </script>
 
@@ -673,6 +804,44 @@
                     </div>
                 {/if}
 
+                {#if cat.isQalqala}
+                    <div class="lc-slider-row qalqala-pad-row">
+                        <!-- svelte-ignore a11y-label-has-associated-control -->
+                        <label class="lc-slider-label">
+                            Pad amount
+                            <span class="lc-slider-val">{padSliderRaw}ms</span>
+                        </label>
+                        <input
+                            type="range"
+                            class="lc-slider"
+                            min="50"
+                            max="500"
+                            step="10"
+                            value={padSliderRaw}
+                            disabled={$qalqalaBatch.isActive}
+                            on:input={onPadSliderInput}
+                        />
+                        <button
+                            type="button"
+                            class="val-action-btn"
+                            disabled={!activeQalqalaLetter || $qalqalaBatch.isActive || cat.visibleItems.length === 0}
+                            on:click={() => { void handlePreviewQalqalaPadding(cat); }}
+                        >Preview padding</button>
+                        {#if $qalqalaBatch.isActive}
+                            <button
+                                type="button"
+                                class="val-action-btn"
+                                on:click={() => { void handleConfirmQalqalaPadding(); }}
+                            >Confirm padding</button>
+                            <button
+                                type="button"
+                                class="val-action-btn val-action-btn-muted"
+                                on:click={handleCancelQalqalaPadding}
+                            >Cancel</button>
+                        {/if}
+                    </div>
+                {/if}
+
                 {#if openCategory === cat.type}
                     <!-- Item navigation buttons (non-qalqala) -->
                     {#if !cat.isQalqala}
@@ -709,7 +878,7 @@
                                 category={cat.type}
                                 item={issue}
                                 initialContextShown={getContextState(cat.type).get(startIdx + localIdx) ?? false}
-                                on:contextchange={(e) => onCardContextChange(cat.type, startIdx + localIdx, e.detail)}
+                                on:contextchange={contextRelay(cat.type, startIdx + localIdx)}
                             />
                         {/each}
                         {#if bottomSpacerPx > 0}

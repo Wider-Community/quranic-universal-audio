@@ -34,15 +34,17 @@
     let _speedCtrl: SpeedControl;
     let _pendingOnMeta: ((ev: Event) => void) | null = null;
 
-    const dispatch = createEventDispatcher<{
+    type AudioPlayerEvents = {
         loadedmetadata: { audio: HTMLAudioElement; event: Event };
-        play:           { audio: HTMLAudioElement; event: Event };
-        pause:          { audio: HTMLAudioElement; event: Event };
-        ended:          { audio: HTMLAudioElement; event: Event };
-        timeupdate:     { audio: HTMLAudioElement; event: Event };
-        error:          { audio: HTMLAudioElement; event: Event };
-        seeking:        { audio: HTMLAudioElement; event: Event };
-    }>();
+        play: { audio: HTMLAudioElement; event: Event };
+        pause: { audio: HTMLAudioElement; event: Event };
+        ended: { audio: HTMLAudioElement; event: Event };
+        timeupdate: { audio: HTMLAudioElement; event: Event };
+        error: { audio: HTMLAudioElement; event: Event };
+        seeking: { audio: HTMLAudioElement; event: Event };
+    };
+
+    const dispatch = createEventDispatcher<AudioPlayerEvents>();
 
     // -----------------------------------------------------------------------
     // Public API
@@ -109,7 +111,7 @@
     // Event forwarding from AudioElement
     // -----------------------------------------------------------------------
 
-    function fwd(name: keyof typeof dispatch, detail: { audio: HTMLAudioElement; event: Event }): void {
+    function fwd<K extends keyof AudioPlayerEvents>(name: K, detail: AudioPlayerEvents[K]): void {
         if (name === 'error' && _pendingOnMeta) {
             detail.audio.removeEventListener('loadedmetadata', _pendingOnMeta);
             _pendingOnMeta = null;

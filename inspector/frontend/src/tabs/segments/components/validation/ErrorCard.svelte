@@ -33,6 +33,10 @@
 
     const dispatch = createEventDispatcher<{ contextchange: boolean }>();
 
+    function bubbleContextChange(e: CustomEvent<boolean>): void {
+        dispatch('contextchange', e.detail);
+    }
+
     // ---- Child refs for API forwarding ----
     let mwCard: MissingWordsCard;
     let mvCard: MissingVersesCard;
@@ -78,20 +82,20 @@
         <MissingWordsCard
             bind:this={mwCard}
             item={mwItem}
-            on:contextchange={(e) => dispatch('contextchange', e.detail)}
+            on:contextchange={bubbleContextChange}
         />
     {:else if cardType === 'missingVerses'}
         <MissingVersesCard
             bind:this={mvCard}
             item={mvItem}
-            on:contextchange={(e) => dispatch('contextchange', e.detail)}
+            on:contextchange={bubbleContextChange}
         />
     {:else}
         <GenericIssueCard
             bind:this={genCard}
             {category}
             {item}
-            on:contextchange={(e) => dispatch('contextchange', e.detail)}
+            on:contextchange={bubbleContextChange}
         />
     {/if}
 </div>
