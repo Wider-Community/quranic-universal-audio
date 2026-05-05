@@ -1,8 +1,8 @@
-Generated: 2026-05-01 18:40:12
+Generated: 2026-05-05 23:22:18
 
 ========================================================================
   mohammed_siddiq_al_minshawi
-  mohammed_siddiq_al_minshawi
+  data/recitation_segments/mohammed_siddiq_al_minshawi
 ========================================================================
 
 --- VAD Settings ---
@@ -42,7 +42,7 @@ Generated: 2026-05-01 18:40:12
   Below 60%: 0
   Below 80%: 0
   Failed:    0 (no alignment)
-  Empty ASR: 123 (matched but no phonemes)
+  Empty ASR: 132 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
 
@@ -112,7 +112,7 @@ Generated: 2026-05-01 18:40:12
            text:  وَٱعْلَمُوٓا۟ أَنَّ ٱللَّهَ غَنِىٌّ حَمِيدٌ
   ... and 314 more
 
---- Empty ASR Phonemes (123) ---
+--- Empty ASR Phonemes (132) ---
   [1.0000]  2:19:1-2:19:8  @ 4:46.9 - 4:57.1
            audio: https://server10.mp3quran.net/minsh/002.mp3
            text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
@@ -143,8 +143,21 @@ Generated: 2026-05-01 18:40:12
   [1.0000]  2:252:1-2:252:6  @ 1:51:20.9 - 1:51:28.5
            audio: https://server10.mp3quran.net/minsh/002.mp3
            text:  تِلْكَ ءَايَـٰتُ ٱللَّهِ نَتْلُوهَا عَلَيْكَ بِٱلْحَقِّ ۚ
-  ... and 113 more
+  ... and 122 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
+
+--- Category Counts (machine-readable) ---
+  failed 0
+  missing_verses 0
+  missing_words 0
+  structural_errors 0
+  low_confidence 0
+  repetitions 0
+  audio_bleeding 0
+  boundary_adj 0
+  cross_verse 0
+  qalqala 324
+  muqattaat 30
 
