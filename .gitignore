@@ -9,6 +9,7 @@ __pycache__/
 # IDEs / Agents
 .vscode/
 .claude/
+.cursor/
 .agents/
 CLAUDE.md
 AGENTS.md
