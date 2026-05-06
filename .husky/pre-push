@@ -1,5 +1,41 @@
 #!/usr/bin/env sh
 set -e
+
+zero_hash="0000000000000000000000000000000000000000"
+run_inspector_checks=false
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip ref deletions.
+  if [ "$local_sha" = "$zero_hash" ]; then
+    continue
+  fi
+
+  if [ "$remote_sha" = "$zero_hash" ]; then
+    range="$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  changed_paths="$(git diff --name-only "$range")"
+  for path in $changed_paths; do
+    case "$path" in
+      inspector/frontend/*)
+        run_inspector_checks=true
+        break
+        ;;
+    esac
+  done
+
+  if [ "$run_inspector_checks" = "true" ]; then
+    break
+  fi
+done
+
+if [ "$run_inspector_checks" != "true" ]; then
+  echo "pre-push: no inspector/frontend changes in pushed commits; skipping frontend checks."
+  exit 0
+fi
+
 cd inspector/frontend || exit 1
 npm run lint
 # tsc only — avoids loading Vite/Rollup via svelte.config.js (WSL + Windows node_modules miss @rollup/rollup-linux-x64-gnu).

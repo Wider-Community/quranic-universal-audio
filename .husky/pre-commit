@@ -1,4 +1,9 @@
 #!/usr/bin/env sh
-# --max-arg-length: CLI default is 0 → no chunking → huge argv (WSL/Windows failures).
-# -p false: run lint-staged task chunks serially (two concurrent ESLint runs were SIGKILL/OOM).
-npx lint-staged --max-arg-length 8000 -p false
+# Git runs hooks from repo root. This file must use LF only (no CRLF) or sh breaks flags.
+# --max-arg-length: avoid huge argv on Windows/WSL.
+# -p false: serial task chunks (concurrent ESLint was SIGKILL/OOM).
+# --no-stash: Windows Git CRLF warnings can break lint-staged stash-hash parsing.
+exec node "./node_modules/lint-staged/bin/lint-staged.js" \
+  --max-arg-length 8000 \
+  -p false \
+  --no-stash
