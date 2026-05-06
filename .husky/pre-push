@@ -37,8 +37,17 @@ if [ "$run_inspector_checks" != "true" ]; then
 fi
 
 cd inspector/frontend || exit 1
+
+# Rollup ships native bindings as optional dependencies. When this worktree is
+# shared between Windows and WSL, node_modules can be present but missing the
+# binding for the shell running this hook; repair that install before checks.
+if ! node -e "require('rollup/dist/native.js')" >/dev/null 2>&1; then
+  echo "pre-push: installing missing frontend optional dependencies for this platform..."
+  npm install --include=optional
+fi
+
 npm run lint
-# tsc only — avoids loading Vite/Rollup via svelte.config.js (WSL + Windows node_modules miss @rollup/rollup-linux-x64-gnu).
+# tsc only — avoids loading Vite/Rollup via svelte.config.js.
 # Full `npm run check` runs in CI (docker-publish).
 npm run typecheck
 npm run test
