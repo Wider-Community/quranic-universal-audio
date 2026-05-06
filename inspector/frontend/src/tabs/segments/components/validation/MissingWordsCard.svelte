@@ -1,12 +1,14 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
+
+    import type { SegValAutoFix,SegValMissingWordsItem } from '../../../../lib/types/api';
+    import type { Segment } from '../../../../lib/types/domain';
     import {
         getAdjacentSegments,
         getChapterSegments,
         getSegByChapterIndex,
         segAllData,
     } from '../../stores/chapter';
-    import { autoFixMissingWord } from '../../utils/edit/auto-fix';
     import { segConfig } from '../../stores/config';
     import {
         dirtyTick,
@@ -16,9 +18,8 @@
         unmarkDirty,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
+    import { autoFixMissingWord } from '../../utils/edit/auto-fix';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
-    import type { SegValMissingWordsItem, SegValAutoFix } from '../../../../lib/types/api';
-    import type { Segment } from '../../../../lib/types/domain';
     import SegmentRow from '../list/SegmentRow.svelte';
 
     const dispatch = createEventDispatcher<{ contextchange: boolean }>();

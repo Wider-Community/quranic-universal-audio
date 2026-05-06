@@ -33,7 +33,7 @@
 
     import { tick } from 'svelte';
 
-    import { formatHmsMs, composeHmsMs, splitHmsMs } from '../../utils/data/references';
+    import { composeHmsMs, formatHmsMs, splitHmsMs } from '../../utils/data/references';
 
     export let value: number;                     // ms
     export let bounds: { min: number; max: number } | null;

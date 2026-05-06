@@ -2,6 +2,9 @@
     import { createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
 
+    import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
+    import type { Segment } from '../../../../lib/types/domain';
+    import { IssueRegistry } from '../../domain/registry';
     import {
         getAdjacentSegments,
         getChapterSegments,
@@ -15,20 +18,17 @@
         isSegmentDirty,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
-    import { IssueRegistry } from '../../domain/registry';
-    import { isIgnoredFor } from '../../utils/validation/classified-issues';
-    import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
-    import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import {
-        qalqalaBatch,
         getPaddedEnd,
+        qalqalaBatch,
         setSegOverride,
         uidInBatch,
     } from '../../stores/qalqala-batch';
     import { ignoreIssueOnSegment } from '../../utils/edit/ignore';
     import { playFromSegment } from '../../utils/playback/playback';
-    import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
-    import type { Segment } from '../../../../lib/types/domain';
+    import { isIgnoredFor } from '../../utils/validation/classified-issues';
+    import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
+    import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import SegmentRow from '../list/SegmentRow.svelte';
 
     const dispatch = createEventDispatcher<{ contextchange: boolean }>();
@@ -268,7 +268,6 @@
             />
             {#if category === 'qalqala' && uidInBatch(m.segment_uid, $qalqalaBatch) && m.segment_uid}
                 <div class="qalqala-pad-end-field">
-                    <!-- svelte-ignore a11y-label-has-associated-control -->
                     <label class="qalqala-pad-end-label">Padded end (ms)
                         <input
                             type="number"

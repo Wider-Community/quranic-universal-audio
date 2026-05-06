@@ -9,12 +9,12 @@
 
     import AccordionPanel from '../../../lib/components/AccordionPanel.svelte';
     import ValidationBadge from '../../../lib/components/ValidationBadge.svelte';
-    import { validationData } from '../stores/verse';
     import type {
         TsBoundaryMismatch,
         TsMfaFailure,
         TsMissingWords,
     } from '../../../lib/types/domain';
+    import { validationData } from '../stores/verse';
 
     /** Parent-supplied handler: jump the verse dropdown to the clicked issue. */
     export let onJump: (verseKey: string) => void;

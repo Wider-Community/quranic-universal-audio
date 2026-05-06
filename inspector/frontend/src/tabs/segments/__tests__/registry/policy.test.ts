@@ -4,7 +4,8 @@
 // the suite. Once Phase 1 lands `domain/registry.ts`, these tests become
 // the load-bearing artifact for the matrix.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ IssueRegistry: any }>('../../domain/registry');

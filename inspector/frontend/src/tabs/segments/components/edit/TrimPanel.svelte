@@ -23,10 +23,10 @@
     import type { Segment } from '../../../../lib/types/domain';
     import { editStatusText, trimWindow } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
-    import { exitEditMode } from '../../utils/edit/common';
-    import { previewLooping } from '../../utils/playback/play-range';
-    import { confirmTrim, nudgeTrimBoundary, previewTrimAudio } from '../../utils/edit/trim';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
+    import { exitEditMode } from '../../utils/edit/common';
+    import { confirmTrim, nudgeTrimBoundary, previewTrimAudio } from '../../utils/edit/trim';
+    import { previewLooping } from '../../utils/playback/play-range';
 
     export let seg: Segment;
     export let canvas: SegCanvas;

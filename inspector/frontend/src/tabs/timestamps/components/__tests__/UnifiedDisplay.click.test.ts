@@ -6,16 +6,16 @@
  * still letting a lone single-click swap the loop target — the behavior
  * that fixes the "click on diff word stays on same looped word" bug.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, cleanup, fireEvent } from '@testing-library/svelte';
+import { cleanup, fireEvent,render } from '@testing-library/svelte';
 import { get } from 'svelte/store';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import UnifiedDisplay from '../UnifiedDisplay.svelte';
-import { loadedVerse } from '../../stores/verse';
+import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
 import { loopTarget, tsAudioElement } from '../../stores/playback';
 import type { TsLoadedVerse } from '../../stores/verse';
-import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
+import { loadedVerse } from '../../stores/verse';
 import { TS_CLICK_DELAY_MS } from '../../utils/constants';
+import UnifiedDisplay from '../UnifiedDisplay.svelte';
 
 function word(idx: number, start: number, end: number, text = `w${idx}`): TsWord {
     return {

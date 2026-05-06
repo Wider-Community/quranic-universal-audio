@@ -19,13 +19,13 @@
  */
 
 import type { EditOp, Segment } from '../../../lib/types/domain';
-import { snapshotSeg } from '../stores/dirty';
 import type { SegSnapshot } from '../stores/dirty';
+import { snapshotSeg } from '../stores/dirty';
 import type { SegmentState } from '../stores/segments';
-import { IssueRegistry } from './registry';
 import type {
     ApplyCommandContext,
     ApplyCommandState,
+    AutoFixMissingWordCommand,
     CommandNextState,
     CommandOperation,
     CommandResult,
@@ -34,13 +34,13 @@ import type {
     IgnoreIssueCommand,
     MergeCommand,
     Operation,
+    QalqalaPadCommand,
     SegmentCommand,
     SegmentPatch,
     SplitCommand,
     TrimCommand,
-    AutoFixMissingWordCommand,
-    QalqalaPadCommand,
 } from './command';
+import { IssueRegistry } from './registry';
 
 // ---------------------------------------------------------------------------
 // Op-type translation

@@ -29,9 +29,9 @@
     import { segConfig } from '../../stores/config';
     import {
         editCanvas,
-        editMode,
         editingMountId,
         editingSegUid,
+        editMode,
         trimWindow,
         updateTrimWindow,
     } from '../../stores/edit';

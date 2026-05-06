@@ -13,24 +13,24 @@
      * can retry. On the next keystroke the red state clears.
      */
 
+    import { createEventDispatcher,onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { onMount, createEventDispatcher } from 'svelte';
 
+    import { fetchJson } from '../../../../lib/api';
+    import type { SegResolveRefResponse } from '../../../../lib/types/api';
+    import type { Segment } from '../../../../lib/types/domain';
     import { segAllData } from '../../stores/chapter';
     import { setPendingOp } from '../../stores/dirty';
     import {
         clearEdit,
         pendingChainTarget,
     } from '../../stores/edit';
+    import { _normalizeRef, formatRef, getVerseWordCounts } from '../../utils/data/references';
     import {
         commitRefEdit,
         consumePendingInitialSelection,
         consumePendingInitialValue,
     } from '../../utils/edit/reference';
-    import { formatRef, _normalizeRef, getVerseWordCounts } from '../../utils/data/references';
-    import { fetchJson } from '../../../../lib/api';
-    import type { Segment } from '../../../../lib/types/domain';
-    import type { SegResolveRefResponse } from '../../../../lib/types/api';
 
     export let seg: Segment;
 

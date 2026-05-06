@@ -12,23 +12,23 @@
      * (passed through SegmentRow's reactive splitHL prop).
      */
 
-    import SegmentRow from '../list/SegmentRow.svelte';
-    import HistoryArrows from './HistoryArrows.svelte';
+    import type { Segment } from '../../../../lib/types/domain';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
     import {
         computeChainLeafSnaps,
+        type EditChain,
         formatHistDate,
         getChainBatchIds,
+        type HistorySnapshot,
         SHORT_LABELS,
         snapToSeg,
-        type HistorySnapshot,
-        type EditChain,
     } from '../../stores/history';
+    import type { SplitHighlight, TrimHighlight } from '../../types/segments-waveform';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
     import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
-    import type { SplitHighlight, TrimHighlight } from '../../types/segments-waveform';
-    import type { Segment } from '../../../../lib/types/domain';
-    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
+    import SegmentRow from '../list/SegmentRow.svelte';
+    import HistoryArrows from './HistoryArrows.svelte';
 
     // Props ------------------------------------------------------------------
 

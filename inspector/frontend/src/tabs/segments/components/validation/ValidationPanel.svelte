@@ -26,50 +26,51 @@
      */
 
     import { afterUpdate, onDestroy } from 'svelte';
-    import { segValidation, valUiOpenCategory, valUiLcThreshold, valUiScrollTop, valUiMeasuredCardHeight } from '../../stores/validation';
     import { get } from 'svelte/store';
-    import { segConfig } from '../../stores/config';
-    import { editingSegUid } from '../../stores/edit';
+
+    import type {
+        SegValAnyItem,
+        SegValAudioBleedingItem,
+        SegValidateResponse,
+        SegValLowConfidenceItem,
+        SegValMissingWordsItem,
+        SegValQalqalaItem,
+        SegValRepetitionItem,
+    } from '../../../../lib/types/api';
+    import type { Segment } from '../../../../lib/types/domain';
+    import { applyCommand } from '../../domain/apply-command';
     import { IssueRegistry } from '../../domain/registry';
+    import { refreshSegInStore, segAllData, selectedChapter, syncChapterSegsToAll } from '../../stores/chapter';
+    import { segConfig } from '../../stores/config';
+    import { markDirty } from '../../stores/dirty';
+    import { editingSegUid } from '../../stores/edit';
+    import {
+        cancelQalqalaBatch,
+        getPaddedEnd,
+        qalqalaBatch,
+        resetQalqalaBatch,
+        setPeaksComplete,
+        setPeaksFetching,
+        startQalqalaBatch,
+        updateQalqalaPadAmount,
+    } from '../../stores/qalqala-batch';
+    import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
         CONF_MID_THRESHOLD,
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
     import {
-        qalqalaBatch,
-        startQalqalaBatch,
-        updateQalqalaPadAmount,
-        cancelQalqalaBatch,
-        resetQalqalaBatch,
-        setPeaksFetching,
-        setPeaksComplete,
-        getPaddedEnd,
-    } from '../../stores/qalqala-batch';
-    import { fetchPeaksForPaddedEnd } from '../../utils/waveform/utils';
-    import { applyCommand } from '../../domain/apply-command';
-    import { segAllData, selectedChapter, refreshSegInStore, syncChapterSegsToAll } from '../../stores/chapter';
-    import { markDirty } from '../../stores/dirty';
-    import { executeSave } from '../../utils/save/execute';
-    import { finalizeEdit, segSlice } from '../../utils/edit/common';
-    import {
         jumpToMissingVerseContext,
         jumpToSegment,
         jumpToVerse,
     } from '../../utils/data/navigation-actions';
+    import { finalizeEdit, segSlice } from '../../utils/edit/common';
+    import { executeSave } from '../../utils/save/execute';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { filterStaleIssues } from '../../utils/validation/stale';
+    import { fetchPeaksForPaddedEnd } from '../../utils/waveform/utils';
     import ErrorCard from './ErrorCard.svelte';
-    import type {
-        SegValAnyItem,
-        SegValAudioBleedingItem,
-        SegValLowConfidenceItem,
-        SegValMissingWordsItem,
-        SegValQalqalaItem,
-        SegValRepetitionItem,
-        SegValidateResponse,
-    } from '../../../../lib/types/api';
-    import type { Segment } from '../../../../lib/types/domain';
 
     // ---- Props ----
     /** Filter results to this chapter number. null = all chapters. */

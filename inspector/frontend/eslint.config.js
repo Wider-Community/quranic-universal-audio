@@ -1,9 +1,9 @@
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
-import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import importPlugin from 'eslint-plugin-import';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import sveltePlugin from 'eslint-plugin-svelte';
+import tseslint from 'typescript-eslint';
 
 export default [
     { ignores: ['dist/**', 'node_modules/**', '.vite/**'] },
@@ -58,7 +58,28 @@ export default [
     ...sveltePlugin.configs['flat/recommended'],
     {
         files: ['**/*.svelte'],
+        languageOptions: {
+            parserOptions: {
+                // Parse <script lang="ts"> with the TS parser (required for type syntax).
+                parser: tseslint.parser,
+            },
+        },
         rules: {
+            // Type-aware @typescript-eslint rules need parserOptions.project; wiring project
+            // on .svelte breaks other rules on Svelte's AST — keep this rule for .ts only.
+            '@typescript-eslint/consistent-type-imports': 'off',
+            // Reactive `$:` blocks use expression statements; TS rule flags them as unused.
+            '@typescript-eslint/no-unused-expressions': 'off',
+            // @typescript-eslint/no-unused-vars crashes on Svelte AST (Program:exit); use core rule.
+            '@typescript-eslint/no-unused-vars': 'off',
+            'no-unused-vars': ['warn', {
+                argsIgnorePattern: '^_',
+                varsIgnorePattern: '^_',
+                caughtErrorsIgnorePattern: '^_',
+                destructuredArrayIgnorePattern: '^_',
+            }],
+            // Typescript resolves symbols; core no-undef false-positives on DOM types etc.
+            'no-undef': 'off',
             // Disable import/no-cycle for .svelte — the Svelte compiler generates
             // synthetic imports that confuse the cycle detector.
             'import/no-cycle': 'off',

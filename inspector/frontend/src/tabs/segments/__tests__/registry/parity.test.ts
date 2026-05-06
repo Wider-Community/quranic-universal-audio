@@ -4,7 +4,8 @@
 // row-for-row. The Phase 1 implementation either hand-writes the mirror
 // or generates it; either way, these assertions guarantee no drift.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ IssueRegistry: any }>('../../domain/registry');

@@ -8,6 +8,7 @@ import type {
 } from '../../../../lib/types/api';
 import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import { surahOptionText } from '../../../../lib/utils/surah-info';
+import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import { segAllData, selectedReciter } from '../../stores/chapter';
 import {
     getChapterOps,
@@ -18,13 +19,12 @@ import {
 import { pendingChainTarget } from '../../stores/edit';
 import {
     buildEditChains,
+    type EditChain,
     historyData,
     historyDataStale,
     setEditChains,
-    type EditChain,
 } from '../../stores/history';
 import { setSavePreviewData } from '../../stores/save';
-import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import { renderEditHistoryPanel } from '../history/render';
 import { buildSavePreviewData, hideSavePreview } from './actions';
 

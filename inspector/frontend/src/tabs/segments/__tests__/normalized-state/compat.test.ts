@@ -1,6 +1,7 @@
 // Phase 4: compat selectors preserve $segData / $segAllData read shape.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const chapterStore = await loadOptional<any>('../../stores/chapter');

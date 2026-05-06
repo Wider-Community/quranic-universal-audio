@@ -11,13 +11,13 @@
 import { get } from 'svelte/store';
 
 import type { Segment } from '../../../../lib/types/domain';
+import { applyCommand } from '../../domain/apply-command';
 import { refreshSegInStore, selectedChapter } from '../../stores/chapter';
 import {
     finalizeOp,
     markDirty,
     setPendingOp,
 } from '../../stores/dirty';
-import { applyCommand } from '../../domain/apply-command';
 import { isIgnoredFor } from '../validation/classified-issues';
 
 /**

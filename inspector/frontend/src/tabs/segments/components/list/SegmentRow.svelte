@@ -21,29 +21,36 @@
      * tracking releases destroyed nodes; see segments/waveform/index.ts).
      */
 
+    import { onDestroy,onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { onMount, onDestroy } from 'svelte';
 
+    import type { Segment } from '../../../../lib/types/domain';
     import {
         getAdjacentSegments,
         segAllData,
         selectedChapter,
         selectedVerse,
     } from '../../stores/chapter';
-    import {
-        _addVerseMarkers,
-        formatRef,
-        formatTimeMs,
-    } from '../../utils/data/references';
     import { dirtyTick, isIndexDirty } from '../../stores/dirty';
     import {
-        editMode,
         editingMountId,
         editingSegUid,
+        editMode,
         setEditCanvas,
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
+    import {
+        chapterIndexKey,
+        flashSegmentIndices,
+        targetSegmentIndex,
+    } from '../../stores/navigation';
+    import {
+        isMainAudioPlaying,
+        playingSegmentIndex,
+        segAudioElement,
+        segListElement,
+    } from '../../stores/playback';
     import type {
         MergeHighlight,
         PadHighlight,
@@ -51,30 +58,22 @@
         SplitHighlight,
         TrimHighlight,
     } from '../../types/segments-waveform';
-    import { getConfClass } from '../../utils/validation/conf-class';
-    import { _ensureWaveformObserver, redrawPeaksWaveforms } from '../../utils/waveform/utils';
+    import { EDIT_MIN_DURATION_MS,SEG_ROW_CANVAS_HEIGHT, SEG_ROW_CANVAS_WIDTH, TRIM_HANDLE_HIT_RADIUS_PX } from '../../utils/constants';
+    import { jumpToSegment } from '../../utils/data/navigation-actions';
     import {
-        isMainAudioPlaying,
-        playingSegmentIndex,
-        segAudioElement,
-        segListElement,
-    } from '../../stores/playback';
-    import {
-        chapterIndexKey,
-        flashSegmentIndices,
-        targetSegmentIndex,
-    } from '../../stores/navigation';
+        _addVerseMarkers,
+        formatRef,
+        formatTimeMs,
+    } from '../../utils/data/references';
     import { deleteSegment } from '../../utils/edit/delete';
     import { enterEditWithBuffer } from '../../utils/edit/enter';
     import { mergeAdjacent } from '../../utils/edit/merge';
     import { beginRefEdit } from '../../utils/edit/reference';
-    import { jumpToSegment } from '../../utils/data/navigation-actions';
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
-    import { SEG_ROW_CANVAS_WIDTH, SEG_ROW_CANVAS_HEIGHT, TRIM_HANDLE_HIT_RADIUS_PX, EDIT_MIN_DURATION_MS } from '../../utils/constants';
-    import type { Segment } from '../../../../lib/types/domain';
-
+    import { getConfClass } from '../../utils/validation/conf-class';
+    import { _ensureWaveformObserver, redrawPeaksWaveforms } from '../../utils/waveform/utils';
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
     import SplitPanel from '../edit/SplitPanel.svelte';
     import TrimPanel from '../edit/TrimPanel.svelte';

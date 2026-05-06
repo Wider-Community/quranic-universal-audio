@@ -6,10 +6,10 @@
  * audio-range tests; mocks the segments-tab modules preview.ts pulls in.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { writable } from 'svelte/store';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { installRafMock, makeAudioStub, type AudioStub, type RafMock } from '../../../../../lib/playback/__tests__/raf-harness';
+import { type AudioStub, installRafMock, makeAudioStub, type RafMock } from '../../../../../lib/playback/__tests__/raf-harness';
 
 vi.mock('../../../../../lib/utils/peaks-fetch', () => ({
     fetchSegmentPeaks: vi.fn(async () => null),

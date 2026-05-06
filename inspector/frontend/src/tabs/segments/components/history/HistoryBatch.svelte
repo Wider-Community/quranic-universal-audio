@@ -16,24 +16,24 @@
      * badges, "Reverted" badge, chapter name, formatted date, Undo/Discard.
      */
 
-    import HistoryOp from './HistoryOp.svelte';
-    import SegmentRow from '../list/SegmentRow.svelte';
+    import type { EditOp } from '../../../../lib/types/domain';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
+    import {
+        formatHistDate,
+        type HistorySnapshot,
+        type OpFlatItem,
+        SHORT_LABELS,
+        snapToSeg,
+    } from '../../stores/history';
     import { EDIT_OP_LABELS } from '../../utils/constants';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import {
         onOpUndoClick,
         onPendingOpsDiscard,
     } from '../../utils/save/undo';
-    import {
-        formatHistDate,
-        SHORT_LABELS,
-        snapToSeg,
-        type HistorySnapshot,
-        type OpFlatItem,
-    } from '../../stores/history';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
-    import type { EditOp } from '../../../../lib/types/domain';
-    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
+    import SegmentRow from '../list/SegmentRow.svelte';
+    import HistoryOp from './HistoryOp.svelte';
 
     // Props ------------------------------------------------------------------
 

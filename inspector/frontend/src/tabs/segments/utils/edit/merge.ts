@@ -7,6 +7,7 @@ import { get } from 'svelte/store';
 import { fetchJson } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
+import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,
     invalidateChapterIndexFor,
@@ -22,7 +23,6 @@ import {
     clearEdit,
     setEdit,
 } from '../../stores/edit';
-import { applyCommand } from '../../domain/apply-command';
 import { recordMergeRedirect } from '../../stores/merge-redirect';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { reconcilePlayingAfterMutation } from '../playback/playback';

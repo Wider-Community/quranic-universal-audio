@@ -16,13 +16,13 @@ import { get } from 'svelte/store';
 import { fetchJson } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
+import { applyCommand } from '../../domain/apply-command';
 import { refreshSegInStore, selectedChapter } from '../../stores/chapter';
 import {
     finalizeOp,
     markDirty,
     setPendingOp,
 } from '../../stores/dirty';
-import { applyCommand } from '../../domain/apply-command';
 
 export interface AutoFixResult {
     /** EditOp `op_id` so the card can wire its Undo to the right log entry. */

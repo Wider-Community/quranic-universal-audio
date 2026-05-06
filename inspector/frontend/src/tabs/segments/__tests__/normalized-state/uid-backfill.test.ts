@@ -1,6 +1,7 @@
 // Phase 4: frontend loader backfills segment_uid for legacy fixtures.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const identity = await loadOptional<any>('../../domain/identity');

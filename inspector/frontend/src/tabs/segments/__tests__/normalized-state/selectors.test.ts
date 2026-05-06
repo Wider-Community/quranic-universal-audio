@@ -1,7 +1,8 @@
 // Phase 4: derived selectors return correct slices over SegmentState.
 
-import { describe, it, expect } from 'vitest';
 import { get } from 'svelte/store';
+import { describe, expect,it } from 'vitest';
+
 import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 

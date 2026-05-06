@@ -1,2 +1,4 @@
 #!/usr/bin/env sh
-npx lint-staged
+# --max-arg-length: CLI default is 0 → no chunking → huge argv (WSL/Windows failures).
+# -p false: run lint-staged task chunks serially (two concurrent ESLint runs were SIGKILL/OOM).
+npx lint-staged --max-arg-length 8000 -p false

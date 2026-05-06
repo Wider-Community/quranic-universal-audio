@@ -15,19 +15,19 @@
      * only when at least one filter is active.
      */
 
-    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import {
         buildDisplayItems,
         clearFilters,
+        editChains,
         filterErrCats,
         filterOpTypes,
         flatItems,
         historyData,
         setSortMode,
         sortMode,
-        editChains,
         toggleFilter,
     } from '../../stores/history';
+    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
     // Derived pill data ------------------------------------------------------

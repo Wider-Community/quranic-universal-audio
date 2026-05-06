@@ -1,9 +1,9 @@
 import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import type {
-    HistorySnapshot,
-    OpFlatItem,
     EditChain,
     EditChainOp,
+    HistorySnapshot,
+    OpFlatItem,
 } from '../../types/segments';
 import { deriveOpIssueDelta, usesStoredClassifiedIssues } from '../validation/classified-issues';
 

@@ -5,7 +5,8 @@
 // before any chapter+index lookup. Stale uids (absent from current state)
 // return null even when seg_index would resolve.
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { afterAll,beforeAll, describe, expect, it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const resolve = await loadOptional<any>('../../utils/validation/resolve-issue');

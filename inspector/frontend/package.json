@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.{ts,js}\"",
+    "lint": "eslint \"src/**/*.{ts,js,svelte}\"",
     "format": "prettier --write \"src/**/*.{ts,js,css,html}\"",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",

@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
 
 import type { Segment } from '../../../../../lib/types/domain';
-import { buildSegRangeSpec, buildSegPolicy, resolveSegNextRange } from '../range-spec';
 import { AUTOPLAY_GAP_PAUSE_MS } from '../../constants';
+import { buildSegPolicy, buildSegRangeSpec, resolveSegNextRange } from '../range-spec';
 
 function makeSegment(overrides: Partial<Segment> = {}): Segment {
     return {

@@ -11,7 +11,6 @@ import { get } from 'svelte/store';
 
 import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/domain';
 import { getSegByChapterIndex, segAllData } from '../../stores/chapter';
-import type { SegmentState } from '../../stores/segments';
 import {
     finalizeOp,
     setPendingOp,
@@ -23,6 +22,7 @@ import {
     editingSegUid,
 } from '../../stores/edit';
 import { segAudioElement } from '../../stores/playback';
+import type { SegmentState } from '../../stores/segments';
 import { applyVerseFilterAndRender } from '../data/filters-apply';
 import {
     _playRange as _playRangeImpl,

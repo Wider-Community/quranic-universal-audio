@@ -1,7 +1,8 @@
 // Parametrized behavioral tests over ALL_CATEGORIES.
 
-import { describe, it, expect } from 'vitest';
-import { ALL_CATEGORIES, CAN_IGNORE_CATEGORIES, AUTO_SUPPRESS_CATEGORIES } from '../helpers/categories';
+import { describe, expect,it } from 'vitest';
+
+import { ALL_CATEGORIES, AUTO_SUPPRESS_CATEGORIES,CAN_IGNORE_CATEGORIES } from '../helpers/categories';
 import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 

@@ -15,15 +15,16 @@
      */
 
     import { createEventDispatcher, onMount } from 'svelte';
-    import GenericIssueCard from './GenericIssueCard.svelte';
-    import MissingVersesCard from './MissingVersesCard.svelte';
-    import MissingWordsCard from './MissingWordsCard.svelte';
-    import { IssueRegistry } from '../../domain/registry';
+
     import type {
         SegValAnyItem,
         SegValMissingVerseItem,
         SegValMissingWordsItem,
     } from '../../../../lib/types/api';
+    import { IssueRegistry } from '../../domain/registry';
+    import GenericIssueCard from './GenericIssueCard.svelte';
+    import MissingVersesCard from './MissingVersesCard.svelte';
+    import MissingWordsCard from './MissingWordsCard.svelte';
 
     // ---- Props ----
     export let category: string;

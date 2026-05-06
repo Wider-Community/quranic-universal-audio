@@ -17,7 +17,7 @@
  * starting an edit-preview range; `exitEditMode` does the reverse.
  */
 
-import { createAnimationLoop, type AnimationLoop } from '../utils/animation';
+import { type AnimationLoop,createAnimationLoop } from '../utils/animation';
 import { audioSrcMatches, safePlay } from '../utils/audio';
 import { cutAudio, uncutAudio } from './audio-graph';
 

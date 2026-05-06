@@ -10,12 +10,12 @@
      * `fullscreenDist` + `fullscreenCfg`; ChartFullscreen.svelte renders
      * the overlay.
      */
-    import { segStats } from '../../stores/stats';
     import { selectedReciter } from '../../stores/chapter';
+    import { segStats } from '../../stores/stats';
+    import type { ChartCfg,Distribution } from '../../types/stats';
     import { CONF_HIGH_THRESHOLD, CONF_MID_THRESHOLD, SHORT_SEG_WARN_MS, VAD_MIN_SILENCE_FALLBACK_MS } from '../../utils/constants';
-    import type { Distribution, ChartCfg } from '../../types/stats';
-    import StatsChart from './StatsChart.svelte';
     import ChartFullscreen from './ChartFullscreen.svelte';
+    import StatsChart from './StatsChart.svelte';
 
     // Fullscreen overlay state — null = hidden.
     let fullscreenDist: Distribution | null = null;

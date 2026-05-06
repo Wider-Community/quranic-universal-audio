@@ -7,19 +7,26 @@
      * Mounts validation, history, and save-preview panels as Svelte children.
      */
 
-    import { get } from 'svelte/store';
     import { onMount, tick } from 'svelte';
+    import { get } from 'svelte/store';
 
-    import { isDirtyStore, dirtyTick } from './stores/dirty';
-    import { autoSaveEnabled, toggleAutoSave } from './stores/autosave';
-    import { qalqalaBatch, cancelQalqalaBatch } from './stores/qalqala-batch';
-    import { handleSegmentsKey } from './utils/keyboard';
-    import { showHistoryView, hideHistoryView } from './utils/history/actions';
-    import { onSegSaveClick, hideSavePreview, confirmSaveFromPreview, executeSave } from './utils/save/actions';
-    import { loadSegConfig } from './utils/data/config-loader';
-    import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
-    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson } from '../../lib/api';
+    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
+    import type { SegReciter } from '../../lib/types/domain';
+    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
+    import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
+    import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
+    import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
+    import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
+    import EditOverlay from './components/edit/EditOverlay.svelte';
+    import FiltersBar from './components/filters/FiltersBar.svelte';
+    import HistoryPanel from './components/history/HistoryPanel.svelte';
+    import SegmentsList from './components/list/SegmentsList.svelte';
+    import SavePreview from './components/save/SavePreview.svelte';
+    import StatsPanel from './components/stats/StatsPanel.svelte';
+    import ValidationPanel from './components/validation/ValidationPanel.svelte';
+    import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { autoSaveEnabled, toggleAutoSave } from './stores/autosave';
     import {
         getChapterSegments,
         segAllData,
@@ -29,28 +36,20 @@
         selectedVerse,
         verseOptions,
     } from './stores/chapter';
+    import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
-    import { savedFilterView } from './stores/navigation';
-    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
-    import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
-    import type { SegReciter } from '../../lib/types/domain';
-
-    import { reloadCurrentReciter } from './utils/data/reciter-actions';
-    import { loadChapterData } from './utils/data/chapter-actions';
-    import { playFromSegment } from './utils/playback/playback';
-    import HistoryPanel from './components/history/HistoryPanel.svelte';
-    import { segListElement, waveformContainer } from './stores/playback';
     import { historyData, historyVisible } from './stores/history';
-    import { savePreviewVisible, saveButtonLabel } from './stores/save';
-    import ValidationPanel from './components/validation/ValidationPanel.svelte';
-    import EditOverlay from './components/edit/EditOverlay.svelte';
-    import FiltersBar from './components/filters/FiltersBar.svelte';
-    import SegmentsList from './components/list/SegmentsList.svelte';
-    import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
-    import StatsPanel from './components/stats/StatsPanel.svelte';
-    import SavePreview from './components/save/SavePreview.svelte';
-    import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
-    import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { savedFilterView } from './stores/navigation';
+    import { segListElement, waveformContainer } from './stores/playback';
+    import { cancelQalqalaBatch,qalqalaBatch } from './stores/qalqala-batch';
+    import { saveButtonLabel,savePreviewVisible } from './stores/save';
+    import { loadChapterData } from './utils/data/chapter-actions';
+    import { loadSegConfig } from './utils/data/config-loader';
+    import { reloadCurrentReciter } from './utils/data/reciter-actions';
+    import { hideHistoryView,showHistoryView } from './utils/history/actions';
+    import { handleSegmentsKey } from './utils/keyboard';
+    import { playFromSegment } from './utils/playback/playback';
+    import { confirmSaveFromPreview, executeSave,hideSavePreview, onSegSaveClick } from './utils/save/actions';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
     let segAudioEl: HTMLAudioElement | null = null;
@@ -164,7 +163,7 @@
     <ShortcutsGuide />
 
     <div class="info-bar seg-selector-bar">
-        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Reciter:
             <SearchableSelect
                 options={reciterSelectOptions}
@@ -174,7 +173,7 @@
                 on:change={(e) => onReciterSelectChange(e.detail)}
             />
         </label>
-        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Surah:
             <SearchableSelect
                 options={chaptersOptions}
@@ -183,7 +182,7 @@
                 on:change={onChapterSelectChange}
             />
         </label>
-        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Ayah:
             <SearchableSelect
                 options={verseSelectOptions}

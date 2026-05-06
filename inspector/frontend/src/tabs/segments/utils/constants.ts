@@ -75,7 +75,7 @@ export const EDIT_OP_LABELS: Record<string, string> = {
     pipeline: 'Pipeline edit', remove_sadaqa: 'Remove Sadaqa',
 };
 
-import { PER_SEGMENT_CATEGORIES, IssueRegistry } from '../domain/registry';
+import { IssueRegistry,PER_SEGMENT_CATEGORIES } from '../domain/registry';
 
 /** Display labels for each validation category — sourced from the registry. */
 export const ERROR_CAT_LABELS: Record<string, string> = Object.fromEntries(

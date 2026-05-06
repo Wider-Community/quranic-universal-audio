@@ -12,8 +12,8 @@ import {
     historyData,
     historyDataStale,
     restoreEditChains,
-    setHistoryVisible,
     setEditChains,
+    setHistoryVisible,
     snapshotEditChains,
 } from '../../stores/history';
 import { pendingScrollTop } from '../../stores/navigation';
@@ -28,9 +28,9 @@ import {
     showPreview,
 } from '../../stores/save';
 import { reloadCurrentReciter } from '../data/reciter-actions';
+import { refreshValidation } from '../validation/refresh';
 import { executeSave } from './execute';
 import { buildSavePreviewData } from './preview';
-import { refreshValidation } from '../validation/refresh';
 
 // Re-export pure utils so callers that used to import from segments/save
 // keep one import site.

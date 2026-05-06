@@ -1,6 +1,7 @@
 // Save payload shape tests (MUST-1 contract).
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 describe('save payload shape', () => {
