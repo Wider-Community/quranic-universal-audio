@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 # Non-recited Quranic markers to strip from text (stop signs, hizb, sajdah)
 _QURAN_MARKERS = set("\u06D6\u06D7\u06D8\u06D9\u06DA\u06DB\u06DE\u06E9")
 
-SURAH_DOWNLOAD_WORKERS = 8
+SURAH_DOWNLOAD_WORKERS = 4
 AYAH_DOWNLOAD_WORKERS = 64
 
 def _strip_quran_markers(text: str) -> str:
