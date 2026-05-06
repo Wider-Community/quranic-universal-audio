@@ -21,6 +21,7 @@ import { saveButtonLabel } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
 import { refreshValidation } from '../validation/refresh';
 import { collectOpPeaks, type OpPeakRecord } from '../waveform/op-peaks';
+export { buildPayloadFromCommandResult } from './payload';
 
 // ---------------------------------------------------------------------------
 // Payload types
@@ -68,45 +69,6 @@ interface SavePayloadPatch {
 // ---------------------------------------------------------------------------
 // CommandResult → save payload bridge
 // ---------------------------------------------------------------------------
-
-interface CommandResultLike {
-    operation: EditOp & { type?: string; [k: string]: unknown };
-    affectedChapters?: number[];
-    patch?: unknown;
-    [k: string]: unknown;
-}
-
-/**
- * Build a partial save payload from a `CommandResult`.
- *
- * Used by command-layer call sites that want to inspect the payload shape
- * (or pre-bundle it for save) without going through the full
- * dirty-map iteration in `executeSave`. The returned object carries the
- * same `{segments, operations}` envelope that `/api/seg/save` accepts;
- * the segments slice is left empty here — callers fill it from the
- * mutated chapter ids carried by `result.affectedChapters`.
- *
- * In production, dispatchers attach `result.patch` to `result.operation`
- * at finalize time (`finalizeEdit` / direct dispatcher writes), so
- * `executeSave`'s loop reads patch off the op naturally. This helper
- * also accepts the legacy `result.patch` shape as a fallback for callers
- * that still pass it at the result level.
- */
-export function buildPayloadFromCommandResult(result: CommandResultLike): {
-    segments: SaveSegmentPayloadPatch[];
-    operations: EditOp[];
-    affected_chapters: number[];
-} {
-    const op: EditOp & { patch?: unknown } = { ...result.operation };
-    if (op.patch === undefined && result.patch != null) {
-        op.patch = result.patch as EditOp['patch'];
-    }
-    return {
-        segments: [],
-        operations: [op],
-        affected_chapters: result.affectedChapters ?? [],
-    };
-}
 
 // ---------------------------------------------------------------------------
 // executeSave

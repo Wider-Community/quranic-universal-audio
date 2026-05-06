@@ -6,7 +6,7 @@ import { loadOptional } from '../helpers/optional';
 
 describe('save patch field', () => {
   it('payload includes patch field when applyCommand produces one', async () => {
-    const exec = await loadOptional<any>('../../utils/save/execute');
+    const exec = await loadOptional<any>('../../utils/save/payload');
     if (!exec || !exec.buildPayloadFromCommandResult) {
       throw new Error('phase-5: builder not yet present');
     }
