@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -e
+cd inspector/frontend || exit 1
+npm run lint
+npm run check
+npm run test

@@ -5,6 +5,7 @@ docs/reciters-research/
 __pycache__/
 .cache/
 *.bak
+node_modules/
 
 # IDEs / Agents
 .vscode/
