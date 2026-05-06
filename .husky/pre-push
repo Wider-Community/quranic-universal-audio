@@ -2,5 +2,7 @@
 set -e
 cd inspector/frontend || exit 1
 npm run lint
-npm run check
+# tsc only — avoids loading Vite/Rollup via svelte.config.js (WSL + Windows node_modules miss @rollup/rollup-linux-x64-gnu).
+# Full `npm run check` runs in CI (docker-publish).
+npm run typecheck
 npm run test
