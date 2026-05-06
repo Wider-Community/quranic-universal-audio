@@ -737,8 +737,8 @@
         onCardContextChange(catType, absIdx, ev.detail);
     }
 
-    function contextRelay(catType: string, absIdx: number): (ev: CustomEvent<boolean>) => void {
-        return (ev) => relayCardContext(catType, absIdx, ev);
+    function contextRelay(catType: string, absIdx: number): (_ev: CustomEvent<boolean>) => void {
+        return (_ev) => relayCardContext(catType, absIdx, _ev);
     }
 </script>
 

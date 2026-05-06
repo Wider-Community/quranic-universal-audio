@@ -33,7 +33,7 @@
 
     import { tick } from 'svelte';
 
-    import { composeHmsMs, formatHmsMs, splitHmsMs } from '../../utils/data/references';
+    import { composeHmsMs, splitHmsMs } from '../../utils/data/references';
 
     export let value: number;                     // ms
     export let bounds: { min: number; max: number } | null;
@@ -43,8 +43,8 @@
      *  clicked on, or null if the click landed on the wrapper / a separator.
      *  Parent uses it as `autoFocusGroup` so the user lands IN the group they
      *  aimed at — no longer always-default to ss. */
-    export let onTimeClick: (group: 'hh' | 'mm' | 'ss' | 'mmm' | null) => void;
-    export let onCommit: (newMs: number) => void; // fired on Enter/blur if composed value valid
+    export let onTimeClick: (_group: 'hh' | 'mm' | 'ss' | 'mmm' | null) => void;
+    export let onCommit: (_newMs: number) => void; // fired on Enter/blur if composed value valid
 
     type Group = 'hh' | 'mm' | 'ss' | 'mmm';
     type Parts = { hh: number; mm: number; ss: number; mmm: number };

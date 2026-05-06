@@ -222,10 +222,10 @@
         }
     }
 
-    function makeQalqalaPadDragHandler(m: Segment): (t: number) => void {
-        return (t: number) => {
+    function makeQalqalaPadDragHandler(m: Segment): (_t: number) => void {
+        return (_t: number) => {
             const u = m.segment_uid;
-            if (u) setSegOverride(u, m, t);
+            if (u) setSegOverride(u, m, _t);
         };
     }
 </script>

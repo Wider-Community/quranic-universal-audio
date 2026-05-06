@@ -13,9 +13,6 @@
     import {
         dirtyTick,
         getChapterOpsSnapshot,
-        getOpLog,
-        isSegmentDirty,
-        unmarkDirty,
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
     import { autoFixMissingWord } from '../../utils/edit/auto-fix';

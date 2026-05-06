@@ -134,8 +134,8 @@ export async function mergeAdjacent(
     // UID can follow the redirect to the surviving segment.
     recordMergeRedirect(consumedUid, keptUid);
 
-    const keptOldIdx = first.index;
-    const consumedOldIdx = second.index;
+    const _keptOldIdx = first.index;
+    const _consumedOldIdx = second.index;
 
     // Capture pre-mutation UIDs for playing-pair reconciliation. The playing
     // seg might be either side of the merge; try whichever survives post-merge.

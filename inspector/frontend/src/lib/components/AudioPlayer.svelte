@@ -32,7 +32,7 @@
     // Internal refs
     let _audioEl: AudioElement;
     let _speedCtrl: SpeedControl;
-    let _pendingOnMeta: ((ev: Event) => void) | null = null;
+    let _pendingOnMeta: (() => void) | null = null;
 
     type AudioPlayerEvents = {
         loadedmetadata: { audio: HTMLAudioElement; event: Event };

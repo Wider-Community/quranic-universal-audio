@@ -33,7 +33,7 @@ import {
     setPreviewLooping,
     setPreviewStopHandler,
 } from '../playback/play-range';
-import { startSegAnimation, stopSegAnimation } from '../playback/playback';
+import { startSegAnimation } from '../playback/playback';
 import { drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 
 // ---------------------------------------------------------------------------

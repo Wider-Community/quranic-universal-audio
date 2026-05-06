@@ -17,7 +17,7 @@
     import { validationData } from '../stores/verse';
 
     /** Parent-supplied handler: jump the verse dropdown to the clicked issue. */
-    export let onJump: (verseKey: string) => void;
+    export let onJump: (_verseKey: string) => void;
 
     $: data = $validationData;
     $: mfa = data?.mfa_failures ?? [];

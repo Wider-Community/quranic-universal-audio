@@ -6,7 +6,7 @@
     import { shouldHandleKey } from '../../../lib/utils/keyboard-guard';
     import { wordBoundaryScan } from '../../../lib/utils/word-boundary';
     import { TS_VIEW_MODES,viewMode } from '../stores/display';
-    import { loadedVerse, selectedReciter } from '../stores/verse';
+    import { loadedVerse } from '../stores/verse';
     import type TimestampsAudio from './TimestampsAudio.svelte';
 
     // ---- Props ----

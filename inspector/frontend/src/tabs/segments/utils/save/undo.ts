@@ -32,7 +32,7 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 // _afterUndoSuccess -- shared post-undo refresh
 // ---------------------------------------------------------------------------
 
-export async function _afterUndoSuccess(reciter: string, opsReversed: number): Promise<void> {
+export async function _afterUndoSuccess(reciter: string, _opsReversed: number): Promise<void> {
     pendingChainTarget.set(null);
 
     try {

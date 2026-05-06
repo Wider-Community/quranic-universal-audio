@@ -144,7 +144,7 @@
     /** Qalqala batch padding preview — yellow overlay + drag end handle. */
     export let padHL: PadHighlight | null = null;
     /** Called with new absolute end time (ms) when user drags/clicks the pad handle. */
-    export let onPadDrag: ((newEndMs: number) => void) | null = null;
+    export let onPadDrag: ((_newEndMs: number) => void) | null = null;
     /** When set, play button invokes this instead of default segment play (e.g. pad preview). */
     export let onPlayOverride: (() => void) | null = null;
 
@@ -205,7 +205,6 @@
     $: chapterForDirty = seg.chapter ?? fallbackChapter;
     $: dirty = (void $dirtyTick, !readOnly && isIndexDirty(chapterForDirty, seg.index));
     $: confClass = (void segStoreTick, getConfClass(seg));
-    $: durSec = (void segStoreTick, (seg.time_end - seg.time_start) / 1000);
     $: durTitle = (void segStoreTick, `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`);
     $: adj = !readOnly && !isContext
         ? getAdjacentSegments(seg.chapter ?? 0, seg.index)

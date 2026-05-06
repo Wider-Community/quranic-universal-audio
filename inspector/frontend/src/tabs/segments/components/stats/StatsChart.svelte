@@ -25,7 +25,7 @@
     export let reciter: string;
 
     /** Whether this chart is open in fullscreen (drives ChartFullscreen). */
-    export let onOpenFullscreen: ((dist: Distribution, cfg: ChartCfg) => void) | null = null;
+    export let onOpenFullscreen: ((_dist: Distribution, _cfg: ChartCfg) => void) | null = null;
 
     let canvasEl: HTMLCanvasElement | null = null;
     let chartInstance: Chart | null = null;

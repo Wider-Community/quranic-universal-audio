@@ -73,7 +73,7 @@
             } else {
                 dispatch('preview', null);
             }
-        } catch (e) {
+        } catch (_e) {
             dispatch('preview', null);
         }
     }
