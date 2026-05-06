@@ -1148,14 +1148,18 @@ def build_reciters_config():
             seen[slug] = rec
 
     data = {
-        "reciter": [], "name_en": [], "name_ar": [],
+        "reciter": [], "is_timestamped": [],
+        "name_en": [], "name_ar": [],
         "riwayah": [], "style": [], "country": [], "source": [],
         "audio_category": [], "url_template": [],
         "coverage_surahs": [], "coverage_ayahs": [],
-        "is_timestamped": [],
     }
 
-    for slug in sorted(seen):
+    # Timestamped reciters first; secondary sort by slug (alphabetical).
+    is_ts = {s: has_tracked_timestamps(s, ROOT) for s in seen}
+    sorted_slugs = sorted(seen.keys(), key=lambda s: (not is_ts[s], s))
+
+    for slug in sorted_slugs:
         rec = seen[slug]
         manifest = _find_audio_manifest(slug)
         meta = manifest.get("_meta", {}) if manifest else {}
@@ -1183,6 +1187,7 @@ def build_reciters_config():
                 coverage_surahs = 0
 
         data["reciter"].append(slug)
+        data["is_timestamped"].append(is_ts[slug])
         data["name_en"].append(rec["name_en"])
         data["name_ar"].append(meta.get("name_ar", "") or "")
         data["riwayah"].append(rec["riwayah"])
@@ -1193,12 +1198,12 @@ def build_reciters_config():
         data["url_template"].append(url_template)
         data["coverage_surahs"].append(coverage_surahs)
         data["coverage_ayahs"].append(coverage_ayahs)
-        data["is_timestamped"].append(has_tracked_timestamps(slug, ROOT))
 
     log.info("Built %d reciters catalog rows", len(data["reciter"]))
 
     features = Features({
         "reciter": Value("string"),
+        "is_timestamped": Value("bool"),
         "name_en": Value("string"),
         "name_ar": Value("string"),
         "riwayah": Value("string"),
@@ -1209,7 +1214,6 @@ def build_reciters_config():
         "url_template": Value("string"),
         "coverage_surahs": Value("int32"),
         "coverage_ayahs": Value("int32"),
-        "is_timestamped": Value("bool"),
     })
 
     ds = Dataset.from_dict(data, features=features)
