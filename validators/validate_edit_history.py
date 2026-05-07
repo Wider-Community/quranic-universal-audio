@@ -196,8 +196,20 @@ def check_file_hash(reciter: str) -> tuple[bool, str]:
     return True, "File hash matches"
 
 
+# _meta keys that may legitimately change when a `pad_migration` batch is
+# present in edit_history.jsonl. Outside that op these must stay fixed.
+PAD_MIGRATION_KEYS = {
+    "pad_ms", "pad_left_ms", "pad_right_ms", "min_silence_floor_ms",
+    "pad_migrated_at", "pad_migrated_from_pad_ms",
+}
+
+
 def _check_meta_for_file(reciter: str, base_sha: str, filename: str) -> tuple[bool, str]:
-    """Check _meta in a file is unchanged from base."""
+    """Check _meta in a file is unchanged from base.
+
+    Allows pad-related keys to change iff the reciter's edit_history.jsonl
+    has a `pad_migration` batch on HEAD that wasn't on base.
+    """
     rel_path = f"data/recitation_segments/{reciter}/{filename}"
     base_content = _git_show(base_sha, rel_path)
     if base_content is None:
@@ -215,13 +227,41 @@ def _check_meta_for_file(reciter: str, base_sha: str, filename: str) -> tuple[bo
     head_content = head_path.read_text(encoding="utf-8")
     head_meta = json.loads(head_content).get("_meta", {})
 
-    if base_meta != head_meta:
-        changed_keys = [
-            k for k in set(list(base_meta.keys()) + list(head_meta.keys()))
-            if base_meta.get(k) != head_meta.get(k)
-        ]
-        return False, f"_meta changed: {', '.join(changed_keys)}"
-    return True, "_meta unchanged"
+    if base_meta == head_meta:
+        return True, "_meta unchanged"
+
+    changed_keys = {
+        k for k in set(base_meta) | set(head_meta)
+        if base_meta.get(k) != head_meta.get(k)
+    }
+    if changed_keys.issubset(PAD_MIGRATION_KEYS) and _has_new_pad_migration(reciter, base_sha):
+        return True, f"_meta pad-migration: {', '.join(sorted(changed_keys))}"
+    return False, f"_meta changed: {', '.join(sorted(changed_keys))}"
+
+
+def _has_new_pad_migration(reciter: str, base_sha: str) -> bool:
+    """True iff edit_history.jsonl has a `pad_migration` batch on HEAD that
+    wasn't on base."""
+    rel = f"data/recitation_segments/{reciter}/edit_history.jsonl"
+    head_path = SEGMENTS_DIR / reciter / "edit_history.jsonl"
+    if not head_path.exists():
+        return False
+    head_records = _parse_edit_history(head_path)
+
+    base_content = _git_show(base_sha, rel)
+    base_batch_ids = set()
+    if base_content:
+        for line in base_content.strip().splitlines():
+            try:
+                rec = json.loads(line)
+                base_batch_ids.add(rec.get("batch_id"))
+            except json.JSONDecodeError:
+                pass
+
+    for rec in head_records:
+        if rec.get("batch_type") == "pad_migration" and rec.get("batch_id") not in base_batch_ids:
+            return True
+    return False
 
 
 def check_meta_tampering(reciter: str, base_sha: str) -> tuple[bool, str]:
