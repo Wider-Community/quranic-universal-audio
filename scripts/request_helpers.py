@@ -606,10 +606,19 @@ def resolve_riwayah(slug):
 # VAD parameter derivation
 # ---------------------------------------------------------------------------
 def derive_vad_params(min_silence, slug=""):
-    """Derive min_speech and pad from min_silence."""
+    """Return ``(min_silence, min_speech, pad_left, pad_right, floor)``.
+
+    Padding is asymmetric and reciter-independent. Right-side pad is
+    much larger than left to capture trailing qalqala / sukoon at verse
+    end. ``floor`` is the daylight guarantee between adjacent padded
+    segments. Tune via the issue/state file if a specific reciter
+    needs different values; defaults work for the vast majority.
+    """
     min_speech = min_silence
-    pad = int(min_silence * 0.4)
-    return min_silence, min_speech, pad
+    pad_left = 150
+    pad_right = 500
+    floor = 40
+    return min_silence, min_speech, pad_left, pad_right, floor
 
 
 # ---------------------------------------------------------------------------
