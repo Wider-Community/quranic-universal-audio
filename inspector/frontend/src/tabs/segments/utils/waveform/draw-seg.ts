@@ -119,7 +119,6 @@ export function drawSegBaseAndOverlays(
     _drawSplitHighlight(canvas, visSeg);
     _drawTrimHighlight(canvas, visSeg);
     _drawMergeHighlight(canvas, visSeg);
-    _drawPadHighlight(canvas, visSeg);
 
     canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
     canvas._wfCacheKey = `${startMs}:${endMs}`;
@@ -327,24 +326,6 @@ export function _drawSplitHighlight(canvas: SegCanvas, wfSeg: Segment): void {
 
     ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
     if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
-}
-
-/** Yellow fill between original segment end and padded preview end (qalqala batch). */
-export function _drawPadHighlight(canvas: SegCanvas, seg: Segment): void {
-    const hl = canvas._padHL;
-    if (!hl) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const w = canvas.width;
-    const h = canvas.height;
-    const dur = seg.time_end - seg.time_start;
-    if (dur <= 0) return;
-    const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
-    const x1 = toX(hl.padStart);
-    const x2 = toX(hl.padEnd);
-    if (x2 <= x1) return;
-    ctx.fillStyle = 'rgba(255, 200, 0, 0.35)';
-    ctx.fillRect(x1, 0, x2 - x1, h);
 }
 
 /** Draw yellow cursor on merge result card showing the point of merge. */

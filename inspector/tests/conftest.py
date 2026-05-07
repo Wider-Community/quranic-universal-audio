@@ -68,13 +68,12 @@ except Exception:
     PER_CHAPTER_CATEGORIES = ["structural_errors"]
     CAN_IGNORE_CATEGORIES = [
         "low_confidence", "repetitions", "audio_bleeding", "boundary_adj",
-        "cross_verse", "qalqala",
+        "cross_verse",
     ]
     PERSISTS_IGNORE_CATEGORIES = list(CAN_IGNORE_CATEGORIES)
     AUTO_SUPPRESS_CATEGORIES = [
         "failed", "missing_verses", "structural_errors", "low_confidence",
         "repetitions", "audio_bleeding", "boundary_adj", "cross_verse",
-        "qalqala",
     ]
 
 

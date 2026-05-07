@@ -30,8 +30,7 @@ export type Operation =
     | 'editReference'
     | 'delete'
     | 'ignoreIssue'
-    | 'autoFixMissingWord'
-    | 'qalqala_pad';
+    | 'autoFixMissingWord';
 
 // ---------------------------------------------------------------------------
 // Command shapes
@@ -118,13 +117,6 @@ export interface AutoFixMissingWordCommand extends CommandBase {
     display_text?: string;
 }
 
-export interface QalqalaPadCommand extends CommandBase {
-    type: 'qalqala_pad';
-    segmentUid: string;
-    /** New segment end time after padding (ms). */
-    newTimeEnd: number;
-}
-
 export type SegmentCommand =
     | TrimCommand
     | SplitCommand
@@ -132,8 +124,7 @@ export type SegmentCommand =
     | EditReferenceCommand
     | DeleteCommand
     | IgnoreIssueCommand
-    | AutoFixMissingWordCommand
-    | QalqalaPadCommand;
+    | AutoFixMissingWordCommand;
 
 // ---------------------------------------------------------------------------
 // Result shapes

@@ -55,15 +55,12 @@ interface SavePayloadFull {
     segments: SaveSegmentPayloadFull[];
     operations: EditOp[];
     op_peaks?: OpPeakRecord[];
-    /** Shared id across multi-chapter saves (qalqala batch padding). */
-    batch_group_id?: string;
 }
 
 interface SavePayloadPatch {
     segments: SaveSegmentPayloadPatch[];
     operations: EditOp[];
     op_peaks?: OpPeakRecord[];
-    batch_group_id?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,13 +116,8 @@ function isChapterHalfDirty(chOps: EditOp[]): boolean {
 let _isSaving = false;
 let _saveQueued = false;
 let _queuedIsAutoSave = true;
-/** When set, appended to every chapter save payload in this run (multi-chapter qalqala confirm). */
-let _pendingBatchGroupId: string | undefined;
 
-export async function executeSave(isAutoSave = false, opts?: { batchGroupId?: string }): Promise<void> {
-    if (opts?.batchGroupId) {
-        _pendingBatchGroupId = opts.batchGroupId;
-    }
+export async function executeSave(isAutoSave = false): Promise<void> {
     if (_isSaving) {
         _saveQueued = true;
         if (!isAutoSave) _queuedIsAutoSave = false;
@@ -209,7 +201,6 @@ export async function executeSave(isAutoSave = false, opts?: { batchGroupId?: st
             // Pull peaks from in-memory caches for every op that has them.
             const opPeaks = collectOpPeaks(chOps);
             if (opPeaks.length > 0) payload.op_peaks = opPeaks;
-            if (_pendingBatchGroupId) payload.batch_group_id = _pendingBatchGroupId;
 
             pendingSaves.push({ chapter: ch, payload, ops: chOps });
         }
@@ -269,7 +260,6 @@ export async function executeSave(isAutoSave = false, opts?: { batchGroupId?: st
         console.error('Save failed:', e);
         saveButtonLabel.set('Save');
     } finally {
-        _pendingBatchGroupId = undefined;
         _isSaving = false;
         if (_saveQueued) {
             // Give a short breather, then process queued save
