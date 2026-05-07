@@ -1,0 +1,2 @@
+# Husky hooks are POSIX sh; CRLF breaks option parsing (e.g. lint-staged --no-stash).
+.husky/** text eol=lf

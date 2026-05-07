@@ -4,33 +4,23 @@ Flask web app for reviewing and editing Quran recitation alignment results. Thre
 
 ## Setup
 
-Run in a terminal:
+Requires [Docker](https://docs.docker.com/get-docker/). From the repo root:
 
 ```bash
-pip install -r inspector/requirements.txt
+docker compose -f inspector/docker-compose.yml up
 ```
 
-**Highly recommended:** Install [ffmpeg](https://ffmpeg.org/) to enable waveforms on segment cards during playback. Download from https://ffmpeg.org/download.html or install via terminal:
-
-- **Windows**: `winget install ffmpeg` 
-- **macOS**: `brew install ffmpeg`
-- **Linux**: `sudo apt install ffmpeg` (Debian/Ubuntu) or `sudo dnf install ffmpeg` (Fedora)
-
-## Run
-
-```bash
-python inspector/server.py # then open http://localhost:5000 in your browser
-```
+Open http://localhost:5000. The image is pulled from GHCR — no local build needed. `data/` at the repo root is mounted into the container, so edits save back to your working tree.
 
 ## Segments Reviewing
 
-The main editing interface in the **Segments** tab. Browse the AI-generated segments, review flagged errors, and fix them so timestamps can be generated.
+The main editing interface in the **Segments** tab. Browse clips, review flagged errors, and fix them so timestamps can be generated.
 
 > **Important**: Make sure to save edits regularly to avoid losing work. The app does not auto-save, and unsaved changes might be lost if you refresh or navigate away.
 
 ### Getting started
 
-Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache chapter audio locally (~1-2 GB) for offline editing. 
+Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache audio locally (~1-2 GB) for offline editing. 
 
 **This is also needed if you notice segments' audio consistently don't match their text and play audio from neighbouring segments instead (CDN streaming issue with a small number of reciters).**
 
@@ -49,7 +39,7 @@ You can also open the **statistics** panel for graphs on confidence scores, segm
 | **Adjust** | Drag handles on the waveform to modify the segment's start and end time |
 | **Split** | Divide a segment into two at the playhead position |
 | **Merge** | Combine two adjacent segments into one |
-| **Edit Reference** | Change the Qur'anic reference (`surah:verse:word-surah:verse:word` format or shortcut `surah:verse` |
+| **Edit Reference** | Change the Qur'anic reference (`surah:verse:word-surah:verse:word` format or shortcut `surah:verse`) |
 | **Delete** | Remove a segment entirely |
 | **Auto-fill** | Extend an adjacent segment to cover a missing word (available on Missing Words cards) |
 | **Ignore** | Dismiss the issue for this category, marking the segment as reviewed-and-correct |
@@ -68,7 +58,7 @@ Segments are validated automatically and upon every save. Issues appear in colla
 | Low Confidence | Should fix | Ignore, merge, or adjust |
 | Cross-verse | Highly recommended | Ignore or split at pause |
 | Qalqala | Highly recommended | Ignore or adjust boundary |
-| Muqattaat | Display only | Edit if needed |
+| Muqatta'at | Display only | Edit if needed |
 
 > **General tip:** if a flagged segment has no actual error, click **Ignore** to so it disappears from the category and help us know that it is reviewed and correct.
 
@@ -121,7 +111,8 @@ This is especially important at verse boundaries — the HuggingFace dataset rec
 #### Muqatta'at
 
 Segments starting with huruf muqatta'at (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if any issues are spotted.
-<!-- screenshot: muqattaat segment -->
+
+<!-- screenshot: muqatta'at segment -->
 
 <!-- screenshot: editing operations in action -->
 
@@ -164,4 +155,12 @@ We're continuously improving the Inspector to make reviewing as smooth as possib
 - Ideas for new fix types or ways to reduce common errors in the pipeline
 - Ways to improve the reviewer experience, make it more enjoyable, and reduce the time it takes to review a reciter
 - General UI improvements, new features, or bug reports
-- General improvements for the timestamps tab experience
+- General improvements for the timestamps and audio tabs experience
+
+## Tech stack
+
+- **Backend:** Python 3.11, Flask (Blueprints), `quranic-phonemizer`
+- **Frontend:** Svelte 4 + TypeScript + Vite
+- **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
+- **Testing:** Pytest for backend; Vitest 4 + happy-dom + `@testing-library/svelte` for frontend; Playwright for end-to-end testing
+- **Packaging:** Multi-stage Docker image (Node build → Python runtime), published to GHCR via GitHub Actions on pushes to `main`

@@ -1,0 +1,31 @@
+# Inspector — reviewer-facing compose file.
+#
+# Prereq: repo cloned (or PR checked out via `gh pr checkout <N>`) so that
+# `data/` at repo root contains the recitation data to review.
+#
+# Usage (from repo root):
+#   docker compose -f inspector/docker-compose.yml up
+#   → http://localhost:5000
+#
+# The image is published to GHCR by .github/workflows/docker-publish.yml
+# on pushes to main. No local build needed — startup is just an image pull.
+#
+# To build from source instead (when a PR touches inspector code, not just
+# data), drop a `docker-compose.override.yml` alongside this file:
+#   services:
+#     inspector:
+#       image: !reset null
+#       build:
+#         context: ..
+#         dockerfile: inspector/Dockerfile
+
+services:
+  inspector:
+    image: ghcr.io/wider-community/inspector:latest
+    container_name: inspector
+    pull_policy: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../data:/data
+    restart: unless-stopped

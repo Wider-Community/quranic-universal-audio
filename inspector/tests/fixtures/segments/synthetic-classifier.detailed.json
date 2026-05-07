@@ -1,0 +1,139 @@
+{
+  "_meta": {
+    "created_at": "2026-04-04T00:00:00Z",
+    "asr_model": "fixture",
+    "vad_model": "fixture",
+    "min_silence_ms": 400,
+    "min_speech_ms": 400,
+    "pad_ms": 160,
+    "audio_source": "by_surah/fixture"
+  },
+  "_fixture_meta": {
+    "source": "hand-crafted",
+    "purpose": "One segment per per-segment validation category, for unambiguous parametrized testing.",
+    "redactions": [],
+    "categories_covered": [
+      "failed",
+      "low_confidence",
+      "repetitions",
+      "audio_bleeding",
+      "boundary_adj",
+      "cross_verse",
+      "qalqala",
+      "muqattaat"
+    ],
+    "segments_by_entry": [
+      {
+        "ref": "2",
+        "segments": [
+          {"index": 0, "expected_categories": ["muqattaat"], "notes": "Surah 2 verse 1 with s_word=1 — muqattaat fires (2,1) ∈ MUQATTAAT_VERSES"}
+        ]
+      },
+      {
+        "ref": "1",
+        "segments": [
+          {"index": 0, "expected_categories": ["failed"], "notes": "matched_ref empty → failed"},
+          {"index": 1, "expected_categories": ["low_confidence"], "notes": "confidence 0.65 < 0.80 → low_confidence and low_confidence_detail"},
+          {"index": 2, "expected_categories": ["repetitions"], "notes": "wrap_word_ranges populated → repetitions"},
+          {"index": 3, "expected_categories": ["audio_bleeding"], "notes": "matched_ref points to 5:1:1 but entry_ref is 1 → audio_bleeding"},
+          {"index": 4, "expected_categories": ["boundary_adj"], "notes": "single-word matched_ref 1:6:1-1:6:1, not a STANDALONE_REF, not a MUQATTAAT verse → boundary_adj"},
+          {"index": 5, "expected_categories": ["cross_verse"], "notes": "matched_ref spans 1:7:1 to 1:7:4 inside one ayah BUT we set s_ayah != e_ayah by spanning 1:5:7-1:6:1 → cross_verse"},
+          {"index": 6, "expected_categories": ["qalqala"], "notes": "matched_text ends in qalqala letter (د) → qalqala"}
+        ]
+      },
+      {
+        "ref": "1-bleed",
+        "segments": [],
+        "notes": "Used as the audio_bleeding's secondary entry with audio differing — irrelevant for classifier-only fixture (single entry per ref keeps fixture small)."
+      }
+    ],
+    "_classifier_inputs_note": "All segments live under entry ref=1 except the muqattaat one (ref=2). entry.audio is irrelevant to classifier rules; only matched_ref vs entry_ref drives audio_bleeding."
+  },
+  "entries": [
+    {
+      "ref": "2",
+      "audio": "https://fixture.local/audio/2.mp3",
+      "segments": [
+        {
+          "time_start": 1000,
+          "time_end": 5000,
+          "matched_ref": "2:1:1-2:1:1",
+          "matched_text": "الٓمٓ",
+          "phonemes_asr": "ʔ a l i f l a: m m i: m",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-2222-7000-a000-000000000001"
+        }
+      ]
+    },
+    {
+      "ref": "1",
+      "audio": "https://fixture.local/audio/1.mp3",
+      "segments": [
+        {
+          "time_start": 1000,
+          "time_end": 2000,
+          "matched_ref": "",
+          "matched_text": "",
+          "phonemes_asr": "",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-b000-000000000001"
+        },
+        {
+          "time_start": 2100,
+          "time_end": 4000,
+          "matched_ref": "1:2:1-1:2:1",
+          "matched_text": "ٱلْحَمْدُ",
+          "phonemes_asr": "a l ħ a m d",
+          "confidence": 0.65,
+          "segment_uid": "019d5c88-1111-7000-b000-000000000002"
+        },
+        {
+          "time_start": 4100,
+          "time_end": 6000,
+          "matched_ref": "1:3:1-1:3:1",
+          "matched_text": "ٱلرَّحْمَـٰنِ",
+          "phonemes_asr": "a rr a ħ m a: n",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-b000-000000000003",
+          "wrap_word_ranges": [[1, 1]]
+        },
+        {
+          "time_start": 6100,
+          "time_end": 8000,
+          "matched_ref": "5:1:1-5:1:1",
+          "matched_text": "يَـٰٓأَيُّهَا",
+          "phonemes_asr": "j a: ʔ a jj u h a:",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-b000-000000000004"
+        },
+        {
+          "time_start": 8100,
+          "time_end": 10000,
+          "matched_ref": "1:6:1-1:6:1",
+          "matched_text": "ٱهْدِنَا",
+          "phonemes_asr": "i h d i n a:",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-b000-000000000005"
+        },
+        {
+          "time_start": 10100,
+          "time_end": 13000,
+          "matched_ref": "1:5:7-1:6:1",
+          "matched_text": "نَسْتَعِينُ ٱهْدِنَا",
+          "phonemes_asr": "n a s t a ʕ i: n i h d i n a:",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-b000-000000000006"
+        },
+        {
+          "time_start": 13100,
+          "time_end": 16000,
+          "matched_ref": "1:7:1-1:7:4",
+          "matched_text": "صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ هد",
+          "phonemes_asr": "sˤ i rˤ aˤ: tˤ a ll a ð i: n a ʔ a n ʕ a m t a ʕ a l a j h i m h a d",
+          "confidence": 1.0,
+          "segment_uid": "019d5c88-1111-7000-b000-000000000007"
+        }
+      ]
+    }
+  ]
+}
