@@ -160,7 +160,6 @@ Endpoints to gate (audit checklist):
 - `POST /api/seg/save/<reciter>/<chapter>`
 - `POST /api/seg/undo-batch/<reciter>`
 - `POST /api/seg/undo-ops/<reciter>`
-- `POST /api/seg/qalqala-batch/...` (and any other batch-edit routes)
 - `POST /api/seg/trigger-validation/<reciter>` — gated even though "read-only side effect" because it warms a per-reciter cache that's expensive to compute and easy to abuse anonymously.
 
 ### Frontend hiding (cleanliness, not security)
@@ -170,7 +169,6 @@ A single `editingDisabled` derived store consumed by every component that has an
 - `tabs/segments/components/list/SegmentRow.svelte` — inline trim/split/merge/delete buttons.
 - `tabs/segments/components/validation/{ErrorCard,GenericIssueCard,MissingWordsCard,MissingVersesCard,ValidationPanel}.svelte` — accordion edit dispatchers.
 - `tabs/segments/components/history/{EditChainRow,HistoryBatch}.svelte` — undo buttons.
-- `tabs/segments/SegmentsTab.svelte` — qalqala batch confirm flow.
 
 The frontend hides the buttons; the backend rejects unauthorized POSTs even if the frontend is bypassed.
 

@@ -136,13 +136,9 @@ export function _ensureWaveformObserver(): IntersectionObserver {
             }
             if (!seg) return;
 
-            let wfSeg: Segment = canvas._splitHL
+            const wfSeg: Segment = canvas._splitHL
                 ? { ...seg, time_start: canvas._splitHL.wfStart, time_end: canvas._splitHL.wfEnd }
                 : seg;
-            if (canvas._padHL && !canvas._splitHL) {
-                const ext = Math.max(wfSeg.time_end, canvas._padHL.padEnd);
-                wfSeg = { ...wfSeg, time_end: ext };
-            }
 
             if (canvas._splitData) {
                 canvas._splitBaseCache = null;
@@ -237,39 +233,3 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
     } catch { /* ignore */ }
 }
 
-/** Fetch segment peaks for an extended range through *paddedEndMs* (qalqala batch preview). */
-export async function fetchPeaksForPaddedEnd(
-    seg: Segment,
-    chapter: number | string,
-    paddedEndMs: number,
-): Promise<void> {
-    const reciter = get(selectedReciter);
-    const allData = get(segAllData);
-    if (!reciter || !allData) return;
-    const audioUrl = seg.audio_url || allData.audio_by_chapter?.[String(chapter)] || '';
-    if (!audioUrl) return;
-
-    const { prev, next } = getAdjacentSegments(chapter, seg.index);
-    const prevEnd = prev?.time_end ?? 0;
-    const nextStart = next?.time_start ?? Number.POSITIVE_INFINITY;
-    const cfg = get(segConfig);
-    const PAD_EXTRA_MS = 500;
-    const entry = {
-        url: audioUrl,
-        start_ms: Math.max(prevEnd, seg.time_start - cfg.trimPadLeft, 0),
-        end_ms: Math.min(nextStart, paddedEndMs + PAD_EXTRA_MS),
-    };
-
-    try {
-        const data = await fetchJson<SegSegmentPeaksResponse>(`/api/seg/segment-peaks/${reciter}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ segments: [entry] }),
-        });
-        if (!get(segAllData) || get(selectedReciter) !== reciter) return;
-        const newPeaks = data.peaks || {};
-        if (Object.keys(newPeaks).length === 0) return;
-        indexSegPeaksBulk(newPeaks);
-        redrawPeaksWaveforms();
-    } catch { /* ignore */ }
-}

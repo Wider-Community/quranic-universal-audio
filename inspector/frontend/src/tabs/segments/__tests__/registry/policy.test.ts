@@ -22,7 +22,7 @@ const EXPECTED = {
   audio_bleeding:    { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
   boundary_adj:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
   cross_verse:       { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
-  qalqala:           { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info' },
+  qalqala:           { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info' },
   muqattaat:         { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info' },
 };
 

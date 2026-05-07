@@ -41,7 +41,6 @@ _ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset({
     "ignoreIssue",
     "auto_fix_missing_word",
     "autoFixMissingWord",
-    "qalqala_pad",
     # ``confirm_reference`` is a reducer-edge variant of editReference recorded
     # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
 })
@@ -352,11 +351,9 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     operations = _attach_classified_issues(
         _ensure_patch_on_ops(raw_ops), probe_failed_uids=probe_failed_uids,
     )
-    batch_gid = updates.get("batch_group_id")
-    batch_id = batch_gid if isinstance(batch_gid, str) and batch_gid.strip() else uuid7()
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
-        "batch_id": batch_id,
+        "batch_id": uuid7(),
         "reciter": reciter,
         "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
@@ -366,8 +363,6 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
         "validation_summary_after": val_after,
         "operations": operations,
     }
-    if isinstance(batch_gid, str) and batch_gid.strip():
-        batch["batch_group_id"] = batch_gid.strip()
     history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
     backup_file(history_path)
     with open(history_path, "a", encoding="utf-8") as f:
