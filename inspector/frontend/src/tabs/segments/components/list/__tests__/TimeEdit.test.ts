@@ -1,5 +1,5 @@
+import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
 import TimeEdit from '../TimeEdit.svelte';

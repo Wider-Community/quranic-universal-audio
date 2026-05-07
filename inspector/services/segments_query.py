@@ -11,6 +11,7 @@ from services.data_loader import (
     dk_text_for_ref,
     get_word_counts,
     load_detailed,
+    resolve_pad,
 )
 from utils.references import chapter_from_ref
 
@@ -66,11 +67,11 @@ def get_chapter_data(reciter: str, chapter: int,
 
     speech_durations = [s["time_end"] - s["time_start"] for s in segments]
     total_speech = sum(speech_durations)
-    pad_ms = cache.get_seg_meta(reciter).get("pad_ms", 0)
+    pad_left_ms, pad_right_ms, _floor = resolve_pad(cache.get_seg_meta(reciter))
     silence_durations = []
     for i in range(len(segments) - 1):
         if segments[i]["entry_idx"] == segments[i + 1]["entry_idx"]:
-            gap = segments[i + 1]["time_start"] - segments[i]["time_end"] + 2 * pad_ms
+            gap = segments[i + 1]["time_start"] - segments[i]["time_end"] + pad_left_ms + pad_right_ms
             if gap > 0:
                 silence_durations.append(gap)
     total_silence = sum(silence_durations)

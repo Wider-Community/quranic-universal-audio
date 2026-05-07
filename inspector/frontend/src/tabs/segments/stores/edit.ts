@@ -132,7 +132,17 @@ export const editStatusText = derivedEq(_editState, ($s) => $s.statusText);
  *  eliminates a subscriber race where the secondHalf's SegmentRow would
  *  sometimes observe the chain store settling before `$editMode` dropped to
  *  null, dropping the chained edit entirely. */
-export const pendingChainTarget = writable<{ seg: Segment; category: string | null } | null>(null);
+/**
+ * `originalEndRef` is the END endpoint of the pre-split segment's ref
+ * (`s:v:w` form), captured at split time so the chain handoff can rebuild
+ * the second half's ref as `(advance(committedFirstEnd))-(originalEndRef)`
+ * regardless of how the user edits the first half.
+ */
+export const pendingChainTarget = writable<{
+    seg: Segment;
+    category: string | null;
+    originalEndRef: string | null;
+} | null>(null);
 
 // ---------------------------------------------------------------------------
 // Setters — all writes route through a single `_editState.update(...)`.

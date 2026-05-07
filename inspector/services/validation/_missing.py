@@ -79,16 +79,34 @@ def _build_missing_words(
                                 "new_ref_start": f"{surah}:{ayah}:{wf}",
                                 "new_ref_end": f"{surah}:{ayah}:{mw}",
                             }
+                        else:
+                            auto_fix_up = {
+                                "target_seg_index": idx,
+                                "new_ref_start": f"{surah}:{ayah}:{wf}",
+                                "new_ref_end": f"{surah}:{ayah}:{mw}",
+                            }
+                            auto_fix_down = {
+                                "target_seg_index": next_idx,
+                                "new_ref_start": f"{surah}:{ayah}:{mw}",
+                                "new_ref_end": f"{surah}:{ayah}:{next_wt}",
+                            }
                         break
 
         issue: dict = {
             "verse_key": f"{surah}:{ayah}",
             "chapter": surah,
+            "segment_uid": None,
             "msg": f"missing words: {sorted(missing)}",
             "seg_indices": sorted(gap_indices),
         }
         if auto_fix:
             issue["auto_fix"] = auto_fix
+        if "auto_fix_up" in locals():
+            issue["auto_fix_up"] = auto_fix_up
+            del auto_fix_up
+        if "auto_fix_down" in locals():
+            issue["auto_fix_down"] = auto_fix_down
+            del auto_fix_down
         missing_words.append(issue)
 
     return missing_words

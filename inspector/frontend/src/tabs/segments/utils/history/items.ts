@@ -1,21 +1,26 @@
 import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import type {
+    EditChain,
+    EditChainOp,
     HistorySnapshot,
     OpFlatItem,
-    SplitChain,
-    SplitChainOp,
 } from '../../types/segments';
-import { _deriveOpIssueDelta } from '../validation/classify';
+import { deriveOpIssueDelta, usesStoredClassifiedIssues } from '../validation/classified-issues';
+
+/** Marker re-exported for parity tests that assert the post-Phase-2 helper
+ *  is in place (the history-row delta path reads `classified_issues` from
+ *  saved snapshots; no live classifier call). */
+export { usesStoredClassifiedIssues };
 
 // Re-export for consumers that want these types from a utils path.
-export type { HistorySnapshot, OpFlatItem, SplitChain, SplitChainOp };
+export type { HistorySnapshot, OpFlatItem, EditChain, EditChainOp };
 
 /** Display entry produced by `buildDisplayItems` for the batches list. */
 export type DisplayEntry =
-    | { type: 'chain'; chain: SplitChain; date: string }
+    | { type: 'chain'; chain: EditChain; date: string }
     | { type: 'op-item'; item: OpFlatItem; date: string };
 
-/** Flat history summary returned by `computeFilteredItemSummary`. */
+/** Flat history summary returned by `computeFilteredSummary`. */
 export interface FilteredItemSummary {
     total_operations: number;
     chapters_edited: number;
@@ -26,9 +31,10 @@ export interface FilteredItemSummary {
 
 /** Short-label dictionary for issue-delta badges (preserved verbatim). */
 export const SHORT_LABELS: Record<string, string> = {
-    failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
-    cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
-    repetitions: 'reps', muqattaat: 'muqattaat', qalqala: 'qalqala',
+    failed: 'fail', low_confidence: 'low conf', low_confidence_v2: 'low conf',
+    boundary_adj: 'boundary', cross_verse: 'cross', missing_words: 'gaps',
+    audio_bleeding: 'bleed', repetitions: 'reps', muqattaat: 'muqattaat',
+    qalqala: 'qalqala',
 };
 
 export function versesFromRef(ref: string | null | undefined): string[] {
@@ -152,28 +158,61 @@ export function itemMatchesOpFilter(item: OpFlatItem, opTypes: Set<string>): boo
 
 export function itemMatchesCatFilter(item: OpFlatItem, cats: Set<string>): boolean {
     for (const op of item.group) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
-    const delta = _deriveOpIssueDelta(item.group);
-    for (const cat of cats) { if (delta.resolved.includes(cat) || delta.introduced.includes(cat)) return true; }
+    const delta = deriveOpIssueDelta(item.group);
+    for (const cat of cats) { if (delta.involved.includes(cat)) return true; }
     return false;
 }
 
-export function computeFilteredItemSummary(items: OpFlatItem[]): FilteredItemSummary {
+export function chainMatchesOpFilter(chain: EditChain, opTypes: Set<string>): boolean {
+    return chain.ops.some(({ op }) => opTypes.has(op.op_type));
+}
+
+export function chainMatchesCatFilter(chain: EditChain, cats: Set<string>): boolean {
+    const ops = chain.ops.map(co => co.op);
+    for (const op of ops) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
+    const delta = deriveOpIssueDelta(ops);
+    for (const cat of cats) { if (delta.involved.includes(cat)) return true; }
+    return false;
+}
+
+export function computeFilteredSummary(entries: DisplayEntry[]): FilteredItemSummary {
     const opCounts: Record<string, number> = {};
     const fixKindCounts: Record<string, number> = {};
     const chaptersEdited = new Set<number>();
-    for (const item of items) {
-        if (item.chapter != null) chaptersEdited.add(item.chapter);
-        if (Array.isArray(item.chapters)) item.chapters.forEach((ch) => chaptersEdited.add(ch));
-        for (const op of item.group) {
-            opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
-            const kind = op.fix_kind || 'unknown';
-            fixKindCounts[kind] = (fixKindCounts[kind] || 0) + 1;
+    const verses = new Set<string>();
+
+    for (const entry of entries) {
+        if (entry.type === 'chain') {
+            const chain = entry.chain;
+            if (chain.rootBatch?.chapter != null) chaptersEdited.add(chain.rootBatch.chapter);
+            for (const { op } of chain.ops) {
+                opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
+                const kind = op.fix_kind || 'unknown';
+                fixKindCounts[kind] = (fixKindCounts[kind] || 0) + 1;
+                for (const snap of [...(op.targets_before || []), ...(op.targets_after || [])]) {
+                    const matchedRef = (snap as { matched_ref?: string }).matched_ref;
+                    for (const v of versesFromRef(matchedRef ?? '')) verses.add(v);
+                }
+            }
+        } else {
+            const item = entry.item;
+            if (item.chapter != null) chaptersEdited.add(item.chapter);
+            if (Array.isArray(item.chapters)) item.chapters.forEach((ch) => chaptersEdited.add(ch));
+            for (const op of item.group) {
+                opCounts[op.op_type] = (opCounts[op.op_type] || 0) + 1;
+                const kind = op.fix_kind || 'unknown';
+                fixKindCounts[kind] = (fixKindCounts[kind] || 0) + 1;
+                for (const snap of [...(op.targets_before || []), ...(op.targets_after || [])]) {
+                    const matchedRef = (snap as { matched_ref?: string }).matched_ref;
+                    for (const v of versesFromRef(matchedRef ?? '')) verses.add(v);
+                }
+            }
         }
     }
     return {
         total_operations: Object.values(opCounts).reduce((s, v) => s + v, 0),
         chapters_edited: chaptersEdited.size,
-        verses_edited: countVersesFromItems(items),
+        verses_edited: verses.size,
         op_counts: opCounts,
         fix_kind_counts: fixKindCounts,
     };
@@ -183,23 +222,23 @@ export function buildDisplayItems(
     items: OpFlatItem[],
     batches: HistoryBatch[],
     mode: 'time' | 'quran',
-    chains: Map<string, SplitChain> | null,
+    chains: Map<string, EditChain> | null,
     fOpTypes: Set<string>,
     fErrCats: Set<string>,
 ): DisplayEntry[] {
     const out: DisplayEntry[] = [];
-    if (chains && fErrCats.size === 0) {
-        const showSplitChains = fOpTypes.size === 0 || fOpTypes.has('split_segment');
-        if (showSplitChains) {
-            const batchOpIds = new Set<string>(batches.flatMap((b) => (b.operations || []).map((op) => op.op_id)));
-            for (const chain of chains.values()) {
-                if (chain.ops.some(({ op }) => batchOpIds.has(op.op_id))) {
-                    out.push({ type: 'chain', chain, date: chain.latestDate || '' });
-                }
-            }
+    if (chains) {
+        const batchOpIds = new Set<string>(batches.flatMap((b) => (b.operations || []).map((op) => op.op_id)));
+        for (const chain of chains.values()) {
+            if (!chain.ops.some(({ op }) => batchOpIds.has(op.op_id))) continue;
+            if (fOpTypes.size > 0 && !chainMatchesOpFilter(chain, fOpTypes)) continue;
+            if (fErrCats.size > 0 && !chainMatchesCatFilter(chain, fErrCats)) continue;
+            out.push({ type: 'chain', chain, date: chain.latestDate || '' });
         }
     }
     for (const item of items) {
+        if (fOpTypes.size > 0 && !itemMatchesOpFilter(item, fOpTypes)) continue;
+        if (fErrCats.size > 0 && !itemMatchesCatFilter(item, fErrCats)) continue;
         out.push({ type: 'op-item', item, date: item.date });
     }
 

@@ -12,6 +12,7 @@
     export let options: SelectOption[] = [];
     export let value = '';
     export let placeholder = '--';
+    export let className = '';
 
     const dispatch = createEventDispatcher<{ change: string }>();
 
@@ -93,8 +94,9 @@
             scrollToHighlight();
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            const opt = filtered[highlightIdx];
-            if (highlightIdx >= 0 && opt) pick(opt);
+            const idx = highlightIdx >= 0 ? highlightIdx : 0;
+            const opt = filtered[idx];
+            if (opt) pick(opt);
         } else if (e.key === 'Escape') {
             close();
         }
@@ -118,7 +120,7 @@
     });
 </script>
 
-<div class="ss-wrapper">
+<div class="ss-wrapper {className}">
     <input
         bind:this={inputEl}
         class="ss-input"
@@ -135,10 +137,10 @@
                 {#if opt.group && (i === 0 || filtered[i - 1]?.group !== opt.group)}
                     <div class="ss-group-label">{opt.group}</div>
                 {/if}
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <div
                     class="ss-option"
+                    role="button"
+                    tabindex="0"
                     class:ss-option-grouped={!!opt.group}
                     class:ss-highlight={i === highlightIdx}
                     on:mousedown|preventDefault={() => pick(opt)}

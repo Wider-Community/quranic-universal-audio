@@ -4,8 +4,9 @@ import type { AudioPeaks, PeakBucket, Segment } from '../../../../lib/types/doma
 import {
     PREVIEW_PLAYHEAD_COLOR,
     WAVEFORM_BG_COLOR,
-    WAVEFORM_FILL_COLOR,
     WAVEFORM_DIM_OVERLAY_COLOR,
+    WAVEFORM_FILL_COLOR,
+    WAVEFORM_SILENCE_THRESHOLD,
 } from '../../../../lib/utils/constants';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { drawWaveformPeaks } from '../../../../lib/utils/waveform-draw';
@@ -57,6 +58,74 @@ export function drawWaveformFromPeaksForSeg(canvas: SegCanvas, seg: Segment, cha
     return false;
 }
 
+/**
+ * Bg fill → waveform → history overlays → capture `_wfCache`.
+ *
+ * `startMs`/`endMs` describe the canvas's *visual* range — wider than the
+ * playback range for split leaves (parent's union peak with the leaf
+ * slice highlighted in green). The split / trim / merge overlay
+ * descriptors live on the canvas itself (`_splitHL`, `_trimHL`,
+ * `_mergeHL`); applying them here means they're baked into the cached
+ * ImageData and survive every subsequent `putImageData` blit during
+ * playback.
+ *
+ * Returns true when real peaks were drawn — the IntersectionObserver
+ * uses this to decide whether to keep observing. `drawSegPlayhead`
+ * ignores the return; its cache always captures something so the
+ * playhead has a clean base to draw on.
+ */
+export function drawSegBaseAndOverlays(
+    canvas: SegCanvas,
+    startMs: number,
+    endMs: number,
+    audioUrl: string,
+): boolean {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    ctx.fillStyle = WAVEFORM_BG_COLOR;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let drew = false;
+    if (audioUrl) {
+        const pe = getWaveformPeaks(audioUrl);
+        if (pe?.peaks?.length) {
+            drawWaveformPeaks(ctx, pe.peaks, {
+                width: canvas.width,
+                height: canvas.height,
+                startMs,
+                endMs,
+                totalDurationMs: pe.duration_ms,
+            });
+            drew = true;
+        } else {
+            const covering = _findCoveringPeaks(audioUrl, startMs, endMs);
+            if (covering?.peaks?.length) {
+                const rs = covering.start_ms ?? 0;
+                drawWaveformPeaks(ctx, covering.peaks as Peaks, {
+                    width: canvas.width,
+                    height: canvas.height,
+                    startMs: startMs - rs,
+                    endMs: endMs - rs,
+                    totalDurationMs: covering.duration_ms,
+                });
+                drew = true;
+            }
+        }
+    }
+
+    // Synthetic seg matching the canvas's visual range — overlay math
+    // reads `seg.time_start/time_end` as the canvas's full-width bounds.
+    const visSeg = { time_start: startMs, time_end: endMs, audio_url: audioUrl } as Segment;
+    _drawSplitHighlight(canvas, visSeg);
+    _drawTrimHighlight(canvas, visSeg);
+    _drawMergeHighlight(canvas, visSeg);
+    _drawPadHighlight(canvas, visSeg);
+
+    canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    canvas._wfCacheKey = `${startMs}:${endMs}`;
+    return drew;
+}
+
 export function drawSegPlayhead(
     canvas: SegCanvas,
     startMs: number,
@@ -70,15 +139,12 @@ export function drawSegPlayhead(
     if (canvas._wfCache && canvas._wfCacheKey === cacheKey) {
         ctx.putImageData(canvas._wfCache, 0, 0);
     } else {
-        if (audioUrl) {
-            const pe = _findCoveringPeaks(audioUrl, startMs, endMs);
-            if (pe?.peaks?.length) {
-                const rs = pe.start_ms ?? 0;
-                drawSegmentWaveformFromPeaks(canvas, startMs - rs, endMs - rs, pe.peaks as PeakBucket[], pe.duration_ms);
-            }
-        }
-        canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        canvas._wfCacheKey = cacheKey;
+        // Cache miss: rebuild bg + waveform + overlays so the cached
+        // ImageData carries history overlays through every subsequent
+        // tick. Without this, green/red overlays disappear the moment
+        // playback starts (the cache rebuild used to capture the base
+        // waveform only).
+        drawSegBaseAndOverlays(canvas, startMs, endMs, audioUrl);
     }
 
     if (currentTimeMs < startMs || currentTimeMs > endMs) return;
@@ -107,6 +173,7 @@ export function drawSegPlayhead(
 export interface SlicedPeaks {
     maxVals: Float32Array;
     minVals: Float32Array;
+    scale?: number;
 }
 
 /**
@@ -138,7 +205,13 @@ export function drawEditPeakBase(
     const data = _slicePeaks(audioUrl, startMs, endMs, width);
     if (!data) return null;
 
-    const scale = (height / 2) * 0.9;
+    const halfH = height / 2;
+    let maxAmp = 0;
+    for (let i = 0; i < data.maxVals.length; i++) {
+        const a = Math.max(Math.abs(data.maxVals[i] ?? 0), Math.abs(data.minVals[i] ?? 0));
+        if (a > maxAmp) maxAmp = a;
+    }
+    const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD ? halfH * 0.9 : halfH / maxAmp;
 
     ctx.beginPath();
     for (let i = 0; i < width; i++) {
@@ -153,6 +226,7 @@ export function drawEditPeakBase(
     ctx.fillStyle = WAVEFORM_FILL_COLOR;
     ctx.fill();
 
+    data.scale = scale;
     return data;
 }
 
@@ -255,7 +329,25 @@ export function _drawSplitHighlight(canvas: SegCanvas, wfSeg: Segment): void {
     if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
 }
 
-/** Draw dim + green overlay on merge result card showing the absorbed segment's range. */
+/** Yellow fill between original segment end and padded preview end (qalqala batch). */
+export function _drawPadHighlight(canvas: SegCanvas, seg: Segment): void {
+    const hl = canvas._padHL;
+    if (!hl) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const dur = seg.time_end - seg.time_start;
+    if (dur <= 0) return;
+    const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
+    const x1 = toX(hl.padStart);
+    const x2 = toX(hl.padEnd);
+    if (x2 <= x1) return;
+    ctx.fillStyle = 'rgba(255, 200, 0, 0.35)';
+    ctx.fillRect(x1, 0, x2 - x1, h);
+}
+
+/** Draw yellow cursor on merge result card showing the point of merge. */
 export function _drawMergeHighlight(canvas: SegCanvas, seg: Segment): void {
     const hl = canvas._mergeHL;
     if (!hl) return;
@@ -266,13 +358,20 @@ export function _drawMergeHighlight(canvas: SegCanvas, seg: Segment): void {
     if (dur <= 0) return;
     const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
 
-    const x1 = toX(hl.hlStart);
-    const x2 = toX(hl.hlEnd);
+    const x = toX(hl.mergePoint);
 
-    ctx.fillStyle = WAVEFORM_DIM_OVERLAY_COLOR;
-    if (x1 > 0) ctx.fillRect(0, 0, x1, h);
-    if (x2 < w) ctx.fillRect(x2, 0, w - x2, h);
+    ctx.strokeStyle = '#eab308'; // yellow-500
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
 
-    ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
-    if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
+    ctx.fillStyle = '#eab308';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, 0);
+    ctx.lineTo(x + 4, 0);
+    ctx.lineTo(x, 6);
+    ctx.closePath();
+    ctx.fill();
 }

@@ -125,12 +125,22 @@ def get_surah_info():
 
 @app.route("/audio/<reciter>/<filename>")
 def serve_audio(reciter, filename):
-    """Serve audio files."""
+    """Serve audio files.
+
+    Sends `Access-Control-Allow-Origin: *` so the frontend can mark the
+    `<audio>` element with `crossorigin="anonymous"`. That CORS tag is
+    required for Web Audio's `MediaElementAudioSourceNode` to emit real
+    samples (the GainNode kill-switch in `lib/playback/audio-graph.ts`
+    needs it to silence the OS sink at segment boundaries). Without it
+    the spec mandates the source emits silence even on same-origin loads.
+    """
     audio_path = AUDIO_PATH / reciter / filename
     if not audio_path.exists():
         return jsonify({"error": "Audio file not found"}), 404
     mime_type = AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "audio/mpeg")
-    return send_file(audio_path, mimetype=mime_type)
+    response = send_file(audio_path, mimetype=mime_type)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 
 
 # ---------------------------------------------------------------------------

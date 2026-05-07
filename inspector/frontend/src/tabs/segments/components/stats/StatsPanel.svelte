@@ -10,12 +10,12 @@
      * `fullscreenDist` + `fullscreenCfg`; ChartFullscreen.svelte renders
      * the overlay.
      */
-    import { segStats } from '../../stores/stats';
     import { selectedReciter } from '../../stores/chapter';
+    import { segStats } from '../../stores/stats';
+    import type { ChartCfg,Distribution } from '../../types/stats';
     import { CONF_HIGH_THRESHOLD, CONF_MID_THRESHOLD, SHORT_SEG_WARN_MS, VAD_MIN_SILENCE_FALLBACK_MS } from '../../utils/constants';
-    import type { Distribution, ChartCfg } from '../../types/stats';
-    import StatsChart from './StatsChart.svelte';
     import ChartFullscreen from './ChartFullscreen.svelte';
+    import StatsChart from './StatsChart.svelte';
 
     // Fullscreen overlay state — null = hidden.
     let fullscreenDist: Distribution | null = null;
@@ -42,13 +42,26 @@
         ? buildCharts(data.vad_params ?? { min_silence_ms: VAD_MIN_SILENCE_FALLBACK_MS })
         : [];
 
-    function buildCharts(vad: { min_silence_ms: number }): ChartCfg[] {
+    function buildCharts(vad: {
+        min_silence_ms: number;
+        min_silence_floor_ms?: number;
+    }): ChartCfg[] {
+        const refLines = [
+            { value: vad.min_silence_ms, label: 'threshold' },
+        ];
+        if (vad.min_silence_floor_ms && vad.min_silence_floor_ms > 0) {
+            refLines.push({
+                value: vad.min_silence_floor_ms,
+                label: 'floor',
+                color: '#9c27b0',
+                dash: [2, 4],
+            } as never);
+        }
         return [
             {
                 key: 'pause_duration_ms',
                 title: 'Pause Duration (ms)',
-                refLine: vad.min_silence_ms,
-                refLabel: 'threshold',
+                refLines,
                 barColor: (bin) => bin < vad.min_silence_ms ? '#666' : '#4cc9f0',
                 formatBin: v => v >= 3000 ? '3000+' : String(v),
             },

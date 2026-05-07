@@ -1,10 +1,4 @@
-/**
- * Shared helper for building grouped reciter option lists.
- *
- * Groups reciters by their `audio_source` field, sorts groups alphabetically,
- * and appends an `(uncategorized)` group for reciters without a source.
- * Used by TimestampsTab and SegmentsTab to populate grouped <optgroup> selects.
- */
+import type { SelectOption } from '../types/ui';
 
 /** Minimum reciter shape required by this helper. */
 export interface ReciterLike {
@@ -47,4 +41,17 @@ export function buildGroupedReciters<T extends ReciterLike>(reciters: T[]): Grou
         out.push({ group: '(uncategorized)', items: uncategorized });
     }
     return out;
+}
+
+/** Convert grouped reciter list to flat SelectOption[] for SearchableSelect. */
+export function reciterGroupsToOptions<T extends ReciterLike>(
+    groups: GroupedReciters<T>[],
+): SelectOption[] {
+    return groups.flatMap((g) =>
+        g.items.map((r) => ({
+            value: r.slug ?? r.name,
+            label: r.name,
+            group: g.group,
+        })),
+    );
 }

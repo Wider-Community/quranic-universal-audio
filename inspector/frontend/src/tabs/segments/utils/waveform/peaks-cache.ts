@@ -1,9 +1,15 @@
 import type { AudioPeaks } from '../../../../lib/types/domain';
-import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
+import { getWaveformPeaks, normalizeAudioUrl } from '../../../../lib/utils/waveform-cache';
 import type { SegPeaksRangeEntry } from '../../types/segments';
 
 // ---------------------------------------------------------------------------
 // Module-local peaks-by-url store
+//
+// Keys are always the *canonical* (proxy-stripped) URL. Stream-mode segment
+// peaks come back from the server keyed by whichever form was POSTed — and
+// History snapshots store whatever `audio_url` the segment had at edit time
+// (often the proxy form). Normalising on both write and read makes proxy
+// vs canonical interchangeable, matching `lib/utils/waveform-cache.ts`.
 // ---------------------------------------------------------------------------
 
 let _segPeaksByUrl: Record<string, SegPeaksRangeEntry[]> | null = null;
@@ -11,8 +17,9 @@ let _segPeaksByUrl: Record<string, SegPeaksRangeEntry[]> | null = null;
 /** Push a segment-level peaks entry into the covering-range cache. */
 export function pushSegPeaksEntry(url: string, entry: SegPeaksRangeEntry): void {
     if (!_segPeaksByUrl) _segPeaksByUrl = {};
-    if (!_segPeaksByUrl[url]) _segPeaksByUrl[url] = [];
-    _segPeaksByUrl[url]!.push(entry);
+    const key = normalizeAudioUrl(url);
+    if (!_segPeaksByUrl[key]) _segPeaksByUrl[key] = [];
+    _segPeaksByUrl[key]!.push(entry);
 }
 
 /** Drop all segment-level peaks — called on reciter change. */
@@ -33,7 +40,7 @@ export function _findCoveringPeaks(
     const pe = getWaveformPeaks(audioUrl);
     if (pe && pe.peaks && pe.peaks.length > 0) return pe;
     if (startMs != null && endMs != null && _segPeaksByUrl) {
-        const entries = _segPeaksByUrl[audioUrl];
+        const entries = _segPeaksByUrl[normalizeAudioUrl(audioUrl)];
         if (entries) {
             for (const entry of entries) {
                 if (entry.startMs <= startMs && entry.endMs >= endMs) {

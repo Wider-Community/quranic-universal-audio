@@ -119,7 +119,11 @@ export interface SegAllResponse {
     segments: Segment[];
     audio_by_chapter: Record<string, string>;
     verse_word_counts: Record<VerseRef, number>;
+    /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
     pad_ms: number;
+    pad_left_ms: number;
+    pad_right_ms: number;
+    min_silence_floor_ms: number;
 }
 
 // ===========================================================================
@@ -181,8 +185,7 @@ export interface SegTriggerValidationResponse {
 
 /**
  * Auto-fix descriptor attached to some `missing_words` entries.
- * `target_seg_index` is re-indexed client-side on split/merge/delete via
- * `_forEachValItem` / `_fixupValIndicesFor*`.
+ * `target_seg_index` is the chapter-local index of the segment to adjust.
  */
 export interface SegValAutoFix {
     target_seg_index: number;
@@ -193,8 +196,10 @@ export interface SegValAutoFix {
 /** Common fields present on every validation item row. */
 export interface SegValItemBase {
     chapter: number;
-    /** Server-emitted; client mutates during index-fixup after split/merge/delete. */
+    /** Server-emitted positional index; legacy fallback when segment_uid is absent. */
     seg_index?: number;
+    /** Stable segment identity (IS-10). Present on per-segment items; null on chapter-level items. */
+    segment_uid?: string | null;
 }
 
 export interface SegValFailedItem extends SegValItemBase {
@@ -213,6 +218,8 @@ export interface SegValMissingWordsItem extends SegValItemBase {
     /** Client mutates entries during index-fixup. */
     seg_indices?: number[];
     auto_fix?: SegValAutoFix;
+    auto_fix_up?: SegValAutoFix;
+    auto_fix_down?: SegValAutoFix;
 }
 
 export interface SegValStructuralErrorItem extends SegValItemBase {
@@ -224,6 +231,14 @@ export interface SegValLowConfidenceItem extends SegValItemBase {
     seg_index: number;
     ref: Ref;
     confidence: number; // 0..1
+}
+
+/** Item for the *Low Confidence v2* category — segments flagged by the
+ *  extraction-time MFA tight-beam probe. No confidence score; the signal is
+ *  binary (probe pass/fail). */
+export interface SegValLowConfidenceV2Item extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
 }
 
 export interface SegValBoundaryAdjItem extends SegValItemBase {
@@ -277,6 +292,7 @@ export type SegValAnyItem =
     | SegValMissingWordsItem
     | SegValStructuralErrorItem
     | SegValLowConfidenceItem
+    | SegValLowConfidenceV2Item
     | SegValBoundaryAdjItem
     | SegValCrossVerseItem
     | SegValAudioBleedingItem
@@ -291,9 +307,10 @@ export interface SegValidateResponse {
     failed?: SegValFailedItem[];
     missing_verses?: SegValMissingVerseItem[];
     missing_words?: SegValMissingWordsItem[];
-    /** Never emitted by the server; kept as a defensive alias in case a future route adds it. */
+    /** Live alias of {@link errors} — both keys are emitted by the server (additive, MUST-1 compliant). */
     structural_errors?: SegValStructuralErrorItem[];
     low_confidence?: SegValLowConfidenceItem[];
+    low_confidence_v2?: SegValLowConfidenceV2Item[];
     boundary_adj?: SegValBoundaryAdjItem[];
     cross_verse?: SegValCrossVerseItem[];
     audio_bleeding?: SegValAudioBleedingItem[];
@@ -306,7 +323,14 @@ export interface SegValidateResponse {
 /** GET /api/seg/stats/:reciter — distributions + percentiles. Shape varies. */
 export interface SegStatsResponse {
     distributions?: Record<string, { bins: number[]; counts: number[]; percentiles?: Record<string, number> }>;
-    vad_params?: { min_silence_ms: number; [k: string]: unknown };
+    vad_params?: {
+        min_silence_ms: number;
+        min_speech_ms?: number;
+        pad_left_ms?: number;
+        pad_right_ms?: number;
+        min_silence_floor_ms?: number;
+        [k: string]: unknown;
+    };
     [k: string]: unknown;
 }
 

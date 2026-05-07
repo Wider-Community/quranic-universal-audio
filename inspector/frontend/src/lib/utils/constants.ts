@@ -14,6 +14,7 @@ export const LS_KEYS = {
     SEG_SPEED:       'insp_seg_speed',
     SEG_AUTOPLAY:    'insp_seg_autoplay',
     SEG_AUTOSCROLL:  'insp_seg_autoscroll',
+    SEG_AUTOSAVE:    'insp_seg_autosave',
     AUD_RECITER:     'insp_aud_reciter',
 } as const;
 
@@ -56,3 +57,7 @@ export const WAVEFORM_DIM_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.45)';
 
 /** Letter-level highlight color used by the Timestamps display + waveform. */
 export const LETTER_HIGHLIGHT_COLOR = '#2ec4b6';
+
+// Waveform per-segment normalization: segments below this peak amplitude are
+// treated as silent — the display scale is not amplified to avoid noise blowup.
+export const WAVEFORM_SILENCE_THRESHOLD = 0.05;

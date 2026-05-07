@@ -34,8 +34,13 @@ export interface SplitHighlight {
 
 /** Highlight descriptor for a merge-history result card. */
 export interface MergeHighlight {
-    hlStart: number;
-    hlEnd: number;
+    mergePoint: number;
+}
+
+/** Yellow overlay for qalqala batch padding preview (original end → padded end). */
+export interface PadHighlight {
+    padStart: number;
+    padEnd: number;
 }
 
 /** Edit-mode trim window snapshot (currentStart/End are mutable as user drags).
@@ -103,6 +108,7 @@ export interface SegCanvas extends HTMLCanvasElement {
     _trimHL?: TrimHighlight;
     _splitHL?: SplitHighlight;
     _mergeHL?: MergeHighlight;
+    _padHL?: PadHighlight;
     _trimWindow?: TrimWindow;
     _splitData?: SplitData;
     _trimBaseCache?: ImageData | null;

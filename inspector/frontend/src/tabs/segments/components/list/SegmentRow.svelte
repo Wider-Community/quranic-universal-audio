@@ -21,58 +21,59 @@
      * tracking releases destroyed nodes; see segments/waveform/index.ts).
      */
 
+    import { onDestroy,onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { onMount, onDestroy } from 'svelte';
 
+    import type { Segment } from '../../../../lib/types/domain';
     import {
         getAdjacentSegments,
         segAllData,
         selectedChapter,
         selectedVerse,
     } from '../../stores/chapter';
-    import {
-        _addVerseMarkers,
-        formatRef,
-        formatTimeMs,
-    } from '../../utils/data/references';
     import { dirtyTick, isIndexDirty } from '../../stores/dirty';
     import {
-        editMode,
         editingMountId,
         editingSegUid,
+        editMode,
         setEditCanvas,
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
-    import type {
-        MergeHighlight,
-        SegCanvas,
-        SplitHighlight,
-        TrimHighlight,
-    } from '../../types/segments-waveform';
-    import { getConfClass } from '../../utils/validation/conf-class';
-    import { _ensureWaveformObserver } from '../../utils/waveform/utils';
+    import {
+        chapterIndexKey,
+        flashSegmentIndices,
+        targetSegmentIndex,
+    } from '../../stores/navigation';
     import {
         isMainAudioPlaying,
         playingSegmentIndex,
         segAudioElement,
         segListElement,
     } from '../../stores/playback';
+    import type {
+        MergeHighlight,
+        PadHighlight,
+        SegCanvas,
+        SplitHighlight,
+        TrimHighlight,
+    } from '../../types/segments-waveform';
+    import { EDIT_MIN_DURATION_MS,SEG_ROW_CANVAS_HEIGHT, SEG_ROW_CANVAS_WIDTH, TRIM_HANDLE_HIT_RADIUS_PX } from '../../utils/constants';
+    import { jumpToSegment } from '../../utils/data/navigation-actions';
     import {
-        chapterIndexKey,
-        flashSegmentIndices,
-        targetSegmentIndex,
-    } from '../../stores/navigation';
+        _addVerseMarkers,
+        formatRef,
+        formatTimeMs,
+    } from '../../utils/data/references';
     import { deleteSegment } from '../../utils/edit/delete';
     import { enterEditWithBuffer } from '../../utils/edit/enter';
     import { mergeAdjacent } from '../../utils/edit/merge';
     import { beginRefEdit } from '../../utils/edit/reference';
-    import { jumpToSegment } from '../../utils/data/navigation-actions';
     import { playFromSegment } from '../../utils/playback/playback';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
-    import { SEG_ROW_CANVAS_WIDTH, SEG_ROW_CANVAS_HEIGHT } from '../../utils/constants';
-    import type { Segment } from '../../../../lib/types/domain';
-
+    import { getConfClass } from '../../utils/validation/conf-class';
+    import { _ensureWaveformObserver, redrawPeaksWaveforms } from '../../utils/waveform/utils';
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
     import SplitPanel from '../edit/SplitPanel.svelte';
     import TrimPanel from '../edit/TrimPanel.svelte';
@@ -123,6 +124,29 @@
      * auto-ignore the issue for the original seg.
      */
     export let validationCategory: string | null = null;
+    /**
+     * Optional preview-playback context. When supplied AND `readOnly`,
+     * the play button becomes a wired toggle that drives the panel-owned
+     * AudioRange (see `utils/playback/preview.ts`). Without this, readOnly
+     * rows render an inert play button — that's the historical default for
+     * accordion validation rows that share uids with main-list twins. Only
+     * SavePreview and HistoryPanel pass a context.
+     */
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
+    /**
+     * History op_id this row belongs to. Set only by History views
+     * (HistoryOp / SplitChainRow). When present and `previewCtx` is wired,
+     * peaks computed for this row on play are persisted server-side under
+     * this op_id — so future sessions render the same row without
+     * re-computing. Live-edit and SavePreview rows leave this null.
+     */
+    export let opId: string | null = null;
+    /** Qalqala batch padding preview — yellow overlay + drag end handle. */
+    export let padHL: PadHighlight | null = null;
+    /** Called with new absolute end time (ms) when user drags/clicks the pad handle. */
+    export let onPadDrag: ((_newEndMs: number) => void) | null = null;
+    /** When set, play button invokes this instead of default segment play (e.g. pad preview). */
+    export let onPlayOverride: (() => void) | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -134,6 +158,12 @@
         c._splitHL = splitHL ?? undefined;
         c._trimHL = trimHL ?? undefined;
         c._mergeHL = mergeHL ?? undefined;
+        c._padHL = padHL ?? undefined;
+    }
+
+    $: if (canvasEl && padHL) {
+        (canvasEl as SegCanvas)._wfCache = null;
+        redrawPeaksWaveforms();
     }
 
     // True only when this specific mounted row is the editing target. The
@@ -175,7 +205,6 @@
     $: chapterForDirty = seg.chapter ?? fallbackChapter;
     $: dirty = (void $dirtyTick, !readOnly && isIndexDirty(chapterForDirty, seg.index));
     $: confClass = (void segStoreTick, getConfClass(seg));
-    $: durSec = (void segStoreTick, (seg.time_end - seg.time_start) / 1000);
     $: durTitle = (void segStoreTick, `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`);
     $: adj = !readOnly && !isContext
         ? getAdjacentSegments(seg.chapter ?? 0, seg.index)
@@ -195,12 +224,19 @@
         ? 'Cannot merge segments from different audio files'
         : '';
     $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
+    let previewState: { text: string; ref: string } | null = null;
+    $: if (!isEditingThisRow || $editMode !== 'reference') {
+        previewState = null;
+    }
+
     // History-mode changed-field markers.
     $: changedRef = !!changedFields?.has('ref');
     $: changedDur = !!changedFields?.has('duration');
     $: changedConf = !!changedFields?.has('conf');
     $: changedBody = !!changedFields?.has('body');
-    $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
+    $: bodyText = previewState
+        ? _addVerseMarkers(previewState.text, previewState.ref, $segAllData?.verse_word_counts) || '(alignment failed)'
+        : _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
@@ -217,10 +253,17 @@
     // panel can be mounted with chapter=null (all chapters), so same-index
     // rows in other chapters must not collide.
     $: rowChapter = seg.chapter ?? fallbackChapter;
-    $: isPlaying = !readOnly
-        && !!$playingSegmentIndex
-        && $playingSegmentIndex.chapter === rowChapter
-        && $playingSegmentIndex.index === seg.index;
+    /** Stable identity for this preview snapshot row. Snapshots can share
+     *  segment_uid with the live row but their (time_start, time_end) are
+     *  immutable in this panel, so they make a unique key per ctx. */
+    $: rowPreviewUid = `${rowChapter}:${seg.index}:${seg.time_start}:${seg.time_end}`;
+    $: previewActive = readOnly && !!previewCtx && _previewActiveUid === rowPreviewUid;
+    $: previewPlaying = readOnly && !!previewCtx && _previewPlayingUid === rowPreviewUid;
+    $: isPlaying = previewActive
+        || (!readOnly
+            && !!$playingSegmentIndex
+            && $playingSegmentIndex.chapter === rowChapter
+            && $playingSegmentIndex.index === seg.index);
     // flashSegmentIndices is keyed by "chapter:index" — both the main-list
     // and accordion twin for the correctly-matched pair still light up, but
     // a same-index row in a different chapter (validation panel with
@@ -228,7 +271,9 @@
     $: rowFlashKey = chapterIndexKey(rowChapter, seg.index);
     $: isFlashing = !readOnly && $flashSegmentIndices.has(rowFlashKey);
     $: highlighted = isPlaying || isFlashing;
-    $: playGlyph = isPlaying && $isMainAudioPlaying ? '\u25A0' : '\u25B6';
+    $: playGlyph = (previewPlaying || (isPlaying && $isMainAudioPlaying))
+        ? '\u25A0'
+        : '\u25B6';
 
     // Scroll into view when jump target matches, then clear the store so the
     // next write re-fires reliably. Only the main-list instance reacts —
@@ -254,6 +299,34 @@
     // directly. No reactive store indirection, no subscriber race. The
     // accordion path routes via `mountId=null` which the secondHalf's
     // main-list row claims through the `instanceRole === 'main'` fallback.
+
+    // ---------------------------------------------------------------------
+    // Preview-mode subscription (SavePreview / HistoryPanel only)
+    // ---------------------------------------------------------------------
+    // `previewCtx.activeSeg` / `playingSeg` are svelte stores, but we can't
+    // use the `$` prefix on a prop-typed store directly — manual subscribe
+    // with a teardown. Re-subscribes if the prop swaps mid-lifetime
+    // (defensive; in practice the parent panel mounts the ctx once).
+    let _previewActiveUid: string | null = null;
+    let _previewPlayingUid: string | null = null;
+    let _unsubPreviewActive: (() => void) | null = null;
+    let _unsubPreviewPlaying: (() => void) | null = null;
+    $: {
+        _unsubPreviewActive?.();
+        _unsubPreviewPlaying?.();
+        _unsubPreviewActive = null;
+        _unsubPreviewPlaying = null;
+        _previewActiveUid = null;
+        _previewPlayingUid = null;
+        if (previewCtx) {
+            _unsubPreviewActive = previewCtx.activeSeg.subscribe((v) => {
+                _previewActiveUid = v?.uid ?? null;
+            });
+            _unsubPreviewPlaying = previewCtx.playingSeg.subscribe((v) => {
+                _previewPlayingUid = v?.uid ?? null;
+            });
+        }
+    }
 
     // ---------------------------------------------------------------------
     // Waveform observer registration
@@ -284,6 +357,34 @@
             registerRow(rowChapter, seg.index, rowEl, canvasEl, _mountId, instanceRole);
             _prevRegChapter = rowChapter;
             _prevRegIdx = seg.index;
+        }
+        // Preview-mode registration: snapshot rows in SavePreview / HistoryPanel
+        // register with the panel's PreviewPlaybackContext so the play button
+        // can drive playback and the rAF onTick can target this row's canvas.
+        if (readOnly && previewCtx && canvasEl) {
+            const audioUrl = seg.audio_url
+                ?? get(segAllData)?.audio_by_chapter?.[String(rowChapter)]
+                ?? '';
+            if (audioUrl) {
+                // Split-leaf history rows render the parent's union peak
+                // (via splitHL.wfStart/wfEnd substitution in the observer),
+                // but audio playback only spans the leaf slice. Pass both
+                // ranges so the preview ctx can drive the playhead against
+                // the wider visual range while AudioRange stops at the
+                // narrower playback range.
+                const wfStartMs = splitHL?.wfStart ?? seg.time_start;
+                const wfEndMs = splitHL?.wfEnd ?? seg.time_end;
+                previewCtx.registerRow(
+                    rowPreviewUid,
+                    canvasEl,
+                    audioUrl,
+                    seg.time_start,
+                    seg.time_end,
+                    opId ?? undefined,
+                    wfStartMs,
+                    wfEndMs,
+                );
+            }
         }
         if (!canvasEl) return;
         const observer = _ensureWaveformObserver();
@@ -319,14 +420,29 @@
         if (!readOnly && _prevRegChapter !== null && _prevRegIdx !== null) {
             deregisterRow(_prevRegChapter, _prevRegIdx, _mountId);
         }
+        if (readOnly && previewCtx) {
+            previewCtx.deregisterRow(rowPreviewUid);
+        }
+        _unsubPreviewActive?.();
+        _unsubPreviewPlaying?.();
     });
 
     // ---------------------------------------------------------------------
     // Per-button handlers (replace delegated click router for #seg-list rows)
     // ---------------------------------------------------------------------
 
+    function onPreviewPlayClick(e: MouseEvent): void {
+        e.stopPropagation();
+        if (!previewCtx) return;
+        previewCtx.toggle(rowPreviewUid);
+    }
+
     function onPlayClick(e: MouseEvent): void {
         e.stopPropagation();
+        if (onPlayOverride) {
+            onPlayOverride();
+            return;
+        }
         if (readOnly) return;
         const idx = seg.index;
         const chapter = seg.chapter ?? fallbackChapter;
@@ -342,7 +458,14 @@
         if (isSelfPlaying) {
             audioEl.pause();
         } else {
-            playFromSegment(idx, chapter);
+            // Accordion-mounted rows are self-contained playback surfaces.
+            // Marking the play as accordion-origin keeps the main list from
+            // autoscrolling when the same chapter is open, and keeps the
+            // policy gate from advancing into the main display's chapter
+            // when global autoplay is on.
+            playFromSegment(idx, chapter, undefined, {
+                isAccordionPlay: instanceRole !== 'main',
+            });
         }
     }
 
@@ -401,7 +524,9 @@
         if (get(editMode) || readOnly) return;
         const t = e.target as Element;
         if (t.closest('.seg-row-controls') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
-        playFromSegment(seg.index, seg.chapter ?? 0);
+        playFromSegment(seg.index, seg.chapter ?? 0, undefined, {
+            isAccordionPlay: instanceRole !== 'main',
+        });
     }
 
     function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
@@ -422,19 +547,82 @@
         if (isSelfPlaying) {
             audioEl.currentTime = timeMs / 1000;
         } else {
-            playFromSegment(seg.index, chapter, timeMs);
+            playFromSegment(seg.index, chapter, timeMs, {
+                isAccordionPlay: instanceRole !== 'main',
+            });
         }
+    }
+
+    function _wfVisualEnd(): number {
+        if (!padHL) return seg.time_end;
+        return Math.max(seg.time_end, padHL.padEnd);
+    }
+
+    function _timeFromCanvasClientX(canvas: SegCanvas, clientX: number): number {
+        const rect = canvas.getBoundingClientRect();
+        const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const t0 = seg.time_start;
+        const t1 = _wfVisualEnd();
+        return t0 + progress * (t1 - t0);
+    }
+
+    function _padEndHandleX(canvas: SegCanvas): number {
+        const w = canvas.width;
+        const dur = _wfVisualEnd() - seg.time_start;
+        if (dur <= 0 || !padHL) return 0;
+        return ((padHL.padEnd - seg.time_start) / dur) * w;
     }
 
     function onCanvasMousedown(e: MouseEvent): void {
         if (readOnly || get(editMode)) return;
         const canvas = e.currentTarget as SegCanvas;
+        if (padHL && onPadDrag) {
+            e.preventDefault();
+            e.stopPropagation();
+            const xHandle = _padEndHandleX(canvas);
+            const rect = canvas.getBoundingClientRect();
+            const xClick = e.clientX - rect.left;
+            const nearHandle = Math.abs(xClick - xHandle) <= TRIM_HANDLE_HIT_RADIUS_PX;
+
+            let dragging = nearHandle;
+            const minEnd = seg.time_start + EDIT_MIN_DURATION_MS;
+
+            const applyFromClientX = (cx: number): void => {
+                let t = _timeFromCanvasClientX(canvas, cx);
+                if (!nearHandle && padHL) {
+                    t = Math.max(padHL.padStart, t);
+                }
+                t = Math.max(minEnd, t);
+                onPadDrag!(t);
+            };
+
+            applyFromClientX(e.clientX);
+
+            function onMove(ev: MouseEvent): void {
+                if (dragging || nearHandle) {
+                    dragging = true;
+                    applyFromClientX(ev.clientX);
+                }
+            }
+            function onUp(ev: MouseEvent): void {
+                if (!dragging && padHL && !nearHandle) {
+                    applyFromClientX(ev.clientX);
+                }
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            return;
+        }
+
+        const canvas2 = e.currentTarget as SegCanvas;
 
         e.preventDefault();
-        _seekFromCanvasEvent(e, canvas);
+        _seekFromCanvasEvent(e, canvas2);
 
         function onMove(ev: MouseEvent): void {
-            _seekFromCanvasEvent(ev, canvas);
+            _seekFromCanvasEvent(ev, canvas2);
         }
         function onUp(): void {
             document.removeEventListener('mousemove', onMove);
@@ -460,12 +648,22 @@
     data-hist-time-start={readOnly ? String(seg.time_start) : undefined}
     data-hist-time-end={readOnly ? String(seg.time_end) : undefined}
     data-hist-audio-url={readOnly && seg.audio_url ? seg.audio_url : undefined}
+    data-hist-op-id={opId ?? undefined}
     bind:this={rowEl}
     on:click={onRowClick}
 >
     <div class="seg-left">
         {#if readOnly && showPlayBtn}
-            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
+            {#if previewCtx}
+                <button
+                    class="btn btn-sm seg-card-play-btn"
+                    class:playing={previewActive}
+                    title="Play segment audio"
+                    on:click={onPreviewPlayClick}
+                >{playGlyph}</button>
+            {:else}
+                <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
+            {/if}
         {/if}
         <canvas
             bind:this={canvasEl}
@@ -517,7 +715,7 @@
                 <span class="seg-text-index">{indexLabel}</span>
                 <span class="seg-text-sep">|</span>
                 {#if isEditingThisRow && $editMode === 'reference'}
-                    <ReferenceEditor {seg} />
+                    <ReferenceEditor {seg} on:preview={(e) => previewState = e.detail} />
                 {:else}
                     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                     <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>

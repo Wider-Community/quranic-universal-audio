@@ -7,9 +7,9 @@
 
 import { get } from 'svelte/store';
 
+import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import { segConfig } from '../../stores/config';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import { drawEditPeakBase } from './draw-seg';
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
     const width = canvas.width;
     const height = canvas.height;
     const centerY = height / 2;
-    const scale = (height / 2) * 0.9;
+    const scale = data.scale ?? (height / 2) * 0.9;
 
     // Trim strokes the full max+min outline (top and bottom) for a closed look.
     ctx.beginPath();

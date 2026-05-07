@@ -7,17 +7,21 @@
  * owns the store/pending-op transitions and the async commit path.
  */
 
+import { tick } from 'svelte';
 import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
-import type { EditOp, Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/domain';
+import { applyCommand } from '../../domain/apply-command';
 import {
     refreshSegInStore,
+    segAllData,
     selectedChapter,
 } from '../../stores/chapter';
 import {
     createOp,
+    getChapterOps,
     getPendingOp,
     markDirty,
     setPendingOp,
@@ -33,19 +37,42 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/playback';
-import { _normalizeRef as _normalizeRefLib, getVerseWordCounts } from '../data/references';
+import {
+    _advanceRefByOneWord,
+    _normalizeRef as _normalizeRefLib,
+    _validateRefStructural,
+    getVerseWordCounts,
+    parseSegRef,
+} from '../data/references';
 import { stopSegAnimation } from '../playback/playback';
 import type { RowEntry, RowInstanceRole } from '../playback/row-registry';
 import { getRowEntriesFor } from '../playback/row-registry';
 import { finalizeEdit } from './common';
 
-function _normalizeRef(ref: Parameters<typeof _normalizeRefLib>[0]): ReturnType<typeof _normalizeRefLib> {
-    return _normalizeRefLib(ref, getVerseWordCounts());
-}
-
 // ---------------------------------------------------------------------------
 // beginRefEdit — enter reference-edit mode for a segment
 // ---------------------------------------------------------------------------
+
+/**
+ * Initial selection range for the ReferenceEditor input on the next mount.
+ * Set transiently by `_handoffPendingChain` so the chain-mounted second-half
+ * editor can place the cursor at the dash boundary instead of selecting the
+ * whole prefilled value. Cleared by ReferenceEditor on mount.
+ */
+let _pendingInitialSelection: { from: number; to: number } | null = null;
+let _pendingInitialValue: string | null = null;
+
+export function consumePendingInitialSelection(): { from: number; to: number } | null {
+    const v = _pendingInitialSelection;
+    _pendingInitialSelection = null;
+    return v;
+}
+
+export function consumePendingInitialValue(): string | null {
+    const v = _pendingInitialValue;
+    _pendingInitialValue = null;
+    return v;
+}
 
 /**
  * Enter reference-edit mode for `seg`. Pauses audio, creates the pending op,
@@ -71,6 +98,13 @@ export function beginRefEdit(
     if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
 
+    // Seed the initial value with the exact object we just passed to beginRefEdit,
+    // bypassing Svelte's reactive prop delay. If _pendingInitialValue is already
+    // set (e.g. by _handoffPendingChain), we leave it untouched.
+    if (_pendingInitialValue === null) {
+        _pendingInitialValue = seg.matched_ref ?? null;
+    }
+
     setEdit('reference', seg.segment_uid ?? null, mountId);
     setEditingSegIndex(seg.index);
 
@@ -84,81 +118,161 @@ export function beginRefEdit(
 // ---------------------------------------------------------------------------
 
 /**
- * Shared tail for both commitRefEdit branches: append the op-context category
- * to ignored_categories (except muqattaat which tracks confidence instead),
- * clear derived cache, mark dirty, re-publish the seg to the store, and
- * finalize the pending op.
+ * Apply a reference change through `applyCommand` and finalize the op.
+ * Mutates `seg` in place from the reducer's `nextState`, clears derived
+ * cache, marks dirty, refreshes the seg in the chapter store, and feeds
+ * `result.operation` into `finalizeEdit`.
+ *
+ * `opType` selects 'confirm_reference' for the audit-confirm path (user
+ * pressed Enter on an unchanged ref to clear a low-confidence flag) vs
+ * 'edit_reference' for an actual ref change.
  */
-function _applyRefChange(seg: Segment, pending: EditOp | null, chapter: number): void {
-    const ctxCat = pending?.op_context_category;
-    if (ctxCat && ctxCat !== 'muqattaat') {
-        if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(ctxCat))
-            seg.ignored_categories.push(ctxCat);
+function _dispatchRefEdit(
+    seg: Segment,
+    chapter: number,
+    matched_ref: string,
+    matched_text: string,
+    display_text: string,
+    contextCategory: string | null,
+    opType: 'edit_reference' | 'confirm_reference',
+): void {
+    const uid = seg.segment_uid;
+    if (!uid) {
+        // Defensive: legacy fixtures without uids skip the reducer; mutate
+        // in place and mark dirty so the row still renders the new values.
+        seg.matched_ref = matched_ref;
+        seg.matched_text = matched_text;
+        seg.display_text = display_text;
+        seg.confidence = 1.0;
+        delete seg._derived;
+        markDirty(chapter, seg.index);
+        refreshSegInStore(seg);
+        setPendingOp(null);
+        return;
+    }
+    const result = applyCommand(
+        {
+            byId: { [uid]: seg },
+            idsByChapter: { [chapter]: [uid] },
+            selectedChapter: chapter,
+        },
+        {
+            type: 'editReference',
+            segmentUid: uid,
+            matched_ref,
+            matched_text,
+            display_text,
+            sourceCategory: contextCategory ?? undefined,
+            contextCategory: contextCategory ?? undefined,
+            opType,
+            fixKind: opType === 'confirm_reference' ? 'audit' : 'manual',
+        },
+    );
+    const updated = result.nextState.byId[uid];
+    if (updated) {
+        seg.matched_ref = updated.matched_ref;
+        seg.matched_text = updated.matched_text;
+        seg.display_text = updated.display_text;
+        seg.confidence = updated.confidence;
+        if (updated.ignored_categories) {
+            seg.ignored_categories = [...updated.ignored_categories];
+        }
     }
     delete seg._derived;
     markDirty(chapter, seg.index);
     refreshSegInStore(seg);
-    if (pending) {
-        finalizeEdit(pending, chapter, [seg], {
-            skipSilence: true,
-            skipFilterRender: true,
-            skipAccordion: true,
-        });
-    }
+    setPendingOp(null);
+    finalizeEdit(result.operation, chapter, [seg], {
+        skipSilence: true,
+        skipFilterRender: true,
+        skipAccordion: true,
+        patch: result.patch,
+    });
 }
 
-export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<void> {
+export type CommitRefResult =
+    | { status: 'ok' }
+    | { status: 'invalid'; reason: 'malformed' | 'unknown_verse' | 'resolve_failed' };
+
+export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<CommitRefResult> {
     const oldRef = seg.matched_ref || '';
     const chapter = seg.chapter || parseInt(get(selectedChapter));
-    const newRef = _normalizeRef(newRefIn) ?? '';
-    if (newRef === oldRef) {
-        if ((seg.confidence ?? 0) < 1.0) {
-            const pending = getPendingOp();
-            if (pending) {
-                pending.op_type = 'confirm_reference';
-                pending.fix_kind = 'audit';
-            }
-            seg.confidence = 1.0;
-            _applyRefChange(seg, pending, chapter);
+    const vwc = getVerseWordCounts();
+    const normalized = _normalizeRefLib(newRefIn, vwc) ?? '';
+    const pending = getPendingOp();
+    const ctxCat = pending?.op_context_category ?? null;
+
+    if (normalized === oldRef) {
+        const chOps = getChapterOps(chapter);
+        const isFromSplit = chOps.some(o => 
+            o.op_type === 'split_segment' && 
+            (o.targets_after as Record<string, any>[] | undefined)?.some(t => t.segment_uid === seg.segment_uid)
+        );
+
+        if ((seg.confidence ?? 0) < 1.0 || isFromSplit) {
+            // Audit confirm: user pressed Enter on an unchanged low-confidence
+            // ref, or accepted an auto-suggested ref from a recent split.
+            // Records a 'confirm_reference' op with fix_kind='audit' and
+            // bumps confidence to 1.0. Ref + text fields stay as-is.
+            _dispatchRefEdit(
+                seg,
+                chapter,
+                seg.matched_ref || '',
+                seg.matched_text || '',
+                seg.display_text || '',
+                ctxCat,
+                'confirm_reference',
+            );
         } else {
             setPendingOp(null);
         }
         clearEdit();
-        _handoffPendingChain();
-        return;
+        await _handoffPendingChain();
+        return { status: 'ok' };
     }
 
-    seg.matched_ref = newRef;
-    seg.confidence = 1.0;
-    const pending = getPendingOp();
+    // Structural validation: malformed / unknown_verse → reject and let the
+    // editor surface a red badge for re-entry. word_overshoot → silently fix
+    // by clamping the word to the verse's max.
+    let candidate = normalized;
+    if (candidate) {
+        const v = _validateRefStructural(candidate, vwc);
+        if (!v.ok) {
+            if (v.reason === 'word_overshoot' && v.clamped) {
+                candidate = v.clamped;
+            } else if (v.reason === 'malformed' || v.reason === 'unknown_verse') {
+                return { status: 'invalid', reason: v.reason };
+            }
+        }
+    }
 
-    if (newRef) {
+    let matchedText = '';
+    let displayText = '';
+    if (candidate) {
         try {
             const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
-                `/api/seg/resolve_ref?ref=${encodeURIComponent(newRef)}`,
+                `/api/seg/resolve_ref?ref=${encodeURIComponent(candidate)}`,
             );
             if (data.text) {
-                seg.matched_text = data.text;
-                seg.display_text = data.display_text || data.text;
-            } else if (data.error) {
-                console.warn('resolve_ref error:', data.error);
-                seg.matched_text = '(invalid ref)';
-                seg.display_text = '';
+                matchedText = data.text;
+                displayText = data.display_text || data.text;
+            } else {
+                // Backend rejected the ref (or returned empty text). Treat as
+                // invalid so the user can re-enter rather than committing a
+                // junk display string into matched_text.
+                if (data.error) console.warn('resolve_ref error:', data.error);
+                return { status: 'invalid', reason: 'resolve_failed' };
             }
         } catch (e) {
             console.error('Failed to resolve ref:', e);
-            seg.matched_text = '(resolve failed)';
-            seg.display_text = '';
+            return { status: 'invalid', reason: 'resolve_failed' };
         }
-    } else {
-        seg.matched_text = '';
-        seg.display_text = '';
     }
 
-    _applyRefChange(seg, pending, chapter);
+    _dispatchRefEdit(seg, chapter, candidate, matchedText, displayText, ctxCat, 'edit_reference');
     clearEdit();
-    _handoffPendingChain();
+    await _handoffPendingChain();
+    return { status: 'ok' };
 }
 
 /** Priority order for picking a mount when handing the chain off to a
@@ -210,10 +324,18 @@ function _pickHandoffMountId(entries: Iterable<RowEntry>): symbol | null {
  *  `editMode='reference'` stuck with no UI, silently blocking subsequent
  *  Split/Adjust/Edit Ref clicks (the `enterEditWithBuffer` + other guards
  *  bail early on any non-null editMode). */
-function _handoffPendingChain(): void {
+async function _handoffPendingChain(): Promise<void> {
     const chain = get(pendingChainTarget);
     pendingChainTarget.set(null);
     if (!chain) return;
+
+    // Flush Svelte's pending DOM updates so that newly-inserted rows (e.g. the
+    // second half after a split) are mounted and registered in the row registry
+    // before we try to look them up. Without this, the cross-verse "no-change"
+    // confirm path runs fully synchronously and the registry lookup returns null,
+    // silently aborting the chain. The non-cross-verse path only worked by
+    // accident because its async fetchJson call gave Svelte time to flush.
+    await tick();
 
     const chapter = chain.seg.chapter ?? parseInt(get(selectedChapter));
     const entries = getRowEntriesFor(chapter, chain.seg.index);
@@ -221,6 +343,59 @@ function _handoffPendingChain(): void {
     // No row mounted → nothing to claim a programmatic beginRefEdit. Abort
     // the chain; user can Edit Ref manually on the second half later.
     if (!mountId) return;
+
+    // Rebuild the second-half ref as `(advance(committedFirstEnd))-(originalEnd)`
+    // ONLY when the user actually trimmed the first half — i.e. its committed
+    // end is strictly before the original segment's end. When the user kept
+    // first half = full original range (pressed Enter without changing the
+    // suggested ref, or the suggestion already covered the whole segment),
+    // advancing would push past the original range and produce an invalid ref
+    // like `2:5:8-2:5:7` (single-verse split where both halves inherited the
+    // full ref) or otherwise overshoot. In that case leave the second half's
+    // ref untouched so the editor opens with whatever was set at split time.
+    if (chain.originalEndRef) {
+        const origEndParts = chain.originalEndRef.split(':').map(Number);
+        const origAyah = origEndParts[1];
+        const origWord = origEndParts[2];
+        const all = get(segAllData);
+        let firstEndRef: string | null = null;
+        if (all) {
+            const i = all.segments.findIndex(s =>
+                s.segment_uid === chain.seg.segment_uid ||
+                (s.chapter === chapter && s.index === chain.seg.index),
+            );
+            if (i > 0) {
+                const prev = all.segments[i - 1];
+                if (prev && prev.chapter === chapter) firstEndRef = prev.matched_ref ?? null;
+            }
+        }
+        const firstParsed = parseSegRef(firstEndRef);
+        const vwc = getVerseWordCounts();
+        // Trim guard: only advance when first half ends BEFORE original end.
+        const firstTrimmed = !!firstParsed && origAyah != null && origWord != null && (
+            firstParsed.ayah_to < origAyah ||
+            (firstParsed.ayah_to === origAyah && firstParsed.word_to < origWord)
+        );
+        if (firstParsed && firstTrimmed) {
+            const next = _advanceRefByOneWord(
+                { surah: firstParsed.surah, ayah: firstParsed.ayah_to, word: firstParsed.word_to },
+                vwc,
+            );
+            if (next) {
+                const rebuilt = `${next.surah}:${next.ayah}:${next.word}-${chain.originalEndRef}`;
+                // DO NOT mutate chain.seg.matched_ref here! Mutating it in place makes
+                // commitRefEdit think no change occurred when the user accepts the hint,
+                // causing it to discard the edit_reference operation.
+                _pendingInitialValue = rebuilt;
+                // Cursor lands right after the dash so the user can edit only
+                // the end portion. Selection runs from `from` to end of value.
+                const dash = rebuilt.indexOf('-');
+                if (dash >= 0) {
+                    _pendingInitialSelection = { from: dash + 1, to: rebuilt.length };
+                }
+            }
+        }
+    }
 
     beginRefEdit(chain.seg, chain.category, mountId);
 }

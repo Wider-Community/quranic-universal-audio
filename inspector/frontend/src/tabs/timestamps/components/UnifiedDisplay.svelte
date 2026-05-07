@@ -16,19 +16,19 @@
     import { onDestroy } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { loadedVerse } from '../stores/verse';
+    import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
+    import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
+    import { safePlay } from '../../../lib/utils/audio';
     import {
         showLetters,
         showPhonemes,
         tsHoveredElement,
         tsWaveformHoverTime,
     } from '../stores/display';
-    import { autoMode, loopTarget, tsAudioElement } from '../stores/playback';
     import type { TsLoopTarget } from '../stores/playback';
-    import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
-    import { safePlay } from '../../../lib/utils/audio';
+    import { autoMode, loopTarget, tsAudioElement } from '../stores/playback';
+    import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
-    import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
@@ -645,6 +645,7 @@
         >
             <div
                 class="mega-word"
+                role="group"
                 on:mouseenter={() => onWordEnter(block.word)}
                 on:mouseleave={onHoverLeave}
             >{block.word.display_text || block.word.text}</div>

@@ -25,12 +25,36 @@
      * Map so cards restore their state on re-mount as the window slides.
      */
 
-    import { afterUpdate } from 'svelte';
-    import { segValidation } from '../../stores/validation';
+    import { afterUpdate, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
+
+    import type {
+        SegValAnyItem,
+        SegValAudioBleedingItem,
+        SegValidateResponse,
+        SegValLowConfidenceItem,
+        SegValMissingWordsItem,
+        SegValQalqalaItem,
+        SegValRepetitionItem,
+    } from '../../../../lib/types/api';
+    import type { Segment } from '../../../../lib/types/domain';
+    import { applyCommand } from '../../domain/apply-command';
+    import { IssueRegistry } from '../../domain/registry';
+    import { refreshSegInStore, segAllData, selectedChapter, syncChapterSegsToAll } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
+    import { markDirty } from '../../stores/dirty';
     import { editingSegUid } from '../../stores/edit';
-    import { segAllData } from '../../stores/chapter';
+    import {
+        cancelQalqalaBatch,
+        getPaddedEnd,
+        qalqalaBatch,
+        resetQalqalaBatch,
+        setPeaksComplete,
+        setPeaksFetching,
+        startQalqalaBatch,
+        updateQalqalaPadAmount,
+    } from '../../stores/qalqala-batch';
+    import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
         CONF_MID_THRESHOLD,
         VAL_VIRTUALIZE_THRESHOLD,
@@ -41,17 +65,12 @@
         jumpToSegment,
         jumpToVerse,
     } from '../../utils/data/navigation-actions';
+    import { finalizeEdit, segSlice } from '../../utils/edit/common';
+    import { executeSave } from '../../utils/save/execute';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
+    import { filterStaleIssues } from '../../utils/validation/stale';
+    import { fetchPeaksForPaddedEnd } from '../../utils/waveform/utils';
     import ErrorCard from './ErrorCard.svelte';
-    import type {
-        SegValAnyItem,
-        SegValAudioBleedingItem,
-        SegValLowConfidenceItem,
-        SegValMissingWordsItem,
-        SegValQalqalaItem,
-        SegValRepetitionItem,
-        SegValidateResponse,
-    } from '../../../../lib/types/api';
 
     // ---- Props ----
     /** Filter results to this chapter number. null = all chapters. */
@@ -59,22 +78,132 @@
     /** Optional section label shown above the accordions. */
     export let label: string | null = null;
 
-    // ---- Open-state (component-local) ----
-    let openCategory: string | null = null;
+    // ---- Open-state (in-memory persistent) ----
+    let openCategory: string | null = $valUiOpenCategory;
+    $: valUiOpenCategory.set(openCategory);
 
     // Reset on chapter change
-    $: {
-        void chapter;
+    let _prevChapter = chapter;
+    $: if (chapter !== _prevChapter) {
+        _prevChapter = chapter;
         openCategory = null;
+        cardsScrollTop = 0;
     }
 
     // ---- LC slider ----
-    let lcThreshold: number = get(segConfig).lcDefaultThreshold;
+    let lcThreshold: number = $valUiLcThreshold ?? get(segConfig).lcDefaultThreshold;
+    $: valUiLcThreshold.set(lcThreshold);
 
     // ---- Qalqala filter ----
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
     let activeQalqalaLetter: string | null = null;
     let qalqalaEndOfVerse: boolean = false;
+
+    // ---- Qalqala pad slider (batch padding ms) ----
+    let padSliderRaw = 200;
+    let padAmount = 200;
+    let _padDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const PAD_DEBOUNCE_MS = 80;
+    function onPadSliderInput(e: Event): void {
+        const v = parseInt((e.currentTarget as HTMLInputElement).value, 10);
+        if (Number.isNaN(v)) return;
+        padSliderRaw = v;
+        if (_padDebounceTimer !== null) clearTimeout(_padDebounceTimer);
+        _padDebounceTimer = setTimeout(() => {
+            _padDebounceTimer = null;
+            padAmount = padSliderRaw;
+            updateQalqalaPadAmount(padAmount);
+        }, PAD_DEBOUNCE_MS);
+    }
+
+    // ---- Qalqala batch padding ----
+    async function handlePreviewQalqalaPadding(cat: CategoryDescriptor): Promise<void> {
+        if (!activeQalqalaLetter || cat.visibleItems.length === 0) return;
+        const items = cat.visibleItems as SegValQalqalaItem[];
+        const segs: Segment[] = [];
+        for (const it of items) {
+            const s = resolveIssueSeg(it, 'qalqala', null);
+            if (s?.segment_uid) segs.push(s);
+        }
+        if (segs.length === 0) return;
+
+        startQalqalaBatch(activeQalqalaLetter, padAmount, segs);
+        setPeaksFetching(true);
+        setPeaksComplete(false);
+
+        const concurrency = 5;
+        const queue = [...segs];
+        const workers = Array.from({ length: concurrency }, async () => {
+            while (queue.length > 0) {
+                const seg = queue.shift();
+                if (!seg?.segment_uid) continue;
+                const ch = seg.chapter ?? chapter ?? 0;
+                const batchSnap = get(qalqalaBatch);
+                const paddedEnd = getPaddedEnd(seg.segment_uid, seg, batchSnap);
+                await fetchPeaksForPaddedEnd(seg, ch, paddedEnd);
+            }
+        });
+        await Promise.all(workers);
+        setPeaksFetching(false);
+        setPeaksComplete(true);
+    }
+
+    async function handleConfirmQalqalaPadding(): Promise<void> {
+        const batch = get(qalqalaBatch);
+        if (!batch.isActive) return;
+
+        const allData = get(segAllData);
+        if (!allData) return;
+
+        let anyChange = false;
+        for (const seg of batch.segments) {
+            if (!seg.segment_uid) continue;
+            const newTimeEnd = getPaddedEnd(seg.segment_uid, seg, batch);
+            if (newTimeEnd !== seg.time_end) {
+                anyChange = true;
+                break;
+            }
+        }
+        if (!anyChange) {
+            resetQalqalaBatch();
+            return;
+        }
+
+        const batchGroupId = crypto.randomUUID();
+
+        for (const seg of batch.segments) {
+            if (!seg.segment_uid) continue;
+            const newTimeEnd = getPaddedEnd(seg.segment_uid, seg, batch);
+            if (newTimeEnd === seg.time_end) continue;
+
+            const ch = seg.chapter ?? (parseInt(get(selectedChapter), 10) || 0);
+            const result = applyCommand(segSlice(seg, ch), {
+                type: 'qalqala_pad',
+                segmentUid: seg.segment_uid,
+                newTimeEnd,
+                sourceCategory: 'qalqala',
+                contextCategory: `qalqala_pad_${batch.letter}`,
+                fixKind: 'batch_pad',
+            });
+
+            const updated = result.nextState.byId[seg.segment_uid];
+            if (updated) {
+                seg.time_end = updated.time_end;
+                seg.confidence = updated.confidence;
+            }
+            markDirty(ch, undefined, true);
+            refreshSegInStore(seg);
+            finalizeEdit(result.operation, ch, [seg], { skipAccordion: true, patch: result.patch });
+        }
+
+        syncChapterSegsToAll();
+        resetQalqalaBatch();
+        await executeSave(false, { batchGroupId });
+    }
+
+    function handleCancelQalqalaPadding(): void {
+        cancelQalqalaBatch();
+    }
 
     // ---- Virtualization constants ----
     /** Fallback card height (px) before real measurement. MissingVersesCard with
@@ -86,10 +215,21 @@
     // ---- Per-category virtualization state ----
     // scrollTop and viewport height of the open category's cards container.
     const CARDS_VIEWPORT_HEIGHT_FALLBACK = 500;
-    let cardsScrollTop = 0;
+    let cardsScrollTop = $valUiScrollTop;
+    $: valUiScrollTop.set(cardsScrollTop);
+
     let cardsViewportHeight = CARDS_VIEWPORT_HEIGHT_FALLBACK;
-    let measuredCardHeight = FALLBACK_CARD_HEIGHT;
+    let measuredCardHeight = $valUiMeasuredCardHeight ?? FALLBACK_CARD_HEIGHT;
+    $: valUiMeasuredCardHeight.set(measuredCardHeight);
+
     let cardsContainerEl: HTMLDivElement | null = null;
+    let _hasRestoredScroll = false;
+    $: if (cardsContainerEl && !_hasRestoredScroll) {
+        if (cardsScrollTop > 0) {
+            cardsContainerEl.scrollTop = cardsScrollTop;
+        }
+        _hasRestoredScroll = true;
+    }
 
     let scrollRaf: number | null = null;
     function onCardsScroll(): void {
@@ -127,11 +267,14 @@
 
     // Reset scroll position and measured height when the open category changes
     // so the new category starts at the top and re-measures its own card sizes.
-    let _prevOpenCategory: string | null = null;
+    let _prevOpenCategory: string | null = openCategory;
     $: if (openCategory !== _prevOpenCategory) {
         _prevOpenCategory = openCategory;
         cardsScrollTop = 0;
         measuredCardHeight = FALLBACK_CARD_HEIGHT;
+        if (cardsContainerEl) {
+            cardsContainerEl.scrollTop = 0;
+        }
     }
 
     // ---- Per-type context-shown state (survives virtualization re-mounts) ----
@@ -168,65 +311,195 @@
         qalqalaLetters: string[];
     }
 
+    /** Base-layer descriptor — everything except the per-filter projection.
+     *  Computed once per (validationIdentity, segAllDataIdentity, chapter)
+     *  so qalqala/letter and LC/slider clicks don't rebuild filterStaleIssues
+     *  or the qalqala letter set. */
+    interface BaseDescriptor {
+        name: string;
+        kind: string;
+        countClass: string;
+        items: SegValAnyItem[];
+        /** LC-default-threshold count (badge value when slider hasn't moved off default). */
+        defaultLowConfCount: number;
+        isLowConf: boolean;
+        isQalqala: boolean;
+        qalqalaLetters: string[];
+    }
+
     // ---- Chapter filter ----
     function matchChapter<T extends { chapter: number }>(arr: T[] | undefined): T[] {
         return chapter === null ? (arr ?? []) : (arr ?? []).filter((i) => i.chapter === chapter);
     }
 
-    // ---- Build category list from store ----
-    function buildCategories(
+    // ---- Per-category presentation hints (count badge class). ----
+    // Severity \u2192 CSS hook for the count pill. The two flag-style classes
+    // (val-rep-count, val-cross-count) are used to colour repetition /
+    // cross-verse / muqattaat / qalqala counts in their own palette.
+    const COUNT_CLASS_OVERRIDES: Record<string, string> = {
+        repetitions: 'val-rep-count',
+        cross_verse: 'val-cross-count',
+        muqattaat: 'val-cross-count',
+        qalqala: 'val-cross-count',
+    };
+    function _countClassFor(kind: string): string {
+        const override = COUNT_CLASS_OVERRIDES[kind];
+        if (override) return override;
+        const sev = IssueRegistry[kind]?.severity ?? 'error';
+        return sev === 'error' ? 'has-errors' : 'has-warnings';
+    }
+
+    // Each registry entry maps to the response field it consumes. The accordion
+    // descriptor is built in registry accordionOrder.
+    function _itemsFor(kind: string, data: SegValidateResponse): SegValAnyItem[] {
+        if (kind === 'structural_errors') {
+            return matchChapter(data.errors ?? data.structural_errors);
+        }
+        const slot = (data as Record<string, SegValAnyItem[] | undefined>)[kind];
+        return matchChapter(slot);
+    }
+
+    // ---- Two-layer rebuild ----
+    //
+    // Layer 1 (`buildBaseDescriptors`): does the heavy work — `filterStaleIssues`
+    // per category and the qalqala letter set computation. Memoized on
+    // (validationIdentity, segAllDataIdentity, chapter), so it runs once per
+    // validation refresh / chapter switch and NOT on filter button clicks or
+    // LC slider drags.
+    //
+    // Layer 2 (`projectVisible`): cheap per-category projection that depends
+    // on the filter inputs (lcThreshold, qalqala letter/EoV). Non-LC/non-
+    // qalqala categories get `visibleItems = items` byref so the descriptor
+    // is byref-equal to the previous tick when only filters changed for
+    // *another* category — keeping Svelte's keyed-each diffs minimal.
+
+    let _baseMemoVal: SegValidateResponse | null = null;
+    let _baseMemoSegData: typeof $segAllData = null;
+    let _baseMemoChapter: number | null = null;
+    let _baseMemoResult: BaseDescriptor[] = [];
+
+    function buildBaseDescriptors(
         data: SegValidateResponse | null,
+        segDataRef: typeof $segAllData,
+        chapterFilter: number | null,
+    ): BaseDescriptor[] {
+        if (data === _baseMemoVal && segDataRef === _baseMemoSegData && chapterFilter === _baseMemoChapter) {
+            return _baseMemoResult;
+        }
+        _baseMemoVal = data;
+        _baseMemoSegData = segDataRef;
+        _baseMemoChapter = chapterFilter;
+
+        if (!data) {
+            _baseMemoResult = [];
+            return _baseMemoResult;
+        }
+
+        const ordered = Object.values(IssueRegistry).slice()
+            .sort((a, b) => a.accordionOrder - b.accordionOrder);
+
+        // Build the live-uid set once so stale-filter has O(1) membership
+        // checks. Only per-segment categories use uids; chapter-level
+        // categories (missing_verses, structural_errors) carry segment_uid:
+        // null and are always kept by filterStaleIssues.
+        const allSegs = segDataRef?.segments ?? [];
+        const liveUids = new Set(
+            allSegs.map((s) => s.segment_uid).filter((u): u is string => !!u),
+        );
+
+        const LC_DEFAULT = get(segConfig).lcDefaultThreshold;
+        _baseMemoResult = ordered.map((defn) => {
+            const rawItems = _itemsFor(defn.kind, data);
+            const items = filterStaleIssues(rawItems, liveUids);
+            let defaultLowConfCount = 0;
+            let isLowConf = false;
+            let isQalqala = false;
+            let qalqalaLetters: string[] = [];
+
+            if (defn.kind === 'low_confidence') {
+                isLowConf = true;
+                const lowConf = items as SegValLowConfidenceItem[];
+                for (const i of lowConf) {
+                    if (i.confidence * 100 < LC_DEFAULT) defaultLowConfCount++;
+                }
+            } else if (defn.kind === 'qalqala') {
+                isQalqala = true;
+                const qal = items as SegValQalqalaItem[];
+                // Single O(n) pass to find which letters are present —
+                // beats QALQALA_LETTERS_ORDER.filter(l => qal.some(...))'s
+                // O(5*n) nested loop on every reactive tick.
+                const present = new Set<string>();
+                for (const i of qal) {
+                    if (i.qalqala_letter) present.add(i.qalqala_letter);
+                }
+                qalqalaLetters = QALQALA_LETTERS_ORDER.filter((l) => present.has(l));
+            }
+
+            return {
+                name: defn.displayTitle,
+                kind: defn.kind,
+                countClass: _countClassFor(defn.kind),
+                items,
+                defaultLowConfCount,
+                isLowConf,
+                isQalqala,
+                qalqalaLetters,
+            };
+        });
+        return _baseMemoResult;
+    }
+
+    /** Per-category visible-items projection. Cheap; runs on every filter
+     *  change but only walks the affected category's already-narrowed items. */
+    function projectVisible(
+        base: BaseDescriptor[],
         _lcThreshold: number,
         _activeQalqalaLetter: string | null,
         _qalqalaEndOfVerse: boolean,
     ): CategoryDescriptor[] {
-        if (!data) return [];
-
-        const failed = matchChapter(data.failed);
-        const mv = matchChapter(data.missing_verses);
-        const mw = matchChapter(data.missing_words);
-        const errs = matchChapter(data.errors ?? data.structural_errors);
-        const lowConf = matchChapter(data.low_confidence) as SegValLowConfidenceItem[];
-        const ba = matchChapter(data.boundary_adj);
-        const cv = matchChapter(data.cross_verse);
-        const ab = matchChapter(data.audio_bleeding);
-        const rep = matchChapter(data.repetitions);
-        const muq = matchChapter(data.muqattaat);
-        const qal = matchChapter(data.qalqala) as SegValQalqalaItem[];
-
-        // Low confidence
-        const LC_DEFAULT = get(segConfig).lcDefaultThreshold;
-        const lcVisible = lowConf
-            .filter((i) => (i.confidence * 100) < _lcThreshold)
-            .sort((a, b) => a.confidence - b.confidence);
-        const lcSummaryCount = lowConf.filter((i) => (i.confidence * 100) < LC_DEFAULT).length;
-
-        // Qalqala
-        let qalVisible: SegValQalqalaItem[] = qal;
-        if (_activeQalqalaLetter) qalVisible = qalVisible.filter((i) => i.qalqala_letter === _activeQalqalaLetter);
-        if (_qalqalaEndOfVerse) qalVisible = qalVisible.filter((i) => i.end_of_verse === true);
-        const qalLetters = QALQALA_LETTERS_ORDER.filter((l) => qal.some((i) => i.qalqala_letter === l));
-
-        const all: CategoryDescriptor[] = [
-            { name: 'Failed Alignments',              type: 'failed',         countClass: 'has-errors',     items: failed,  visibleItems: failed,     summaryCount: failed.length,    isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Missing Verses',                  type: 'missing_verses', countClass: 'has-errors',     items: mv,      visibleItems: mv,         summaryCount: mv.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Missing Words',                   type: 'missing_words',  countClass: 'has-errors',     items: mw,      visibleItems: mw,         summaryCount: mw.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Structural Errors',               type: 'errors',         countClass: 'has-errors',     items: errs,    visibleItems: errs,       summaryCount: errs.length,      isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Low Confidence',                  type: 'low_confidence', countClass: 'has-warnings',   items: lowConf, visibleItems: lcVisible,  summaryCount: lcSummaryCount,   isLowConf: true,  isQalqala: false, qalqalaLetters: [] },
-            { name: 'Detected Repetitions',            type: 'repetitions',    countClass: 'val-rep-count',  items: rep,     visibleItems: rep,        summaryCount: rep.length,       isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'May Require Boundary Adjustment', type: 'boundary_adj',   countClass: 'has-warnings',   items: ba,      visibleItems: ba,         summaryCount: ba.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Cross-verse',                     type: 'cross_verse',    countClass: 'val-cross-count',items: cv,      visibleItems: cv,         summaryCount: cv.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Audio Bleeding',                  type: 'audio_bleeding', countClass: 'has-warnings',   items: ab,      visibleItems: ab,         summaryCount: ab.length,        isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Muqatta\u02bcat',                 type: 'muqattaat',      countClass: 'val-cross-count',items: muq,     visibleItems: muq,        summaryCount: muq.length,       isLowConf: false, isQalqala: false, qalqalaLetters: [] },
-            { name: 'Qalqala',                         type: 'qalqala',        countClass: 'val-cross-count',items: qal,     visibleItems: qalVisible, summaryCount: qal.length,       isLowConf: false, isQalqala: true,  qalqalaLetters: qalLetters },
-        ];
-
-        return all.filter((c) => c.items.length > 0);
+        const out: CategoryDescriptor[] = [];
+        for (const b of base) {
+            if (b.items.length === 0) continue;
+            let visibleItems: SegValAnyItem[] = b.items;
+            let summaryCount = b.items.length;
+            if (b.isLowConf) {
+                const lowConf = b.items as SegValLowConfidenceItem[];
+                visibleItems = lowConf
+                    .filter((i) => (i.confidence * 100) < _lcThreshold)
+                    .sort((a, b2) => a.confidence - b2.confidence);
+                summaryCount = b.defaultLowConfCount;
+            } else if (b.isQalqala && (_activeQalqalaLetter || _qalqalaEndOfVerse)) {
+                const qal = b.items as SegValQalqalaItem[];
+                // Single-pass combined filter (letter + end-of-verse) instead
+                // of two chained `.filter()` calls.
+                const filtered: SegValQalqalaItem[] = [];
+                for (const i of qal) {
+                    if (_activeQalqalaLetter && i.qalqala_letter !== _activeQalqalaLetter) continue;
+                    if (_qalqalaEndOfVerse && i.end_of_verse !== true) continue;
+                    filtered.push(i);
+                }
+                visibleItems = filtered;
+                // Qalqala: badge tracks the active filter (parallel to LC).
+                summaryCount = filtered.length;
+            }
+            out.push({
+                name: b.name,
+                type: b.kind,
+                countClass: b.countClass,
+                items: b.items,
+                visibleItems,
+                summaryCount,
+                isLowConf: b.isLowConf,
+                isQalqala: b.isQalqala,
+                qalqalaLetters: b.qalqalaLetters,
+            });
+        }
+        return out;
     }
 
-    let categories: CategoryDescriptor[] = [];
+    $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter);
+    $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
     $: {
-        categories = buildCategories($segValidation, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
         // Filter signature: the subset of inputs that truly narrow the item
         // list (chapter / LC threshold / qalqala letter / end-of-verse).
         // If none of these change, preserve each type's context-shown map so
@@ -236,7 +509,7 @@
         for (const cat of categories) {
             if (_lastFilterSig[cat.type] !== sig) {
                 _lastFilterSig[cat.type] = sig;
-                if (contextStateByType[cat.type]) contextStateByType[cat.type].clear();
+                contextStateByType[cat.type]?.clear();
             }
         }
     }
@@ -265,8 +538,8 @@
         return { chapter: seg.chapter, index: seg.index };
     })();
     // Find the editing card's index within the open category's visible list.
-    // `seg_index` is the validation item's segment index (mutated in place by
-    // the split/merge/delete fixups in `utils/validation/fixups.ts`).
+    // `seg_index` is used for the legacy fallback path; uid-carrying items
+    // resolve via filterStaleIssues + resolveIssueSeg uid-first.
     $: editingItemIdx = ((): number => {
         if (!virtualize || !editingCoords || !openCat) return -1;
         const items = openCat.visibleItems as ReadonlyArray<{
@@ -290,7 +563,7 @@
         : openTotal;
     // Expand the window to cover the editing card so scrolling away doesn't
     // unmount it. Bound check against openTotal handles items added/removed
-    // via fixups while still in edit mode.
+    // by re-validation while still in edit mode.
     $: startIdx = virtualize && editingItemIdx >= 0
         ? Math.min(baseStartIdx, editingItemIdx)
         : baseStartIdx;
@@ -305,6 +578,7 @@
         if (type === 'low_confidence') {
             return ((issue as SegValLowConfidenceItem).confidence < CONF_MID_THRESHOLD) ? 'val-conf-low' : 'val-conf-mid';
         }
+        if (type === 'low_confidence_v2') return 'val-conf-mid';
         if (type === 'repetitions') return 'val-rep';
         if (type === 'cross_verse' || type === 'muqattaat' || type === 'qalqala') return 'val-cross';
         if (type === 'audio_bleeding') return 'val-bleed';
@@ -330,7 +604,7 @@
         };
         void $segAllData; // re-evaluate on seg mutations so live ref tracks
         if (type === 'failed') return `${any.chapter}:#${any.seg_index}`;
-        if (type === 'missing_verses' || type === 'errors') return any.verse_key ?? '';
+        if (type === 'missing_verses' || type === 'structural_errors') return any.verse_key ?? '';
         if (type === 'missing_words') {
             const indices = (issue as SegValMissingWordsItem).seg_indices || [];
             return indices.length > 0 ? `${any.verse_key} #${indices.join('/#')}` : (any.verse_key ?? '');
@@ -349,7 +623,7 @@
         const any = issue as { msg?: string; time?: string; verse_key?: string; ref?: string; entry_ref?: string; matched_verse?: string; confidence?: number };
         void $segAllData;
         if (type === 'failed') return any.time ?? '';
-        if (type === 'missing_verses' || type === 'errors') return any.msg ?? '';
+        if (type === 'missing_verses' || type === 'structural_errors') return any.msg ?? '';
         if (type === 'missing_words') return any.msg ?? '';
         if (type === 'low_confidence') return `${((any.confidence ?? 0) * 100).toFixed(1)}%`;
         if (type === 'boundary_adj') return any.verse_key ?? '';
@@ -366,9 +640,9 @@
         const any = issue as {
             seg_index?: number; verse_key?: string; chapter: number;
         };
-        if (type === 'failed' || type === 'low_confidence' || type === 'boundary_adj' ||
-            type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions' ||
-            type === 'muqattaat' || type === 'qalqala') {
+        if (type === 'failed' || type === 'low_confidence' || type === 'low_confidence_v2' ||
+            type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' ||
+            type === 'repetitions' || type === 'muqattaat' || type === 'qalqala') {
             if (any.seg_index != null) jumpToSegment(any.chapter, any.seg_index);
         } else if (type === 'missing_verses') {
             jumpToMissingVerseContext(any.chapter, any.verse_key ?? '');
@@ -378,7 +652,7 @@
             const first = indices[0];
             if (first != null) jumpToSegment(any.chapter, first);
             else jumpToVerse(any.chapter, any.verse_key ?? '');
-        } else if (type === 'errors') {
+        } else if (type === 'structural_errors') {
             jumpToVerse(any.chapter, any.verse_key ?? '');
         }
     }
@@ -416,9 +690,56 @@
         openCategory = isOpen ? type : (openCategory === type ? null : openCategory);
     }
 
+    // ---- Stable composite each-key for issue cards ----
+    // Object-reference keying caused every ErrorCard to remount whenever
+    // `$segValidation` republished (re-validate after save). A composite
+    // key based on the underlying segment identity survives republishes,
+    // so cards stay mounted and their transient state is preserved.
+    function issueKey(it: SegValAnyItem, kind: string): string {
+        const any = it as {
+            segment_uid?: string | null;
+            chapter: number;
+            seg_index?: number;
+            verse_key?: string;
+        };
+        if (any.segment_uid) return `${kind}:${any.segment_uid}`;
+        if (any.seg_index != null) return `${kind}:${any.chapter}:${any.seg_index}`;
+        return `${kind}:${any.chapter}:${any.verse_key ?? ''}`;
+    }
+
+    // ---- LC slider debounce ----
+    // Drag updates the input's value live (visible thumb stays smooth) but
+    // we only republish `lcThreshold` after a short idle so visibleItems
+    // doesn't re-filter+sort on every intermediate keystroke value.
+    let lcSliderRaw: number = lcThreshold;
+    let _lcDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const LC_DEBOUNCE_MS = 80;
+    function onLcSliderInput(e: Event): void {
+        const v = parseInt((e.currentTarget as HTMLInputElement).value, 10);
+        if (Number.isNaN(v)) return;
+        lcSliderRaw = v;
+        if (_lcDebounceTimer !== null) clearTimeout(_lcDebounceTimer);
+        _lcDebounceTimer = setTimeout(() => {
+            _lcDebounceTimer = null;
+            lcThreshold = lcSliderRaw;
+        }, LC_DEBOUNCE_MS);
+    }
+    onDestroy(() => {
+        if (_lcDebounceTimer !== null) clearTimeout(_lcDebounceTimer);
+        if (_padDebounceTimer !== null) clearTimeout(_padDebounceTimer);
+    });
+
     // ---- Context state sync: card notifies panel when user toggles Show/Hide ----
     function onCardContextChange(type: string, absIdx: number, shown: boolean): void {
         getContextState(type).set(absIdx, shown);
+    }
+
+    function relayCardContext(catType: string, absIdx: number, ev: CustomEvent<boolean>): void {
+        onCardContextChange(catType, absIdx, ev.detail);
+    }
+
+    function contextRelay(catType: string, absIdx: number): (_ev: CustomEvent<boolean>) => void {
+        return (_ev) => relayCardContext(catType, absIdx, _ev);
     }
 </script>
 
@@ -437,7 +758,7 @@
                 <summary class="val-summary">
                     {cat.name}
                     <span class="val-count {cat.countClass}" data-lc-count>
-                        {cat.isLowConf ? cat.visibleItems.length : cat.summaryCount}
+                        {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
                     </span>
                 </summary>
 
@@ -447,7 +768,7 @@
                         <!-- svelte-ignore a11y-label-has-associated-control -->
                         <label class="lc-slider-label">
                             Show confidence &lt;
-                            <span class="lc-slider-val">{lcThreshold}%</span>
+                            <span class="lc-slider-val">{lcSliderRaw}%</span>
                         </label>
                         <input
                             type="range"
@@ -455,7 +776,8 @@
                             min="50"
                             max="99"
                             step="1"
-                            bind:value={lcThreshold}
+                            value={lcSliderRaw}
+                            on:input={onLcSliderInput}
                         />
                     </div>
                 {/if}
@@ -484,11 +806,49 @@
                     </div>
                 {/if}
 
+                {#if cat.isQalqala}
+                    <div class="lc-slider-row qalqala-pad-row">
+                        <!-- svelte-ignore a11y-label-has-associated-control -->
+                        <label class="lc-slider-label">
+                            Pad amount
+                            <span class="lc-slider-val">{padSliderRaw}ms</span>
+                        </label>
+                        <input
+                            type="range"
+                            class="lc-slider"
+                            min="50"
+                            max="500"
+                            step="10"
+                            value={padSliderRaw}
+                            disabled={$qalqalaBatch.isActive}
+                            on:input={onPadSliderInput}
+                        />
+                        <button
+                            type="button"
+                            class="val-action-btn"
+                            disabled={!activeQalqalaLetter || $qalqalaBatch.isActive || cat.visibleItems.length === 0}
+                            on:click={() => { void handlePreviewQalqalaPadding(cat); }}
+                        >Preview padding</button>
+                        {#if $qalqalaBatch.isActive}
+                            <button
+                                type="button"
+                                class="val-action-btn"
+                                on:click={() => { void handleConfirmQalqalaPadding(); }}
+                            >Confirm padding</button>
+                            <button
+                                type="button"
+                                class="val-action-btn val-action-btn-muted"
+                                on:click={handleCancelQalqalaPadding}
+                            >Cancel</button>
+                        {/if}
+                    </div>
+                {/if}
+
                 {#if openCategory === cat.type}
                     <!-- Item navigation buttons (non-qalqala) -->
                     {#if !cat.isQalqala}
                         <div class="val-items">
-                            {#each cat.visibleItems as issue (issue)}
+                            {#each cat.visibleItems as issue (issueKey(issue, cat.type))}
                                 <button
                                     class="val-btn {getItemBtnClass(cat.type, issue)}"
                                     title={getItemBtnTitle(cat.type, issue)}
@@ -514,13 +874,13 @@
                         {#if topSpacerPx > 0}
                             <div class="val-cards-spacer" style="height: {topSpacerPx}px" aria-hidden="true"></div>
                         {/if}
-                        {#each cat.visibleItems.slice(startIdx, endIdx) as issue, localIdx (issue)}
+                        {#each cat.visibleItems.slice(startIdx, endIdx) as issue, localIdx (issueKey(issue, cat.type))}
                             <ErrorCard
                                 bind:this={windowCardRefs[localIdx]}
                                 category={cat.type}
                                 item={issue}
                                 initialContextShown={getContextState(cat.type).get(startIdx + localIdx) ?? false}
-                                on:contextchange={(e) => onCardContextChange(cat.type, startIdx + localIdx, e.detail)}
+                                on:contextchange={contextRelay(cat.type, startIdx + localIdx)}
                             />
                         {/each}
                         {#if bottomSpacerPx > 0}

@@ -14,12 +14,9 @@ import { segConfig } from '../../stores/config';
 import { editCanvas } from '../../stores/edit';
 import { segIndexMap } from '../../stores/filters';
 import { waveformContainers } from '../../stores/playback';
-import type {
-    ObserverPeaksQueueItem,
-    TimerHandle,
-} from '../../types/segments';
+import type { TimerHandle } from '../../types/segments';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { _drawMergeHighlight, _drawSplitHighlight, _drawTrimHighlight, drawWaveformFromPeaksForSeg } from './draw-seg';
+import { drawSegBaseAndOverlays } from './draw-seg';
 import { _findCoveringPeaks, clearSegPeaksCache, pushSegPeaksEntry } from './peaks-cache';
 import { drawSplitWaveform } from './split-draw';
 import { drawTrimWaveform } from './trim-draw';
@@ -29,9 +26,6 @@ import { drawTrimWaveform } from './trim-draw';
 // ---------------------------------------------------------------------------
 
 let _waveformObserver: IntersectionObserver | null = null;
-let _observerPeaksQueue: ObserverPeaksQueueItem[] = [];
-let _observerPeaksTimer: TimerHandle | null = null;
-let _observerPeaksRequested = new Set<string>();
 let _peaksPollTimer: TimerHandle | null = null;
 
 /** Reset all per-reciter waveform caches / observer. Called from
@@ -43,9 +37,6 @@ export function resetWaveformState(): void {
     }
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
     clearSegPeaksCache();
-    _observerPeaksQueue = [];
-    if (_observerPeaksTimer) { clearTimeout(_observerPeaksTimer); _observerPeaksTimer = null; }
-    _observerPeaksRequested = new Set();
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +53,31 @@ export function indexSegPeaksBulk(peaksMap: Record<string, SegmentPeaks> | null 
             endMs: data.end_ms,
             peaks: data.peaks,
             durationMs: data.duration_ms,
+        });
+    }
+}
+
+/** Push a list of persisted history-peaks records (from
+ *  `/api/seg/history-peaks/<reciter>`) into the covering-range cache so the
+ *  History panel renders without re-computing. Tolerant of partial records —
+ *  any malformed entry is skipped. */
+export function indexHistoryPeaksRecords(
+    records: ReadonlyArray<{ url?: string; start_ms?: number; end_ms?: number; peaks?: unknown; duration_ms?: number }> | null | undefined,
+): void {
+    if (!records?.length) return;
+    for (const r of records) {
+        const url = r.url;
+        const startMs = r.start_ms;
+        const endMs = r.end_ms;
+        const durationMs = r.duration_ms;
+        const peaks = r.peaks;
+        if (!url || typeof startMs !== 'number' || typeof endMs !== 'number'
+            || typeof durationMs !== 'number' || !Array.isArray(peaks) || peaks.length === 0) continue;
+        pushSegPeaksEntry(url, {
+            startMs,
+            endMs,
+            peaks: peaks as SegmentPeaks['peaks'],
+            durationMs,
         });
     }
 }
@@ -87,44 +103,6 @@ export function redrawPeaksWaveforms(): void {
         activeEdit._wfCache = null;
         drawTrimWaveform(activeEdit);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Observer-triggered segment-level peaks pre-fetch
-// ---------------------------------------------------------------------------
-
-function _queueObserverPeaksFetch(seg: Segment, chapter: number | string): void {
-    const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
-    if (!audioUrl) return;
-    const key = `${audioUrl}:${seg.time_start}:${seg.time_end}`;
-    if (_observerPeaksRequested.has(key)) return;
-    _observerPeaksRequested.add(key);
-    _observerPeaksQueue.push({ url: audioUrl, start_ms: seg.time_start, end_ms: seg.time_end });
-
-    if (_observerPeaksTimer) clearTimeout(_observerPeaksTimer);
-    _observerPeaksTimer = setTimeout(_flushObserverPeaksQueue, 150);
-}
-
-function _flushObserverPeaksQueue(): void {
-    _observerPeaksTimer = null;
-    const queue = _observerPeaksQueue.splice(0);
-    if (queue.length === 0) return;
-    const reciter = get(selectedReciter);
-    if (!reciter) return;
-
-    fetchJson<SegSegmentPeaksResponse>(`/api/seg/segment-peaks/${reciter}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segments: queue, cached_only: true }),
-    })
-        .then(data => {
-            if (!get(segAllData) || get(selectedReciter) !== reciter) return;
-            const newPeaks = data.peaks || {};
-            if (Object.keys(newPeaks).length === 0) return;
-            indexSegPeaksBulk(newPeaks);
-            redrawPeaksWaveforms();
-        })
-        .catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -158,9 +136,13 @@ export function _ensureWaveformObserver(): IntersectionObserver {
             }
             if (!seg) return;
 
-            const wfSeg: Segment = canvas._splitHL
+            let wfSeg: Segment = canvas._splitHL
                 ? { ...seg, time_start: canvas._splitHL.wfStart, time_end: canvas._splitHL.wfEnd }
                 : seg;
+            if (canvas._padHL && !canvas._splitHL) {
+                const ext = Math.max(wfSeg.time_end, canvas._padHL.padEnd);
+                wfSeg = { ...wfSeg, time_end: ext };
+            }
 
             if (canvas._splitData) {
                 canvas._splitBaseCache = null;
@@ -177,15 +159,16 @@ export function _ensureWaveformObserver(): IntersectionObserver {
                 return;
             }
 
-            if (drawWaveformFromPeaksForSeg(canvas, wfSeg, chapter)) {
-                _drawSplitHighlight(canvas, wfSeg);
-                _drawTrimHighlight(canvas, seg);
-                _drawMergeHighlight(canvas, seg);
+            const audioUrl = wfSeg.audio_url
+                || get(segAllData)?.audio_by_chapter?.[String(chapter)]
+                || '';
+            if (drawSegBaseAndOverlays(canvas, wfSeg.time_start, wfSeg.time_end, audioUrl)) {
                 _waveformObserver?.unobserve(canvas);
                 canvas.removeAttribute('data-needs-waveform');
-            } else {
-                _queueObserverPeaksFetch(seg, chapter);
             }
+            // Cache miss: leave canvas flat. Stream-mode peaks compute on
+            // play (`_fetchPeaksForClick`); History rows hydrate from the
+            // peaks JSONL on panel open.
         });
     }, { rootMargin: '200px' });
     _waveformObserver = observer;
@@ -238,6 +221,43 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
         url: audioUrl,
         start_ms: Math.max(prevEnd, seg.time_start - cfg.trimPadLeft, 0),
         end_ms: Math.min(nextStart, seg.time_end + cfg.trimPadRight),
+    };
+
+    try {
+        const data = await fetchJson<SegSegmentPeaksResponse>(`/api/seg/segment-peaks/${reciter}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ segments: [entry] }),
+        });
+        if (!get(segAllData) || get(selectedReciter) !== reciter) return;
+        const newPeaks = data.peaks || {};
+        if (Object.keys(newPeaks).length === 0) return;
+        indexSegPeaksBulk(newPeaks);
+        redrawPeaksWaveforms();
+    } catch { /* ignore */ }
+}
+
+/** Fetch segment peaks for an extended range through *paddedEndMs* (qalqala batch preview). */
+export async function fetchPeaksForPaddedEnd(
+    seg: Segment,
+    chapter: number | string,
+    paddedEndMs: number,
+): Promise<void> {
+    const reciter = get(selectedReciter);
+    const allData = get(segAllData);
+    if (!reciter || !allData) return;
+    const audioUrl = seg.audio_url || allData.audio_by_chapter?.[String(chapter)] || '';
+    if (!audioUrl) return;
+
+    const { prev, next } = getAdjacentSegments(chapter, seg.index);
+    const prevEnd = prev?.time_end ?? 0;
+    const nextStart = next?.time_start ?? Number.POSITIVE_INFINITY;
+    const cfg = get(segConfig);
+    const PAD_EXTRA_MS = 500;
+    const entry = {
+        url: audioUrl,
+        start_ms: Math.max(prevEnd, seg.time_start - cfg.trimPadLeft, 0),
+        end_ms: Math.min(nextStart, paddedEndMs + PAD_EXTRA_MS),
     };
 
     try {
