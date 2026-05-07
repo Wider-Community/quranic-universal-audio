@@ -20,6 +20,7 @@ import {
     getSegByChapterIndex,
     segAllData,
     segCurrentIdx,
+    segData,
     selectedChapter,
 } from '../../stores/chapter';
 import { editMode } from '../../stores/edit';
@@ -80,8 +81,8 @@ export function disposeSegRange(): void {
 // AudioRange wiring
 // ---------------------------------------------------------------------------
 
-function _onRangeTick(): void {
-    drawActivePlayhead();
+function _onRangeTick(timeMs: number): void {
+    drawActivePlayhead(timeMs);
     updateSegHighlight();
 }
 
@@ -234,6 +235,13 @@ export function onSegPlayClick(): void {
 export function onSegTimeUpdate(): void {
     // Edit-preview's rAF owns boundary enforcement on the edit canvas.
     if (get(editMode)) return;
+    // VBR clip mode plays a one-segment clip from byte 0, so audioEl.src is
+    // the clip URL, not the chapter audio URL. Cross-segment-within-shared-
+    // audio detection (the body of this function) keys off matching the
+    // chapter URL — useless in clip mode. Segment switches in VBR mode come
+    // through `_onRangeBoundary('advance')` and explicit `playFromSegment`
+    // calls instead.
+    if (get(segData)?.vbr) return;
     const audioEl = get(segAudioElement);
     if (!audioEl) return;
     const timeMs = audioEl.currentTime * 1000;
@@ -379,7 +387,7 @@ export function reconcilePlayingAfterMutation(
     }
 }
 
-export function drawActivePlayhead(): void {
+export function drawActivePlayhead(timeMs?: number): void {
     // Hoist above the pair-change erase branch (below): during any edit mode
     // the preview rAF owns the edit canvas, and the erase branch iterates
     // `getRowEntriesFor(_prevPlaying)` — which includes the edit canvas when
@@ -391,7 +399,11 @@ export function drawActivePlayhead(): void {
     if (!allData) return;
     const audioEl = get(segAudioElement);
     if (!audioEl) return;
-    const time = audioEl.currentTime * 1000;
+    // `timeMs` is the file-absolute time supplied by AudioRange's rAF tick
+    // (which already added clipFileOffsetMs for VBR-clip plays). When called
+    // outside the rAF (manual seek path), fall back to the live `<audio>`
+    // current-time + the active range's offset via `_segRange.getCurrentTimeMs()`.
+    const time = timeMs ?? _segRange?.getCurrentTimeMs() ?? audioEl.currentTime * 1000;
 
     const prev = _prevPlaying;
     const pairChanged = !prev || !active

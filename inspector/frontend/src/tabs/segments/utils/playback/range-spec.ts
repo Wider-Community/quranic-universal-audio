@@ -11,17 +11,69 @@
  *     only; accordion plays always stop at `time_end`.
  */
 
+import { get } from 'svelte/store';
+
 import type { AudioRangeSpec, RangePolicy } from '../../../../lib/playback/audio-range';
 import type { Segment } from '../../../../lib/types/domain';
+import { segData, selectedReciter } from '../../stores/chapter';
 import { AUTOPLAY_GAP_PAUSE_MS } from '../constants';
 import { nextDisplayedSeg } from './prefetch';
 
+/** Build the per-play `AudioRangeSpec` for a segment.
+ *
+ *  Two regimes — chosen at call time from `$segData.vbr`:
+ *
+ *  - **CBR (default)**: spec is file-absolute. `startMs/endMs` map straight
+ *    to the segment's time window in the chapter audio; the audio element
+ *    seeks to `startMs/1000` and the rAF compares `currentTime` directly
+ *    against `endMs`.
+ *
+ *  - **VBR**: spec points at the server clip endpoint (a per-segment MP3
+ *    extracted with `ffmpeg -ss/-t` from the source). The clip plays from
+ *    byte 0, so `startMs/endMs` are clip-relative (`0..segDur`) and
+ *    `clipFileOffsetMs = seg.time_start` lets the rAF tick recover
+ *    file-absolute time for the playhead and segment-detection callers.
+ *    `seekToMs` is mapped into the clip space (`seekToMs - seg.time_start`).
+ *
+ *  The VBR routing piggybacks on the existing src-swap path in
+ *  `audio-range.ts:_loadAndStart` — every play in a VBR chapter swaps the
+ *  audio element's src to a per-segment clip URL.
+ */
 export function buildSegRangeSpec(seg: Segment, seekToMs?: number | null): AudioRangeSpec {
+    const data = get(segData);
+    const reciter = get(selectedReciter);
+    const segDurMs = Math.max(0, seg.time_end - seg.time_start);
+
+    if (data?.vbr && reciter && seg.audio_url) {
+        const clipUrl = buildSegmentClipUrl(reciter, seg);
+        const seekClipMs = seekToMs != null
+            ? Math.max(0, Math.min(segDurMs, seekToMs - seg.time_start))
+            : 0;
+        return {
+            startMs: seekClipMs,
+            endMs: segDurMs,
+            src: clipUrl,
+            clipFileOffsetMs: seg.time_start,
+        };
+    }
+
     return {
         startMs: seekToMs ?? seg.time_start,
         endMs: seg.time_end,
         src: seg.audio_url || null,
     };
+}
+
+/** Construct the `/api/seg/segment-clip/<reciter>?…` URL for a segment.
+ *  Deterministic on (url, start_ms, end_ms) so the browser HTTP cache
+ *  absorbs repeat plays of the same segment. */
+export function buildSegmentClipUrl(reciter: string, seg: Segment): string {
+    const params = new URLSearchParams({
+        url: seg.audio_url,
+        start_ms: String(seg.time_start),
+        end_ms: String(seg.time_end),
+    });
+    return `/api/seg/segment-clip/${encodeURIComponent(reciter)}?${params.toString()}`;
 }
 
 interface NextRangeOptions {

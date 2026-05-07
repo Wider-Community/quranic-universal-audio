@@ -107,6 +107,11 @@ export type SegChaptersResponse = number[] | ApiErrorBody;
 /** GET /api/seg/data/:reciter/:chapter[?verse=:n] — 404 returns {error}. */
 export interface SegDataResponse {
     audio_url: string;
+    /** True when the chapter audio is VBR (per data/.audio_meta.json).
+     *  Frontend routes playback through the segment-clip endpoint instead of
+     *  HTML5 `<audio>.currentTime` (which mis-seeks Xing-less VBR files).
+     *  Defaults to false for unknown / unprobed chapters. */
+    vbr: boolean;
     segments: Segment[];
     summary: SegmentsChapterSummary;
     verse_word_counts: Record<VerseRef, number>;
