@@ -78,7 +78,7 @@ jobs:
         id: summary
         if: steps.detect.outputs.reciters != ''
         run: |
-          summary=$(python scripts/summarize_pr_edits.py ${{ steps.detect.outputs.reciters }})
+          summary=$(python .github/scripts/summarize_pr_edits.py ${{ steps.detect.outputs.reciters }})
 
           # Write to file for multi-line output
           echo "$summary" > /tmp/edit_summary.md
