@@ -31,9 +31,6 @@ import numpy as np
 # Constants
 # ---------------------------------------------------------------------------
 
-_BASMALA_TEXT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم"
-_ISTIATHA_TEXT = "أَعُوذُ بِٱللَّهِ مِنَ الشَّيْطَانِ الرَّجِيم"
-
 DEFAULT_SPACE_URL = "https://hetchyy-quran-phoneme-mfa-dev.hf.space"
 DEFAULT_ALIGNER_MODEL = "quran_aligner_model"
 DEFAULT_METHOD = "kalpy"
@@ -279,7 +276,8 @@ def build_mfa_ref(seg: dict) -> str | None:
     """Build the MFA ref string for a segment from detailed.json.
 
     Returns None for segments that should be skipped (empty ref, low
-    confidence, or transition segments like Amin/Takbir).
+    confidence, or transition segments like Amin/Takbir). The ref is derived
+    only from the segment key, not inferred from matched_text.
     """
     matched_ref = seg.get("matched_ref", "")
     confidence = seg.get("confidence", 0)
@@ -291,16 +289,7 @@ def build_mfa_ref(seg: dict) -> str | None:
     if ":" not in matched_ref:
         return None
 
-    mfa_ref = matched_ref
-
-    # Check for Basmala/Isti'adha prefix in matched_text (fused segments)
-    matched_text = seg.get("matched_text", "")
-    if matched_text.startswith(_ISTIATHA_TEXT):
-        mfa_ref = f"Isti'adha+{mfa_ref}"
-    elif matched_text.startswith(_BASMALA_TEXT):
-        mfa_ref = f"Basmala+{mfa_ref}"
-
-    return mfa_ref
+    return matched_ref
 
 
 def _matched_ref_to_output_key(matched_ref: str) -> str | None:

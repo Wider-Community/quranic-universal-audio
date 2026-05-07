@@ -19,9 +19,9 @@
     import { afterUpdate, onMount, tick } from 'svelte';
 
     import {
-        computeArrowLayout,
         type ArrowLayout,
         type ArrowPath,
+        computeArrowLayout,
         type XMark,
     } from '../../../../lib/utils/svg-arrow-geometry';
 

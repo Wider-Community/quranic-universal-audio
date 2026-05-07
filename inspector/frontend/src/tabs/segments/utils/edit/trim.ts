@@ -6,6 +6,7 @@ import { get } from 'svelte/store';
 
 import type { Segment } from '../../../../lib/types/domain';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
+import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,
     getCurrentChapterSegs,
@@ -33,7 +34,6 @@ import {
 } from '../../stores/edit';
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { applyCommand } from '../../domain/apply-command';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
     clearPlayRangeRAF,

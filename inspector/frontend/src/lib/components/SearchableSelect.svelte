@@ -137,10 +137,10 @@
                 {#if opt.group && (i === 0 || filtered[i - 1]?.group !== opt.group)}
                     <div class="ss-group-label">{opt.group}</div>
                 {/if}
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <div
                     class="ss-option"
+                    role="button"
+                    tabindex="0"
                     class:ss-option-grouped={!!opt.group}
                     class:ss-highlight={i === highlightIdx}
                     on:mousedown|preventDefault={() => pick(opt)}

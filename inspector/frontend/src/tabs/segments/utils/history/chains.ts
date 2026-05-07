@@ -1,8 +1,8 @@
 import type { HistoryBatch, Segment } from '../../../../lib/types/domain';
 import type {
-    HistorySnapshot,
     EditChain,
     EditChainOp,
+    HistorySnapshot,
 } from '../../types/segments';
 
 export type { EditChain, EditChainOp };

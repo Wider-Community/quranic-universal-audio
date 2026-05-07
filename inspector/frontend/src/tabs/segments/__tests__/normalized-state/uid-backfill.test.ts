@@ -1,6 +1,7 @@
 // Phase 4: frontend loader backfills segment_uid for legacy fixtures.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const identity = await loadOptional<any>('../../domain/identity');
@@ -16,7 +17,7 @@ const legacySeg = (chapter: number, idx: number, startMs: number) => ({
 
 describe.skipIf(!identity)('uid backfill (frontend)', () => {
   it('frontend loader backfills uid for legacy fixture', () => {
-    const s = legacySeg(1, 0, 0);
+    void legacySeg(1, 0, 0);
     const uid = identity.deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
     expect(typeof uid).toBe('string');
     expect(uid.length).toBeGreaterThan(8);

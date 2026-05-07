@@ -186,16 +186,22 @@ def classify_flags(
     e_word: int,
     single_word_verses: set,
     canonical: dict | None,
+    probe_failed_uids: set | None = None,
 ) -> dict[str, Any]:
     """Return per-category boolean flags + auxiliary fields for one segment.
 
     Keys:
       - ``failed``, ``audio_bleeding``, ``repetitions``, ``low_confidence``,
-        ``low_confidence_detail``, ``cross_verse``, ``boundary_adj``,
-        ``muqattaat``, ``qalqala``: bool.
+        ``low_confidence_detail``, ``low_confidence_v2``, ``cross_verse``,
+        ``boundary_adj``, ``muqattaat``, ``qalqala``: bool.
       - ``qalqala_letter``: ``str | None`` — populated when ``qalqala`` fires.
       - ``end_of_verse``: bool — reserved (callers pass ``word_counts`` to
         compute this themselves).
+
+    ``probe_failed_uids`` is the set of segment UIDs that failed the
+    extraction-time MFA tight-beam probe (the *Low Confidence v2*
+    signal). Pass ``None`` to skip the v2 check; pass an empty set when
+    the sidecar exists but listed no failures.
     """
     result: dict[str, Any] = {
         "failed": False,
@@ -203,6 +209,7 @@ def classify_flags(
         "repetitions": False,
         "low_confidence": False,
         "low_confidence_detail": False,
+        "low_confidence_v2": False,
         "cross_verse": False,
         "boundary_adj": False,
         "muqattaat": False,
@@ -232,6 +239,11 @@ def classify_flags(
         result["low_confidence"] = True
     if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD and not is_ignored_for(seg, "low_confidence"):
         result["low_confidence_detail"] = True
+
+    if probe_failed_uids:
+        seg_uid = seg.get("segment_uid", "")
+        if seg_uid and seg_uid in probe_failed_uids and not is_suppressed_for(seg, "low_confidence_v2"):
+            result["low_confidence_v2"] = True
 
     if s_ayah != e_ayah:
         if not is_ignored_for(seg, "cross_verse"):
@@ -282,6 +294,7 @@ def classify_segment(
     single_word_verses: set | None = None,
     canonical: dict | None = None,
     detail: bool = False,
+    probe_failed_uids: set | None = None,
 ) -> list[str]:
     """Classify one segment and return the category list.
 
@@ -317,6 +330,7 @@ def classify_segment(
         seg, entry_ref, is_by_ayah,
         surah, s_ayah, e_ayah, s_word, e_word,
         single_word_verses or set(), canonical,
+        probe_failed_uids=probe_failed_uids,
     )
     return _flags_to_categories(flags, detail=detail)
 
@@ -334,6 +348,7 @@ def classify_segment_full(
     single_word_verses: set | None = None,
     canonical: dict | None = None,
     detail: bool = False,
+    probe_failed_uids: set | None = None,
 ) -> dict:
     """Like :func:`classify_segment` but returns a dict with auxiliary fields.
 
@@ -375,6 +390,7 @@ def classify_segment_full(
         seg, entry_ref, is_by_ayah,
         surah, s_ayah, e_ayah, s_word, e_word,
         single_word_verses or set(), canonical,
+        probe_failed_uids=probe_failed_uids,
     )
     return {
         "categories": _flags_to_categories(flags, detail=detail),
@@ -391,6 +407,7 @@ def classify_entry(
     single_word_verses: set | None = None,
     canonical: dict | None = None,
     detail: bool = False,
+    probe_failed_uids: set | None = None,
 ) -> dict[str, dict]:
     """Classify every segment in an entry.
 
@@ -413,6 +430,7 @@ def classify_entry(
             single_word_verses=single_word_verses,
             canonical=canonical,
             detail=detail,
+            probe_failed_uids=probe_failed_uids,
         )
         out[uid] = {
             "categories": info["categories"],

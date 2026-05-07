@@ -232,7 +232,10 @@ def validate_reciter(
     reciter = reciter_dir.name
 
     verses, meta = parse_segments(segments_path)
-    pad_ms = meta.get("pad_ms", 0)
+    legacy_pad = int(meta.get("pad_ms", 0))
+    pad_left_ms = int(meta.get("pad_left_ms", legacy_pad))
+    pad_right_ms = int(meta.get("pad_right_ms", legacy_pad))
+    min_silence_floor_ms = int(meta.get("min_silence_floor_ms", 0))
     is_by_ayah = "by_ayah" in meta.get("audio_source", "")
 
     errors = []
@@ -248,11 +251,16 @@ def validate_reciter(
     empty_verse_keys = 0
 
     # ── Meta validation ──
-    meta_fields = {"created_at", "asr_model", "vad_model", "pad_ms", "min_silence_ms", "min_speech_ms", "audio_source"}
+    # Pad info accepted in either legacy (`pad_ms`) or asymmetric
+    # (`pad_left_ms` + `pad_right_ms`) form; aliasing handled above.
+    meta_fields = {"created_at", "asr_model", "vad_model", "min_silence_ms", "min_speech_ms", "audio_source"}
     if not meta:
         errors.append({"msg": "_meta missing or empty", "verse_key": "", "t_from": 0, "t_to": 0})
     else:
         missing_meta = meta_fields - set(meta.keys())
+        has_pad = "pad_ms" in meta or ("pad_left_ms" in meta and "pad_right_ms" in meta)
+        if not has_pad:
+            missing_meta.add("pad_ms or (pad_left_ms + pad_right_ms)")
         if missing_meta:
             warnings.append({"msg": f"_meta missing fields: {sorted(missing_meta)}",
                              "verse_key": "", "t_from": 0, "t_to": 0})
@@ -305,7 +313,7 @@ def validate_reciter(
                     errors.append({"msg": f"time overlap: seg[{i}] ends {_ms_to_hms(t_to)}, seg[{i+1}] starts {_ms_to_hms(next_t_from)}",
                                    "verse_key": verse_key, "t_from": t_from, "t_to": segs[i + 1][3]})
                 else:
-                    true_pause = (next_t_from - t_to) + 2 * pad_ms
+                    true_pause = (next_t_from - t_to) + pad_left_ms + pad_right_ms
                     pause_durations.append(true_pause)
 
         if is_cross_verse:
@@ -500,7 +508,12 @@ def _print_verbose(reciter, reciter_dir, stats, meta, errors, warnings,
         print(f"\n--- VAD Settings ---")
         print(f"  Min silence:   {meta.get('min_silence_ms', '?')} ms")
         print(f"  Min speech:    {meta.get('min_speech_ms', '?')} ms")
-        print(f"  Padding:       {meta.get('pad_ms', '?')} ms")
+        if "pad_left_ms" in meta or "pad_right_ms" in meta:
+            print(f"  Padding L/R:   "
+                  f"{meta.get('pad_left_ms', '?')}/{meta.get('pad_right_ms', '?')} ms")
+            print(f"  Silence floor: {meta.get('min_silence_floor_ms', 0)} ms")
+        else:
+            print(f"  Padding:       {meta.get('pad_ms', '?')} ms (legacy symmetric)")
 
     # ── Coverage ──
     print(f"\n--- Coverage ---")

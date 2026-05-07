@@ -6,8 +6,8 @@
 # Held here for backward compatibility with un-migrated callers; the canonical
 # category metadata lives in ``services.validation.registry.IssueRegistry``.
 VALIDATION_CATEGORIES = (
-    "failed", "low_confidence", "boundary_adj", "cross_verse",
-    "missing_words", "audio_bleeding", "repetitions",
+    "failed", "low_confidence", "low_confidence_v2", "boundary_adj",
+    "cross_verse", "missing_words", "audio_bleeding", "repetitions",
     "muqattaat", "qalqala",
 )
 

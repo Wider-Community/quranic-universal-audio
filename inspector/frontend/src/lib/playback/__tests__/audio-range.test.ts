@@ -6,11 +6,11 @@
  * pause-resilient loop, dispose.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AudioRange, type AudioRangeSpec, type RangePolicy } from '../audio-range';
 import { cutAudio, uncutAudio } from '../audio-graph';
-import { installRafMock, makeAudioStub, type AudioStub, type RafMock } from './raf-harness';
+import { AudioRange, type AudioRangeSpec, type RangePolicy } from '../audio-range';
+import { type AudioStub, installRafMock, makeAudioStub, type RafMock } from './raf-harness';
 
 // Mock audio-graph so we can assert when AudioRange invokes the kill-switch
 // and gain-restore primitives. happy-dom has no Web Audio, so the real

@@ -11,23 +11,42 @@
      *     TimestampsWaveform (imperative 60fps highlight path).
      */
 
-    import { get } from 'svelte/store';
     import { onMount } from 'svelte';
+    import { get } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
-    import {
-        autoAdvancing,
-        loopTarget,
-    } from './stores/playback';
+    import type {
+        TsChaptersResponse,
+        TsConfigResponse,
+        TsDataResponse,
+        TsRecitersResponse,
+        TsValidateResponse,
+        TsVersesResponse,
+    } from '../../lib/types/api';
+    import { LS_KEYS } from '../../lib/utils/constants';
+    import { surahInfoReady } from '../../lib/utils/surah-info';
+    import AnimationDisplay from './components/AnimationDisplay.svelte';
+    import TimestampsAudio from './components/TimestampsAudio.svelte';
+    import TimestampsControls from './components/TimestampsControls.svelte';
+    import TimestampsKeyboard from './components/TimestampsKeyboard.svelte';
+    import TimestampsShortcutsGuide from './components/TimestampsShortcutsGuide.svelte';
+    import TimestampsValidationPanel from './components/TimestampsValidationPanel.svelte';
+    import TimestampsViewControls from './components/TimestampsViewControls.svelte';
+    import TimestampsWaveform from './components/TimestampsWaveform.svelte';
+    import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
         granularity,
         showLetters,
         showPhonemes,
+        TS_GRANULARITIES,
+        TS_VIEW_MODES,
         tsConfig,
         viewMode,
-        TS_VIEW_MODES,
-        TS_GRANULARITIES,
     } from './stores/display';
+    import {
+        autoAdvancing,
+        loopTarget,
+    } from './stores/playback';
     import {
         chapters,
         loadedVerse,
@@ -38,26 +57,6 @@
         validationData,
         verses,
     } from './stores/verse';
-    import { LS_KEYS } from '../../lib/utils/constants';
-    import { surahInfoReady } from '../../lib/utils/surah-info';
-    import type {
-        TsChaptersResponse,
-        TsConfigResponse,
-        TsDataResponse,
-        TsRecitersResponse,
-        TsValidateResponse,
-        TsVersesResponse,
-    } from '../../lib/types/api';
-
-    import AnimationDisplay from './components/AnimationDisplay.svelte';
-    import TimestampsAudio from './components/TimestampsAudio.svelte';
-    import TimestampsControls from './components/TimestampsControls.svelte';
-    import TimestampsKeyboard from './components/TimestampsKeyboard.svelte';
-    import TimestampsShortcutsGuide from './components/TimestampsShortcutsGuide.svelte';
-    import TimestampsValidationPanel from './components/TimestampsValidationPanel.svelte';
-    import TimestampsViewControls from './components/TimestampsViewControls.svelte';
-    import TimestampsWaveform from './components/TimestampsWaveform.svelte';
-    import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import { setupZoomLifecycle } from './utils/zoom';
 
     // ---- Local display constants ----

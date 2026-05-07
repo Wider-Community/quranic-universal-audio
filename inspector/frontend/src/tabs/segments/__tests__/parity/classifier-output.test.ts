@@ -1,6 +1,7 @@
 // Frontend reads classified_issues from backend DTOs; no live classification.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const historyItems = await loadOptional<any>('../../utils/history/items');

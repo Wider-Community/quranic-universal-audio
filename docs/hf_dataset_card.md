@@ -76,6 +76,8 @@ dataset_info:
   features:
   - name: reciter
     dtype: string
+  - name: is_timestamped
+    dtype: bool
   - name: name_en
     dtype: string
   - name: name_ar
@@ -96,8 +98,6 @@ dataset_info:
     dtype: int32
   - name: coverage_ayahs
     dtype: int32
-  - name: is_timestamped
-    dtype: bool
   splits:
   - name: all
     num_bytes: 0
@@ -249,6 +249,7 @@ url = "https://" + r["url_template"].format(surah=2)  # Al-Baqarah chapter audio
 | Column | Type | Description |
 |--------|------|-------------|
 | `reciter` | `string` | Reciter slug |
+| `is_timestamped` | `bool` | Whether word-level timestamps are available in the dataset |
 | `name_en` | `string` | English display name |
 | `name_ar` | `string` | Arabic name |
 | `riwayah` | `string` | Riwayah slug (e.g. `hafs_an_asim`) |
@@ -259,7 +260,6 @@ url = "https://" + r["url_template"].format(surah=2)  # Al-Baqarah chapter audio
 | `url_template` | `string` | URL pattern (without `https://`) |
 | `coverage_surahs` | `int32` | Number of surahs with audio (max 114) |
 | `coverage_ayahs` | `int32` | Number of ayahs with audio (max 6,236) |
-| `is_timestamped` | `bool` | Whether word-level timestamps are available in the dataset |
 
 ## Configs
 

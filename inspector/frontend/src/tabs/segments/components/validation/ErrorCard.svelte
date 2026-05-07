@@ -15,15 +15,16 @@
      */
 
     import { createEventDispatcher, onMount } from 'svelte';
-    import GenericIssueCard from './GenericIssueCard.svelte';
-    import MissingVersesCard from './MissingVersesCard.svelte';
-    import MissingWordsCard from './MissingWordsCard.svelte';
-    import { IssueRegistry } from '../../domain/registry';
+
     import type {
         SegValAnyItem,
         SegValMissingVerseItem,
         SegValMissingWordsItem,
     } from '../../../../lib/types/api';
+    import { IssueRegistry } from '../../domain/registry';
+    import GenericIssueCard from './GenericIssueCard.svelte';
+    import MissingVersesCard from './MissingVersesCard.svelte';
+    import MissingWordsCard from './MissingWordsCard.svelte';
 
     // ---- Props ----
     export let category: string;
@@ -32,6 +33,10 @@
     export let initialContextShown = false;
 
     const dispatch = createEventDispatcher<{ contextchange: boolean }>();
+
+    function bubbleContextChange(e: CustomEvent<boolean>): void {
+        dispatch('contextchange', e.detail);
+    }
 
     // ---- Child refs for API forwarding ----
     let mwCard: MissingWordsCard;
@@ -78,20 +83,20 @@
         <MissingWordsCard
             bind:this={mwCard}
             item={mwItem}
-            on:contextchange={(e) => dispatch('contextchange', e.detail)}
+            on:contextchange={bubbleContextChange}
         />
     {:else if cardType === 'missingVerses'}
         <MissingVersesCard
             bind:this={mvCard}
             item={mvItem}
-            on:contextchange={(e) => dispatch('contextchange', e.detail)}
+            on:contextchange={bubbleContextChange}
         />
     {:else}
         <GenericIssueCard
             bind:this={genCard}
             {category}
             {item}
-            on:contextchange={(e) => dispatch('contextchange', e.detail)}
+            on:contextchange={bubbleContextChange}
         />
     {/if}
 </div>

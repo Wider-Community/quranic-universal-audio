@@ -3,7 +3,8 @@
  * second half's start point from the just-committed first half's end.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { _advanceRefByOneWord } from '../../utils/data/references';
 
 // surah 1: verse 1 has 4 words, verse 2 has 5 words, no verse 3 (surah end).

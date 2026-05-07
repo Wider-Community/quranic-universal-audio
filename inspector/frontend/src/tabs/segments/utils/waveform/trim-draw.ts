@@ -7,9 +7,9 @@
 
 import { get } from 'svelte/store';
 
+import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import { segConfig } from '../../stores/config';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import { drawEditPeakBase } from './draw-seg';
 
 // ---------------------------------------------------------------------------

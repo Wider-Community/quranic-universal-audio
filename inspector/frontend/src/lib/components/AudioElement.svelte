@@ -8,6 +8,7 @@
      */
 
     import { createEventDispatcher } from 'svelte';
+
     import { safePlay } from '../utils/audio';
 
     /** Audio source URL. */

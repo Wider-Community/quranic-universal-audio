@@ -30,32 +30,32 @@
     import { onDestroy, onMount } from 'svelte';
 
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
-    import HistoryBatch from './HistoryBatch.svelte';
-    import HistoryFilters from './HistoryFilters.svelte';
-    import EditChainRow from './EditChainRow.svelte';
-    import { waveformContainer } from '../../stores/playback';
-    import { createPreviewPlaybackContext } from '../../utils/playback/preview';
-    import { VIRT_BUFFER_ROWS } from '../../utils/constants';
-    import {
-        bottomSpacerValue,
-        findIdxAtOffset,
-        rebuildCumHeights,
-        topSpacerValue,
-    } from '../list/virtualization';
     import {
         buildDisplayItems,
         computeFilteredSummary,
         countVersesFromBatches,
+        type DisplayEntry,
+        editChains,
+        type FilteredItemSummary,
         filterErrCats,
         filterOpTypes,
         flatItems,
         historyData,
         historyVisible,
         sortMode,
-        editChains,
-        type DisplayEntry,
-        type FilteredItemSummary,
     } from '../../stores/history';
+    import { waveformContainer } from '../../stores/playback';
+    import { VIRT_BUFFER_ROWS } from '../../utils/constants';
+    import { createPreviewPlaybackContext } from '../../utils/playback/preview';
+    import {
+        bottomSpacerValue,
+        findIdxAtOffset,
+        rebuildCumHeights,
+        topSpacerValue,
+    } from '../list/virtualization';
+    import EditChainRow from './EditChainRow.svelte';
+    import HistoryBatch from './HistoryBatch.svelte';
+    import HistoryFilters from './HistoryFilters.svelte';
 
     // Filtered flat items -----------------------------------------------------
     $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0;

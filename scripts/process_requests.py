@@ -379,19 +379,30 @@ def cmd_generate_pbs(args):
         return
 
     print(f"\nGenerating PBS for {len(accepted)} reciter(s):\n")
-    print(f"  {'Reciter':<40} {'Silence':>8} {'Speech':>8} {'Pad':>6} {'Source'}")
-    print(f"  {'-'*40} {'-'*8} {'-'*8} {'-'*6} {'-'*20}")
+    hdr = f"  {'Reciter':<40} {'Sil':>5} {'Spch':>5} {'L':>4} {'R':>4} {'Flr':>4} {'Source'}"
+    print(hdr)
+    print(f"  {'-'*40} {'-'*5} {'-'*5} {'-'*4} {'-'*4} {'-'*4} {'-'*20}")
 
     pbs_entries = []
     for i, req in enumerate(accepted):
-        silence, speech, pad = derive_vad_params(req["min_silence"], req["slug"])
+        silence, speech, pad_l, pad_r, floor = derive_vad_params(
+            req["min_silence"], req["slug"]
+        )
         req["min_speech"] = speech
-        req["pad"] = pad
+        req["pad_left"] = pad_l
+        req["pad_right"] = pad_r
+        req["min_silence_floor"] = floor
         req["pbs_index"] = i + 1
 
-        entry = f'    "{req["slug"]},{silence},{speech},{pad},,{req["source"]}"'
+        entry = (
+            f'    "{req["slug"]},{silence},{speech},'
+            f'{pad_l},{pad_r},{floor},,{req["source"]}"'
+        )
         pbs_entries.append(entry)
-        print(f"  {req['name']:<40} {silence:>8} {speech:>8} {pad:>6} {req['source']}")
+        print(
+            f"  {req['name']:<40} {silence:>5} {speech:>5} "
+            f"{pad_l:>4} {pad_r:>4} {floor:>4} {req['source']}"
+        )
 
     # Rewrite PBS file
     pbs_path = REPO_ROOT / ".local" / "extraction" / "extract_segments.pbs"

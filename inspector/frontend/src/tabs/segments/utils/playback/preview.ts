@@ -21,7 +21,7 @@
  * One context per panel; dispose on panel unmount.
  */
 
-import { get, writable, type Readable, type Writable } from 'svelte/store';
+import { get, type Readable, type Writable,writable } from 'svelte/store';
 
 import { AudioRange } from '../../../../lib/playback/audio-range';
 import { fetchSegmentPeaks } from '../../../../lib/utils/peaks-fetch';

@@ -10,6 +10,10 @@
     export function cycleSpeed(direction: 'up' | 'down'): void {
         _speedCtrl?.cycle(direction);
     }
+    import type { TsReciter } from '../../../lib/types/domain';
+    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../../lib/utils/constants';
+    import { buildGroupedReciters, reciterGroupsToOptions } from '../../../lib/utils/grouped-reciters';
+    import { tsAudioElement } from '../stores/playback';
     import {
         chaptersOptions,
         reciters,
@@ -18,10 +22,6 @@
         selectedVerse,
         versesOptions,
     } from '../stores/verse';
-    import { tsAudioElement } from '../stores/playback';
-    import { buildGroupedReciters, reciterGroupsToOptions } from '../../../lib/utils/grouped-reciters';
-    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../../lib/utils/constants';
-    import type { TsReciter } from '../../../lib/types/domain';
 
     const dispatch = createEventDispatcher<{
         reciterChange: string;
@@ -35,7 +35,7 @@
 </script>
 
 <div class="info-bar">
-    <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Reciter:
         <SearchableSelect
             options={reciterOptions}
@@ -45,7 +45,7 @@
             on:change={(e) => dispatch('reciterChange', e.detail)}
         />
     </label>
-    <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Surah:
         <SearchableSelect
             options={$chaptersOptions}
@@ -54,7 +54,7 @@
             on:change={(e) => dispatch('chapterChange', e.detail)}
         />
     </label>
-    <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Ayah:
         <SearchableSelect
             options={$versesOptions}
