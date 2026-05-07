@@ -22,11 +22,24 @@ import { audioSrcMatches, safePlay } from '../utils/audio';
 import { cutAudio, uncutAudio } from './audio-graph';
 
 export interface AudioRangeSpec {
+    /** Clip-relative play start, in ms. For direct chapter audio this equals
+     *  the file-absolute time. For server-clip sources (VBR routing) the clip
+     *  plays from byte 0, so this is the offset INTO the clip — typically 0
+     *  for a fresh play, or `seekToMs - clipFileOffsetMs` when resuming. */
     startMs: number;
+    /** Clip-relative play end, in ms. Compared against `audioEl.currentTime`
+     *  for boundary firing — must live in the same space as the audio element
+     *  reports it (i.e. clip-relative when `src` is a server clip). */
     endMs: number;
     /** When set and !audioSrcMatches(audioEl.src, src), `start()` swaps the
      *  audio element's src and waits for `canplay` before seeking + playing. */
     src?: string | null;
+    /** When set, `audioEl.currentTime` is clip-relative; file-absolute time
+     *  is `clipFileOffsetMs + audioEl.currentTime * 1000`. Used by the rAF
+     *  tick so the playhead and segment-detection see file-absolute time
+     *  while the audio element seeks against the byte-0 clip. Undefined or 0
+     *  means the audio plays the chapter file directly. */
+    clipFileOffsetMs?: number;
 }
 
 export type RangePolicy =
@@ -165,20 +178,37 @@ export class AudioRange {
         // We just don't tick onTick or check the boundary — those resume on unpause.
         if (this.audioEl.paused) return;
 
-        const timeMs = this.audioEl.currentTime * 1000;
+        // `audioEl.currentTime` is in the same space as `range.startMs/endMs`
+        // (clip-relative when `clipFileOffsetMs` is set, file-absolute otherwise).
+        // Boundary firing uses this value directly. `onTick` callers want
+        // file-absolute time, so we add the offset before dispatching.
+        const clipMs = this.audioEl.currentTime * 1000;
+        const fileMs = this.range.clipFileOffsetMs != null
+            ? this.range.clipFileOffsetMs + clipMs
+            : clipMs;
 
         // Seeked-this-frame guard: clear once currentTime has dropped below
         // endMs at least once after a loop seek-back.
-        if (this.seekedThisFrame && timeMs < this.range.endMs) {
+        if (this.seekedThisFrame && clipMs < this.range.endMs) {
             this.seekedThisFrame = false;
         }
 
-        if (timeMs >= this.range.endMs && !this.seekedThisFrame) {
+        if (clipMs >= this.range.endMs && !this.seekedThisFrame) {
             return this._handleBoundary();
         }
 
-        this.onTick?.(timeMs);
+        this.onTick?.(fileMs);
         return;
+    }
+
+    /** Return file-absolute current time in ms, accounting for clip offset.
+     *  Callers outside the rAF tick (e.g. timeupdate handler) read this so
+     *  they see the same coordinate space the playhead draws in. */
+    getCurrentTimeMs(): number {
+        const clipMs = this.audioEl.currentTime * 1000;
+        return this.range.clipFileOffsetMs != null
+            ? this.range.clipFileOffsetMs + clipMs
+            : clipMs;
     }
 
     private _handleBoundary(): boolean | void {
