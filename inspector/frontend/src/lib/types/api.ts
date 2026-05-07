@@ -119,6 +119,8 @@ export interface SegAllResponse {
     segments: Segment[];
     audio_by_chapter: Record<string, string>;
     verse_word_counts: Record<VerseRef, number>;
+    /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
+    pad_ms: number;
     pad_left_ms: number;
     pad_right_ms: number;
     min_silence_floor_ms: number;

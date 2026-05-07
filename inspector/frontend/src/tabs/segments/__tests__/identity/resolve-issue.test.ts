@@ -33,6 +33,7 @@ async function setupStore(): Promise<(() => void) | null> {
     segments: [seg],
     audio_by_chapter: {},
     verse_word_counts: {},
+    pad_ms: 0,
     pad_left_ms: 0,
     pad_right_ms: 0,
     min_silence_floor_ms: 0,

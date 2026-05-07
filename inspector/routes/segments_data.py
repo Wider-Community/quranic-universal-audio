@@ -160,6 +160,8 @@ def seg_all(reciter):
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "verse_word_counts": verse_word_counts,
+        # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
+        "pad_ms": (pad_left_ms + pad_right_ms) // 2,
         "pad_left_ms": pad_left_ms,
         "pad_right_ms": pad_right_ms,
         "min_silence_floor_ms": min_silence_floor_ms,
