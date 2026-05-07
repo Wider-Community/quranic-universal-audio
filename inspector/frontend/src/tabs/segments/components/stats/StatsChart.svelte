@@ -14,11 +14,10 @@
     import { onDestroy } from 'svelte';
 
     import { fetchJson } from '../../../../lib/api';
-    import { drawBarChart } from '../../utils/stats-chart-draw';
     import type { SegSaveChartResponse } from '../../../../lib/types/api';
-    import type { ChartCfg, Distribution } from '../../types/stats';
-
     import type { Chart } from '../../../../lib/utils/chart';
+    import type { ChartCfg, Distribution } from '../../types/stats';
+    import { drawBarChart } from '../../utils/stats-chart-draw';
 
     export let title: string;
     export let dist: Distribution;
@@ -26,7 +25,7 @@
     export let reciter: string;
 
     /** Whether this chart is open in fullscreen (drives ChartFullscreen). */
-    export let onOpenFullscreen: ((dist: Distribution, cfg: ChartCfg) => void) | null = null;
+    export let onOpenFullscreen: ((_dist: Distribution, _cfg: ChartCfg) => void) | null = null;
 
     let canvasEl: HTMLCanvasElement | null = null;
     let chartInstance: Chart | null = null;

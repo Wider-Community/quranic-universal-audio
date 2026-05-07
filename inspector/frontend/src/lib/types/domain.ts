@@ -45,9 +45,9 @@ export interface Segment {
     segment_uid?: string;
     entry_ref?: string;
     /**
-     * Client-computed: (next.time_start - this.time_end) + 2*pad_ms for the
-     * next segment in the same entry. `null` when there is no downstream
-     * neighbour (end of chapter/entry); callers use `!= null` to gate.
+     * Client-computed: (next.time_start - this.time_end) + pad_left_ms + pad_right_ms
+     * for the next segment in the same entry. `null` when there is no
+     * downstream neighbour (end of chapter/entry); callers use `!= null` to gate.
      */
     silence_after_ms?: number | null;
     silence_after_raw_ms?: number | null;

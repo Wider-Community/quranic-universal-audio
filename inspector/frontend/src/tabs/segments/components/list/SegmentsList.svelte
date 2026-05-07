@@ -25,9 +25,12 @@
     import { afterUpdate, onDestroy, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { derivedTimings, displayedSegments } from '../../stores/filters';
+    import type { Segment } from '../../../../lib/types/domain';
+    import { SCROLL_ANIM_MODES } from '../../../../lib/utils/constants';
     import { selectedChapter } from '../../stores/chapter';
+    import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
+    import { derivedTimings, displayedSegments } from '../../stores/filters';
     import { pendingScrollTop, targetSegmentIndex } from '../../stores/navigation';
     import {
         autoScrollEnabled,
@@ -35,11 +38,8 @@
         segListElement,
         waveformContainer,
     } from '../../stores/playback';
-    import { segConfig } from '../../stores/config';
     import { segValidation } from '../../stores/validation';
-    import { SCROLL_ANIM_MODES } from '../../../../lib/utils/constants';
     import { VIRT_BUFFER_ROWS } from '../../utils/constants';
-    import type { Segment } from '../../../../lib/types/domain';
     import Navigation from './Navigation.svelte';
     import SegmentRow from './SegmentRow.svelte';
     import {

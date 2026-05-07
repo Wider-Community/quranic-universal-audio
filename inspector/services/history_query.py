@@ -45,6 +45,48 @@ def parse_history_file(history_path: Path) -> list[dict]:
     return records
 
 
+def _merge_batches_sharing_batch_id(batches: list[dict]) -> list[dict]:
+    """Merge consecutive-like batches that share the same ``batch_id`` (multi-chapter saves).
+
+    Preserves chronological order: the first occurrence of a ``batch_id`` anchors
+    the merged row; later lines with the same id extend its ``operations``.
+    """
+    out: list[dict] = []
+    anchor_index_by_id: dict[str, int] = {}
+
+    for batch in batches:
+        bid = batch.get("batch_id")
+        if not isinstance(bid, str):
+            out.append(batch)
+            continue
+        if bid not in anchor_index_by_id:
+            anchor_index_by_id[bid] = len(out)
+            merged = dict(batch)
+            merged["operations"] = list(batch.get("operations") or [])
+            out.append(merged)
+            continue
+
+        acc = out[anchor_index_by_id[bid]]
+        acc["operations"].extend(batch.get("operations") or [])
+        chs: set[int] = set()
+        if isinstance(acc.get("chapter"), int):
+            chs.add(acc["chapter"])
+        if isinstance(batch.get("chapter"), int):
+            chs.add(batch["chapter"])
+        for c in acc.get("chapters") or []:
+            if isinstance(c, int):
+                chs.add(c)
+        for c in batch.get("chapters") or []:
+            if isinstance(c, int):
+                chs.add(c)
+        if chs:
+            acc["chapters"] = sorted(chs)
+            acc["chapter"] = None if len(chs) > 1 else next(iter(chs))
+        acc["saved_at_utc"] = batch.get("saved_at_utc") or acc.get("saved_at_utc")
+
+    return out
+
+
 def load_edit_history(reciter: str) -> dict:
     """Return ``{batches, summary}`` for a reciter's edit_history.jsonl.
 
@@ -75,11 +117,6 @@ def load_edit_history(reciter: str) -> dict:
                 fully_reverted_ids.add(rbid)
 
     batches = []
-    op_counts: Counter = Counter()
-    fix_kind_counts: Counter = Counter()
-    chapters_edited: set[int] = set()
-    total_batches = 0
-
     for record in all_records:
         if record.get("reverts_batch_id"):
             continue
@@ -110,16 +147,26 @@ def load_edit_history(reciter: str) -> dict:
             batch["reverted_op_ids"] = list(reverted_ops_for_batch)
         batches.append(batch)
 
-        if ops:
-            total_batches += 1
-            ch = record.get("chapter")
-            if ch is not None:
-                chapters_edited.add(ch)
-            for mch in record.get("chapters") or []:
-                chapters_edited.add(mch)
-            for op in ops:
-                op_counts[op.get("op_type", "unknown")] += 1
-                fix_kind_counts[op.get("fix_kind", "unknown")] += 1
+    batches = _merge_batches_sharing_batch_id(batches)
+
+    op_counts = Counter()
+    fix_kind_counts = Counter()
+    chapters_edited: set[int] = set()
+    total_batches = 0
+
+    for batch in batches:
+        ops = batch.get("operations") or []
+        if not ops:
+            continue
+        total_batches += 1
+        ch = batch.get("chapter")
+        if ch is not None:
+            chapters_edited.add(ch)
+        for mch in batch.get("chapters") or []:
+            chapters_edited.add(mch)
+        for op in ops:
+            op_counts[op.get("op_type", "unknown")] += 1
+            fix_kind_counts[op.get("fix_kind", "unknown")] += 1
 
     total_operations = sum(op_counts.values())
     summary = {

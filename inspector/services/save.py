@@ -14,7 +14,7 @@ from config import RECITATION_SEGMENTS_PATH
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
 from services import cache
-from services.data_loader import get_word_counts, load_detailed
+from services.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.peaks_history import append_peaks_records
 from services.validation import chapter_validation_counts
 from services.validation.registry import filter_persistent_ignores
@@ -41,6 +41,7 @@ _ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset({
     "ignoreIssue",
     "auto_fix_missing_word",
     "autoFixMissingWord",
+    "qalqala_pad",
     # ``confirm_reference`` is a reducer-edge variant of editReference recorded
     # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
 })
@@ -127,7 +128,8 @@ def _ensure_patch_on_ops(operations: list) -> list:
     return out
 
 
-def _attach_classified_issues(operations: list) -> list:
+def _attach_classified_issues(operations: list,
+                               probe_failed_uids: set | None = None) -> list:
     """Return a deep-enough copy of ``operations`` with ``classified_issues``
     populated on every snapshot.
 
@@ -140,6 +142,11 @@ def _attach_classified_issues(operations: list) -> list:
     Each snapshot dict gains a ``classified_issues: list[str]`` field
     derived by routing through the unified snapshot classifier. Non-dict
     snapshots are left untouched.
+
+    ``probe_failed_uids`` (when provided) lets the snapshot classifier
+    surface the *Low Confidence v2* category — same uid set used for the
+    live validation pass — so resolved/introduced v2 flags appear in the
+    history-row delta with the same ``low conf`` pill as v1.
     """
     out: list = []
     for op in operations or []:
@@ -156,7 +163,9 @@ def _attach_classified_issues(operations: list) -> list:
             for snap in arr:
                 if isinstance(snap, dict):
                     enriched = dict(snap)
-                    enriched["classified_issues"] = classify_snapshot(enriched)
+                    enriched["classified_issues"] = classify_snapshot(
+                        enriched, probe_failed_uids=probe_failed_uids,
+                    )
                     new_arr.append(enriched)
                 else:
                     new_arr.append(snap)
@@ -169,7 +178,9 @@ def _attach_classified_issues(operations: list) -> list:
                 snap = new_snapshots.get(which)
                 if isinstance(snap, dict):
                     enriched = dict(snap)
-                    enriched["classified_issues"] = classify_snapshot(enriched)
+                    enriched["classified_issues"] = classify_snapshot(
+                        enriched, probe_failed_uids=probe_failed_uids,
+                    )
                     new_snapshots[which] = enriched
             new_op["snapshots"] = new_snapshots
 
@@ -334,11 +345,18 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     # frontend history-delta path reads it directly off the saved record
     # instead of running a second classifier pass on snapshot dicts.
     # Ops also receive a ``patch`` envelope when absent.
-    val_after = chapter_validation_counts(entries, chapter, meta)
-    operations = _attach_classified_issues(_ensure_patch_on_ops(raw_ops))
+    probe_failed_uids, _ = load_probe_v2(reciter)
+    val_after = chapter_validation_counts(
+        entries, chapter, meta, probe_failed_uids=probe_failed_uids,
+    )
+    operations = _attach_classified_issues(
+        _ensure_patch_on_ops(raw_ops), probe_failed_uids=probe_failed_uids,
+    )
+    batch_gid = updates.get("batch_group_id")
+    batch_id = batch_gid if isinstance(batch_gid, str) and batch_gid.strip() else uuid7()
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
-        "batch_id": uuid7(),
+        "batch_id": batch_id,
         "reciter": reciter,
         "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
@@ -348,6 +366,8 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
         "validation_summary_after": val_after,
         "operations": operations,
     }
+    if isinstance(batch_gid, str) and batch_gid.strip():
+        batch["batch_group_id"] = batch_gid.strip()
     history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
     backup_file(history_path)
     with open(history_path, "a", encoding="utf-8") as f:
@@ -392,7 +412,10 @@ def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
 
     # Snapshot validation counts before mutation
     meta = cache.get_seg_meta(reciter)
-    val_before = chapter_validation_counts(entries, chapter, meta)
+    probe_failed_uids, _ = load_probe_v2(reciter)
+    val_before = chapter_validation_counts(
+        entries, chapter, meta, probe_failed_uids=probe_failed_uids,
+    )
 
     if updates.get("full_replace"):
         err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid)

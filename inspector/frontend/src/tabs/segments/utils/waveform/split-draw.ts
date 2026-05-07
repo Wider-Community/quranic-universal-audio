@@ -3,8 +3,8 @@
  * split line, and right-region tinting.
  */
 
-import type { SegCanvas } from '../../types/segments-waveform';
 import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
+import type { SegCanvas } from '../../types/segments-waveform';
 import { drawEditPeakBase } from './draw-seg';
 
 // ---------------------------------------------------------------------------

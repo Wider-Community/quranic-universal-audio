@@ -1,4 +1,4 @@
-name: Build & Publish Inspector Image
+name: Inspector checks & Docker image
 
 on:
   push:
@@ -39,7 +39,51 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/inspector
 
 jobs:
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inspector/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: inspector/frontend/package-lock.json
+
+      - name: Install and verify frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run check
+          npm run test
+          npm run build
+
+  backend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inspector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            inspector/requirements.txt
+            inspector/requirements-dev.txt
+
+      - name: Install deps and run pytest
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          python -m pytest
+
   build:
+    needs: [frontend-checks, backend-checks]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

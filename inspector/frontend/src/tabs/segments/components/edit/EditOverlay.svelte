@@ -13,7 +13,6 @@
      */
 
     import { editMode } from '../../stores/edit';
-
     import DeletePanel from './DeletePanel.svelte';
     import MergePanel from './MergePanel.svelte';
 

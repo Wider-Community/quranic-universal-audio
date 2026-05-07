@@ -6,9 +6,10 @@
 // segment's persisted ignore list. Card dismissal for soft-rule
 // categories is handled out-of-band via the session-resolved store.
 
-import { describe, it, expect } from 'vitest';
-import { makeSegment } from '../helpers/make-segment';
+import { describe, expect,it } from 'vitest';
+
 import { CAN_IGNORE_CATEGORIES } from '../helpers/categories';
+import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');

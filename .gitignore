@@ -5,10 +5,12 @@ docs/reciters-research/
 __pycache__/
 .cache/
 *.bak
+node_modules/
 
 # IDEs / Agents
 .vscode/
 .claude/
+.cursor/
 .agents/
 CLAUDE.md
 AGENTS.md

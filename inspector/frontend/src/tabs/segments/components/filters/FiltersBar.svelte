@@ -9,8 +9,8 @@
      * clears it when filters become non-empty).
      */
 
-    import { activeFilters, displayedResult } from '../../stores/filters';
     import { selectedVerse } from '../../stores/chapter';
+    import { activeFilters, displayedResult } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
     import FilterCondition from './FilterCondition.svelte';
 

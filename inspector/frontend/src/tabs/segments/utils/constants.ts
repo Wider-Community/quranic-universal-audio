@@ -46,6 +46,9 @@ export const SHORT_SEG_WARN_MS = 1000;
 /** VAD min-silence fallback when server does not provide the value. */
 export const VAD_MIN_SILENCE_FALLBACK_MS = 300;
 
+/** VAD min-silence-floor fallback (0 = pre-feature reciters had no daylight guarantee). */
+export const VAD_MIN_SILENCE_FLOOR_FALLBACK_MS = 0;
+
 /** ArrowLeft / ArrowRight audio seek delta, in seconds. */
 export const KEY_SEEK_SECONDS = 3;
 
@@ -71,10 +74,11 @@ export const EDIT_OP_LABELS: Record<string, string> = {
     merge_segments: 'Merge', delete_segment: 'Deletion',
     edit_reference: 'Reference edit', confirm_reference: 'Reference confirmation',
     auto_fix_missing_word: 'Auto-fill missing word', ignore_issue: 'Ignored issue',
+    qalqala_pad: 'Qalqala pad',
     pipeline: 'Pipeline edit', remove_sadaqa: 'Remove Sadaqa',
 };
 
-import { PER_SEGMENT_CATEGORIES, IssueRegistry } from '../domain/registry';
+import { IssueRegistry,PER_SEGMENT_CATEGORIES } from '../domain/registry';
 
 /** Display labels for each validation category — sourced from the registry. */
 export const ERROR_CAT_LABELS: Record<string, string> = Object.fromEntries(

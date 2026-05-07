@@ -5,8 +5,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import type { EditOpPatch, Segment } from '../../../../lib/types/domain';
+import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 
 function seg(overrides: Partial<Segment> & { segment_uid: string; chapter: number; time_start: number }): Segment {
     return {

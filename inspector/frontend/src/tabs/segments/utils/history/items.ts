@@ -1,9 +1,9 @@
 import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import type {
-    HistorySnapshot,
-    OpFlatItem,
     EditChain,
     EditChainOp,
+    HistorySnapshot,
+    OpFlatItem,
 } from '../../types/segments';
 import { deriveOpIssueDelta, usesStoredClassifiedIssues } from '../validation/classified-issues';
 
@@ -31,9 +31,10 @@ export interface FilteredItemSummary {
 
 /** Short-label dictionary for issue-delta badges (preserved verbatim). */
 export const SHORT_LABELS: Record<string, string> = {
-    failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
-    cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
-    repetitions: 'reps', muqattaat: 'muqattaat', qalqala: 'qalqala',
+    failed: 'fail', low_confidence: 'low conf', low_confidence_v2: 'low conf',
+    boundary_adj: 'boundary', cross_verse: 'cross', missing_words: 'gaps',
+    audio_bleeding: 'bleed', repetitions: 'reps', muqattaat: 'muqattaat',
+    qalqala: 'qalqala',
 };
 
 export function versesFromRef(ref: string | null | undefined): string[] {

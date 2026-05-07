@@ -74,7 +74,8 @@ export const derivedTimings = derived(segAllData, ($all) => {
     const timings = new Map<string, SegmentTiming>();
     if (!$all) return timings;
     const segs = $all.segments;
-    const pad = $all.pad_ms ?? 0;
+    const padLeft = $all.pad_left_ms ?? 0;
+    const padRight = $all.pad_right_ms ?? 0;
     for (let i = 0; i < segs.length; i++) {
         const cur = segs[i];
         if (!cur || !cur.segment_uid) continue;
@@ -83,7 +84,7 @@ export const derivedTimings = derived(segAllData, ($all) => {
                                && cur.entry_idx === next.entry_idx;
         const t: SegmentTiming = sameEntry && next
             ? {
-                silence_after_ms: (next.time_start - cur.time_end) + 2 * pad,
+                silence_after_ms: (next.time_start - cur.time_end) + padLeft + padRight,
                 silence_after_raw_ms: next.time_start - cur.time_end,
             }
             : { silence_after_ms: null, silence_after_raw_ms: null };

@@ -1,13 +1,14 @@
 <script lang="ts">
-    import { get } from 'svelte/store';
     import { onMount } from 'svelte';
+    import { get } from 'svelte/store';
+
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
-    import { tsAudioElement } from './tabs/timestamps/stores/playback';
-    import { segAudioElement } from './tabs/segments/stores/playback';
-    import { audAudioElement } from './tabs/audio/stores/audio';
     import AudioTab from './tabs/audio/AudioTab.svelte';
+    import { audAudioElement } from './tabs/audio/stores/audio';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
+    import { segAudioElement } from './tabs/segments/stores/playback';
+    import { tsAudioElement } from './tabs/timestamps/stores/playback';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
     let activeTab = getActiveTab();
