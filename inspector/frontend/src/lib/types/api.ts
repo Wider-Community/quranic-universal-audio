@@ -233,6 +233,14 @@ export interface SegValLowConfidenceItem extends SegValItemBase {
     confidence: number; // 0..1
 }
 
+/** Item for the *Low Confidence v2* category — segments flagged by the
+ *  extraction-time MFA tight-beam probe. No confidence score; the signal is
+ *  binary (probe pass/fail). */
+export interface SegValLowConfidenceV2Item extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+}
+
 export interface SegValBoundaryAdjItem extends SegValItemBase {
     seg_index: number;
     ref: Ref;
@@ -284,6 +292,7 @@ export type SegValAnyItem =
     | SegValMissingWordsItem
     | SegValStructuralErrorItem
     | SegValLowConfidenceItem
+    | SegValLowConfidenceV2Item
     | SegValBoundaryAdjItem
     | SegValCrossVerseItem
     | SegValAudioBleedingItem
@@ -301,6 +310,7 @@ export interface SegValidateResponse {
     /** Live alias of {@link errors} — both keys are emitted by the server (additive, MUST-1 compliant). */
     structural_errors?: SegValStructuralErrorItem[];
     low_confidence?: SegValLowConfidenceItem[];
+    low_confidence_v2?: SegValLowConfidenceV2Item[];
     boundary_adj?: SegValBoundaryAdjItem[];
     cross_verse?: SegValCrossVerseItem[];
     audio_bleeding?: SegValAudioBleedingItem[];

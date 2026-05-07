@@ -21,6 +21,7 @@ EXPECTED_MATRIX = {
     "missing_words":     {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_verse",   "card_type": "missingWords",   "severity": "error"},
     "structural_errors": {"can_ignore": False, "auto_suppress": True,  "persists_ignore": False, "scope": "per_chapter", "card_type": "error",          "severity": "error"},
     "low_confidence":    {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
+    "low_confidence_v2": {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
     "repetitions":       {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
     "audio_bleeding":    {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
     "boundary_adj":      {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
@@ -48,7 +49,7 @@ def test_registry_pins_matrix_verbatim():
             )
 
 
-def test_registry_has_all_eleven_categories():
+def test_registry_has_all_categories():
     reg = _registry()
     assert set(reg.keys()) == EXPECTED_CATEGORIES
 
@@ -93,6 +94,7 @@ def test_registry_accordion_order_is_complete():
     for cat in EXPECTED_CATEGORIES:
         row = reg[cat]
         orders.append(getattr(row, "accordion_order", None) or row["accordion_order"])
-    assert sorted(orders) == list(range(1, 12)), (
-        f"expected accordion_order to be a 1..11 permutation; got sorted={sorted(orders)}"
+    n = len(EXPECTED_CATEGORIES)
+    assert sorted(orders) == list(range(1, n + 1)), (
+        f"expected accordion_order to be a 1..{n} permutation; got sorted={sorted(orders)}"
     )

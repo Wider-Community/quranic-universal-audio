@@ -22,7 +22,7 @@ from pathlib import Path
 from config import LOW_CONFIDENCE_THRESHOLD, SURAH_INFO_PATH
 from constants import VALIDATION_CATEGORIES
 from services import cache
-from services.data_loader import get_word_counts, load_detailed
+from services.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.history_query import build_resolved_by_edit_index
 from services.phonemizer_service import get_canonical_phonemes
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
@@ -58,7 +58,8 @@ ISSUE_REGISTRY = IssueRegistry
 
 
 def chapter_validation_counts(entries: list, chapter: int, meta: dict,
-                              canonical: dict | None = None) -> dict:
+                              canonical: dict | None = None,
+                              probe_failed_uids: set | None = None) -> dict:
     """Count validation issues for a single chapter.  Returns ``{category: count}``."""
     word_counts = get_word_counts()
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
@@ -86,6 +87,8 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
                     counts["repetitions"] += 1
                 if seg.get("confidence", 0.0) < LOW_CONFIDENCE_THRESHOLD:
                     counts["low_confidence"] += 1
+                if probe_failed_uids and seg.get("segment_uid") in probe_failed_uids:
+                    counts["low_confidence_v2"] += 1
                 continue
             sp = parts[0].split(":")
             ep = parts[1].split(":")
@@ -101,10 +104,12 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 seg, entry_ref, is_by_ayah,
                 surah, s_ayah, e_ayah, s_word, e_word,
                 single_word_verses, canonical,
+                probe_failed_uids=probe_failed_uids,
             )
 
             for cat in ("audio_bleeding", "repetitions", "low_confidence",
-                        "cross_verse", "boundary_adj", "muqattaat", "qalqala"):
+                        "low_confidence_v2", "cross_verse", "boundary_adj",
+                        "muqattaat", "qalqala"):
                 if flags[cat]:
                     counts[cat] += 1
 
@@ -172,7 +177,11 @@ def validate_reciter_segments(reciter: str) -> dict:
                     seg["_resolved_by_edit"] = resolved_idx[uid]
                     _injected_segs.append(seg)
 
-    detail = _build_detail_lists(entries, is_by_ayah, word_counts, canonical, single_word_verses)
+    probe_failed_uids, probe_meta = load_probe_v2(reciter)
+    detail = _build_detail_lists(
+        entries, is_by_ayah, word_counts, canonical, single_word_verses,
+        probe_failed_uids=probe_failed_uids,
+    )
     missing_words = _build_missing_words(detail["verse_segments"], word_counts)
     errors, missing_verses, stats = _check_structural_errors(reciter, entries)
 
@@ -185,6 +194,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "missing_words": len(missing_words),
         "structural_errors": len(errors),
         "low_confidence": len(detail["low_confidence"]),
+        "low_confidence_v2": len(detail["low_confidence_v2"]),
         "repetitions": len(detail["repetitions"]),
         "audio_bleeding": len(detail["audio_bleeding"]),
         "boundary_adj": len(detail["boundary_adj"]),
@@ -200,6 +210,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "missing_words": missing_words,
         "failed": detail["failed"],
         "low_confidence": detail["low_confidence"],
+        "low_confidence_v2": detail["low_confidence_v2"],
         "boundary_adj": detail["boundary_adj"],
         "cross_verse": detail["cross_verse"],
         "audio_bleeding": detail["audio_bleeding"],
@@ -209,6 +220,8 @@ def validate_reciter_segments(reciter: str) -> dict:
         "category_counts": category_counts,
         "stats": stats,
     }
+    if probe_meta is not None:
+        result["low_confidence_v2_meta"] = probe_meta
 
     # Strip the transient injection so the cached entries dict stays clean
     # for the save flow (which serializes ``entries`` directly to disk).

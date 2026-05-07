@@ -53,7 +53,8 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
 
   it('accordion order matches registry', () => {
     const orders = ALL_CATEGORIES.map((c) => registry[c].accordionOrder).sort((a, b) => a - b);
-    expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    const expected = Array.from({ length: ALL_CATEGORIES.length }, (_, i) => i + 1);
+    expect(orders).toEqual(expected);
   });
 });
 

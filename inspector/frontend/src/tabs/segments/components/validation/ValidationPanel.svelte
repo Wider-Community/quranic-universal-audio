@@ -578,6 +578,7 @@
         if (type === 'low_confidence') {
             return ((issue as SegValLowConfidenceItem).confidence < CONF_MID_THRESHOLD) ? 'val-conf-low' : 'val-conf-mid';
         }
+        if (type === 'low_confidence_v2') return 'val-conf-mid';
         if (type === 'repetitions') return 'val-rep';
         if (type === 'cross_verse' || type === 'muqattaat' || type === 'qalqala') return 'val-cross';
         if (type === 'audio_bleeding') return 'val-bleed';
@@ -639,9 +640,9 @@
         const any = issue as {
             seg_index?: number; verse_key?: string; chapter: number;
         };
-        if (type === 'failed' || type === 'low_confidence' || type === 'boundary_adj' ||
-            type === 'cross_verse' || type === 'audio_bleeding' || type === 'repetitions' ||
-            type === 'muqattaat' || type === 'qalqala') {
+        if (type === 'failed' || type === 'low_confidence' || type === 'low_confidence_v2' ||
+            type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' ||
+            type === 'repetitions' || type === 'muqattaat' || type === 'qalqala') {
             if (any.seg_index != null) jumpToSegment(any.chapter, any.seg_index);
         } else if (type === 'missing_verses') {
             jumpToMissingVerseContext(any.chapter, any.verse_key ?? '');

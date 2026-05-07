@@ -235,6 +235,38 @@ def load_detailed(reciter: str) -> list[dict]:
     return entries
 
 
+def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
+    """Load ``low_confidence_v2.json`` sidecar for *reciter*.
+
+    Returns ``(failed_uid_set, meta_dict)``. When the sidecar is absent
+    returns ``(set(), None)`` and caches the empty result so repeated
+    lookups don't re-stat the filesystem. The sidecar is the source of
+    truth for the *Low Confidence v2* validation category and is never
+    written from the Inspector — it's emitted by the segments-stage
+    MFA probe (``scripts/lib/probe_mfa.py``).
+    """
+    cached = cache.get_seg_probe_v2(reciter)
+    if cached is not None:
+        return cached
+    path = RECITATION_SEGMENTS_PATH / reciter / "low_confidence_v2.json"
+    if not path.exists():
+        result: tuple[set[str], dict | None] = (set(), None)
+        cache.set_seg_probe_v2(reciter, result)
+        return result
+    try:
+        import orjson
+        doc = orjson.loads(path.read_bytes())
+    except Exception:
+        result = (set(), None)
+        cache.set_seg_probe_v2(reciter, result)
+        return result
+    failures = doc.get("failures") or []
+    meta = doc.get("_meta") or None
+    result = (set(failures), meta)
+    cache.set_seg_probe_v2(reciter, result)
+    return result
+
+
 def load_audio_urls(audio_source: str, reciter: str) -> dict:
     """Load verse/chapter URL map from data/audio/<audio_source>/<reciter>.json."""
     key = f"{audio_source}/{reciter}"

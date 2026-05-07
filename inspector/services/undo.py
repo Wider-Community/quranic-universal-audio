@@ -11,7 +11,7 @@ from config import RECITATION_SEGMENTS_PATH
 from constants import HISTORY_SCHEMA_VERSION, VALIDATION_CATEGORIES
 from domain.command import apply_inverse_patch
 from services import cache
-from services.data_loader import load_detailed
+from services.data_loader import load_detailed, load_probe_v2
 from services.save import persist_detailed
 from services.validation import chapter_validation_counts
 from services.history_query import parse_history_file
@@ -378,7 +378,8 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
-    val_before_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    probe_failed_uids, _ = load_probe_v2(reciter)
+    val_before_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
 
     try:
         for op in reversed(operations):
@@ -388,7 +389,7 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
 
     file_hash = persist_detailed(reciter, meta, entries)
 
-    val_after_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
     val_before = _merge_val_summaries(val_before_all)
     val_after = _merge_val_summaries(val_after_all)
 
@@ -463,7 +464,8 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
-    val_before_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    probe_failed_uids, _ = load_probe_v2(reciter)
+    val_before_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
 
     try:
         for op in reversed(ops_to_undo):
@@ -473,7 +475,7 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
 
     file_hash = persist_detailed(reciter, meta, entries)
 
-    val_after_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
     val_before = _merge_val_summaries(val_before_all)
     val_after = _merge_val_summaries(val_after_all)
 

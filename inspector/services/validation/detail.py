@@ -48,16 +48,22 @@ def _build_detail_lists(
     word_counts: dict,
     canonical: dict | None,
     single_word_verses: set,
+    probe_failed_uids: set | None = None,
 ) -> dict:
     """Iterate entries and build all detail lists + verse_segments map.
 
     Returns a dict with keys:
       chapter_seg_idx, verse_segments,
-      failed, low_confidence, boundary_adj, cross_verse,
+      failed, low_confidence, low_confidence_v2, boundary_adj, cross_verse,
       audio_bleeding, repetitions, muqattaat, qalqala.
+
+    ``probe_failed_uids`` is the set of segment UIDs flagged by the
+    extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
+    the sidecar isn't present and the v2 list should stay empty.
     """
     failed: list[dict] = []
     low_confidence: list[dict] = []
+    low_confidence_v2: list[dict] = []
     boundary_adj: list[dict] = []
     cross_verse: list[dict] = []
     audio_bleeding: list[dict] = []
@@ -151,6 +157,7 @@ def _build_detail_lists(
                 seg, entry_ref, is_by_ayah,
                 surah, s_ayah, e_ayah, s_word, e_word,
                 single_word_verses, canonical,
+                probe_failed_uids=probe_failed_uids,
             )
             classified = _classified_issues_from_flags(flags, detail=True)
 
@@ -197,6 +204,13 @@ def _build_detail_lists(
                     "ref": display_ref, "chapter": chapter, "seg_index": i,
                     "segment_uid": seg_uid,
                     "confidence": round(confidence, 4),
+                    "classified_issues": classified,
+                })
+
+            if flags["low_confidence_v2"]:
+                low_confidence_v2.append({
+                    "ref": matched_ref, "chapter": chapter, "seg_index": i,
+                    "segment_uid": seg_uid,
                     "classified_issues": classified,
                 })
 
@@ -257,6 +271,7 @@ def _build_detail_lists(
         "verse_segments": verse_segments,
         "failed": failed,
         "low_confidence": low_confidence,
+        "low_confidence_v2": low_confidence_v2,
         "boundary_adj": boundary_adj,
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
