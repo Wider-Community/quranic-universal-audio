@@ -165,7 +165,7 @@ def run_probe(
             if t_end <= t_start:
                 continue
             uid = seg.get("segment_uid") or _derive_uid(chapter, idx, t_start)
-            wav_path = tmp_dir / f"ch{chapter}_{uid[:12]}.wav"
+            wav_path = tmp_dir / f"ch{chapter}_seg{idx:04d}.wav"
             try:
                 slice_audio(audio_int16, t_start, t_end, wav_path)
             except Exception as e:
