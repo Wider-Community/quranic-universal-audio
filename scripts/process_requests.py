@@ -28,8 +28,10 @@ Usage:
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -377,22 +379,33 @@ def cmd_generate_pbs(args):
         return
 
     print(f"\nGenerating PBS for {len(accepted)} reciter(s):\n")
-    print(f"  {'Reciter':<40} {'Silence':>8} {'Speech':>8} {'Pad':>6} {'Source'}")
-    print(f"  {'-'*40} {'-'*8} {'-'*8} {'-'*6} {'-'*20}")
+    hdr = f"  {'Reciter':<40} {'Sil':>5} {'Spch':>5} {'L':>4} {'R':>4} {'Flr':>4} {'Source'}"
+    print(hdr)
+    print(f"  {'-'*40} {'-'*5} {'-'*5} {'-'*4} {'-'*4} {'-'*4} {'-'*20}")
 
     pbs_entries = []
     for i, req in enumerate(accepted):
-        silence, speech, pad = derive_vad_params(req["min_silence"], req["slug"])
+        silence, speech, pad_l, pad_r, floor = derive_vad_params(
+            req["min_silence"], req["slug"]
+        )
         req["min_speech"] = speech
-        req["pad"] = pad
+        req["pad_left"] = pad_l
+        req["pad_right"] = pad_r
+        req["min_silence_floor"] = floor
         req["pbs_index"] = i + 1
 
-        entry = f'    "{req["slug"]},{silence},{speech},{pad},,{req["source"]}"'
+        entry = (
+            f'    "{req["slug"]},{silence},{speech},'
+            f'{pad_l},{pad_r},{floor},,{req["source"]}"'
+        )
         pbs_entries.append(entry)
-        print(f"  {req['name']:<40} {silence:>8} {speech:>8} {pad:>6} {req['source']}")
+        print(
+            f"  {req['name']:<40} {silence:>5} {speech:>5} "
+            f"{pad_l:>4} {pad_r:>4} {floor:>4} {req['source']}"
+        )
 
     # Rewrite PBS file
-    pbs_path = REPO_ROOT / "jobs" / "extract_segments.pbs"
+    pbs_path = REPO_ROOT / ".local" / "extraction" / "extract_segments.pbs"
     if not pbs_path.exists():
         print(f"\nERROR: PBS file not found at {pbs_path}")
         return
@@ -420,8 +433,8 @@ def cmd_generate_pbs(args):
     print(f"\nPBS file updated: {pbs_path}")
     print(f"Array range: 1-{len(accepted)}")
     print("\nReview the PBS file, then submit:")
-    print("  bash scripts/sync_mfa.sh")
-    print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub jobs/extract_segments.pbs"')
+    print("  bash .local/extraction/sync_mfa.sh")
+    print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub .local/extraction/extract_segments.pbs"')
 
     # Receipt emails are now sent at form submission (HF Space),
     # not here.  Use `notify receipt` to manually re-send if needed.
@@ -741,11 +754,23 @@ def cmd_prepare_pr(args):
             print(f"    ERROR: {e}")
             req["pr_url"] = ""
         finally:
-            # Always return to main
+            # Always return to main, preserving segment files as untracked.
+            # After commit on the branch, files are tracked — checking out main
+            # would delete them.  Copy aside, switch, copy back.
+            seg_abs = REPO_ROOT / "data" / "recitation_segments" / slug
+            _tmp = None
+            if seg_abs.is_dir():
+                _tmp = Path(tempfile.mkdtemp())
+                shutil.copytree(seg_abs, _tmp / slug, dirs_exist_ok=True)
             subprocess.run(
                 ["git", "checkout", "main"],
                 cwd=str(REPO_ROOT), capture_output=True, text=True,
             )
+            if _tmp and (_tmp / slug).is_dir():
+                if seg_abs.exists():
+                    shutil.rmtree(seg_abs)
+                shutil.copytree(_tmp / slug, seg_abs)
+                shutil.rmtree(_tmp)
 
     save_state(state)
     print(f"\nDone. State saved with PR URLs.")
