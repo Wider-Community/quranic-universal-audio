@@ -200,7 +200,7 @@ The segment validations surface as collapsible accordion panels in the inspector
 
 ## validate_timestamps.py
 
-Checks the output of `extract_timestamps.py` for structural correctness, temporal plausibility, and consistency with the upstream segment pipeline.
+Checks for structural correctness, temporal plausibility, and consistency with the upstream segment pipeline.
 
 ### Usage
 

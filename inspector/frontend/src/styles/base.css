@@ -1,0 +1,126 @@
+/* Ensure [hidden] always hides even when CSS sets explicit display values */
+[hidden] { display: none !important; }
+
+@font-face {
+    font-family: 'DigitalKhatt';
+    src: url('/fonts/DigitalKhattV2.otf') format('opentype');
+}
+
+:root {
+    --mega-line-gap: 16px;
+    --word-phoneme-gap: 4px;
+    --phoneme-box-gap: 2px;
+    --unified-display-max-height: 800px;
+    --anim-highlight-color: #f0a500;
+    --anim-word-transition: opacity 0.15s ease;
+    --anim-char-transition: opacity 0.15s ease;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+}
+
+.container {
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    margin-bottom: 30px;
+}
+
+h1 {
+    font-size: 1.8rem;
+    margin-bottom: 15px;
+    color: #fff;
+}
+
+main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+footer {
+    margin-top: 30px;
+    text-align: center;
+    color: #666;
+    font-size: 0.85rem;
+}
+
+/* Loading state */
+.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* ============ Header links ============ */
+.header-links {
+    color: #888;
+    font-size: 0.9rem;
+    margin: 0 0 12px 0;
+}
+.header-links a {
+    color: #4cc9f0;
+    text-decoration: none;
+}
+.header-links a:hover {
+    text-decoration: underline;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0f0f23;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #444;
+}
+
+/* ============ Tab bar ============ */
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+}
+
+.tab-btn {
+    padding: 10px 24px;
+    background: #16213e;
+    color: #aaa;
+    border: 1px solid #333;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background 0.2s, color 0.2s;
+}
+
+.tab-btn:hover {
+    background: #1a2a4e;
+    color: #ccc;
+}
+
+.tab-btn.active {
+    background: #1a1a2e;
+    color: #4cc9f0;
+    border-bottom-color: #1a1a2e;
+}
