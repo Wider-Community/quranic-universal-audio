@@ -1,0 +1,38 @@
+Generated: 2026-05-01 21:39:36
+
+=== Timestamp Coverage ===
+
+Reciter                        Verses Missing   Words Cov Issues Fwd Gaps MFA Fail Errors Warnings
+--------------------------------------------------------------------------------------------------
+mohammed_siddiq_al_minshawi      6236       0   79567          0        0        0      0        8
+saad_al_ghamdi                   6235       1   80197          5        0        6      9     1036
+--------------------------------------------------------------------------------------------------
+TOTAL (2 reciters)              12471       1  159764          5        0        6      9     1044
+
+
+=== Word Duration (ms) ===
+
+Reciter                             Min   Median     Mean      Max Zero-Dur Negative
+------------------------------------------------------------------------------------
+mohammed_siddiq_al_minshawi          40     1070     1161    10370        0        0
+saad_al_ghamdi                       30      920     1024    10580        0        0
+------------------------------------------------------------------------------------
+TOTAL (2 reciters)                           995                                    
+
+
+=== Verse Duration (ms) ===
+
+Reciter                             Min   Median     Mean      Max  Short Overlaps Lg Gaps
+------------------------------------------------------------------------------------------
+mohammed_siddiq_al_minshawi         790    12100    15605   176495      0        0       0
+saad_al_ghamdi                     1030    10740    13629   148595      0        3       1
+------------------------------------------------------------------------------------------
+TOTAL (2 reciters)                         11420                                          
+
+
+=== Consistency ===
+
+Reciter                        Full File Ltr Errors Ph Issues Seg File Boundary MM
+----------------------------------------------------------------------------------
+mohammed_siddiq_al_minshawi          yes          0         0      yes           8
+saad_al_ghamdi                       yes          0         0      yes        1030
