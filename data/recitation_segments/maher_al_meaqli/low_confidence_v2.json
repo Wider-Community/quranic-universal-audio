@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "created_at": "2026-05-07T06:53:03Z",
+    "aligner_model": "quran_aligner_model",
+    "method": "kalpy",
+    "beam": 2,
+    "reciter": "maher_al_meaqli",
+    "source_file_hash": "sha256:e1b6f671fae37615cafe9a24697d1b0687bef974b79f7f403a7367cbf29cabdd"
+  },
+  "failures": [
+    "0ea2a9ea-39d4-55df-966a-975b7085ef5d",
+    "206d0e3c-868e-55c7-b3a1-a05240a5b45a",
+    "3278fc96-2594-527c-a8b5-98d08efc1520",
+    "4b02a830-e66e-5b6c-bcc8-96d3d45905f9",
+    "50d2b4c7-003c-5322-9f33-6644b3554bc7",
+    "50e54f8f-439e-59a3-8d08-9992f2e5c1b9",
+    "52d073a0-a9db-5000-a09d-2a27fefecebe",
+    "5f187ecb-4d07-5e71-8b21-65b3299392e9",
+    "62ecf1bb-70db-55ca-a000-bf8a33615b7e",
+    "656f0a19-eb25-5dbc-997c-6a6994f1dee8",
+    "68c62f9c-8072-4a26-8f2f-83539c09d03f",
+    "69ba5569-f622-56ce-9a60-d669aa84be3b",
+    "7c01627e-9b5e-53f8-88be-0812ea61ba6a",
+    "87b551f6-1577-5393-82e4-940744a93aaf",
+    "9125214f-8dee-53c7-ae17-6939b118f569",
+    "a7b9b522-7b2d-55a3-aca0-be3313282a24",
+    "aa7bdc3f-92f5-5384-b75f-ba1444b4da5d",
+    "b7760a3d-427e-5908-be1e-05b29ade54cd",
+    "bca8f774-c0a4-5fc9-9fcf-a6ea688319bd",
+    "c09f2565-8e16-5012-b382-cfdd3ca0a004",
+    "d232750d-ffcf-5f65-a518-852df48915f1"
+  ]
+}
