@@ -126,7 +126,7 @@ jobs:
             reciter=$(echo "$entry" | cut -d= -f1)
             verses=$(echo "$entry" | cut -d= -f2)
             echo "::group::Refreshing $reciter (verses: $verses) beams=50,5"
-            python3 extract_timestamps.py \
+            python3 .github/scripts/extract_timestamps.py \
               --input "data/recitation_segments/$reciter/" \
               --space-url "https://hetchyy-quran-phoneme-mfa-dev.hf.space" \
               --beams 50,5 \

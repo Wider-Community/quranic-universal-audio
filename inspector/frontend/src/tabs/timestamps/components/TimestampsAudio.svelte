@@ -1,6 +1,6 @@
 <script lang="ts">
+    import { createEventDispatcher, onDestroy,onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
     import AudioPlayer from '../../../lib/components/AudioPlayer.svelte';
     import { AudioRange } from '../../../lib/playback/audio-range';

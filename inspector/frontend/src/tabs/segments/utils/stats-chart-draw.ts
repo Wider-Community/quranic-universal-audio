@@ -42,12 +42,20 @@ export function drawBarChart(canvas: HTMLCanvasElement, d: Distribution, c: Char
     });
      
     const annotations: Record<string, any> = {};
-    if (c.refLine != null && bins.length >= 2) {
-        annotations.refLine = {
-            type: 'line', scaleID: 'x', value: findBinIndex(bins, c.refLine),
-            borderColor: '#f44336', borderWidth: 1.5, borderDash: [4, 3],
-            label: { display: true, content: c.refLabel || '', position: 'start', color: '#f44336', font: { size: 9, family: 'monospace' }, backgroundColor: 'rgba(15,15,35,0.7)' },
-        };
+    const refLines = [
+        ...(c.refLine != null ? [{ value: c.refLine, label: c.refLabel || '' }] : []),
+        ...(c.refLines ?? []),
+    ];
+    if (refLines.length > 0 && bins.length >= 2) {
+        refLines.forEach((rl, i) => {
+            const color = rl.color ?? '#f44336';
+            const dash = rl.dash ?? [4, 3];
+            annotations[`refLine_${i}`] = {
+                type: 'line', scaleID: 'x', value: findBinIndex(bins, rl.value),
+                borderColor: color, borderWidth: 1.5, borderDash: dash,
+                label: { display: true, content: rl.label, position: 'start', color, font: { size: 9, family: 'monospace' }, backgroundColor: 'rgba(15,15,35,0.7)' },
+            };
+        });
     }
     if (d.percentiles && bins.length >= 2) {
         const pCfg: Record<string, { color: string; dash: number[]; label: string }> = {

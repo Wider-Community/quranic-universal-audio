@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+
 import { LS_KEYS } from '../../../lib/utils/constants';
 
 // Load initial preference from localStorage (default to true)

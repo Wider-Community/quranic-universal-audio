@@ -15,18 +15,18 @@
     import { onDestroy } from 'svelte';
 
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
-    import HistoryBatch from '../history/HistoryBatch.svelte';
-    import EditChainRow from '../history/EditChainRow.svelte';
     import {
         buildDisplayItems,
         chainedOpIds,
-        flattenBatchesToItems,
-        editChains,
         type DisplayEntry,
+        editChains,
+        flattenBatchesToItems,
     } from '../../stores/history';
     import { waveformContainer } from '../../stores/playback';
     import { savePreviewData, savePreviewVisible } from '../../stores/save';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
+    import EditChainRow from '../history/EditChainRow.svelte';
+    import HistoryBatch from '../history/HistoryBatch.svelte';
 
     // Derive display entries from the preview data --------------------------
     $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../../lib/types/domain').HistoryBatch[];

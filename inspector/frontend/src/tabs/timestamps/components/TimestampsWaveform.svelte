@@ -26,33 +26,33 @@
     import { get } from 'svelte/store';
 
     import WaveformCanvas from '../../../lib/components/WaveformCanvas.svelte';
-    import { loadedVerse, selectedReciter } from '../stores/verse';
-    import { loopTarget, tsAudioElement } from '../stores/playback';
-    import {
-        TS_GRANULARITIES,
-        TS_VIEW_MODES,
-        granularity,
-        showLetters,
-        showPhonemes,
-        tsConfig,
-        tsHoveredElement,
-        tsWaveformHoverTime,
-        viewMode,
-    } from '../stores/display';
-    import { findWordAt } from '../utils/loop-target';
-    import { applyTsWheelZoom, isTsZoomAnimating, panTsViewBy } from '../utils/zoom';
-    import { tsZoom, tsZoomAnimating } from '../stores/zoom';
-    import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
-    import { fetchSegmentPeaks } from '../../../lib/utils/peaks-fetch';
-    import { drawWaveformPeaks } from '../../../lib/utils/waveform-draw';
-    import { safePlay } from '../../../lib/utils/audio';
     import type { PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
+    import { safePlay } from '../../../lib/utils/audio';
     import {
         LETTER_HIGHLIGHT_COLOR,
         PREVIEW_PLAYHEAD_COLOR,
         WAVEFORM_BG_COLOR,
         WAVEFORM_STROKE_COLOR,
     } from '../../../lib/utils/constants';
+    import { fetchSegmentPeaks } from '../../../lib/utils/peaks-fetch';
+    import { drawWaveformPeaks } from '../../../lib/utils/waveform-draw';
+    import {
+        granularity,
+        showLetters,
+        showPhonemes,
+        TS_GRANULARITIES,
+        TS_VIEW_MODES,
+        tsConfig,
+        tsHoveredElement,
+        tsWaveformHoverTime,
+        viewMode,
+    } from '../stores/display';
+    import { loopTarget, tsAudioElement } from '../stores/playback';
+    import { loadedVerse, selectedReciter } from '../stores/verse';
+    import { tsZoom, tsZoomAnimating } from '../stores/zoom';
+    import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
+    import { findWordAt } from '../utils/loop-target';
+    import { applyTsWheelZoom, isTsZoomAnimating, panTsViewBy } from '../utils/zoom';
 
     // ---- Local layout constants ----
     const TS_WAVEFORM_DEFAULT_WIDTH = 1200;

@@ -1,6 +1,7 @@
 // IS-6: delete flows dispatch through applyCommand.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 

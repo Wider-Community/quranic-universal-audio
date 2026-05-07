@@ -171,20 +171,42 @@ def load_timestamps(reciter: str) -> dict:
 # Segments
 # ---------------------------------------------------------------------------
 
-def load_seg_verses(reciter: str) -> tuple[dict, int]:
-    """Load segments.json verse data for boundary mismatch checking.  Cached."""
+def resolve_pad(meta: dict) -> tuple[int, int, int]:
+    """Resolve VAD pad fields from ``_meta`` with alias-on-read.
+
+    Returns ``(pad_left_ms, pad_right_ms, min_silence_floor_ms)``.
+
+    For files written before asymmetric pad landed, ``pad_ms`` is
+    treated as both left and right; ``min_silence_floor_ms`` defaults
+    to 0 (no daylight guarantee was enforced pre-feature).
+    """
+    legacy = int(meta.get("pad_ms", 0))
+    pad_left = int(meta.get("pad_left_ms", legacy))
+    pad_right = int(meta.get("pad_right_ms", legacy))
+    floor = int(meta.get("min_silence_floor_ms", 0))
+    return pad_left, pad_right, floor
+
+
+def load_seg_verses(reciter: str) -> tuple[dict, int, int, int]:
+    """Load segments.json verse data for boundary mismatch checking.
+
+    Returns ``(verses, pad_left_ms, pad_right_ms, min_silence_floor_ms)``.
+    Cached.
+    """
     cached = cache.get_seg_verses_cache(reciter)
     if cached is not None:
         return cached
     seg_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
     if not seg_path.exists():
-        return {}, 0
+        return {}, 0, 0, 0
     import orjson
     doc = orjson.loads(seg_path.read_bytes())
-    pad_ms = doc.get("_meta", {}).get("pad_ms", 0)
+    meta = doc.get("_meta", {})
+    pad_left, pad_right, floor = resolve_pad(meta)
     verses = {k: v for k, v in doc.items() if k != "_meta"}
-    cache.set_seg_verses_cache(reciter, (verses, pad_ms))
-    return verses, pad_ms
+    result = (verses, pad_left, pad_right, floor)
+    cache.set_seg_verses_cache(reciter, result)
+    return result
 
 
 def load_detailed(reciter: str) -> list[dict]:
@@ -211,6 +233,38 @@ def load_detailed(reciter: str) -> list[dict]:
             except Exception:
                 pass
     return entries
+
+
+def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
+    """Load ``low_confidence_v2.json`` sidecar for *reciter*.
+
+    Returns ``(failed_uid_set, meta_dict)``. When the sidecar is absent
+    returns ``(set(), None)`` and caches the empty result so repeated
+    lookups don't re-stat the filesystem. The sidecar is the source of
+    truth for the *Low Confidence v2* validation category and is never
+    written from the Inspector — it's emitted by the segments-stage
+    MFA probe (``scripts/lib/probe_mfa.py``).
+    """
+    cached = cache.get_seg_probe_v2(reciter)
+    if cached is not None:
+        return cached
+    path = RECITATION_SEGMENTS_PATH / reciter / "low_confidence_v2.json"
+    if not path.exists():
+        result: tuple[set[str], dict | None] = (set(), None)
+        cache.set_seg_probe_v2(reciter, result)
+        return result
+    try:
+        import orjson
+        doc = orjson.loads(path.read_bytes())
+    except Exception:
+        result = (set(), None)
+        cache.set_seg_probe_v2(reciter, result)
+        return result
+    failures = doc.get("failures") or []
+    meta = doc.get("_meta") or None
+    result = (set(failures), meta)
+    cache.set_seg_probe_v2(reciter, result)
+    return result
 
 
 def load_audio_urls(audio_source: str, reciter: str) -> dict:

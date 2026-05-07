@@ -2,14 +2,14 @@
     import { get } from 'svelte/store';
 
     import {
+        cacheDeleteButton,
+        cachePrepareButton,
+        cacheProgress,
         cacheStatus,
         cacheStatusText,
-        cacheProgress,
-        cachePrepareButton,
-        cacheDeleteButton,
     } from '../../stores/audio-cache';
-    import { _prepareAudio, _deleteAudioCache } from '../../utils/playback/audio-cache-ui';
     import { selectedReciter } from '../../stores/chapter';
+    import { _deleteAudioCache,_prepareAudio } from '../../utils/playback/audio-cache-ui';
 
     function onPrepareClick(): void { _prepareAudio(get(selectedReciter)); }
     function onDeleteClick(): void { _deleteAudioCache(get(selectedReciter)); }

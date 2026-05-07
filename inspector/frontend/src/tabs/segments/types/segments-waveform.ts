@@ -37,6 +37,12 @@ export interface MergeHighlight {
     mergePoint: number;
 }
 
+/** Yellow overlay for qalqala batch padding preview (original end → padded end). */
+export interface PadHighlight {
+    padStart: number;
+    padEnd: number;
+}
+
 /** Edit-mode trim window snapshot (currentStart/End are mutable as user drags).
  *
  *  - `windowStart/windowEnd` — hard CLAMP bounds (from neighbors + trim padding).
@@ -102,6 +108,7 @@ export interface SegCanvas extends HTMLCanvasElement {
     _trimHL?: TrimHighlight;
     _splitHL?: SplitHighlight;
     _mergeHL?: MergeHighlight;
+    _padHL?: PadHighlight;
     _trimWindow?: TrimWindow;
     _splitData?: SplitData;
     _trimBaseCache?: ImageData | null;

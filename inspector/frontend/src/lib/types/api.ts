@@ -119,7 +119,11 @@ export interface SegAllResponse {
     segments: Segment[];
     audio_by_chapter: Record<string, string>;
     verse_word_counts: Record<VerseRef, number>;
+    /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
     pad_ms: number;
+    pad_left_ms: number;
+    pad_right_ms: number;
+    min_silence_floor_ms: number;
 }
 
 // ===========================================================================
@@ -229,6 +233,14 @@ export interface SegValLowConfidenceItem extends SegValItemBase {
     confidence: number; // 0..1
 }
 
+/** Item for the *Low Confidence v2* category — segments flagged by the
+ *  extraction-time MFA tight-beam probe. No confidence score; the signal is
+ *  binary (probe pass/fail). */
+export interface SegValLowConfidenceV2Item extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+}
+
 export interface SegValBoundaryAdjItem extends SegValItemBase {
     seg_index: number;
     ref: Ref;
@@ -280,6 +292,7 @@ export type SegValAnyItem =
     | SegValMissingWordsItem
     | SegValStructuralErrorItem
     | SegValLowConfidenceItem
+    | SegValLowConfidenceV2Item
     | SegValBoundaryAdjItem
     | SegValCrossVerseItem
     | SegValAudioBleedingItem
@@ -297,6 +310,7 @@ export interface SegValidateResponse {
     /** Live alias of {@link errors} — both keys are emitted by the server (additive, MUST-1 compliant). */
     structural_errors?: SegValStructuralErrorItem[];
     low_confidence?: SegValLowConfidenceItem[];
+    low_confidence_v2?: SegValLowConfidenceV2Item[];
     boundary_adj?: SegValBoundaryAdjItem[];
     cross_verse?: SegValCrossVerseItem[];
     audio_bleeding?: SegValAudioBleedingItem[];
@@ -309,7 +323,14 @@ export interface SegValidateResponse {
 /** GET /api/seg/stats/:reciter — distributions + percentiles. Shape varies. */
 export interface SegStatsResponse {
     distributions?: Record<string, { bins: number[]; counts: number[]; percentiles?: Record<string, number> }>;
-    vad_params?: { min_silence_ms: number; [k: string]: unknown };
+    vad_params?: {
+        min_silence_ms: number;
+        min_speech_ms?: number;
+        pad_left_ms?: number;
+        pad_right_ms?: number;
+        min_silence_floor_ms?: number;
+        [k: string]: unknown;
+    };
     [k: string]: unknown;
 }
 

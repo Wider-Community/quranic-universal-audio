@@ -10,7 +10,6 @@
 import { get } from 'svelte/store';
 
 import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
-import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import type {
     SegAllResponse,
     SegChaptersResponse,
@@ -18,6 +17,7 @@ import type {
     SegStatsResponse,
     SegValidateResponse,
 } from '../../../../lib/types/api';
+import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import {
     segAllData,
     selectedChapter,

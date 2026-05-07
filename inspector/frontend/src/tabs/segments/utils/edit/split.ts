@@ -8,6 +8,7 @@ import { fetchJsonOrNull } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
+import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,
     invalidateChapterIndexFor,
@@ -33,7 +34,6 @@ import {
 } from '../../stores/edit';
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { applyCommand } from '../../domain/apply-command';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts, parseSegRef } from '../data/references';
 import { setPreviewLooping } from '../playback/play-range';
