@@ -8,13 +8,12 @@
 
 import ikhlas from '@fixtures/112-ikhlas.detailed.json';
 import falaq from '@fixtures/113-falaq.detailed.json';
-import structural from '@fixtures/synthetic-structural.detailed.json';
-import classifier from '@fixtures/synthetic-classifier.detailed.json';
-
 import ikhlasExpected from '@fixtures/expected/112-ikhlas.classify.json';
 import falaqExpected from '@fixtures/expected/113-falaq.classify.json';
-import structuralExpected from '@fixtures/expected/synthetic-structural.classify.json';
 import classifierExpected from '@fixtures/expected/synthetic-classifier.classify.json';
+import structuralExpected from '@fixtures/expected/synthetic-structural.classify.json';
+import classifier from '@fixtures/synthetic-classifier.detailed.json';
+import structural from '@fixtures/synthetic-structural.detailed.json';
 
 export type FixtureName =
   | '112-ikhlas'

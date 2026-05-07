@@ -21,59 +21,59 @@
      * tracking releases destroyed nodes; see segments/waveform/index.ts).
      */
 
+    import { onDestroy,onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { onMount, onDestroy } from 'svelte';
 
+    import type { Segment } from '../../../../lib/types/domain';
     import {
         getAdjacentSegments,
         segAllData,
         selectedChapter,
         selectedVerse,
     } from '../../stores/chapter';
-    import {
-        _addVerseMarkers,
-        formatRef,
-        formatTimeMs,
-    } from '../../utils/data/references';
     import { dirtyTick, isIndexDirty } from '../../stores/dirty';
     import {
-        editMode,
         editingMountId,
         editingSegUid,
+        editMode,
         setEditCanvas,
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
-    import type {
-        MergeHighlight,
-        SegCanvas,
-        SplitHighlight,
-        TrimHighlight,
-    } from '../../types/segments-waveform';
-    import { getConfClass } from '../../utils/validation/conf-class';
-    import { _ensureWaveformObserver } from '../../utils/waveform/utils';
+    import {
+        chapterIndexKey,
+        flashSegmentIndices,
+        targetSegmentIndex,
+    } from '../../stores/navigation';
     import {
         isMainAudioPlaying,
         playingSegmentIndex,
         segAudioElement,
         segListElement,
     } from '../../stores/playback';
+    import type {
+        MergeHighlight,
+        PadHighlight,
+        SegCanvas,
+        SplitHighlight,
+        TrimHighlight,
+    } from '../../types/segments-waveform';
+    import { EDIT_MIN_DURATION_MS,SEG_ROW_CANVAS_HEIGHT, SEG_ROW_CANVAS_WIDTH, TRIM_HANDLE_HIT_RADIUS_PX } from '../../utils/constants';
+    import { jumpToSegment } from '../../utils/data/navigation-actions';
     import {
-        chapterIndexKey,
-        flashSegmentIndices,
-        targetSegmentIndex,
-    } from '../../stores/navigation';
+        _addVerseMarkers,
+        formatRef,
+        formatTimeMs,
+    } from '../../utils/data/references';
     import { deleteSegment } from '../../utils/edit/delete';
     import { enterEditWithBuffer } from '../../utils/edit/enter';
     import { mergeAdjacent } from '../../utils/edit/merge';
     import { beginRefEdit } from '../../utils/edit/reference';
-    import { jumpToSegment } from '../../utils/data/navigation-actions';
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
-    import { SEG_ROW_CANVAS_WIDTH, SEG_ROW_CANVAS_HEIGHT } from '../../utils/constants';
-    import type { Segment } from '../../../../lib/types/domain';
-
+    import { getConfClass } from '../../utils/validation/conf-class';
+    import { _ensureWaveformObserver, redrawPeaksWaveforms } from '../../utils/waveform/utils';
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
     import SplitPanel from '../edit/SplitPanel.svelte';
     import TrimPanel from '../edit/TrimPanel.svelte';
@@ -141,6 +141,12 @@
      * re-computing. Live-edit and SavePreview rows leave this null.
      */
     export let opId: string | null = null;
+    /** Qalqala batch padding preview — yellow overlay + drag end handle. */
+    export let padHL: PadHighlight | null = null;
+    /** Called with new absolute end time (ms) when user drags/clicks the pad handle. */
+    export let onPadDrag: ((_newEndMs: number) => void) | null = null;
+    /** When set, play button invokes this instead of default segment play (e.g. pad preview). */
+    export let onPlayOverride: (() => void) | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -152,6 +158,12 @@
         c._splitHL = splitHL ?? undefined;
         c._trimHL = trimHL ?? undefined;
         c._mergeHL = mergeHL ?? undefined;
+        c._padHL = padHL ?? undefined;
+    }
+
+    $: if (canvasEl && padHL) {
+        (canvasEl as SegCanvas)._wfCache = null;
+        redrawPeaksWaveforms();
     }
 
     // True only when this specific mounted row is the editing target. The
@@ -193,7 +205,6 @@
     $: chapterForDirty = seg.chapter ?? fallbackChapter;
     $: dirty = (void $dirtyTick, !readOnly && isIndexDirty(chapterForDirty, seg.index));
     $: confClass = (void segStoreTick, getConfClass(seg));
-    $: durSec = (void segStoreTick, (seg.time_end - seg.time_start) / 1000);
     $: durTitle = (void segStoreTick, `${formatTimeMs(seg.time_start)} \u2013 ${formatTimeMs(seg.time_end)}`);
     $: adj = !readOnly && !isContext
         ? getAdjacentSegments(seg.chapter ?? 0, seg.index)
@@ -213,12 +224,19 @@
         ? 'Cannot merge segments from different audio files'
         : '';
     $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
+    let previewState: { text: string; ref: string } | null = null;
+    $: if (!isEditingThisRow || $editMode !== 'reference') {
+        previewState = null;
+    }
+
     // History-mode changed-field markers.
     $: changedRef = !!changedFields?.has('ref');
     $: changedDur = !!changedFields?.has('duration');
     $: changedConf = !!changedFields?.has('conf');
     $: changedBody = !!changedFields?.has('body');
-    $: bodyText = _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
+    $: bodyText = previewState
+        ? _addVerseMarkers(previewState.text, previewState.ref, $segAllData?.verse_word_counts) || '(alignment failed)'
+        : _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
@@ -421,6 +439,10 @@
 
     function onPlayClick(e: MouseEvent): void {
         e.stopPropagation();
+        if (onPlayOverride) {
+            onPlayOverride();
+            return;
+        }
         if (readOnly) return;
         const idx = seg.index;
         const chapter = seg.chapter ?? fallbackChapter;
@@ -531,15 +553,76 @@
         }
     }
 
+    function _wfVisualEnd(): number {
+        if (!padHL) return seg.time_end;
+        return Math.max(seg.time_end, padHL.padEnd);
+    }
+
+    function _timeFromCanvasClientX(canvas: SegCanvas, clientX: number): number {
+        const rect = canvas.getBoundingClientRect();
+        const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const t0 = seg.time_start;
+        const t1 = _wfVisualEnd();
+        return t0 + progress * (t1 - t0);
+    }
+
+    function _padEndHandleX(canvas: SegCanvas): number {
+        const w = canvas.width;
+        const dur = _wfVisualEnd() - seg.time_start;
+        if (dur <= 0 || !padHL) return 0;
+        return ((padHL.padEnd - seg.time_start) / dur) * w;
+    }
+
     function onCanvasMousedown(e: MouseEvent): void {
         if (readOnly || get(editMode)) return;
         const canvas = e.currentTarget as SegCanvas;
+        if (padHL && onPadDrag) {
+            e.preventDefault();
+            e.stopPropagation();
+            const xHandle = _padEndHandleX(canvas);
+            const rect = canvas.getBoundingClientRect();
+            const xClick = e.clientX - rect.left;
+            const nearHandle = Math.abs(xClick - xHandle) <= TRIM_HANDLE_HIT_RADIUS_PX;
+
+            let dragging = nearHandle;
+            const minEnd = seg.time_start + EDIT_MIN_DURATION_MS;
+
+            const applyFromClientX = (cx: number): void => {
+                let t = _timeFromCanvasClientX(canvas, cx);
+                if (!nearHandle && padHL) {
+                    t = Math.max(padHL.padStart, t);
+                }
+                t = Math.max(minEnd, t);
+                onPadDrag!(t);
+            };
+
+            applyFromClientX(e.clientX);
+
+            function onMove(ev: MouseEvent): void {
+                if (dragging || nearHandle) {
+                    dragging = true;
+                    applyFromClientX(ev.clientX);
+                }
+            }
+            function onUp(ev: MouseEvent): void {
+                if (!dragging && padHL && !nearHandle) {
+                    applyFromClientX(ev.clientX);
+                }
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            return;
+        }
+
+        const canvas2 = e.currentTarget as SegCanvas;
 
         e.preventDefault();
-        _seekFromCanvasEvent(e, canvas);
+        _seekFromCanvasEvent(e, canvas2);
 
         function onMove(ev: MouseEvent): void {
-            _seekFromCanvasEvent(ev, canvas);
+            _seekFromCanvasEvent(ev, canvas2);
         }
         function onUp(): void {
             document.removeEventListener('mousemove', onMove);
@@ -632,7 +715,7 @@
                 <span class="seg-text-index">{indexLabel}</span>
                 <span class="seg-text-sep">|</span>
                 {#if isEditingThisRow && $editMode === 'reference'}
-                    <ReferenceEditor {seg} />
+                    <ReferenceEditor {seg} on:preview={(e) => previewState = e.detail} />
                 {:else}
                     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                     <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>

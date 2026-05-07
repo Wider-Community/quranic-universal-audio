@@ -6,6 +6,7 @@ import { get } from 'svelte/store';
 
 import type { Segment } from '../../../../lib/types/domain';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
+import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,
     getCurrentChapterSegs,
@@ -33,7 +34,6 @@ import {
 } from '../../stores/edit';
 import { segAudioElement } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
-import { applyCommand } from '../../domain/apply-command';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
     clearPlayRangeRAF,
@@ -73,9 +73,10 @@ export function computeTrimBounds(
     const segIdx = chapterSegs.findIndex((s) => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
     const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(seg.chapter ?? 0)] || '';
+    const fallbackPad = Math.max(1000, cfg.trimPadRight);
     const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
-        ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + 1000)
-        : (peaksDurationMs || seg.time_end + 1000);
+        ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + fallbackPad)
+        : (peaksDurationMs || seg.time_end + fallbackPad);
     const windowStart = Math.max(prevEnd, seg.time_start - cfg.trimPadLeft);
     const windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
     return { windowStart, windowEnd, audioUrl };
@@ -141,6 +142,28 @@ export function enterTrimMode(seg: Segment, row: HTMLElement, mountId: symbol | 
     previewTrimAudio(canvas);
     void _fetchPeaksForClick(seg, chapter).then(() => {
         if (!canvas._trimWindow) return; // user exited trim mode mid-fetch
+
+        const loadedDuration = getWaveformPeaks(seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '')?.duration_ms;
+        if (loadedDuration) {
+            const { windowStart, windowEnd } = computeTrimBounds(
+                { ...seg, chapter },
+                chapterSegs,
+                cfg,
+                loadedDuration,
+            );
+            const tw = canvas._trimWindow;
+            tw.windowStart = windowStart;
+            tw.windowEnd = windowEnd;
+            tw.viewStart = Math.max(windowStart, tw.viewStart);
+            tw.viewEnd = Math.min(windowEnd, tw.viewEnd);
+            
+            // Constrain cursors. If they were already dragged past the new true end, snap them back.
+            tw.currentStart = Math.max(windowStart, Math.min(tw.currentStart, windowEnd - EDIT_MIN_DURATION_MS));
+            tw.currentEnd = Math.min(windowEnd, Math.max(tw.currentEnd, tw.currentStart + EDIT_MIN_DURATION_MS));
+            
+            setTrimWindow({ ...tw });
+        }
+
         drawTrimWaveform(canvas);
     });
 }

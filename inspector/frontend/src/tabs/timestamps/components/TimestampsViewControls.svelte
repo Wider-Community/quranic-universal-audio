@@ -12,19 +12,19 @@
     import { createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { safePlay } from '../../../lib/utils/audio';
+    import { LS_KEYS } from '../../../lib/utils/constants';
     import {
-        TS_GRANULARITIES,
-        TS_VIEW_MODES,
         granularity,
         showLetters,
         showPhonemes,
+        TS_GRANULARITIES,
+        TS_VIEW_MODES,
         viewMode,
     } from '../stores/display';
     import { autoMode, loopTarget, tsAudioElement } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
-    import { safePlay } from '../../../lib/utils/audio';
-    import { LS_KEYS } from '../../../lib/utils/constants';
 
     const dispatch = createEventDispatcher<{
         randomAny: void;

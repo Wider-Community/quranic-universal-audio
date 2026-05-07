@@ -15,18 +15,18 @@
     import { onDestroy } from 'svelte';
 
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
-    import HistoryBatch from '../history/HistoryBatch.svelte';
-    import SplitChainRow from '../history/SplitChainRow.svelte';
     import {
         buildDisplayItems,
         chainedOpIds,
-        flattenBatchesToItems,
-        splitChains,
         type DisplayEntry,
+        editChains,
+        flattenBatchesToItems,
     } from '../../stores/history';
     import { waveformContainer } from '../../stores/playback';
     import { savePreviewData, savePreviewVisible } from '../../stores/save';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
+    import EditChainRow from '../history/EditChainRow.svelte';
+    import HistoryBatch from '../history/HistoryBatch.svelte';
 
     // Derive display entries from the preview data --------------------------
     $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../../lib/types/domain').HistoryBatch[];
@@ -43,7 +43,7 @@
         flatPreviewItems,
         previewBatches,
         'time',
-        $splitChains,
+        $editChains,
         new Set<string>(),
         new Set<string>(),
     ) as DisplayEntry[];
@@ -107,7 +107,7 @@
         {#each displayEntries as entry (entryKey(entry))}
             <div>
                 {#if entry.type === 'chain'}
-                    <SplitChainRow chain={entry.chain} {previewCtx} />
+                    <EditChainRow chain={entry.chain} {previewCtx} />
                 {:else}
                     <HistoryBatch item={entry.item} {previewCtx} />
                 {/if}

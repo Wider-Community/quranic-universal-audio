@@ -26,7 +26,7 @@
  */
 
 import type { SegValAnyItem } from '../../../../lib/types/api';
-import { resolveMergeRedirect, hasMergeRedirect } from '../../stores/merge-redirect';
+import { hasMergeRedirect,resolveMergeRedirect } from '../../stores/merge-redirect';
 
 /**
  * Return only the issues that are still live.

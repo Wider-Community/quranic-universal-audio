@@ -8,14 +8,13 @@ import type { HistoryBatch } from '../../../../lib/types/domain';
 import { selectedReciter } from '../../stores/chapter';
 import { isDirty } from '../../stores/dirty';
 import {
-    buildSplitChains,
-    buildSplitLineage,
+    buildEditChains,
     historyData,
     historyDataStale,
-    restoreSplitChains,
+    restoreEditChains,
+    setEditChains,
     setHistoryVisible,
-    setSplitChains,
-    snapshotSplitChains,
+    snapshotEditChains,
 } from '../../stores/history';
 import { pendingScrollTop } from '../../stores/navigation';
 import { segListElement } from '../../stores/playback';
@@ -29,6 +28,7 @@ import {
     showPreview,
 } from '../../stores/save';
 import { reloadCurrentReciter } from '../data/reciter-actions';
+import { refreshValidation } from '../validation/refresh';
 import { executeSave } from './execute';
 import { buildSavePreviewData } from './preview';
 
@@ -58,17 +58,16 @@ export function showSavePreview(): void {
     const data = buildSavePreviewData();
 
     // Snapshot current split-chain state so hideSavePreview can restore it.
-    // snapshotSplitChains() returns { chains, chainedOpIds }; map to the
-    // SavedChainsSnapshot shape { splitChains, chainedOpIds }.
-    const snap = snapshotSplitChains();
-    savedChains.set({ splitChains: snap.chains, chainedOpIds: snap.chainedOpIds });
+    // snapshotEditChains() returns { chains, chainedOpIds }; map to the
+    // SavedChainsSnapshot shape { editChains, chainedOpIds }.
+    const snap = snapshotEditChains();
+    savedChains.set({ editChains: snap.chains, chainedOpIds: snap.chainedOpIds });
 
-    // Rebuild split chains to include pending batches, push to store so
+    // Rebuild edit chains to include pending batches, push to store so
     // SavePreview.svelte (and HistoryPanel) see the augmented chain map.
     const allBatches = [...(storeGet(historyData)?.batches || []), ...(data.batches as HistoryBatch[])];
-    const splitLineage = buildSplitLineage(allBatches);
-    const built = buildSplitChains(allBatches, splitLineage);
-    setSplitChains(built.chains, built.chainedOpIds);
+    const built = buildEditChains(allBatches);
+    setEditChains(built.chains, built.chainedOpIds);
 
     // Publish preview data to store — SavePreview.svelte renders reactively.
     setSavePreviewData(data);
@@ -85,10 +84,11 @@ export function showSavePreview(): void {
 export function hideSavePreview(restoreScroll = true): void {
     hidePreview();
     clearSavePreviewData();
+    void refreshValidation();
 
     const snap = storeGet(savedChains);
     if (snap) {
-        restoreSplitChains({ chains: snap.splitChains, chainedOpIds: snap.chainedOpIds });
+        restoreEditChains({ chains: snap.editChains, chainedOpIds: snap.chainedOpIds });
         savedChains.set(null);
     }
 

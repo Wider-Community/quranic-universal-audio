@@ -7,12 +7,13 @@
  * owns the store/pending-op transitions and the async commit path.
  */
 
-import { get } from 'svelte/store';
 import { tick } from 'svelte';
+import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
+import { applyCommand } from '../../domain/apply-command';
 import {
     refreshSegInStore,
     segAllData,
@@ -36,7 +37,6 @@ import {
     continuousPlay,
     segAudioElement,
 } from '../../stores/playback';
-import { applyCommand } from '../../domain/apply-command';
 import {
     _advanceRefByOneWord,
     _normalizeRef as _normalizeRefLib,

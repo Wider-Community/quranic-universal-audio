@@ -12,6 +12,7 @@
 import { get } from 'svelte/store';
 
 import type { Segment } from '../../../../lib/types/domain';
+import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,
     invalidateChapterIndexFor,
@@ -23,7 +24,6 @@ import {
     markDirty,
 } from '../../stores/dirty';
 import { clearEdit, setEdit } from '../../stores/edit';
-import { applyCommand } from '../../domain/apply-command';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { formatRef as _formatRefLib, getVerseWordCounts } from '../data/references';
 import { reconcilePlayingAfterMutation } from '../playback/playback';

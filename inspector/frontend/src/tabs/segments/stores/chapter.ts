@@ -33,7 +33,7 @@ export const selectedVerse = writable<string>('');
 /** Full reciter corpus (segments across all chapters). */
 export const segAllData = writable<SegAllResponse | null>(null);
 
-/** Per-chapter loaded data (audio_url, pad_ms, segments). */
+/** Per-chapter loaded data (audio_url, pad fields, segments). */
 export const segData = writable<SegDataState | null>(null);
 
 /** Currently-playing segment index (shared across playback + row/card UI). */

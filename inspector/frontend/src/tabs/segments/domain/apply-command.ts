@@ -19,13 +19,13 @@
  */
 
 import type { EditOp, Segment } from '../../../lib/types/domain';
-import { snapshotSeg } from '../stores/dirty';
 import type { SegSnapshot } from '../stores/dirty';
+import { snapshotSeg } from '../stores/dirty';
 import type { SegmentState } from '../stores/segments';
-import { IssueRegistry } from './registry';
 import type {
     ApplyCommandContext,
     ApplyCommandState,
+    AutoFixMissingWordCommand,
     CommandNextState,
     CommandOperation,
     CommandResult,
@@ -34,12 +34,13 @@ import type {
     IgnoreIssueCommand,
     MergeCommand,
     Operation,
+    QalqalaPadCommand,
     SegmentCommand,
     SegmentPatch,
     SplitCommand,
     TrimCommand,
-    AutoFixMissingWordCommand,
 } from './command';
+import { IssueRegistry } from './registry';
 
 // ---------------------------------------------------------------------------
 // Op-type translation
@@ -58,6 +59,7 @@ const OP_TYPE_BY_COMMAND: Readonly<Record<Operation, string>> = Object.freeze({
     delete: 'delete_segment',
     ignoreIssue: 'ignore_issue',
     autoFixMissingWord: 'auto_fix_missing_word',
+    qalqala_pad: 'qalqala_pad',
 });
 
 const STRUCTURAL_COMMANDS: ReadonlySet<Operation> = new Set([
@@ -65,6 +67,7 @@ const STRUCTURAL_COMMANDS: ReadonlySet<Operation> = new Set([
     'split',
     'merge',
     'delete',
+    'qalqala_pad',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -121,7 +124,7 @@ function _baseOperation(
     const startedAt = _now(ctx);
     const op: CommandOperation = {
         op_id: _newUid(ctx),
-        op_type: OP_TYPE_BY_COMMAND[cmd.type],
+        op_type: OP_TYPE_BY_COMMAND[cmd.type as Operation],
         op_context_category: cmd.contextCategory ?? cmd.sourceCategory ?? null,
         fix_kind: cmd.fixKind ?? (cmd.type === 'ignoreIssue' ? 'ignore'
             : cmd.type === 'autoFixMissingWord' ? 'auto_fix'
@@ -131,8 +134,8 @@ function _baseOperation(
         ready_at_utc: null,
         targets_before: [],
         targets_after: [],
-        type: cmd.type,
-        kind: _kindFor(cmd.type),
+        type: cmd.type as Operation,
+        kind: _kindFor(cmd.type as Operation),
         snapshots: { before: [], after: [] },
         targetSegmentIndex: { chapter, index: targetIndex },
         command: { ...cmd, type: cmd.type },
@@ -530,6 +533,47 @@ function _reduceAutoFixMissingWord(
     };
 }
 
+function _reduceQalqalaPad(
+    state: ApplyCommandState,
+    cmd: QalqalaPadCommand,
+    ctx?: ApplyCommandContext,
+): CommandResult {
+    const target = _findSeg(state, cmd.segmentUid);
+    if (!target) throw new Error(`applyCommand[qalqala_pad]: segment '${cmd.segmentUid}' not found`);
+    const chapter = _chapterFor(target, state);
+
+    const next = _cloneSeg(target);
+    next.time_end = cmd.newTimeEnd;
+    next.confidence = 1.0;
+
+    const op = _baseOperation(cmd, target, chapter, target.index, ctx);
+    op.op_context_category = cmd.contextCategory ?? cmd.sourceCategory ?? 'qalqala';
+    op.fix_kind = cmd.fixKind ?? 'batch_pad';
+    op.snapshots.before = [_snapshot(target)];
+    op.snapshots.after = [_snapshot(next)];
+    op.targets_before = op.snapshots.before;
+    op.targets_after = op.snapshots.after;
+    op.affected_chapters = [chapter];
+
+    const nextState: CommandNextState = {
+        byId: { [next.segment_uid ?? cmd.segmentUid]: next },
+        affectedChapter: chapter,
+    };
+    return {
+        nextState,
+        operation: op,
+        affectedChapters: [chapter],
+        validationDelta: { resolved: ['qalqala'], introduced: [] },
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(next)],
+            [],
+            [],
+            [chapter],
+        ),
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -541,19 +585,21 @@ export function applyCommand(
 ): CommandResult {
     switch (command.type) {
         case 'trim':
-            return _reduceTrim(state, command, ctx);
+            return _reduceTrim(state as ApplyCommandState, command, ctx);
         case 'split':
-            return _reduceSplit(state, command, ctx);
+            return _reduceSplit(state as ApplyCommandState, command, ctx);
         case 'merge':
-            return _reduceMerge(state, command, ctx);
+            return _reduceMerge(state as ApplyCommandState, command, ctx);
         case 'editReference':
-            return _reduceEditReference(state, command, ctx);
+            return _reduceEditReference(state as ApplyCommandState, command, ctx);
         case 'delete':
-            return _reduceDelete(state, command, ctx);
+            return _reduceDelete(state as ApplyCommandState, command, ctx);
         case 'ignoreIssue':
-            return _reduceIgnoreIssue(state, command, ctx);
+            return _reduceIgnoreIssue(state as ApplyCommandState, command, ctx);
         case 'autoFixMissingWord':
-            return _reduceAutoFixMissingWord(state, command, ctx);
+            return _reduceAutoFixMissingWord(state as ApplyCommandState, command, ctx);
+        case 'qalqala_pad':
+            return _reduceQalqalaPad(state as ApplyCommandState, command, ctx);
         default: {
             const _exhaustive: never = command;
             throw new Error(`applyCommand: unsupported command type ${(_exhaustive as { type: string }).type}`);
@@ -573,6 +619,7 @@ export type {
     CommandResult,
     SegmentCommand,
     SegmentPatch,
+    QalqalaPadCommand,
 } from './command';
 
 /** Wire-level shape of the operation record — handed to finalizeOp / save. */

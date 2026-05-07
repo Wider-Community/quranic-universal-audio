@@ -1,13 +1,12 @@
 <script lang="ts">
-    import { get } from 'svelte/store';
     import { createEventDispatcher } from 'svelte';
+    import { get } from 'svelte/store';
 
     import { safePlay } from '../../../lib/utils/audio';
     import { shouldHandleKey } from '../../../lib/utils/keyboard-guard';
     import { wordBoundaryScan } from '../../../lib/utils/word-boundary';
-    import { viewMode, TS_VIEW_MODES } from '../stores/display';
-    import { loadedVerse, selectedReciter } from '../stores/verse';
-
+    import { TS_VIEW_MODES,viewMode } from '../stores/display';
+    import { loadedVerse } from '../stores/verse';
     import type TimestampsAudio from './TimestampsAudio.svelte';
 
     // ---- Props ----

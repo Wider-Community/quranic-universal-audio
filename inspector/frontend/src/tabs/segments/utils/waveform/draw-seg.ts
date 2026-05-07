@@ -119,6 +119,7 @@ export function drawSegBaseAndOverlays(
     _drawSplitHighlight(canvas, visSeg);
     _drawTrimHighlight(canvas, visSeg);
     _drawMergeHighlight(canvas, visSeg);
+    _drawPadHighlight(canvas, visSeg);
 
     canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
     canvas._wfCacheKey = `${startMs}:${endMs}`;
@@ -172,6 +173,7 @@ export function drawSegPlayhead(
 export interface SlicedPeaks {
     maxVals: Float32Array;
     minVals: Float32Array;
+    scale?: number;
 }
 
 /**
@@ -224,6 +226,7 @@ export function drawEditPeakBase(
     ctx.fillStyle = WAVEFORM_FILL_COLOR;
     ctx.fill();
 
+    data.scale = scale;
     return data;
 }
 
@@ -326,7 +329,25 @@ export function _drawSplitHighlight(canvas: SegCanvas, wfSeg: Segment): void {
     if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
 }
 
-/** Draw dim + green overlay on merge result card showing the absorbed segment's range. */
+/** Yellow fill between original segment end and padded preview end (qalqala batch). */
+export function _drawPadHighlight(canvas: SegCanvas, seg: Segment): void {
+    const hl = canvas._padHL;
+    if (!hl) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const dur = seg.time_end - seg.time_start;
+    if (dur <= 0) return;
+    const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
+    const x1 = toX(hl.padStart);
+    const x2 = toX(hl.padEnd);
+    if (x2 <= x1) return;
+    ctx.fillStyle = 'rgba(255, 200, 0, 0.35)';
+    ctx.fillRect(x1, 0, x2 - x1, h);
+}
+
+/** Draw yellow cursor on merge result card showing the point of merge. */
 export function _drawMergeHighlight(canvas: SegCanvas, seg: Segment): void {
     const hl = canvas._mergeHL;
     if (!hl) return;
@@ -337,13 +358,20 @@ export function _drawMergeHighlight(canvas: SegCanvas, seg: Segment): void {
     if (dur <= 0) return;
     const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
 
-    const x1 = toX(hl.hlStart);
-    const x2 = toX(hl.hlEnd);
+    const x = toX(hl.mergePoint);
 
-    ctx.fillStyle = WAVEFORM_DIM_OVERLAY_COLOR;
-    if (x1 > 0) ctx.fillRect(0, 0, x1, h);
-    if (x2 < w) ctx.fillRect(x2, 0, w - x2, h);
+    ctx.strokeStyle = '#eab308'; // yellow-500
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
 
-    ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
-    if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
+    ctx.fillStyle = '#eab308';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, 0);
+    ctx.lineTo(x + 4, 0);
+    ctx.lineTo(x, 6);
+    ctx.closePath();
+    ctx.fill();
 }

@@ -1,9 +1,9 @@
 import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import type {
+    EditChain,
+    EditChainOp,
     HistorySnapshot,
     OpFlatItem,
-    SplitChain,
-    SplitChainOp,
 } from '../../types/segments';
 import { deriveOpIssueDelta, usesStoredClassifiedIssues } from '../validation/classified-issues';
 
@@ -13,11 +13,11 @@ import { deriveOpIssueDelta, usesStoredClassifiedIssues } from '../validation/cl
 export { usesStoredClassifiedIssues };
 
 // Re-export for consumers that want these types from a utils path.
-export type { HistorySnapshot, OpFlatItem, SplitChain, SplitChainOp };
+export type { HistorySnapshot, OpFlatItem, EditChain, EditChainOp };
 
 /** Display entry produced by `buildDisplayItems` for the batches list. */
 export type DisplayEntry =
-    | { type: 'chain'; chain: SplitChain; date: string }
+    | { type: 'chain'; chain: EditChain; date: string }
     | { type: 'op-item'; item: OpFlatItem; date: string };
 
 /** Flat history summary returned by `computeFilteredSummary`. */
@@ -31,9 +31,10 @@ export interface FilteredItemSummary {
 
 /** Short-label dictionary for issue-delta badges (preserved verbatim). */
 export const SHORT_LABELS: Record<string, string> = {
-    failed: 'fail', low_confidence: 'low conf', boundary_adj: 'boundary',
-    cross_verse: 'cross', missing_words: 'gaps', audio_bleeding: 'bleed',
-    repetitions: 'reps', muqattaat: 'muqattaat', qalqala: 'qalqala',
+    failed: 'fail', low_confidence: 'low conf', low_confidence_v2: 'low conf',
+    boundary_adj: 'boundary', cross_verse: 'cross', missing_words: 'gaps',
+    audio_bleeding: 'bleed', repetitions: 'reps', muqattaat: 'muqattaat',
+    qalqala: 'qalqala',
 };
 
 export function versesFromRef(ref: string | null | undefined): string[] {
@@ -162,11 +163,11 @@ export function itemMatchesCatFilter(item: OpFlatItem, cats: Set<string>): boole
     return false;
 }
 
-export function chainMatchesOpFilter(chain: SplitChain, opTypes: Set<string>): boolean {
+export function chainMatchesOpFilter(chain: EditChain, opTypes: Set<string>): boolean {
     return chain.ops.some(({ op }) => opTypes.has(op.op_type));
 }
 
-export function chainMatchesCatFilter(chain: SplitChain, cats: Set<string>): boolean {
+export function chainMatchesCatFilter(chain: EditChain, cats: Set<string>): boolean {
     const ops = chain.ops.map(co => co.op);
     for (const op of ops) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
     const delta = deriveOpIssueDelta(ops);
@@ -221,7 +222,7 @@ export function buildDisplayItems(
     items: OpFlatItem[],
     batches: HistoryBatch[],
     mode: 'time' | 'quran',
-    chains: Map<string, SplitChain> | null,
+    chains: Map<string, EditChain> | null,
     fOpTypes: Set<string>,
     fErrCats: Set<string>,
 ): DisplayEntry[] {

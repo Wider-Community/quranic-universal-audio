@@ -27,7 +27,7 @@ def _check_structural_errors(reciter: str, entries: list[dict]) -> tuple[list, l
     missing_verses: list[dict] = []
     stats: dict | None = None
 
-    verses, pad_ms = load_seg_verses(reciter)
+    verses, pad_left_ms, pad_right_ms, _floor = load_seg_verses(reciter)
     if not verses:
         return errors, missing_verses, stats
 
@@ -89,7 +89,7 @@ def _check_structural_errors(reciter: str, entries: list[dict]) -> tuple[list, l
                 if next_t_from < t_to:
                     errors.append({"verse_key": verse_key, "chapter": surah, "segment_uid": None, "msg": "time overlap"})
                 else:
-                    true_pause = (next_t_from - t_to) + 2 * pad_ms
+                    true_pause = (next_t_from - t_to) + pad_left_ms + pad_right_ms
                     pause_durations.append(true_pause)
 
     # Missing verses — derive covered surahs from segments.json keys

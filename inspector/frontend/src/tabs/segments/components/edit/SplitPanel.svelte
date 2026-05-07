@@ -21,7 +21,7 @@
     import { get } from 'svelte/store';
 
     import type { Segment } from '../../../../lib/types/domain';
-    import { editingMountId, splitState, editStatusText } from '../../stores/edit';
+    import { editingMountId, editStatusText,splitState } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';

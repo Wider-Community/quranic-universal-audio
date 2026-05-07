@@ -1,6 +1,7 @@
 // Save payload shape tests (MUST-1 contract).
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 describe('save payload shape', () => {
@@ -26,7 +27,7 @@ describe('save payload shape', () => {
   });
 
   it('save payload built from CommandResult includes all expected fields', async () => {
-    const exec = await loadOptional<any>('../../utils/save/execute');
+    const exec = await loadOptional<any>('../../utils/save/payload');
     if (!exec) throw new Error('phase-3: build helper not yet present');
     const result = {
       operation: { op_id: 'x', type: 'trim', snapshots: { before: {}, after: {} }, affected_chapters: [1] },

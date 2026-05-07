@@ -5,7 +5,8 @@
 // before any chapter+index lookup. Stale uids (absent from current state)
 // return null even when seg_index would resolve.
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { afterAll,beforeAll, describe, expect, it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const resolve = await loadOptional<any>('../../utils/validation/resolve-issue');
@@ -33,6 +34,9 @@ async function setupStore(): Promise<(() => void) | null> {
     audio_by_chapter: {},
     verse_word_counts: {},
     pad_ms: 0,
+    pad_left_ms: 0,
+    pad_right_ms: 0,
+    min_silence_floor_ms: 0,
   });
   return () => segAllData.set(null);
 }

@@ -9,6 +9,7 @@ export const ALL_CATEGORIES = [
   'missing_words',
   'structural_errors',
   'low_confidence',
+  'low_confidence_v2',
   'repetitions',
   'audio_bleeding',
   'boundary_adj',
@@ -22,6 +23,7 @@ export type CategoryName = typeof ALL_CATEGORIES[number];
 export const PER_SEGMENT_CATEGORIES: CategoryName[] = [
   'failed',
   'low_confidence',
+  'low_confidence_v2',
   'repetitions',
   'audio_bleeding',
   'boundary_adj',
@@ -32,6 +34,7 @@ export const PER_SEGMENT_CATEGORIES: CategoryName[] = [
 
 export const CAN_IGNORE_CATEGORIES: CategoryName[] = [
   'low_confidence',
+  'low_confidence_v2',
   'repetitions',
   'audio_bleeding',
   'boundary_adj',
@@ -46,6 +49,7 @@ export const AUTO_SUPPRESS_CATEGORIES: CategoryName[] = [
   'missing_verses',
   'structural_errors',
   'low_confidence',
+  'low_confidence_v2',
   'repetitions',
   'audio_bleeding',
   'boundary_adj',

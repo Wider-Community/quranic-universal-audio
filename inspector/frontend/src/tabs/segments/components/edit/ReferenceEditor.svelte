@@ -13,29 +13,70 @@
      * can retry. On the next keystroke the red state clears.
      */
 
+    import { createEventDispatcher,onMount } from 'svelte';
     import { get } from 'svelte/store';
-    import { onMount } from 'svelte';
 
+    import { fetchJson } from '../../../../lib/api';
+    import type { SegResolveRefResponse } from '../../../../lib/types/api';
+    import type { Segment } from '../../../../lib/types/domain';
     import { segAllData } from '../../stores/chapter';
     import { setPendingOp } from '../../stores/dirty';
     import {
         clearEdit,
         pendingChainTarget,
     } from '../../stores/edit';
+    import { _normalizeRef, formatRef, getVerseWordCounts } from '../../utils/data/references';
     import {
         commitRefEdit,
         consumePendingInitialSelection,
         consumePendingInitialValue,
     } from '../../utils/edit/reference';
-    import { formatRef } from '../../utils/data/references';
-    import type { Segment } from '../../../../lib/types/domain';
 
     export let seg: Segment;
+
+    const dispatch = createEventDispatcher<{
+        preview: { text: string; ref: string } | null;
+    }>();
 
     let inputEl: HTMLInputElement | undefined;
     let value = consumePendingInitialValue() ?? formatRef(seg.matched_ref, get(segAllData)?.verse_word_counts);
     let committed = false;
     let invalid = false;
+
+    let fetchTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFetchedValue = '';
+
+    $: {
+        const currentVal = value.trim();
+        if (currentVal && currentVal !== lastFetchedValue) {
+            if (fetchTimer) clearTimeout(fetchTimer);
+            fetchTimer = setTimeout(() => {
+                void fetchPreview(currentVal);
+            }, 300);
+        }
+    }
+
+    async function fetchPreview(candidate: string) {
+        lastFetchedValue = candidate;
+        const vwc = getVerseWordCounts();
+        const normalized = _normalizeRef(candidate, vwc);
+        if (!normalized) {
+            dispatch('preview', null);
+            return;
+        }
+        try {
+            const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
+                `/api/seg/resolve_ref?ref=${encodeURIComponent(normalized)}`,
+            );
+            if (data.text && !data.error) {
+                dispatch('preview', { text: data.display_text || data.text, ref: normalized });
+            } else {
+                dispatch('preview', null);
+            }
+        } catch (_e) {
+            dispatch('preview', null);
+        }
+    }
 
     onMount(() => {
         inputEl?.focus();
@@ -72,6 +113,7 @@
         setPendingOp(null);
         pendingChainTarget.set(null);
         clearEdit();
+        dispatch('preview', null);
     }
 
     function onKeydown(e: KeyboardEvent): void {

@@ -23,6 +23,7 @@ def classify_snapshot(
     canonical: dict | None = None,
     entry_ref: str = "",
     is_by_ayah: bool = False,
+    probe_failed_uids: set | None = None,
 ) -> list[str]:
     """Classify a snapshot dict and return its category list.
 
@@ -31,6 +32,10 @@ def classify_snapshot(
     routing context), so ``audio_bleeding`` is unreachable from a bare
     snapshot — pass ``entry_ref`` and ``is_by_ayah=True`` when callers
     want the audio-bleeding signal too.
+
+    ``probe_failed_uids`` mirrors the per-segment classifier kwarg —
+    snapshots carry ``segment_uid``, so the *Low Confidence v2* category
+    can resolve cleanly against the same sidecar uid set.
 
     Returns categories in registry-declared order.
     """
@@ -42,6 +47,7 @@ def classify_snapshot(
         is_by_ayah=is_by_ayah,
         single_word_verses=single_word_verses,
         canonical=canonical,
+        probe_failed_uids=probe_failed_uids,
     )
 
 

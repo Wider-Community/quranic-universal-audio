@@ -15,19 +15,19 @@
      * only when at least one filter is active.
      */
 
-    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import {
         buildDisplayItems,
         clearFilters,
+        editChains,
         filterErrCats,
         filterOpTypes,
         flatItems,
         historyData,
         setSortMode,
         sortMode,
-        splitChains,
         toggleFilter,
     } from '../../stores/history';
+    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
     // Derived pill data ------------------------------------------------------
@@ -38,7 +38,7 @@
             $flatItems,
             $historyData.batches,
             'time',
-            $splitChains,
+            $editChains,
             new Set(),
             new Set()
         );
@@ -78,7 +78,7 @@
             $flatItems,
             $historyData.batches,
             'time',
-            $splitChains,
+            $editChains,
             new Set(), // No op-type filter
             $filterErrCats // Respect active category filter
         );
@@ -104,7 +104,7 @@
             $flatItems,
             $historyData.batches,
             'time',
-            $splitChains,
+            $editChains,
             $filterOpTypes, // Respect active op-type filter
             new Set() // No category filter
         );

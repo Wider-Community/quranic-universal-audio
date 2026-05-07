@@ -11,17 +11,17 @@
 
     import { afterUpdate } from 'svelte';
 
-    import SegmentRow from '../list/SegmentRow.svelte';
-    import HistoryArrows from './HistoryArrows.svelte';
-    import { EDIT_OP_LABELS } from '../../utils/constants';
-    import { onOpUndoClick } from '../../utils/save/undo';
+    import type { EditOp } from '../../../../lib/types/domain';
     import {
-        snapToSeg,
         type HistorySnapshot,
+        snapToSeg,
     } from '../../stores/history';
     import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
-    import type { EditOp } from '../../../../lib/types/domain';
+    import { EDIT_OP_LABELS } from '../../utils/constants';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
+    import { onOpUndoClick } from '../../utils/save/undo';
+    import SegmentRow from '../list/SegmentRow.svelte';
+    import HistoryArrows from './HistoryArrows.svelte';
 
     // Props ------------------------------------------------------------------
 
@@ -109,7 +109,8 @@
         if (diff.before.length !== 2 || diff.after.length !== 1) return null;
         if (!primary.merge_direction) return null;
         const hlSnap = primary.merge_direction === 'prev' ? diff.before[1]! : diff.before[0]!;
-        const hl: MergeHighlight = { hlStart: hlSnap.time_start, hlEnd: hlSnap.time_end };
+        const mergePoint = primary.merge_direction === 'prev' ? hlSnap.time_start : hlSnap.time_end;
+        const hl: MergeHighlight = { mergePoint };
         return hl;
     })();
 

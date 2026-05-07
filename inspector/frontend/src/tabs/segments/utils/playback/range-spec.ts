@@ -11,8 +11,8 @@
  *     only; accordion plays always stop at `time_end`.
  */
 
-import type { Segment } from '../../../../lib/types/domain';
 import type { AudioRangeSpec, RangePolicy } from '../../../../lib/playback/audio-range';
+import type { Segment } from '../../../../lib/types/domain';
 import { AUTOPLAY_GAP_PAUSE_MS } from '../constants';
 import { nextDisplayedSeg } from './prefetch';
 

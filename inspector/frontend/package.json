@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.{ts,js}\"",
+    "lint": "eslint \"src/**/*.{ts,js,svelte}\"",
     "format": "prettier --write \"src/**/*.{ts,js,css,html}\"",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
@@ -24,7 +24,7 @@
     "@testing-library/svelte": "^5.3.1",
     "@tsconfig/svelte": "^5",
     "@types/node": "^22.0.0",
-    "@vitest/ui": "^4.1.4",
+    "@vitest/ui": "^3.2.4",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-import-resolver-typescript": "^4.4.4",
@@ -38,6 +38,6 @@
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.0.0",
     "vite": "^5.4.0",
-    "vitest": "^4.1.4"
+    "vitest": "^3.2.4"
   }
 }

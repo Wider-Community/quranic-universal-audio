@@ -3,9 +3,10 @@
 // asserts that only the discarded ops' effects are reverted while other
 // pending ops survive both in `_opLog` and in `segAllData`.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get as storeGet } from 'svelte/store';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/domain';
 import { segAllData } from '../../stores/chapter';
 import {
     clearDirtyMap,
@@ -16,7 +17,6 @@ import {
     markDirty,
 } from '../../stores/dirty';
 import { onPendingOpsDiscard } from '../../utils/save/undo';
-import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/domain';
 
 function makeSeg(overrides: Partial<Segment> & { segment_uid: string; chapter: number; time_start: number }): Segment {
     return {

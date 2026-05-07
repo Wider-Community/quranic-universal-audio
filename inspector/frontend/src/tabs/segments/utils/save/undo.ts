@@ -8,6 +8,7 @@ import type {
 } from '../../../../lib/types/api';
 import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import { surahOptionText } from '../../../../lib/utils/surah-info';
+import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import { segAllData, selectedReciter } from '../../stores/chapter';
 import {
     getChapterOps,
@@ -17,15 +18,13 @@ import {
 } from '../../stores/dirty';
 import { pendingChainTarget } from '../../stores/edit';
 import {
-    buildSplitChains,
-    buildSplitLineage,
+    buildEditChains,
+    type EditChain,
     historyData,
     historyDataStale,
-    setSplitChains,
-    type SplitChain,
+    setEditChains,
 } from '../../stores/history';
 import { setSavePreviewData } from '../../stores/save';
-import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import { renderEditHistoryPanel } from '../history/render';
 import { buildSavePreviewData, hideSavePreview } from './actions';
 
@@ -33,7 +32,7 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 // _afterUndoSuccess -- shared post-undo refresh
 // ---------------------------------------------------------------------------
 
-export async function _afterUndoSuccess(reciter: string, opsReversed: number): Promise<void> {
+export async function _afterUndoSuccess(reciter: string, _opsReversed: number): Promise<void> {
     pendingChainTarget.set(null);
 
     try {
@@ -125,7 +124,7 @@ export async function onOpUndoClick(batchId: string, opIds: string[], btn: HTMLB
 // _getChainBatchIds
 // ---------------------------------------------------------------------------
 
-export function _getChainBatchIds(chain: SplitChain): string[] {
+export function _getChainBatchIds(chain: EditChain): string[] {
     const seen = new Set<string>();
     const ids: string[] = [];
     for (let i = chain.ops.length - 1; i >= 0; i--) {
@@ -263,8 +262,7 @@ export function onPendingOpsDiscard(
     }
     const data = buildSavePreviewData();
     const allBatches = [...(storeGet(historyData)?.batches || []), ...(data.batches as HistoryBatch[])];
-    const splitLineage = buildSplitLineage(allBatches);
-    const built = buildSplitChains(allBatches, splitLineage);
-    setSplitChains(built.chains, built.chainedOpIds);
+    const built = buildEditChains(allBatches);
+    setEditChains(built.chains, built.chainedOpIds);
     setSavePreviewData(data);
 }

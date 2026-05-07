@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
 
-import { buildTimestampsRangeSpec } from '../range-spec';
 import type { TsLoopTarget } from '../../stores/playback';
 import type { TsLoadedVerse } from '../../stores/verse';
+import { buildTimestampsRangeSpec } from '../range-spec';
 
 const loaded = (overrides: Partial<TsLoadedVerse> = {}): TsLoadedVerse => ({
     data: { ref: '1:1', words: [] } as unknown as TsLoadedVerse['data'],

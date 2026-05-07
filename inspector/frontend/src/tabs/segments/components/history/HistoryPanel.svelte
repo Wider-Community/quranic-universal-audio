@@ -30,32 +30,32 @@
     import { onDestroy, onMount } from 'svelte';
 
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
-    import HistoryBatch from './HistoryBatch.svelte';
-    import HistoryFilters from './HistoryFilters.svelte';
-    import SplitChainRow from './SplitChainRow.svelte';
-    import { waveformContainer } from '../../stores/playback';
-    import { createPreviewPlaybackContext } from '../../utils/playback/preview';
-    import { VIRT_BUFFER_ROWS } from '../../utils/constants';
-    import {
-        bottomSpacerValue,
-        findIdxAtOffset,
-        rebuildCumHeights,
-        topSpacerValue,
-    } from '../list/virtualization';
     import {
         buildDisplayItems,
         computeFilteredSummary,
         countVersesFromBatches,
+        type DisplayEntry,
+        editChains,
+        type FilteredItemSummary,
         filterErrCats,
         filterOpTypes,
         flatItems,
         historyData,
         historyVisible,
         sortMode,
-        splitChains,
-        type DisplayEntry,
-        type FilteredItemSummary,
     } from '../../stores/history';
+    import { waveformContainer } from '../../stores/playback';
+    import { VIRT_BUFFER_ROWS } from '../../utils/constants';
+    import { createPreviewPlaybackContext } from '../../utils/playback/preview';
+    import {
+        bottomSpacerValue,
+        findIdxAtOffset,
+        rebuildCumHeights,
+        topSpacerValue,
+    } from '../list/virtualization';
+    import EditChainRow from './EditChainRow.svelte';
+    import HistoryBatch from './HistoryBatch.svelte';
+    import HistoryFilters from './HistoryFilters.svelte';
 
     // Filtered flat items -----------------------------------------------------
     $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0;
@@ -65,7 +65,7 @@
         $flatItems,
         $historyData.batches,
         $sortMode,
-        $splitChains,
+        $editChains,
         $filterOpTypes,
         $filterErrCats,
     );
@@ -301,7 +301,7 @@
             {#each visibleEntries as entry (entryKey(entry))}
                 <div use:observeEntry={entryKey(entry)}>
                     {#if entry.type === 'chain'}
-                        <SplitChainRow chain={entry.chain} {previewCtx} />
+                        <EditChainRow chain={entry.chain} {previewCtx} />
                     {:else}
                         <HistoryBatch item={entry.item} {previewCtx} />
                     {/if}

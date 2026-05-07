@@ -21,6 +21,7 @@ import {
 } from '../../stores/dirty';
 import { clearEdit } from '../../stores/edit';
 import { setHistoryData, setHistoryVisible } from '../../stores/history';
+import { clearMergeRedirects } from '../../stores/merge-redirect';
 import {
     continuousPlay,
     playEndMs,
@@ -37,7 +38,6 @@ import { clearAudioCachePollTimer } from '../playback/audio-cache-ui';
 import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { clearRowRegistry } from '../playback/row-registry';
 import { resetWaveformState } from '../waveform/utils';
-import { clearMergeRedirects } from '../../stores/merge-redirect';
 
 export function clearPerReciterState(): void {
     resetWaveformState();

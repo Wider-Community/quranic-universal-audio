@@ -1,6 +1,7 @@
 // Phase 6: filterStaleIssues helper.
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { loadOptional } from '../helpers/optional';
 
 const stale = await loadOptional<any>('../../utils/validation/stale');

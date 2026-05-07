@@ -10,6 +10,7 @@
      */
 
     import { onMount } from 'svelte';
+
     import type { PeakBucket } from '../types/domain';
     import { drawWaveformPeaks } from '../utils/waveform-draw';
 
