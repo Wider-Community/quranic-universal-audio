@@ -42,13 +42,26 @@
         ? buildCharts(data.vad_params ?? { min_silence_ms: VAD_MIN_SILENCE_FALLBACK_MS })
         : [];
 
-    function buildCharts(vad: { min_silence_ms: number }): ChartCfg[] {
+    function buildCharts(vad: {
+        min_silence_ms: number;
+        min_silence_floor_ms?: number;
+    }): ChartCfg[] {
+        const refLines = [
+            { value: vad.min_silence_ms, label: 'threshold' },
+        ];
+        if (vad.min_silence_floor_ms && vad.min_silence_floor_ms > 0) {
+            refLines.push({
+                value: vad.min_silence_floor_ms,
+                label: 'floor',
+                color: '#9c27b0',
+                dash: [2, 4],
+            } as never);
+        }
         return [
             {
                 key: 'pause_duration_ms',
                 title: 'Pause Duration (ms)',
-                refLine: vad.min_silence_ms,
-                refLabel: 'threshold',
+                refLines,
                 barColor: (bin) => bin < vad.min_silence_ms ? '#666' : '#4cc9f0',
                 formatBin: v => v >= 3000 ? '3000+' : String(v),
             },

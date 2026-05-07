@@ -24,6 +24,7 @@ from services.data_loader import (
     dk_text_for_ref,
     get_word_counts,
     load_detailed,
+    resolve_pad,
 )
 from services.segments_query import get_chapter_data
 from utils.formatting import slug_to_name
@@ -152,9 +153,14 @@ def seg_all(reciter):
     for (surah, ayah), n in get_word_counts().items():
         verse_word_counts[f"{surah}:{ayah}"] = n
 
+    pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(
+        cache.get_seg_meta(reciter)
+    )
     return jsonify({
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "verse_word_counts": verse_word_counts,
-        "pad_ms": cache.get_seg_meta(reciter).get("pad_ms", 0),
+        "pad_left_ms": pad_left_ms,
+        "pad_right_ms": pad_right_ms,
+        "min_silence_floor_ms": min_silence_floor_ms,
     })

@@ -119,7 +119,9 @@ export interface SegAllResponse {
     segments: Segment[];
     audio_by_chapter: Record<string, string>;
     verse_word_counts: Record<VerseRef, number>;
-    pad_ms: number;
+    pad_left_ms: number;
+    pad_right_ms: number;
+    min_silence_floor_ms: number;
 }
 
 // ===========================================================================
@@ -309,7 +311,14 @@ export interface SegValidateResponse {
 /** GET /api/seg/stats/:reciter — distributions + percentiles. Shape varies. */
 export interface SegStatsResponse {
     distributions?: Record<string, { bins: number[]; counts: number[]; percentiles?: Record<string, number> }>;
-    vad_params?: { min_silence_ms: number; [k: string]: unknown };
+    vad_params?: {
+        min_silence_ms: number;
+        min_speech_ms?: number;
+        pad_left_ms?: number;
+        pad_right_ms?: number;
+        min_silence_floor_ms?: number;
+        [k: string]: unknown;
+    };
     [k: string]: unknown;
 }
 

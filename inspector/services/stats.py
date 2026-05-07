@@ -60,7 +60,7 @@ def compute_stats(reciter: str) -> dict | None:
 
     Returns a dict suitable for ``jsonify()`` or ``None`` if reciter not found.
     """
-    verses, pad_ms = load_seg_verses(reciter)
+    verses, pad_left_ms, pad_right_ms, min_silence_floor_ms = load_seg_verses(reciter)
     if not verses:
         return None
 
@@ -90,7 +90,7 @@ def compute_stats(reciter: str) -> dict | None:
             t_to = entry_segs[i].get("time_end", 0)
             next_t_from = entry_segs[i + 1].get("time_start", 0)
             if next_t_from > t_to:
-                true_pause = (next_t_from - t_to) + 2 * pad_ms
+                true_pause = (next_t_from - t_to) + pad_left_ms + pad_right_ms
                 pause_durations.append(true_pause)
 
     spv_values = list(segs_per_verse.values())
@@ -146,7 +146,9 @@ def compute_stats(reciter: str) -> dict | None:
     vad_params = {
         "min_silence_ms": meta.get("min_silence_ms", 0),
         "min_speech_ms": meta.get("min_speech_ms", 0),
-        "pad_ms": pad_ms,
+        "pad_left_ms": pad_left_ms,
+        "pad_right_ms": pad_right_ms,
+        "min_silence_floor_ms": min_silence_floor_ms,
     }
 
     return {

@@ -46,6 +46,9 @@ export const SHORT_SEG_WARN_MS = 1000;
 /** VAD min-silence fallback when server does not provide the value. */
 export const VAD_MIN_SILENCE_FALLBACK_MS = 300;
 
+/** VAD min-silence-floor fallback (0 = pre-feature reciters had no daylight guarantee). */
+export const VAD_MIN_SILENCE_FLOOR_FALLBACK_MS = 0;
+
 /** ArrowLeft / ArrowRight audio seek delta, in seconds. */
 export const KEY_SEEK_SECONDS = 3;
 

@@ -59,7 +59,7 @@ describe.skipIf(!segmentsStore || !chapterStore)('segmentsStore load-path wiring
       { ...makeSegment(0, 0, 1000, { segment_uid: 'load-uid-1' }), chapter: 7 },
       { ...makeSegment(1, 1000, 2000, { segment_uid: 'load-uid-2' }), chapter: 7 },
     ];
-    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, pad_ms: 0 });
+    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, verse_word_counts: {}, pad_left_ms: 0, pad_right_ms: 0, min_silence_floor_ms: 0 });
     chapterStore.selectedChapter.set('7');
     const state: any = get(store);
     expect(Object.keys(state.byId).sort()).toEqual(['load-uid-1', 'load-uid-2']);
@@ -88,14 +88,14 @@ describe.skipIf(!filtersStore || !chapterStore)('derivedTimings (silence_after d
       { ...makeSegment(1, 1500, 2500, { segment_uid: 't-uid-2' }), chapter: 1, audio_url: audio, entry_idx: 0 },
       { ...makeSegment(2, 3000, 4000, { segment_uid: 't-uid-3' }), chapter: 1, audio_url: audio, entry_idx: 0 },
     ];
-    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, pad_ms: 100 });
+    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, verse_word_counts: {}, pad_left_ms: 100, pad_right_ms: 100, min_silence_floor_ms: 0 });
     const map: any = get(filtersStore.derivedTimings);
     expect(map.get('t-uid-1')).toEqual({
-      silence_after_ms: (1500 - 1000) + 2 * 100,
+      silence_after_ms: (1500 - 1000) + 200,
       silence_after_raw_ms: 1500 - 1000,
     });
     expect(map.get('t-uid-2')).toEqual({
-      silence_after_ms: (3000 - 2500) + 2 * 100,
+      silence_after_ms: (3000 - 2500) + 200,
       silence_after_raw_ms: 3000 - 2500,
     });
     // Last segment in the entry has no "next" -> null timing.
@@ -111,7 +111,7 @@ describe.skipIf(!filtersStore || !chapterStore)('derivedTimings (silence_after d
       { ...makeSegment(0, 0, 1000, { segment_uid: 'x-uid-1' }), chapter: 1, audio_url: 'a', entry_idx: 0 },
       { ...makeSegment(1, 1500, 2500, { segment_uid: 'x-uid-2' }), chapter: 1, audio_url: 'b', entry_idx: 0 },
     ];
-    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, pad_ms: 0 });
+    chapterStore.segAllData.set({ segments: segs, audio_by_chapter: {}, verse_word_counts: {}, pad_left_ms: 0, pad_right_ms: 0, min_silence_floor_ms: 0 });
     const map: any = get(filtersStore.derivedTimings);
     expect(map.get('x-uid-1')?.silence_after_ms).toBeNull();
     chapterStore.segAllData.set(null);
