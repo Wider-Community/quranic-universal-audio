@@ -10,6 +10,7 @@ def register_blueprints(app):
     from routes.peaks import peaks_bp
     from routes.audio_proxy import audio_proxy_bp
     from routes.audio_metadata import audio_meta_bp
+    from routes.segment_clip import segment_clip_bp
 
     app.register_blueprint(ts_bp)
     app.register_blueprint(seg_data_bp)
@@ -18,3 +19,4 @@ def register_blueprints(app):
     app.register_blueprint(peaks_bp)
     app.register_blueprint(audio_proxy_bp)
     app.register_blueprint(audio_meta_bp)
+    app.register_blueprint(segment_clip_bp)
