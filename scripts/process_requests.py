@@ -28,8 +28,10 @@ Usage:
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -377,22 +379,33 @@ def cmd_generate_pbs(args):
         return
 
     print(f"\nGenerating PBS for {len(accepted)} reciter(s):\n")
-    print(f"  {'Reciter':<40} {'Silence':>8} {'Speech':>8} {'Pad':>6} {'Source'}")
-    print(f"  {'-'*40} {'-'*8} {'-'*8} {'-'*6} {'-'*20}")
+    hdr = f"  {'Reciter':<40} {'Sil':>5} {'Spch':>5} {'L':>4} {'R':>4} {'Flr':>4} {'Source'}"
+    print(hdr)
+    print(f"  {'-'*40} {'-'*5} {'-'*5} {'-'*4} {'-'*4} {'-'*4} {'-'*20}")
 
     pbs_entries = []
     for i, req in enumerate(accepted):
-        silence, speech, pad = derive_vad_params(req["min_silence"], req["slug"])
+        silence, speech, pad_l, pad_r, floor = derive_vad_params(
+            req["min_silence"], req["slug"]
+        )
         req["min_speech"] = speech
-        req["pad"] = pad
+        req["pad_left"] = pad_l
+        req["pad_right"] = pad_r
+        req["min_silence_floor"] = floor
         req["pbs_index"] = i + 1
 
-        entry = f'    "{req["slug"]},{silence},{speech},{pad},,{req["source"]}"'
+        entry = (
+            f'    "{req["slug"]},{silence},{speech},'
+            f'{pad_l},{pad_r},{floor},,{req["source"]}"'
+        )
         pbs_entries.append(entry)
-        print(f"  {req['name']:<40} {silence:>8} {speech:>8} {pad:>6} {req['source']}")
+        print(
+            f"  {req['name']:<40} {silence:>5} {speech:>5} "
+            f"{pad_l:>4} {pad_r:>4} {floor:>4} {req['source']}"
+        )
 
     # Rewrite PBS file
-    pbs_path = REPO_ROOT / "jobs" / "extract_segments.pbs"
+    pbs_path = REPO_ROOT / ".local" / "extraction" / "extract_segments.pbs"
     if not pbs_path.exists():
         print(f"\nERROR: PBS file not found at {pbs_path}")
         return
@@ -420,8 +433,8 @@ def cmd_generate_pbs(args):
     print(f"\nPBS file updated: {pbs_path}")
     print(f"Array range: 1-{len(accepted)}")
     print("\nReview the PBS file, then submit:")
-    print("  bash scripts/sync_mfa.sh")
-    print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub jobs/extract_segments.pbs"')
+    print("  bash .local/extraction/sync_mfa.sh")
+    print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub .local/extraction/extract_segments.pbs"')
 
     # Receipt emails are now sent at form submission (HF Space),
     # not here.  Use `notify receipt` to manually re-send if needed.
@@ -643,6 +656,19 @@ def cmd_prepare_pr(args):
             req["pr_url"] = pr_url
             pr_number = int(pr_url.rstrip("/").split("/")[-1])
 
+            # Trigger validation workflow (bot PRs don't fire pull_request events)
+            try:
+                subprocess.run(
+                    ["gh", "workflow", "run", "validate-segments-pr.yml",
+                     "-f", f"reciters={req['slug']}",
+                     "-f", f"pr_number={pr_number}",
+                     "-f", f"ref={branch}"],
+                    cwd=str(REPO_ROOT), capture_output=True, text=True, check=True,
+                )
+                print(f"    Triggered validation for PR #{pr_number}")
+            except Exception as e:
+                print(f"    Warning: failed to trigger validation: {e}")
+
             # Link PR to issue via Development sidebar + update status
             if req.get("issue_number"):
                 try:
@@ -662,32 +688,11 @@ def cmd_prepare_pr(args):
                 except Exception:
                     pass
 
-            # Comment on the issue linking to the PR
-            has_reviewer = req.get("review_opt_in") and req.get("github_username")
-            try:
-                if has_reviewer:
-                    comment_body = (
-                        f"Draft PR created: {pr_url}\n\n"
-                        f"@{req['github_username']}, checkout the branch and "
-                        f"run the Inspector to review segments."
-                    )
-                else:
-                    comment_body = (
-                        f"Draft PR created: {pr_url}\n\n"
-                        f"This request needs a reviewer. If you'd like to help, "
-                        f"comment `/claim` on this issue to get assigned."
-                    )
-                gh_comment_on_issue(req["issue_number"], comment_body)
-            except Exception as e:
-                print(f"    Warning: failed to comment on issue: {e}")
-
             # Invite collaborator and assign to issue + PR if requester opted to review
+            has_reviewer = req.get("review_opt_in") and req.get("github_username")
             collab_status = "passive"
             if has_reviewer:
                 collab_status = gh_invite_collaborator(req["github_username"])
-                # Assign reviewer to issue + PR (may silently fail for
-                # newly-invited users — collaborator-accepted.yml handles
-                # assignment once they accept the invite)
                 for target, cmd in [
                     (f"issue #{req['issue_number']}",
                      ["gh", "issue", "edit", str(req["issue_number"]),
@@ -702,6 +707,31 @@ def cmd_prepare_pr(args):
                         print(f"    Assigned @{req['github_username']} to {target}")
                     except Exception as e:
                         print(f"    Warning: failed to assign to {target}: {e}")
+
+            # Comment on the issue linking to the PR
+            try:
+                if has_reviewer and collab_status == "existing":
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"@{req['github_username']}, checkout the branch and "
+                        f"run the Inspector to review segments."
+                    )
+                elif has_reviewer and collab_status == "invited":
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"@{req['github_username']}, a collaborator invite has been sent. "
+                        f"Please [accept the invite](https://github.com/Wider-Community/quranic-universal-audio/invitations), "
+                        f"then comment `/confirm` to get assigned."
+                    )
+                else:
+                    comment_body = (
+                        f"Draft PR created: {pr_url}\n\n"
+                        f"This request needs a reviewer. If you'd like to help, "
+                        f"comment `/claim` on this issue to get assigned."
+                    )
+                gh_comment_on_issue(req["issue_number"], comment_body)
+            except Exception as e:
+                print(f"    Warning: failed to comment on issue: {e}")
 
             # Send segments-ready email (template varies by contributor status)
             if req.get("requester_email"):
@@ -724,11 +754,23 @@ def cmd_prepare_pr(args):
             print(f"    ERROR: {e}")
             req["pr_url"] = ""
         finally:
-            # Always return to main
+            # Always return to main, preserving segment files as untracked.
+            # After commit on the branch, files are tracked — checking out main
+            # would delete them.  Copy aside, switch, copy back.
+            seg_abs = REPO_ROOT / "data" / "recitation_segments" / slug
+            _tmp = None
+            if seg_abs.is_dir():
+                _tmp = Path(tempfile.mkdtemp())
+                shutil.copytree(seg_abs, _tmp / slug, dirs_exist_ok=True)
             subprocess.run(
                 ["git", "checkout", "main"],
                 cwd=str(REPO_ROOT), capture_output=True, text=True,
             )
+            if _tmp and (_tmp / slug).is_dir():
+                if seg_abs.exists():
+                    shutil.rmtree(seg_abs)
+                shutil.copytree(_tmp / slug, seg_abs)
+                shutil.rmtree(_tmp)
 
     save_state(state)
     print(f"\nDone. State saved with PR URLs.")

@@ -1,4 +1,4 @@
-Generated: 2026-04-09 23:11:24
+Generated: 2026-05-07 18:43:30
 
 ========================================================================
   mohammed_siddiq_al_minshawi
@@ -8,7 +8,8 @@ Generated: 2026-04-09 23:11:24
 --- VAD Settings ---
   Min silence:   400 ms
   Min speech:    400 ms
-  Padding:       160 ms
+  Padding L/R:   150/500 ms
+  Silence floor: 30 ms
 
 --- Coverage ---
   Verses found:   6236 / 6236
@@ -23,15 +24,15 @@ Generated: 2026-04-09 23:11:24
   Max segs/verse:   17
 
 --- Segment Duration ---
-  Min:    1.02s
-  Median: 7.70s
-  Mean:   8.76s
-  Max:    23.95s
+  Min:    1.35s
+  Median: 8.03s
+  Mean:   9.07s
+  Max:    24.29s
 
 --- True Silence Duration (padding reversed) ---
-  Min:    0.44s
+  Min:    0.68s
   Median: 1.08s
-  Mean:   1.15s
+  Mean:   1.17s
   Max:    4.54s
 
 --- Alignment Confidence ---
@@ -42,11 +43,77 @@ Generated: 2026-04-09 23:11:24
   Below 60%: 0
   Below 80%: 0
   Failed:    0 (no alignment)
-  Empty ASR: 123 (matched but no phonemes)
+  Empty ASR: 132 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
 
---- Empty ASR Phonemes (123) ---
+--- Muqatta'at (30) ---
+  [1.0000]  2:1:1-2:1:1  @ 0:05.1 - 0:12.5
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  الٓمٓ
+  [1.0000]  3:1:1-3:1:1  @ 0:06.1 - 0:13.4
+           audio: https://server10.mp3quran.net/minsh/003.mp3
+           text:  الٓمٓ
+  [1.0000]  7:1:1-7:1:1  @ 0:07.1 - 0:17.5
+           audio: https://server10.mp3quran.net/minsh/007.mp3
+           text:  الٓمٓصٓ
+  [1.0000]  10:1:1-10:1:1  @ 0:04.9 - 0:09.9
+           audio: https://server10.mp3quran.net/minsh/010.mp3
+           text:  الٓر ۚ
+  [1.0000]  11:1:1-11:1:1  @ 0:06.9 - 0:11.6
+           audio: https://server10.mp3quran.net/minsh/011.mp3
+           text:  الٓر ۚ
+  [1.0000]  12:1:1-12:1:1  @ 0:06.8 - 0:12.0
+           audio: https://server10.mp3quran.net/minsh/012.mp3
+           text:  الٓر ۚ
+  [1.0000]  13:1:1-13:1:1  @ 0:05.3 - 0:13.2
+           audio: https://server10.mp3quran.net/minsh/013.mp3
+           text:  الٓمٓر ۚ
+  [1.0000]  14:1:1-14:1:1  @ 0:10.0 - 0:14.7
+           audio: https://server10.mp3quran.net/minsh/014.mp3
+           text:  الٓر ۚ
+  [1.0000]  15:1:1-15:1:1  @ 0:05.0 - 0:09.8
+           audio: https://server10.mp3quran.net/minsh/015.mp3
+           text:  الٓر ۚ
+  [1.0000]  19:1:1-19:1:1  @ 0:06.0 - 0:17.2
+           audio: https://server10.mp3quran.net/minsh/019.mp3
+           text:  كٓهيعٓصٓ
+  ... and 20 more
+
+--- Qalqala (324) ---
+  [1.0000]  2:196:67-2:196:73  [ب]  @ 1:22:11.2 - 1:22:19.1
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَٱتَّقُوا۟ ٱللَّهَ وَٱعْلَمُوٓا۟ أَنَّ ٱللَّهَ شَدِيدُ ٱلْعِقَابِ
+  [1.0000]  2:197:27-2:197:29  [ب]  @ 1:22:45.1 - 1:22:50.0
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَٱتَّقُونِ يَـٰٓأُو۟لِى ٱلْأَلْبَـٰبِ
+  [1.0000]  2:202:6-2:202:8  [ب]  @ 1:24:24.1 - 1:24:27.8
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَٱللَّهُ سَرِيعُ ٱلْحِسَابِ
+  [1.0000]  2:205:11-2:205:14  [د]  @ 1:25:21.0 - 1:25:24.9
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَٱللَّهُ لَا يُحِبُّ ٱلْفَسَادَ
+  [1.0000]  2:206:11-2:206:12  [د]  @ 1:25:35.1 - 1:25:37.9
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَلَبِئْسَ ٱلْمِهَادُ
+  [1.0000]  2:207:9-2:207:11  [د]  @ 1:25:46.5 - 1:25:50.9
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَٱللَّهُ رَءُوفٌ بِٱلْعِبَادِ
+  [1.0000]  2:212:15-2:212:20  [ب]  @ 1:27:20.3 - 1:27:27.1
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَٱللَّهُ يَرْزُقُ مَن يَشَآءُ بِغَيْرِ حِسَابٍ
+  [1.0000]  2:214:26-2:214:30  [ب]  @ 1:28:50.2 - 1:28:55.8
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  أَلَآ إِنَّ نَصْرَ ٱللَّهِ قَرِيبٌ
+  [1.0000]  2:253:43-2:253:52  [د]  @ 1:52:33.9 - 1:52:45.6
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَلَوْ شَآءَ ٱللَّهُ مَا ٱقْتَتَلُوا۟ وَلَـٰكِنَّ ٱللَّهَ يَفْعَلُ مَا يُرِيدُ
+  [1.0000]  2:267:25-2:267:29  [د]  @ 2:04:10.0 - 2:04:17.9
+           audio: https://server10.mp3quran.net/minsh/002.mp3
+           text:  وَٱعْلَمُوٓا۟ أَنَّ ٱللَّهَ غَنِىٌّ حَمِيدٌ
+  ... and 314 more
+
+--- Empty ASR Phonemes (132) ---
   [1.0000]  2:19:1-2:19:8  @ 4:46.9 - 4:57.1
            audio: https://server10.mp3quran.net/minsh/002.mp3
            text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
@@ -77,68 +144,21 @@ Generated: 2026-04-09 23:11:24
   [1.0000]  2:252:1-2:252:6  @ 1:51:20.9 - 1:51:28.5
            audio: https://server10.mp3quran.net/minsh/002.mp3
            text:  تِلْكَ ءَايَـٰتُ ٱللَّهِ نَتْلُوهَا عَلَيْكَ بِٱلْحَقِّ ۚ
-  [1.0000]  3:18:1-3:18:12  @ 6:21.0 - 6:37.2
-           audio: https://server10.mp3quran.net/minsh/003.mp3
-           text:  شَهِدَ ٱللَّهُ أَنَّهُۥ لَآ إِلَـٰهَ إِلَّا هُوَ وَٱلْمَلَـٰٓئِكَةُ وَأُو۟لُوا۟ ٱلْعِلْمِ قَآئِمًا بِٱلْقِسْطِ ۚ
-  [1.0000]  3:62:1-3:62:5  @ 23:24.3 - 23:29.4
-           audio: https://server10.mp3quran.net/minsh/003.mp3
-           text:  إِنَّ هَـٰذَا لَهُوَ ٱلْقَصَصُ ٱلْحَقُّ ۚ
-  [1.0000]  3:108:1-3:108:6  @ 43:54.0 - 44:02.6
-           audio: https://server10.mp3quran.net/minsh/003.mp3
-           text:  تِلْكَ ءَايَـٰتُ ٱللَّهِ نَتْلُوهَا عَلَيْكَ بِٱلْحَقِّ ۗ
-  [1.0000]  3:112:21-3:112:30  @ 45:58.4 - 46:16.6
-           audio: https://server10.mp3quran.net/minsh/003.mp3
-           text:  ذَٰلِكَ بِأَنَّهُمْ كَانُوا۟ يَكْفُرُونَ بِـَٔايَـٰتِ ٱللَّهِ وَيَقْتُلُونَ ٱلْأَنبِيَآءَ بِغَيْرِ حَقٍّ ۚ
-  [1.0000]  3:181:12-3:181:22  @ 1:18:07.3 - 1:18:22.5
-           audio: https://server10.mp3quran.net/minsh/003.mp3
-           text:  سَنَكْتُبُ مَا قَالُوا۟ وَقَتْلَهُمُ ٱلْأَنبِيَآءَ بِغَيْرِ حَقٍّ وَنَقُولُ ذُوقُوا۟ عَذَابَ ٱلْحَرِيقِ
-  [1.0000]  4:127:25-4:127:31  @ 1:05:03.0 - 1:05:12.8
-           audio: https://server10.mp3quran.net/minsh/004.mp3
-           text:  وَٱلْمُسْتَضْعَفِينَ مِنَ ٱلْوِلْدَٰنِ وَأَن تَقُومُوا۟ لِلْيَتَـٰمَىٰ بِٱلْقِسْطِ ۚ
-  [1.0000]  4:171:1-4:171:12  @ 1:22:06.4 - 1:22:17.7
-           audio: https://server10.mp3quran.net/minsh/004.mp3
-           text:  يَـٰٓأَهْلَ ٱلْكِتَـٰبِ لَا تَغْلُوا۟ فِى دِينِكُمْ وَلَا تَقُولُوا۟ عَلَى ٱللَّهِ إِلَّا ٱلْحَقَّ ۚ
-  [1.0000]  5:6:1-5:6:12  @ 6:01.1 - 6:17.6
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوٓا۟ إِذَا قُمْتُمْ إِلَى ٱلصَّلَوٰةِ فَٱغْسِلُوا۟ وُجُوهَكُمْ وَأَيْدِيَكُمْ إِلَى ٱلْمَرَافِقِ
-  [1.0000]  5:8:1-5:8:8  @ 8:39.0 - 8:53.4
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ كُونُوا۟ قَوَّٰمِينَ لِلَّهِ شُهَدَآءَ بِٱلْقِسْطِ ۖ
-  [1.0000]  5:18:8-5:18:16  @ 16:49.3 - 17:04.3
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  قُلْ فَلِمَ يُعَذِّبُكُم بِذُنُوبِكُم ۖ بَلْ أَنتُم بَشَرٌ مِّمَّنْ خَلَقَ ۚ
-  [1.0000]  5:42:18-5:42:22  @ 28:26.7 - 28:32.8
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  وَإِنْ حَكَمْتَ فَٱحْكُم بَيْنَهُم بِٱلْقِسْطِ ۚ
-  [1.0000]  5:48:18-5:48:24  @ 32:06.6 - 32:15.9
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  وَلَا تَتَّبِعْ أَهْوَآءَهُمْ عَمَّا جَآءَكَ مِنَ ٱلْحَقِّ ۚ
-  [1.0000]  5:83:1-5:83:15  @ 49:00.5 - 49:16.2
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  وَإِذَا سَمِعُوا۟ مَآ أُنزِلَ إِلَى ٱلرَّسُولِ تَرَىٰٓ أَعْيُنَهُمْ تَفِيضُ مِنَ ٱلدَّمْعِ مِمَّا عَرَفُوا۟ مِنَ ٱلْحَقِّ ۖ
-  [1.0000]  5:94:1-5:94:16  @ 53:38.2 - 54:01.1
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ لَيَبْلُوَنَّكُمُ ٱللَّهُ بِشَىْءٍ مِّنَ ٱلصَّيْدِ تَنَالُهُۥٓ أَيْدِيكُمْ وَرِمَاحُكُمْ لِيَعْلَمَ ٱللَّهُ مَن يَخَافُهُۥ بِٱلْغَيْبِ ۚ
-  [1.0000]  5:103:1-5:103:18  @ 57:42.4 - 58:03.1
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  مَا جَعَلَ ٱللَّهُ مِن بَحِيرَةٍ وَلَا سَآئِبَةٍ وَلَا وَصِيلَةٍ وَلَا حَامٍ ۙ وَلَـٰكِنَّ ٱلَّذِينَ كَفَرُوا۟ يَفْتَرُونَ عَلَى ٱللَّهِ ٱلْكَذِبَ ۖ
-  [1.0000]  5:116:16-5:116:26  @ 1:05:13.6 - 1:05:22.6
-           audio: https://server10.mp3quran.net/minsh/005.mp3
-           text:  قَالَ سُبْحَـٰنَكَ مَا يَكُونُ لِىٓ أَنْ أَقُولَ مَا لَيْسَ لِى بِحَقٍّ ۚ
-  [1.0000]  6:30:7-6:30:10  @ 9:07.7 - 9:11.9
-           audio: https://server10.mp3quran.net/minsh/006.mp3
-           text:  قَالَ أَلَيْسَ هَـٰذَا بِٱلْحَقِّ ۚ
-  [1.0000]  6:62:1-6:62:6  @ 21:50.2 - 21:57.6
-           audio: https://server10.mp3quran.net/minsh/006.mp3
-           text:  ثُمَّ رُدُّوٓا۟ إِلَى ٱللَّهِ مَوْلَىٰهُمُ ٱلْحَقِّ ۚ
-  [1.0000]  6:66:1-6:66:5  @ 23:15.7 - 23:20.6
-           audio: https://server10.mp3quran.net/minsh/006.mp3
-           text:  وَكَذَّبَ بِهِۦ قَوْمُكَ وَهُوَ ٱلْحَقُّ ۚ
-  [1.0000]  6:73:1-6:73:6  @ 26:25.0 - 26:31.6
-           audio: https://server10.mp3quran.net/minsh/006.mp3
-           text:  وَهُوَ ٱلَّذِى خَلَقَ ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضَ بِٱلْحَقِّ ۖ
-  ... and 93 more
+  ... and 122 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
+
+--- Category Counts (machine-readable) ---
+  failed 0
+  missing_verses 0
+  missing_words 0
+  structural_errors 0
+  low_confidence 0
+  repetitions 0
+  audio_bleeding 0
+  boundary_adj 0
+  cross_verse 0
+  qalqala 324
+  muqattaat 30
 

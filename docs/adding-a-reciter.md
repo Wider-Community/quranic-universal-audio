@@ -42,7 +42,7 @@ mkdir data/audio/by_surah/my-source
 echo "https://example.com/quran-audio" > data/audio/by_surah/my-source/SOURCE
 ```
 
-No other configuration is needed — the pipeline, inspector, and `scripts/list_reciters.py` auto-discover source directories.
+No other configuration is needed — the pipeline, inspector, and `.github/scripts/list_reciters.py` auto-discover source directories.
 
 ## Step 2: Create the Manifest
 
