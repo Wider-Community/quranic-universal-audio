@@ -15,7 +15,7 @@ on:
         type: boolean
         default: false
       timestamps_only:
-        description: 'Skip the verse-row dataset rebuild + catalog refresh; only push timestamp shards + manifest + resources'
+        description: 'Skip the verse-row dataset rebuild + catalog refresh; only push alignment shards (timestamps + segments) + manifest + resources'
         type: boolean
         default: false
       email_to:
@@ -30,6 +30,7 @@ on:
     paths:
       - 'data/timestamps/**/*.json'
       - 'data/audio/**/*.json'
+      - 'data/recitation_segments/**/detailed.json'
 
 permissions:
   contents: read
@@ -137,13 +138,15 @@ jobs:
         run: python .github/scripts/build_reciter.py --reciters-config
 
       # ---------------------------------------------------------------------
-      # Timestamps-tab read path: per-chapter shards + global resources +
-      # manifest. The Inspector frontend (HF mode) reads these directly.
-      # Steps run regardless of `readme_only` since manifest + resources
-      # may need to refresh independently of reciter dataset rows.
+      # Alignment shards: per-chapter timestamps + segments + global
+      # resources + manifest. The Inspector frontend (HF mode) reads the
+      # timestamps shards; the aligner Space's preload mode reads the
+      # segments shards. Both share the manifest. Steps run regardless of
+      # `readme_only` since manifest + resources may need to refresh
+      # independently of reciter dataset rows.
       # ---------------------------------------------------------------------
 
-      - name: Build and upload timestamp shards
+      - name: Build and upload alignment shards (timestamps + segments)
         if: steps.detect.outputs.slugs != ''
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -151,6 +154,8 @@ jobs:
           for slug in ${{ steps.detect.outputs.slugs }}; do
             echo "Building timestamp shards for $slug..."
             python .github/scripts/build_reciter.py --build-timestamps "$slug"
+            echo "Building segments shards for $slug..."
+            python .github/scripts/build_reciter.py --build-segments  "$slug"
           done
 
       - name: Build and upload global resources
