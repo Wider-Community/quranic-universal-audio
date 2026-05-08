@@ -1,4 +1,4 @@
-Generated: 2026-05-08 21:17:34
+Generated: 2026-05-08 22:22:25
 
 ========================================================================
   Timestamps: maher_al_meaqli
@@ -13,9 +13,9 @@ Generated: 2026-05-08 21:17:34
   Shared CMVN:   False
 
 --- Coverage ---
-  Verses found:       6236 / 6236
-  Missing verses:     0
-  Total words:        83962
+  Verses found:       6235 / 6236
+  Missing verses:     1
+  Total words:        83958
   Coverage issues:    0
   Forward gap verses: 0
 
@@ -52,6 +52,9 @@ Generated: 2026-05-08 21:17:34
 --- Validation Issues ---
   Errors:     1
   Warnings:   6
+
+  Missing verses (first 1 of 1):
+    MISS   1:1  (4 words)
 
   Errors (first 1 of 1):
     ERROR  8:48  verse overlap with 8:47: 8:47 ends 13:05.1, 8:48 starts 13:05.1 (overlap 2ms)
