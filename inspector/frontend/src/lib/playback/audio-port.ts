@@ -231,7 +231,10 @@ export class AudioPort {
     loadCovering(startMs: number, endMs: number, pad?: number): LoadCoveringResult {
         if (!this.el) throw new Error('AudioPort.loadCovering: no element attached');
         if (!this._source) throw new Error('AudioPort.loadCovering: no source bound');
-        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) {
+        // Allow `endMs = Infinity` for callers that just want "anything in
+        // the file" coverage (Audio-tab full-file play). startMs must be
+        // finite and not greater than endMs.
+        if (!Number.isFinite(startMs) || Number.isNaN(endMs) || startMs > endMs) {
             throw new Error(`AudioPort.loadCovering: bad range [${startMs}, ${endMs}]`);
         }
 
