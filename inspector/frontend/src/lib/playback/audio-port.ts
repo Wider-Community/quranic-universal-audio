@@ -36,10 +36,17 @@ import { cutAudio, uncutAudio } from './audio-graph';
  *  detail); callers describe the source they want to play, the port picks
  *  the actual URL. */
 export interface AudioSource {
-    /** Canonical CDN URL, before any audio-proxy wrapping. */
+    /** Canonical CDN URL — used for VBR clip URL building. The clip
+     *  endpoint expects the unwrapped URL in its query string. */
     audioUrl: string;
-    /** Reciter slug. Required for VBR clip routing AND for audio-proxy
-     *  wrapping on CBR (the proxy is per-reciter). null disables both. */
+    /** What to set as `<audio>.src` in CBR mode. Defaults to `audioUrl`
+     *  when omitted. Callers that need an audio-proxy wrap (for CORS on
+     *  by_surah reciters) compute the wrapped URL and pass it here; the
+     *  port doesn't second-guess. VBR mode ignores this field — the clip
+     *  endpoint is always built from `audioUrl`. */
+    cbrSrc?: string;
+    /** Reciter slug. Required for VBR clip routing. null disables it
+     *  (port falls through to CBR using `cbrSrc ?? audioUrl`). */
     reciter: string | null;
     /** When true, `loadCovering` builds a server-clip URL for the requested
      *  window. Set from `segData.vbr` (or whatever per-source store carries
@@ -99,15 +106,6 @@ function buildClipUrl(reciter: string, audioUrl: string, startMs: number, endMs:
         end_ms: String(endMs),
     });
     return `/api/seg/segment-clip/${encodeURIComponent(reciter)}?${params.toString()}`;
-}
-
-/** Wrap a CDN URL in the audio-proxy when the URL is canonical and a
- *  reciter is set. The proxy's job is to add the CORS headers Web Audio
- *  needs for `MediaElementAudioSourceNode` (the kill-switch graph). Mirrors
- *  the inline wrap that used to live in `chapter-actions.ts:48-49`. */
-function wrapAudioProxy(audioUrl: string, reciter: string | null): string {
-    if (!reciter || !audioUrl || audioUrl.startsWith('/api/')) return audioUrl;
-    return `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
 }
 
 function isAbortError(e: unknown): boolean {
@@ -263,16 +261,18 @@ export class AudioPort {
         }
 
         // CBR fast path: chapter URL covers the whole file. If the element
-        // already holds the chapter src, no-op.
-        const wrapped = wrapAudioProxy(src.audioUrl, src.reciter);
-        if (this._window && audioSrcMatches(this._window.src, wrapped)) {
+        // already holds the chapter src, no-op. Caller-supplied `cbrSrc`
+        // wins over the canonical `audioUrl` (so callers needing the
+        // audio-proxy wrap pass it pre-wrapped).
+        const cbrSrc = src.cbrSrc ?? src.audioUrl;
+        if (this._window && audioSrcMatches(this._window.src, cbrSrc)) {
             return { ready: Promise.resolve(), swapped: false, window: this._window };
         }
-        return this._swapTo(wrapped, {
+        return this._swapTo(cbrSrc, {
             startMs: 0,
             endMs: Number.POSITIVE_INFINITY,
             offsetMs: 0,
-            src: wrapped,
+            src: cbrSrc,
             isClip: false,
         });
     }
@@ -341,6 +341,15 @@ export class AudioPort {
         this.seek(fileMs);
         // Restore gain ramp before playing; matches the legacy
         // `_seekAndPlay` ordering in `audio-range.ts`.
+        uncutAudio(this.el);
+        safePlay(this.el);
+    }
+
+    /** Resume play at the current position. Use for play/pause toggles where
+     *  the AudioRange is still alive and the rAF chain is paused-but-ticking;
+     *  no seek needed. */
+    play(): void {
+        if (!this.el) return;
         uncutAudio(this.el);
         safePlay(this.el);
     }

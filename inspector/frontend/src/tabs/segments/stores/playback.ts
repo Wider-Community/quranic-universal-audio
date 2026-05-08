@@ -4,6 +4,7 @@
 
 import { writable } from 'svelte/store';
 
+import { AudioPort } from '../../../lib/playback/audio-port';
 import { LS_KEYS } from '../../../lib/utils/constants';
 
 /**
@@ -40,8 +41,28 @@ export const activeAudioSource = writable<'main' | null>(null);
 
 /** The <audio> element driving segments-tab playback. Populated by
  *  SegmentsAudioControls.svelte via bind:this once AudioPlayer mounts.
- *  Consumers read via get(segAudioElement) and null-check. */
+ *  Consumers read via get(segAudioElement) and null-check.
+ *
+ *  @deprecated Use `segPort` instead. New code should never read the
+ *  audio element directly — every operation (load, seek, currentTime,
+ *  play, pause, src-swap) goes through the port so the CBR-vs-VBR
+ *  transport is hidden. This export is retained transitionally for
+ *  call sites still being migrated; deleted in the final cleanup phase. */
 export const segAudioElement = writable<HTMLAudioElement | null>(null);
+
+/** Single AudioPort instance for the segments tab. Module-scoped so its
+ *  identity is stable across HMR and component remounts. SegmentsAudioControls
+ *  attaches the bound `<audio>` element on mount; every other consumer
+ *  imports this port directly and reads file-absolute milliseconds.
+ *
+ *  Coordinate space: file-absolute ms — always. The port translates to
+ *  the element's clip-relative `currentTime` internally for VBR clips. */
+export const segPort: AudioPort = new AudioPort();
+
+/** True when `segPort` has an `<audio>` element bound. UI binding for
+ *  `disabled={!$segPortReady}` on the play button (replaces the old
+ *  `disabled={!audioEl}` reactive). */
+export const segPortReady = writable<boolean>(false);
 
 /** The #seg-list scroll container. Populated by SegmentsList.svelte via
  *  bind:this. Consumers read via get(segListElement) and null-check. */

@@ -10,6 +10,11 @@
  * `startSegAnimation` / `stopSegAnimation` are UI-state-only helpers driven
  * by the audio element's `play` / `pause` DOM events; they no longer own a
  * rAF loop and never touch `_segRange`. Explicit teardown is `disposeSegRange()`.
+ *
+ * Coordinate space: every `timeMs` value flowing through this module is
+ * **file-absolute milliseconds**. The `segPort` port translates to / from
+ * the `<audio>.currentTime` clip-relative space internally for VBR clips.
+ * Callers never see clip offsets.
  */
 
 import { get } from 'svelte/store';
@@ -21,7 +26,6 @@ import {
     getSegByChapterIndex,
     segAllData,
     segCurrentIdx,
-    segData,
     selectedChapter,
 } from '../../stores/chapter';
 import { editMode } from '../../stores/edit';
@@ -35,13 +39,13 @@ import {
     playButtonLabel,
     playEndMs,
     playingSegmentIndex,
-    segAudioElement,
+    segPort,
     setPlayingSegment,
 } from '../../stores/playback';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
 import { nextDisplayedSeg, prefetchNextSegAudio } from './prefetch';
-import { buildSegPolicy, buildSegRangeSpec } from './range-spec';
+import { buildSegPolicy } from './range-spec';
 import { getRowEntriesFor } from './row-registry';
 
 // ---------------------------------------------------------------------------
@@ -78,6 +82,13 @@ export function disposeSegRange(): void {
     _segRange = null;
 }
 
+/** Canonical chapter URL of the currently bound source — used by prefetch
+ *  to decide whether the next segment shares the chapter audio (CBR skip)
+ *  or needs a fresh warm. Empty string when no source is bound. */
+function _curChapterUrl(): string {
+    return segPort.source?.audioUrl ?? '';
+}
+
 // ---------------------------------------------------------------------------
 // AudioRange wiring
 // ---------------------------------------------------------------------------
@@ -111,17 +122,16 @@ function _onRangeBoundary(ev: { reason: string }): void {
     // Update the active-pair + segCurrentIdx + prefetch+peaks NOW (before the
     // gap fires) so the UI reflects the upcoming segment immediately.
     if (ev.reason === 'advance') {
-        const audioEl = get(segAudioElement);
         const active = get(playingSegmentIndex);
         const displayed = get(displayedSegments);
-        if (!audioEl || !active || !displayed) return;
+        if (!segPort.element || !active || !displayed) return;
         const next = nextDisplayedSeg(displayed, active.index);
         if (!next || next.index !== active.index + 1) return;
         const nextChapter = next.chapter ?? active.chapter;
         setPlayingSegment({ chapter: nextChapter, index: next.index });
         segCurrentIdx.set(next.index);
         playEndMs.set(next.time_end);
-        prefetchNextSegAudio(displayed, next.index, audioEl.src || '', _segPrefetchCache);
+        prefetchNextSegAudio(displayed, next.index, _curChapterUrl(), _segPrefetchCache);
         if (nextChapter) void _fetchPeaksForClick(next, nextChapter);
     }
 }
@@ -148,8 +158,7 @@ export function playFromSegment(
     disposeSegRange();
     const allData = get(segAllData);
     if (!allData) return;
-    const audioEl = get(segAudioElement);
-    if (!audioEl) return;
+    if (!segPort.element) return;
     activeAudioSource.set('main');
     const _chStr = get(selectedChapter);
     const chapter = chapterOverride ?? (_chStr ? parseInt(_chStr) : null);
@@ -169,7 +178,12 @@ export function playFromSegment(
     continuousPlay.set(get(autoPlayEnabled) && !isAccordionPlay);
     playEndMs.set(seg.time_end);
 
-    const range = buildSegRangeSpec(seg, seekToMs);
+    // File-absolute spec — port owns CBR-vs-VBR transport and offset
+    // bookkeeping. The seek target defaults to the segment start.
+    const range = {
+        startMs: seekToMs ?? seg.time_start,
+        endMs: seg.time_end,
+    };
     const policy = buildSegPolicy({
         getAutoPlayEnabled: () => get(autoPlayEnabled),
         isAccordionPlay,
@@ -185,7 +199,7 @@ export function playFromSegment(
     });
 
     _segRange = new AudioRange({
-        audioEl,
+        port: segPort,
         range,
         policy,
         onTick: _onRangeTick,
@@ -212,11 +226,11 @@ export function playFromSegment(
     // — non-null switches `prefetchNextSegAudio` to the sibling resolver.
     if (isAccordionPlay && opts?.accordionSiblings) {
         prefetchNextSegAudio(
-            opts.accordionSiblings, segIndex, audioEl.src || '',
+            opts.accordionSiblings, segIndex, _curChapterUrl(),
             _segPrefetchCache, resolvedChapter,
         );
     } else {
-        prefetchNextSegAudio(displayed, segIndex, audioEl.src || '', _segPrefetchCache);
+        prefetchNextSegAudio(displayed, segIndex, _curChapterUrl(), _segPrefetchCache);
     }
 
     // Fetch waveform peaks on-demand via ffmpeg HTTP Range (brief delay expected).
@@ -224,19 +238,18 @@ export function playFromSegment(
 }
 
 export function onSegPlayClick(): void {
-    const audioEl = get(segAudioElement);
-    if (!audioEl) return;
+    if (!segPort.element) return;
     const displayed = get(displayedSegments);
     const curIdx = get(segCurrentIdx);
-    if (audioEl.paused) {
+    if (segPort.paused) {
         if (displayed && displayed.length > 0 && curIdx < 0) {
             const first = displayed[0];
             if (first) playFromSegment(first.index, first.chapter);
         } else if (_segRange) {
             // Resume an existing run — the range's pause-resilient frame loop
             // ticks idly while audio was paused, no rebuild needed.
-            audioEl.playbackRate = get(playbackSpeed);
-            void audioEl.play();
+            segPort.setPlaybackRate(get(playbackSpeed));
+            segPort.play();
         } else if (curIdx >= 0 && displayed) {
             // No range alive (e.g. user manually paused before any play) —
             // rebuild from the segCurrentIdx pointer.
@@ -245,7 +258,7 @@ export function onSegPlayClick(): void {
         }
     } else {
         continuousPlay.set(false);
-        audioEl.pause();
+        segPort.pause();
     }
 }
 
@@ -253,7 +266,7 @@ export function onSegPlayClick(): void {
 // Audio event handlers
 // ---------------------------------------------------------------------------
 
-export function onSegTimeUpdate(): void {
+export function onSegTimeUpdate(fileMs?: number): void {
     // Edit-preview's rAF owns boundary enforcement on the edit canvas.
     if (get(editMode)) return;
     // VBR clip mode plays a one-segment clip from byte 0, so audioEl.src is
@@ -262,11 +275,13 @@ export function onSegTimeUpdate(): void {
     // chapter URL — useless in clip mode. Segment switches in VBR mode come
     // through `_onRangeBoundary('advance')` and explicit `playFromSegment`
     // calls instead.
-    if (get(segData)?.vbr) return;
-    const audioEl = get(segAudioElement);
-    if (!audioEl) return;
-    const timeMs = audioEl.currentTime * 1000;
-    const currentSrc = audioEl.src || '';
+    if (segPort.window?.isClip) return;
+    if (!segPort.element) return;
+    // `fileMs` comes from the port's `onTimeUpdate` subscription (file-
+    // absolute). Fall back to a fresh read for direct callers (none today,
+    // but the public export shape allows it).
+    const timeMs = fileMs ?? segPort.currentTimeMs();
+    const currentSrc = _curChapterUrl();
     const displayed = get(displayedSegments);
     const active = get(playingSegmentIndex);
 
@@ -307,7 +322,7 @@ export function onSegTimeUpdate(): void {
         // active pair so the playhead and class:playing follow.
         setPlayingSegment({ chapter: nextCurrentChapter, index: nextCurrentIdx });
         if (displayed) {
-            prefetchNextSegAudio(displayed, nextCurrentIdx, audioEl.src || '', _segPrefetchCache);
+            prefetchNextSegAudio(displayed, nextCurrentIdx, currentSrc, _segPrefetchCache);
             const curSeg = displayed.find(s => s.index === nextCurrentIdx);
             if (curSeg) {
                 const chapterForPeaks = curSeg.chapter ?? (get(selectedChapter) ? parseInt(get(selectedChapter)) : 0);
@@ -418,13 +433,12 @@ export function drawActivePlayhead(timeMs?: number): void {
     const allData = get(segAllData);
     const active = get(playingSegmentIndex);
     if (!allData) return;
-    const audioEl = get(segAudioElement);
-    if (!audioEl) return;
-    // `timeMs` is the file-absolute time supplied by AudioRange's rAF tick
-    // (which already added clipFileOffsetMs for VBR-clip plays). When called
-    // outside the rAF (manual seek path), fall back to the live `<audio>`
-    // current-time + the active range's offset via `_segRange.getCurrentTimeMs()`.
-    const time = timeMs ?? _segRange?.getCurrentTimeMs() ?? audioEl.currentTime * 1000;
+    if (!segPort.element) return;
+    // `timeMs` is the file-absolute time supplied by AudioRange's rAF tick.
+    // For direct callers (manual seek handler) fall back to the live port
+    // reading — the port owns offset translation so file-absolute is
+    // identical regardless of CBR vs VBR transport.
+    const time = timeMs ?? segPort.currentTimeMs();
 
     const prev = _prevPlaying;
     const pairChanged = !prev || !active
