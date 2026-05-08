@@ -18,7 +18,6 @@
 
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
-    import { safePlay } from '../../../lib/utils/audio';
     import {
         showLetters,
         showPhonemes,
@@ -26,7 +25,7 @@
         tsWaveformHoverTime,
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
-    import { autoMode, loopTarget, tsAudioElement } from '../stores/playback';
+    import { autoMode, loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
 
@@ -252,7 +251,8 @@
 
         const intervals = lv.data.intervals;
         const words = lv.data.words;
-        const audioEl = get(tsAudioElement);
+        const portReady = !!tsPort.element;
+        const portPaused = tsPort.paused;
         const hoverTime = get(tsWaveformHoverTime);
 
         // Current phoneme (skip geminate_end)
@@ -282,7 +282,7 @@
         // (user is actively scrubbing; auto-scrolling would fight the pointer).
         let hoverWordIndex = -1;
         let hoverPhonemeIndex = -1;
-        const showWaveformPreview = hoverTime != null && !!audioEl && !audioEl.paused;
+        const showWaveformPreview = hoverTime != null && portReady && !portPaused;
         if (showWaveformPreview) {
             for (let i = 0; i < words.length; i++) {
                 const w = words[i];
@@ -305,7 +305,7 @@
                 }
             }
         }
-        const isHoverDriven = hoverTime != null && !!audioEl && audioEl.paused;
+        const isHoverDriven = hoverTime != null && portReady && portPaused;
         if (currentWordIndex !== _prevActiveWordIdx) {
             const blocks = rootEl.querySelectorAll<HTMLElement>('.mega-block');
             blocks.forEach((block) => {
@@ -377,14 +377,13 @@
     }
 
     function getSegRelTime(segOffset: number): number {
-        const audio = get(tsAudioElement);
-        if (!audio) return 0;
+        if (!tsPort.element) return 0;
         // While paused, waveform hover drives a preview: treat the hovered
         // slice-relative time as the "current" time so block highlights
         // (active word / letter / phoneme) follow the pointer.
         const hoverT = get(tsWaveformHoverTime);
-        if (hoverT != null && audio.paused) return hoverT;
-        return audio.currentTime - segOffset;
+        if (hoverT != null && tsPort.paused) return hoverT;
+        return tsPort.currentTimeMs() / 1000 - segOffset;
     }
 
     /** Scroll the active mega-block into view (keyboard `J`). */
@@ -397,11 +396,10 @@
     // ---- Click handlers: seek audio on click ----
 
     function seekToTime(absTime: number): void {
-        const audio = get(tsAudioElement);
-        if (!audio) return;
-        audio.currentTime = absTime;
+        if (!tsPort.element) return;
+        tsPort.seek(absTime * 1000);
         // Clicking a block always starts playback — resumes if paused.
-        if (audio.paused) void safePlay(audio);
+        if (tsPort.paused) tsPort.play();
         // Force a repaint immediately after user seek (not waiting on timeupdate)
         updateHighlights();
     }
@@ -448,19 +446,17 @@
                 && cur.childIndex === target.childIndex;
             if (same) return;
             loopTarget.set(target);
-            const audio = get(tsAudioElement);
-            if (audio) {
-                audio.currentTime = absSeek;
-                if (audio.paused) void safePlay(audio);
+            if (tsPort.element) {
+                tsPort.seek(absSeek * 1000);
+                if (tsPort.paused) tsPort.play();
             }
             updateHighlights();
             return;
         }
         // No loop active → pure seek.
-        const audio = get(tsAudioElement);
-        if (!audio) return;
-        audio.currentTime = absSeek;
-        if (audio.paused) void safePlay(audio);
+        if (!tsPort.element) return;
+        tsPort.seek(absSeek * 1000);
+        if (tsPort.paused) tsPort.play();
         updateHighlights();
     }
 

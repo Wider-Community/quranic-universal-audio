@@ -4,6 +4,8 @@
 
 import { writable } from 'svelte/store';
 
+import { AudioPort } from '../../../lib/playback/audio-port';
+
 /** Auto-advance mode — null = off, 'next' = advance to next verse on end,
  *  'random-any' = load random verse from any reciter on end,
  *  'random-current' = load random verse from the currently-selected reciter on end. */
@@ -19,8 +21,28 @@ export const autoAdvancing = writable<boolean>(false);
 export const currentTime = writable<number>(0);
 
 /** The <audio> element driving timestamps-tab playback. Set by TimestampsAudio
- *  on mount; cleared to null on destroy. Consumers null-check before use. */
+ *  on mount; cleared to null on destroy. Consumers null-check before use.
+ *
+ *  @deprecated Use `tsPort` instead. The audio element is now wrapped by
+ *  the port; this export is retained transitionally. The Timestamps tab
+ *  is currently CBR-only — when it gains VBR support, the port already
+ *  carries the offset translation needed for clip-relative `currentTime`. */
 export const tsAudioElement = writable<HTMLAudioElement | null>(null);
+
+/** Single AudioPort for the Timestamps tab. TimestampsAudio attaches the
+ *  bound `<audio>` element on mount; every consumer (waveform clicks,
+ *  keyboard nudges, karaoke tick reads) imports this port and reads
+ *  file-absolute milliseconds.
+ *
+ *  Coordinate space: file-absolute ms — always. The Timestamps tab is
+ *  CBR-only today, so file-absolute equals `audio.currentTime * 1000`,
+ *  but routing reads through the port keeps the codebase ready for VBR
+ *  routing without a second-pass rewrite. */
+export const tsPort: AudioPort = new AudioPort();
+
+/** True when `tsPort` has an `<audio>` element bound. Mirrors the
+ *  segments-tab `segPortReady` shape. */
+export const tsPortReady = writable<boolean>(false);
 
 /**
  * Looped element. While non-null, playback repeats `[startSec, endSec)` on

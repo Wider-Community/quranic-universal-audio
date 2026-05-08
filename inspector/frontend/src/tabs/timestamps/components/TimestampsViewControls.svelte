@@ -12,7 +12,6 @@
     import { createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { safePlay } from '../../../lib/utils/audio';
     import { LS_KEYS } from '../../../lib/utils/constants';
     import {
         granularity,
@@ -22,7 +21,7 @@
         TS_VIEW_MODES,
         viewMode,
     } from '../stores/display';
-    import { autoMode, loopTarget, tsAudioElement } from '../stores/playback';
+    import { autoMode, loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
 
@@ -87,10 +86,9 @@
             return;
         }
         const lv = get(loadedVerse);
-        const audio = get(tsAudioElement);
-        if (!lv || !audio) return;
+        if (!lv || !tsPort.element) return;
         const words = lv.data.words;
-        const relTime = audio.currentTime - lv.tsSegOffset;
+        const relTime = tsPort.currentTimeMs() / 1000 - lv.tsSegOffset;
         const w = findWordAt(relTime, words, true);
         if (!w) return; // empty verse → silent no-op
         const wi = words.indexOf(w);
@@ -101,8 +99,8 @@
             wordIndex: wi,
         });
         // Jump to the word's start so the loop begins cleanly.
-        audio.currentTime = w.start + lv.tsSegOffset;
-        if (audio.paused) void safePlay(audio);
+        tsPort.seek((w.start + lv.tsSegOffset) * 1000);
+        if (tsPort.paused) tsPort.play();
         // Loop cancels auto-advance.
         autoMode.set(null);
         // Zoom on Loop-button activation is handled by the centralized

@@ -19,9 +19,8 @@
         splitIntoCharGroups,
         ZWSP,
     } from '../../../lib/utils/arabic-text';
-    import { safePlay } from '../../../lib/utils/audio';
     import { granularity, TS_GRANULARITIES } from '../stores/display';
-    import { loopTarget, tsAudioElement } from '../stores/playback';
+    import { loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
 
     // ---- Data model (produced by buildStructure) ----
@@ -288,9 +287,8 @@
         if (!rootEl) return;
         const lv = get(loadedVerse);
         if (!lv) return;
-        const audio = get(tsAudioElement);
-        if (!audio) return;
-        const time = audio.currentTime - lv.tsSegOffset;
+        if (!tsPort.element) return;
+        const time = tsPort.currentTimeMs() / 1000 - lv.tsSegOffset;
 
         const gran = get(granularity);
         const cache = gran === TS_GRANULARITIES.CHARACTERS ? _charCache : _wordCache;
@@ -390,13 +388,12 @@
     function onWordClick(word: TsWord, wordIndex: number): void {
         const lv = get(loadedVerse);
         if (!lv) return;
-        const audio = get(tsAudioElement);
-        if (!audio) return;
+        if (!tsPort.element) return;
         const cur = get(loopTarget);
         if (cur) {
             // Revealed only: unrevealed words can't be looped since audio
             // hasn't reached them yet — click is a no-op in that case.
-            const relTime = audio.currentTime - lv.tsSegOffset;
+            const relTime = tsPort.currentTimeMs() / 1000 - lv.tsSegOffset;
             if (word.start > relTime) return;
             if (cur.kind === 'word' && cur.wordIndex === wordIndex) return;
             loopTarget.set({
@@ -405,12 +402,12 @@
                 endSec: word.end,
                 wordIndex,
             });
-            audio.currentTime = word.start + lv.tsSegOffset;
-            if (audio.paused) void safePlay(audio);
+            tsPort.seek((word.start + lv.tsSegOffset) * 1000);
+            if (tsPort.paused) tsPort.play();
             updateHighlights();
             return;
         }
-        audio.currentTime = word.start + lv.tsSegOffset;
+        tsPort.seek((word.start + lv.tsSegOffset) * 1000);
         updateHighlights();
     }
 

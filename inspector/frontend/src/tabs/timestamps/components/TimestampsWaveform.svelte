@@ -27,7 +27,6 @@
 
     import WaveformCanvas from '../../../lib/components/WaveformCanvas.svelte';
     import type { PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
-    import { safePlay } from '../../../lib/utils/audio';
     import {
         LETTER_HIGHLIGHT_COLOR,
         PREVIEW_PLAYHEAD_COLOR,
@@ -47,7 +46,7 @@
         tsWaveformHoverTime,
         viewMode,
     } from '../stores/display';
-    import { loopTarget, tsAudioElement } from '../stores/playback';
+    import { loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse, selectedReciter } from '../stores/verse';
     import { tsZoom, tsZoomAnimating } from '../stores/zoom';
     import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
@@ -354,8 +353,7 @@
         const tToX = _zoom
             ? (t: number): number => ((t - _zoom!.viewStart) / (_zoom!.viewEnd - _zoom!.viewStart)) * width
             : (t: number): number => (t / duration) * width;
-        const audio = get(tsAudioElement);
-        const audioPaused = !audio || audio.paused;
+        const audioPaused = !tsPort.element || tsPort.paused;
 
         // 1.5. Dim silence-region peaks. MFA phoneme tiling is vocal-only in
         //      this dataset, so silence is inferred from inter-word gaps plus
@@ -406,10 +404,10 @@
         }
 
         // 2a. Playing-current fills — always show the tiers currently active,
-        //     based on audio.currentTime, in both Analysis and Animation modes.
+        //     based on tsPort.currentTimeMs, in both Analysis and Animation modes.
         //     Drawn below hover so hover stays visually dominant.
-        if (audio) {
-            const t = audio.currentTime - segOffset;
+        if (tsPort.element) {
+            const t = tsPort.currentTimeMs() / 1000 - segOffset;
             const curW = findWordAt(t, words, false);
             if (curW) _fillBand(ctx, tToX(curW.start), tToX(curW.end), height, wordColor, PLAYING_ALPHA_WORD);
             if (lettersActive && curW) {
@@ -520,8 +518,8 @@
         // 4. Playhead. Zoom-aware via `tToX` — playback outside the visible
         // window gets `px` past [0, width], clipped by canvas (i.e. no visible
         // playhead until playback re-enters the view).
-        if (!audio) return;
-        const time = audio.currentTime - segOffset;
+        if (!tsPort.element) return;
+        const time = tsPort.currentTimeMs() / 1000 - segOffset;
         const px = tToX(time);
 
         ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR;
@@ -605,8 +603,7 @@
     }
 
     function onCanvasClick(e: MouseEvent): void {
-        const audio = get(tsAudioElement);
-        if (!audio || !audio.duration) return;
+        if (!tsPort.element || !tsPort.element.duration) return;
         const lv = get(loadedVerse);
         if (!lv) return;
         const t = _pointerTime(e);
@@ -626,16 +623,16 @@
             const wi = words.indexOf(w);
             if (cur.kind === 'word' && cur.wordIndex === wi) return;
             loopTarget.set({ kind: 'word', startSec: w.start, endSec: w.end, wordIndex: wi });
-            audio.currentTime = w.start + lv.tsSegOffset;
-            if (audio.paused) void safePlay(audio);
+            tsPort.seek((w.start + lv.tsSegOffset) * 1000);
+            if (tsPort.paused) tsPort.play();
             drawOverlays();
             return;
         }
 
         // Snap to enclosing word's start.
-        audio.currentTime = w.start + lv.tsSegOffset;
+        tsPort.seek((w.start + lv.tsSegOffset) * 1000);
         // Start playback if paused — matches block-click behavior.
-        if (audio.paused) void safePlay(audio);
+        if (tsPort.paused) tsPort.play();
         drawOverlays();
     }
 
