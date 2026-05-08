@@ -6,19 +6,17 @@ Subcommands (segments):
   triage              — Fetch pending requests from GitHub, cross-check, output triage table
   generate-pbs        — Derive VAD params and rewrite PBS job array for accepted requests
   set-status          — Update GitHub labels for the current batch
-  notify              — Send emails via Gmail SMTP for the current batch
   prepare-pr          — Edit RECITERS.md + README.md for segments PR
 
 Subcommands (timestamps):
   detect-timestamps    — Find processed reciters needing timestamp extraction
   run-timestamps       — Run extract_timestamps.py in parallel for detected reciters
-  complete-timestamps  — Create per-reciter PRs, auto-merge, wait for CI, set status, notify
+  complete-timestamps  — Create per-reciter PRs, auto-merge, wait for CI, set status
 
 Usage:
   python scripts/process_requests.py triage
   python scripts/process_requests.py generate-pbs
   python scripts/process_requests.py set-status <status>
-  python scripts/process_requests.py notify <template>
   python scripts/process_requests.py prepare-pr
   python scripts/process_requests.py detect-timestamps
   python scripts/process_requests.py run-timestamps
@@ -53,7 +51,6 @@ from request_helpers import (
     gh_create_draft_pr,
     gh_create_bot_pr,
     gh_comment_on_issue,
-    send_email,
     slug_from_name,
     parse_processed_table,
     detect_reciters_needing_timestamps,
@@ -72,16 +69,6 @@ _STYLE_DISPLAY_TO_SLUG = {
 
 def _style_display_to_slug(s):
     return _STYLE_DISPLAY_TO_SLUG.get(s, s.lower() if s else "")
-
-
-from email_templates import (
-    email_receipt,
-    email_rejected_non_hafs,
-    email_rejected_duplicate,
-    email_rejected_already_processed,
-    email_segments_ready,
-    email_timestamps_done,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -220,37 +207,6 @@ def cmd_triage(args):
 
     save_state(state)
     print(f"\nState saved to {state['batch_id']}")
-
-    # Auto-send rejection emails
-    rejected = [r for r in state["requests"] if r["action"] == "reject"]
-    if rejected:
-        print(f"\nSending rejection emails ({len(rejected)})...")
-        for req in rejected:
-            if not req.get("requester_email"):
-                print(f"  {req['name']}: No email, skipping")
-                continue
-            reason = req.get("reject_reason", "")
-            try:
-                if reason == "non-hafs":
-                    subj, html = email_rejected_non_hafs(
-                        req["name"], req["requester_name"],
-                        req.get("riwayah", "unknown"), req["issue_url"],
-                    )
-                elif reason == "duplicate":
-                    subj, html = email_rejected_duplicate(
-                        req["name"], req["requester_name"],
-                        req["issue_url"], "pending", req["issue_url"],
-                    )
-                elif reason == "already-processed":
-                    subj, html = email_rejected_already_processed(
-                        req["name"], req["requester_name"], req["issue_url"],
-                    )
-                else:
-                    continue
-                send_email(req["requester_email"], subj, html)
-                print(f"  {req['name']}: sent to {req['requester_email']}")
-            except Exception as e:
-                print(f"  {req['name']}: failed — {e}")
 
 
 def _triage_one(req, processed_slugs, open_by_slug, processed):
@@ -436,9 +392,6 @@ def cmd_generate_pbs(args):
     print("  bash .local/extraction/sync_mfa.sh")
     print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub .local/extraction/extract_segments.pbs"')
 
-    # Receipt emails are now sent at form submission (HF Space),
-    # not here.  Use `notify receipt` to manually re-send if needed.
-
 
 # ---------------------------------------------------------------------------
 # set-status
@@ -474,83 +427,6 @@ def cmd_set_status(args):
 
     save_state(state)
     print(f"\nUpdated {len(targets)} request(s).")
-
-
-# ---------------------------------------------------------------------------
-# notify
-# ---------------------------------------------------------------------------
-def cmd_notify(args):
-    """Send email notifications for the current batch."""
-    template = args.template
-    print(f"Sending '{template}' emails...")
-
-    state = load_state()
-
-    if template == "rejected":
-        targets = [r for r in state["requests"] if r["action"] == "reject"]
-        for req in targets:
-            if not req.get("requester_email"):
-                print(f"  #{req['issue_number']} {req['name']}: No email, skipping")
-                continue
-
-            reason = req.get("reject_reason", "")
-            if reason == "non-hafs":
-                subj, html = email_rejected_non_hafs(
-                    req["name"], req["requester_name"],
-                    req.get("riwayah", "unknown"), req["issue_url"],
-                )
-            elif reason == "duplicate":
-                subj, html = email_rejected_duplicate(
-                    req["name"], req["requester_name"],
-                    req["issue_url"], "pending", req["issue_url"],
-                )
-            elif reason == "already-processed":
-                subj, html = email_rejected_already_processed(
-                    req["name"], req["requester_name"], req["issue_url"],
-                )
-            else:
-                continue
-
-            send_email(req["requester_email"], subj, html)
-
-    elif template == "receipt":
-        targets = [r for r in state["requests"] if r["action"] == "accept"]
-        for req in targets:
-            if not req.get("requester_email"):
-                print(f"  #{req['issue_number']} {req['name']}: No email, skipping")
-                continue
-            subj, html = email_receipt(
-                req["name"], req["requester_name"], req["issue_url"],
-            )
-            send_email(req["requester_email"], subj, html)
-
-    elif template == "segments_ready":
-        targets = [r for r in state["requests"] if r["action"] == "accept"]
-        for req in targets:
-            if not req.get("requester_email"):
-                continue
-            has_reviewer = req.get("review_opt_in") and req.get("github_username")
-            subj, html = email_segments_ready(
-                req["name"], req["requester_name"],
-                req["issue_url"], req.get("pr_url", ""),
-                collab_status="invited" if has_reviewer else "passive",
-                github_username=req.get("github_username", ""),
-            )
-            send_email(req["requester_email"], subj, html)
-
-    elif template == "timestamps_done":
-        targets = [r for r in state["requests"] if r["action"] == "accept"]
-        for req in targets:
-            if not req.get("requester_email"):
-                continue
-            subj, html = email_timestamps_done(
-                req["name"], req["requester_name"], req["issue_url"],
-            )
-            send_email(req["requester_email"], subj, html)
-
-    else:
-        print(f"Unknown template: {template}")
-        print("Available: rejected, receipt, segments_ready, timestamps_done")
 
 
 # ---------------------------------------------------------------------------
@@ -732,20 +608,6 @@ def cmd_prepare_pr(args):
                 gh_comment_on_issue(req["issue_number"], comment_body)
             except Exception as e:
                 print(f"    Warning: failed to comment on issue: {e}")
-
-            # Send segments-ready email (template varies by contributor status)
-            if req.get("requester_email"):
-                try:
-                    subj, html = email_segments_ready(
-                        req["name"], req["requester_name"],
-                        req["issue_url"], pr_url,
-                        collab_status=collab_status,
-                        github_username=req.get("github_username", ""),
-                    )
-                    send_email(req["requester_email"], subj, html)
-                    print(f"    Email sent to {req['requester_email']} ({collab_status})")
-                except Exception as e:
-                    print(f"    Warning: failed to send email: {e}")
 
         except subprocess.CalledProcessError as e:
             print(f"    ERROR: {e.cmd[0]} failed: {e.stderr.strip()}")
@@ -1198,34 +1060,10 @@ def cmd_complete_timestamps(args):
         else:
             print("  sync-dataset did not succeed; skipping release wait.")
 
-    # --- Phase 7: Send notifications (after CI, so links are valid) ---
-    release_url = (
-        f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{release_tag}"
-        if release_tag else ""
-    )
-
-    print("\nSending notifications...")
-    for pr in merged:
-        rec = pr["reciter"]
-        slug = rec["slug"]
-        riwayah = rec.get("riwayah", "hafs_an_asim")
-
-        dataset_url = (
-            f"https://huggingface.co/datasets/{HF_DATASET_ID}"
-            f"/viewer/{riwayah}/{slug}"
+    if release_tag:
+        print(
+            f"\nRelease: https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{release_tag}"
         )
-
-        if rec.get("requester_email"):
-            subj, html = email_timestamps_done(
-                rec["name"], rec.get("requester_name", ""),
-                rec.get("issue_url", ""),
-                dataset_url=dataset_url,
-                release_url=release_url,
-            )
-            send_email(rec["requester_email"], subj, html)
-            print(f"  Emailed {rec['requester_email']}")
-        else:
-            print(f"  {rec['name']}: no email on file, skipping notification")
 
     # --- Summary ---
     print("\n" + "=" * 60)
@@ -1260,16 +1098,13 @@ def main():
     sp.add_argument("status", choices=["pending", "rejected", "awaiting-review", "completed"])
     sp.add_argument("--job-id", help="PBS job ID to track")
 
-    sp = sub.add_parser("notify", help="Send email notifications")
-    sp.add_argument("template", choices=["rejected", "receipt", "segments_ready", "timestamps_done"])
-
     sub.add_parser("prepare-pr", help="Prepare PR staging instructions")
 
     sub.add_parser("detect-timestamps", help="Find reciters needing timestamps")
     sub.add_parser("run-timestamps", help="Run timestamp extraction in parallel")
 
     sp = sub.add_parser("complete-timestamps",
-                        help="Auto PR + merge + CI wait + notify")
+                        help="Auto PR + merge + CI wait")
     sp.add_argument("--skip-ci", action="store_true",
                     help="Skip waiting for CI workflows")
 
@@ -1279,7 +1114,6 @@ def main():
         "triage": cmd_triage,
         "generate-pbs": cmd_generate_pbs,
         "set-status": cmd_set_status,
-        "notify": cmd_notify,
         "prepare-pr": cmd_prepare_pr,
         "detect-timestamps": cmd_detect_timestamps,
         "run-timestamps": cmd_run_timestamps,
