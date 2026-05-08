@@ -17,7 +17,6 @@
         continuousPlay,
         playbackSpeed,
         playButtonLabel,
-        prefetchEnabled,
         segAudioElement,
         segPort,
         segPortReady,
@@ -50,7 +49,6 @@
     // Reactive button classes driven by the toggle stores.
     $: autoPlayClass = 'btn ' + ($autoPlayEnabled ? 'seg-autoplay-on' : 'seg-autoplay-off');
     $: autoScrollClass = 'btn ' + ($autoScrollEnabled ? 'seg-autoscroll-on' : 'seg-autoscroll-off');
-    $: prefetchClass = 'btn ' + ($prefetchEnabled ? 'seg-prefetch-on' : 'seg-prefetch-off');
 
     // -------------------------------------------------------------------------
     // Event handlers
@@ -71,12 +69,6 @@
         const next = !get(autoScrollEnabled);
         autoScrollEnabled.set(next);
         localStorage.setItem(LS_KEYS.SEG_AUTOSCROLL, String(next));
-    }
-
-    function handlePrefetchToggle(): void {
-        const next = !get(prefetchEnabled);
-        prefetchEnabled.set(next);
-        localStorage.setItem(LS_KEYS.SEG_PREFETCH, String(next));
     }
 
     function onSpeedSelectChange(e: Event): void {
@@ -170,12 +162,6 @@
         title="Auto-scroll the list to follow the playing segment"
         on:click={handleAutoScrollToggle}
     >Auto-scroll</button>
-    <button
-        id="seg-prefetch-btn"
-        class={prefetchClass}
-        title="Pre-warm the next segment's audio (VBR clip / CBR chapter URL) during playback"
-        on:click={handlePrefetchToggle}
-    >Prefetch</button>
 </div>
 
 <style>
