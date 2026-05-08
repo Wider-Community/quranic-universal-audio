@@ -45,7 +45,7 @@ Timestamps: `✓✓` = words + letters/phonemes, `✓` = words only.
 | Ahmad Talib bin Humaid | Murattal | MP3Quran | Surah | 107, 5,559 | 20.8 | ✓ | ✓ | ✗ |
 | Bandar Balilah | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 26.4 | ✓ | ✓ | ✗ |
 | Maher Al Meaqli | Murattal | MP3Quran | Surah | 114, 6,235 | 22.7 | ✓ | ✓ | ✓✓ |
-| Mishary Alafasi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 29.8 | ✓ | ✓ | ✗ |
+| Mishary Alafasi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 29.8 | ✓ | ✓ | ✓✓ |
 | Mohammed Al-Ghazali | Murattal | Surah-Quran | Surah | 114, 6,236 | 31.5 | ✓ | ✓ | ✗ |
 | Mohammed Ayyub | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 21.3 | ✓ | ✓ | ✗ |
 | Mohammed Siddiq Al-Minshawi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 28.9 | ✓ | ✓ | ✓✓ |
