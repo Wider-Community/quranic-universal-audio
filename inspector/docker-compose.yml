@@ -28,4 +28,9 @@ services:
       - "5000:5000"
     volumes:
       - ../data:/data
+    environment:
+      # Timestamps tab read path. "local" = Flask slices on-disk data and
+      # serves manifest + per-chapter shards. "huggingface" = frontend
+      # bypasses Flask and reads directly from the HF dataset CDN.
+      - INSPECTOR_TS_SOURCE=local
     restart: unless-stopped
