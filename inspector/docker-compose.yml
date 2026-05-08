@@ -28,9 +28,8 @@ services:
       - "5000:5000"
     volumes:
       - ../data:/data
-    environment:
-      # Timestamps tab read path. "local" = Flask slices on-disk data and
-      # serves manifest + per-chapter shards. "huggingface" = frontend
-      # bypasses Flask and reads directly from the HF dataset CDN.
-      - INSPECTOR_TS_SOURCE=local
+    # Timestamps tab read path is "huggingface" by default (set in the
+    # Dockerfile) so Docker reviewers don't need a local timestamps tree
+    # to use the tab. Override with `INSPECTOR_TS_SOURCE=local` here if
+    # you want Flask to serve shards from the bind-mounted ../data instead.
     restart: unless-stopped

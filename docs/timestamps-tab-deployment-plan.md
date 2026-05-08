@@ -332,7 +332,17 @@ The manual-dispatch full-sync path (`reciter: ""`) iterates all eligible reciter
 
 ### 6e. Local-Docker dev (unchanged)
 
-`INSPECTOR_TS_SOURCE=local` (default in `docker-compose.yml`) keeps the on-disk path: `services/data_loader.py::load_timestamps` reads `data/timestamps/by_*_audio/<reciter>/timestamps_full.json` lazily as today. The startup eager preload + the audio-source byte-peek go away regardless of mode (see also `inspector-deployment-plan.md` §7).
+**Default mode by execution context:**
+
+| How Inspector is run | `INSPECTOR_TS_SOURCE` default | Source of the default |
+|---|---|---|
+| Docker (`docker compose up`, `docker run`, GHCR pull) | `huggingface` | `inspector/Dockerfile`'s `ENV INSPECTOR_TS_SOURCE=huggingface` |
+| Direct `python inspector/app.py` (maintainer dev) | `local` | `inspector/config.py`'s `os.getenv` fallback |
+| Frontend dev `npm run dev` (proxies to direct Flask) | `local` | same as above |
+
+The reasoning: Docker reviewers don't necessarily have a local `data/timestamps/...` tree (they're often pulling the image to inspect a specific PR's segments without the prior MFA outputs), so HF mode is the safer default. Maintainer dev — running Flask directly — does have the local tree and benefits from offline operation. Either default can be overridden via the env var on a single run.
+
+In `local` mode the on-disk path is unchanged: `services/data_loader.py` loads `data/timestamps/by_*_audio/<reciter>/timestamps_full.json` lazily, Flask slices into chapter shards on demand. The startup eager preload + the audio-source byte-peek are gone regardless of mode (see also `inspector-deployment-plan.md` §7).
 
 ## 7. Phased rollout
 
