@@ -33,7 +33,7 @@ import {
 } from '../../stores/edit';
 import {
     continuousPlay,
-    segAudioElement,
+    segPort,
 } from '../../stores/playback';
 import {
     _advanceRefByOneWord,
@@ -93,8 +93,7 @@ export function beginRefEdit(
     contextCategory: string | null = null,
     mountId: symbol | null = null,
 ): void {
-    const audioEl = get(segAudioElement);
-    if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
+    if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
 
     // Seed the initial value with the exact object we just passed to beginRefEdit,

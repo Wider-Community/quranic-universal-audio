@@ -8,12 +8,13 @@
 
 import { get } from 'svelte/store';
 
+import { EDIT_LOAD_PAD_MS } from '../../../../lib/playback/constants';
 import type { Segment } from '../../../../lib/types/domain';
 import { createOp, setPendingOp, snapshotSeg } from '../../stores/dirty';
 import { clearEdit, editMode } from '../../stores/edit';
 import {
     continuousPlay,
-    segAudioElement,
+    segPort,
 } from '../../stores/playback';
 import { disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { enterSplitMode } from './split';
@@ -28,14 +29,22 @@ export function enterEditWithBuffer(
 ): void {
     if (get(editMode)) return;
 
-    const audioEl = get(segAudioElement);
-    const prePausePlayMs = !audioEl || audioEl.paused ? null : audioEl.currentTime * 1000;
+    const prePausePlayMs = segPort.paused ? null : segPort.currentTimeMs();
 
-    if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
+    if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
     // Dispose the segments-main AudioRange so its rAF + pending advance gap
     // can't fire onto the audio element while edit-preview owns it.
     disposeSegRange();
     continuousPlay.set(false);
+
+    // Pre-load the audio for the whole segment ± edit-mode padding. Under
+    // VBR this issues ONE ffmpeg invocation that covers all subsequent
+    // edit-preview operations: split-left toggle, split-right toggle, trim
+    // nudge, click-to-seek inside the row. Each of those was previously
+    // its own clip URL → bug #2 (split latency) and #3 (drag past clip
+    // edge had no audio). Now the port's idempotent fast path absorbs
+    // them. CBR chapters cover everything regardless, so no-op.
+    segPort.loadCovering(seg.time_start, seg.time_end, EDIT_LOAD_PAD_MS);
 
     const pending = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment',
         contextCategory ? { contextCategory } : undefined);
