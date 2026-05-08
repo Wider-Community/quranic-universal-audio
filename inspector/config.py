@@ -160,9 +160,6 @@ PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 
 PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parallel peak compute
 PEAKS_MIN_CHUNK_BYTES = 100              # short-circuit below this raw-chunk size (prevents tiny ffmpeg invocations)
 
-# Startup preload (app.py)
-STARTUP_PRELOAD_WORKERS = 8              # ThreadPoolExecutor cap for eager timestamp preload
-
 # Audio-cache background download (routes/audio_proxy.py)
 AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download workers for by_surah cache warmup
 
