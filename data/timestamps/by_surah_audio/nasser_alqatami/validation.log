@@ -1,4 +1,4 @@
-Generated: 2026-05-08 21:34:06
+Generated: 2026-05-08 22:22:30
 
 ========================================================================
   Timestamps: nasser_alqatami
@@ -13,10 +13,10 @@ Generated: 2026-05-08 21:34:06
   Shared CMVN:   False
 
 --- Coverage ---
-  Verses found:       6236 / 6236
-  Missing verses:     0
-  Total words:        84637
-  Coverage issues:    2
+  Verses found:       6235 / 6236
+  Missing verses:     1
+  Total words:        84643
+  Coverage issues:    0
   Forward gap verses: 0
 
 --- Word Duration ---
@@ -31,7 +31,7 @@ Generated: 2026-05-08 21:34:06
 
 --- Verse Timestamps ---
   Duration min:     0.75s
-  Duration median:  12.36s
+  Duration median:  12.37s
   Duration mean:    15.24s
   Duration max:     154.48s
   Short (<500ms):   0
@@ -56,15 +56,16 @@ Generated: 2026-05-08 21:34:06
 
 --- Validation Issues ---
   Errors:     1
-  Warnings:   28
+  Warnings:   26
+
+  Missing verses (first 1 of 1):
+    MISS   1:1  (4 words)
 
   Errors (first 1 of 1):
     ERROR  77:29  verse overlap with 77:28: 77:28 ends 1:58.4, 77:29 starts 1:58.4 (overlap 5ms)
 
-  Warnings (first 28 of 28):
+  Warnings (first 26 of 26):
     WARN     _meta missing fields: ['retry_beam']
-    WARN   19:30  missing word indices: [5, 6, 7, 8]
-    WARN   79:38  missing word indices: [3]
     WARN   12:100  end mismatch: timestamps 32:56.5 vs segments 32:57.5 (diff 976ms)
     WARN   14:52  end mismatch: timestamps 19:09.2 vs segments 19:10.8 (diff 1552ms)
     WARN   19:71  end mismatch: timestamps 15:21.3 vs segments 15:22.3 (diff 1011ms)
@@ -73,7 +74,7 @@ Generated: 2026-05-08 21:34:06
     WARN   75:40  end mismatch: timestamps 3:50.8 vs segments 3:51.8 (diff 1020ms)
     WARN   89:26  end mismatch: timestamps 4:37.8 vs segments 4:38.9 (diff 1145ms)
     WARN   2:46  large gap after 2:45: 14:29.3 to 14:39.8 (gap 10.47s)
-    WARN   19:31  large gap after 19:30: 5:42.3 to 6:09.8 (gap 27.45s)
+    WARN   19:30  large gap after 19:29: 5:34.2 to 5:53.7 (gap 19.53s)
     WARN   22:21  large gap after 22:20: 7:09.5 to 7:46.6 (gap 37.08s)
     WARN   26:89  large gap after 26:88: 11:33.6 to 11:53.8 (gap 20.25s)
     WARN   40:46  large gap after 40:45: 12:41.0 to 12:51.8 (gap 10.74s)
