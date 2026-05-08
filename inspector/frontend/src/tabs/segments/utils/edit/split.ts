@@ -4,8 +4,6 @@
 
 import { get } from 'svelte/store';
 
-import { fetchJsonOrNull } from '../../../../lib/api';
-import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { applyCommand } from '../../domain/apply-command';
@@ -35,7 +33,12 @@ import {
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
-import { _suggestSplitRefs as _suggestSplitRefsLib, getVerseWordCounts, parseSegRef } from '../data/references';
+import {
+    _suggestSplitRefs as _suggestSplitRefsLib,
+    dkTextForRef,
+    getVerseWordCounts,
+    parseSegRef,
+} from '../data/references';
 import { setPreviewLooping } from '../playback/play-range';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { getRowEntryForMount } from '../playback/row-registry';
@@ -264,11 +267,11 @@ export function nudgeSplitBoundary(deltaMs: number): number | null {
 // confirmSplit — apply the split and chain ref editing
 // ---------------------------------------------------------------------------
 
-export async function confirmSplit(
+export function confirmSplit(
     seg: Segment,
     canvas?: SegCanvas | null,
     mountId: symbol | null = null,
-): Promise<void> {
+): void {
     const c = canvas ?? get(editCanvas);
     const splitTime = c?._splitData?.currentSplit;
     if (splitTime == null || splitTime <= seg.time_start || splitTime >= seg.time_end) {
@@ -293,38 +296,23 @@ export async function confirmSplit(
     const uid = seg.segment_uid;
     if (!uid) return;
 
-    // Async ref resolution at the edge: cross-verse splits get per-verse
-    // refs auto-suggested. Resolved text lives on the command so the reducer
-    // produces halves with matching ref+text in one atomic step. Failed
-    // resolves yield empty text fields — never inherited cross-verse text.
+    // Cross-verse splits get per-verse refs auto-suggested + resolved text
+    // derived locally via `dkTextForRef`. Resolved text lives on the command
+    // so the reducer produces halves with matching ref+text in one atomic
+    // step. Empty when the suggested ref isn't in the local DK map (treated
+    // as a no-resolution) — never inherits cross-verse text.
     const suggested = _suggestSplitRefs(seg.matched_ref);
     let firstRef: string | undefined;
     let secondRef: string | undefined;
     let firstText: string | undefined;
-    let firstDisplay: string | undefined;
     let secondText: string | undefined;
-    let secondDisplay: string | undefined;
     if (suggested) {
+        const dk = get(segAllData)?.dk_words;
+        const vwc = getVerseWordCounts();
         firstRef = suggested.first;
         secondRef = suggested.second;
-        const [r1, r2] = await Promise.allSettled([
-            fetchJsonOrNull<SegResolveRefResponse>(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.first)}`),
-            fetchJsonOrNull<SegResolveRefResponse>(`/api/seg/resolve_ref?ref=${encodeURIComponent(suggested.second)}`),
-        ]);
-        if (r1.status === 'fulfilled' && r1.value?.text) {
-            firstText = r1.value.text;
-            firstDisplay = r1.value.display_text || r1.value.text;
-        } else {
-            firstText = '';
-            firstDisplay = '';
-        }
-        if (r2.status === 'fulfilled' && r2.value?.text) {
-            secondText = r2.value.text;
-            secondDisplay = r2.value.display_text || r2.value.text;
-        } else {
-            secondText = '';
-            secondDisplay = '';
-        }
+        firstText = dkTextForRef(suggested.first, dk, vwc);
+        secondText = dkTextForRef(suggested.second, dk, vwc);
     }
 
     const secondHalfUid = crypto.randomUUID();
@@ -342,9 +330,7 @@ export async function confirmSplit(
             firstRef,
             secondRef,
             firstText,
-            firstDisplayText: firstDisplay,
             secondText,
-            secondDisplayText: secondDisplay,
             sourceCategory: ctxCat ?? undefined,
             contextCategory: ctxCat ?? undefined,
         },

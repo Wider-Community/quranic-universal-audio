@@ -8,7 +8,6 @@ function makeSegment(overrides: Partial<Segment>): Segment {
         audio_url: '/audio/ch1.mp3',
         chapter: 1,
         confidence: 1,
-        display_text: '',
         entry_idx: 0,
         index: 0,
         matched_ref: '',

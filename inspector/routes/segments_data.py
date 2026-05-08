@@ -21,7 +21,7 @@ from constants import (
 from services.validation.registry import ALL_CATEGORIES
 from services import cache
 from services.data_loader import (
-    dk_text_for_ref,
+    get_dk_words_flat,
     get_word_counts,
     load_detailed,
     resolve_pad,
@@ -136,7 +136,6 @@ def seg_all(reciter):
                 "time_end":     seg.get("time_end", 0),
                 "matched_ref":  mref,
                 "matched_text": seg.get("matched_text", ""),
-                "display_text": dk_text_for_ref(mref),
                 "confidence":   round(seg.get("confidence", 0.0), 4),
                 "audio_url":    entry_audio,
                 "entry_ref":    entry.get("ref", ""),
@@ -160,6 +159,10 @@ def seg_all(reciter):
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "verse_word_counts": verse_word_counts,
+        # Flat ``"surah:ayah:word" -> Digital Khatt text`` map. Lets the FE
+        # build per-row body text directly from ``matched_ref``, so history
+        # snapshots without stored text fields still render correctly.
+        "dk_words": get_dk_words_flat(),
         # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
         "pad_ms": (pad_left_ms + pad_right_ms) // 2,
         "pad_left_ms": pad_left_ms,

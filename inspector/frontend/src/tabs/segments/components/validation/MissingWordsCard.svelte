@@ -135,12 +135,12 @@
     }
 
     // ---- Auto-fix handler ----
-    async function handleAutoFix(autoFix: SegValAutoFix | undefined): Promise<void> {
+    function handleAutoFix(autoFix: SegValAutoFix | undefined): void {
         if (!autoFix) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
-        await autoFixMissingWord(targetSeg, newRef);
+        autoFixMissingWord(targetSeg, newRef);
     }
 
 </script>

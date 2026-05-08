@@ -63,9 +63,7 @@ export interface SplitCommand extends CommandBase {
     firstRef?: string;
     secondRef?: string;
     firstText?: string;
-    firstDisplayText?: string;
     secondText?: string;
-    secondDisplayText?: string;
     /** Pre-allocated UID for the second half so the dispatcher can wire row registry. */
     secondHalfUid?: string;
 }
@@ -80,7 +78,6 @@ export interface MergeCommand extends CommandBase {
     /** Resolved merged values from the dispatcher edge. */
     mergedRef?: string;
     mergedText?: string;
-    mergedDisplayText?: string;
     /** Convenience direction tag — 'prev' if fromUid precedes toUid, else 'next'. */
     direction?: 'prev' | 'next';
 }
@@ -90,7 +87,6 @@ export interface EditReferenceCommand extends CommandBase {
     segmentUid: string;
     matched_ref: string;
     matched_text?: string;
-    display_text?: string;
     /** Wire-level op_type to record. Defaults to 'edit_reference'; the
      *  dispatcher passes 'confirm_reference' when the user confirmed an
      *  unchanged ref to clear an audit/low-confidence flag. */
@@ -114,7 +110,6 @@ export interface AutoFixMissingWordCommand extends CommandBase {
     /** New ref the auto-fix extends the segment to. */
     matched_ref: string;
     matched_text?: string;
-    display_text?: string;
 }
 
 export type SegmentCommand =

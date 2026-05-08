@@ -61,6 +61,7 @@
     import { jumpToSegment } from '../../utils/data/navigation-actions';
     import {
         _addVerseMarkers,
+        dkTextForRef,
         formatRef,
         formatTimeMs,
     } from '../../utils/data/references';
@@ -96,8 +97,10 @@
     export let trimHL: TrimHighlight | null = null;
     /** Provisioning slot — overlay applied in history mode. */
     export let mergeHL: MergeHighlight | null = null;
-    /** Provisioning slot — marks changed fields in the card. */
-    export let changedFields: Set<'ref' | 'duration' | 'conf' | 'body'> | null = null;
+    /** Provisioning slot — marks changed fields in the card. The `body` flag
+     *  was retired alongside `display_text`: row body is now derived from
+     *  `matched_ref`, so a body change always implies a `ref` change. */
+    export let changedFields: Set<'ref' | 'duration' | 'conf'> | null = null;
     /** `history` mode = vertical layout (waveform above text). */
     export let mode: 'normal' | 'history' = 'normal';
     /** Fallback chapter when `seg.chapter` is null — only used for dirty lookup. */
@@ -223,7 +226,11 @@
         ? 'Cannot merge segments from different audio files'
         : '';
     $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
-    let previewState: { text: string; ref: string } | null = null;
+    // Live ref-edit preview ref. ReferenceEditor dispatches the normalized ref
+    // on every keystroke; the body re-renders synchronously through the same
+    // `dkTextForRef` lookup the persisted row uses. `null` = no preview /
+    // invalid input — body falls back to `seg.matched_ref`.
+    let previewState: { ref: string } | null = null;
     $: if (!isEditingThisRow || $editMode !== 'reference') {
         previewState = null;
     }
@@ -232,10 +239,12 @@
     $: changedRef = !!changedFields?.has('ref');
     $: changedDur = !!changedFields?.has('duration');
     $: changedConf = !!changedFields?.has('conf');
-    $: changedBody = !!changedFields?.has('body');
-    $: bodyText = previewState
-        ? _addVerseMarkers(previewState.text, previewState.ref, $segAllData?.verse_word_counts) || '(alignment failed)'
-        : _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
+    $: bodyRef = previewState?.ref ?? seg.matched_ref;
+    $: bodyText = (() => {
+        const text = dkTextForRef(bodyRef, $segAllData?.dk_words, $segAllData?.verse_word_counts);
+        if (!text) return seg.matched_ref ? '(no text)' : '(no match)';
+        return _addVerseMarkers(text, bodyRef, $segAllData?.verse_word_counts) || text;
+    })();
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
@@ -686,6 +695,6 @@
                 <div class="seg-text-label">{contextLabel}</div>
             {/if}
         </div>
-        <div class="seg-text-body" class:seg-history-changed={changedBody}>{bodyText}</div>
+        <div class="seg-text-body" class:seg-history-changed={changedRef}>{bodyText}</div>
     </div>
 </div>

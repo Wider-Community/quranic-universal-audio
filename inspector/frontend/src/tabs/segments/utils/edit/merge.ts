@@ -4,8 +4,6 @@
 
 import { get } from 'svelte/store';
 
-import { fetchJson } from '../../../../lib/api';
-import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { applyCommand } from '../../domain/apply-command';
 import {
@@ -25,6 +23,7 @@ import {
 } from '../../stores/edit';
 import { recordMergeRedirect } from '../../stores/merge-redirect';
 import { clearFlashForChapter } from '../../stores/navigation';
+import { dkTextForRef, getVerseWordCounts } from '../data/references';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { finalizeEdit } from './common';
 
@@ -32,12 +31,12 @@ import { finalizeEdit } from './common';
 // mergeAdjacent — combine two adjacent segments
 // ---------------------------------------------------------------------------
 
-export async function mergeAdjacent(
+export function mergeAdjacent(
     seg: Segment,
     direction: 'prev' | 'next',
     contextCategory: string | null = null,
     mountId: symbol | null = null,
-): Promise<void> {
+): void {
     const chStr = get(selectedChapter);
     const chapter = seg.chapter || parseInt(chStr);
     const currentChapter = parseInt(chStr);
@@ -79,8 +78,9 @@ export async function mergeAdjacent(
     // so accordion twins stay passive; omit (null) for programmatic calls.
     setEdit('merge', seg.segment_uid ?? null, mountId);
 
-    // Async ref resolution at the edge: produces the canonical merged ref+text
-    // pair that the reducer slots into the merged segment.
+    // Build the merged ref from the two halves' endpoints, then derive the
+    // canonical Arabic text for it locally via `dkTextForRef`. Falls back to
+    // concatenated halves when the merged ref isn't resolvable.
     let mergedRef = '';
     const refs = [first.matched_ref, second.matched_ref].filter(Boolean);
     if (refs.length > 0) {
@@ -92,19 +92,10 @@ export async function mergeAdjacent(
     }
 
     let mergedText = [first.matched_text, second.matched_text].filter(Boolean).join(' ');
-    let mergedDisplay = [first.display_text, second.display_text].filter(Boolean).join(' ');
     if (mergedRef) {
-        try {
-            const data = await fetchJson<SegResolveRefResponse>(
-                `/api/seg/resolve_ref?ref=${encodeURIComponent(mergedRef)}`,
-            );
-            if (data.text) {
-                mergedText = data.text;
-                mergedDisplay = data.display_text || data.text;
-            }
-        } catch (e) {
-            console.warn('Failed to resolve merged ref, using concatenated text:', e);
-        }
+        const dk = get(segAllData)?.dk_words;
+        const resolved = dkTextForRef(mergedRef, dk, getVerseWordCounts());
+        if (resolved) mergedText = resolved;
     }
 
     const result = applyCommand(
@@ -120,7 +111,6 @@ export async function mergeAdjacent(
             direction,
             mergedRef,
             mergedText,
-            mergedDisplayText: mergedDisplay,
             sourceCategory: contextCategory ?? undefined,
             contextCategory: contextCategory ?? undefined,
         },

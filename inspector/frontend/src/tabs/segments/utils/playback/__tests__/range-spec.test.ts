@@ -14,7 +14,6 @@ function makeSegment(overrides: Partial<Segment> = {}): Segment {
         time_end: 1000,
         matched_ref: '1:1:1-1:1:1',
         matched_text: 'x',
-        display_text: 'x',
         confidence: 1.0,
         audio_url: 'http://x/seg.mp3',
         ...overrides,
@@ -61,6 +60,7 @@ describe('buildSegRangeSpec — VBR routing', () => {
             segments: [],
             summary: {} as never,
             verse_word_counts: {},
+            dk_words: {},
         });
         try {
             return fn();
@@ -108,7 +108,7 @@ describe('buildSegRangeSpec — VBR routing', () => {
         segData.subscribe((v) => { prev.data = v; })();
         segData.set({
             audio_url: 'http://x/seg.mp3', vbr: true, reciter_vbr_chapters: [], segments: [],
-            summary: {} as never, verse_word_counts: {},
+            summary: {} as never, verse_word_counts: {}, dk_words: {},
         });
         try {
             const spec = buildSegRangeSpec(seg);

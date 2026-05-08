@@ -34,7 +34,6 @@ function _segFromSnapshot(snap: Record<string, unknown>): Segment {
         time_end: (snap.time_end as number) ?? 0,
         matched_ref: (snap.matched_ref as string) ?? '',
         matched_text: (snap.matched_text as string) ?? '',
-        display_text: (snap.display_text as string) ?? '',
         confidence: (snap.confidence as number) ?? 0,
         audio_url: (snap.audio_url as string) ?? '',
     };

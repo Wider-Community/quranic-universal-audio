@@ -28,7 +28,6 @@ export interface Segment {
     time_end: number; // milliseconds
     matched_ref: Ref;
     matched_text: string;
-    display_text: string;
     confidence: number; // 0..1
     audio_url: string;
     ignored_categories?: string[];
