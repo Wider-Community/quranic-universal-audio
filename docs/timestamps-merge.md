@@ -77,18 +77,23 @@ seg δ (home B)   →  37:65:1-4   (re-pass of β)
 
 If both passes of `A` are kept, verse `A`'s start/end span the whole α…γ range and apparently overlap verse `B`'s start (which spans β…δ) by many seconds. That is a downstream defect, not within-verse repetition.
 
-**Rule:** for each verse, the **first contiguous run** of home segs is kept; once a different home verse intervenes, the verse is *closed* and any later home seg of it is dropped from timestamp extraction. The segments themselves stay in `detailed.json` (so the audio is still in the source recording) — they're only excluded from the timestamps merge.
+**Rule (run-level picker).** Group V's home segs into **runs** — a run is a maximal contiguous sequence of V-home segs in seg order, optionally punctuated by cross-verse segs (those are transition audio, not a different home). A home seg for a different verse breaks the run. For each verse with multiple runs, pick the run that covers the **widest set of widxs**; on a tie the earliest run wins. All segs in losing runs are excluded from the timestamps merge. The segs themselves remain in `detailed.json` — the original audio is untouched — they just don't contribute timings.
 
-What counts as "intervening":
+Why widx coverage rather than "first wins always":
 
-| Between two home segs of the same verse V | Result |
-|---|---|
-| Nothing — segs are adjacent in seg order | both kept (Case 2 stutter) |
-| Another home seg for the same V | both kept (still consecutive run of V) |
-| A cross-verse seg | first kept, second dropped *unless the cross-verse seg's home component is V itself* — see Case 3 |
-| A home seg for a different verse | first kept, second dropped |
+```
+seg α   home V   1-4         (partial first take)
+seg β   home X
+seg γ   home X
+seg δ   home V   1-4         (re-pass start)
+seg ε   home V   1-8         (re-pass continued, fuller)
+```
 
-This rule assumes reciters do not jump forward and back-fill mid-pass — they read in order, occasionally re-reading something they just said. Under that assumption, "home seg of V appears after V was closed" is unambiguously a re-pass, with no need to inspect widx ranges.
+The reciter started V, fumbled, jumped to X to recover, then came back and read V cleanly. The first run (α) covers widx 1-4; the second run (δ-ε) covers 1-8. "First wins" would leave V at widx 1-4 with 5-8 missing. Picking the wider-coverage run gives a complete V from the clean take.
+
+Within the winning run, multiple segs (e.g. δ + ε) and within-verse stutter still flow through `_merge_seg_words` unchanged — multiple primaries at the same widx remain legitimate.
+
+This rule assumes reciters don't jump forward and back-fill mid-pass — they read in order, occasionally re-reading something they just said. So we never need to merge widxs across runs.
 
 Implemented in `_repeat_pass_skip_indices` (`scripts/lib/timestamps_pipeline.py`); skipped seg indices are logged at INFO so the run log shows what was dropped and why.
 

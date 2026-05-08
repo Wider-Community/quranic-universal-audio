@@ -360,29 +360,43 @@ def _seg_is_home_for_key(matched_ref: str, output_key: str) -> bool:
 
 
 def _repeat_pass_skip_indices(segments: list[dict]) -> set[int]:
-    """Identify home segs that are re-pass duplicates and should be skipped.
+    """Identify home segs that belong to a re-pass and should be skipped.
 
     Reciters sometimes re-recite a verse (or short run of verses) after
-    moving on. The segmenter still emits home segs for both passes, but
-    keeping both produces two disjoint copies of the same verse — verse
+    moving on. The segmenter emits home segs for every pass, and keeping
+    them all produces two disjoint copies of the same verse — the verse's
     `start`/`end` then spans both, manifesting downstream as a "verse
     overlap" against neighbours.
 
-    Rule: for each verse V the FIRST contiguous run of home segs is kept;
-    once a *different* home verse intervenes, V is closed and any later
-    home seg of V is dropped. Consecutive same-verse repeats stay open
-    (legitimate within-verse stutter — handled by `_merge_seg_words`).
-    Cross-verse segs close the active home (we exited it) but don't open
-    one; their bleed contributions still flow through the existing
-    primary/bleed dedup.
+    The picker works at the *run* level rather than the seg level. A run
+    for verse V is a maximal contiguous sequence of V's home segs in
+    seg-order, allowed to be punctuated by cross-verse segs (which are
+    transition audio, not a new home). A different home verse breaks the
+    run.
 
-    Reciters do not jump forward and back-fill mid-pass, so an overlap
-    against a closed verse is always a re-pass dupe — no widx-range check
-    needed.
+    For each verse with multiple runs, the run that covers the widest set
+    of widxs wins; on a tie the earliest run wins (so a clean first
+    take is preferred over a clean re-pass of the same range). All segs
+    in losing runs are skipped from timestamp extraction. Within the
+    winning run, multi-seg coverage and within-verse stutter still flow
+    through `_merge_seg_words`'s primary-append path unchanged.
+
+    Picking by widx coverage handles the partial-then-complete shape
+    (e.g. seg ``19:30:1-4`` then later ``19:30:1-8``): the fuller run
+    wins, so the verse ends up complete instead of stuck at the early
+    partial pass. Reciters don't jump forward and back-fill mid-pass, so
+    we don't worry about merging widxs across runs.
     """
-    skip: set[int] = set()
-    closed: set[str] = set()
-    current_home: str | None = None
+    runs_by_verse: dict[str, list[dict]] = {}
+    cur_verse: str | None = None
+    cur_run: dict | None = None
+
+    def _finalize() -> None:
+        nonlocal cur_verse, cur_run
+        if cur_verse is not None and cur_run is not None:
+            runs_by_verse.setdefault(cur_verse, []).append(cur_run)
+        cur_verse = None
+        cur_run = None
 
     for idx, seg in enumerate(segments):
         matched_ref = seg.get("matched_ref", "")
@@ -391,28 +405,36 @@ def _repeat_pass_skip_indices(segments: list[dict]) -> set[int]:
         out_key = _matched_ref_to_output_key(matched_ref)
         if out_key is None:
             continue
-        # Cross-verse: out_key is the compound matched_ref itself.
+        # Cross-verse: out_key is the compound matched_ref itself —
+        # transition audio, doesn't break the active home's run.
         is_single_home = ":" in out_key and "-" not in out_key
         if not is_single_home:
-            if current_home is not None:
-                closed.add(current_home)
-                current_home = None
             continue
 
-        if out_key in closed:
-            skip.add(idx)
-            # The seg still represents a real pass through this verse —
-            # update state so a *later* re-pass of the same verse after
-            # yet another transition is also detected.
-            if current_home is not None and current_home != out_key:
-                closed.add(current_home)
-            current_home = out_key
+        widx_range = _declared_widx_range(matched_ref)
+        if widx_range is None:
             continue
+        seg_widxs = set(range(widx_range[0], widx_range[1] + 1))
 
-        if current_home is not None and current_home != out_key:
-            closed.add(current_home)
-        current_home = out_key
+        if cur_verse != out_key:
+            _finalize()
+            cur_verse = out_key
+            cur_run = {"seg_idxs": [], "widxs": set()}
+        cur_run["seg_idxs"].append(idx)
+        cur_run["widxs"] |= seg_widxs
 
+    _finalize()
+
+    skip: set[int] = set()
+    for runs in runs_by_verse.values():
+        if len(runs) <= 1:
+            continue
+        # Wider coverage wins; earliest first-seg breaks ties.
+        best = max(runs, key=lambda r: (len(r["widxs"]),
+                                        -min(r["seg_idxs"])))
+        for r in runs:
+            if r is not best:
+                skip.update(r["seg_idxs"])
     return skip
 
 
