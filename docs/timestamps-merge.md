@@ -40,7 +40,7 @@ The boring majority. One segment covers the verse exactly. MFA returns timings. 
 
 ## Case 2 — Within-verse repetition (two home segments)
 
-Reciter reads a verse, pauses, repeats some words for emphasis or correction. The segmenter produces **two overlapping home segments** for the same verse.
+Reciter reads a verse, pauses, repeats some words for emphasis or correction. The segmenter produces **two overlapping home segments** for the same verse, **with no different home verse between them** (i.e. they're consecutive in seg order — possibly with a cross-verse seg between, see Case 3).
 
 **Minshawi, 2:14:**
 
@@ -63,6 +63,34 @@ Repeated widx 9–11 before finishing.
 **Behavior:** both segments' timings are kept. The verse's `word_timestamps` contains each repeated widx twice, ordered by start time. Dataset consumers see this as expected — the dataset schema explicitly allows repeated `word_idx` and the README documents it ("When the reciter repeats a word, the same `word_idx` may appear multiple times and indices may go backward").
 
 There are **547 such within-verse repetition pairs** across Minshawi's full recording.
+
+### Case 2b — Re-pass duplicate (NOT kept)
+
+A different shape: the reciter reads `A`, then `B`, then goes **back** and re-reads `A` (and possibly `B`). The segmenter still emits home segs for both passes of `A`, but here the two `A` segs are **separated by a different home verse** rather than adjacent.
+
+```
+seg α (home A)   →  e.g. 37:64:1-6
+seg β (home B)   →  e.g. 37:65:1-4
+seg γ (home A)   →  37:64:1-6   (re-pass of α)
+seg δ (home B)   →  37:65:1-4   (re-pass of β)
+```
+
+If both passes of `A` are kept, verse `A`'s start/end span the whole α…γ range and apparently overlap verse `B`'s start (which spans β…δ) by many seconds. That is a downstream defect, not within-verse repetition.
+
+**Rule:** for each verse, the **first contiguous run** of home segs is kept; once a different home verse intervenes, the verse is *closed* and any later home seg of it is dropped from timestamp extraction. The segments themselves stay in `detailed.json` (so the audio is still in the source recording) — they're only excluded from the timestamps merge.
+
+What counts as "intervening":
+
+| Between two home segs of the same verse V | Result |
+|---|---|
+| Nothing — segs are adjacent in seg order | both kept (Case 2 stutter) |
+| Another home seg for the same V | both kept (still consecutive run of V) |
+| A cross-verse seg | first kept, second dropped *unless the cross-verse seg's home component is V itself* — see Case 3 |
+| A home seg for a different verse | first kept, second dropped |
+
+This rule assumes reciters do not jump forward and back-fill mid-pass — they read in order, occasionally re-reading something they just said. Under that assumption, "home seg of V appears after V was closed" is unambiguously a re-pass, with no need to inspect widx ranges.
+
+Implemented in `_repeat_pass_skip_indices` (`scripts/lib/timestamps_pipeline.py`); skipped seg indices are logged at INFO so the run log shows what was dropped and why.
 
 ## Case 3 — Verse boundary: cross-verse segment beside home coverage
 
@@ -103,6 +131,8 @@ Result:
 If a verse has no home segment, any cross-verse segment that touches it still contributes. That's exactly what happens for "وَلَدَ ٱللَّهُ" (the first two words of 37:152) in the example above — no home seg covers them, so the cross-verse seg's timing is used. If several cross-verse segs claimed the same word with no home alternative, first-seen wins.
 
 ## The merge rules in plain words
+
+A pre-pass first **filters segments** for re-pass duplicates (Case 2b). Surviving segments then enter the per-widx merge.
 
 For each `(verse, word_idx)` the pipeline collects every contribution and classifies each one:
 
