@@ -16,6 +16,10 @@ vi.mock('../../../../../lib/utils/peaks-fetch', () => ({
 }));
 vi.mock('../../../stores/chapter', () => ({
     selectedReciter: writable<string | null>('test-reciter'),
+    // segData is read by buildRangePlaybackSpec to decide CBR vs VBR routing.
+    // Default to null (treated as CBR) so existing assertions keep matching;
+    // VBR-specific tests live in range-spec.test.ts.
+    segData: writable<unknown>(null),
 }));
 vi.mock('../../../stores/playback', () => ({
     playbackSpeed: writable<number>(1),

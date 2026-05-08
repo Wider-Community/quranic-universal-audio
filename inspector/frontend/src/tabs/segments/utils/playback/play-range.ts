@@ -15,6 +15,7 @@ import {
 import type { PreviewLoopMode, RafHandle } from '../../types/segments';
 import { drawSplitWaveform } from '../waveform/split-draw';
 import { drawTrimWaveform } from '../waveform/trim-draw';
+import { vbrClipFor } from './range-spec';
 
 // ---------------------------------------------------------------------------
 // Module-local state
@@ -63,8 +64,24 @@ export function _playRange(startMs: number, endMs: number): void {
         _previewStopHandler = null;
     }
     if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
-    const start = startMs / 1000;
     const canvas = get(editCanvas);
+
+    // VBR routing: when the chapter's audio is VBR-without-Xing, byte-position
+    // seeks on the chapter MP3 mis-decode (drift up to ~10 s on long files).
+    // For the edit-mode preview we extract a clip of [startMs, endMs] from
+    // the source via /api/seg/segment-clip and play it from byte 0 — no seek,
+    // no drift. The playhead-drawing branch below recovers file-absolute time
+    // by adding `clipFileOffsetMs` to the clip-relative `audioEl.currentTime`.
+    const sourceUrl = canvas?._splitData?.audioUrl
+        || canvas?._trimWindow?.audioUrl
+        || (() => { const ch = get(selectedChapter) ? parseInt(get(selectedChapter)) : null;
+                     const editIdx = get(editingSegIndex);
+                     const s = ch != null ? getSegByChapterIndex(ch, editIdx) : null;
+                     return s && s.audio_url; })()
+        || '';
+    const vbrClip = sourceUrl ? vbrClipFor(sourceUrl, startMs, endMs) : null;
+    const start = vbrClip ? 0 : startMs / 1000;
+    const clipFileOffsetMs = vbrClip ? vbrClip.fileOffsetMs : 0;
 
     let wfStart: number, wfEnd: number;
     // Trim + Split modes: playhead x is mapped against the VISIBLE window
@@ -104,7 +121,10 @@ export function _playRange(startMs: number, endMs: number): void {
             _playRangeRAF = requestAnimationFrame(animatePlayhead);
             return;
         }
-        const curMs = audioEl!.currentTime * 1000;
+        // In VBR clip mode `currentTime` is clip-relative; add the file
+        // offset so all the file-absolute comparisons below (effectiveEnd,
+        // loopStart, viewStart/End) keep working unchanged.
+        const curMs = audioEl!.currentTime * 1000 + clipFileOffsetMs;
         const loopMode = get(previewLooping);
         let effectiveEnd = endMs;
         let loopStart: number | null = null;
@@ -125,7 +145,9 @@ export function _playRange(startMs: number, endMs: number): void {
         }
         if (curMs >= effectiveEnd && !_previewJustSeeked) {
             if (loopMode && loopStart !== null) {
-                audioEl!.currentTime = loopStart / 1000;
+                // loopStart is file-absolute; map it back to clip-relative
+                // for the seek when we're playing the segment-clip src.
+                audioEl!.currentTime = (loopStart - clipFileOffsetMs) / 1000;
                 _previewJustSeeked = true;
                 _playRangeRAF = requestAnimationFrame(animatePlayhead);
                 return;
@@ -175,13 +197,15 @@ export function _playRange(startMs: number, endMs: number): void {
         _playRangeRAF = requestAnimationFrame(animatePlayhead);
     };
 
-    const chStr = get(selectedChapter);
-    const targetUrl = canvas?._splitData?.audioUrl
+    // VBR: load the clip URL instead of the chapter audio. The audio plays
+    // from byte 0; `start` is 0 (clip-relative), so `doPlay` seeks to 0 and
+    // play() is drift-free.
+    const targetUrl = vbrClip ? vbrClip.clipUrl : (canvas?._splitData?.audioUrl
         || canvas?._trimWindow?.audioUrl
-        || (() => { const ch = chStr ? parseInt(chStr) : null;
+        || (() => { const ch = get(selectedChapter) ? parseInt(get(selectedChapter)) : null;
                      const editIdx = get(editingSegIndex);
                      const s = ch != null ? getSegByChapterIndex(ch, editIdx) : null;
-                     return s && s.audio_url; })();
+                     return s && s.audio_url; })());
     if (targetUrl && !audioSrcMatches(audioEl.src, targetUrl)) {
         if (_previewCanplayHandler) {
             audioEl.removeEventListener('canplay', _previewCanplayHandler);

@@ -40,40 +40,90 @@ import { nextDisplayedSeg } from './prefetch';
  *  audio element's src to a per-segment clip URL.
  */
 export function buildSegRangeSpec(seg: Segment, seekToMs?: number | null): AudioRangeSpec {
+    return buildRangePlaybackSpec(seg.audio_url, seg.time_start, seg.time_end, seekToMs);
+}
+
+/** Build an AudioRangeSpec for an arbitrary [startMs, endMs] window of a
+ *  chapter audio URL. The single VBR-routing primitive — used by segment
+ *  playback, edit-mode preview (trim/split), History panel, and SavePreview.
+ *
+ *  CBR: returns a file-absolute spec pointing at the chapter URL.
+ *
+ *  VBR: returns a clip-relative spec pointing at the segment-clip endpoint
+ *  for the requested window. The clip plays from byte 0; `clipFileOffsetMs`
+ *  lets `AudioRange.getCurrentTimeMs()` and the rAF tick recover file-absolute
+ *  time for playhead drawing and segment-detection.
+ *
+ *  Reads `$segData.vbr` and `$selectedReciter` from the segments stores —
+ *  these are populated as soon as the chapter loads, before any playback can
+ *  start, so an unset value here means we genuinely don't know the chapter's
+ *  encoding (treat as CBR — the no-regression default). */
+export function buildRangePlaybackSpec(
+    audioUrl: string,
+    startMs: number,
+    endMs: number,
+    seekToMs?: number | null,
+): AudioRangeSpec {
     const data = get(segData);
     const reciter = get(selectedReciter);
-    const segDurMs = Math.max(0, seg.time_end - seg.time_start);
+    const durMs = Math.max(0, endMs - startMs);
 
-    if (data?.vbr && reciter && seg.audio_url) {
-        const clipUrl = buildSegmentClipUrl(reciter, seg);
+    if (data?.vbr && reciter && audioUrl) {
+        const clipUrl = buildClipUrl(reciter, audioUrl, startMs, endMs);
         const seekClipMs = seekToMs != null
-            ? Math.max(0, Math.min(segDurMs, seekToMs - seg.time_start))
+            ? Math.max(0, Math.min(durMs, seekToMs - startMs))
             : 0;
         return {
             startMs: seekClipMs,
-            endMs: segDurMs,
+            endMs: durMs,
             src: clipUrl,
-            clipFileOffsetMs: seg.time_start,
+            clipFileOffsetMs: startMs,
         };
     }
 
     return {
-        startMs: seekToMs ?? seg.time_start,
-        endMs: seg.time_end,
-        src: seg.audio_url || null,
+        startMs: seekToMs ?? startMs,
+        endMs,
+        src: audioUrl || null,
     };
 }
 
-/** Construct the `/api/seg/segment-clip/<reciter>?…` URL for a segment.
+/** Resolve the active chapter's clip URL for a [startMs, endMs] window if
+ *  the chapter is VBR, else null. Useful for callers (`_playRange`,
+ *  `_seekFromCanvasEvent`) that don't go through `AudioRange` and need to
+ *  drive the audio element directly. Returns null in the CBR fast path so
+ *  callers can keep their existing chapter-audio + currentTime logic. */
+export function vbrClipFor(
+    audioUrl: string,
+    startMs: number,
+    endMs: number,
+): { clipUrl: string; fileOffsetMs: number } | null {
+    const data = get(segData);
+    const reciter = get(selectedReciter);
+    if (!data?.vbr || !reciter || !audioUrl) return null;
+    return {
+        clipUrl: buildClipUrl(reciter, audioUrl, startMs, endMs),
+        fileOffsetMs: startMs,
+    };
+}
+
+/** Construct the `/api/seg/segment-clip/<reciter>?…` URL.
  *  Deterministic on (url, start_ms, end_ms) so the browser HTTP cache
- *  absorbs repeat plays of the same segment. */
-export function buildSegmentClipUrl(reciter: string, seg: Segment): string {
+ *  absorbs repeat plays of the same range. */
+export function buildClipUrl(reciter: string, audioUrl: string, startMs: number, endMs: number): string {
     const params = new URLSearchParams({
-        url: seg.audio_url,
-        start_ms: String(seg.time_start),
-        end_ms: String(seg.time_end),
+        url: audioUrl,
+        start_ms: String(startMs),
+        end_ms: String(endMs),
     });
     return `/api/seg/segment-clip/${encodeURIComponent(reciter)}?${params.toString()}`;
+}
+
+/** @deprecated Use {@link buildClipUrl}. Kept as a thin alias because the
+ *  existing tests (and any future callers needing a Segment-shaped input)
+ *  still want a per-segment helper. */
+export function buildSegmentClipUrl(reciter: string, seg: Segment): string {
+    return buildClipUrl(reciter, seg.audio_url, seg.time_start, seg.time_end);
 }
 
 interface NextRangeOptions {
