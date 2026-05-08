@@ -359,6 +359,63 @@ def _seg_is_home_for_key(matched_ref: str, output_key: str) -> bool:
     return _matched_ref_to_output_key(matched_ref) == output_key
 
 
+def _repeat_pass_skip_indices(segments: list[dict]) -> set[int]:
+    """Identify home segs that are re-pass duplicates and should be skipped.
+
+    Reciters sometimes re-recite a verse (or short run of verses) after
+    moving on. The segmenter still emits home segs for both passes, but
+    keeping both produces two disjoint copies of the same verse — verse
+    `start`/`end` then spans both, manifesting downstream as a "verse
+    overlap" against neighbours.
+
+    Rule: for each verse V the FIRST contiguous run of home segs is kept;
+    once a *different* home verse intervenes, V is closed and any later
+    home seg of V is dropped. Consecutive same-verse repeats stay open
+    (legitimate within-verse stutter — handled by `_merge_seg_words`).
+    Cross-verse segs close the active home (we exited it) but don't open
+    one; their bleed contributions still flow through the existing
+    primary/bleed dedup.
+
+    Reciters do not jump forward and back-fill mid-pass, so an overlap
+    against a closed verse is always a re-pass dupe — no widx-range check
+    needed.
+    """
+    skip: set[int] = set()
+    closed: set[str] = set()
+    current_home: str | None = None
+
+    for idx, seg in enumerate(segments):
+        matched_ref = seg.get("matched_ref", "")
+        if not matched_ref:
+            continue
+        out_key = _matched_ref_to_output_key(matched_ref)
+        if out_key is None:
+            continue
+        # Cross-verse: out_key is the compound matched_ref itself.
+        is_single_home = ":" in out_key and "-" not in out_key
+        if not is_single_home:
+            if current_home is not None:
+                closed.add(current_home)
+                current_home = None
+            continue
+
+        if out_key in closed:
+            skip.add(idx)
+            # The seg still represents a real pass through this verse —
+            # update state so a *later* re-pass of the same verse after
+            # yet another transition is also detected.
+            if current_home is not None and current_home != out_key:
+                closed.add(current_home)
+            current_home = out_key
+            continue
+
+        if current_home is not None and current_home != out_key:
+            closed.add(current_home)
+        current_home = out_key
+
+    return skip
+
+
 def _declared_widx_range(matched_ref: str) -> tuple[int, int] | None:
     """Return (W1, W2) widx range declared by a single-verse matched_ref.
 
@@ -1052,7 +1109,14 @@ def process(input_dir: Path,
                 continue
 
             if audio_category == "by_surah_audio":
+                repeat_skip = _repeat_pass_skip_indices(chapter["segments"])
+                if repeat_skip:
+                    log.info(
+                        "Surah %s: dropping %d re-pass home seg(s): %s",
+                        ch_ref, len(repeat_skip), sorted(repeat_skip))
                 for seg_idx, result in results_by_ch[ch_idx]:
+                    if seg_idx in repeat_skip:
+                        continue
                     seg = chapter["segments"][seg_idx]
                     matched_ref = seg.get("matched_ref", "")
 
