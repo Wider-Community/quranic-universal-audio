@@ -34,14 +34,6 @@
     let _speedCtrl: SpeedControl;
     let _pendingOnMeta: (() => void) | null = null;
 
-    // AbortError fires routinely when a fresh load() interrupts a pending
-    // play(); everything else (NotAllowedError under autoplay policy,
-    // NotSupportedError on bad codec, etc.) is real and should surface.
-    function _logNonAbort(e: unknown): void {
-        const name = (e as { name?: string } | null)?.name;
-        if (name !== 'AbortError') console.error('[AudioPlayer] play() rejected:', e);
-    }
-
     type AudioPlayerEvents = {
         loadedmetadata: { audio: HTMLAudioElement; event: Event };
         play: { audio: HTMLAudioElement; event: Event };
@@ -99,14 +91,14 @@
                 audio.removeEventListener('loadedmetadata', onMeta);
                 if (_pendingOnMeta === onMeta) _pendingOnMeta = null;
                 audio.currentTime = seekTo;
-                if (autoplay) audio.play().catch(_logNonAbort);
+                if (autoplay) audio.play().catch(() => {/* AbortError on rapid src change */});
             };
             _pendingOnMeta = onMeta;
             audio.addEventListener('loadedmetadata', onMeta);
             audio.src = url;
         } else {
             if (atTime !== undefined) audio.currentTime = atTime;
-            if (autoplay) audio.play().catch(_logNonAbort);
+            if (autoplay) audio.play().catch(() => {/* AbortError on interrupted play() */});
         }
     }
 
