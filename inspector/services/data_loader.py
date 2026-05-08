@@ -10,17 +10,14 @@ from pathlib import Path
 from config import (
     AUDIO_METADATA_PATH,
     DK_SCRIPT_PATH,
-    MAX_AYAH_BOUNDARY_CHECK,
     QPC_HAFS_PATH,
     RECITATION_SEGMENTS_PATH,
     SURAH_INFO_PATH,
-    TIMESTAMPS_PATH,
 )
 from adapters.detailed_json import load_entries as _load_detailed_entries
-from constants import AUDIO_META_CATEGORIES, STOP_SIGNS, TS_AUDIO_CATEGORIES
+from constants import AUDIO_META_CATEGORIES, STOP_SIGNS
 from services import cache
 from utils.formatting import slug_to_name
-from utils.references import chapter_from_ref
 
 
 # ---------------------------------------------------------------------------
@@ -55,110 +52,28 @@ def load_dk() -> dict[str, dict]:
     return data
 
 
-def dk_text_for_ref(ref: str) -> str:
-    """Build Digital Khatt display text for a matched_ref like ``'1:7:1-1:7:5'``."""
-    if not ref:
-        return ""
-    dk = load_dk()
-    if not dk:
-        return ""
-    parts = ref.split("-")
-    if len(parts) != 2:
-        return ""
-    start_parts = parts[0].split(":")
-    end_parts = parts[1].split(":")
-    if len(start_parts) != 3 or len(end_parts) != 3:
-        return ""
-    try:
-        s_su, s_ay, s_w = int(start_parts[0]), int(start_parts[1]), int(start_parts[2])
-        e_su, e_ay, e_w = int(end_parts[0]), int(end_parts[1]), int(end_parts[2])
-    except ValueError:
-        return ""
-    wc = get_word_counts()
-    words = []
-    su, ay, w = s_su, s_ay, s_w
-    while (su, ay, w) <= (e_su, e_ay, e_w):
-        entry = dk.get(f"{su}:{ay}:{w}")
-        if entry:
-            words.append(entry["text"])
-        w += 1
-        if w > wc.get((su, ay), 0):
-            w = 1
-            ay += 1
-            if ay > MAX_AYAH_BOUNDARY_CHECK:
-                break
-    return " ".join(words)
+def get_dk_words_flat() -> dict[str, str]:
+    """Flat ``"surah:ayah:word" -> text`` projection of ``load_dk()``.
 
-
-# ---------------------------------------------------------------------------
-# Timestamps
-# ---------------------------------------------------------------------------
-
-def discover_ts_reciters() -> list[dict]:
-    """Scan timestamps directories for reciters.  Cached after first call."""
-    cached = cache.get_ts_reciters_cache()
+    Served to the FE on every chapter-data response so client-side
+    ``dkTextForRef`` can build display text from a ref without an HTTP
+    round-trip. Cached after first call.
+    """
+    cached = cache.get_dk_words_flat_cache()
     if cached is not None:
         return cached
-    if not TIMESTAMPS_PATH.exists():
-        cache.set_ts_reciters_cache([])
-        return []
-    result = []
-    ts_all = cache.get_all_ts_cache()
-    for category in TS_AUDIO_CATEGORIES:
-        cat_dir = TIMESTAMPS_PATH / category
-        if not cat_dir.is_dir():
-            continue
-        for reciter_dir in sorted(cat_dir.iterdir()):
-            if not reciter_dir.is_dir():
-                continue
-            ts_file = reciter_dir / "timestamps_full.json"
-            if not ts_file.exists():
-                ts_file = reciter_dir / "timestamps.json"
-                if not ts_file.exists():
-                    continue
-            slug = reciter_dir.name
-            name = slug_to_name(slug)
-            # audio_source lives in the file's _meta block. If the reciter
-            # has already been lazily loaded we read it from cache; otherwise
-            # we leave it blank — it'll fill in on first verse load. C6
-            # replaces this whole function with a manifest builder that
-            # reads each _meta block cleanly without a full file load.
-            audio_source = ""
-            if slug in ts_all:
-                audio_source = ts_all[slug].get("meta", {}).get("audio_source", "")
-            result.append({
-                "slug": slug, "name": name,
-                "audio_source": audio_source,
-                "audio_category": category,
-            })
-    cache.set_ts_reciters_cache(result)
-    return result
+    flat: dict[str, str] = {}
+    for loc, entry in load_dk().items():
+        text = entry.get("text") if isinstance(entry, dict) else None
+        if text:
+            flat[loc] = text
+    cache.set_dk_words_flat_cache(flat)
+    return flat
 
 
-def load_timestamps(reciter: str) -> dict:
-    """Load and cache a reciter's verse-keyed timestamps JSON."""
-    cached = cache.get_ts_cache(reciter)
-    if cached is not None:
-        return cached
-    path = None
-    for category in TS_AUDIO_CATEGORIES:
-        full = TIMESTAMPS_PATH / category / reciter / "timestamps_full.json"
-        basic = TIMESTAMPS_PATH / category / reciter / "timestamps.json"
-        if full.exists():
-            path = full
-            break
-        if basic.exists():
-            path = basic
-            break
-    if path is None:
-        return {}
-    import orjson
-    doc = orjson.loads(path.read_bytes())
-    meta = doc.pop("_meta", {})
-    verses = doc
-    result = {"meta": meta, "verses": verses, "audio_category": category}
-    cache.set_ts_cache(reciter, result)
-    return result
+# Timestamps tab read path now lives in `services/ts_local.py` — see that
+# module for the manifest + per-chapter shard cache that replaced the
+# eager `discover_ts_reciters` / `load_timestamps` loaders.
 
 
 # ---------------------------------------------------------------------------
@@ -261,20 +176,11 @@ def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
     return result
 
 
-def load_audio_urls(audio_source: str, reciter: str) -> dict:
-    """Load verse/chapter URL map from data/audio/<audio_source>/<reciter>.json."""
-    key = f"{audio_source}/{reciter}"
-    cached = cache.get_audio_url_cache(key)
-    if cached is not None:
-        return cached
-    path = AUDIO_METADATA_PATH / audio_source / f"{reciter}.json"
-    if not path.exists():
-        return {}
-    import orjson
-    urls = orjson.loads(path.read_bytes())
-    urls.pop("_meta", None)
-    cache.set_audio_url_cache(key, urls)
-    return urls
+# Audio URL maps remain cached via `cache._audio_url`, but the only
+# remaining caller is `routes/audio_metadata.py` (Audio tab), which now
+# loads them inline. The Timestamps tab's old `load_audio_urls` flow is
+# gone — `services/ts_local.py` inlines the per-chapter URL slice into
+# each shard's `_meta` instead.
 
 
 # ---------------------------------------------------------------------------
