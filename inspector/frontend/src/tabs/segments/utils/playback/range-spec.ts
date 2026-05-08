@@ -15,9 +15,9 @@ import { get } from 'svelte/store';
 
 import type { AudioRangeSpec, RangePolicy } from '../../../../lib/playback/audio-range';
 import type { Segment } from '../../../../lib/types/domain';
-import { segData, selectedReciter } from '../../stores/chapter';
+import { reciterVbrChapters, segData, selectedReciter } from '../../stores/chapter';
 import { AUTOPLAY_GAP_PAUSE_MS } from '../constants';
-import { nextDisplayedSeg } from './prefetch';
+import { nextDisplayedSeg } from './resolvers';
 
 /** Build the per-play `AudioRangeSpec` for a segment.
  *
@@ -101,6 +101,28 @@ export function vbrClipFor(
     const data = get(segData);
     const reciter = get(selectedReciter);
     if (!data?.vbr || !reciter || !audioUrl) return null;
+    return {
+        clipUrl: buildClipUrl(reciter, audioUrl, startMs, endMs),
+        fileOffsetMs: startMs,
+    };
+}
+
+/** Same as {@link vbrClipFor}, but consults the per-reciter VBR chapter map
+ *  instead of the active chapter's `segData.vbr`. Used by prefetch when the
+ *  next sibling may live in a different chapter from the one currently
+ *  playing — accordion validation cards (e.g. MissingVersesCard boundary
+ *  segments) can render rows from chapters other than the active one, and
+ *  routing each candidate through `segData.vbr` would force the active
+ *  chapter's encoding onto every sibling. */
+export function vbrClipForChapter(
+    chapter: number,
+    audioUrl: string,
+    startMs: number,
+    endMs: number,
+): { clipUrl: string; fileOffsetMs: number } | null {
+    const reciter = get(selectedReciter);
+    const vbrSet = get(reciterVbrChapters);
+    if (!reciter || !audioUrl || !vbrSet?.has(chapter)) return null;
     return {
         clipUrl: buildClipUrl(reciter, audioUrl, startMs, endMs),
         fileOffsetMs: startMs,

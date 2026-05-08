@@ -15,6 +15,7 @@
 import { get } from 'svelte/store';
 
 import { AudioRange } from '../../../../lib/playback/audio-range';
+import type { Segment } from '../../../../lib/types/domain';
 import { audioSrcMatches } from '../../../../lib/utils/audio';
 import {
     getSegByChapterIndex,
@@ -133,7 +134,16 @@ export function playFromSegment(
     segIndex: number,
     chapterOverride?: number | null,
     seekToMs?: number | null,
-    opts?: { isAccordionPlay?: boolean },
+    opts?: {
+        isAccordionPlay?: boolean,
+        /** Rendered sibling list of the accordion card that initiated this
+         *  play. When supplied (only by accordion rows), prefetch warms the
+         *  next sibling's clip URL by *list position* rather than chapter
+         *  mode's `displayedSegments` + `index + 1` resolver. May span
+         *  chapters; the per-reciter VBR map decides clip-vs-chapter URL
+         *  per sibling. */
+        accordionSiblings?: Segment[] | null,
+    },
 ): void {
     disposeSegRange();
     const allData = get(segAllData);
@@ -196,7 +206,18 @@ export function playFromSegment(
         origin: isAccordionPlay ? 'accordion' : 'main',
     });
 
-    prefetchNextSegAudio(displayed, segIndex, audioEl.src || '', _segPrefetchCache);
+    // Accordion plays prefetch their card's next *sibling* (list position,
+    // possibly cross-chapter); main-list plays prefetch the next displayed
+    // segment by `Segment.index + 1`. The fourth arg is the chapter pointer
+    // — non-null switches `prefetchNextSegAudio` to the sibling resolver.
+    if (isAccordionPlay && opts?.accordionSiblings) {
+        prefetchNextSegAudio(
+            opts.accordionSiblings, segIndex, audioEl.src || '',
+            _segPrefetchCache, resolvedChapter,
+        );
+    } else {
+        prefetchNextSegAudio(displayed, segIndex, audioEl.src || '', _segPrefetchCache);
+    }
 
     // Fetch waveform peaks on-demand via ffmpeg HTTP Range (brief delay expected).
     void _fetchPeaksForClick(seg, resolvedChapter);

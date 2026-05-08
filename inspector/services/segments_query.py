@@ -7,7 +7,7 @@ import statistics
 
 from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
 from services import cache
-from services.audio_meta import is_vbr
+from services.audio_meta import is_vbr, vbr_chapters_for_reciter
 from services.data_loader import (
     dk_text_for_ref,
     get_word_counts,
@@ -131,6 +131,7 @@ def get_chapter_data(reciter: str, chapter: int,
     return {
         "audio_url": audio_url,
         "vbr": is_vbr(reciter, chapter),
+        "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
         "segments": segments,
         "summary": summary,
         "verse_word_counts": verse_word_counts,

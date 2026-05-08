@@ -13,6 +13,7 @@ import type { SegDataResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import {
+    reciterVbrChapters,
     segAllData,
     segData,
     selectedChapter,
@@ -57,6 +58,7 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
             : [];
         chData.segments = chapterSegs;
         segData.set(chData);
+        reciterVbrChapters.set(new Set(chData.reciter_vbr_chapters ?? []));
         _fetchChapterPeaksIfNeeded(reciter, chNum);
 
         if (chData.audio_url && audioEl) {
