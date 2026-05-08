@@ -54,6 +54,7 @@
     import {
         autoAdvancing,
         loopTarget,
+        tsPort,
     } from './stores/playback';
     import {
         chapters,
@@ -385,6 +386,14 @@
             && !data.audio_url.startsWith('/api/'))
             ? `/api/seg/audio-proxy/${data.reciter}?url=${encodeURIComponent(data.audio_url)}`
             : data.audio_url;
+        // Auto-next reaches here right after AudioRange.`_pauseAndFlush` ramped
+        // the gain to 0. The eventual `setRange→_uncut` lifting it back to 1
+        // runs in a microtask AFTER `audioComp.load` synchronously kicks off
+        // `audio.play()`, so the new verse plays silent for ~5 ms — long
+        // enough to look "stuck paused" if the browser also rejects the
+        // play() (autoplay policy). Lift the cut on the same tick as the
+        // load so the next play() sees gain=1 immediately.
+        tsPort.uncut();
         audioComp?.load(playUrl, tsSegOffset, autoplay);
         autoAdvancing.set(false);
         // Verse change invalidates any active loop target.
