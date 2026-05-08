@@ -1126,6 +1126,155 @@ def delete_reciter(slug):
 
 
 # ---------------------------------------------------------------------------
+# Timestamp shards (deployed Inspector read path)
+# ---------------------------------------------------------------------------
+
+# Lazy imports — keep this module importable even when scripts/lib isn't on
+# sys.path (e.g. for the existing `--reciters-config` flow on a fresh CI runner).
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+
+
+def _load_existing_shard_hashes(slug: str) -> dict[str, str]:
+    """Read shard hashes for `slug` out of the dataset's manifest.json.gz.
+
+    Returns ``{chapter_str: sha256_hex}``. Empty dict if manifest doesn't
+    exist yet (first build) or the slug isn't in it (new reciter).
+    """
+    import gzip
+    from huggingface_hub import HfApi
+    api = HfApi(token=HF_TOKEN)
+    try:
+        path = api.hf_hub_download(
+            repo_id=REPO_ID, repo_type="dataset",
+            filename="manifest.json.gz",
+        )
+    except Exception:
+        return {}
+    try:
+        with gzip.open(path, "rb") as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Could not parse existing manifest.json.gz: %s", e)
+        return {}
+    reciter_block = (manifest.get("reciters") or {}).get(slug, {})
+    return (reciter_block.get("_build") or {}).get("shard_hashes") or {}
+
+
+def _resolve_audio_template(slug: str, audio_type: str) -> tuple[str, str, dict]:
+    """Find audio manifest, derive (template, audio_category, manifest_dict).
+
+    `audio_type` is the timestamps-side category (`by_surah_audio` /
+    `by_ayah_audio`); the audio manifest's category drops the `_audio` suffix.
+    """
+    audio_cat = audio_type.replace("_audio", "")  # by_surah_audio → by_surah
+    manifest = _find_audio_manifest(slug) or {}
+    template = _derive_url_template(manifest, audio_cat) if manifest else ""
+    return template, audio_cat, manifest
+
+
+def build_timestamp_shards(slug: str, *, dry_run: bool = False) -> None:
+    """Split a reciter's timestamps_full.json into per-chapter gzipped shards
+    and upload only the changed ones to the HF dataset.
+
+    Diffs against ``manifest.reciters.<slug>._build.shard_hashes`` from the
+    last manifest build. New + changed shards are uploaded; chapters present
+    on HF but not locally are deleted. A single ``create_commit`` keeps the
+    per-reciter sync atomic.
+
+    With ``dry_run=True``, the upload/delete plan is printed to stdout but
+    no commit is made. Useful for CI safety + local verification.
+    """
+    from huggingface_hub import (
+        CommitOperationDelete,
+        CommitOperationAdd,
+        HfApi,
+    )
+
+    from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
+
+    audio_type = detect_audio_source(slug)
+    if not audio_type:
+        sys.exit(f"Could not detect audio source for {slug}")
+
+    ts_path = (
+        ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
+    )
+    if not ts_path.exists():
+        sys.exit(f"timestamps_full.json not found for {slug} at {ts_path}")
+    log.info("Loading %s", ts_path)
+    doc = json.loads(ts_path.read_bytes())
+
+    template, audio_cat, audio_manifest = _resolve_audio_template(slug, audio_type)
+    if not template:
+        log.warning(
+            "%s: url_template empty — falling back to per-verse audio_urls "
+            "in shard _meta", slug,
+        )
+
+    shards = split_to_shards(
+        doc,
+        reciter=slug,
+        audio_category=audio_cat,
+        url_template=template,
+        audio_urls_fallback=audio_manifest if not template else None,
+    )
+
+    # Hash each shard, diff against existing manifest hashes.
+    new_hashes: dict[str, str] = {}
+    payloads: dict[str, bytes] = {}
+    for chapter, shard in shards.items():
+        body = gzip_shard(shard)
+        digest = sha256_hex(body)
+        new_hashes[str(chapter)] = digest
+        payloads[str(chapter)] = body
+
+    existing_hashes = _load_existing_shard_hashes(slug)
+    to_upload = [c for c, h in new_hashes.items() if existing_hashes.get(c) != h]
+    to_delete = [c for c in existing_hashes if c not in new_hashes]
+
+    log.info(
+        "%s: %d total chapters, %d to upload, %d to delete (unchanged: %d)",
+        slug, len(shards), len(to_upload), len(to_delete),
+        len(shards) - len(to_upload),
+    )
+
+    if dry_run:
+        log.info("[dry-run] would upload:")
+        for c in sorted(to_upload, key=int):
+            log.info("  + timestamps/%s/%s.json.gz  (%d bytes, sha %s...)",
+                     slug, c, len(payloads[c]), new_hashes[c][:12])
+        log.info("[dry-run] would delete:")
+        for c in sorted(to_delete, key=int):
+            log.info("  - timestamps/%s/%s.json.gz", slug, c)
+        return
+
+    if not to_upload and not to_delete:
+        log.info("%s: nothing to do (all shard hashes match)", slug)
+        return
+
+    operations = []
+    for c in to_upload:
+        operations.append(CommitOperationAdd(
+            path_in_repo=f"timestamps/{slug}/{c}.json.gz",
+            path_or_fileobj=payloads[c],
+        ))
+    for c in to_delete:
+        operations.append(CommitOperationDelete(
+            path_in_repo=f"timestamps/{slug}/{c}.json.gz",
+        ))
+
+    api = HfApi(token=HF_TOKEN)
+    api.create_commit(
+        repo_id=REPO_ID, repo_type="dataset",
+        operations=operations,
+        commit_message=(
+            f"timestamps/{slug}: upload {len(to_upload)}, delete {len(to_delete)}"
+        ),
+    )
+    log.info("Pushed %d shard ops for %s", len(operations), slug)
+
+
+# ---------------------------------------------------------------------------
 # Reciters catalog config
 # ---------------------------------------------------------------------------
 def build_reciters_config():
@@ -1242,12 +1391,22 @@ def main():
     parser.add_argument("--update-readme", action="store_true", help="Update dataset card only")
     parser.add_argument("--reciters-config", action="store_true",
                         help="Build and push reciters catalog config")
+    parser.add_argument("--build-timestamps", metavar="SLUG",
+                        help="Split timestamps_full.json into per-chapter "
+                             "gzipped shards and upload changed ones")
     parser.add_argument("--full-rebuild", action="store_true",
                         help="Force full audio re-download (skip smart reuse)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print upload/delete plan without committing "
+                             "(applies to --build-timestamps)")
     args = parser.parse_args()
 
     if not HF_TOKEN:
         sys.exit("HF_TOKEN not set")
+
+    if args.build_timestamps:
+        build_timestamp_shards(args.build_timestamps, dry_run=args.dry_run)
+        return
 
     if args.reciters_config:
         build_reciters_config()
