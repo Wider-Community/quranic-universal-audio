@@ -153,7 +153,7 @@ def validate_reciter(
     # ── 1. Structural / Integrity ──
 
     # Meta check
-    meta_fields = {"created_at", "aligner_model", "audio_source", "method", "beam", "retry_beam", "shared_cmvn", "padding"}
+    meta_fields = {"created_at", "aligner_model", "audio_source", "method", "beam", "shared_cmvn", "padding"}
     missing_meta = meta_fields - set(meta.keys())
     if not meta:
         errors.append({"msg": "_meta line missing or empty", "verse_key": ""})
