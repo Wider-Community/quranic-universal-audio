@@ -197,6 +197,11 @@ def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> str:
     segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
     backup_file(detailed_path)
     backup_file(segments_path)
+    # Strip transient ``_resolved_by_edit`` (set, injected by validate route)
+    # — concurrent validate may have left it on cached segs mid-flight.
+    for entry in entries:
+        for seg in entry.get("segments", []):
+            seg.pop("_resolved_by_edit", None)
     atomic_json_write(detailed_path, {"_meta": meta, "entries": entries})
     file_hash = file_sha256(detailed_path)
     rebuild_segments_json(reciter, entries)
