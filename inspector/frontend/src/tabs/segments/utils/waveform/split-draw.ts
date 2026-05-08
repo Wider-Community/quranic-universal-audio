@@ -3,7 +3,6 @@
  * split line, and right-region tinting.
  */
 
-import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { drawEditPeakBase } from './draw-seg';
 
@@ -22,28 +21,15 @@ export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
 
     // Slice peaks for the VISIBLE window (not the whole segment) — wheel zoom
     // rebuilds this cache after dropping the prior ImageData via
-    // `_splitBaseCache = null`.
-    const data = drawEditPeakBase(canvas, sd.audioUrl || '', sd.viewStart, sd.viewEnd);
-    if (!data) {
+    // `_splitBaseCache = null`. drawEditPeakBase paints the shared bg + fill
+    // + top/bottom outline so split matches every other surface.
+    if (!drawEditPeakBase(canvas, sd.audioUrl || '', sd.viewStart, sd.viewEnd)) {
         ctx.fillStyle = '#888';
         ctx.font = '14px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('No waveform data', width / 2, height / 2);
         return false;
     }
-
-    const centerY = height / 2;
-    const scale = data.scale ?? (height / 2) * 0.9;
-
-    // Split strokes only the top (max) outline for a thinner visual.
-    ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < width; i++) {
-        const y = centerY - (data.maxVals[i] ?? 0) * scale;
-        if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
-    }
-    ctx.stroke();
 
     canvas._splitBaseCache = ctx.getImageData(0, 0, width, height);
     return true;
