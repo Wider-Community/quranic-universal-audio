@@ -348,7 +348,7 @@ describe('AudioPort — pauseAndFlush / uncut', () => {
         audio._fireEvent('canplay');
         await r.ready;
 
-        await port.seekAndPlay(500);
+        port.seekAndPlay(500);
         expect(audio.currentTime).toBeCloseTo(0.5, 5);
         expect(vi.mocked(uncutAudio)).toHaveBeenCalled();
         expect(audio.play).toHaveBeenCalledTimes(1);
@@ -360,7 +360,7 @@ describe('AudioPort — pauseAndFlush / uncut', () => {
         audio._fireEvent('canplay');
         await r.ready;
 
-        await port.seekAndPlay(5500);  // file-absolute
+        port.seekAndPlay(5500);  // file-absolute
         expect(audio.currentTime).toBeCloseTo(0.5, 5);   // clip-relative
     });
 });
