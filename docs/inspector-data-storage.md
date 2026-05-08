@@ -6,7 +6,7 @@ The parent doc covers identity convention, auth/claim flow, locking, state compu
 
 ## 1. Model in one paragraph
 
-The deployed backend is **stateless for reads** and **near-stateless for writes**. Read traffic for any reciter — anonymous or authenticated — flows through a single `github-fetch` service that pulls files from GitHub raw at the appropriate ref (`main` for completed, `reciter/<slug>/segments` for under-review) and caches them in a server-side LRU. Write traffic is gated to one active reviewer per reciter; their session materialises the same files into a small per-session **scratch dir**, and edits flow scratch → debounced → Git Data API multi-file commit → PR branch. The backend keeps no persistent state for read traffic, and only ephemeral per-session disk for the active reviewer's writes. Audio plays browser → origin direct; timestamps come browser → HF CDN direct.
+The deployed backend is **stateless for reads** and **near-stateless for writes**. Read traffic for any reciter — anonymous or authenticated — flows through a single `github-fetch` service that pulls files from GitHub raw at the appropriate ref (`main` for completed, `reciter/<slug>` for under-review) and caches them in a server-side LRU. Write traffic is gated to one active reviewer per reciter; their session materialises the same files into a small per-session **scratch dir**, and edits flow scratch → debounced → Git Data API multi-file commit → PR branch. The backend keeps no persistent state for read traffic, and only ephemeral per-session disk for the active reviewer's writes. Audio plays browser → origin direct; timestamps come browser → HF CDN direct.
 
 ## 2. Classification map
 
@@ -57,7 +57,7 @@ def invalidate(slug: str, file: str | None = None, ref: str | None = None) -> No
 
 ### Cache invalidation triggers
 
-- **Squash-merge of `reciter/<slug>/segments`** — `segments-pr-merged.yml` POSTs `/api/internal/cache-invalidate?slug=<slug>` (with a shared secret). Backend drops every cache key matching that slug.
+- **Squash-merge of `reciter/<slug>`** — `segments-pr-merged.yml` POSTs `/api/internal/cache-invalidate?slug=<slug>` (with a shared secret). Backend drops every cache key matching that slug.
 - **Manual force-refresh** — admin endpoint `/api/internal/cache-invalidate-all` for emergencies.
 - **TTL expiry** — natural backstop.
 
@@ -89,7 +89,7 @@ Reproduces the path layout `save_seg_data()` and validators expect, scoped to on
 
 | Event | Action |
 |---|---|
-| Reviewer claims reciter | Backend creates `<scratch>/<slug>/...`, materialises 5 files via github-fetch at branch ref `reciter/<slug>/segments`, marks dir clean |
+| Reviewer claims reciter | Backend creates `<scratch>/<slug>/...`, materialises 5 files via github-fetch at branch ref `reciter/<slug>`, marks dir clean |
 | Save POST | Existing `save_seg_data()` runs in-place: atomic write `detailed.json`, rebuild `segments.json`, append `edit_history.jsonl`. Marks dir dirty. Resets debounce timer |
 | Debounce fires | Multi-file commit via Git Data API (§5). Marks dir clean |
 | Reviewer releases claim / lock expires | Force-flush any pending commits, then delete scratch dir |
@@ -109,16 +109,16 @@ Per active reviewer: 9–19 MB on disk. With one-reviewer-per-reciter and realis
 
 ### Git Data API multi-file commit
 
-On debounce-fire, for the dirty scratch dir of slug `<slug>` on branch `reciter/<slug>/segments`:
+On debounce-fire, for the dirty scratch dir of slug `<slug>` on branch `reciter/<slug>`:
 
 1. **Read** the 4–5 dirty files from scratch.
 2. **Create blobs** — `POST /repos/.../git/blobs` for each file. Returns SHAs.
-3. **Get current tree** at the branch tip — `GET /repos/.../git/ref/heads/reciter%2F<slug>%2Fsegments` → commit SHA → tree SHA.
+3. **Get current tree** at the branch tip — `GET /repos/.../git/ref/heads/reciter%2F<slug>` → commit SHA → tree SHA.
 4. **Create new tree** — `POST /repos/.../git/trees` with the parent tree SHA + blob entries for each updated path.
 5. **Create commit** — `POST /repos/.../git/commits` with:
    - `tree` = new tree SHA
    - `parents` = `[current_commit_sha]`
-   - `message` = `[<slug>] segments: <human summary>` (`[wip]` prefix for debounced auto-commits; absent for explicit "Push to PR now" button)
+   - `message` = `[<slug>] [wip] <op summary>` for debounced auto-commits, `[<slug>] <message>` for explicit pushes (e.g. future "Push to PR now" button)
    - `author` = `{ "name": "<gh-login>", "email": "<id>+<gh-login>@users.noreply.github.com" }` (the active reviewer)
    - `committer` = `{ "name": "github-actions[bot]", "email": "..." }` (the App)
 6. **Update ref** — `PATCH /repos/.../git/refs/heads/<branch>` with the new commit SHA. `force = false` (fail if the branch moved out from under us).
@@ -390,3 +390,7 @@ Every deploy clears the LRU. First page-load post-deploy is all cold. With a CDN
 ### Selective `.dockerignore` correctness
 
 If `.dockerignore` is wrong (e.g. fails to exclude `data/recitation_segments/`), the image silently bloats and ships sensitive in-progress data. Mitigated by the Phase 1 acceptance check that fails if these paths exist in the built image.
+
+## TODO
+
+Accurate estimates/measures of scratch storage, github storage, output data storage (releases, HF dataset, Github files, HF mounted seg/ts files), inspector browser + LRU Cache and effect on performance
