@@ -11,6 +11,8 @@
         currentTime,
         loopTarget,
         tsAudioElement,
+        tsPort,
+        tsPortReady,
     } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { buildTimestampsRangeSpec } from '../utils/range-spec';
@@ -82,8 +84,7 @@
     }
 
     function _ensureRangeForCurrentState(): AudioRange | null {
-        const audio = _player?.element();
-        if (!audio) return null;
+        if (!tsPort.element) return null;
         const spec = buildTimestampsRangeSpec(get(loadedVerse), get(loopTarget));
         if (!spec) return null;
         if (_range) {
@@ -92,7 +93,7 @@
             return _range;
         }
         _range = new AudioRange({
-            audioEl: audio,
+            port: tsPort,
             range: spec.range,
             policy: spec.policy,
             onTick: _onTick,
@@ -122,8 +123,7 @@
 
     function onPause(): void {
         _range?.stop();
-        const audio = _player?.element();
-        if (audio) currentTime.set(audio.currentTime);
+        if (tsPort.element) currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     function onEnded(): void {
@@ -134,8 +134,7 @@
         // AudioRange's rAF loop owns boundary enforcement at frame precision.
         // Keep the handler only as a tick when audio is paused (so the playhead
         // store catches a manual seek the rAF doesn't see while paused).
-        const audio = _player?.element();
-        if (audio?.paused) currentTime.set(audio.currentTime);
+        if (tsPort.paused) currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     function onError(): void {
@@ -155,12 +154,19 @@
     }
 
     onMount(() => {
-        tsAudioElement.set(_player?.element() ?? null);
+        const el = _player?.element() ?? null;
+        tsAudioElement.set(el);
+        if (el) {
+            tsPort.attachElement(el);
+            tsPortReady.set(true);
+        }
     });
 
     onDestroy(() => {
         _disposeRange();
         tsAudioElement.set(null);
+        tsPort.attachElement(null);
+        tsPortReady.set(false);
     });
 </script>
 
