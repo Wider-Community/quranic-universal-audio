@@ -21,8 +21,11 @@
  *  context window around an issue, and may span chapters).
  */
 
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../../lib/types/domain';
 import { audioSrcMatches } from '../../../../lib/utils/audio';
+import { prefetchEnabled } from '../../stores/playback';
 import { vbrClipForChapter } from './range-spec';
 import { nextDisplayedSeg, nextSiblingSeg } from './resolvers';
 
@@ -49,6 +52,9 @@ export function prefetchNextSegAudio(
     prefetchCache: Record<string, Promise<unknown>>,
     currentChapter: number | null = null,
 ): void {
+    // User-disabled: skip resolver work, network warm, and cache writes for
+    // both main-list (chapter mode) and accordion (sibling mode) callers.
+    if (!get(prefetchEnabled)) return;
     const next = currentChapter != null
         ? nextSiblingSeg(list, currentChapter, currentIndex)
         : nextDisplayedSeg(list, currentIndex);
