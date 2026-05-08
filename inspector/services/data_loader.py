@@ -5,14 +5,12 @@ import Flask -- they return plain dicts/lists.
 """
 
 import json
-import re
 from pathlib import Path
 
 from config import (
     AUDIO_METADATA_PATH,
     DK_SCRIPT_PATH,
     MAX_AYAH_BOUNDARY_CHECK,
-    METADATA_PEEK_BYTES,
     QPC_HAFS_PATH,
     RECITATION_SEGMENTS_PATH,
     SURAH_INFO_PATH,
@@ -120,18 +118,14 @@ def discover_ts_reciters() -> list[dict]:
                     continue
             slug = reciter_dir.name
             name = slug_to_name(slug)
+            # audio_source lives in the file's _meta block. If the reciter
+            # has already been lazily loaded we read it from cache; otherwise
+            # we leave it blank — it'll fill in on first verse load. C6
+            # replaces this whole function with a manifest builder that
+            # reads each _meta block cleanly without a full file load.
             audio_source = ""
             if slug in ts_all:
                 audio_source = ts_all[slug].get("meta", {}).get("audio_source", "")
-            else:
-                try:
-                    with open(ts_file, encoding="utf-8") as f:
-                        head = f.read(METADATA_PEEK_BYTES)
-                    m = re.search(r'"audio_source"\s*:\s*"([^"]*)"', head)
-                    if m:
-                        audio_source = m.group(1)
-                except OSError:
-                    pass
             result.append({
                 "slug": slug, "name": name,
                 "audio_source": audio_source,
