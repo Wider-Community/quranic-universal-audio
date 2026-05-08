@@ -66,20 +66,16 @@
         // per verse-end crossing, guarded by autoAdvancing against re-entry.
         if (get(autoAdvancing)) return;
         const mode = get(autoMode);
-        if (!mode) return;
-        autoAdvancing.set(true);
-        // AudioRange._pauseAndFlush just paused the element. The eventual
-        // audio.play() in ingestVerseData runs after the await chain in
-        // loadTimestampVerse, which can cross enough event-loop turns that
-        // Chrome's autoplay policy denies it (no transient activation from
-        // the rAF tick that detected the boundary) — manifests as "next
-        // clip loads but audio is stuck paused". Re-arm playback here so
-        // the element stays in the playing state across the transition;
-        // ingestVerseData's audioComp.load then just seeks + no-op-plays.
-        tsPort.play();
-        if (mode === 'next') dispatch('autoNext');
-        else if (mode === 'random-any') dispatch('autoRandomAny');
-        else if (mode === 'random-current') dispatch('autoRandomCurrent');
+        if (mode === 'next') {
+            autoAdvancing.set(true);
+            dispatch('autoNext');
+        } else if (mode === 'random-any') {
+            autoAdvancing.set(true);
+            dispatch('autoRandomAny');
+        } else if (mode === 'random-current') {
+            autoAdvancing.set(true);
+            dispatch('autoRandomCurrent');
+        }
     }
 
     function _disposeRange(): void {
@@ -108,11 +104,20 @@
 
     // Re-spec the running range whenever loop or verse state changes — avoids
     // a stale loop window after the user toggles loopTarget mid-playback or
-    // navigates verses.
+    // navigates verses. Also re-attaches the rAF loop when audio is playing
+    // — covers the auto-advance path where the `tsPort.play()` re-arm in
+    // `_onBoundary` fires its 'play' event while `autoAdvancing` is still true
+    // (so `onPlay` skips the attach to avoid a second-boundary trigger), and
+    // ingestVerseData's same-URL `audio.play()` is a no-op (no fresh 'play'
+    // event). Without this, the loop would stay stopped through the rest of
+    // the verse and karaoke ticks would freeze.
     $: {
         void $loopTarget;
         void $loadedVerse;
-        if (_range) _ensureRangeForCurrentState();
+        if (_range) {
+            _ensureRangeForCurrentState();
+            if (!tsPort.paused) _range.attach();
+        }
     }
 
     // ---- Audio event handlers ----
@@ -121,6 +126,19 @@
         // attach (not start) — `_player.load(url, atTime, autoplay)` has
         // already seeked to the verse start and kicked off playback. We only
         // want the boundary-watcher rAF on top.
+        //
+        // Gate on autoAdvancing: during auto-advance the boundary handler
+        // re-arms playback via `tsPort.play()` BEFORE the dispatch chain
+        // navigates to the next verse. The resulting 'play' event would
+        // otherwise re-attach the rAF here against the OLD range — currentTime
+        // is still pinned at the old verse's endMs (where _pauseAndFlush left
+        // it), so the loop's first frame would fire the boundary AGAIN and
+        // `_pauseAndFlush` would pause the element a second time. By the time
+        // ingestVerseData's same-URL `audio.play()` runs, the element is
+        // paused with no transient activation to revive it — manifests as
+        // "auto-next loads but the audio stays paused".
+        // The reactive block above handles re-attach once loadedVerse updates.
+        if (get(autoAdvancing)) return;
         const r = _ensureRangeForCurrentState();
         r?.attach();
     }
