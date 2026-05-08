@@ -36,6 +36,16 @@ TIMESTAMPS_PATH = DATA_DIR / "timestamps"
 # Override via INSPECTOR_CACHE_DIR if a volatile / separate cache location is preferred.
 CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))).resolve()
 
+# Timestamps tab read-path source.
+#   "local"       — Flask serves manifest + per-chapter shards from on-disk timestamps
+#   "huggingface" — frontend fetches directly from the HF dataset CDN, no backend round-trip
+TS_SOURCE = os.environ.get("INSPECTOR_TS_SOURCE", "local")
+# Base URL for the HF dataset that publishes timestamp shards (huggingface mode only).
+TS_HF_DATASET_BASE_URL = os.environ.get(
+    "INSPECTOR_TS_HF_DATASET_BASE_URL",
+    "https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs/resolve/main",
+)
+
 # Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).
 # Each consumer in services/ gracefully degrades to an empty set/dict if the file is
 # missing, so these paths are advisory rather than required. Override the base dir via

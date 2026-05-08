@@ -13,6 +13,8 @@ from config import (
     TIMESTAMPS_PATH,
     TS_RANDOM_MAX_RETRIES,
     TS_BOUNDARY_TOLERANCE_MS,
+    TS_SOURCE,
+    TS_HF_DATASET_BASE_URL,
     MISSING_WORD_DIFF_MS_WEIGHT,
 )
 from constants import TS_AUDIO_CATEGORIES
@@ -29,8 +31,25 @@ ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 
 @ts_bp.route("/config")
 def ts_config():
-    """Return display configuration for Timestamps tab."""
+    """Return display configuration + read-path URLs for Timestamps tab.
+
+    `mode`, `manifest_url`, `shard_url_template`, and `resources` drive the
+    frontend's shard-fetch model (parameterised by mode):
+      local       — Flask serves manifest + sliced shards from on-disk data.
+      huggingface — frontend fetches directly from the HF dataset CDN.
+    """
+    if TS_SOURCE == "huggingface":
+        base = TS_HF_DATASET_BASE_URL.rstrip("/")
+        manifest_url = f"{base}/manifest.json.gz"
+        shard_url_template = f"{base}/timestamps/{{reciter}}/{{chapter}}.json.gz"
+    else:
+        manifest_url = "/api/ts/manifest"
+        shard_url_template = "/api/ts/shard/{reciter}/{chapter}"
+
     return jsonify({
+        "mode": TS_SOURCE,
+        "manifest_url": manifest_url,
+        "shard_url_template": shard_url_template,
         "unified_display_max_height": UNIFIED_DISPLAY_MAX_HEIGHT,
         "anim_highlight_color": ANIM_HIGHLIGHT_COLOR,
         "anim_word_transition_duration": ANIM_WORD_TRANSITION_DURATION,
