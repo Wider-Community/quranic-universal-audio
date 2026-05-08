@@ -311,10 +311,30 @@ export function assembleVerseFromShard(
     let timeStartMs = 0;
     let timeEndMs = 0;
 
+    // Prefer seg-based `verse_start_ms` / `verse_end_ms` from the shard so
+    // the inspector's clip matches what the dataset publishes (segmenter's
+    // natural lead-in / trailing silence included). Audio plays through the
+    // silence with no word/letter highlighted — that's expected. When the
+    // shard predates seg bounds, fall back to MFA word bounds.
+    const shardVerse = (verse && typeof verse === 'object' && !Array.isArray(verse))
+        ? (verse as Record<string, unknown>)
+        : null;
+    const seg_start_ms = typeof shardVerse?.verse_start_ms === 'number'
+        ? shardVerse.verse_start_ms : null;
+    const seg_end_ms = typeof shardVerse?.verse_end_ms === 'number'
+        ? shardVerse.verse_end_ms : null;
+
     if (audioCategory === 'by_surah_audio') {
         if (wordsRaw.length > 0) {
-            timeStartMs = wordsRaw[0]![1];
-            timeEndMs = wordsRaw[wordsRaw.length - 1]![2];
+            const wordStart = wordsRaw[0]![1];
+            const wordEnd = wordsRaw.reduce(
+                (m, w) => (w[2] > m ? w[2] : m), wordsRaw[0]![2]);
+            timeStartMs = seg_start_ms !== null
+                ? Math.min(seg_start_ms, wordStart)
+                : wordStart;
+            timeEndMs = seg_end_ms !== null
+                ? Math.max(seg_end_ms, wordEnd)
+                : wordEnd;
             const offsetSec = timeStartMs / 1000;
             for (const wo of wordsOut) {
                 wo.start -= offsetSec;
@@ -329,10 +349,13 @@ export function assembleVerseFromShard(
                 iv.end -= offsetSec;
             }
         }
+    } else if (seg_end_ms !== null) {
+        timeEndMs = seg_end_ms;
     } else if (intervals.length > 0) {
         timeEndMs = Math.round(intervals[intervals.length - 1]!.end * 1000);
     } else if (wordsRaw.length > 0) {
-        timeEndMs = wordsRaw[wordsRaw.length - 1]![2];
+        timeEndMs = wordsRaw.reduce(
+            (m, w) => (w[2] > m ? w[2] : m), wordsRaw[0]![2]);
     }
 
     return {
