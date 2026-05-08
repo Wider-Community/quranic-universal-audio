@@ -41,11 +41,12 @@ afterEach(() => {
 
 describe('AudioPort — CBR fast path', () => {
     it('first loadCovering swaps to chapter url, subsequent in-window calls no-op', async () => {
+        // CBR src defaults to audioUrl when cbrSrc omitted. by_surah reciters
+        // pass a pre-wrapped audio-proxy url here; non-by_surah pass canonical.
         port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: false });
         const r1 = port.loadCovering(0, 1000);
         expect(r1.swapped).toBe(true);
-        // Audio-proxy wraps CDN URLs when reciter is set.
-        expect(audio.src).toBe('/api/seg/audio-proxy/r1?url=http%3A%2F%2Fcdn%2Fx.mp3');
+        expect(audio.src).toBe('http://cdn/x.mp3');
         audio._fireEvent('canplay');
         await r1.ready;
 
@@ -56,10 +57,15 @@ describe('AudioPort — CBR fast path', () => {
         await r2.ready;
     });
 
-    it('uses the canonical url unwrapped when no reciter is bound', async () => {
-        port.setSource({ audioUrl: '/api/seg/something.mp3', reciter: null, vbr: false });
+    it('uses cbrSrc override when caller pre-wraps via audio-proxy', async () => {
+        port.setSource({
+            audioUrl: 'http://cdn/x.mp3',
+            cbrSrc: '/api/seg/audio-proxy/r1?url=http%3A%2F%2Fcdn%2Fx.mp3',
+            reciter: 'r1',
+            vbr: false,
+        });
         const r = port.loadCovering(0, 1000);
-        expect(audio.src).toBe('/api/seg/something.mp3');
+        expect(audio.src).toBe('/api/seg/audio-proxy/r1?url=http%3A%2F%2Fcdn%2Fx.mp3');
         audio._fireEvent('canplay');
         await r.ready;
     });

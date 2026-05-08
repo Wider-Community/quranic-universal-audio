@@ -48,8 +48,8 @@
     import {
         isMainAudioPlaying,
         playingSegmentIndex,
-        segAudioElement,
         segListElement,
+        segPort,
     } from '../../stores/playback';
     import type {
         MergeHighlight,
@@ -71,7 +71,6 @@
     import { beginRefEdit } from '../../utils/edit/reference';
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
-    import { vbrClipFor } from '../../utils/playback/range-spec';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
     import { getConfClass } from '../../utils/validation/conf-class';
     import { _ensureWaveformObserver } from '../../utils/waveform/utils';
@@ -450,7 +449,6 @@
         if (readOnly) return;
         const idx = seg.index;
         const chapter = seg.chapter ?? fallbackChapter;
-        const audioEl = get(segAudioElement);
         // Use the full (chapter, index) active pair so a context row for a
         // different chapter with the same index doesn't mistake itself for
         // the playing one and pause unrelated playback.
@@ -458,9 +456,9 @@
         const isSelfPlaying = !!active
             && active.chapter === chapter
             && active.index === idx
-            && audioEl && !audioEl.paused;
+            && !segPort.paused;
         if (isSelfPlaying) {
-            audioEl.pause();
+            segPort.pause();
         } else {
             // Accordion-mounted rows are self-contained playback surfaces.
             // Marking the play as accordion-origin keeps the main list from
@@ -543,24 +541,17 @@
         const tEnd = hl ? hl.wfEnd : seg.time_end;
         const timeMs = tStart + progress * (tEnd - tStart);
 
-        const audioEl = get(segAudioElement);
         const chapter = seg.chapter ?? fallbackChapter;
         const active = get(playingSegmentIndex);
         const isSelfPlaying = !!active
             && active.chapter === chapter
             && active.index === seg.index
-            && audioEl && !audioEl.paused;
+            && !segPort.paused;
         if (isSelfPlaying) {
-            // VBR mode: audioEl is playing the segment clip from byte 0, so
-            // currentTime is clip-relative. Convert the file-absolute click
-            // target to the same coordinate space; CBR keeps direct seek.
-            const clip = vbrClipFor(seg.audio_url, seg.time_start, seg.time_end);
-            if (clip) {
-                const clipMs = Math.max(0, Math.min(seg.time_end - seg.time_start, timeMs - clip.fileOffsetMs));
-                audioEl.currentTime = clipMs / 1000;
-            } else {
-                audioEl.currentTime = timeMs / 1000;
-            }
+            // Port owns CBR-vs-VBR offset translation: `seek(timeMs)` accepts
+            // file-absolute and writes the clip-relative value internally.
+            // Was previously a VBR-vs-CBR branch that did its own offset math.
+            segPort.seek(timeMs);
         } else {
             playFromSegment(seg.index, chapter, timeMs, {
                 isAccordionPlay: instanceRole !== 'main',

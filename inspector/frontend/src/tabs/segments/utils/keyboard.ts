@@ -10,7 +10,7 @@ import { displayedSegments } from '../stores/filters';
 import { savedFilterView, targetSegmentIndex } from '../stores/navigation';
 import {
     playbackSpeed,
-    segAudioElement,
+    segPort,
 } from '../stores/playback';
 import { savePreviewVisible } from '../stores/save';
 import { KEY_SEEK_SECONDS } from './constants';
@@ -37,14 +37,20 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
             return true;
 
         case 'ArrowLeft': {
-            const el = get(segAudioElement);
-            if (el) el.currentTime = Math.max(0, el.currentTime - KEY_SEEK_SECONDS);
+            // Port owns CBR vs VBR offset translation — `currentTimeMs()`
+            // returns file-absolute regardless, and `seek()` writes file-
+            // absolute back. Under VBR this previously wrote file-absolute
+            // ms onto a clip-relative element (broken nudge — fixed by the
+            // port indirection). Negative seeks clamp inside the port.
+            segPort.seek(segPort.currentTimeMs() - KEY_SEEK_SECONDS * 1000);
             return true;
         }
 
         case 'ArrowRight': {
-            const el = get(segAudioElement);
-            if (el) el.currentTime = Math.min(el.duration || 0, el.currentTime + KEY_SEEK_SECONDS);
+            // Audio element clamps over-shoots to its own duration (which
+            // for VBR clips is the clip span, not the file span — that's
+            // the expected behavior: you can't nudge past the loaded clip).
+            segPort.seek(segPort.currentTimeMs() + KEY_SEEK_SECONDS * 1000);
             return true;
         }
 
@@ -73,16 +79,13 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
         case 'Period':
         case 'Comma': {
             const rate = cycleSpeedStore(playbackSpeed, e.code === 'Period' ? 'up' : 'down', LS_KEYS.SEG_SPEED);
-            // Write the new rate directly to both audio elements. The main
-            // audio must NOT be updated via a reactive `$: audioEl.playbackRate
-            // = $playbackSpeed` block — on Period/Comma that reactive fires
-            // while the keydown is still being processed and races with
-            // Svelte's DOM update for `<select value={$playbackSpeed}>`, which
-            // steals focus onto the <select> and drops the ongoing audio
-            // playback. Direct set here keeps audio and store in sync without
-            // routing through Svelte's update cycle.
-            const mainAudio = get(segAudioElement);
-            if (mainAudio) mainAudio.playbackRate = rate;
+            // Write through the port. The main audio must NOT be updated
+            // via a reactive `$: audioEl.playbackRate = $playbackSpeed`
+            // block — on Period/Comma that reactive fires while the keydown
+            // is still being processed and races with Svelte's DOM update
+            // for `<select value={$playbackSpeed}>`, which steals focus
+            // onto the <select> and drops the ongoing audio playback.
+            segPort.setPlaybackRate(rate);
             return true;
         }
 
