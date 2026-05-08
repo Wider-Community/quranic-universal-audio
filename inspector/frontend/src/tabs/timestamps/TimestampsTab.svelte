@@ -185,8 +185,11 @@
             if (cfg.mode === 'huggingface' && pre.length > 0) {
                 validationData.set({
                     mfa_failures: [],
+                    missing_verses: [],
                     missing_words: [],
+                    verse_overlaps: [],
                     boundary_mismatches: pre,
+                    large_gaps: [],
                     meta: { has_segments: true, tolerance_ms: 0 },
                 });
             } else {

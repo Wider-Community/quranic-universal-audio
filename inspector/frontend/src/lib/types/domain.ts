@@ -267,6 +267,28 @@ export interface TsBoundaryMismatch {
     label: string;
 }
 
+export interface TsMissingVerse {
+    verse_key: string;
+    chapter: number;
+    label: string;
+}
+
+export interface TsVerseOverlap {
+    verse_key: string;
+    chapter: number;
+    prev_verse_key: string;
+    overlap_ms: number;
+    label: string;
+}
+
+export interface TsLargeGap {
+    verse_key: string;
+    chapter: number;
+    prev_verse_key: string;
+    gap_ms: number;
+    label: string;
+}
+
 // ---------------------------------------------------------------------------
 // Surah info (cross-tab)
 // ---------------------------------------------------------------------------
