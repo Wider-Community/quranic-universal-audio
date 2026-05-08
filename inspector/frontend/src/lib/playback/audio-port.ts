@@ -128,6 +128,14 @@ export class AudioPort {
     private loadGen = 0;
     private pendingCanplay: (() => void) | null = null;
     private pendingReady: { resolve: () => void; reject: (e: unknown) => void } | null = null;
+    /** The `ready` promise of an in-flight swap. Held so a follow-up
+     *  `loadCovering` whose request is covered by the in-flight target window
+     *  can return that same promise (with `swapped: true`) and have the
+     *  caller wait for canplay — instead of the caller seeing `swapped:false`
+     *  against the OLD `_window` and seeking/playing into a still-loading
+     *  element with mismatched offsetMs. Cleared when canplay fires or the
+     *  load is aborted. */
+    private pendingPromise: Promise<void> | null = null;
 
     /** DOM listeners attached on `attachElement` and detached on
      *  `attachElement(null)`. Kept so we can re-emit through subscribers
@@ -243,55 +251,66 @@ export class AudioPort {
         const needEnd = endMs + padMs;
         const src = this._source;
 
-        // VBR routing. We need a per-segment clip; only swap when the
-        // current loaded clip doesn't cover the requested span.
-        if (src.vbr && src.reciter && src.audioUrl) {
-            if (this._window?.isClip
-                && this._window.startMs <= needStart
-                && this._window.endMs >= needEnd) {
-                return { ready: Promise.resolve(), swapped: false, window: this._window };
-            }
+        // Compute the window we'd load if we had to swap. Done up front so
+        // we can compare the request against both the (loaded or in-flight)
+        // current `_window` and decide between fast-path / pending-reuse /
+        // fresh swap with a single rule.
+        const useVbr = !!(src.vbr && src.reciter && src.audioUrl);
+        let desiredUrl: string;
+        let desiredWin: LoadedWindow;
+        if (useVbr) {
             const clipStart = Math.max(0, needStart);
             const clipEnd = needEnd;
-            const url = buildClipUrl(src.reciter, src.audioUrl, clipStart, clipEnd);
-            return this._swapTo(url, {
+            desiredUrl = buildClipUrl(src.reciter as string, src.audioUrl, clipStart, clipEnd);
+            desiredWin = {
                 startMs: clipStart,
                 endMs: clipEnd,
                 offsetMs: clipStart,
-                src: url,
+                src: desiredUrl,
                 isClip: true,
-            });
-        }
-
-        // CBR fast path: chapter URL covers the whole file. If the element
-        // already holds the chapter src, no-op. Caller-supplied `cbrSrc`
-        // wins over the canonical `audioUrl` (so callers needing the
-        // audio-proxy wrap pass it pre-wrapped).
-        const cbrSrc = src.cbrSrc ?? src.audioUrl;
-        // Compare against the live element src as a fallback when no
-        // `_window` exists yet — this handles remount-with-loaded-src
-        // and the test fixture where the element starts with the same
-        // src; without it we'd issue a redundant src-swap waiting on a
-        // canplay that may never re-fire.
-        const existingSrc = this._window?.src ?? this.el.src;
-        if (existingSrc && audioSrcMatches(existingSrc, cbrSrc)) {
-            // Synthesize the window so subsequent calls hit the fast path.
-            this._window = {
+            };
+        } else {
+            const cbrSrc = src.cbrSrc ?? src.audioUrl;
+            desiredUrl = cbrSrc;
+            desiredWin = {
                 startMs: 0,
                 endMs: Number.POSITIVE_INFINITY,
                 offsetMs: 0,
                 src: cbrSrc,
                 isClip: false,
             };
+        }
+
+        // Fast path 1: the current `_window` (loaded OR in-flight) already
+        // covers the request and matches the desired transport. Note that
+        // `_window` is set synchronously by `_swapTo` so a follow-up call
+        // arriving DURING a swap correctly sees the in-flight target — not
+        // stale data from the prior load. When a swap is still pending
+        // (canplay hasn't fired), we hand back the pending promise with
+        // `swapped: true` so the caller awaits canplay before playing.
+        if (this._window
+            && this._window.isClip === desiredWin.isClip
+            && this._window.startMs <= needStart
+            && this._window.endMs >= needEnd) {
+            if (this.pendingPromise) {
+                return { ready: this.pendingPromise, swapped: true, window: this._window };
+            }
             return { ready: Promise.resolve(), swapped: false, window: this._window };
         }
-        return this._swapTo(cbrSrc, {
-            startMs: 0,
-            endMs: Number.POSITIVE_INFINITY,
-            offsetMs: 0,
-            src: cbrSrc,
-            isClip: false,
-        });
+
+        // Fast path 2: CBR-only synthesis. No `_window` yet (post-attach,
+        // post-remount, or test fixture preset) but the element's live src
+        // already matches the chapter URL. Synthesize the window without a
+        // swap so subsequent calls hit fast path 1.
+        if (!desiredWin.isClip
+            && !this._window
+            && this.el.src
+            && audioSrcMatches(this.el.src, desiredUrl)) {
+            this._window = desiredWin;
+            return { ready: Promise.resolve(), swapped: false, window: desiredWin };
+        }
+
+        return this._swapTo(desiredUrl, desiredWin);
     }
 
     /** True when the current loaded window covers `[startMs, endMs]` (no
@@ -443,13 +462,24 @@ export class AudioPort {
         if (!this.el) throw new Error('AudioPort._swapTo: no element');
         this._abortPendingLoad();
         const gen = ++this.loadGen;
+        // Sync update: `_window` reflects the INTENDED window from the
+        // moment the swap is initiated, not when canplay fires. A follow-up
+        // `loadCovering` arriving during the swap sees the new window's
+        // offsetMs and either reuses the in-flight ready (covers) or aborts
+        // and starts a fresh swap (doesn't cover) — instead of fast-pathing
+        // against stale data and writing wrong `currentTime` into a still-
+        // loading element. The audible regression this fixes: in VBR Adjust
+        // mode, an immediate split-left/right click after enter would seek
+        // and play before the wider clip's canplay had updated `_window`,
+        // landing the playhead in the wrong file-absolute position.
+        this._window = win;
         const promise = new Promise<void>((resolve, reject) => {
             const handler = (): void => {
                 if (gen !== this.loadGen) return;
                 this.el?.removeEventListener('canplay', handler);
                 this.pendingCanplay = null;
                 this.pendingReady = null;
-                this._window = win;
+                this.pendingPromise = null;
                 this._fanout(this.loadSubs, win);
                 resolve();
             };
@@ -463,6 +493,7 @@ export class AudioPort {
         // `.catch` / `await`. Promise subscribers are independent — any
         // external `await ready` still sees the rejection.
         promise.catch(() => {});
+        this.pendingPromise = promise;
         this.el.src = url;
         this.el.load();
         return { ready: promise, swapped: true, window: win };
@@ -473,6 +504,7 @@ export class AudioPort {
             this.el.removeEventListener('canplay', this.pendingCanplay);
         }
         this.pendingCanplay = null;
+        this.pendingPromise = null;
         if (this.pendingReady) {
             const r = this.pendingReady;
             this.pendingReady = null;

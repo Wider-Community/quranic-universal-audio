@@ -1,8 +1,6 @@
 import { describe, expect,it } from 'vitest';
 
-import type { SegDataResponse } from '../../../../../lib/types/api';
 import type { Segment } from '../../../../../lib/types/domain';
-import { segData, selectedReciter } from '../../../stores/chapter';
 import { AUTOPLAY_GAP_PAUSE_MS } from '../../constants';
 import { buildSegmentClipUrl, buildSegPolicy, buildSegRangeSpec, resolveSegNextRange } from '../range-spec';
 
@@ -21,7 +19,10 @@ function makeSegment(overrides: Partial<Segment> = {}): Segment {
 }
 
 describe('buildSegRangeSpec', () => {
-    it('emits {startMs, endMs, src} from segment fields', () => {
+    // Spec is file-absolute regardless of CBR/VBR — the AudioPort owns
+    // transport (chapter URL vs server-clip URL) and offset translation.
+    // Per-transport routing is verified in audio-port.test.ts.
+    it('emits file-absolute {startMs, endMs} from segment fields', () => {
         const seg = makeSegment({
             index: 5,
             time_start: 1500,
@@ -31,7 +32,6 @@ describe('buildSegRangeSpec', () => {
         const spec = buildSegRangeSpec(seg);
         expect(spec.startMs).toBe(1500);
         expect(spec.endMs).toBe(2500);
-        expect(spec.src).toBe('http://x/abc.mp3');
     });
 
     it('honors seekToMs override', () => {
@@ -39,84 +39,6 @@ describe('buildSegRangeSpec', () => {
         const spec = buildSegRangeSpec(seg, 1234);
         expect(spec.startMs).toBe(1234);
         expect(spec.endMs).toBe(2000);
-    });
-
-    it('falls back src to null when audio_url is empty', () => {
-        const seg = makeSegment({ audio_url: '' });
-        expect(buildSegRangeSpec(seg).src).toBeNull();
-    });
-});
-
-describe('buildSegRangeSpec — VBR routing', () => {
-    function withVbrSegData<T>(reciter: string, fn: () => T): T {
-        const prev = { reciter: '', data: null as SegDataResponse | null };
-        selectedReciter.subscribe((v) => { prev.reciter = v; })();
-        segData.subscribe((v) => { prev.data = v; })();
-        selectedReciter.set(reciter);
-        segData.set({
-            audio_url: 'http://x/seg.mp3',
-            vbr: true,
-            reciter_vbr_chapters: [],
-            segments: [],
-            summary: {} as never,
-            verse_word_counts: {},
-            dk_words: {},
-        });
-        try {
-            return fn();
-        } finally {
-            selectedReciter.set(prev.reciter);
-            segData.set(prev.data);
-        }
-    }
-
-    it('emits clip-relative spec with clipFileOffsetMs when chapter is VBR', () => {
-        const seg = makeSegment({ time_start: 4411667, time_end: 4419395, audio_url: 'http://x/004.mp3' });
-        withVbrSegData('yasser_al_dosari', () => {
-            const spec = buildSegRangeSpec(seg);
-            expect(spec.startMs).toBe(0);
-            expect(spec.endMs).toBe(7728);
-            expect(spec.clipFileOffsetMs).toBe(4411667);
-            expect(spec.src).toBe('/api/seg/segment-clip/yasser_al_dosari?url=http%3A%2F%2Fx%2F004.mp3&start_ms=4411667&end_ms=4419395');
-        });
-    });
-
-    it('maps file-absolute seekToMs into clip-relative space', () => {
-        const seg = makeSegment({ time_start: 1000, time_end: 5000, audio_url: 'http://x/seg.mp3' });
-        withVbrSegData('r', () => {
-            const spec = buildSegRangeSpec(seg, 3500);
-            expect(spec.startMs).toBe(2500);
-            expect(spec.endMs).toBe(4000);
-            expect(spec.clipFileOffsetMs).toBe(1000);
-        });
-    });
-
-    it('clamps seekToMs into the clip window so out-of-range values do not seek negative', () => {
-        const seg = makeSegment({ time_start: 1000, time_end: 5000, audio_url: 'http://x/seg.mp3' });
-        withVbrSegData('r', () => {
-            const before = buildSegRangeSpec(seg, 500);
-            expect(before.startMs).toBe(0);
-            const after = buildSegRangeSpec(seg, 9000);
-            expect(after.startMs).toBe(4000);
-        });
-    });
-
-    it('falls back to file-absolute spec when reciter slug is missing', () => {
-        const seg = makeSegment({ time_start: 1000, time_end: 2000, audio_url: 'http://x/seg.mp3' });
-        // VBR but no reciter → no clip URL we can build → CBR fallback
-        const prev = { data: null as SegDataResponse | null };
-        segData.subscribe((v) => { prev.data = v; })();
-        segData.set({
-            audio_url: 'http://x/seg.mp3', vbr: true, reciter_vbr_chapters: [], segments: [],
-            summary: {} as never, verse_word_counts: {}, dk_words: {},
-        });
-        try {
-            const spec = buildSegRangeSpec(seg);
-            expect(spec.startMs).toBe(1000);
-            expect(spec.clipFileOffsetMs).toBeUndefined();
-        } finally {
-            segData.set(prev.data);
-        }
     });
 });
 
