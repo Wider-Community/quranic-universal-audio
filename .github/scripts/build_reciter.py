@@ -162,6 +162,17 @@ def load_data(slug, audio_type):
     with open(surah_info_path) as f:
         surah_info = json.load(f)
 
+    # timestamps_full.json carries per-verse `verse_start_ms` / `verse_end_ms`
+    # derived from accepted home segs (incl. leading/trailing silence captured
+    # by the segmenter). Prefer those for clip boundaries; fall back to MFA
+    # word bounds if the field is absent (older ts data without seg-based
+    # bounds). Letter-level data also comes from this file.
+    ts_full_raw: dict = {}
+    if ts_full_path.exists():
+        log.info("Loading letter timestamps from %s...", ts_full_path.name)
+        with open(ts_full_path) as f:
+            ts_full_raw = json.load(f)
+
     # Reshape timestamps.json ([[word_idx, start, end], ...]) into the
     # structure build_rows expects: {ref: {"words": [...], "verse_start_ms",
     # "verse_end_ms"}}
@@ -172,33 +183,36 @@ def load_data(slug, audio_type):
         if not words:
             timestamps[ref] = {"words": [], "verse_start_ms": 0, "verse_end_ms": 0}
             continue
+        full_entry = ts_full_raw.get(ref) if isinstance(ts_full_raw, dict) else None
+        verse_start_ms = None
+        verse_end_ms = None
+        if isinstance(full_entry, dict):
+            verse_start_ms = full_entry.get("verse_start_ms")
+            verse_end_ms = full_entry.get("verse_end_ms")
+        if verse_start_ms is None or verse_end_ms is None:
+            verse_start_ms = words[0][1]
+            verse_end_ms = max(w[2] for w in words)
         timestamps[ref] = {
             "words": words,
-            "verse_start_ms": words[0][1],
-            "verse_end_ms": words[-1][2],
+            "verse_start_ms": verse_start_ms,
+            "verse_end_ms": verse_end_ms,
         }
 
-    # Optionally load letter data from timestamps_full.json
-    # Each word in full format: [word_idx, start, end, [[char,s,e],...], [[phone,s,e],...]]
     letter_data = {}
-    if ts_full_path.exists():
-        log.info("Loading letter timestamps from %s...", ts_full_path.name)
-        with open(ts_full_path) as f:
-            ts_full_raw = json.load(f)
-        for ref, verse in ts_full_raw.items():
-            if ref == "_meta":
-                continue
-            words = verse.get("words") if isinstance(verse, dict) else verse
-            if not words:
-                letter_data[ref] = []
-                continue
-            word_letters = []
-            for word in words:
-                word_idx = word[0]
-                letters = word[3] if len(word) > 3 else []
-                word_letters.append((word_idx, letters))
-            letter_data[ref] = word_letters
-        del ts_full_raw
+    for ref, verse in ts_full_raw.items():
+        if ref == "_meta":
+            continue
+        words = verse.get("words") if isinstance(verse, dict) else verse
+        if not words:
+            letter_data[ref] = []
+            continue
+        word_letters = []
+        for word in words:
+            word_idx = word[0]
+            letters = word[3] if len(word) > 3 else []
+            word_letters.append((word_idx, letters))
+        letter_data[ref] = word_letters
+    ts_full_raw.clear()
 
     # Build verse-level lookup: by_ayah entries have ref="surah:ayah",
     # by_surah entries have ref="chapter_num" (one entry per whole surah).
