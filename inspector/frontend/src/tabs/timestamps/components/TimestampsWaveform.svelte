@@ -47,7 +47,7 @@
         viewMode,
     } from '../stores/display';
     import { loopTarget, tsPort } from '../stores/playback';
-    import { loadedVerse, selectedReciter } from '../stores/verse';
+    import { loadedVerse } from '../stores/verse';
     import { tsZoom, tsZoomAnimating } from '../stores/zoom';
     import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
     import { findWordAt } from '../utils/loop-target';
@@ -198,14 +198,23 @@
 
     // ---- Peaks fetch ----
 
+    // Read the reciter from `loadedVerse.data.reciter`, NOT from the
+    // `selectedReciter` store. `ingestVerseData` in TimestampsTab updates
+    // `loadedVerse` before `selectedReciter`, and Svelte fires this
+    // reactive on the first store write — so reading from the store sees
+    // the stale empty-string and the early-return below silently kills
+    // the peaks fetch on first paint. The reciter is already part of the
+    // reactive's input via loadedVerse.data, so use that directly.
     $: reactToVerse(
         $loadedVerse?.data.audio_url ?? null,
+        $loadedVerse?.data.reciter ?? '',
         $loadedVerse?.tsSegOffset ?? 0,
         $loadedVerse?.tsSegEnd ?? 0,
     );
 
     async function reactToVerse(
         url: string | null,
+        reciter: string,
         startSec: number,
         endSec: number,
     ): Promise<void> {
@@ -223,8 +232,12 @@
             _baseCacheKey = null;
             return;
         }
-        const reciter = get(selectedReciter);
-        if (!reciter) return;
+        if (!reciter) {
+            peaks = null;
+            _baseImageData = null;
+            _baseCacheKey = null;
+            return;
+        }
 
         const key = `${url}:${startMs}:${endMs}`;
         const gen = ++fetchGen;
