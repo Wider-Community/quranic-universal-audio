@@ -68,6 +68,25 @@
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
     $: rendered, (_prevActivePhonemeIdx = -1);
+    // Clear stale highlight classes on verse change. The keyed `{#each}` reuses
+    // DOM nodes whose `block.wordIndex` matches across verses (typically 0,1,2…),
+    // so without this the prior verse's `.active`/`.past` classes survive on
+    // reused nodes until the next rAF tick. Between auto-next pause-and-flush
+    // and the new audio's `play` event the rAF loop is stopped, so the user
+    // sees the stale highlight pinned on the old word until playback resumes.
+    $: rendered, _resetHighlightClasses();
+    function _resetHighlightClasses(): void {
+        if (!rootEl) return;
+        rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((b) => {
+            b.classList.remove('active', 'past', 'hover-preview');
+        });
+        rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((p) => {
+            p.classList.remove('active', 'hover-preview');
+        });
+        rootEl.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)').forEach((l) => {
+            l.classList.remove('active', 'hover-preview');
+        });
+    }
 
     // Waveform hover → re-run highlights. The rAF loop is stopped while paused,
     // so without this reactive trigger hover-driven previews wouldn't repaint.
