@@ -550,7 +550,7 @@ def cmd_prepare_pr(args):
                 try:
                     result = subprocess.run(
                         ["gh", "issue", "develop", str(req["issue_number"]),
-                         "--branch", branch, "--base", "main"],
+                         "--name", branch, "--base", "main"],
                         cwd=str(REPO_ROOT), capture_output=True, text=True,
                     )
                     if result.returncode == 0:
