@@ -25,7 +25,6 @@ function makeSeg(overrides: Partial<Segment> & { segment_uid: string; chapter: n
         time_end: overrides.time_start + 1000,
         matched_ref: '',
         matched_text: '',
-        display_text: '',
         confidence: 1,
         audio_url: '',
         ...overrides,
@@ -41,7 +40,6 @@ function snap(s: Segment): Record<string, unknown> {
         time_end: s.time_end,
         matched_ref: s.matched_ref,
         matched_text: s.matched_text,
-        display_text: s.display_text,
         confidence: s.confidence,
         chapter: s.chapter,
     };

@@ -10,8 +10,9 @@ import { cleanup, fireEvent,render } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { makeAudioStub as makePortAudioStub } from '../../../../lib/playback/__tests__/raf-harness';
 import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
-import { loopTarget, tsAudioElement } from '../../stores/playback';
+import { loopTarget, tsAudioElement, tsPort } from '../../stores/playback';
 import type { TsLoadedVerse } from '../../stores/verse';
 import { loadedVerse } from '../../stores/verse';
 import { TS_CLICK_DELAY_MS } from '../../utils/constants';
@@ -49,15 +50,29 @@ function fixture(): TsLoadedVerse {
     return { data, tsSegOffset: 0, tsSegEnd: 10 };
 }
 
-/** Minimal stub of HTMLAudioElement that UnifiedDisplay's click path uses. */
+/** Minimal stub of HTMLAudioElement that UnifiedDisplay's click path uses.
+ *  Reuses the playback-layer test harness so the port's `attachElement`
+ *  finds `addEventListener` / `removeEventListener` (it subscribes to
+ *  play/pause/timeupdate at attach time). */
 function makeAudioStub(): HTMLAudioElement {
-    // We only need .currentTime, .paused, .play(); assertions look at .currentTime.
-    const el = {
-        currentTime: 0,
-        paused: true,
-        play: vi.fn().mockResolvedValue(undefined),
-    } as unknown as HTMLAudioElement;
-    return el;
+    return makePortAudioStub({ src: 'http://audio/1.mp3', readyState: 4 }) as unknown as HTMLAudioElement;
+}
+
+/** Bind both legacy (`tsAudioElement`) and port (`tsPort`) so the click
+ *  handlers — which read through `tsPort` after the Phase 6 migration —
+ *  can write `audio.currentTime` via `tsPort.seek`. The port needs a
+ *  CBR source so `loadCovering` can resolve and the in-memory window
+ *  has offsetMs=0. */
+function bindAudio(audio: HTMLAudioElement): void {
+    tsAudioElement.set(audio);
+    tsPort.attachElement(audio);
+    tsPort.setSource({ audioUrl: 'http://audio/1.mp3', reciter: null, vbr: false });
+    // Synthesize the loaded window so currentTimeMs returns immediately
+    // without needing a canplay round-trip in the test fixture.
+    const r = tsPort.loadCovering(0, 10_000);
+    // The makeAudioStub has _fireEvent for synchronous canplay dispatch.
+    (audio as unknown as { _fireEvent: (t: string) => void })._fireEvent('canplay');
+    void r.ready;
 }
 
 describe('UnifiedDisplay — click / dblclick in loop mode', () => {
@@ -65,7 +80,7 @@ describe('UnifiedDisplay — click / dblclick in loop mode', () => {
         vi.useFakeTimers();
         loadedVerse.set(fixture());
         loopTarget.set(null);
-        tsAudioElement.set(makeAudioStub());
+        bindAudio(makeAudioStub());
     });
 
     afterEach(() => {
@@ -74,6 +89,7 @@ describe('UnifiedDisplay — click / dblclick in loop mode', () => {
         loadedVerse.set(null);
         loopTarget.set(null);
         tsAudioElement.set(null);
+        tsPort.attachElement(null);
     });
 
     it('single-click on a DIFFERENT word while looped swaps the loop target', () => {
@@ -139,7 +155,7 @@ describe('UnifiedDisplay — click / dblclick in loop mode', () => {
 
     it('single-click with no loop active performs a plain seek (no loop mutation)', () => {
         const audio = makeAudioStub();
-        tsAudioElement.set(audio);
+        bindAudio(audio);
         loopTarget.set(null);
 
         const { container } = render(UnifiedDisplay);

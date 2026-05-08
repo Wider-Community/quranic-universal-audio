@@ -14,7 +14,7 @@
     import type { SelectOption } from '../../lib/types/ui';
     import { LS_KEYS, PLACEHOLDER_RECITER } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
-    import { audAudioElement } from './stores/audio';
+    import { audAudioElement, audPort, audPortReady } from './stores/audio';
 
     // ---- Types ----
     interface AudioReciter {
@@ -56,10 +56,14 @@
     onMount(() => {
         void loadSources();
         audAudioElement.set(playerEl);
+        audPort.attachElement(playerEl);
+        audPortReady.set(true);
     });
 
     onDestroy(() => {
         audAudioElement.set(null);
+        audPort.attachElement(null);
+        audPortReady.set(false);
     });
 
     // ---- Source loading ----
@@ -231,18 +235,20 @@
 
         const url = urls[key];
         if (url) {
-            playerEl.src = url;
-            playerEl.load();
+            // Bind the source through the port. CBR fast path: port's
+            // CBR-src equality check no-ops on identical URLs; otherwise
+            // it issues the swap + canplay wait. Audio tab plays full
+            // files via native <audio> controls, so we don't gate play
+            // on canplay — the user clicks play themselves.
+            audPort.setSource({ audioUrl: url, reciter: null, vbr: false });
+            audPort.loadCovering(0, Number.POSITIVE_INFINITY);
         } else {
             clearPlayer();
         }
     }
 
     function clearPlayer(): void {
-        if (playerEl) {
-            playerEl.removeAttribute('src');
-            playerEl.load();
-        }
+        audPort.setSource(null);
         updateNavButtons();
     }
 

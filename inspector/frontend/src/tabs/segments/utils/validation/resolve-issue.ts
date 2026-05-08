@@ -14,9 +14,10 @@
  *
  *   1. `seg.matched_ref` — ground-truth live ref on the segment object.
  *       Updated by split / ref-edit / merge. This is what any ref DISPLAY
- *       should read.
- *   2. `seg.matched_text` / `seg.display_text` — text body. Updated together
- *       with `matched_ref` by `resolve_ref`. Display body reads these.
+ *       should read; row body text is derived from it via `dkTextForRef`.
+ *   2. `seg.matched_text` — canonical Arabic text persisted alongside the
+ *       ref. Used by validators (qalqala last-letter check) and by audit
+ *       tooling — NOT consulted for row body rendering anymore.
  *   3. `item.ref` — server snapshot frozen at `/api/seg/validate` response
  *       time. NEVER rewritten client-side. Safe for KEYING / navigation
  *       (jumpToSegment uses seg_index, not ref) — NEVER safe for display

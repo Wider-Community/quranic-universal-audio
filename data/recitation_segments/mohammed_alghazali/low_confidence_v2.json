@@ -1,0 +1,13 @@
+{
+  "_meta": {
+    "created_at": "2026-05-07T10:29:18Z",
+    "aligner_model": "quran_aligner_model",
+    "method": "kalpy",
+    "beam": 2,
+    "reciter": "mohammed_alghazali",
+    "source_file_hash": "sha256:4ecf00771efed23de010e9c8587b7eded448771beb9df183cb83e25609188ccf"
+  },
+  "failures": [
+    "d5ec30da-3d7e-5c30-a40a-446b5e91eeec"
+  ]
+}

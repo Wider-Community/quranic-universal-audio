@@ -3,8 +3,10 @@
      * TimestampsTab — composition shell for the Timestamps tab.
      *
      * Owns:
-     *   - Reciter/chapter/verse cascade (data fetch + store writes).
+     *   - Reciter/chapter/verse cascade (manifest fetch + shard slice + store writes).
      *   - Config fetch → CSS custom-property bindings on the root div.
+     *   - Lookahead pre-rolls (`nextRandomSame` / `nextRandomAny`) for instant random.
+     *   - Autoplay-on-active-tab on first load.
      *   - Delegating to subcomponents: TimestampsControls, TimestampsAudio,
      *     TimestampsKeyboard, TimestampsShortcutsGuide.
      *   - Passing display-update callbacks to UnifiedDisplay / AnimationDisplay /
@@ -15,14 +17,9 @@
     import { get } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
-    import type {
-        TsChaptersResponse,
-        TsConfigResponse,
-        TsDataResponse,
-        TsRecitersResponse,
-        TsValidateResponse,
-        TsVersesResponse,
-    } from '../../lib/types/api';
+    import type { TsConfigResponse, TsDataResponse, TsValidateResponse } from '../../lib/types/api';
+    import type { TsReciter } from '../../lib/types/domain';
+    import { getActiveTab } from '../../lib/utils/active-tab';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import AnimationDisplay from './components/AnimationDisplay.svelte';
@@ -35,6 +32,17 @@
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
+        assembleVerseFromShard,
+        audioUrlFor,
+        chapterVerseRefs,
+        getRandomTarget,
+        loadChapterShard,
+        loadConfig,
+        loadDk,
+        loadManifest,
+        loadQpc,
+    } from './services/ts_client';
+    import {
         granularity,
         showLetters,
         showPhonemes,
@@ -46,6 +54,7 @@
     import {
         autoAdvancing,
         loopTarget,
+        tsPort,
     } from './stores/playback';
     import {
         chapters,
@@ -54,6 +63,7 @@
         selectedChapter,
         selectedReciter,
         selectedVerse,
+        type TsVerseOption,
         validationData,
         verses,
     } from './stores/verse';
@@ -72,12 +82,20 @@
     let animDisplayEl: AnimationDisplay;
     let waveformTabEl: TimestampsWaveform;
 
+    // ---- Lookahead pre-rolls ----
+    // Each pre-roll is the (reciter, chapter, verseRef) we'd jump to on the
+    // matching random click. The shard is already in ts_client's LRU because
+    // getRandomTarget loaded it during the pre-roll. Consuming a pre-roll is
+    // therefore a dict-lookup-fast operation.
+    let nextRandomSame: { reciter: string; chapter: number; verseRef: string } | null = null;
+    let nextRandomAny: { reciter: string; chapter: number; verseRef: string } | null = null;
+
     // ---------------------------------------------------------------------
     // Initial load
     // ---------------------------------------------------------------------
 
     async function init(): Promise<void> {
-        fetchJson<TsConfigResponse>('/api/ts/config').then((cfg) => tsConfig.set(cfg));
+        loadConfig().then((cfg) => tsConfig.set(cfg as TsConfigResponse));
 
         const savedView = localStorage.getItem(LS_KEYS.TS_VIEW_MODE);
         if (savedView === TS_VIEW_MODES.ANALYSIS || savedView === TS_VIEW_MODES.ANIMATION) {
@@ -89,31 +107,46 @@
                 if (sP !== null) showPhonemes.set(sP === 'true');
             } else {
                 const sG = localStorage.getItem(LS_KEYS.TS_GRANULARITY);
-                if (sG === TS_GRANULARITIES.WORDS || sG === TS_GRANULARITIES.CHARACTERS) granularity.set(sG);
+                if (sG === TS_GRANULARITIES.WORDS || sG === TS_GRANULARITIES.CHARACTERS) {
+                    granularity.set(sG);
+                }
             }
         }
 
         await surahInfoReady;
         await loadReciters();
 
+        // Autoplay on first load only when this tab is the active one — a
+        // browser deep-link or refresh while the Segments tab is up should
+        // still start paused. The eventual audio.play() is wrapped so a
+        // policy denial leaves the UI primed-paused without console noise.
+        const autoplay = getActiveTab() === 'timestamps';
+
         // First-load auto-pick: if we have a persisted reciter, let the
         // reciter-change path auto-load a random verse from it. Otherwise
-        // load a random verse from any reciter. Both open paused.
+        // load a random verse from any reciter.
         const savedReciter = localStorage.getItem(LS_KEYS.TS_RECITER);
         if (savedReciter) {
             selectedReciter.set(savedReciter);
-            await onReciterChange(savedReciter);
+            await onReciterChange(savedReciter, autoplay);
         } else {
-            await loadRandomTimestamp(null, /* autoplay */ false);
+            await loadRandomTimestamp(null, autoplay);
         }
     }
 
     async function loadReciters(): Promise<void> {
         try {
-            const rs = await fetchJson<TsRecitersResponse>('/api/ts/reciters');
+            const m = await loadManifest();
+            const rs: TsReciter[] = Object.entries(m.reciters).map(([slug, b]) => ({
+                slug,
+                name: b.name_en,
+                audio_source: b.source ?? '',
+            }));
+            // Sort by display name for deterministic dropdown order.
+            rs.sort((a, b) => a.name.localeCompare(b.name));
             reciters.set(rs);
         } catch (e) {
-            console.error('Error loading ts reciters:', e);
+            console.error('Error loading manifest:', e);
         }
     }
 
@@ -121,7 +154,7 @@
     // Reciter / chapter / verse cascade
     // ---------------------------------------------------------------------
 
-    async function onReciterChange(reciter: string): Promise<void> {
+    async function onReciterChange(reciter: string, autoplayOverride?: boolean): Promise<void> {
         if (reciter) localStorage.setItem(LS_KEYS.TS_RECITER, reciter);
         chapters.set([]);
         selectedChapter.set('');
@@ -132,25 +165,43 @@
         if (!reciter) return;
 
         try {
-            const [chapResult, valResult] = await Promise.allSettled([
-                fetchJson<TsChaptersResponse>(`/api/ts/chapters/${reciter}`),
-                fetchJson<TsValidateResponse>(`/api/ts/validate/${reciter}`),
-            ]);
-            if (chapResult.status === 'fulfilled' && Array.isArray(chapResult.value)) {
-                chapters.set(chapResult.value);
-            }
-            if (
-                valResult.status === 'fulfilled' &&
-                !valResult.value.error
-            ) {
-                validationData.set(valResult.value);
+            const m = await loadManifest();
+            const block = m.reciters[reciter];
+            if (block) {
+                chapters.set(block.ts_chapters);
             }
         } catch (e) {
-            console.error('Error loading ts reciter data:', e);
+            console.error('Error reading manifest for reciter:', e);
         }
-        // Auto-load a random verse (paused) from this reciter so the tab
-        // always has something on screen after a reciter change.
-        await loadRandomTimestamp(reciter, /* autoplay */ false);
+
+        // Validation: HF mode can serve pre-computed boundary mismatches from
+        // the manifest. Local mode (which carries an empty array) and any
+        // in-review reciter (also empty) fall through to /api/ts/validate.
+        try {
+            const m = await loadManifest();
+            const cfg = await loadConfig();
+            const block = m.reciters[reciter];
+            const pre = block?.validation?.boundary_mismatches ?? [];
+            if (cfg.mode === 'huggingface' && pre.length > 0) {
+                validationData.set({
+                    mfa_failures: [],
+                    missing_words: [],
+                    boundary_mismatches: pre,
+                    meta: { has_segments: true, tolerance_ms: 0 },
+                });
+            } else {
+                const valResult = await fetchJson<TsValidateResponse>(
+                    `/api/ts/validate/${encodeURIComponent(reciter)}`,
+                );
+                if (!valResult.error) validationData.set(valResult);
+            }
+        } catch (e) {
+            console.error('Error loading validation:', e);
+        }
+
+        // Auto-load a random verse from this reciter so the tab always has
+        // something on screen after a reciter change.
+        await loadRandomTimestamp(reciter, autoplayOverride ?? false);
     }
 
     async function onChapterChange(chapter: string): Promise<void> {
@@ -159,17 +210,26 @@
         clearDisplay();
         const reciter = get(selectedReciter);
         if (!reciter || !chapter) return;
+        await populateVersesFor(reciter, parseInt(chapter, 10));
+    }
 
+    /** Populate the verses store from a chapter shard. Caches on ts_client's
+     *  shard LRU so subsequent verse picks within the chapter are free. */
+    async function populateVersesFor(reciter: string, chapter: number): Promise<void> {
         try {
-            const data = await fetchJson<TsVersesResponse & { error?: string }>(
-                `/api/ts/verses/${reciter}/${chapter}`,
-            );
-            if (data.error) return;
-            verses.set(
-                (data.verses || []).map((v) => ({ ref: v.ref, audio_url: v.audio_url || '' })),
-            );
+            const shard = await loadChapterShard(reciter, chapter);
+            const meta = shard._meta;
+            const refs = chapterVerseRefs(shard);
+            const opts: TsVerseOption[] = refs.map((ref) => {
+                const [s, a] = ref.split('-', 1)[0]!.split(':');
+                const surahN = parseInt(s ?? '0', 10);
+                const ayahN = parseInt(a ?? '0', 10);
+                return { ref, audio_url: audioUrlFor(meta, surahN, ayahN) };
+            });
+            verses.set(opts);
         } catch (e) {
-            console.error('Error loading ts verses:', e);
+            console.error('Error loading chapter shard:', e);
+            verses.set([]);
         }
     }
 
@@ -189,17 +249,24 @@
         const reciter = get(selectedReciter);
         const chapter = get(selectedChapter);
         if (!reciter || !chapter || verseRef === '') return;
-        await loadTimestampVerse(reciter, verseRef);
+        await loadTimestampVerse(reciter, parseInt(chapter, 10), verseRef);
     }
 
-    async function loadTimestampVerse(reciter: string, verseRef: string): Promise<void> {
+    async function loadTimestampVerse(
+        reciter: string,
+        chapter: number,
+        verseRef: string,
+    ): Promise<void> {
         document.body.classList.add('loading');
         try {
-            const data = await fetchJson<TsDataResponse & { error?: string }>(
-                `/api/ts/data/${reciter}/${verseRef}`,
-            );
-            if (data.error) {
-                alert('Error: ' + data.error);
+            const [shard, qpc, dk] = await Promise.all([
+                loadChapterShard(reciter, chapter),
+                loadQpc(),
+                loadDk(),
+            ]);
+            const data = assembleVerseFromShard(shard, verseRef, qpc, dk);
+            if (!data) {
+                alert('Error: verse not found in shard');
                 return;
             }
             ingestVerseData(data);
@@ -217,12 +284,22 @@
     ): Promise<void> {
         document.body.classList.add('loading');
         try {
-            const url = reciter
-                ? `/api/ts/random/${encodeURIComponent(reciter)}`
-                : '/api/ts/random';
-            const data = await fetchJson<TsDataResponse & { error?: string }>(url);
-            if (data.error) {
-                alert('Error: ' + data.error);
+            const target = reciter
+                ? consumePreroll('same') ?? await getRandomTarget({ reciter })
+                : consumePreroll('any') ?? await getRandomTarget();
+            if (!target) {
+                console.warn('No timestamp data available');
+                return;
+            }
+
+            const [shard, qpc, dk] = await Promise.all([
+                loadChapterShard(target.reciter, target.chapter),
+                loadQpc(),
+                loadDk(),
+            ]);
+            const data = assembleVerseFromShard(shard, target.verseRef, qpc, dk);
+            if (!data) {
+                console.error('Random target verse missing from shard:', target);
                 return;
             }
 
@@ -232,29 +309,15 @@
                 localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
                 validationData.set(null);
                 try {
-                    const chs = await fetchJson<TsChaptersResponse>(
-                        `/api/ts/chapters/${encodeURIComponent(data.reciter)}`,
-                    );
-                    if (Array.isArray(chs)) chapters.set(chs);
+                    const m = await loadManifest();
+                    chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
                 } catch {
                     chapters.set([]);
                 }
             }
             if (reciterChanged || get(selectedChapter) !== String(data.chapter)) {
                 selectedChapter.set(String(data.chapter));
-                try {
-                    const vData = await fetchJson<TsVersesResponse>(
-                        `/api/ts/verses/${encodeURIComponent(data.reciter)}/${data.chapter}`,
-                    );
-                    verses.set(
-                        (vData.verses || []).map((v) => ({
-                            ref: v.ref,
-                            audio_url: v.audio_url || '',
-                        })),
-                    );
-                } catch {
-                    verses.set([]);
-                }
+                await populateVersesFor(data.reciter, data.chapter);
             }
 
             ingestVerseData(data, autoplay);
@@ -262,7 +325,44 @@
             console.error('Error loading random timestamp:', e);
         } finally {
             document.body.classList.remove('loading');
+            // Refresh both pre-rolls in parallel — fire-and-forget; the cache
+            // they leave behind makes the next click instant.
+            primePrerolls();
         }
+    }
+
+    /** Consume the matching pre-roll if it exists, otherwise return null. */
+    function consumePreroll(
+        kind: 'same' | 'any',
+    ): { reciter: string; chapter: number; verseRef: string } | null {
+        if (kind === 'same') {
+            const r = get(selectedReciter);
+            if (nextRandomSame && nextRandomSame.reciter === r) {
+                const t = nextRandomSame;
+                nextRandomSame = null;
+                return t;
+            }
+            return null;
+        }
+        const t = nextRandomAny;
+        nextRandomAny = null;
+        return t;
+    }
+
+    /** Re-roll both pre-rolls. Their shards are pre-fetched into the LRU
+     *  by `getRandomTarget` itself, so consuming the pre-roll is dict-fast. */
+    function primePrerolls(): void {
+        const reciter = get(selectedReciter) || null;
+        if (reciter) {
+            getRandomTarget({ reciter })
+                .then((t) => { nextRandomSame = t; })
+                .catch(() => { nextRandomSame = null; });
+        } else {
+            nextRandomSame = null;
+        }
+        getRandomTarget()
+            .then((t) => { nextRandomAny = t; })
+            .catch(() => { nextRandomAny = null; });
     }
 
     function ingestVerseData(data: TsDataResponse, autoplay: boolean = true): void {
@@ -275,14 +375,25 @@
         selectedVerse.set(data.verse_ref);
 
         // For per-surah audio (large files) route playback through the local
-        // audio-proxy so the Flask layer can disk-cache + Range-serve. The
-        // store keeps the raw CDN URL so the peaks endpoint (which itself
-        // fetches the URL server-side) doesn't loop through the proxy.
+        // audio-proxy so the Flask layer can disk-cache + Range-serve. Local
+        // mode keeps the proxy; HF mode plays the origin URL direct since
+        // there's no Flask layer to disk-cache through.
+        const cfg = get(tsConfig);
+        const useProxy = (cfg?.mode ?? 'local') === 'local';
         const playUrl = (data.audio_category === 'by_surah_audio'
             && data.audio_url
+            && useProxy
             && !data.audio_url.startsWith('/api/'))
             ? `/api/seg/audio-proxy/${data.reciter}?url=${encodeURIComponent(data.audio_url)}`
             : data.audio_url;
+        // Auto-next reaches here right after AudioRange.`_pauseAndFlush` ramped
+        // the gain to 0. The eventual `setRange→_uncut` lifting it back to 1
+        // runs in a microtask AFTER `audioComp.load` synchronously kicks off
+        // `audio.play()`, so the new verse plays silent for ~5 ms — long
+        // enough to look "stuck paused" if the browser also rejects the
+        // play() (autoplay policy). Lift the cut on the same tick as the
+        // load so the next play() sees gain=1 immediately.
+        tsPort.uncut();
         audioComp?.load(playUrl, tsSegOffset, autoplay);
         autoAdvancing.set(false);
         // Verse change invalidates any active loop target.

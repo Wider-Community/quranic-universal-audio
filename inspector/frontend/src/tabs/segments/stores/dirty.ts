@@ -92,7 +92,6 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
         time_end: seg.time_end,
         matched_ref: seg.matched_ref || '',
         matched_text: seg.matched_text || '',
-        display_text: seg.display_text || '',
         confidence: seg.confidence ?? 0,
     };
     if (seg.has_repeated_words) snap.has_repeated_words = true;

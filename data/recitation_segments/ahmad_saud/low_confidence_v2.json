@@ -1,0 +1,11 @@
+{
+  "_meta": {
+    "created_at": "2026-05-07T10:28:30Z",
+    "aligner_model": "quran_aligner_model",
+    "method": "kalpy",
+    "beam": 2,
+    "reciter": "ahmad_saud",
+    "source_file_hash": "sha256:803fd2625aa743067a82a9cf6a5045a134f6fdd49d5fd09fba29eaa49316f369"
+  },
+  "failures": []
+}

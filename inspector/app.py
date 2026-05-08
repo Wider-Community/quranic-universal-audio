@@ -6,7 +6,6 @@ SPA shell (inspector/frontend/dist/) and cross-tab routes, and runs the
 startup sequence.
 """
 import argparse
-import concurrent.futures
 import json
 import logging
 import os
@@ -26,10 +25,9 @@ from flask import Flask, jsonify, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 from config import (AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR, DEFAULT_PORT,
-                    FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST,
-                    STARTUP_PRELOAD_WORKERS)
+                    FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
-from services.data_loader import discover_ts_reciters, load_surah_info_lite, load_timestamps
+from services.data_loader import load_surah_info_lite
 from services.phonemizer_service import get_phonemizer, has_phonemizer
 
 
@@ -169,21 +167,9 @@ if __name__ == "__main__":
     else:
         logger.info("Phonemizer not available (reference resolution disabled)")
 
-    # Eagerly discover timestamp reciters
-    reciters = discover_ts_reciters()
-    logger.info("Discovered %d timestamp reciter(s).", len(reciters))
-
-    # Preload all timestamp data in background threads
-    if reciters:
-        def _preload(slug):
-            load_timestamps(slug)
-            return slug
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=min(len(reciters), STARTUP_PRELOAD_WORKERS),
-        ) as pool:
-            for slug in pool.map(_preload, [r["slug"] for r in reciters]):
-                logger.info("Preloaded timestamps: %s", slug)
-        logger.info("All timestamp data cached.")
+    # Timestamp data loads lazily on first request now (per-reciter cache in
+    # services/data_loader.py). The earlier eager preload pinned ~22 MB *
+    # 300 reciters at startup, which is unviable at deployed scale.
 
     # Vite owns frontend file-watching (HMR in dev; rebuild on npm run build).
     # Flask reloader only needs to watch Python modules, which it does natively.

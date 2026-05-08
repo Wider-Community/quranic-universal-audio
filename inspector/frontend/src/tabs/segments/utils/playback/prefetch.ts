@@ -1,43 +1,82 @@
 /**
- * Audio prefetch for the next displayed segment.
+ * Audio prefetch for the next displayed / accordion segment.
  *
- * Reads displayed segments and prefetch cache from the imperative `state`
- * object and uses `audioSrcMatches` from lib/utils/audio to compare URLs.
+ * Two transport paths:
+ *
+ *  - **CBR**: warms the chapter audio URL. Useful only when the next segment
+ *    actually points at a different audio file from the current one — for
+ *    consecutive same-chapter segments the URL matches and we skip.
+ *  - **VBR**: warms the per-segment clip URL (`/api/seg/segment-clip/...`).
+ *    Each clip endpoint hits ffmpeg `-ss/-t`, so a speculative `fetch()`
+ *    while the user is still on the previous segment hides the ~200–400 ms
+ *    spin-up before the next play.
+ *
+ *  The endpoint sets `Cache-Control: public, max-age=…, immutable`, so a
+ *  bare fetch warms the browser HTTP cache; the subsequent `audio.src=…`
+ *  is served from cache.
+ *
+ *  Two "next" resolvers — chapter-mode advances by `Segment.index + 1` in
+ *  the displayed slice; accordion-mode advances by *list position* in the
+ *  card's rendered sibling list (which may not be index-sorted, e.g. a
+ *  context window around an issue, and may span chapters).
  */
+
+import { get } from 'svelte/store';
 
 import type { Segment } from '../../../../lib/types/domain';
 import { audioSrcMatches } from '../../../../lib/utils/audio';
+import { prefetchEnabled } from '../../stores/playback';
+import { vbrClipForChapter } from './range-spec';
+import { nextDisplayedSeg, nextSiblingSeg } from './resolvers';
+
+// Re-export for the existing import sites. The resolvers themselves live in
+// `./resolvers` so range-spec can also use them without an import cycle.
+export { nextDisplayedSeg, nextSiblingSeg } from './resolvers';
 
 /**
- * Find the next displayed segment after the given index.
- * Returns null if the index is not found or is the last segment.
- */
-export function nextDisplayedSeg(
-    displayedSegments: Segment[] | null,
-    afterIndex: number,
-): Segment | null {
-    if (!displayedSegments) return null;
-    const pos = displayedSegments.findIndex(s => s.index === afterIndex);
-    if (pos >= 0 && pos < displayedSegments.length - 1) {
-        return displayedSegments[pos + 1] ?? null;
-    }
-    return null;
-}
-
-/**
- * Prefetch the audio for the next segment after `currentIndex`.
- * Skips if the next segment shares the same audio URL as the current one
- * or if it has already been prefetched.
+ * Prefetch the audio for the next segment in `list` after the row identified
+ * by (`currentChapter`, `currentIndex`).
+ *
+ * For VBR siblings the clip URL is fetched (per-reciter VBR map decides);
+ * for CBR siblings the chapter audio URL is fetched, skipping when it
+ * matches `currentAudioSrc` (the common consecutive-same-chapter case).
+ *
+ * If `currentChapter` is null the function falls back to chapter-mode
+ * resolution by `Segment.index + 1` (legacy callers that haven't been
+ * migrated to pass a chapter pointer).
  */
 export function prefetchNextSegAudio(
-    displayedSegments: Segment[] | null,
+    list: Segment[] | null,
     currentIndex: number,
     currentAudioSrc: string,
     prefetchCache: Record<string, Promise<unknown>>,
+    currentChapter: number | null = null,
 ): void {
-    const next = nextDisplayedSeg(displayedSegments, currentIndex);
-    if (!next) return;
-    if (!next.audio_url || audioSrcMatches(next.audio_url, currentAudioSrc)) return;
+    // User-disabled: skip resolver work, network warm, and cache writes for
+    // both main-list (chapter mode) and accordion (sibling mode) callers.
+    if (!get(prefetchEnabled)) return;
+    const next = currentChapter != null
+        ? nextSiblingSeg(list, currentChapter, currentIndex)
+        : nextDisplayedSeg(list, currentIndex);
+    if (!next || !next.audio_url) return;
+
+    // VBR path: prefetch the clip URL keyed off the *next* sibling's chapter,
+    // so cross-chapter accordion rows get the right encoding routing.
+    const nextChapter = next.chapter;
+    if (nextChapter != null) {
+        const clip = vbrClipForChapter(nextChapter, next.audio_url, next.time_start, next.time_end);
+        if (clip) {
+            if (clip.clipUrl in prefetchCache) return;
+            prefetchCache[clip.clipUrl] = fetch(clip.clipUrl)
+                .then(r => r.blob())
+                .catch(() => {});
+            return;
+        }
+    }
+
+    // CBR path: warm the chapter URL. Skips when the next segment shares the
+    // current segment's audio (no useful warming) or when already cached.
+    if (audioSrcMatches(next.audio_url, currentAudioSrc)) return;
     if (next.audio_url in prefetchCache) return;
     prefetchCache[next.audio_url] = fetch(next.audio_url)
         .then(r => r.blob())

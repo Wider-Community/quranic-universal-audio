@@ -32,7 +32,7 @@ import {
     setTrimWindow,
     updateTrimWindow,
 } from '../../stores/edit';
-import { segAudioElement } from '../../stores/playback';
+import { segPort } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
@@ -434,11 +434,10 @@ export function previewTrimAudio(canvas?: SegCanvas | null): void {
     const c = canvas ?? get(editCanvas);
     const tw = c?._trimWindow;
     if (!tw || !c) return;
-    const audioEl = get(segAudioElement);
-    if (getPreviewLooping() && audioEl && !audioEl.paused) {
+    if (getPreviewLooping() && !segPort.paused) {
         setPreviewLooping(false);
         setPreviewJustSeeked(false);
-        audioEl.pause();
+        segPort.pause();
         clearPlayRangeRAF();
         if (c._trimWindow) drawTrimWaveform(c);
         return;

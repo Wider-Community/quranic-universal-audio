@@ -15,7 +15,6 @@ function seg(overrides: Partial<Segment> & { segment_uid: string; chapter: numbe
         time_end: overrides.time_start + 1000,
         matched_ref: '',
         matched_text: '',
-        display_text: '',
         confidence: 1,
         audio_url: '',
         ...overrides,
@@ -31,7 +30,6 @@ function snap(s: Segment): Record<string, unknown> {
         time_end: s.time_end,
         matched_ref: s.matched_ref,
         matched_text: s.matched_text,
-        display_text: s.display_text,
         confidence: s.confidence,
         chapter: s.chapter,
         ...(s.ignored_categories ? { ignored_categories: s.ignored_categories } : {}),
@@ -56,13 +54,13 @@ describe('applyInversePatchToSegments', () => {
         expect(result[0]!.confidence).toBe(0.5);
     });
 
-    it('reverts an edit_reference (matched_ref/text/display_text restored)', () => {
+    it('reverts an edit_reference (matched_ref/text restored)', () => {
         const before = seg({
             segment_uid: 'a', chapter: 1, time_start: 0, time_end: 1000,
-            matched_ref: '1:1:1', matched_text: 'old', display_text: 'old',
+            matched_ref: '1:1:1', matched_text: 'old',
             confidence: 0.7,
         });
-        const after: Segment = { ...before, matched_ref: '1:1:2', matched_text: 'new', display_text: 'new', confidence: 1.0 };
+        const after: Segment = { ...before, matched_ref: '1:1:2', matched_text: 'new', confidence: 1.0 };
         const patch: EditOpPatch = {
             before: [snap(before)], after: [snap(after)],
             removedIds: [], insertedIds: [], affectedChapterIds: [1],
@@ -70,7 +68,6 @@ describe('applyInversePatchToSegments', () => {
         const [restored] = applyInversePatchToSegments([after], patch);
         expect(restored!.matched_ref).toBe('1:1:1');
         expect(restored!.matched_text).toBe('old');
-        expect(restored!.display_text).toBe('old');
         expect(restored!.confidence).toBe(0.7);
     });
 

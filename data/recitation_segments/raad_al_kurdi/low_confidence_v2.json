@@ -1,0 +1,15 @@
+{
+  "_meta": {
+    "created_at": "2026-05-07T10:28:09Z",
+    "aligner_model": "quran_aligner_model",
+    "method": "kalpy",
+    "beam": 2,
+    "reciter": "raad_al_kurdi",
+    "source_file_hash": "sha256:7fe0b1effaa66edf0e57006521c5bc4f6821607b6f7f56c0a2a4e3473b32c007"
+  },
+  "failures": [
+    "019d883e-58c9-7df3-9dc9-7f254116bee2",
+    "019d883e-596d-74f4-9899-9811410baf5c",
+    "019d883e-59cd-743a-ac97-cb9648209231"
+  ]
+}

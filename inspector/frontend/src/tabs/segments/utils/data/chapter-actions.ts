@@ -13,14 +13,15 @@ import type { SegDataResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import {
+    reciterVbrChapters,
     segAllData,
     segData,
     selectedChapter,
     selectedReciter,
     selectedVerse,
 } from '../../stores/chapter';
-import { segAudioElement } from '../../stores/playback';
-import { clearSegPrefetchCache, stopSegAnimation } from '../playback/playback';
+import { segPort } from '../../stores/playback';
+import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { _fetchChapterPeaksIfNeeded } from '../waveform/utils';
 import { _isCurrentReciterBySurah } from './reciter';
 
@@ -33,8 +34,17 @@ import { _isCurrentReciterBySurah } from './reciter';
 export async function loadChapterData(reciter: string, chapter: string): Promise<void> {
     selectedVerse.set('');
 
-    const audioEl = get(segAudioElement);
-    if (audioEl) audioEl.src = '';
+    // Tear down the prior chapter's source. The port pauses any running
+    // playback and clears the audio element's src; chapter-src state lives
+    // entirely behind the port from here on.
+    //
+    // Dispose any live AudioRange BEFORE setSource so a stale range whose
+    // pending `_startWithPort.then(seekAndPlay)` is still in flight can't
+    // fire against the new source after the swap. Without this, a fast
+    // reciter / chapter switch mid-cross-chapter-accordion-play would
+    // briefly play the new chapter at the old seg's offset.
+    disposeSegRange();
+    segPort.setSource(null);
     stopSegAnimation();
     clearSegPrefetchCache();
 
@@ -44,9 +54,14 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
         const chData = await fetchJson<SegDataResponse>(`/api/seg/data/${reciter}/${chapter}`);
         if (get(selectedReciter) !== reciter || get(selectedChapter) !== chapter) return;
         if (chData.error) return;
-        if (_isCurrentReciterBySurah() && chData.audio_url && !chData.audio_url.startsWith('/api/')) {
-            chData.audio_url = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(chData.audio_url)}`;
-        }
+
+        // by_surah reciters need the audio-proxy wrap for CORS so Web Audio
+        // can route the chapter MP3 through `MediaElementAudioSourceNode`.
+        // Compute it here and pass to the port via `cbrSrc`; the canonical
+        // `audioUrl` stays unwrapped so VBR clip-URL building uses it raw.
+        const cbrSrc = (_isCurrentReciterBySurah() && chData.audio_url && !chData.audio_url.startsWith('/api/'))
+            ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(chData.audio_url)}`
+            : chData.audio_url;
 
         const chNum = parseInt(chapter);
         // Slice segments into the per-chapter list (imperative consumers
@@ -57,17 +72,25 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
             : [];
         chData.segments = chapterSegs;
         segData.set(chData);
+        reciterVbrChapters.set(new Set(chData.reciter_vbr_chapters ?? []));
         _fetchChapterPeaksIfNeeded(reciter, chNum);
 
-        if (chData.audio_url && audioEl) {
+        if (chData.audio_url) {
             // Re-warm the CDN connection: the reciter-load preconnect may have
             // decayed if the user took >10s to pick a chapter (Chrome abandons
-            // idle preconnects). Fire again now, just before audio src is set.
+            // idle preconnects). Fire again now, just before binding the source.
             preconnectOrigins(
                 Object.values(get(segAllData)?.audio_by_chapter ?? {}),
             );
-            audioEl.src = chData.audio_url;
-            audioEl.preload = 'metadata';
+            // Bind the logical source to the port. CBR plays don't actually
+            // load `<audio>.src` until the first `loadCovering` (port owns
+            // that). VBR clips swap src per-segment via the same path.
+            segPort.setSource({
+                audioUrl: chData.audio_url,
+                cbrSrc,
+                reciter,
+                vbr: !!chData.vbr,
+            });
         }
     } catch (e) {
         console.error('Error loading chapter data:', e);
