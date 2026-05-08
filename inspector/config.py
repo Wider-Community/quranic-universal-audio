@@ -135,7 +135,6 @@ LOW_CONFIDENCE_THRESHOLD = 0.80
 # "Show everything below perfect" tier — used to populate detail lists (not count badges).
 # Distinct from LOW_CONFIDENCE_THRESHOLD (count badge cutoff) and LOW_CONFIDENCE_RED (red highlight).
 LOW_CONFIDENCE_DETAIL_THRESHOLD = 1.0
-MAX_AYAH_BOUNDARY_CHECK = 300
 METADATA_PEEK_BYTES = 512
 
 # Statistics histogram defaults

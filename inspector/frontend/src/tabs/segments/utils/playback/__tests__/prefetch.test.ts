@@ -25,7 +25,6 @@ function makeSegment(overrides: Partial<Segment> = {}): Segment {
         time_end: 1000,
         matched_ref: '1:1:1-1:1:1',
         matched_text: 'x',
-        display_text: 'x',
         confidence: 1.0,
         audio_url: 'http://x/audio.mp3',
         chapter: 1,

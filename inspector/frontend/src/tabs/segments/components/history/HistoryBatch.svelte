@@ -39,6 +39,10 @@
 
     export let item: OpFlatItem;
     export let previewCtx: PreviewPlaybackContext | undefined = undefined;
+    /** `'history'` (default) renders Undo on saved batches; `'preview'` (set
+     *  by SavePreview) suppresses Undo so the save-preview surface only ever
+     *  exposes Discard for pending ops. */
+    export let mode: 'preview' | 'history' = 'history';
 
     // Derived header bits ----------------------------------------------------
 
@@ -134,7 +138,7 @@
                 class="btn btn-sm seg-history-undo-btn"
                 on:click|stopPropagation={handleDiscardClick}
             >Discard</button>
-        {:else if item.batchId && !item.isRevert}
+        {:else if mode === 'history' && item.batchId && !item.isRevert}
             <button
                 class="btn btn-sm seg-history-undo-btn"
                 on:click|stopPropagation={handleUndoClick}

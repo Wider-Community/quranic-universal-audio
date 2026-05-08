@@ -229,10 +229,8 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     };
     if (cmd.firstRef !== undefined) firstHalf.matched_ref = cmd.firstRef;
     if (cmd.firstText !== undefined) firstHalf.matched_text = cmd.firstText;
-    if (cmd.firstDisplayText !== undefined) firstHalf.display_text = cmd.firstDisplayText;
     if (cmd.secondRef !== undefined) secondHalf.matched_ref = cmd.secondRef;
     if (cmd.secondText !== undefined) secondHalf.matched_text = cmd.secondText;
-    if (cmd.secondDisplayText !== undefined) secondHalf.display_text = cmd.secondDisplayText;
 
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
     const resolved = new Set<string>(_resolvedFromContext(ctxCat));
@@ -302,7 +300,6 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
         time_end: second.time_end,
         matched_ref: cmd.mergedRef ?? _joinRefs(first.matched_ref, second.matched_ref),
         matched_text: cmd.mergedText ?? [first.matched_text, second.matched_text].filter(Boolean).join(' '),
-        display_text: cmd.mergedDisplayText ?? [first.display_text, second.display_text].filter(Boolean).join(' '),
         confidence: 1.0,
     };
     merged.ignored_categories = mergedIc.size ? [...mergedIc] : undefined;
@@ -371,7 +368,6 @@ function _reduceEditReference(
     const next = _cloneSeg(target);
     next.matched_ref = cmd.matched_ref;
     if (cmd.matched_text !== undefined) next.matched_text = cmd.matched_text;
-    if (cmd.display_text !== undefined) next.display_text = cmd.display_text;
     next.confidence = 1.0;
     const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 
@@ -499,7 +495,6 @@ function _reduceAutoFixMissingWord(
     const next = _cloneSeg(target);
     next.matched_ref = cmd.matched_ref;
     if (cmd.matched_text !== undefined) next.matched_text = cmd.matched_text;
-    if (cmd.display_text !== undefined) next.display_text = cmd.display_text;
     next.confidence = 1.0;
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);

@@ -34,6 +34,10 @@
 
     export let chain: EditChain;
     export let previewCtx: PreviewPlaybackContext | undefined = undefined;
+    /** `'history'` (default) shows Undo for any saved batches in the chain.
+     *  `'preview'` (set by SavePreview) suppresses Undo — that view is for
+     *  reviewing pending edits, not reverting prior saves. */
+    export let mode: 'preview' | 'history' = 'history';
 
     // Derived ----------------------------------------------------------------
 
@@ -174,7 +178,7 @@
         {#each valDelta.regressed as cat}
             <span class="seg-history-val-delta regression">+{SHORT_LABELS[cat] || cat}</span>
         {/each}
-        {#if chainBatchIds.length > 0}
+        {#if mode === 'history' && chainBatchIds.length > 0}
             <button
                 class="btn btn-sm seg-history-undo-btn"
                 on:click|stopPropagation={handleChainUndoClick}

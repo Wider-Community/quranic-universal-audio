@@ -16,8 +16,6 @@
     import { createEventDispatcher,onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { fetchJson } from '../../../../lib/api';
-    import type { SegResolveRefResponse } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import { segAllData } from '../../stores/chapter';
     import { setPendingOp } from '../../stores/dirty';
@@ -25,7 +23,12 @@
         clearEdit,
         pendingChainTarget,
     } from '../../stores/edit';
-    import { _normalizeRef, formatRef, getVerseWordCounts } from '../../utils/data/references';
+    import {
+        _normalizeRef,
+        dkTextForRef,
+        formatRef,
+        getVerseWordCounts,
+    } from '../../utils/data/references';
     import {
         commitRefEdit,
         consumePendingInitialSelection,
@@ -35,7 +38,7 @@
     export let seg: Segment;
 
     const dispatch = createEventDispatcher<{
-        preview: { text: string; ref: string } | null;
+        preview: { ref: string } | null;
     }>();
 
     let inputEl: HTMLInputElement | undefined;
@@ -43,37 +46,18 @@
     let committed = false;
     let invalid = false;
 
-    let fetchTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFetchedValue = '';
-
+    // Recompute the live preview synchronously on every keystroke. The
+    // SegmentRow body re-derives its text from `previewState.ref` via the
+    // same `dkTextForRef` helper, so we only signal validity here — the
+    // resolved text never crosses the boundary.
     $: {
         const currentVal = value.trim();
-        if (currentVal && currentVal !== lastFetchedValue) {
-            if (fetchTimer) clearTimeout(fetchTimer);
-            fetchTimer = setTimeout(() => {
-                void fetchPreview(currentVal);
-            }, 300);
-        }
-    }
-
-    async function fetchPreview(candidate: string) {
-        lastFetchedValue = candidate;
         const vwc = getVerseWordCounts();
-        const normalized = _normalizeRef(candidate, vwc);
-        if (!normalized) {
-            dispatch('preview', null);
-            return;
-        }
-        try {
-            const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
-                `/api/seg/resolve_ref?ref=${encodeURIComponent(normalized)}`,
-            );
-            if (data.text && !data.error) {
-                dispatch('preview', { text: data.display_text || data.text, ref: normalized });
-            } else {
-                dispatch('preview', null);
-            }
-        } catch (_e) {
+        const normalized = _normalizeRef(currentVal, vwc);
+        const dk = $segAllData?.dk_words;
+        if (normalized && dkTextForRef(normalized, dk, vwc)) {
+            dispatch('preview', { ref: normalized });
+        } else {
             dispatch('preview', null);
         }
     }

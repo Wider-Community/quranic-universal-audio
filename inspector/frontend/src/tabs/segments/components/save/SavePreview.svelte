@@ -107,9 +107,9 @@
         {#each displayEntries as entry (entryKey(entry))}
             <div>
                 {#if entry.type === 'chain'}
-                    <EditChainRow chain={entry.chain} {previewCtx} />
+                    <EditChainRow chain={entry.chain} {previewCtx} mode="preview" />
                 {:else}
-                    <HistoryBatch item={entry.item} {previewCtx} />
+                    <HistoryBatch item={entry.item} {previewCtx} mode="preview" />
                 {/if}
             </div>
         {/each}

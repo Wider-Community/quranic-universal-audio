@@ -95,11 +95,10 @@
         if (!isOneToOne) return null;
         const b = diff.before[0]!;
         const a = diff.after[0]!;
-        const set = new Set<'ref' | 'duration' | 'conf' | 'body'>();
+        const set = new Set<'ref' | 'duration' | 'conf'>();
         if (b.matched_ref !== a.matched_ref) set.add('ref');
         if (b.time_start !== a.time_start || b.time_end !== a.time_end) set.add('duration');
         if (b.confidence !== a.confidence) set.add('conf');
-        if (b.matched_text !== a.matched_text) set.add('body');
         return set.size > 0 ? set : null;
     })();
 
