@@ -422,7 +422,9 @@ def validate_reciter(
 
     short_verses = 0
     verse_overlaps = 0
+    overlap_details: list[dict] = []
     large_gaps = 0
+    large_gap_details: list[dict] = []
     verse_durations = []
 
     # Build {(surah, ayah): (start_ms, end_ms)} for all regular verse keys
@@ -475,6 +477,11 @@ def validate_reciter(
                 if cur_start < prev_end:
                     overlap = prev_end - cur_start
                     verse_overlaps += 1
+                    overlap_details.append({
+                        "verse_key": f"{surah}:{cur_ayah}",
+                        "prev_verse_key": f"{surah}:{prev_ayah}",
+                        "overlap_ms": int(overlap),
+                    })
                     errors.append({
                         "msg": f"verse overlap with {surah}:{prev_ayah}: "
                                f"{surah}:{prev_ayah} ends {_ms_to_hms(prev_end)}, "
@@ -487,6 +494,11 @@ def validate_reciter(
                 gap = cur_start - prev_end
                 if gap > 10000:
                     large_gaps += 1
+                    large_gap_details.append({
+                        "verse_key": f"{surah}:{cur_ayah}",
+                        "prev_verse_key": f"{surah}:{prev_ayah}",
+                        "gap_ms": int(gap),
+                    })
                     warnings.append({
                         "msg": f"large gap after {surah}:{prev_ayah}: "
                                f"{_ms_to_hms(prev_end)} to {_ms_to_hms(cur_start)} "
@@ -540,6 +552,9 @@ def validate_reciter(
             {"verse_key": vk, "side": side, "diff_ms": round(diff)}
             for vk, side, diff, _msg in seg_boundary_details
         ],
+        "_missing_verses": list(missing_verses),
+        "_verse_overlaps": overlap_details,
+        "_large_gaps": large_gap_details,
     }
 
     if verbose:
