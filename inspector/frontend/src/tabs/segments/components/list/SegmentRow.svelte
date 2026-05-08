@@ -533,14 +533,17 @@
         });
     }
 
-    function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
+    function _timeFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): number {
         const rect = canvas.getBoundingClientRect();
         const progress = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const hl = canvas._splitHL;
         const tStart = hl ? hl.wfStart : seg.time_start;
         const tEnd = hl ? hl.wfEnd : seg.time_end;
-        const timeMs = tStart + progress * (tEnd - tStart);
+        return tStart + progress * (tEnd - tStart);
+    }
 
+    function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
+        const timeMs = _timeFromCanvasEvent(e, canvas);
         const chapter = seg.chapter ?? fallbackChapter;
         const active = get(playingSegmentIndex);
         const isSelfPlaying = !!active
@@ -565,10 +568,22 @@
         const canvas = e.currentTarget as SegCanvas;
 
         e.preventDefault();
+        // Initial mousedown: full seek-or-play decision (re-init the
+        // AudioRange when the user clicks a non-playing row).
         _seekFromCanvasEvent(e, canvas);
 
+        // Drag (mousemove with the button held): SCRUB only — write the
+        // new file-absolute time directly. Routing through
+        // `_seekFromCanvasEvent` here would re-enter `playFromSegment` on
+        // every pixel of mouse movement (each pixel fires a fresh
+        // `mousemove` event), each call disposing the live AudioRange and
+        // rebuilding it. That stack of dispose+rebuild churns 3+ ranges
+        // per click in practice and inherits stale state across
+        // iterations. The seek-only path is what the `isSelfPlaying`
+        // branch above does anyway — apply it unconditionally for drag.
         function onMove(ev: MouseEvent): void {
-            _seekFromCanvasEvent(ev, canvas);
+            const timeMs = _timeFromCanvasEvent(ev, canvas);
+            segPort.seek(timeMs);
         }
         function onUp(): void {
             document.removeEventListener('mousemove', onMove);

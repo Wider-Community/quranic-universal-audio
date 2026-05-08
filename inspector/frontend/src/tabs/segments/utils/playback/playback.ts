@@ -300,6 +300,20 @@ export function onSegTimeUpdate(fileMs?: number): void {
     // calls instead.
     if (segPort.window?.isClip) return;
     if (!segPort.element) return;
+    // Cross-chapter accordion plays keep the port bound to the row's chapter
+    // (via `playFromSegment`'s setSource), but `displayedSegments` and
+    // `playingSegmentIndex` describe the ACTIVE chapter's view. The
+    // file-absolute `timeMs` below would be interpreted in the ACCORDION
+    // chapter's coordinate space, but compared against ACTIVE-chapter rows
+    // whose `time_start/time_end` are in their own chapter's space —
+    // false-positive matches happen when the numeric ms range overlaps
+    // by coincidence. Skip the scan entirely whenever the port isn't
+    // playing the active chapter; the playing pair set by `playFromSegment`
+    // already points at the right (cross-chapter) row, and the rAF tick's
+    // `drawActivePlayhead` keeps the cursor on that row's canvas.
+    const portUrl = segPort.source?.audioUrl;
+    const activeUrl = _curChapterUrl();
+    if (!portUrl || !activeUrl || !audioSrcMatches(portUrl, activeUrl)) return;
     // `fileMs` comes from the port's `onTimeUpdate` subscription (file-
     // absolute). Fall back to a fresh read for direct callers (none today,
     // but the public export shape allows it).
@@ -370,6 +384,15 @@ export function stopSegAnimation(): void {
     // fires this both for user pauses (range stays alive, ready to resume)
     // and the autoplay-gap pause (range scheduled the resume internally).
     // Explicit teardown is `disposeSegRange()`.
+    //
+    // Mirror the `editMode` gate from `startSegAnimation`. During edit-mode
+    // preview, `_playRange`'s loop seek-back issues a transient
+    // `pauseAndFlush()` to drain the OS audio sink — that fires a 'pause'
+    // DOM event whose only intent is to silence the sink, not to surface
+    // a paused state to the user. Without this gate the main play-button
+    // label flickered to 'Play' on every loop iteration during Adjust /
+    // Split preview.
+    if (get(editMode)) return;
     playButtonLabel.set('Play');
     if (get(activeAudioSource) === 'main') activeAudioSource.set(null);
     isMainAudioPlaying.set(false);
