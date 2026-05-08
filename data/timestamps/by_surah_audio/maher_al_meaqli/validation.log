@@ -1,0 +1,66 @@
+Generated: 2026-05-08 21:17:34
+
+========================================================================
+  Timestamps: maher_al_meaqli
+  data/timestamps/by_surah_audio/maher_al_meaqli
+========================================================================
+
+--- MFA Settings ---
+  Audio source:  by_surah/mp3quran
+  Method:        kalpy
+  Beam:          50
+  Retry beam:    ?
+  Shared CMVN:   False
+
+--- Coverage ---
+  Verses found:       6236 / 6236
+  Missing verses:     0
+  Total words:        83962
+  Coverage issues:    0
+  Forward gap verses: 0
+
+--- Word Duration ---
+  Min:      0.04s
+  Median:   0.80s
+  Mean:     0.92s
+  Max:      9.85s
+
+--- Temporal Issues ---
+  Negative timestamps:  0
+  Zero-duration words:  0
+
+--- Verse Timestamps ---
+  Duration min:     0.75s
+  Duration median:  10.07s
+  Duration mean:    12.64s
+  Duration max:     119.80s
+  Short (<500ms):   0
+  Verse overlaps:   1
+  Large gaps (>10s):3
+
+--- Full Format (letters/phones) ---
+  Negative/inverted letters:  0
+  Phone issues:              0
+
+--- Cross-file Consistency (segments.json) ---
+  Boundary mismatches (>975ms):  2
+
+  Top 2 boundary violations (by diff):
+    3:90         end mismatch: timestamps 26:54.8 vs segments 26:56.1 (diff 1331ms)
+    6:162        end mismatch: timestamps 49:11.3 vs segments 49:12.3 (diff 1036ms)
+
+--- Validation Issues ---
+  Errors:     1
+  Warnings:   6
+
+  Errors (first 1 of 1):
+    ERROR  8:48  verse overlap with 8:47: 8:47 ends 13:05.1, 8:48 starts 13:05.1 (overlap 2ms)
+
+  Warnings (first 6 of 6):
+    WARN     _meta missing fields: ['retry_beam']
+    WARN   3:90  end mismatch: timestamps 26:54.8 vs segments 26:56.1 (diff 1331ms)
+    WARN   6:162  end mismatch: timestamps 49:11.3 vs segments 49:12.3 (diff 1036ms)
+    WARN   24:19  large gap after 24:18: 5:02.2 to 5:12.8 (gap 10.64s)
+    WARN   37:66  large gap after 37:65: 6:10.4 to 6:25.3 (gap 14.89s)
+    WARN   44:28  large gap after 44:27: 2:56.0 to 3:12.9 (gap 16.90s)
+
