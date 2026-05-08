@@ -338,6 +338,20 @@ export class AudioRange {
 
     private _startWithPort(spec: AudioRangeSpec): void {
         if (!this.port) return;
+        // Phase-0 instrumentation (regression diagnosis). Logs every direct
+        // play (`range.start()`) and every autoplay-advance gap callback so
+        // we can verify port.source vs spec coordinates per-bug — see
+        // `~/.claude/plans/fancy-toasting-fern.md`. Removed once the three
+        // remaining VBR bugs are confirmed-fixed.
+         
+        console.log('[ARStartWithPort]', {
+            spec,
+            src: this.port.source,
+            win: this.port.window,
+            elSrc: this.audioEl.src,
+            elPaused: this.audioEl.paused,
+            elTime: this.audioEl.currentTime,
+        });
         const { ready, swapped } = this.port.loadCovering(spec.startMs, spec.endMs);
         if (!swapped) {
             this._seekAndPlayWithPort(spec.startMs);

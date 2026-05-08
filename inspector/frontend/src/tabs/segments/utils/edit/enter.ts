@@ -17,6 +17,7 @@ import {
     segPort,
 } from '../../stores/playback';
 import { disposeSegRange, stopSegAnimation } from '../playback/playback';
+import { resolveSegSource } from '../playback/source';
 import { enterSplitMode } from './split';
 import { enterTrimMode } from './trim';
 
@@ -36,6 +37,15 @@ export function enterEditWithBuffer(
     // can't fire onto the audio element while edit-preview owns it.
     disposeSegRange();
     continuousPlay.set(false);
+
+    // Bind the port to THIS seg's source. Cross-chapter Adjust/Split
+    // (launched from a validation accordion row whose chapter ≠ active)
+    // would otherwise build the wider clip from the active chapter's URL
+    // — wrong audio. setSource is a no-op for active-chapter Adjust and
+    // invalidates `_window` for cross-chapter so the loadCovering below
+    // swaps to the row's chapter clip.
+    const segSource = resolveSegSource(seg);
+    if (segSource) segPort.setSource(segSource);
 
     // Pre-load the audio for the whole segment ± edit-mode padding. Under
     // VBR this issues ONE ffmpeg invocation that covers all subsequent
