@@ -70,6 +70,7 @@
     import { beginRefEdit } from '../../utils/edit/reference';
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
+    import { vbrClipFor } from '../../utils/playback/range-spec';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
     import { getConfClass } from '../../utils/validation/conf-class';
     import { _ensureWaveformObserver } from '../../utils/waveform/utils';
@@ -528,7 +529,16 @@
             && active.index === seg.index
             && audioEl && !audioEl.paused;
         if (isSelfPlaying) {
-            audioEl.currentTime = timeMs / 1000;
+            // VBR mode: audioEl is playing the segment clip from byte 0, so
+            // currentTime is clip-relative. Convert the file-absolute click
+            // target to the same coordinate space; CBR keeps direct seek.
+            const clip = vbrClipFor(seg.audio_url, seg.time_start, seg.time_end);
+            if (clip) {
+                const clipMs = Math.max(0, Math.min(seg.time_end - seg.time_start, timeMs - clip.fileOffsetMs));
+                audioEl.currentTime = clipMs / 1000;
+            } else {
+                audioEl.currentTime = timeMs / 1000;
+            }
         } else {
             playFromSegment(seg.index, chapter, timeMs, {
                 isAccordionPlay: instanceRole !== 'main',

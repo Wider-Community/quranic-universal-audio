@@ -31,6 +31,7 @@ import type { SegCanvas } from '../../types/segments-waveform';
 import { drawSegPlayhead } from '../waveform/draw-seg';
 import { _findCoveringPeaks } from '../waveform/peaks-cache';
 import { indexSegPeaksBulk, redrawPeaksWaveforms } from '../waveform/utils';
+import { buildRangePlaybackSpec } from './range-spec';
 
 export interface PreviewActiveSeg {
     /** Stable per-row id minted by the caller (chapter:index:start:end). */
@@ -294,9 +295,13 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         // the next session hydrates without a round-trip.
         void _ensurePeaks(row.audioUrl, row.wfStartMs, row.wfEndMs, row.opId);
 
+        // Route through buildRangePlaybackSpec so SavePreview / HistoryPanel
+        // pick up the VBR clip path automatically when $segData.vbr is true.
+        // The chapter context lives in segData (set on chapter load), so this
+        // produces clip-relative specs for VBR rows and file-absolute for CBR.
         range = new AudioRange({
             audioEl,
-            range: { startMs: row.startMs, endMs: row.endMs, src: row.audioUrl },
+            range: buildRangePlaybackSpec(row.audioUrl, row.startMs, row.endMs),
             policy: { kind: 'stop' },
             onTick: _onTick,
             onBoundary: _onBoundary,
