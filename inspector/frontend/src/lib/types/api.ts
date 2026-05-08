@@ -18,10 +18,13 @@ import type {
     SegReciter,
     SurahInfoMap,
     TsBoundaryMismatch,
+    TsLargeGap,
     TsMfaFailure,
+    TsMissingVerse,
     TsMissingWords,
     TsReciter,
     TsVerseData,
+    TsVerseOverlap,
     VerseRef,
 } from './domain';
 
@@ -140,8 +143,11 @@ export interface TsVersesResponse {
 /** GET /api/ts/validate/:reciter */
 export interface TsValidateResponse {
     mfa_failures: TsMfaFailure[];
+    missing_verses: TsMissingVerse[];
     missing_words: TsMissingWords[];
+    verse_overlaps: TsVerseOverlap[];
     boundary_mismatches: TsBoundaryMismatch[];
+    large_gaps: TsLargeGap[];
     meta: {
         has_segments: boolean;
         tolerance_ms: number;
