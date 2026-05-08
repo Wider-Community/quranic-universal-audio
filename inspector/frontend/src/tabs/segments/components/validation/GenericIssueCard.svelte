@@ -175,6 +175,17 @@
         return n;
     })();
 
+    // Ordered sibling list — render order — passed to every SegmentRow so
+    // playback prefetch can warm the next sibling's clip URL by list
+    // position. Mirrors the template below exactly.
+    $: siblings = ((): Segment[] => {
+        const out: Segment[] = [];
+        if (prevSeg) out.push(prevSeg);
+        for (const m of mainMembers) out.push(m);
+        if (nextSeg) out.push(nextSeg);
+        return out;
+    })();
+
     // Open default context once resolvedSeg becomes available.
     let _didAutoOpen = false;
     $: if (resolvedSeg && ctxDefaultOpen && !_didAutoOpen) {
@@ -222,6 +233,7 @@
                 contextLabel="Previous"
                 showPlayBtn={true}
                 showChapter={true}
+                accordionSiblings={siblings}
             />
         {/if}
         {#each mainMembers as m (m.segment_uid ?? `${m.chapter}:${m.index}`)}
@@ -231,6 +243,7 @@
                 showPlayBtn={true}
                 showChapter={true}
                 validationCategory={category}
+                accordionSiblings={siblings}
             />
             {#if showPhonemes && boundaryItem && m.segment_uid === _boundUid}
                 <div class="val-phoneme-tail">
@@ -248,6 +261,7 @@
                 contextLabel="Next"
                 showPlayBtn={true}
                 showChapter={true}
+                accordionSiblings={siblings}
             />
         {/if}
     {/if}

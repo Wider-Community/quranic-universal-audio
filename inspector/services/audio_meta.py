@@ -65,6 +65,34 @@ def is_vbr(reciter: str, chapter: int | str) -> bool:
     return bool(entry.get("vbr"))
 
 
+def vbr_chapters_for_reciter(reciter: str) -> list[int]:
+    """Return the sorted list of chapter numbers known VBR for ``reciter``.
+
+    Used by the chapter-load endpoint to ship the per-reciter VBR map to the
+    frontend so cross-chapter accordion prefetch can pick the right transport
+    (clip URL vs chapter URL) without a per-chapter probe round-trip. Only the
+    chapters present under ``by_chapter`` are returned — the artifact omits CBR
+    chapters by construction, so set membership is the encoding signal.
+    """
+    doc = _load_doc()
+    if not doc:
+        return []
+    section = doc.get(reciter)
+    if not isinstance(section, dict):
+        return []
+    by_chapter = section.get("by_chapter") or {}
+    out: list[int] = []
+    for k, entry in by_chapter.items():
+        if not isinstance(entry, dict) or not entry.get("vbr"):
+            continue
+        try:
+            out.append(int(k))
+        except (TypeError, ValueError):
+            continue
+    out.sort()
+    return out
+
+
 def chapter_meta(reciter: str, chapter: int | str) -> dict | None:
     """Return the per-chapter audio_meta entry, or None when missing."""
     doc = _load_doc()

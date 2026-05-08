@@ -57,6 +57,7 @@ describe('buildSegRangeSpec — VBR routing', () => {
         segData.set({
             audio_url: 'http://x/seg.mp3',
             vbr: true,
+            reciter_vbr_chapters: [],
             segments: [],
             summary: {} as never,
             verse_word_counts: {},
@@ -106,7 +107,7 @@ describe('buildSegRangeSpec — VBR routing', () => {
         const prev = { data: null as SegDataResponse | null };
         segData.subscribe((v) => { prev.data = v; })();
         segData.set({
-            audio_url: 'http://x/seg.mp3', vbr: true, segments: [],
+            audio_url: 'http://x/seg.mp3', vbr: true, reciter_vbr_chapters: [], segments: [],
             summary: {} as never, verse_word_counts: {},
         });
         try {

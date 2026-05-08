@@ -35,6 +35,18 @@
         return getAdjacentSegments(next.chapter, next.index).next;
     })();
 
+    // Ordered sibling list — render order — passed to each SegmentRow so
+    // playback prefetch can warm the next sibling's clip URL by list
+    // position. Mirrors the template below exactly.
+    $: siblings = ((): Segment[] => {
+        const out: Segment[] = [];
+        if (beforeCtx) out.push(beforeCtx);
+        if (prev) out.push(prev);
+        if (nextDifferent && next) out.push(next);
+        if (afterCtx) out.push(afterCtx);
+        return out;
+    })();
+
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }
     export function showContextForced(): void { showContext = true; dispatch('contextchange', true); }
@@ -56,6 +68,7 @@
         contextLabel="Before"
         showPlayBtn={true}
         showChapter={true}
+        accordionSiblings={siblings}
     />
 {/if}
 {#if prev}
@@ -65,6 +78,7 @@
         contextLabel="Previous verse boundary"
         showPlayBtn={true}
         showChapter={true}
+        accordionSiblings={siblings}
     />
 {/if}
 {#if nextDifferent && next}
@@ -74,6 +88,7 @@
         contextLabel="Next verse boundary"
         showPlayBtn={true}
         showChapter={true}
+        accordionSiblings={siblings}
     />
 {/if}
 {#if afterCtx}
@@ -83,6 +98,7 @@
         contextLabel="After"
         showPlayBtn={true}
         showChapter={true}
+        accordionSiblings={siblings}
     />
 {/if}
 {#if !hasBoundarySegs}

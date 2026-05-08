@@ -141,6 +141,17 @@
      * re-computing. Live-edit and SavePreview rows leave this null.
      */
     export let opId: string | null = null;
+    /**
+     * Rendered sibling list of the accordion card mounting this row. Set by
+     * `MissingVersesCard` / `MissingWordsCard` / `GenericIssueCard` to the
+     * full ordered list of segments they render — the playback layer uses
+     * it to prefetch the *next* sibling's clip URL by list position when
+     * this row plays. Cross-chapter siblings are supported (validation
+     * panels with `chapter=null`); the per-reciter VBR map decides whether
+     * each sibling routes through the clip endpoint or the chapter URL.
+     * Main-list and history/preview rows pass null.
+     */
+    export let accordionSiblings: Segment[] | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -449,6 +460,7 @@
             // when global autoplay is on.
             playFromSegment(idx, chapter, undefined, {
                 isAccordionPlay: instanceRole !== 'main',
+                accordionSiblings,
             });
         }
     }
@@ -510,6 +522,7 @@
         if (t.closest('.seg-row-controls') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
         playFromSegment(seg.index, seg.chapter ?? 0, undefined, {
             isAccordionPlay: instanceRole !== 'main',
+            accordionSiblings,
         });
     }
 
@@ -542,6 +555,7 @@
         } else {
             playFromSegment(seg.index, chapter, timeMs, {
                 isAccordionPlay: instanceRole !== 'main',
+                accordionSiblings,
             });
         }
     }

@@ -112,6 +112,12 @@ export interface SegDataResponse {
      *  HTML5 `<audio>.currentTime` (which mis-seeks Xing-less VBR files).
      *  Defaults to false for unknown / unprobed chapters. */
     vbr: boolean;
+    /** All chapters of this reciter known VBR. Populated from the same
+     *  `data/.audio_meta.json` source as `vbr`, but covers the full reciter
+     *  rather than just the active chapter — needed for cross-chapter
+     *  accordion prefetch to pick the clip endpoint vs chapter URL based on
+     *  the next sibling's chapter. */
+    reciter_vbr_chapters: number[];
     segments: Segment[];
     summary: SegmentsChapterSummary;
     verse_word_counts: Record<VerseRef, number>;
