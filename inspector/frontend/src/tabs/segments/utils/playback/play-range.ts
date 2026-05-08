@@ -133,13 +133,27 @@ export function _playRange(startMs: number, endMs: number): void {
         }
         if (curMs >= effectiveEnd && !_previewJustSeeked) {
             if (loopMode && loopStart !== null) {
+                // OS-sink flush across the loop seek-back. Without
+                // pauseAndFlush the platform audio sink (Windows WASAPI
+                // ~50–200ms of pre-decoded samples) keeps playing past
+                // `effectiveEnd` while the seek queues — pre-refactor's
+                // tight per-press clip ended at endMs so those queued
+                // samples were silence/EOF, but the post-refactor wider
+                // EDIT_LOAD_PAD_MS clip has REAL audio in the post-pad
+                // zone. The cut+pause silences and drains the sink; the
+                // seekAndPlay then uncuts and resumes from loopStart.
                 // Port handles file-absolute → clip-relative translation.
-                segPort.seek(loopStart);
+                segPort.pauseAndFlush();
+                segPort.seekAndPlay(loopStart);
                 _previewJustSeeked = true;
                 _playRangeRAF = requestAnimationFrame(animatePlayhead);
                 return;
             }
-            segPort.pause();
+            // Stop branch (non-loop preview reaching its endMs): same
+            // sink-flush rationale — replace bare `pause()` with
+            // `pauseAndFlush()` so the wider clip's post-pad samples
+            // queued in the OS sink don't audibly leak after the boundary.
+            segPort.pauseAndFlush();
             cleanup();
             return;
         }
