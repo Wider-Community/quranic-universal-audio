@@ -21,7 +21,7 @@ import {
     selectedVerse,
 } from '../../stores/chapter';
 import { segPort } from '../../stores/playback';
-import { clearSegPrefetchCache, stopSegAnimation } from '../playback/playback';
+import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { _fetchChapterPeaksIfNeeded } from '../waveform/utils';
 import { _isCurrentReciterBySurah } from './reciter';
 
@@ -37,6 +37,13 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
     // Tear down the prior chapter's source. The port pauses any running
     // playback and clears the audio element's src; chapter-src state lives
     // entirely behind the port from here on.
+    //
+    // Dispose any live AudioRange BEFORE setSource so a stale range whose
+    // pending `_startWithPort.then(seekAndPlay)` is still in flight can't
+    // fire against the new source after the swap. Without this, a fast
+    // reciter / chapter switch mid-cross-chapter-accordion-play would
+    // briefly play the new chapter at the old seg's offset.
+    disposeSegRange();
     segPort.setSource(null);
     stopSegAnimation();
     clearSegPrefetchCache();

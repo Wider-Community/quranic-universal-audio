@@ -26,6 +26,7 @@ import {
     getSegByChapterIndex,
     segAllData,
     segCurrentIdx,
+    segData,
     selectedChapter,
 } from '../../stores/chapter';
 import { editMode } from '../../stores/edit';
@@ -47,6 +48,7 @@ import { _fetchPeaksForClick } from '../waveform/utils';
 import { nextDisplayedSeg, prefetchNextSegAudio } from './prefetch';
 import { buildSegPolicy } from './range-spec';
 import { getRowEntriesFor } from './row-registry';
+import { resolveSegSource } from './source';
 
 // ---------------------------------------------------------------------------
 // Module-local state
@@ -82,11 +84,16 @@ export function disposeSegRange(): void {
     _segRange = null;
 }
 
-/** Canonical chapter URL of the currently bound source — used by prefetch
- *  to decide whether the next segment shares the chapter audio (CBR skip)
- *  or needs a fresh warm. Empty string when no source is bound. */
+/** Active-chapter audio URL — independent of which segment's source the
+ *  port is currently bound to. Used by `onSegTimeUpdate`'s cross-segment
+ *  scan (filters `displayed` to active-chapter rows by URL match) and by
+ *  prefetch's "skip if next seg shares chapter audio" gate. Reads from
+ *  `segData.audio_url` (the active chapter's canonical CDN URL set by
+ *  `loadChapterData`) rather than `segPort.source.audioUrl` so per-row
+ *  source rebinding doesn't break either consumer when an accordion row
+ *  from another chapter is the most recent thing the port loaded. */
 function _curChapterUrl(): string {
-    return segPort.source?.audioUrl ?? '';
+    return get(segData)?.audio_url ?? '';
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +134,13 @@ function _onRangeBoundary(ev: { reason: string }): void {
         if (!segPort.element || !active || !displayed) return;
         const next = nextDisplayedSeg(displayed, active.index);
         if (!next || next.index !== active.index + 1) return;
+        // Rebind the port to the next seg's source BEFORE the gap timer
+        // fires `_startWithPort(next)` → `port.loadCovering(next.start, next.end)`
+        // — otherwise the port still has the prior seg's chapter source and
+        // the clip URL builds against the wrong audio. setSource is a no-op
+        // when the source is unchanged (same-chapter advance).
+        const nextSource = resolveSegSource(next);
+        if (nextSource) segPort.setSource(nextSource);
         const nextChapter = next.chapter ?? active.chapter;
         setPlayingSegment({ chapter: nextChapter, index: next.index });
         segCurrentIdx.set(next.index);
@@ -172,6 +186,15 @@ export function playFromSegment(
     // disambiguates same-index rows in other chapters.
     const resolvedChapter = chapter ?? seg.chapter ?? 0;
     const isAccordionPlay = opts?.isAccordionPlay ?? false;
+
+    // Bind the port to THIS seg's source. Cross-chapter accordion rows
+    // (validation cards mounting rows from other chapters) and main-list
+    // rows in the active chapter both flow through here. setSource is a
+    // no-op for the active chapter; for cross-chapter rows it invalidates
+    // `_window` so the next `loadCovering` issues a fresh swap against
+    // the row's chapter URL.
+    const segSource = resolveSegSource(seg);
+    if (segSource) segPort.setSource(segSource);
 
     // Autoplay is intentionally main-list only: accordion plays always stop
     // at time_end regardless of the global autoplay toggle.
