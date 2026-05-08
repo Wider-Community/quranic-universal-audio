@@ -18,6 +18,8 @@
         playbackSpeed,
         playButtonLabel,
         segAudioElement,
+        segPort,
+        segPortReady,
     } from '../../stores/playback';
     import {
         onSegAudioEnded,
@@ -29,13 +31,18 @@
 
     // ---- Exported prop: raw HTMLAudioElement exposed to parent via bind:audioEl ----
     // Populated reactively once AudioPlayer mounts and element() returns non-null.
+    // @deprecated New code reads `segPort` instead; this prop is retained until
+    // the final cleanup phase removes `segAudioElement`.
     export let audioEl: HTMLAudioElement | null = null;
 
     // ---- Internal refs ----
     let _player: AudioPlayer;
 
     // Keep audioEl prop in sync with the underlying HTMLAudioElement, and
-    // publish it to the segAudioElement store.
+    // publish it to the segAudioElement store (legacy mirror). The port is
+    // attached in onMount so its element binding has the same lifecycle as
+    // the DOM listeners — chapter-src writes flow through `segPort.setSource(...)`
+    // (in chapter-actions.ts), not a reactive mirror block.
     $: audioEl = _player?.element() ?? null;
     $: segAudioElement.set(audioEl);
 
@@ -69,7 +76,7 @@
         if (!isNaN(v)) {
             playbackSpeed.set(v);
             localStorage.setItem(LS_KEYS.SEG_SPEED, String(v));
-            if (audioEl) audioEl.playbackRate = v;
+            segPort.setPlaybackRate(v);
         }
     }
 
@@ -77,28 +84,14 @@
     // Don't mirror $playbackSpeed reactively — a `$: audioEl.playbackRate =
     // $playbackSpeed` block re-runs inside Svelte's update cycle alongside
     // the speed <select>'s re-render, which drops focus onto the select and
-    // halts audio playback. All speed writes set audioEl.playbackRate
-    // directly at the call site (keyboard.ts, onSpeedSelectChange).
-    $: if (audioEl && audioEl.playbackRate === 1 && $playbackSpeed !== 1) {
-        audioEl.playbackRate = $playbackSpeed;
-    }
-
-    // Ensure the audio element's src reflects the current chapter's audio_url
-    // after the normal-content block re-mounts (e.g. leaving history/save
-    // preview with a chapter already loaded). Only fires when audioEl is
-    // unset, empty, or missing the expected URL; avoids resetting playback
-    // on every reactive re-run.
-    $: if (audioEl && $segData?.audio_url) {
-        const want = $segData.audio_url;
-        const cur = audioEl.src;
-        if (!cur || (cur !== want && cur !== location.origin + want)) {
-            audioEl.src = want;
-            audioEl.preload = 'auto';
-        }
+    // halts audio playback. All speed writes route through the port at the
+    // call site (keyboard.ts, onSpeedSelectChange).
+    $: if (audioEl && segPort.playbackRate === 1 && $playbackSpeed !== 1) {
+        segPort.setPlaybackRate($playbackSpeed);
     }
 
     // -------------------------------------------------------------------------
-    // Mount: wire audio listeners
+    // Mount: bind <audio> to the port + register subscribers
     // -------------------------------------------------------------------------
 
     onMount(() => {
@@ -111,16 +104,23 @@
             if (!isNaN(v)) playbackSpeed.set(v);
         }
 
-        el.addEventListener('play', startSegAnimation);
-        el.addEventListener('pause', stopSegAnimation);
-        el.addEventListener('ended', onSegAudioEnded);
-        el.addEventListener('timeupdate', onSegTimeUpdate);
+        // Bind the element to the port. Port owns DOM event subscription
+        // (play/pause/ended/timeupdate) — we attach our handlers via the
+        // port's typed subscription API so future src-swaps (chapter change,
+        // VBR clip swap) don't churn DOM listeners.
+        segPort.attachElement(el);
+        segPortReady.set(true);
+        const offs = [
+            segPort.onPlay(startSegAnimation),
+            segPort.onPause(stopSegAnimation),
+            segPort.onEnded(onSegAudioEnded),
+            segPort.onTimeUpdate(onSegTimeUpdate),
+        ];
 
         return () => {
-            el.removeEventListener('play', startSegAnimation);
-            el.removeEventListener('pause', stopSegAnimation);
-            el.removeEventListener('ended', onSegAudioEnded);
-            el.removeEventListener('timeupdate', onSegTimeUpdate);
+            for (const off of offs) off();
+            segPort.attachElement(null);
+            segPortReady.set(false);
         };
     });
 </script>
@@ -147,7 +147,7 @@
     <button
         id="seg-play-btn"
         class="btn"
-        disabled={!audioEl || !$segData?.audio_url}
+        disabled={!$segPortReady || !$segData?.audio_url}
         on:click={handlePlayClick}
     >{$playButtonLabel}</button>
     <button

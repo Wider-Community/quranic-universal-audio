@@ -48,20 +48,20 @@
     import {
         isMainAudioPlaying,
         playingSegmentIndex,
-        segAudioElement,
         segListElement,
+        segPort,
     } from '../../stores/playback';
     import type {
         MergeHighlight,
-        PadHighlight,
         SegCanvas,
         SplitHighlight,
         TrimHighlight,
     } from '../../types/segments-waveform';
-    import { EDIT_MIN_DURATION_MS,SEG_ROW_CANVAS_HEIGHT, SEG_ROW_CANVAS_WIDTH, TRIM_HANDLE_HIT_RADIUS_PX } from '../../utils/constants';
+    import { SEG_ROW_CANVAS_HEIGHT, SEG_ROW_CANVAS_WIDTH } from '../../utils/constants';
     import { jumpToSegment } from '../../utils/data/navigation-actions';
     import {
         _addVerseMarkers,
+        dkTextForRef,
         formatRef,
         formatTimeMs,
     } from '../../utils/data/references';
@@ -73,7 +73,7 @@
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
     import { getConfClass } from '../../utils/validation/conf-class';
-    import { _ensureWaveformObserver, redrawPeaksWaveforms } from '../../utils/waveform/utils';
+    import { _ensureWaveformObserver } from '../../utils/waveform/utils';
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
     import SplitPanel from '../edit/SplitPanel.svelte';
     import TrimPanel from '../edit/TrimPanel.svelte';
@@ -96,8 +96,10 @@
     export let trimHL: TrimHighlight | null = null;
     /** Provisioning slot — overlay applied in history mode. */
     export let mergeHL: MergeHighlight | null = null;
-    /** Provisioning slot — marks changed fields in the card. */
-    export let changedFields: Set<'ref' | 'duration' | 'conf' | 'body'> | null = null;
+    /** Provisioning slot — marks changed fields in the card. The `body` flag
+     *  was retired alongside `display_text`: row body is now derived from
+     *  `matched_ref`, so a body change always implies a `ref` change. */
+    export let changedFields: Set<'ref' | 'duration' | 'conf'> | null = null;
     /** `history` mode = vertical layout (waveform above text). */
     export let mode: 'normal' | 'history' = 'normal';
     /** Fallback chapter when `seg.chapter` is null — only used for dirty lookup. */
@@ -141,12 +143,17 @@
      * re-computing. Live-edit and SavePreview rows leave this null.
      */
     export let opId: string | null = null;
-    /** Qalqala batch padding preview — yellow overlay + drag end handle. */
-    export let padHL: PadHighlight | null = null;
-    /** Called with new absolute end time (ms) when user drags/clicks the pad handle. */
-    export let onPadDrag: ((_newEndMs: number) => void) | null = null;
-    /** When set, play button invokes this instead of default segment play (e.g. pad preview). */
-    export let onPlayOverride: (() => void) | null = null;
+    /**
+     * Rendered sibling list of the accordion card mounting this row. Set by
+     * `MissingVersesCard` / `MissingWordsCard` / `GenericIssueCard` to the
+     * full ordered list of segments they render — the playback layer uses
+     * it to prefetch the *next* sibling's clip URL by list position when
+     * this row plays. Cross-chapter siblings are supported (validation
+     * panels with `chapter=null`); the per-reciter VBR map decides whether
+     * each sibling routes through the clip endpoint or the chapter URL.
+     * Main-list and history/preview rows pass null.
+     */
+    export let accordionSiblings: Segment[] | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -158,12 +165,6 @@
         c._splitHL = splitHL ?? undefined;
         c._trimHL = trimHL ?? undefined;
         c._mergeHL = mergeHL ?? undefined;
-        c._padHL = padHL ?? undefined;
-    }
-
-    $: if (canvasEl && padHL) {
-        (canvasEl as SegCanvas)._wfCache = null;
-        redrawPeaksWaveforms();
     }
 
     // True only when this specific mounted row is the editing target. The
@@ -224,7 +225,11 @@
         ? 'Cannot merge segments from different audio files'
         : '';
     $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
-    let previewState: { text: string; ref: string } | null = null;
+    // Live ref-edit preview ref. ReferenceEditor dispatches the normalized ref
+    // on every keystroke; the body re-renders synchronously through the same
+    // `dkTextForRef` lookup the persisted row uses. `null` = no preview /
+    // invalid input — body falls back to `seg.matched_ref`.
+    let previewState: { ref: string } | null = null;
     $: if (!isEditingThisRow || $editMode !== 'reference') {
         previewState = null;
     }
@@ -233,10 +238,12 @@
     $: changedRef = !!changedFields?.has('ref');
     $: changedDur = !!changedFields?.has('duration');
     $: changedConf = !!changedFields?.has('conf');
-    $: changedBody = !!changedFields?.has('body');
-    $: bodyText = previewState
-        ? _addVerseMarkers(previewState.text, previewState.ref, $segAllData?.verse_word_counts) || '(alignment failed)'
-        : _addVerseMarkers(seg.display_text || seg.matched_text, seg.matched_ref, $segAllData?.verse_word_counts) || '(alignment failed)';
+    $: bodyRef = previewState?.ref ?? seg.matched_ref;
+    $: bodyText = (() => {
+        const text = dkTextForRef(bodyRef, $segAllData?.dk_words, $segAllData?.verse_word_counts);
+        if (!text) return seg.matched_ref ? '(no text)' : '(no match)';
+        return _addVerseMarkers(text, bodyRef, $segAllData?.verse_word_counts) || text;
+    })();
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
 
@@ -439,14 +446,9 @@
 
     function onPlayClick(e: MouseEvent): void {
         e.stopPropagation();
-        if (onPlayOverride) {
-            onPlayOverride();
-            return;
-        }
         if (readOnly) return;
         const idx = seg.index;
         const chapter = seg.chapter ?? fallbackChapter;
-        const audioEl = get(segAudioElement);
         // Use the full (chapter, index) active pair so a context row for a
         // different chapter with the same index doesn't mistake itself for
         // the playing one and pause unrelated playback.
@@ -454,9 +456,9 @@
         const isSelfPlaying = !!active
             && active.chapter === chapter
             && active.index === idx
-            && audioEl && !audioEl.paused;
+            && !segPort.paused;
         if (isSelfPlaying) {
-            audioEl.pause();
+            segPort.pause();
         } else {
             // Accordion-mounted rows are self-contained playback surfaces.
             // Marking the play as accordion-origin keeps the main list from
@@ -465,6 +467,7 @@
             // when global autoplay is on.
             playFromSegment(idx, chapter, undefined, {
                 isAccordionPlay: instanceRole !== 'main',
+                accordionSiblings,
             });
         }
     }
@@ -526,103 +529,61 @@
         if (t.closest('.seg-row-controls') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
         playFromSegment(seg.index, seg.chapter ?? 0, undefined, {
             isAccordionPlay: instanceRole !== 'main',
+            accordionSiblings,
         });
     }
 
-    function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
+    function _timeFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): number {
         const rect = canvas.getBoundingClientRect();
         const progress = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const hl = canvas._splitHL;
         const tStart = hl ? hl.wfStart : seg.time_start;
         const tEnd = hl ? hl.wfEnd : seg.time_end;
-        const timeMs = tStart + progress * (tEnd - tStart);
+        return tStart + progress * (tEnd - tStart);
+    }
 
-        const audioEl = get(segAudioElement);
+    function _seekFromCanvasEvent(e: MouseEvent, canvas: SegCanvas): void {
+        const timeMs = _timeFromCanvasEvent(e, canvas);
         const chapter = seg.chapter ?? fallbackChapter;
         const active = get(playingSegmentIndex);
         const isSelfPlaying = !!active
             && active.chapter === chapter
             && active.index === seg.index
-            && audioEl && !audioEl.paused;
+            && !segPort.paused;
         if (isSelfPlaying) {
-            audioEl.currentTime = timeMs / 1000;
+            // Port owns CBR-vs-VBR offset translation: `seek(timeMs)` accepts
+            // file-absolute and writes the clip-relative value internally.
+            // Was previously a VBR-vs-CBR branch that did its own offset math.
+            segPort.seek(timeMs);
         } else {
             playFromSegment(seg.index, chapter, timeMs, {
                 isAccordionPlay: instanceRole !== 'main',
+                accordionSiblings,
             });
         }
-    }
-
-    function _wfVisualEnd(): number {
-        if (!padHL) return seg.time_end;
-        return Math.max(seg.time_end, padHL.padEnd);
-    }
-
-    function _timeFromCanvasClientX(canvas: SegCanvas, clientX: number): number {
-        const rect = canvas.getBoundingClientRect();
-        const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        const t0 = seg.time_start;
-        const t1 = _wfVisualEnd();
-        return t0 + progress * (t1 - t0);
-    }
-
-    function _padEndHandleX(canvas: SegCanvas): number {
-        const w = canvas.width;
-        const dur = _wfVisualEnd() - seg.time_start;
-        if (dur <= 0 || !padHL) return 0;
-        return ((padHL.padEnd - seg.time_start) / dur) * w;
     }
 
     function onCanvasMousedown(e: MouseEvent): void {
         if (readOnly || get(editMode)) return;
         const canvas = e.currentTarget as SegCanvas;
-        if (padHL && onPadDrag) {
-            e.preventDefault();
-            e.stopPropagation();
-            const xHandle = _padEndHandleX(canvas);
-            const rect = canvas.getBoundingClientRect();
-            const xClick = e.clientX - rect.left;
-            const nearHandle = Math.abs(xClick - xHandle) <= TRIM_HANDLE_HIT_RADIUS_PX;
-
-            let dragging = nearHandle;
-            const minEnd = seg.time_start + EDIT_MIN_DURATION_MS;
-
-            const applyFromClientX = (cx: number): void => {
-                let t = _timeFromCanvasClientX(canvas, cx);
-                if (!nearHandle && padHL) {
-                    t = Math.max(padHL.padStart, t);
-                }
-                t = Math.max(minEnd, t);
-                onPadDrag!(t);
-            };
-
-            applyFromClientX(e.clientX);
-
-            function onMove(ev: MouseEvent): void {
-                if (dragging || nearHandle) {
-                    dragging = true;
-                    applyFromClientX(ev.clientX);
-                }
-            }
-            function onUp(ev: MouseEvent): void {
-                if (!dragging && padHL && !nearHandle) {
-                    applyFromClientX(ev.clientX);
-                }
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-            }
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-            return;
-        }
-
-        const canvas2 = e.currentTarget as SegCanvas;
 
         e.preventDefault();
-        _seekFromCanvasEvent(e, canvas2);
+        // Initial mousedown: full seek-or-play decision (re-init the
+        // AudioRange when the user clicks a non-playing row).
+        _seekFromCanvasEvent(e, canvas);
 
+        // Drag (mousemove with the button held): SCRUB only — write the
+        // new file-absolute time directly. Routing through
+        // `_seekFromCanvasEvent` here would re-enter `playFromSegment` on
+        // every pixel of mouse movement (each pixel fires a fresh
+        // `mousemove` event), each call disposing the live AudioRange and
+        // rebuilding it. That stack of dispose+rebuild churns 3+ ranges
+        // per click in practice and inherits stale state across
+        // iterations. The seek-only path is what the `isSelfPlaying`
+        // branch above does anyway — apply it unconditionally for drag.
         function onMove(ev: MouseEvent): void {
-            _seekFromCanvasEvent(ev, canvas2);
+            const timeMs = _timeFromCanvasEvent(ev, canvas);
+            segPort.seek(timeMs);
         }
         function onUp(): void {
             document.removeEventListener('mousemove', onMove);
@@ -740,6 +701,6 @@
                 <div class="seg-text-label">{contextLabel}</div>
             {/if}
         </div>
-        <div class="seg-text-body" class:seg-history-changed={changedBody}>{bodyText}</div>
+        <div class="seg-text-body" class:seg-history-changed={changedRef}>{bodyText}</div>
     </div>
 </div>

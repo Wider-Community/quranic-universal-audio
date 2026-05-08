@@ -257,22 +257,6 @@
     padding: 4px 0;
 }
 
-.seg-history-qalqala-nested {
-    margin-left: 1rem;
-    padding-left: 0.65rem;
-    border-left: 2px solid rgba(240, 165, 0, 0.35);
-}
-
-.seg-history-qalqala-collapsed-hint {
-    color: #888;
-    font-size: 0.82rem;
-    padding: 4px 0;
-}
-
-.seg-history-expand-btn {
-    margin-left: 4px;
-}
-
 /* Single operation */
 .seg-history-op {
     background: #16213e;

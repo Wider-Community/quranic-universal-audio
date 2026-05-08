@@ -39,6 +39,10 @@
 
     export let item: OpFlatItem;
     export let previewCtx: PreviewPlaybackContext | undefined = undefined;
+    /** `'history'` (default) renders Undo on saved batches; `'preview'` (set
+     *  by SavePreview) suppresses Undo so the save-preview surface only ever
+     *  exposes Discard for pending ops. */
+    export let mode: 'preview' | 'history' = 'history';
 
     // Derived header bits ----------------------------------------------------
 
@@ -63,13 +67,6 @@
         return [...set];
     })();
     $: issueDelta = group.length > 0 ? deriveOpIssueDelta(group) : { resolved: [], introduced: [] };
-
-    $: isQalqalaPadGroup =
-        item.type === 'op-card'
-        && group.length > 1
-        && group.every((op) => op.op_type === 'qalqala_pad');
-
-    let qalqalaExpanded = false;
 
     // Strip-specials single-snapshot diff (shared "before" card + empty-after).
     $: stripSnap = item.type === 'strip-specials-card'
@@ -102,15 +99,6 @@
             </span>
         {:else if item.type === 'revert-card'}
             <!-- no op badge -->
-        {:else if primary && isQalqalaPadGroup}
-            <span class="seg-history-op-type-badge">
-                {EDIT_OP_LABELS.qalqala_pad} &times;{group.length}
-            </span>
-            <button
-                type="button"
-                class="btn btn-sm seg-history-expand-btn"
-                on:click|stopPropagation={() => { qalqalaExpanded = !qalqalaExpanded; }}
-            >{qalqalaExpanded ? 'Collapse' : 'Expand'}</button>
         {:else if primary}
             <span class="seg-history-op-type-badge">
                 {EDIT_OP_LABELS[primary.op_type] || primary.op_type}
@@ -150,7 +138,7 @@
                 class="btn btn-sm seg-history-undo-btn"
                 on:click|stopPropagation={handleDiscardClick}
             >Discard</button>
-        {:else if item.batchId && !item.isRevert}
+        {:else if mode === 'history' && item.batchId && !item.isRevert}
             <button
                 class="btn btn-sm seg-history-undo-btn"
                 on:click|stopPropagation={handleUndoClick}
@@ -186,24 +174,6 @@
                 <div class="seg-history-chapter-list">
                     Chapters: {(item.chapters || []).map((c) => surahOptionText(c)).join(', ')}
                 </div>
-            {:else if isQalqalaPadGroup}
-                {#if qalqalaExpanded}
-                    {#each group as op (op.op_id)}
-                        <div class="seg-history-qalqala-nested">
-                            <HistoryOp
-                                group={[op]}
-                                chapter={item.chapter}
-                                batchId={item.batchId}
-                                skipLabel={true}
-                                {previewCtx}
-                            />
-                        </div>
-                    {/each}
-                {:else}
-                    <div class="seg-history-qalqala-collapsed-hint">
-                        {group.length} boundary adjustments — expand to view each segment.
-                    </div>
-                {/if}
             {:else if group.length === 1 && primary}
                 <HistoryOp
                     group={[primary]}

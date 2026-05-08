@@ -20,7 +20,6 @@ export interface HistorySnapshot {
     time_end: number;
     matched_ref?: string;
     matched_text?: string;
-    display_text?: string;
     confidence?: number;
     wrap_word_ranges?: unknown;
     has_repeated_words?: boolean;

@@ -10,8 +10,6 @@
 import { tick } from 'svelte';
 import { get } from 'svelte/store';
 
-import { fetchJson } from '../../../../lib/api';
-import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { applyCommand } from '../../domain/apply-command';
 import {
@@ -35,12 +33,13 @@ import {
 } from '../../stores/edit';
 import {
     continuousPlay,
-    segAudioElement,
+    segPort,
 } from '../../stores/playback';
 import {
     _advanceRefByOneWord,
     _normalizeRef as _normalizeRefLib,
     _validateRefStructural,
+    dkTextForRef,
     getVerseWordCounts,
     parseSegRef,
 } from '../data/references';
@@ -94,8 +93,7 @@ export function beginRefEdit(
     contextCategory: string | null = null,
     mountId: symbol | null = null,
 ): void {
-    const audioEl = get(segAudioElement);
-    if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
+    if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
     continuousPlay.set(false);
 
     // Seed the initial value with the exact object we just passed to beginRefEdit,
@@ -132,7 +130,6 @@ function _dispatchRefEdit(
     chapter: number,
     matched_ref: string,
     matched_text: string,
-    display_text: string,
     contextCategory: string | null,
     opType: 'edit_reference' | 'confirm_reference',
 ): void {
@@ -142,7 +139,6 @@ function _dispatchRefEdit(
         // in place and mark dirty so the row still renders the new values.
         seg.matched_ref = matched_ref;
         seg.matched_text = matched_text;
-        seg.display_text = display_text;
         seg.confidence = 1.0;
         delete seg._derived;
         markDirty(chapter, seg.index);
@@ -161,7 +157,6 @@ function _dispatchRefEdit(
             segmentUid: uid,
             matched_ref,
             matched_text,
-            display_text,
             sourceCategory: contextCategory ?? undefined,
             contextCategory: contextCategory ?? undefined,
             opType,
@@ -172,7 +167,6 @@ function _dispatchRefEdit(
     if (updated) {
         seg.matched_ref = updated.matched_ref;
         seg.matched_text = updated.matched_text;
-        seg.display_text = updated.display_text;
         seg.confidence = updated.confidence;
         if (updated.ignored_categories) {
             seg.ignored_categories = [...updated.ignored_categories];
@@ -204,8 +198,8 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<Com
 
     if (normalized === oldRef) {
         const chOps = getChapterOps(chapter);
-        const isFromSplit = chOps.some(o => 
-            o.op_type === 'split_segment' && 
+        const isFromSplit = chOps.some(o =>
+            o.op_type === 'split_segment' &&
             (o.targets_after as Record<string, any>[] | undefined)?.some(t => t.segment_uid === seg.segment_uid)
         );
 
@@ -219,7 +213,6 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<Com
                 chapter,
                 seg.matched_ref || '',
                 seg.matched_text || '',
-                seg.display_text || '',
                 ctxCat,
                 'confirm_reference',
             );
@@ -246,30 +239,22 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<Com
         }
     }
 
+    // Derive the canonical Arabic text for the new ref locally — the row body
+    // is rendered ref-first via `dkTextForRef`, but `matched_text` is still
+    // persisted for downstream consumers (qalqala classifier, ASR audit).
     let matchedText = '';
-    let displayText = '';
     if (candidate) {
-        try {
-            const data = await fetchJson<SegResolveRefResponse & { error?: string }>(
-                `/api/seg/resolve_ref?ref=${encodeURIComponent(candidate)}`,
-            );
-            if (data.text) {
-                matchedText = data.text;
-                displayText = data.display_text || data.text;
-            } else {
-                // Backend rejected the ref (or returned empty text). Treat as
-                // invalid so the user can re-enter rather than committing a
-                // junk display string into matched_text.
-                if (data.error) console.warn('resolve_ref error:', data.error);
-                return { status: 'invalid', reason: 'resolve_failed' };
-            }
-        } catch (e) {
-            console.error('Failed to resolve ref:', e);
+        const dk = get(segAllData)?.dk_words;
+        matchedText = dkTextForRef(candidate, dk, vwc);
+        if (!matchedText) {
+            // dk_words missing the ref's words means the ref is structurally
+            // valid but unresolvable against the canonical script — treat as
+            // invalid to avoid committing an empty matched_text.
             return { status: 'invalid', reason: 'resolve_failed' };
         }
     }
 
-    _dispatchRefEdit(seg, chapter, candidate, matchedText, displayText, ctxCat, 'edit_reference');
+    _dispatchRefEdit(seg, chapter, candidate, matchedText, ctxCat, 'edit_reference');
     clearEdit();
     await _handoffPendingChain();
     return { status: 'ok' };

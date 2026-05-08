@@ -85,7 +85,10 @@ export function drawWaveformPeaks(
         return (arr[lo]?.[component] ?? 0) * (1 - t) + (arr[hi]?.[component] ?? 0) * t;
     }
 
-    // Filled area (bottom + top envelope)
+    // Build the closed top+bottom envelope once, then fill AND stroke it so
+    // every consumer (playback, accordion, history, timestamps, edit modes)
+    // gets the same look: translucent fill bordered by a 1px outline on
+    // both the upper (max) and lower (min) envelopes.
     ctx.beginPath();
     for (let i = 0; i < buckets; i++) {
         const x = (i / buckets) * width;
@@ -102,16 +105,7 @@ export function drawWaveformPeaks(
     ctx.closePath();
     ctx.fillStyle = WAVEFORM_FILL_COLOR;
     ctx.fill();
-
-    // Top-envelope stroke
     ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < buckets; i++) {
-        const x = (i / buckets) * width;
-        const maxVal = sampleAt(drawPeaks, i, 1);
-        const y = centerY - maxVal * scale;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
     ctx.stroke();
 }

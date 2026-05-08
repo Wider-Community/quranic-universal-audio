@@ -64,6 +64,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     INSPECTOR_DATA_DIR=/data \
     INSPECTOR_QUA_DATA_PATH=/data \
+    INSPECTOR_TS_SOURCE=huggingface \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -90,6 +91,12 @@ COPY inspector/routes/ ./inspector/routes/
 COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
 COPY validators/ ./validators/
+# scripts/lib/ is shared with the CI build pipeline (e.g. timestamps_shards
+# keeps local-mode docker shards bytewise identical to HF-mode shards via
+# deterministic gzip + same split logic). Top-level scripts/ contains local
+# CLIs we don't need at runtime — only lib/ ships.
+COPY scripts/__init__.py ./scripts/__init__.py
+COPY scripts/lib/ ./scripts/lib/
 # Linguistic data read by services/data_loader.py via config.py's _QUA_DATA.
 # These live in data/ (tracked by git) so the Docker build context has them.
 # INSPECTOR_QUA_DATA_PATH=/data tells config.py to look there instead of the
