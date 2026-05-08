@@ -79,6 +79,7 @@ from reciter_eligibility import (  # noqa: E402
     find_eligible_reciters,
     has_tracked_timestamps,
 )
+from timestamps_shards import derive_url_template as _derive_url_template  # noqa: E402
 
 REPO_ID = repo_config()["hf_dataset"]
 SAMPLE_PCT = int(os.environ.get("SAMPLE_PCT", "0"))
@@ -834,71 +835,6 @@ def _find_audio_manifest_meta(slug):
     """Find first audio manifest for slug and return its _meta dict."""
     data = _find_audio_manifest(slug)
     return data.get("_meta", {}) if data else None
-
-
-def _derive_url_template(manifest_data, audio_cat):
-    """Derive a URL template from manifest entries.
-
-    Returns a template string with protocol stripped (e.g.
-    'server8.mp3quran.net/afs/{surah:03d}.mp3') or empty string on failure.
-    Only replaces in the filename portion to avoid hitting patterns in hostnames.
-    """
-    entries = {k: v for k, v in manifest_data.items() if k != "_meta"}
-    if not entries:
-        return ""
-
-    if audio_cat == "by_surah":
-        if "1" in entries:
-            url, surah_num = entries["1"], 1
-        else:
-            first_key = min(entries.keys(), key=int)
-            url, surah_num = entries[first_key], int(first_key)
-
-        base, _, filename = url.rpartition("/")
-        if not base:
-            return ""
-        padded = f"{surah_num:03d}"
-        if padded in filename:
-            template = base + "/" + filename.replace(padded, "{surah:03d}", 1)
-        else:
-            s = str(surah_num)
-            if s in filename:
-                template = base + "/" + filename.replace(s, "{surah}", 1)
-            else:
-                return ""
-
-        # Validate against another entry
-        val_key = "2" if "2" in entries else ("3" if "3" in entries else None)
-        if val_key:
-            expected = template.format(surah=int(val_key))
-            if expected != entries[val_key]:
-                return ""
-
-    elif audio_cat == "by_ayah":
-        url = entries.get("1:1")
-        if not url:
-            return ""
-        base, _, filename = url.rpartition("/")
-        if not base:
-            return ""
-        if "001001" in filename:
-            template = base + "/" + filename.replace("001001", "{surah:03d}{ayah:03d}", 1)
-        else:
-            return ""
-        val = entries.get("2:1")
-        if val:
-            expected = template.format(surah=2, ayah=1)
-            if expected != val:
-                return ""
-    else:
-        return ""
-
-    # Strip protocol so HF dataset viewer doesn't render as audio widget
-    for prefix in ("https://", "http://"):
-        if template.startswith(prefix):
-            template = template[len(prefix):]
-            break
-    return template
 
 
 def _build_reciter_info(eligible):
