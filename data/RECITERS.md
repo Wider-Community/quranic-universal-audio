@@ -44,11 +44,11 @@ Timestamps: `✓✓` = words + letters/phonemes, `✓` = words only.
 | Ahmad Saud | Murattal | MP3Quran | Surah | 30, 327 | 0.7 | ✓ | ✓ | ✗ |
 | Ahmad Talib bin Humaid | Murattal | MP3Quran | Surah | 107, 5,559 | 20.8 | ✓ | ✓ | ✗ |
 | Bandar Balilah | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 26.4 | ✓ | ✓ | ✗ |
-| Maher Al Meaqli | Murattal | MP3Quran | Surah | 114, 6,236 | 22.7 | ✓ | ✓ | ✓✓ |
+| Maher Al Meaqli | Murattal | MP3Quran | Surah | 114, 6,235 | 22.7 | ✓ | ✓ | ✓✓ |
 | Mohammed Al-Ghazali | Murattal | Surah-Quran | Surah | 114, 6,236 | 31.5 | ✓ | ✓ | ✗ |
 | Mohammed Ayyub | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 21.3 | ✓ | ✓ | ✗ |
 | Mohammed Siddiq Al-Minshawi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 28.9 | ✓ | ✓ | ✓✓ |
-| Nasser Alqatami | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 27.0 | ✓ | ✓ | ✓✓ |
+| Nasser Alqatami | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,235 | 27.0 | ✓ | ✓ | ✓✓ |
 | Raad Al Kurdi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,233 | 32.3 | ✓ | ✓ | ✗ |
 | Saad Al-Ghamdi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,235 | 24.8 | ✓ | ✓ | ✓✓ |
 | Yasser Al-Dosari | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 25.8 | ✓ | ✓ | ✗ |
