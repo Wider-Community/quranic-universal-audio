@@ -66,16 +66,23 @@
         // per verse-end crossing, guarded by autoAdvancing against re-entry.
         if (get(autoAdvancing)) return;
         const mode = get(autoMode);
-        if (mode === 'next') {
-            autoAdvancing.set(true);
-            dispatch('autoNext');
-        } else if (mode === 'random-any') {
-            autoAdvancing.set(true);
-            dispatch('autoRandomAny');
-        } else if (mode === 'random-current') {
-            autoAdvancing.set(true);
-            dispatch('autoRandomCurrent');
-        }
+        if (!mode) return;
+        autoAdvancing.set(true);
+        // AudioRange._pauseAndFlush just paused the element on the rAF tick.
+        // The eventual audio.play() in ingestVerseData runs after the await
+        // chain in loadTimestampVerse / loadRandomTimestamp, by which time
+        // Chrome's autoplay policy can deny it (no transient activation
+        // surviving across the awaits) — manifests as "next verse loads but
+        // audio stays paused". Re-arm playback synchronously here so the
+        // element stays in the playing state across the transition;
+        // ingestVerseData's audioComp.load then just seeks + no-op-plays.
+        // Safe against a stale-range re-attach because onPlay below gates on
+        // autoAdvancing, and the loadedVerse reactive block re-attaches the
+        // rAF once the new range/policy land.
+        tsPort.play();
+        if (mode === 'next') dispatch('autoNext');
+        else if (mode === 'random-any') dispatch('autoRandomAny');
+        else if (mode === 'random-current') dispatch('autoRandomCurrent');
     }
 
     function _disposeRange(): void {
