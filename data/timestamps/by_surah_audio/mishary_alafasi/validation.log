@@ -1,0 +1,123 @@
+Generated: 2026-05-08 22:52:10
+
+========================================================================
+  Timestamps: mishary_alafasi
+  data/timestamps/by_surah_audio/mishary_alafasi
+========================================================================
+
+--- MFA Settings ---
+  Audio source:  by_surah/mp3quran
+  Method:        kalpy
+  Beam:          50
+  Retry beam:    ?
+  Shared CMVN:   False
+
+--- Coverage ---
+  Verses found:       6236 / 6236
+  Missing verses:     0
+  Total words:        80200
+  Coverage issues:    0
+  Forward gap verses: 0
+
+--- Word Duration ---
+  Min:      0.04s
+  Median:   1.07s
+  Mean:     1.30s
+  Max:      14.36s
+
+--- Temporal Issues ---
+  Negative timestamps:  0
+  Zero-duration words:  0
+
+--- Verse Timestamps ---
+  Duration min:     0.89s
+  Duration median:  13.50s
+  Duration mean:    16.90s
+  Duration max:     150.75s
+  Short (<500ms):   0
+  Verse overlaps:   4
+  Large gaps (>10s):0
+
+--- Full Format (letters/phones) ---
+  Negative/inverted letters:  0
+  Phone issues:              0
+
+--- Cross-file Consistency (segments.json) ---
+  Boundary mismatches (>500ms):  206
+
+  Top 30 boundary violations (by diff):
+    19:9         end mismatch: timestamps 2:01.6 vs segments 2:02.5 (diff 846ms)
+    105:5        end mismatch: timestamps 0:46.7 vs segments 0:47.5 (diff 763ms)
+    20:91        end mismatch: timestamps 17:25.2 vs segments 17:26.0 (diff 727ms)
+    54:46        end mismatch: timestamps 6:53.1 vs segments 6:53.8 (diff 717ms)
+    89:30        end mismatch: timestamps 3:31.0 vs segments 3:31.8 (diff 708ms)
+    17:62        end mismatch: timestamps 19:46.9 vs segments 19:47.6 (diff 705ms)
+    20:85        end mismatch: timestamps 15:34.2 vs segments 15:34.9 (diff 695ms)
+    91:15        end mismatch: timestamps 1:22.3 vs segments 1:23.0 (diff 695ms)
+    17:56        end mismatch: timestamps 17:15.8 vs segments 17:16.5 (diff 691ms)
+    20:1         end mismatch: timestamps 0:07.3 vs segments 0:08.0 (diff 690ms)
+    17:59        end mismatch: timestamps 18:37.5 vs segments 18:38.1 (diff 685ms)
+    17:93        end mismatch: timestamps 28:57.3 vs segments 28:58.0 (diff 684ms)
+    18:110       end mismatch: timestamps 33:15.0 vs segments 33:15.7 (diff 684ms)
+    22:34        end mismatch: timestamps 13:32.8 vs segments 13:33.5 (diff 678ms)
+    48:29        end mismatch: timestamps 11:59.5 vs segments 12:00.2 (diff 678ms)
+    17:109       end mismatch: timestamps 34:24.1 vs segments 34:24.8 (diff 674ms)
+    86:17        end mismatch: timestamps 1:38.2 vs segments 1:38.9 (diff 673ms)
+    79:46        end mismatch: timestamps 4:14.5 vs segments 4:15.1 (diff 672ms)
+    19:2         end mismatch: timestamps 0:32.6 vs segments 0:33.3 (diff 670ms)
+    87:19        end mismatch: timestamps 1:45.8 vs segments 1:46.5 (diff 664ms)
+    110:3        end mismatch: timestamps 0:33.0 vs segments 0:33.6 (diff 659ms)
+    17:48        end mismatch: timestamps 15:05.3 vs segments 15:05.9 (diff 657ms)
+    33:73        end mismatch: timestamps 29:01.7 vs segments 29:02.4 (diff 657ms)
+    35:43        end mismatch: timestamps 16:22.6 vs segments 16:23.3 (diff 656ms)
+    75:40        end mismatch: timestamps 3:29.7 vs segments 3:30.4 (diff 655ms)
+    65:12        end mismatch: timestamps 5:59.2 vs segments 5:59.8 (diff 654ms)
+    17:85        end mismatch: timestamps 26:39.3 vs segments 26:40.0 (diff 653ms)
+    80:1         end mismatch: timestamps 0:09.5 vs segments 0:10.1 (diff 652ms)
+    42:2         end mismatch: timestamps 0:26.0 vs segments 0:26.6 (diff 650ms)
+    110:2        end mismatch: timestamps 0:22.9 vs segments 0:23.6 (diff 647ms)
+    ... and 176 more
+
+--- Validation Issues ---
+  Errors:     4
+  Warnings:   207
+
+  Errors (first 4 of 4):
+    ERROR  5:9  verse overlap with 5:8: 5:8 ends 8:00.7, 5:9 starts 8:00.7 (overlap 2ms)
+    ERROR  15:38  verse overlap with 15:37: 15:37 ends 6:26.7, 15:38 starts 6:26.7 (overlap 5ms)
+    ERROR  15:95  verse overlap with 15:94: 15:94 ends 15:13.3, 15:95 starts 15:13.3 (overlap 5ms)
+    ERROR  56:95  verse overlap with 56:94: 56:94 ends 11:42.5, 56:95 starts 11:42.5 (overlap 4ms)
+
+  Warnings (first 30 of 207):
+    WARN     _meta missing fields: ['retry_beam']
+    WARN   3:5  end mismatch: timestamps 1:12.6 vs segments 1:13.1 (diff 534ms)
+    WARN   3:9  end mismatch: timestamps 3:05.8 vs segments 3:06.4 (diff 585ms)
+    WARN   3:30  end mismatch: timestamps 11:50.7 vs segments 11:51.3 (diff 593ms)
+    WARN   3:37  end mismatch: timestamps 14:32.2 vs segments 14:32.8 (diff 605ms)
+    WARN   3:195  end mismatch: timestamps 1:15:38.1 vs segments 1:15:38.6 (diff 579ms)
+    WARN   3:197  end mismatch: timestamps 1:15:59.2 vs segments 1:15:59.8 (diff 505ms)
+    WARN   4:15  end mismatch: timestamps 9:35.8 vs segments 9:36.3 (diff 511ms)
+    WARN   4:22  end mismatch: timestamps 12:54.8 vs segments 12:55.3 (diff 519ms)
+    WARN   4:50  end mismatch: timestamps 26:51.7 vs segments 26:52.2 (diff 501ms)
+    WARN   4:60  end mismatch: timestamps 30:53.9 vs segments 30:54.4 (diff 503ms)
+    WARN   4:87  end mismatch: timestamps 42:07.0 vs segments 42:07.6 (diff 586ms)
+    WARN   4:93  end mismatch: timestamps 46:12.8 vs segments 46:13.3 (diff 514ms)
+    WARN   4:113  end mismatch: timestamps 55:16.4 vs segments 55:16.9 (diff 564ms)
+    WARN   4:136  end mismatch: timestamps 1:04:17.3 vs segments 1:04:17.8 (diff 545ms)
+    WARN   4:139  end mismatch: timestamps 1:05:03.6 vs segments 1:05:04.1 (diff 503ms)
+    WARN   4:164  end mismatch: timestamps 1:14:36.8 vs segments 1:14:37.4 (diff 515ms)
+    WARN   5:2  end mismatch: timestamps 2:06.7 vs segments 2:07.3 (diff 591ms)
+    WARN   7:1  end mismatch: timestamps 0:27.4 vs segments 0:28.0 (diff 568ms)
+    WARN   8:11  end mismatch: timestamps 4:02.8 vs segments 4:03.4 (diff 507ms)
+    WARN   11:69  end mismatch: timestamps 27:56.8 vs segments 27:57.3 (diff 507ms)
+    WARN   12:29  end mismatch: timestamps 10:35.6 vs segments 10:36.2 (diff 574ms)
+    WARN   12:36  end mismatch: timestamps 13:47.9 vs segments 13:48.4 (diff 535ms)
+    WARN   13:19  end mismatch: timestamps 10:02.9 vs segments 10:03.5 (diff 579ms)
+    WARN   13:21  end mismatch: timestamps 10:35.5 vs segments 10:36.0 (diff 504ms)
+    WARN   13:25  end mismatch: timestamps 12:19.2 vs segments 12:19.8 (diff 614ms)
+    WARN   13:43  end mismatch: timestamps 20:15.6 vs segments 20:16.1 (diff 546ms)
+    WARN   14:23  end mismatch: timestamps 10:42.4 vs segments 10:42.9 (diff 514ms)
+    WARN   14:24  end mismatch: timestamps 11:04.5 vs segments 11:05.1 (diff 586ms)
+    WARN   14:38  end mismatch: timestamps 16:11.6 vs segments 16:12.2 (diff 551ms)
+    ... and 177 more
+

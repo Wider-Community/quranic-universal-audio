@@ -1113,10 +1113,21 @@ def process(input_dir: Path,
         full_data = dict(seed_existing) if seed_existing else {}
         words_data = {}
         mfa_failures = []
+        # Per-verse min(time_start) / max(time_end) of accepted home segs.
+        # Drives `verse_start_ms` / `verse_end_ms` in `full_data` so dataset
+        # consumers cut audio along seg boundaries (which include natural
+        # leading/trailing silence) rather than MFA's tight phone-level
+        # boundaries. Cross-verse segs don't contribute (their audio is
+        # shared across two verses; the home segs alone bracket each verse).
+        seg_bounds: dict[str, list[int]] = {}
         if seed_existing:
             for ref, val in seed_existing.items():
                 words_only = [[w[0], w[1], w[2]] for w in val["words"]]
                 words_data[ref] = words_only
+                vs = val.get("verse_start_ms")
+                ve = val.get("verse_end_ms")
+                if vs is not None and ve is not None:
+                    seg_bounds[ref] = [vs, ve]
 
         for ch_idx, chapter in enumerate(chapters):
             ch_ref = str(chapter.get("ref", ""))
@@ -1155,6 +1166,19 @@ def process(input_dir: Path,
                         continue
 
                     seg_offset_ms = seg["time_start"]
+                    seg_end_ms = seg.get("time_end", seg_offset_ms)
+                    seg_home_key = _matched_ref_to_output_key(matched_ref)
+                    seg_is_single_home = (seg_home_key is not None
+                                          and ":" in seg_home_key
+                                          and "-" not in seg_home_key)
+                    if seg_is_single_home:
+                        cur = seg_bounds.get(seg_home_key)
+                        if cur is None:
+                            seg_bounds[seg_home_key] = [seg_offset_ms, seg_end_ms]
+                        else:
+                            cur[0] = min(cur[0], seg_offset_ms)
+                            cur[1] = max(cur[1], seg_end_ms)
+
                     words_by_verse: dict[str, list] = {}
                     for w in result.get("words", []):
                         location = w["location"]
@@ -1212,9 +1236,23 @@ def process(input_dir: Path,
             val.pop("_provenance", None)
             words = val["words"]
             words.sort(key=lambda w: w[1])
-            if words:
-                val["verse_start_ms"] = words[0][1]
-                val["verse_end_ms"] = words[-1][2]
+            bound = seg_bounds.get(ref)
+            # Verse boundaries take the union of accepted home segs (carries
+            # the segmenter's natural leading/trailing silence — preferred
+            # for dataset clip cuts) and the actual MFA word bounds (so a
+            # cross-verse bleed contributing widxs outside the home segs'
+            # range still falls inside the clip).
+            word_start = words[0][1] if words else None
+            word_end = max((w[2] for w in words), default=None)
+            if bound is not None and words:
+                val["verse_start_ms"] = min(bound[0], word_start)
+                val["verse_end_ms"] = max(bound[1], word_end)
+            elif bound is not None:
+                val["verse_start_ms"] = bound[0]
+                val["verse_end_ms"] = bound[1]
+            elif words:
+                val["verse_start_ms"] = word_start
+                val["verse_end_ms"] = word_end
 
         for ref, val in full_data.items():
             if ref not in words_data:
