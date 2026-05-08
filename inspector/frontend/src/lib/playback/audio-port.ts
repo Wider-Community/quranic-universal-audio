@@ -265,7 +265,21 @@ export class AudioPort {
         // wins over the canonical `audioUrl` (so callers needing the
         // audio-proxy wrap pass it pre-wrapped).
         const cbrSrc = src.cbrSrc ?? src.audioUrl;
-        if (this._window && audioSrcMatches(this._window.src, cbrSrc)) {
+        // Compare against the live element src as a fallback when no
+        // `_window` exists yet — this handles remount-with-loaded-src
+        // and the test fixture where the element starts with the same
+        // src; without it we'd issue a redundant src-swap waiting on a
+        // canplay that may never re-fire.
+        const existingSrc = this._window?.src ?? this.el.src;
+        if (existingSrc && audioSrcMatches(existingSrc, cbrSrc)) {
+            // Synthesize the window so subsequent calls hit the fast path.
+            this._window = {
+                startMs: 0,
+                endMs: Number.POSITIVE_INFINITY,
+                offsetMs: 0,
+                src: cbrSrc,
+                isClip: false,
+            };
             return { ready: Promise.resolve(), swapped: false, window: this._window };
         }
         return this._swapTo(cbrSrc, {

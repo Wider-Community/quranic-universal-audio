@@ -8,7 +8,9 @@
  * while visible, so they also have no audio element to drive.
  *
  * This module provides a self-contained context that owns:
- *   - one HTMLAudioElement (mounted by the calling panel)
+ *   - one per-panel `AudioPort` wrapping the panel's hidden `<audio>`
+ *     element, so CBR-vs-VBR transport stays hidden the same way the
+ *     main playback path hides it
  *   - one AudioRange instance (single-segment, `policy: 'stop'`)
  *   - reactive `activeSeg` / `playingSeg` stores so SegmentRow can derive
  *     its play-glyph + class:playing state without touching the main-list
@@ -23,15 +25,15 @@
 
 import { get, type Readable, type Writable,writable } from 'svelte/store';
 
+import { AudioPort } from '../../../../lib/playback/audio-port';
 import { AudioRange } from '../../../../lib/playback/audio-range';
 import { fetchSegmentPeaks } from '../../../../lib/utils/peaks-fetch';
-import { selectedReciter } from '../../stores/chapter';
+import { segData, selectedReciter } from '../../stores/chapter';
 import { playbackSpeed } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { drawSegPlayhead } from '../waveform/draw-seg';
 import { _findCoveringPeaks } from '../waveform/peaks-cache';
 import { indexSegPeaksBulk, redrawPeaksWaveforms } from '../waveform/utils';
-import { buildRangePlaybackSpec } from './range-spec';
 
 export interface PreviewActiveSeg {
     /** Stable per-row id minted by the caller (chapter:index:start:end). */
@@ -89,10 +91,15 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
     const _activeSeg: Writable<PreviewActiveSeg | null> = writable(null);
     const _playingSeg: Writable<PreviewActiveSeg | null> = writable(null);
 
-    let audioEl: HTMLAudioElement | null = null;
+    // Per-panel port — isolated from the segments-tab `segPort`. Each panel
+    // mounts its own hidden `<audio>`, attached on `attachAudioEl`. The
+    // port owns CBR-vs-VBR transport for whichever row is being played.
+    const port = new AudioPort();
     let range: AudioRange | null = null;
     let curUid: string | null = null;
     let curRow: RowEntry | null = null;
+    let unsubPlay: (() => void) | null = null;
+    let unsubPause: (() => void) | null = null;
     /** Dedup peak fetches per (url, start, end) — registering the same
      *  row twice (e.g. parent re-render) shouldn't trigger duplicate
      *  network calls. */
@@ -160,14 +167,12 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
     }
 
     function attachAudioEl(el: HTMLAudioElement): void {
-        if (audioEl === el) return;
-        if (audioEl) {
-            audioEl.removeEventListener('play', _onAudioPlay);
-            audioEl.removeEventListener('pause', _onAudioPause);
-        }
-        audioEl = el;
-        el.addEventListener('play', _onAudioPlay);
-        el.addEventListener('pause', _onAudioPause);
+        if (port.element === el) return;
+        // Detach prior subscriptions before rebinding.
+        unsubPlay?.(); unsubPause?.();
+        port.attachElement(el);
+        unsubPlay = port.onPlay(_onAudioPlay);
+        unsubPause = port.onPause(_onAudioPause);
     }
 
     async function _ensurePeaks(
@@ -261,18 +266,18 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
     }
 
     function toggle(uid: string): void {
-        if (!audioEl) return;
+        if (!port.element) return;
         const row = rows.get(uid);
         if (!row) return;
 
         // Same row, currently playing → pause (range stays alive, ready to resume)
-        if (curUid === uid && range && !audioEl.paused) {
-            audioEl.pause();
+        if (curUid === uid && range && !port.paused) {
+            port.pause();
             return;
         }
         // Same row, paused (range still alive) → resume
-        if (curUid === uid && range && audioEl.paused) {
-            void audioEl.play();
+        if (curUid === uid && range && port.paused) {
+            port.play();
             return;
         }
 
@@ -295,13 +300,27 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         // the next session hydrates without a round-trip.
         void _ensurePeaks(row.audioUrl, row.wfStartMs, row.wfEndMs, row.opId);
 
-        // Route through buildRangePlaybackSpec so SavePreview / HistoryPanel
-        // pick up the VBR clip path automatically when $segData.vbr is true.
-        // The chapter context lives in segData (set on chapter load), so this
-        // produces clip-relative specs for VBR rows and file-absolute for CBR.
+        // Bind the row's logical source to the per-panel port. CBR rows
+        // hit the chapter-URL fast path; VBR rows route through the
+        // segment-clip endpoint (port handles offset translation). VBR
+        // status comes from $segData.vbr — same as the legacy
+        // `buildRangePlaybackSpec` path. Cross-chapter history rows
+        // inherit the active chapter's encoding, identical to legacy
+        // semantics; tightening that read to the row's own chapter is
+        // a follow-up.
+        const reciter = get(selectedReciter);
+        const data = get(segData);
+        port.setSource({
+            audioUrl: row.audioUrl,
+            cbrSrc: row.audioUrl,
+            reciter: reciter || null,
+            vbr: !!data?.vbr,
+        });
+
+        // File-absolute spec — port owns transport.
         range = new AudioRange({
-            audioEl,
-            range: buildRangePlaybackSpec(row.audioUrl, row.startMs, row.endMs),
+            port,
+            range: { startMs: row.startMs, endMs: row.endMs },
             policy: { kind: 'stop' },
             onTick: _onTick,
             onBoundary: _onBoundary,
@@ -315,11 +334,10 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
             range.dispose();
             range = null;
         }
-        if (audioEl) {
-            audioEl.removeEventListener('play', _onAudioPlay);
-            audioEl.removeEventListener('pause', _onAudioPause);
-            audioEl = null;
-        }
+        unsubPlay?.(); unsubPause?.();
+        unsubPlay = null;
+        unsubPause = null;
+        port.dispose();
         rows.clear();
         fetched.clear();
         curUid = null;
