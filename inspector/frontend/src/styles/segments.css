@@ -115,13 +115,11 @@
 }
 
 #seg-autoplay-btn.seg-autoplay-on,
-#seg-autoscroll-btn.seg-autoscroll-on,
-#seg-prefetch-btn.seg-prefetch-on {
+#seg-autoscroll-btn.seg-autoscroll-on {
     background: #4361ee;
 }
 #seg-autoplay-btn.seg-autoplay-off,
-#seg-autoscroll-btn.seg-autoscroll-off,
-#seg-prefetch-btn.seg-prefetch-off {
+#seg-autoscroll-btn.seg-autoscroll-off {
     background: #555;
 }
 
