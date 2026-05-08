@@ -23,6 +23,17 @@ export const autoScrollEnabled = writable<boolean>(
     localStorage.getItem(LS_KEYS.SEG_AUTOSCROLL) !== 'false',
 );
 
+/**
+ * Whether next-segment audio prefetch (VBR clip pre-warm + CBR chapter URL
+ * warm) is enabled. When OFF, `prefetchNextSegAudio` short-circuits — no
+ * speculative network calls, no resolver work, no cache writes — for both
+ * main-list chapter playback and accordion sibling playback. Persisted to
+ * localStorage via LS_KEYS.SEG_PREFETCH; default ON.
+ */
+export const prefetchEnabled = writable<boolean>(
+    localStorage.getItem(LS_KEYS.SEG_PREFETCH) !== 'false',
+);
+
 
 /** Whether continuous-play (auto-advance to next segment after one ends) is
  *  currently engaged. Short-lived — toggled per play session, not persisted. */
