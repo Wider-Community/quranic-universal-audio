@@ -320,25 +320,25 @@ export class AudioPort {
     // Playback (file-absolute targets)
     // -----------------------------------------------------------------------
 
-    /** Seek to a file-absolute position. Returns a promise that resolves
-     *  once the seek has been written to the element. Does NOT call play().
+    /** Seek to a file-absolute position. Sync write — assigning to
+     *  `audio.currentTime` is synchronous; the seeked event fires later
+     *  but callers don't need to wait on that. Does NOT call play().
      *
      *  When the target is outside the currently-loaded window, the caller
      *  is expected to `loadCovering(...)` first; this method does NOT
      *  auto-load (that's a caller decision because pre-loads outside the
      *  port's knowledge are common, e.g. AudioRange's `start()`). */
-    async seek(fileMs: number): Promise<void> {
+    seek(fileMs: number): void {
         if (!this.el) return;
         const target = Math.max(0, this.toClipMs(fileMs));
         this.el.currentTime = target / 1000;
     }
 
-    /** Seek + play. Resolves once `play()` has been issued; the play
-     *  promise itself is fire-and-forget (AbortError swallowed via
-     *  `safePlay`). */
-    async seekAndPlay(fileMs: number): Promise<void> {
+    /** Seek + play. Sync — issues `play()` via `safePlay` (which swallows
+     *  AbortError). The play promise itself is fire-and-forget. */
+    seekAndPlay(fileMs: number): void {
         if (!this.el) return;
-        await this.seek(fileMs);
+        this.seek(fileMs);
         // Restore gain ramp before playing; matches the legacy
         // `_seekAndPlay` ordering in `audio-range.ts`.
         uncutAudio(this.el);
