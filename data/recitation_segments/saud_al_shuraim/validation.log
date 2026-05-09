@@ -1,4 +1,4 @@
-Generated: 2026-05-09 21:04:15
+Generated: 2026-05-09 21:05:17
 
 ========================================================================
   saud_al_shuraim
@@ -17,10 +17,10 @@ Generated: 2026-05-09 21:04:15
   Word gaps:      0 verses
 
 --- Segments ---
-  Total:            10455
-  Single-seg:       3536
+  Total:            10458
+  Single-seg:       3539
   Multi-seg verses: 2587 (6919 segs)
-  Cross-verse keys: 106
+  Cross-verse keys: 104
   Max segs/verse:   17
 
 --- Segment Duration ---
@@ -43,7 +43,7 @@ Generated: 2026-05-09 21:04:15
   Below 60%: 0
   Below 80%: 0
   Failed:    0 (no alignment)
-  Empty ASR: 81 (matched but no phonemes)
+  Empty ASR: 84 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
 
@@ -52,16 +52,10 @@ Generated: 2026-05-09 21:04:15
            audio: https://server7.mp3quran.net/shur/005.mp3
            text:  وَٱلْأُذُنَ بِٱلْأُذُنِ وَٱلسِّنَّ بِٱلسِّنِّ وَٱلْجُرُوحَ قِصَاصࣱۚ
 
---- Cross-verse (47) ---
+--- Cross-verse (45) ---
   [1.0000]  80:9:1-80:10:3  @ 0:27.0 - 0:30.6
            audio: https://server7.mp3quran.net/shur/080.mp3
            text:  وَهُوَ يَخْشَىٰ فَأَنتَ عَنْهُ تَلَهَّىٰ
-  [1.0000]  84:22:1-84:23:4  @ 1:15.2 - 1:21.2
-           audio: https://server7.mp3quran.net/shur/084.mp3
-           text:  بَلِ ٱلَّذِينَ كَفَرُوا۟ يُكَذِّبُونَ وَٱللَّهُ أَعْلَمُ بِمَا يُوعُونَ
-  [1.0000]  85:1:1-85:3:2  @ 0:02.6 - 0:11.0
-           audio: https://server7.mp3quran.net/shur/085.mp3
-           text:  وَٱلسَّمَآءِ ذَاتِ ٱلْبُرُوجِ وَٱلْيَوْمِ ٱلْمَوْعُودِ وَشَاهِدٍ وَمَشْهُودٍ
   [0.9900]  85:4:1-85:7:6  @ 0:11.0 - 0:23.0
            audio: https://server7.mp3quran.net/shur/085.mp3
            text:  قُتِلَ أَصْحَـٰبُ ٱلْأُخْدُودِ ٱلنَّارِ ذَاتِ ٱلْوَقُودِ إِذْ هُمْ عَلَيْهَا قُعُودٌ وَهُمْ عَلَىٰ مَا يَفْعَلُونَ بِٱلْمُؤْمِنِينَ شُهُودٌ
@@ -83,7 +77,13 @@ Generated: 2026-05-09 21:04:15
   [1.0000]  86:15:1-86:16:2  @ 0:45.7 - 0:50.4
            audio: https://server7.mp3quran.net/shur/086.mp3
            text:  إِنَّهُمْ يَكِيدُونَ كَيْدًا وَأَكِيدُ كَيْدًا
-  ... and 37 more
+  [0.9500]  87:10:1-87:12:4  @ 0:30.4 - 0:37.8
+           audio: https://server7.mp3quran.net/shur/087.mp3
+           text:  سَيَذَّكَّرُ مَن يَخْشَىٰ وَيَتَجَنَّبُهَا ٱلْأَشْقَى ٱلَّذِى يَصْلَى ٱلنَّارَ ٱلْكُبْرَىٰ
+  [1.0000]  88:19:1-88:20:4  @ 0:50.0 - 0:54.8
+           audio: https://server7.mp3quran.net/shur/088.mp3
+           text:  وَإِلَى ٱلْجِبَالِ كَيْفَ نُصِبَتْ وَإِلَى ٱلْأَرْضِ كَيْفَ سُطِحَتْ
+  ... and 35 more
 
 --- Muqatta'at (30) ---
   [0.7000]  2:1:1-2:1:1  @ 0:02.6 - 0:09.4
@@ -118,7 +118,7 @@ Generated: 2026-05-09 21:04:15
            text:  كٓهيعٓصٓ
   ... and 20 more
 
---- Qalqala (629) ---
+--- Qalqala (631) ---
   [0.9600]  2:19:1-2:19:8  [ق]  @ 2:58.0 - 3:05.2
            audio: https://server7.mp3quran.net/shur/002.mp3
            text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
@@ -149,9 +149,9 @@ Generated: 2026-05-09 21:04:15
   [0.9600]  2:115:1-2:115:3  [ب]  @ 29:18.9 - 29:21.9
            audio: https://server7.mp3quran.net/shur/002.mp3
            text:  وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
-  ... and 619 more
+  ... and 621 more
 
---- Empty ASR Phonemes (81) ---
+--- Empty ASR Phonemes (84) ---
   [1.0000]  5:2:1-5:2:14  @ 0:22.0 - 0:32.6
            audio: https://server7.mp3quran.net/shur/005.mp3
            text:  يَٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ لَا تُحِلُّوا۟ شَعَٰٓئِرَ ٱللَّهِ وَلَا ٱلشَّهْرَ ٱلْحَرَامَ وَلَا ٱلْهَدْيَ وَلَا ٱلْقَلَٰٓئِدَ
@@ -182,7 +182,7 @@ Generated: 2026-05-09 21:04:15
   [1.0000]  19:89:1-19:89:4  @ 11:50.3 - 11:53.2
            audio: https://server7.mp3quran.net/shur/019.mp3
            text:  لَّقَدْ جِئْتُمْ شَيْـًٔا إِدࣰّا
-  ... and 71 more
+  ... and 74 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
@@ -196,7 +196,7 @@ Generated: 2026-05-09 21:04:15
   repetitions 1
   audio_bleeding 0
   boundary_adj 0
-  cross_verse 47
-  qalqala 629
+  cross_verse 45
+  qalqala 631
   muqattaat 30
 
