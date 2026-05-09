@@ -92,6 +92,8 @@ Reproduces the path layout `save_seg_data()` and validators expect, scoped to on
 | Reviewer claims reciter | Backend creates `<scratch>/<slug>/...`, materialises 5 files via github-fetch at branch ref `reciter/<slug>`, marks dir clean |
 | Save POST | Existing `save_seg_data()` runs in-place: atomic write `detailed.json`, rebuild `segments.json`, append `edit_history.jsonl`. Marks dir dirty. Resets debounce timer |
 | Debounce fires | Multi-file commit via Git Data API (§5). Marks dir clean |
+| Reviewer marks ready | Force-flush, then delete scratch dir (state freezes; future saves return 410) |
+| Reviewer unmarks ready | Re-materialise scratch from PR branch (same as fresh claim) |
 | Reviewer releases claim / lock expires | Force-flush any pending commits, then delete scratch dir |
 | Backend restart with dirty scratch | On boot, check for dirty scratch dirs; flush each as one commit, then delete |
 
@@ -131,9 +133,13 @@ A commit fires when **any** of:
 1. 30 seconds since last save with no further saves
 2. 5 minutes since last commit with continuous saves (hard cap)
 3. Explicit "Push to PR now" button (UI affordance, future)
-4. Lock release / claim transfer
-5. `beforeunload` `sendBeacon` from the browser tab
-6. Backend graceful shutdown (drains dirty scratch dirs)
+4. **Mark-ready transition** (`POST /api/mark-ready/<slug>` flushes before firing `reciter.marked_ready`) — the marked-ready commit must reflect everything the reviewer intends
+5. **Release** (`POST /api/release/<slug>` flushes before firing `reciter.released`) — the abandoning reviewer's last edits must land for the next reviewer to continue from
+6. Lock release / claim transfer (admin force-release per [`inspector-admin-perms.md`](inspector-admin-perms.md) §5.1 also flushes)
+7. `beforeunload` `sendBeacon` from the browser tab
+8. Backend graceful shutdown (drains dirty scratch dirs)
+
+Once state transitions to `ready_for_merge`, save endpoints return 410 with "unmark ready first." The scratch dir is destroyed after the mark-ready flush completes — re-acquired on `unmark-ready` via the standard session-start materialisation path.
 
 ### Attribution
 
@@ -316,6 +322,10 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 **Acceptance:**
 - One volunteer reviewer end-to-end edits a reciter, edits show on PR branch within 30 s of pause, all 4–5 files updated atomically per commit, author = reviewer, committer = App.
 - Backend restart mid-session does not corrupt edit_history.jsonl (scratch is replayed from PR branch on next session).
+- Save POST during `ready_for_merge` returns 410 cleanly; frontend hides save buttons (per [`inspector-state-management.md`](inspector-state-management.md) §8 `can_edit` predicate).
+- Mark-ready triggers a final debounce flush before the dispatch event; the resulting PR-branch tip reflects every save the reviewer made.
+- Unmark-ready re-materialises scratch from PR branch tip — no stale local state from a prior session.
+- Squash-merge of the PR onto `main` carries `Co-authored-by:` trailer with the reviewer's `<id>+<login>@users.noreply.github.com` email (per [`inspector-auth-claim.md`](inspector-auth-claim.md) §5).
 
 ### Phase 5b — Edit history schema simplification
 

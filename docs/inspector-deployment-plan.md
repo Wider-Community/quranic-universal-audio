@@ -8,6 +8,7 @@ This document captures architectural decisions only. It is not an implementation
 - [`inspector-data-storage.md`](inspector-data-storage.md) — implementation-grade reference for the deployed file-IO model: github-fetch service, scratch dir lifecycle, Git Data API write path, image build rules, per-phase acceptance criteria.
 - [`inspector-state-management.md`](inspector-state-management.md) — implementation-grade reference for reciter state: state file schema, catalog file schema, state machine + event vocabulary, the consolidated state workflow, identity convention with full marker/template registry, GitHub mirroring, per-phase acceptance criteria.
 - [`inspector-admin-perms.md`](inspector-admin-perms.md) — implementation-grade reference for admin and permissions: roles, maintainer/owner identity, permission matrix, override actions (force-release, reassign, force-claim, manual state override, discard, catalog edit, pipeline trigger), admin dashboard, audit log, new state events, per-phase acceptance criteria.
+- [`inspector-auth-claim.md`](inspector-auth-claim.md) — implementation-grade reference for authentication and the user-facing claim/release/mark-ready flow: GitHub App configuration, token lifecycle, endpoint contracts, optimistic UI reconciliation, identity attribution, edge cases.
 
 ## Goals
 
@@ -26,18 +27,19 @@ This document captures architectural decisions only. It is not an implementation
 - Public rejection / re-extraction / param-rerun flows. These remain internal-only operations performed by maintainers from the CLI; the website does not surface them as states.
 - Schema migration of `edit_history.jsonl` for backwards compatibility. The hash chain is being removed (see §7); writes after rollout follow the new schema.
 
-## 1. Reciter lifecycle (six states)
+## 1. Reciter lifecycle (seven states)
 
 State is owned by `data/reciter_state.json`. GitHub labels and assignees mirror the file. See [`inspector-state-management.md`](inspector-state-management.md) §4 for the full state machine, event vocabulary, and transition matrix.
 
-| State | Editable | Inspector behaviour |
-|---|---|---|
-| `catalogued` | No | Hidden from segments tab. Surfaced via "Request alignment" which fires `reciter.alignment_requested`. |
-| `awaiting_alignment` | No | Tab card shows "Pipeline running" with the issue link. Cannot be claimed. |
-| `awaiting_review` | No (claimable) | Listed in "Available for review". Claim button visible. |
-| `under_review` | **Yes** for the assignee, view-only otherwise | Listed in "Under review". Lock banner for non-assignees. |
-| `awaiting_timestamps` | No | Segments on main; TS data not yet on main. Listed in "Completed" tab; view-only. |
-| `completed` | No | Listed in "Completed" tab. View-only. |
+| State | Editable | Assignee | Inspector behaviour |
+|---|---|---|---|
+| `catalogued` | No | — | Hidden from segments tab. Surfaced via "Request alignment" which fires `reciter.alignment_requested`. |
+| `awaiting_alignment` | No | — | Tab card shows "Pipeline running" with the issue link. Cannot be claimed. |
+| `awaiting_review` | No (claimable) | — | Listed in "Available for review". Claim button visible. |
+| `under_review` | **Yes** for the assignee, view-only otherwise | set | Listed in "Under review". Lock banner for non-assignees. |
+| `ready_for_merge` | No (frozen) | retained | Listed in "Awaiting merge". Reviewer can unmark or release; maintainer merges or sends back. |
+| `awaiting_timestamps` | No | — | Segments on main; TS data not yet on main. Listed in "Completed" tab; view-only. |
+| `completed` | No | — | Listed in "Completed" tab. View-only. |
 
 Deferred (schema flexible to add later, no automation today):
 
@@ -110,30 +112,36 @@ Fly.io is the path of least resistance: supports Python + ffmpeg + websockets in
 
 ## 4. Authentication & first-time contributor flow
 
+Full mechanics — App configuration, token lifecycle, endpoint contracts, optimistic UI, identity attribution, edge cases — live in [`inspector-auth-claim.md`](inspector-auth-claim.md). Sketch only here.
+
 ### Anonymous
 
 No login required. All three tabs render in view-only mode. The "Claim" button is disabled with a tooltip "Sign in with GitHub to claim".
 
 ### Logged-in contributor
 
-GitHub OAuth via a GitHub App installed on the repo. Scopes: `read:user`, `user:email`. The App itself has `Contents: Write` and `Pull requests: Write` on the repo — that is what the backend uses to push.
+GitHub App user-to-server auth. The App's installation token does all repo writes; the user-to-server token identifies the contributor for commit attribution. **Contributors never become repo collaborators** — author attribution comes from the `<id>+<login>@users.noreply.github.com` no-reply email pattern, which credits the contributor in the contribution graph regardless of repo membership. The App needs `Contents: write`, `Pull requests: write`, `Issues: write`, `Metadata: read`, `Actions: read` (and `Members: read` on the org for team-membership lookup). No `Administration: write`.
 
 ### One-click claim flow
 
 The current `/claim` issue-comment dance is preserved as a CLI fallback but **not surfaced to web users**. The website collapses it into one button:
 
 1. Logged-in user clicks **Claim** on an Available reciter.
-2. Backend calls `GET /repos/{owner}/{repo}/collaborators/{login}` (using App token).
-3. **If collaborator (204):** backend fires `repository_dispatch reciter.claimed { slug, login }` and returns 202. `update-reciter-state.yml` validates the transition, writes `data/reciter_state.json`, and mirrors to GitHub primitives (assigns issue, flips state label). UI flips to edit mode optimistically; reconciles on the next state-file poll (~10 s).
-4. **If not collaborator (404):** backend calls `PUT /repos/.../collaborators/{login}` to send the invite, then shows a modal:
-   > *We've sent you a collaborator invite. [Accept invite ↗](https://github.com/{owner}/{repo}/invitations) — once accepted, return here and the page will auto-claim.*
-5. The page polls `GET /api/me/collaborator-status` every few seconds. When `true`, it auto-fires the claim API call (step 3). User never has to re-click; never has to type `/claim` or `/confirm`.
+2. Backend's API gate validates state and one-claim-per-user, then fires `repository_dispatch reciter.claimed { slug, login }` and returns 202 with optimistic state.
+3. `update-reciter-state.yml` validates the transition, writes `data/reciter_state.json`, and mirrors to GitHub primitives (best-effort `POST /issues/.../assignees` — silently skipped for non-collabs — plus body re-render and label flip).
+4. UI flips to edit mode optimistically; backend reconciles within ~10 s via `/api/internal/state-changed` webhook + 30 s polling backstop on `/api/reciter-task/<slug>`.
 
-CLI fallback (`/claim` and `/confirm` as issue comments) remains for users who prefer terminal flow or who can't run the web UI; these go through `issue-commands.yml`, which fires the same `reciter.claimed` / `reciter.released` dispatch events.
+A first-time visitor sees a sign-in modal once; thereafter the flow is one click. **No collaborator invite, no second tab, no waiting modal, no polling for collaborator status.**
+
+CLI fallback (`/claim` and `/confirm` as issue comments) remains for users who prefer terminal flow or who can't run the web UI; these go through `issue-commands.yml`, which fires the same `reciter.claimed` / `reciter.released` dispatch events. CLI users who push directly via git are invited as collaborators by a maintainer manually, on request — not auto-invited by the website.
+
+### Mark ready (primary completion path)
+
+When the reviewer is done, they click **Mark ready** in the banner. Backend flushes any pending debounced edits, fires `reciter.marked_ready { slug, login }`, returns 202. State transitions `under_review → ready_for_merge`; assignee retained. The reciter is frozen from edits and surfaced to the maintainer queue under "Awaiting merge". Maintainer clicks Squash & Merge on github.com → `segments-pr-merged.yml` fires `reciter.review_merged` → state advances to `awaiting_timestamps`. The reviewer can pull the claim back themselves with **Continue editing** (fires `reciter.unmarked_ready`), and a maintainer can send it back via [`inspector-admin-perms.md`](inspector-admin-perms.md) §5.10.
 
 ### Release flow (assigned reviewer changes mind)
 
-A new **Release claim** button calls `POST /api/release/<slug>` which fires `reciter.released { slug, login }`. The state workflow flips state `under_review → awaiting_review`, clears assignee, mirrors to issue + PR. Saved edits remain on the PR branch — a future reviewer continues from there.
+The **Release claim** button calls `POST /api/release/<slug>` which fires `reciter.released { slug, login }`. Allowed from both `under_review` and `ready_for_merge`. The state workflow clears assignee, transitions to `awaiting_review`, mirrors to issue + PR. Saved edits remain on the PR branch — a future reviewer continues from there.
 
 ### What CI gives us for free
 
@@ -282,16 +290,14 @@ These are not strictly required for deployment but reduce surface area while we'
 
 The flow with the new website:
 
-1. Visitor lands on the Inspector website. Sees the segments tab with three sub-tabs (Available / Under review / Completed).
+1. Visitor lands on the Inspector website. Sees the segments tab with sub-tabs (Available / Under review / Awaiting merge / Completed).
 2. Browses freely without auth.
 3. Finds an Available reciter, clicks **Claim**.
-4. Redirected to GitHub OAuth (one click — authorize the Inspector App).
-5. Returns to the page. Backend checks collaborator status:
-   - If they were a collaborator → assigned immediately, page reloads in edit mode.
-   - If not → invite sent, page shows the accept-invite link with auto-poll.
-6. They accept. Page detects, auto-claims, switches to edit mode.
+4. Modal: "Sign in with GitHub to claim. [Continue]".
+5. GitHub App authorize page — approve.
+6. Returns to the page in optimistic edit mode. No invite, no waiting tab.
 
-Total clicks: **3 maximum** (Claim → Authorize → Accept invite). Two for returning collaborators. No CLI knowledge required. No `/claim` comment to remember.
+Total clicks: **3 max** (Claim → Continue → Authorize). **1** for returning users with an active session. No collaborator status check. No `/claim` comment to remember.
 
 The OAuth/App install also gives us:
 
@@ -329,9 +335,11 @@ Detailed per-phase file-IO scope, acceptance criteria, and risks live in [`inspe
    - Edit affordances still hidden globally.
    - Add `editingDisabled` store consumed by every edit-affordance component.
 
-4. **Phase 3 — claim flow**
-   - GitHub OAuth / App on the website.
-   - Wire the Claim button + collaborator-invite + auto-poll modal.
+4. **Phase 3 — auth and claim flow** (see [`inspector-auth-claim.md`](inspector-auth-claim.md) §11 for full acceptance criteria)
+   - GitHub App user-to-server flow + session cookies.
+   - `/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` endpoints firing `repository_dispatch`.
+   - Optimistic UI + reconciliation polling on `/api/reciter-task/<slug>`.
+   - One-claim-per-user enforcement (maintainer/owner bypass with audit).
    - Enforce single-writer lock (no writes yet — saves still 403).
 
 5. **Phase 5a — writes against existing edit_history schema**
@@ -357,7 +365,8 @@ Detailed per-phase file-IO scope, acceptance criteria, and risks live in [`inspe
 ## Open questions
 
 - **Anonymous viewing of in-review PRs.** Default to yes (transparent process). Can flip later if maintainers prefer to keep WIP private.
-- **OAuth App vs. GitHub App.** GitHub App is preferred (server-side installation token avoids needing user OAuth tokens to have `repo` scope, and it's the same token github-fetch + Git Data API commits use). A small OAuth App is easier to bootstrap. Decide before Phase 3.
 - **CDN in front of Inspector.** Cold-start cache miss after a deploy hits github-fetch for every active user's first request. Fronting `/api/seg/data/*` with Cloudflare or Fly's edge cache makes only the first global user pay. Decision deferred to Phase 1 measurements.
+
+The OAuth-App-vs-GitHub-App question is resolved: **GitHub App** (see [`inspector-auth-claim.md`](inspector-auth-claim.md) §2).
 
 Detailed file-storage risks (rate limits, `detailed.json` size cap, single-flight semantics, App token expiry, scratch crash recovery, etc.) live in [`inspector-data-storage.md`](inspector-data-storage.md) §10.

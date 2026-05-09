@@ -88,7 +88,11 @@ Cache: 60 s. On a 401 / 403 from the team membership endpoint, fall back to `CON
 | Claim a reciter | — | ✓ | ✓ | ✓ |
 | Release own claim | — | ✓ | ✓ | ✓ |
 | Edit segments (own claim) | — | ✓ | ✓ | ✓ |
+| Mark own claim ready for merge | — | ✓ | ✓ | ✓ |
+| Unmark own claim (pull back to under_review) | — | ✓ | ✓ | ✓ |
 | **Force-release someone else's claim** | — | — | ✓ | ✓ |
+| **Send back from ready_for_merge** | — | — | ✓ | ✓ |
+| **Merge ready PR** ⁵ | — | — | ✓ | ✓ |
 | **Reassign claim to specific user** | — | — | ✓ | ✓ |
 | **Edit segments without holding claim** | — | — | ✓ ² | ✓ ² |
 | **Manually set state (override workflow)** | — | — | ✓ | ✓ |
@@ -109,6 +113,7 @@ Cache: 60 s. On a 401 / 403 from the team membership endpoint, fall back to `CON
 ² Maintainer edit-without-claim auto-acquires a temporary claim labelled `force_held_by=<login>` that fires `claim.force_acquired` for audit. Released on session end or after 30 min of inactivity.
 ³ Web surface fires the pipeline; the pipeline itself remains CLI/HPC-driven. The web button just dispatches the job.
 ⁴ Destructive bulk actions also require a typed confirmation phrase and a 24-hour soft-lock window before they fire (see §6.5).
+⁵ Merge happens via the GitHub native squash-merge button; `segments-pr-merged.yml` fires `reciter.review_merged`. Inspector dashboard surfaces a deep-link to the PR — no separate API.
 
 ## 5. Override actions — full spec
 
@@ -262,6 +267,26 @@ The web surface only triggers; the pipeline itself runs unchanged on Katana / HF
 
 `discard` mode requires a typed confirmation. Used for recovery from rare corruption.
 
+### 5.10 Send back from ready_for_merge
+
+**Use case:** maintainer reviewed a `ready_for_merge` PR, found issues, wants the reviewer to fix them rather than merging or force-claiming a quick fix themselves.
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/ready/send-back` |
+| Body | `{ "slug": "...", "reason": "..." }` |
+| Preconditions | reciter is `ready_for_merge`; caller is maintainer+ |
+| Dispatch event | `reciter.merge_rejected { slug, by_login, original_assignee, reason }` |
+| State transition | `ready_for_merge → under_review` (assignee retained) |
+| Audit entry | yes |
+| Reversibility | Reviewer can mark ready again after fixes |
+| UI | "Send back…" button on the reciter card when state is `ready_for_merge` |
+| Confirmation | Modal with required reason field (≥10 chars) |
+
+The reason text is posted as a comment on the issue and pinged at the original assignee. The PR is left open. Reviewer reads, makes changes, marks ready again.
+
+Lighter alternative: maintainer can just leave a PR review comment on github.com requesting changes; the reviewer then unmark themselves. This admin endpoint is for the case where the maintainer wants the state to flip immediately (e.g. to free up the dashboard's stalled-ready queue).
+
 ## 6. Admin dashboard
 
 A maintainer-gated SPA route at `/admin`. Hidden entirely (404) for non-maintainers — does not flash and disappear.
@@ -299,6 +324,7 @@ Auto-populated from these rules (configurable per-state thresholds):
 | `awaiting_alignment` | >7 days since transition |
 | `awaiting_review` | >30 days with `assignee == null` |
 | `under_review` | >14 days since last commit on PR head |
+| `ready_for_merge` | >7 days awaiting maintainer merge |
 | `awaiting_timestamps` | >7 days since transition |
 
 Each row shows: slug, state, days stalled, recommended action, action button.
@@ -458,8 +484,11 @@ Extends [`inspector-state-management.md`](inspector-state-management.md) §4 eve
 
 | Event | Fired by | Required fields | Allowed transitions |
 |---|---|---|---|
-| `claim.force_released` | admin endpoint | `slug, by_login, original_assignee, reason` | `under_review → awaiting_review` |
-| `claim.reassigned` | admin endpoint | `slug, by_login, from_login, to_login, reason` | `awaiting_review → under_review`, `under_review → under_review` (assignee swap) |
+| `reciter.marked_ready` | contributor endpoint | `slug, login` | `under_review → ready_for_merge` (assignee retained) |
+| `reciter.unmarked_ready` | contributor endpoint | `slug, login` | `ready_for_merge → under_review` (assignee retained) |
+| `reciter.merge_rejected` | maintainer endpoint | `slug, by_login, original_assignee, reason` | `ready_for_merge → under_review` (assignee retained) |
+| `claim.force_released` | admin endpoint | `slug, by_login, original_assignee, reason` | `under_review → awaiting_review`, `ready_for_merge → awaiting_review` |
+| `claim.reassigned` | admin endpoint | `slug, by_login, from_login, to_login, reason` | `awaiting_review → under_review`, `under_review → under_review` (assignee swap), `ready_for_merge → under_review` (swap and demote) |
 | `claim.force_acquired` | admin endpoint (implicit via first save) | `slug, by_login, original_assignee` | none (ephemeral; no state file change) |
 | `claim.force_released_auto` | backend timer | `slug, by_login, original_assignee` | none (ephemeral) |
 | `state.manual_override` | admin endpoint | `slug, by_login, from_state, to_state, reason` | any → any |
@@ -479,16 +508,18 @@ The state-management transition matrix (§4 of that doc) needs updating to allow
 
 ## 12. GitHub App permissions delta
 
-Already-required (per `inspector-state-management.md` §9):
+Already-required (per [`inspector-auth-claim.md`](inspector-auth-claim.md) §3 / [`inspector-state-management.md`](inspector-state-management.md) §9):
 
 - `Contents: Write` (state file commits, edit pushes)
 - `Pull requests: Write` (creating / updating review PRs)
 - `Issues: Write` (label/assignee mirroring)
+- `Metadata: Read`
+- `Actions: Read` (workflow run statuses for the dashboard)
 - `Members: Read` on the org (team membership lookup)
 
 Added by this doc:
 
-- `Administration: Read` — needed for `/api/admin/pipeline/trigger` to dispatch GitHub Actions workflows (or use existing `Actions: Write` if already there). Confirm before Phase 3.
+- None. `/api/admin/pipeline/trigger` fires `repository_dispatch` (Contents: write covers it) or `workflow_dispatch` via the existing Actions: Read + a small write extension if needed — confirm at implementation time. No `Administration: write` is requested anywhere; collaborator invites are not part of the deployed flow.
 
 No additional user-token scopes — admin authorization is derived from the App's team-membership lookup, not from broader OAuth scopes on the user side.
 
@@ -507,12 +538,12 @@ Maps onto the parent doc's phases. Admin work lands incrementally — the dashbo
 
 ### Phase 3 — Claim overrides
 
-- Force-release, reassign, force-claim implemented as admin endpoints.
-- Dispatch events `claim.force_released`, `claim.reassigned`, `claim.force_acquired` added to the state workflow.
+- Force-release, reassign, force-claim, send-back-from-ready implemented as admin endpoints.
+- Dispatch events `claim.force_released`, `claim.reassigned`, `claim.force_acquired`, `reciter.merge_rejected` added to the state workflow.
 - Dashboard quick-action buttons wired up.
 - Audit log writes flowing.
 
-**Acceptance:** all three actions work end-to-end, audit entries appear, dispatch events update state file correctly, original assignees see appropriate UI feedback.
+**Acceptance:** all four actions work end-to-end, audit entries appear, dispatch events update state file correctly, original assignees see appropriate UI feedback.
 
 ### Phase 5a — Lock overrides
 

@@ -224,16 +224,17 @@ No state-file changes. No PR-branch impact. Inspector reads new fields gracefull
 
 ### States
 
-| State | Definition | Required state-file fields | Forbidden fields |
-|---|---|---|---|
-| `catalogued` | In catalog. No alignment work has started. | none beyond identity | `issue_number`, `pr_number`, `assignee` must be null |
-| `awaiting_alignment` | Alignment pipeline pending or running. | `issue_number` | `pr_number`, `assignee` null |
-| `awaiting_review` | Alignment done. PR exists. No reviewer claimed. | `issue_number`, `pr_number`, `pr_head_sha` | `assignee` null |
-| `under_review` | A reviewer has claimed the PR. | `issue_number`, `pr_number`, `pr_head_sha`, `assignee`, `assignee_since` | none |
-| `awaiting_timestamps` | Segments PR merged to main. TS data not yet on main. | `issue_number` | `pr_number`, `assignee` null |
-| `completed` | Segments + TS both on main, in sync. | `issue_number` | `pr_number`, `assignee` null |
+| State | Definition | Editable | Required state-file fields | Forbidden fields |
+|---|---|---|---|---|
+| `catalogued` | In catalog. No alignment work has started. | No | none beyond identity | `issue_number`, `pr_number`, `assignee` must be null |
+| `awaiting_alignment` | Alignment pipeline pending or running. | No | `issue_number` | `pr_number`, `assignee` null |
+| `awaiting_review` | Alignment done. PR exists. No reviewer claimed. | No (claimable) | `issue_number`, `pr_number`, `pr_head_sha` | `assignee` null |
+| `under_review` | A reviewer has claimed the PR. | Yes (assignee only) | `issue_number`, `pr_number`, `pr_head_sha`, `assignee`, `assignee_since` | none |
+| `ready_for_merge` | Reviewer marked complete. Awaiting maintainer merge. Frozen from edits. | No | `issue_number`, `pr_number`, `pr_head_sha`, `assignee`, `assignee_since` | none |
+| `awaiting_timestamps` | Segments PR merged to main. TS data not yet on main. | No | `issue_number` | `pr_number`, `assignee` null |
+| `completed` | Segments + TS both on main, in sync. | No | `issue_number` | `pr_number`, `assignee` null |
 
-`assignee_since` is the only multi-field linkage with a temporal invariant — equal to `state_since` when state is `under_review`.
+`assignee_since` is the only multi-field linkage with a temporal invariant — set when state transitions to `under_review` and retained through `ready_for_merge` (the assignee identity is preserved when the reviewer marks ready, since they may unmark to continue editing).
 
 ### Events
 
@@ -246,6 +247,9 @@ reciter.alignment_completed       # pipeline finished, PR opened
 # Review cycle
 reciter.claimed                   # someone took the PR
 reciter.released                  # claimant gave it back
+reciter.marked_ready              # reviewer marked PR ready for maintainer merge
+reciter.unmarked_ready            # reviewer pulled the PR back to under_review
+reciter.merge_rejected            # maintainer sent ready PR back to reviewer for changes
 reciter.review_merged             # segments PR merged to main
 
 # Timestamps cycle
@@ -277,16 +281,21 @@ reciter.discarded
 | `alignment_requested` | `catalogued` | `awaiting_alignment` | Open issue; set `issue_number`; mirror label |
 | `alignment_completed` | `awaiting_alignment` | `awaiting_review` | Set `pr_number`, `pr_head_sha`; mirror label; comment on issue |
 | `claimed` | `awaiting_review` | `under_review` | Set `assignee`, `assignee_since`; mirror to issue + PR |
-| `released` | `under_review` | `awaiting_review` | Clear `assignee`; mirror |
-| `review_merged` | `under_review` | `awaiting_timestamps` | Clear `pr_number`, `pr_head_sha`, `assignee`; mirror; trigger TS pipeline downstream |
+| `released` | `under_review`, `ready_for_merge` | `awaiting_review` | Clear `assignee`, `assignee_since`; mirror |
+| `marked_ready` | `under_review` | `ready_for_merge` | Retain `assignee`, `assignee_since`; mirror label; post issue comment with maintainer ping |
+| `unmarked_ready` | `ready_for_merge` | `under_review` | Retain `assignee`, `assignee_since`; mirror label |
+| `merge_rejected` | `ready_for_merge` | `under_review` | Retain `assignee`, `assignee_since`; mirror; post issue comment with reviewer ping + reason |
+| `review_merged` | `ready_for_merge` | `awaiting_timestamps` | Clear `pr_number`, `pr_head_sha`, `assignee`, `assignee_since`; mirror; trigger TS pipeline downstream |
 | `timestamps_completed` | `awaiting_timestamps` | `completed` | Mirror; close issue |
 | `admin_override` | any | (specified) | History entry includes `detail` with reason |
+
+Direct `under_review → review_merged` is **not** allowed. The reviewer must mark ready first; this forces a deliberate handoff. Maintainer emergency direct-merge uses `admin_override`.
 
 Invalid transitions (e.g. `claimed` while state is `completed`) are rejected by the workflow with a comment back on the originating event source (issue comment, PR comment, or workflow run log).
 
 ### Why re-edits don't get their own state
 
-Once a reciter is `completed`, the reviewing surface for a fix-up PR is identical to first-time review — same branch name pattern, same Inspector entry point, same gate. Implementation: when a new PR is opened touching `data/recitation_segments/<slug>/` for an already-`completed` slug, fire `alignment_completed` (yes — same event). The workflow validates that no `pr_number` is currently set, then transitions back to `awaiting_review`. No new state needed. The existing CI that detects merged segment changes and regenerates timestamps already handles the TS staleness without an explicit `timestamps_stale` event.
+Once a reciter is `completed`, the reviewing surface for a fix-up PR is identical to first-time review — same branch name pattern, same Inspector entry point, same gate. Implementation: when a new PR is opened touching `data/recitation_segments/<slug>/` for an already-`completed` slug, fire `alignment_completed` (yes — same event). The workflow validates that no `pr_number` is currently set, then transitions back to `awaiting_review`. The re-edit then follows the same path through `under_review → ready_for_merge → awaiting_timestamps`. No new state needed. The existing CI that detects merged segment changes and regenerates timestamps already handles the TS staleness without an explicit `timestamps_stale` event.
 
 ## 5. The state workflow (`update-reciter-state.yml`)
 
@@ -345,8 +354,11 @@ One Python entry point, `scripts/update_state.py event_type [args...]`:
 ### Business rules (workflow rejects events that violate)
 
 - `claimed` is rejected if `state != awaiting_review` or `assignee` already set.
-- `released` is rejected if `state != under_review` or `assignee != event.by`.
-- `review_merged` is rejected if `state != under_review`.
+- `released` is rejected if `state` ∉ `(under_review, ready_for_merge)` or `assignee != event.by` (unless event is admin-fired).
+- `marked_ready` is rejected if `state != under_review` or `assignee != event.by`.
+- `unmarked_ready` is rejected if `state != ready_for_merge` or `assignee != event.by` (unless event is admin-fired — see `merge_rejected`).
+- `merge_rejected` is rejected if `state != ready_for_merge` or caller is not maintainer+; requires `reason` field.
+- `review_merged` is rejected if `state != ready_for_merge`. Direct merge from `under_review` requires `admin_override`.
 - `alignment_completed` is rejected if there is already an `active_pr` on the same slug (prevents duplicate alignment runs).
 - `admin_override` is the only way to set `state` to a value the matrix doesn't permit; requires a `detail` reason.
 
@@ -444,6 +456,7 @@ state:catalogued
 state:awaiting_alignment
 state:awaiting_review
 state:under_review
+state:ready_for_merge
 state:awaiting_timestamps
 state:completed
 
@@ -507,6 +520,8 @@ Sparse — most transitions are body updates only. Comments fire only on:
 | Event | Comment template |
 |---|---|
 | `alignment_completed` | "Alignment ready for review. [Open in Inspector](...)." |
+| `marked_ready` | "Marked ready for merge by @reviewer. Maintainer review pending. cc @\<maintainer-team\>." |
+| `merge_rejected` | "Sent back for changes by @maintainer. Reason: …" |
 | `timestamps_completed` | "Timestamps complete. Reciter is live in the dataset." (and close issue) |
 | `admin_override` | "State set to `<state>` by @maintainer. Reason: …" |
 
@@ -533,24 +548,33 @@ Slug is URL identity. Stable as long as slugs are immutable (which they are; ren
 
 ### API endpoints
 
+Full contracts (preconditions, request/response shapes, optimistic state, idempotency) live in [`inspector-auth-claim.md`](inspector-auth-claim.md) §6. Index here:
+
 ```
 # Identity
-GET  /api/me                       → { login, id, noreply_email, is_collaborator }
-GET  /api/me/collaborator-status   → { is_collaborator }   (polled after invite)
+GET  /api/me                       → { login, id, noreply_email, role, active_claim }
+GET  /api/auth/login               → initiates user-to-server flow
+GET  /api/auth/callback            → handles GitHub redirect, sets session
+POST /api/auth/logout              → clears session
 
 # State reads (all sourced from parsed reciter_state.json + reciter_catalog.json)
 GET  /api/reciters                 → [{ slug, display, state, riwayah, style }]
                                      served from in-memory cache; refreshed on state-changed webhook or 30 s poll
-GET  /api/reciter-task/<slug>      → full ReciterTask + can_edit_for_current_user
+GET  /api/reciter-task/<slug>      → full ReciterTask + can_*_for_current_user predicates + optimistic flag
 
-# Claim flow (mutating — fire dispatch, return 202)
-POST /api/claim/<slug>             → fires reciter.claimed; returns 202 with optimistic state
-DELETE /api/claim/<slug>           → fires reciter.released; flushes pending edits before dispatch
+# Claim flow (mutating — fire dispatch, return 202 with optimistic state)
+POST /api/claim/<slug>             → fires reciter.claimed
+POST /api/release/<slug>           → fires reciter.released; flushes pending edits before dispatch
+POST /api/mark-ready/<slug>        → fires reciter.marked_ready; flushes pending edits before dispatch
+POST /api/unmark-ready/<slug>      → fires reciter.unmarked_ready
 
 # Internal (workflow → backend)
 POST /api/internal/state-changed   → wakes the in-memory cache (auth via shared secret)
 POST /api/internal/cache-invalidate → drops github-fetch entries (existing per data-storage doc)
+POST /api/internal/github-webhook   → GitHub event delivery (auth via HMAC)
 ```
+
+The `/api/me/collaborator-status` polling endpoint is **not** in the API — collaborator invites are not part of the web flow.
 
 ### State refresh strategy
 
@@ -563,18 +587,28 @@ POST /api/internal/cache-invalidate → drops github-fetch entries (existing per
 
 `POST /api/claim/<slug>` returns 202 immediately after firing dispatch. Frontend optimistically flips lock-banner / claim-button state. On the next state-refresh tick (~10 s typical), the file change propagates and the optimistic state either reconciles silently or — if the workflow rejected the event — flips back with a toast explaining why.
 
-### `can_edit_for_current_user`
+### Predicates
 
 Computed server-side in the `/api/reciter-task/<slug>` response:
 
 ```python
-def can_edit(entry: ReciterStateEntry, user: User | None) -> bool:
-    if user is None:
-        return False
-    return entry.state == 'under_review' and entry.assignee == user.login
+def can_edit(entry, user):
+    return user is not None and entry.state == 'under_review' and entry.assignee == user.login
+
+def can_mark_ready(entry, user):
+    return user is not None and entry.state == 'under_review' and entry.assignee == user.login
+
+def can_unmark_ready(entry, user):
+    return user is not None and entry.state == 'ready_for_merge' and entry.assignee == user.login
+
+def can_release(entry, user):
+    return user is not None and entry.state in ('under_review', 'ready_for_merge') and entry.assignee == user.login
+
+def can_claim(entry, user):
+    return user is not None and entry.state == 'awaiting_review' and not has_other_active_claim(user)
 ```
 
-The same predicate gates `@require_edit_lock` on every mutating endpoint. Frontend hiding is cleanliness; backend rejection is security.
+`can_edit` gates `@require_edit_lock` on every mutating *save* endpoint. Note that `ready_for_merge` is explicitly **not editable** — saves return 410 with "unmark ready first." Frontend hiding is cleanliness; backend rejection is security.
 
 ## 9. GitHub App permissions
 
@@ -583,13 +617,15 @@ The Inspector App needs:
 | Resource | Permission | Why |
 |---|---|---|
 | Contents | Read & write | github-fetch (read) and Git Data API commits (write) |
-| Pull requests | Read & write | Open PRs from `bot-create-pr.yml`; sync assignees |
+| Pull requests | Read & write | Open PRs from `bot-create-pr.yml`; mirror PR-side assignee |
 | Issues | Read & write | Create issues, post comments, mirror labels/assignees |
 | Metadata | Read | Required for any API call |
-| Members | Read | Collaborator status check |
-| Administration | Write | `PUT /collaborators/{login}` (invite) |
+| Actions | Read | Workflow run statuses for the admin dashboard |
+| Members | Read (org) | `<org>/inspector-maintainers` team membership lookup |
 
-The App's installation token is what github-fetch and the commit pathway use. The contributor's OAuth token (issued by the App's user-token flow) is only used for identity establishment — never for repo writes.
+**Not requested:** `Administration: write` — collaborator invites are not part of the web flow. CLI fallback users are invited by maintainers manually, on request.
+
+The App's installation token is what github-fetch and the commit pathway use. The contributor's user-to-server token (issued by the App's user-token flow) is only used for identity establishment at sign-in — never for repo writes. See [`inspector-auth-claim.md`](inspector-auth-claim.md) §3 for the full configuration.
 
 ## 10. Downstream consumers and producers
 
@@ -680,13 +716,17 @@ This doc's scope lands primarily in **Phase 0** (foundational state work) and bl
 ### Phase 3 — Claim flow
 
 **In scope:**
-- `/api/claim/<slug>` and `/api/release/<slug>` fire dispatch events.
+- `/api/claim/<slug>`, `/api/release/<slug>`, `/api/mark-ready/<slug>`, `/api/unmark-ready/<slug>` fire dispatch events.
 - Optimistic UI flip + reconciliation on poll.
 - `/api/internal/state-changed` webhook receives invalidation hits from the workflow.
 
 **Acceptance:**
-- Logged-in collaborator clicks Claim, sees lock banner flip within ~3 s (optimistic) and reconciles to authoritative within 30 s.
+- Logged-in user clicks Claim, sees lock banner flip within ~3 s (optimistic) and reconciles to authoritative within 30 s.
 - Two simultaneous claim attempts on the same reciter: one succeeds, one is rejected with a clear toast (workflow business rule).
+- Mark-ready → unmark-ready round-trip preserves `assignee` and `assignee_since`.
+- Release from `ready_for_merge` clears assignee and lands reciter in `awaiting_review`.
+- `merge_rejected` from a maintainer flips state back to `under_review` and posts an issue comment with reason.
+- Direct `under_review → review_merged` is rejected by the state workflow with a clear comment.
 
 ### Phase 5a — Writes
 
@@ -720,6 +760,10 @@ Pipeline runs the alignment job, then the runner crashes before firing `alignmen
 ### Stalled `awaiting_timestamps`
 
 TS pipeline fails. State stays `awaiting_timestamps`. **Mitigation:** reconciler flags after N hours; maintainer triggers `timestamps-refresh.yml` manually with the slug, which on success fires `timestamps_completed`.
+
+### Stuck `ready_for_merge`
+
+Reviewer marked ready; maintainer never merges. State stays `ready_for_merge`. The PR branch is frozen from edits (any save returns 410). **Mitigation:** reconciler flags `ready_for_merge` for >7 days; admin dashboard surfaces in the stalled-reciters tab with quick-actions (merge / send-back / force-release / reassign). No automatic action — maintainer judgement always required.
 
 ### Manual GitHub UI edits
 
