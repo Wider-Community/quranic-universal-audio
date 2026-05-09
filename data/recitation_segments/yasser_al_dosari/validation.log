@@ -1,4 +1,4 @@
-Generated: 2026-05-09 09:53:48
+Generated: 2026-05-09 11:06:36
 
 ========================================================================
   yasser_al_dosari
@@ -12,13 +12,13 @@ Generated: 2026-05-09 09:53:48
   Silence floor: 30 ms
 
 --- Coverage ---
-  Verses found:   6236 / 6236
-  Missing verses: 0
+  Verses found:   6235 / 6236
+  Missing verses: 1
   Word gaps:      0 verses
 
 --- Segments ---
-  Total:            12020
-  Single-seg:       2923
+  Total:            12019
+  Single-seg:       2922
   Multi-seg verses: 3191 (9097 segs)
   Cross-verse keys: 196
   Max segs/verse:   17
@@ -46,6 +46,9 @@ Generated: 2026-05-09 09:53:48
   Empty ASR: 19 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
+
+--- Missing Verses (1) ---
+  MISS  1:1  (4 words)
 
 --- Detected Repetitions (24) ---
   [1.0000]  2:274:1-2:274:7  @ 1:52:08.3 - 1:52:19.1
@@ -217,7 +220,7 @@ Generated: 2026-05-09 09:53:48
 
 --- Category Counts (machine-readable) ---
   failed 0
-  missing_verses 0
+  missing_verses 1
   missing_words 0
   structural_errors 0
   low_confidence 0
