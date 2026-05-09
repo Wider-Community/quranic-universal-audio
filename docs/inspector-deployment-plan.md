@@ -7,6 +7,7 @@ This document captures architectural decisions only. It is not an implementation
 **Companion docs:**
 - [`inspector-data-storage.md`](inspector-data-storage.md) — implementation-grade reference for the deployed file-IO model: github-fetch service, scratch dir lifecycle, Git Data API write path, image build rules, per-phase acceptance criteria.
 - [`inspector-state-management.md`](inspector-state-management.md) — implementation-grade reference for reciter state: state file schema, catalog file schema, state machine + event vocabulary, the consolidated state workflow, identity convention with full marker/template registry, GitHub mirroring, per-phase acceptance criteria.
+- [`inspector-admin-perms.md`](inspector-admin-perms.md) — implementation-grade reference for admin and permissions: roles, maintainer/owner identity, permission matrix, override actions (force-release, reassign, force-claim, manual state override, discard, catalog edit, pipeline trigger), admin dashboard, audit log, new state events, per-phase acceptance criteria.
 
 ## Goals
 
