@@ -1,4 +1,4 @@
-Generated: 2026-05-09 18:58:08
+Generated: 2026-05-09 19:16:40
 
 ========================================================================
   saud_al_shuraim
@@ -14,12 +14,12 @@ Generated: 2026-05-09 18:58:08
 --- Coverage ---
   Verses found:   6236 / 6236
   Missing verses: 0
-  Word gaps:      3 verses
+  Word gaps:      1 verses
 
 --- Segments ---
-  Total:            10378
-  Single-seg:       3502
-  Multi-seg verses: 2567 (6876 segs)
+  Total:            10375
+  Single-seg:       3503
+  Multi-seg verses: 2566 (6872 segs)
   Cross-verse keys: 179
   Max segs/verse:   17
 
@@ -30,7 +30,7 @@ Generated: 2026-05-09 18:58:08
   Max:    17.13s
 
 --- True Silence Duration (padding reversed) ---
-  Min:    0.69s
+  Min:    0.65s
   Median: 0.69s
   Mean:   0.70s
   Max:    9.73s
@@ -38,80 +38,24 @@ Generated: 2026-05-09 18:58:08
 --- Alignment Confidence ---
   Min:       0.6700
   Median:    1.0000
-  Mean:      0.9843
+  Mean:      0.9844
   Max:       1.0000
   Below 60%: 0
-  Below 80%: 14
+  Below 80%: 0
   Failed:    0 (no alignment)
-  Empty ASR: 0 (matched but no phonemes)
+  Empty ASR: 1 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
 
---- Missing Words (3) ---
+--- Missing Words (1) ---
   12:1  @ 0:10.7 - 0:14.7
     missing words: [1]
     audio: https://server7.mp3quran.net/shur/012.mp3
-  31:33  @ 6:21.5 - 6:45.0
-    missing words: [18]
-    audio: https://server7.mp3quran.net/shur/031.mp3
-  48:6  @ 1:08.1 - 1:41.6
-    missing words: [9]
-    audio: https://server7.mp3quran.net/shur/048.mp3
 
---- Low Confidence <80% (14) ---
-  [0.6700]  50:1:1-50:1:1  @ 0:02.9 - 0:05.2
-           audio: https://server7.mp3quran.net/shur/050.mp3
-           text:  قٓ ۚ
-  [0.7000]  2:1:1-2:1:1  @ 0:02.6 - 0:09.4
-           audio: https://server7.mp3quran.net/shur/002.mp3
-           text:  الٓمٓ
-  [0.7000]  24:35:10-24:35:12  @ 8:58.0 - 9:00.4
-           audio: https://server7.mp3quran.net/shur/024.mp3
-           text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
-  [0.7000]  32:1:1-32:1:1  @ 0:02.9 - 0:08.7
-           audio: https://server7.mp3quran.net/shur/032.mp3
-           text:  الٓمٓ
-  [0.7400]  3:174:9-3:174:11  @ 40:06.3 - 40:09.2
-           audio: https://server7.mp3quran.net/shur/003.mp3
-           text:  وَٱتَّبَعُوا۟ رِضْوَٰنَ ٱللَّهِ ۗ
-  [0.7500]  13:1:1-13:1:1  @ 0:02.7 - 0:09.6
-           audio: https://server7.mp3quran.net/shur/013.mp3
-           text:  الٓمٓر ۚ
-  [0.7500]  20:1:1-20:1:1  @ 0:02.8 - 0:04.3
-           audio: https://server7.mp3quran.net/shur/020.mp3
-           text:  طه
-  [0.7500]  69:19:1-69:19:2  @ 1:52.0 - 1:54.0
-           audio: https://server7.mp3quran.net/shur/069.mp3
-           text:  فَأَمَّا مَنْ
-  [0.7600]  48:6:6-48:6:8  @ 1:18.8 - 1:26.5
-           audio: https://server7.mp3quran.net/shur/048.mp3
-           text:  ٱلظَّآنِّينَ بِٱللَّهِ ظَنَّ
-  [0.7700]  16:75:22-16:75:23  @ 14:18.1 - 14:20.2
-           audio: https://server7.mp3quran.net/shur/016.mp3
-           text:  ٱلْحَمْدُ لِلَّهِ ۚ
-  ... and 4 more
-
---- Detected Repetitions (2) ---
-  [0.9400]  5:45:1-5:45:16  @ 16:15.7 - 16:31.1
+--- Detected Repetitions (1) ---
+  [1.0000]  5:45:11-5:45:16  @ 16:25.2 - 16:31.1
            audio: https://server7.mp3quran.net/shur/005.mp3
-           text:  وَكَتَبْنَا عَلَيْهِمْ فِيهَآ أَنَّ ٱلنَّفْسَ بِٱلنَّفْسِ وَٱلْعَيْنَ بِٱلْعَيْنِ وَٱلْأَنفَ بِٱلْأَنفِ وَٱلْأُذُنَ بِٱلْأُذُنِ وَٱلسِّنَّ بِٱلسِّنِّ وَٱلْجُرُوحَ قِصَاصٌ ۚ
-  [0.9200]  44:37:1-44:37:8  @ 3:32.8 - 3:38.8
-           audio: https://server7.mp3quran.net/shur/044.mp3
-           text:  أَهُمْ خَيْرٌ أَمْ قَوْمُ تُبَّعٍ وَٱلَّذِينَ مِن قَبْلِهِمْ ۚ
-
---- May Require Boundary Adjustment (4) ---
-  [0.9200]  4:176:1-4:176:1  @ 51:39.4 - 51:40.8
-           audio: https://server7.mp3quran.net/shur/004.mp3
-           text:  يَسْتَفْتُونَكَ
-  [0.8900]  15:72:1-15:72:1  @ 7:09.9 - 7:10.9
-           audio: https://server7.mp3quran.net/shur/015.mp3
-           text:  لَعَمْرُكَ
-  [1.0000]  20:121:15-20:121:15  @ 14:21.8 - 14:23.3
-           audio: https://server7.mp3quran.net/shur/020.mp3
-           text:  فَغَوَىٰ
-  [0.8900]  33:61:1-33:61:1  @ 16:10.3 - 16:12.2
-           audio: https://server7.mp3quran.net/shur/033.mp3
-           text:  مَّلْعُونِينَ ۖ
+           text:  وَٱلْأُذُنَ بِٱلْأُذُنِ وَٱلسِّنَّ بِٱلسِّنِّ وَٱلْجُرُوحَ قِصَاصࣱۚ
 
 --- Cross-verse (179) ---
   [0.9700]  2:183:1-2:184:2  @ 47:58.4 - 48:11.4
@@ -179,7 +123,7 @@ Generated: 2026-05-09 18:58:08
            text:  طه
   ... and 18 more
 
---- Qalqala (625) ---
+--- Qalqala (624) ---
   [0.9600]  2:19:1-2:19:8  [ق]  @ 2:58.0 - 3:05.2
            audio: https://server7.mp3quran.net/shur/002.mp3
            text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
@@ -210,7 +154,12 @@ Generated: 2026-05-09 18:58:08
   [0.9600]  2:115:1-2:115:3  [ب]  @ 29:18.9 - 29:21.9
            audio: https://server7.mp3quran.net/shur/002.mp3
            text:  وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
-  ... and 615 more
+  ... and 614 more
+
+--- Empty ASR Phonemes (1) ---
+  [1.0000]  5:45:11-5:45:16  @ 16:25.2 - 16:31.1
+           audio: https://server7.mp3quran.net/shur/005.mp3
+           text:  وَٱلْأُذُنَ بِٱلْأُذُنِ وَٱلسِّنَّ بِٱلسِّنِّ وَٱلْجُرُوحَ قِصَاصࣱۚ
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
@@ -218,13 +167,13 @@ Generated: 2026-05-09 18:58:08
 --- Category Counts (machine-readable) ---
   failed 0
   missing_verses 0
-  missing_words 3
+  missing_words 1
   structural_errors 0
-  low_confidence 14
-  repetitions 2
+  low_confidence 0
+  repetitions 1
   audio_bleeding 0
-  boundary_adj 4
+  boundary_adj 0
   cross_verse 179
-  qalqala 625
+  qalqala 624
   muqattaat 28
 
