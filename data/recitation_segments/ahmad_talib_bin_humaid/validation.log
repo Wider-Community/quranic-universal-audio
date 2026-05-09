@@ -1,4 +1,4 @@
-Generated: 2026-05-09 10:19:14
+Generated: 2026-05-09 20:38:44
 
 ========================================================================
   ahmad_talib_bin_humaid
@@ -12,22 +12,22 @@ Generated: 2026-05-09 10:19:14
   Silence floor: 30 ms
 
 --- Coverage ---
-  Verses found:   5561 / 6236
-  Missing verses: 0
+  Verses found:   5539 / 6236
+  Missing verses: 22
   Word gaps:      0 verses
 
 --- Segments ---
-  Total:            9543
-  Single-seg:       3052
+  Total:            9524
+  Single-seg:       3033
   Multi-seg verses: 2376 (6491 segs)
-  Cross-verse keys: 109
+  Cross-verse keys: 106
   Max segs/verse:   17
 
 --- Segment Duration ---
   Min:    1.19s
   Median: 7.25s
   Mean:   7.64s
-  Max:    20.86s
+  Max:    20.45s
 
 --- True Silence Duration (padding reversed) ---
   Min:    0.65s
@@ -43,17 +43,22 @@ Generated: 2026-05-09 10:19:14
   Below 60%: 0
   Below 80%: 0
   Failed:    0 (no alignment)
-  Empty ASR: 69 (matched but no phonemes)
+  Empty ASR: 70 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
 
---- Cross-verse (2) ---
-  [1.0000]  19:88:1-19:89:4  @ 15:45.1 - 15:52.5
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/019.mp3
-           text:  وَقَالُوا۟ ٱتَّخَذَ ٱلرَّحْمَـٰنُ وَلَدًا لَّقَدْ جِئْتُمْ شَيْـًٔا إِدًّا
-  [1.0000]  35:6:1-35:7:13  @ 1:06.6 - 1:27.4
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
-           text:  إِنَّ ٱلشَّيْطَـٰنَ لَكُمْ عَدُوٌّ فَٱتَّخِذُوهُ عَدُوًّا ۚ إِنَّمَا يَدْعُوا۟ حِزْبَهُۥ لِيَكُونُوا۟ مِنْ أَصْحَـٰبِ ٱلسَّعِيرِ ٱلَّذِينَ كَفَرُوا۟ لَهُمْ عَذَابٌ شَدِيدٌ ۖ وَٱلَّذِينَ ءَامَنُوا۟ وَعَمِلُوا۟ ٱلصَّـٰلِحَـٰتِ لَهُم مَّغْفِرَةٌ وَأَجْرٌ كَبِيرٌ
+--- Missing Verses (22) ---
+  MISS  19:77  (8 words)
+  MISS  19:78  (7 words)
+  MISS  19:79  (9 words)
+  MISS  19:80  (5 words)
+  MISS  19:81  (8 words)
+  MISS  19:82  (6 words)
+  MISS  19:83  (9 words)
+  MISS  19:84  (7 words)
+  MISS  19:85  (6 words)
+  MISS  19:86  (5 words)
+  ... and 12 more
 
 --- Muqatta'at (29) ---
   [0.8000]  2:1:1-2:1:1  @ 0:03.7 - 0:11.0
@@ -121,7 +126,7 @@ Generated: 2026-05-09 10:19:14
            text:  قَالَ رَجُلَانِ مِنَ ٱلَّذِينَ يَخَافُونَ أَنْعَمَ ٱللَّهُ عَلَيْهِمَا ٱدْخُلُوا۟ عَلَيْهِمُ ٱلْبَابَ
   ... and 532 more
 
---- Empty ASR Phonemes (69) ---
+--- Empty ASR Phonemes (70) ---
   [1.0000]  4:171:1-4:171:12  @ 1:02:35.4 - 1:02:44.6
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
            text:  يَـٰٓأَهْلَ ٱلْكِتَـٰبِ لَا تَغْلُوا۟ فِى دِينِكُمْ وَلَا تَقُولُوا۟ عَلَى ٱللَّهِ إِلَّا ٱلْحَقَّ ۚ
@@ -152,21 +157,21 @@ Generated: 2026-05-09 10:19:14
   [1.0000]  20:24:1-20:24:5  @ 2:22.6 - 2:26.2
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
            text:  ٱذْهَبْ إِلَىٰ فِرْعَوْنَ إِنَّهُۥ طَغَىٰ
-  ... and 59 more
+  ... and 60 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
 
 --- Category Counts (machine-readable) ---
   failed 0
-  missing_verses 0
+  missing_verses 22
   missing_words 0
   structural_errors 0
   low_confidence 0
   repetitions 0
   audio_bleeding 0
   boundary_adj 0
-  cross_verse 2
+  cross_verse 0
   qalqala 542
   muqattaat 29
 
