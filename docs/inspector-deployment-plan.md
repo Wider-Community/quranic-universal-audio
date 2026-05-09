@@ -5,8 +5,9 @@ Design for migrating the Inspector from a local-Docker-only tool to a hosted, fr
 This document captures architectural decisions only. It is not an implementation plan — concrete TODOs are derived from it later, phase by phase.
 
 **Companion docs:**
-- [`inspector-data-storage.md`](inspector-data-storage.md) — implementation-grade reference for the deployed file-IO model: github-fetch service, scratch dir lifecycle, Git Data API write path, image build rules, per-phase acceptance criteria.
+- [`inspector-data-storage.md`](inspector-data-storage.md) — implementation-grade reference for the deployed file-IO model: three-tier read path (HF static / github-fetch / server-image), scratch dir lifecycle, Git Data API write path, image build rules, perf budget, per-phase acceptance criteria.
 - [`inspector-state-management.md`](inspector-state-management.md) — implementation-grade reference for reciter state: state file schema, catalog file schema, state machine + event vocabulary, the consolidated state workflow, identity convention with full marker/template registry, GitHub mirroring, per-phase acceptance criteria.
+- [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md) — operational runbook: HF Space setup (dev + prod), GitHub App setup, upload pipeline, test environment conventions, smoke tests per phase, rollback procedure, the three concrete file structures (HF dataset / HF Space repo / `/tmp` on the running container).
 - [`inspector-admin-perms.md`](inspector-admin-perms.md) — implementation-grade reference for admin and permissions: roles, maintainer/owner identity, permission matrix, override actions (force-release, reassign, force-claim, manual state override, discard, catalog edit, pipeline trigger), admin dashboard, audit log, new state events, per-phase acceptance criteria.
 - [`inspector-auth-claim.md`](inspector-auth-claim.md) — implementation-grade reference for authentication and the user-facing claim/release/mark-ready flow: GitHub App configuration, token lifecycle, endpoint contracts, optimistic UI reconciliation, identity attribution, edge cases.
 
@@ -73,14 +74,15 @@ The Inspector backend stays Python (Flask) — its 11 validators, the phonemizer
 
 ### Read path
 
-1. Browser requests data for reciter `X`.
-2. Backend resolves `X`'s state via the live state computation (see §6) and picks a ref: `main` for completed, `reciter/<slug>/segments` for under-review.
-3. Backend's `services/github_fetch.py` returns the requested file from a server-side LRU cache, falling back to `https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>` (authenticated via the GitHub App installation token) on miss. ETag-revalidated, TTL'd, single-flight.
-4. Subsequent reads served from `services/cache.py` (in-memory parsed forms) exactly as today.
+Three tiers based on reciter state, with the backend involved only for under-review reciters:
 
-No worktrees. No on-disk repo. Anonymous viewers and active reviewers share the same read path; the only difference is the ref.
+1. **Completed reciters** — browser fetches Inspector data direct from HF CDN at `inspector/segments/<slug>/<file>.gz` under the `hetchyy/quranic-universal-ayahs` dataset, parallel to the existing TS shards. Backend uninvolved on the read path.
+2. **Under-review reciters** (PR branch `reciter/<slug>`) — backend's `services/github_fetch.py` serves files from raw.githubusercontent.com via the GitHub App installation token. ETag-revalidated, TTL'd 30 s with ±10% jitter, single-flight, two-layer caching (raw bytes + parsed Python objects).
+3. **Static reference data** (Quran word text, controlled vocabularies, the consolidated audio URL catalog) — baked into the Space image, served same-origin via `/api/static/...`. Browser caches forever via `Cache-Control: immutable`. Audio playback browser → origin direct. Timestamps browser → HF CDN direct (already implemented per [`timestamps-tab-deployment-plan.md`](timestamps-tab-deployment-plan.md)).
 
-Audio plays browser → origin direct. Timestamps come browser → HF CDN direct (already implemented per [`timestamps-tab-deployment-plan.md`](timestamps-tab-deployment-plan.md)).
+No worktrees. No on-disk repo. github-fetch usage drops dramatically vs the original plan — only the ~20 in-flight reciters at any time consume GitHub rate budget; the long tail of completed reciters is on HF CDN.
+
+Active reviewers reading their own slug's data go through scratch (so they see in-flight pre-debounce state); anyone else reading the same slug's data goes through the standard tier path (HF CDN or github-fetch), seeing the last-debounce-flushed state — see [`inspector-data-storage.md`](inspector-data-storage.md) §4.
 
 ### Write path
 
@@ -108,7 +110,21 @@ This contradicts the `process-requests` skill's "all bot artifacts appear as `gi
 
 ### Hosting target
 
-Fly.io is the path of least resistance: supports Python + ffmpeg + websockets in a single small VM. **No persistent volume required** — the github-fetch LRU is in-memory, scratch is ephemeral disk, and audio/timestamps bypass the backend entirely. Cloud Run / Render / Railway are equally viable since the persistent-disk requirement is gone. The deployed image is the same `inspector/Dockerfile` artifact reviewers use locally (`docker-publish.yml` already builds and pushes it to GHCR), with a stripped `.dockerignore` excluding per-reciter and pipeline-only data — see [`inspector-data-storage.md`](inspector-data-storage.md) §7.
+**Hugging Face Spaces (Docker SDK, free CPU-basic tier)** is the chosen starting host. Same operational pattern as the existing three project Spaces (`reciter_requests/`, `mfa_aligner/`, `quranic_universal_aligner/`), zero new ops surface, free at the targeted scale (2 vCPU, 16 GB RAM, ephemeral disk, 48-hour idle sleep timeout that effectively never fires for an active project). Fly.io is the migration path if/when sleep latency or CPU saturation forces it; same image transplants directly.
+
+**No persistent volume required** — github-fetch LRU is in-memory, scratch is ephemeral `/tmp` disk, audio/timestamps/completed-segments all bypass the backend entirely. Single-image / two-profile Dockerfile (env-driven mode, see [`inspector-data-storage.md`](inspector-data-storage.md) §7): one image works for both local-Docker maintainer use (data bind-mounted at `/data`) and the deployed Space (data baked into `/app/data` and fetched on demand for everything else).
+
+**Image footprint** ~300–400 MB (~89 MB static reference data including the consolidated `audio_catalog.json.gz` + Python deps + Alpine static ffmpeg + frontend dist). Image rebuilds on code or static-data changes only; per-reciter data changes never trigger a redeploy.
+
+**Operational topology:** dev Space (`hetchyy/quranic-inspector-dev`) tracks the `dev` branch with `INSPECTOR_ALLOWED_SLUGS_REGEX=^_test_` to gate writes to test reciters; prod Space (`hetchyy/quranic-inspector`) tracks `main`. Both are stable URLs (`https://hetchyy-quranic-inspector{,-dev}.hf.space`); custom domain is supported on Spaces if/when desired. See [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md) for the full setup procedure.
+
+### Free-tier prerequisites
+
+The deploy is **blocked** on three changes before exposing to the public on free CPU-basic. Without them, p95 latency at 10 concurrent users runs 2–4 s during scrubbing bursts. With them, 10 concurrent is comfortable.
+
+1. **Replace `app.run()` with `gunicorn -k gthread -w 2 --threads 8`** in the Dockerfile CMD. `inspector/app.py:180` runs werkzeug dev server, which is explicitly not production-grade. Two worker processes (one per vCPU) × 8 threads each gives proper request scheduling.
+2. **Implement `services/github_fetch.py` with single-flight + parsed-cache layer** as [`inspector-data-storage.md`](inspector-data-storage.md) §3 specifies. Without single-flight, 10 concurrent cold viewers of the same reciter trigger 10 redundant GitHub fetches and 10 redundant 5 MB JSON parses on the GIL.
+3. **`Cache-Control: public, max-age=31536000, immutable` on peaks routes** (`/api/seg/segment-peaks`, `/api/seg/peaks`). First bottleneck on free tier is **ffmpeg subprocess fork on the per-segment peaks route** during scrubbing; CDN-fronting the deterministic peaks responses (Cloudflare free or HF edge cache) absorbs the burst and lets backend ffmpeg stay idle except on first global hit. Headers must be set even if a CDN isn't fronted yet, so the addition is a config flip rather than a code change.
 
 ## 4. Authentication & first-time contributor flow
 
@@ -320,17 +336,20 @@ Detailed per-phase file-IO scope, acceptance criteria, and risks live in [`inspe
    - **Rewrite downstream producers** (`list_reciters.py`, `build_reciter.py --build-manifest`) to read identity from the catalog and status from the state file. Extend `sync-dataset.yml` and `update-reciters.yml` triggers. Land all producer rewrites in one merge group with a regression test against the pre-migration `reciters_index.json` shape — see [`inspector-state-management.md`](inspector-state-management.md) §10.
    - Add `@require_edit_lock` decorator (lookups state file; no-op while state file is unpopulated).
 
-2. **Phase 1 — read-only deployment** (anonymous, `main` data only)
-   - Implement `services/github_fetch.py` (LRU + TTL + ETag + single-flight) and route reads through it.
-   - Image built with `.dockerignore` excluding `data/audio/`, `data/recitation_segments/`, `data/timestamps/`, `data/qul_downloads/`, `data/.cache/` — image stays ~22 MB of static data.
-   - `INSPECTOR_TS_SOURCE=huggingface` flipped on for the image.
-   - Deploy to Fly.io (no persistent volume needed).
-   - `routes/timestamps.py::ts_validate`, `routes/audio_proxy.py`, `app.py::serve_audio` excluded from deployed image.
+2. **Phase 1 — read-only deployment on HF Space, completed reciters via HF dataset**
+   - **Free-tier prerequisites (deploy-blockers):** swap `app.run()` → `gunicorn -k gthread -w 2 --threads 8`; implement `services/github_fetch.py` with single-flight + parsed-cache layer (128 MB raw LRU + 128 MB parsed); add `Cache-Control: immutable` to peaks routes (CDN-front decision deferred).
+   - HF dataset extension: `build_reciter.py --build-inspector-segments <slug>` publishes the 5 per-reciter completed-reciter files (segments, detailed, edit_history, edit_history_peaks, low_confidence_v2) under `inspector/segments/<slug>/` parallel to the existing TS shards. `sync-dataset.yml` extended; one-shot bootstrap seeds the dataset for currently-eligible reciters.
+   - Frontend: `services/segments_hf_client.ts` fetches completed-reciter data direct from HF CDN. `/api/ts/config` extended to return `inspector_shard_url_template` and `globals_url_template` (globals served same-origin in deployed mode, not from HF).
+   - Image build: root `.dockerignore` excludes `data/audio/`, `data/recitation_segments/`, `data/timestamps/`, `data/qul_downloads/`, `data/.cache/`, `inspector/frontend/src/`. Static data ~89 MB (extends current Dockerfile COPY list to all 10 reference files + the new consolidated `audio_catalog.json.gz`).
+   - Audio catalog build: `scripts/build_audio_catalog.py` consolidates 391 per-reciter manifests into `data/audio_catalog.json.gz` (compact + gzipped, ~6 MB) at image build time.
+   - Dockerfile env defaults flipped to deployed profile: `INSPECTOR_DATA_DIR=/app/data`, `INSPECTOR_QUA_DATA_PATH=/app/data`, `INSPECTOR_TS_SOURCE=huggingface`, `INSPECTOR_AUDIO_PROXY_ENABLED=0`. Local `docker-compose.yml` overrides back to `/data` + bind mount.
+   - Deploy to HF Space (`hetchyy/quranic-inspector-dev` first); production cutover follows after dev validation. No persistent volume.
+   - `routes/timestamps.py::ts_validate`, `routes/audio_proxy.py`, `app.py::serve_audio` excluded from deployed image (gated by env flags).
    - `/api/reciter-task/<slug>` endpoint live; UI shows reciter status pills.
-   - Anonymous = view-only on completed reciters via github-fetch at `main`.
+   - Anonymous = view-only on completed reciters via HF CDN direct (no backend on the read path).
 
-3. **Phase 2 — PR-branch reads**
-   - github-fetch extended with `ref` parameter; differentiated TTLs (5 min main, 30 s branch).
+3. **Phase 2 — PR-branch reads (under-review reciters)**
+   - github-fetch (already implemented in Phase 1) wired to the route handlers serving under-review data at `reciter/<slug>` ref.
    - Available + Under-review tabs render data from PR branches via github-fetch.
    - Edit affordances still hidden globally.
    - Add `editingDisabled` store consumed by every edit-affordance component.
