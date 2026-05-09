@@ -1,4 +1,4 @@
-Generated: 2026-05-09 20:00:21
+Generated: 2026-05-09 20:13:37
 
 ========================================================================
   saud_al_shuraim
@@ -14,7 +14,7 @@ Generated: 2026-05-09 20:00:21
 --- Coverage ---
   Verses found:   6236 / 6236
   Missing verses: 0
-  Word gaps:      1 verses
+  Word gaps:      0 verses
 
 --- Segments ---
   Total:            10426
@@ -46,11 +46,6 @@ Generated: 2026-05-09 20:00:21
   Empty ASR: 52 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
-
---- Missing Words (1) ---
-  12:1  @ 0:10.7 - 0:14.7
-    missing words: [1]
-    audio: https://server7.mp3quran.net/shur/012.mp3
 
 --- Detected Repetitions (1) ---
   [1.0000]  5:45:11-5:45:16  @ 16:25.2 - 16:31.1
@@ -90,7 +85,7 @@ Generated: 2026-05-09 20:00:21
            text:  وَلَا تَمْنُن تَسْتَكْثِرُ وَلِرَبِّكَ فَٱصْبِرْ
   ... and 64 more
 
---- Muqatta'at (29) ---
+--- Muqatta'at (30) ---
   [0.7000]  2:1:1-2:1:1  @ 0:02.6 - 0:09.4
            audio: https://server7.mp3quran.net/shur/002.mp3
            text:  الٓمٓ
@@ -106,6 +101,9 @@ Generated: 2026-05-09 20:00:21
   [0.8000]  11:1:1-11:1:1  @ 0:02.9 - 0:08.0
            audio: https://server7.mp3quran.net/shur/011.mp3
            text:  الٓر ۚ
+  [1.0000]  12:1:1-12:1:5  @ 0:05.8 - 0:14.8
+           audio: https://server7.mp3quran.net/shur/012.mp3
+           text:  الٓرۚ تِلْكَ ءَايَٰتُ ٱلْكِتَٰبِ ٱلْمُبِينِ
   [0.7500]  13:1:1-13:1:1  @ 0:02.7 - 0:09.6
            audio: https://server7.mp3quran.net/shur/013.mp3
            text:  الٓمٓر ۚ
@@ -118,10 +116,7 @@ Generated: 2026-05-09 20:00:21
   [0.9300]  19:1:1-19:1:1  @ 0:07.0 - 0:15.0
            audio: https://server7.mp3quran.net/shur/019.mp3
            text:  كٓهيعٓصٓ
-  [0.7500]  20:1:1-20:1:1  @ 0:02.8 - 0:04.3
-           audio: https://server7.mp3quran.net/shur/020.mp3
-           text:  طه
-  ... and 19 more
+  ... and 20 more
 
 --- Qalqala (629) ---
   [0.9600]  2:19:1-2:19:8  [ق]  @ 2:58.0 - 3:05.2
@@ -195,7 +190,7 @@ Generated: 2026-05-09 20:00:21
 --- Category Counts (machine-readable) ---
   failed 0
   missing_verses 0
-  missing_words 1
+  missing_words 0
   structural_errors 0
   low_confidence 0
   repetitions 1
@@ -203,5 +198,5 @@ Generated: 2026-05-09 20:00:21
   boundary_adj 0
   cross_verse 74
   qalqala 629
-  muqattaat 29
+  muqattaat 30
 
