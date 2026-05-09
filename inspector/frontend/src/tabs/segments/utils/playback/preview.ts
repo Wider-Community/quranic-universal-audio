@@ -28,7 +28,7 @@ import { get, type Readable, type Writable,writable } from 'svelte/store';
 import { AudioPort } from '../../../../lib/playback/audio-port';
 import { AudioRange } from '../../../../lib/playback/audio-range';
 import { fetchSegmentPeaks } from '../../../../lib/utils/peaks-fetch';
-import { segData, selectedReciter } from '../../stores/chapter';
+import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
 import { playbackSpeed } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { drawSegPlayhead } from '../waveform/draw-seg';
@@ -55,7 +55,7 @@ export interface PreviewPlaybackContext {
      *  while playback only spans the leaf slice itself). Defaults to the
      *  playback range when omitted — the common case for SavePreview and
      *  non-split history rows. */
-    registerRow(uid: string, canvas: HTMLCanvasElement, audioUrl: string, startMs: number, endMs: number, opId?: string, wfStartMs?: number, wfEndMs?: number): void;
+    registerRow(uid: string, canvas: HTMLCanvasElement, audioUrl: string, startMs: number, endMs: number, opId?: string, wfStartMs?: number, wfEndMs?: number, chapter?: number): void;
     /** Drop a row entry; if it was the active one, stop playback and clear the playhead. */
     deregisterRow(uid: string): void;
     /** Click-handler for a row's play button. Toggles play/pause for the
@@ -83,6 +83,7 @@ interface RowEntry {
      *  rows showing the parent's union peak. */
     wfStartMs: number;
     wfEndMs: number;
+    chapter?: number;
     opId?: string;
 }
 
@@ -231,6 +232,7 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         opId?: string,
         wfStartMs?: number,
         wfEndMs?: number,
+        chapter?: number,
     ): void {
         // No fetch on register. Persisted peaks (if any) were hydrated at
         // reciter load; rows without persisted peaks render flat until the
@@ -242,6 +244,7 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
             endMs,
             wfStartMs: wfStartMs ?? startMs,
             wfEndMs: wfEndMs ?? endMs,
+            chapter,
             opId,
         });
     }
@@ -300,21 +303,19 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         // the next session hydrates without a round-trip.
         void _ensurePeaks(row.audioUrl, row.wfStartMs, row.wfEndMs, row.opId);
 
-        // Bind the row's logical source to the per-panel port. CBR rows
-        // hit the chapter-URL fast path; VBR rows route through the
-        // segment-clip endpoint (port handles offset translation). VBR
-        // status comes from $segData.vbr — same as the legacy
-        // `buildRangePlaybackSpec` path. Cross-chapter history rows
-        // inherit the active chapter's encoding, identical to legacy
-        // semantics; tightening that read to the row's own chapter is
-        // a follow-up.
+        // Bind the row's logical source to the per-panel port. CBR rows hit
+        // the chapter-URL fast path; VBR rows route through the segment-clip
+        // endpoint. Use the row chapter instead of the active chapter so
+        // cross-chapter history/save-preview rows keep the same VBR/CBR
+        // routing as main row playback.
         const reciter = get(selectedReciter);
-        const data = get(segData);
+        const isVbr = row.chapter != null
+            && (get(reciterVbrChapters)?.has(row.chapter) ?? false);
         port.setSource({
             audioUrl: row.audioUrl,
             cbrSrc: row.audioUrl,
             reciter: reciter || null,
-            vbr: !!data?.vbr,
+            vbr: isVbr,
         });
 
         // File-absolute spec — port owns transport.

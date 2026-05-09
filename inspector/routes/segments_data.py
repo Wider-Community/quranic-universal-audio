@@ -26,6 +26,7 @@ from services.data_loader import (
     load_detailed,
     resolve_pad,
 )
+from services.audio_meta import vbr_chapters_for_reciter
 from services.segments_query import get_chapter_data
 from utils.formatting import slug_to_name
 from utils.references import chapter_from_ref
@@ -158,6 +159,7 @@ def seg_all(reciter):
     return jsonify({
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
+        "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
         "verse_word_counts": verse_word_counts,
         # Flat ``"surah:ayah:word" -> Digital Khatt text`` map. Lets the FE
         # build per-row body text directly from ``matched_ref``, so history

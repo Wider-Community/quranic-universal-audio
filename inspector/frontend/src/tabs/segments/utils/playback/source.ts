@@ -31,17 +31,17 @@ import { _isCurrentReciterBySurah } from '../data/reciter';
  *  - `reciter` is the active reciter — accordion rows are always for the
  *    active reciter (cross-reciter History snapshots stay in their per-panel
  *    preview port and never reach this path).
- *  - `vbr` is read from the per-reciter map keyed on `seg.chapter`, so a
+ *  - `vbr` is read from the per-reciter map keyed on the row chapter, so a
  *    cross-chapter row gets ITS chapter's encoding, not the active one's.
  *  - `cbrSrc` applies the audio-proxy wrap only for `by_surah` reciters
  *    (mirrors `chapter-actions.ts:55-57`).
  *
  *  Returns null when the source can't be resolved (no reciter or empty
  *  audio_url) — callers skip the setSource call in that case. */
-export function resolveSegSource(seg: Segment): AudioSource | null {
+export function resolveSegSource(seg: Segment, chapterOverride?: number | null): AudioSource | null {
     const reciter = get(selectedReciter);
     if (!reciter || !seg.audio_url) return null;
-    const chapter = seg.chapter ?? 0;
+    const chapter = chapterOverride ?? seg.chapter ?? 0;
     const vbr = chapter > 0 && (get(reciterVbrChapters)?.has(chapter) ?? false);
     const cbrSrc = (_isCurrentReciterBySurah() && !seg.audio_url.startsWith('/api/'))
         ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(seg.audio_url)}`

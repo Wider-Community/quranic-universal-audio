@@ -16,10 +16,7 @@ vi.mock('../../../../../lib/utils/peaks-fetch', () => ({
 }));
 vi.mock('../../../stores/chapter', () => ({
     selectedReciter: writable<string | null>('test-reciter'),
-    // segData is read by buildRangePlaybackSpec to decide CBR vs VBR routing.
-    // Default to null (treated as CBR) so existing assertions keep matching;
-    // VBR-specific tests live in range-spec.test.ts.
-    segData: writable<unknown>(null),
+    reciterVbrChapters: writable<Set<number>>(new Set()),
 }));
 vi.mock('../../../stores/playback', () => ({
     playbackSpeed: writable<number>(1),
@@ -35,6 +32,7 @@ vi.mock('../../waveform/utils', () => ({
     redrawPeaksWaveforms: vi.fn(),
 }));
 
+import { reciterVbrChapters } from '../../../stores/chapter';
 import { createPreviewPlaybackContext } from '../preview';
 
 let raf: RafMock;
@@ -47,6 +45,7 @@ beforeEach(() => {
     canvas = document.createElement('canvas');
     canvas.width = 200;
     canvas.height = 50;
+    reciterVbrChapters.set(new Set());
 });
 
 afterEach(() => {
@@ -67,6 +66,25 @@ describe('PreviewPlaybackContext — toggle from idle', () => {
         expect(audio.play).toHaveBeenCalledTimes(1);
         expect(active).toEqual({ uid: 'row-1' });
         unsub();
+        ctx.dispose();
+    });
+
+    it('routes rows whose own chapter is VBR through the segment clip endpoint', async () => {
+        reciterVbrChapters.set(new Set([2]));
+        const ctx = createPreviewPlaybackContext();
+        ctx.attachAudioEl(audio as unknown as HTMLAudioElement);
+        ctx.registerRow('row-1', canvas, 'http://x/audio.mp3', 1000, 2000, undefined, undefined, undefined, 2);
+
+        ctx.toggle('row-1');
+        expect(audio.src).toContain('/api/seg/segment-clip/test-reciter');
+        expect(audio.src).toContain('start_ms=1000');
+        expect(audio.play).toHaveBeenCalledTimes(0);
+
+        audio._fireEvent('canplay');
+        await Promise.resolve();
+
+        expect(audio.play).toHaveBeenCalledTimes(1);
+        expect(audio.currentTime).toBeCloseTo(0, 5);
         ctx.dispose();
     });
 });
