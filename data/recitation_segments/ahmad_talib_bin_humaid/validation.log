@@ -1,4 +1,4 @@
-Generated: 2026-05-09 10:07:46
+Generated: 2026-05-09 10:19:14
 
 ========================================================================
   ahmad_talib_bin_humaid
@@ -12,15 +12,15 @@ Generated: 2026-05-09 10:07:46
   Silence floor: 30 ms
 
 --- Coverage ---
-  Verses found:   5559 / 6236
-  Missing verses: 2
-  Word gaps:      1 verses
+  Verses found:   5561 / 6236
+  Missing verses: 0
+  Word gaps:      0 verses
 
 --- Segments ---
-  Total:            9537
-  Single-seg:       3047
-  Multi-seg verses: 2376 (6490 segs)
-  Cross-verse keys: 111
+  Total:            9543
+  Single-seg:       3052
+  Multi-seg verses: 2376 (6491 segs)
+  Cross-verse keys: 109
   Max segs/verse:   17
 
 --- Segment Duration ---
@@ -42,57 +42,18 @@ Generated: 2026-05-09 10:07:46
   Max:       1.0000
   Below 60%: 0
   Below 80%: 0
-  Failed:    2 (no alignment)
-  Empty ASR: 64 (matched but no phonemes)
+  Failed:    0 (no alignment)
+  Empty ASR: 69 (matched but no phonemes)
 
---- Failed Alignments (2) ---
-  1:43.6 - 2:02.7  (19.05s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/021.mp3
-    asr:   l a q aˤ d Q ʔ a ŋ z a l n a: ʔ i l a j k u m k i t a: b a ŋ f i: h i ð i k rˤ u k u m ʔ a f a l a: t a ʕ q i l u: n w a k a m q aˤ sˤ aˤ m n a: m i ŋ q aˤ rˤ j a t i ŋ k a: n a t ðˤ aˤ: l i m a t a w̃ a ʔ a ŋ ʃ a ʔ n a: b a ʕ d a h a: q aˤ w m a n ʔ a: x aˤ r i: n
-  1:07.2 - 1:18.9  (11.75s)
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/058.mp3
-    asr:   ʔ a w a ll a ʔ w a ll a ð i: n a j u ðˤ aˤ: h i rˤ u: n a m i ñ i s a: ʔ i h i m θ u m̃ a j a ʕ u: d u: n a l i m a: q aˤ: l u: f a t a ħ r i: ɣ u rˤ aˤ q aˤ b a h
+--- Failed Alignments (0) ---
 
---- Missing Verses (2) ---
-  MISS  21:10  (8 words)
-  MISS  21:11  (10 words)
-
---- Missing Words (1) ---
-  58:3  @ 5:47.0 - 5:56.1
-    missing words: [1, 2, 3, 4, 5, 6, 7, 8]
-    audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/058.mp3
-
---- Cross-verse (10) ---
+--- Cross-verse (2) ---
   [1.0000]  19:88:1-19:89:4  @ 15:45.1 - 15:52.5
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/019.mp3
            text:  وَقَالُوا۟ ٱتَّخَذَ ٱلرَّحْمَـٰنُ وَلَدًا لَّقَدْ جِئْتُمْ شَيْـًٔا إِدًّا
   [1.0000]  35:6:1-35:7:13  @ 1:06.6 - 1:27.4
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
            text:  إِنَّ ٱلشَّيْطَـٰنَ لَكُمْ عَدُوٌّ فَٱتَّخِذُوهُ عَدُوًّا ۚ إِنَّمَا يَدْعُوا۟ حِزْبَهُۥ لِيَكُونُوا۟ مِنْ أَصْحَـٰبِ ٱلسَّعِيرِ ٱلَّذِينَ كَفَرُوا۟ لَهُمْ عَذَابٌ شَدِيدٌ ۖ وَٱلَّذِينَ ءَامَنُوا۟ وَعَمِلُوا۟ ٱلصَّـٰلِحَـٰتِ لَهُم مَّغْفِرَةٌ وَأَجْرٌ كَبِيرٌ
-  [0.9100]  79:3:1-79:4:2  @ 0:14.6 - 0:21.6
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/079.mp3
-           text:  وَٱلسَّـٰبِحَـٰتِ سَبْحًا فَٱلسَّـٰبِقَـٰتِ سَبْقًا
-  [0.9700]  84:7:1-84:8:4  @ 0:42.1 - 0:53.3
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/084.mp3
-           text:  فَأَمَّا مَنْ أُوتِىَ كِتَـٰبَهُۥ بِيَمِينِهِۦ فَسَوْفَ يُحَاسَبُ حِسَابًا يَسِيرًا
-  [0.9400]  85:21:1-85:22:3  @ 2:24.9 - 2:35.0
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/085.mp3
-           text:  بَلْ هُوَ قُرْءَانٌ مَّجِيدٌ فِى لَوْحٍ مَّحْفُوظٍ
-  [0.9200]  88:15:1-88:16:2  @ 1:10.9 - 1:18.3
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/088.mp3
-           text:  وَنَمَارِقُ مَصْفُوفَةٌ وَزَرَابِىُّ مَبْثُوثَةٌ
-  [0.8600]  89:1:1-89:3:2  @ 0:05.6 - 0:12.1
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/089.mp3
-           text:  وَٱلْفَجْرِ وَلَيَالٍ عَشْرٍ وَٱلشَّفْعِ وَٱلْوَتْرِ
-  [1.0000]  89:29:1-89:30:2  @ 3:26.5 - 3:34.5
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/089.mp3
-           text:  فَٱدْخُلِى فِى عِبَـٰدِى وَٱدْخُلِى جَنَّتِى
-  [1.0000]  109:1:1-109:3:5  @ 0:05.5 - 0:16.8
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/109.mp3
-           text:  قُلْ يَـٰٓأَيُّهَا ٱلْكَـٰفِرُونَ لَآ أَعْبُدُ مَا تَعْبُدُونَ وَلَآ أَنتُمْ عَـٰبِدُونَ مَآ أَعْبُدُ
-  [1.0000]  112:1:1-112:2:2  @ 0:05.5 - 0:10.2
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/112.mp3
-           text:  قُلْ هُوَ ٱللَّهُ أَحَدٌ ٱللَّهُ ٱلصَّمَدُ
 
 --- Muqatta'at (29) ---
   [0.8000]  2:1:1-2:1:1  @ 0:03.7 - 0:11.0
@@ -127,7 +88,7 @@ Generated: 2026-05-09 10:07:46
            text:  طه
   ... and 19 more
 
---- Qalqala (541) ---
+--- Qalqala (542) ---
   [0.9100]  4:171:35-4:171:38  [د]  @ 1:03:09.3 - 1:03:14.8
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
            text:  إِنَّمَا ٱللَّهُ إِلَـٰهٌ وَٰحِدٌ ۖ
@@ -158,9 +119,9 @@ Generated: 2026-05-09 10:07:46
   [0.9900]  5:23:1-5:23:11  [ب]  @ 13:12.8 - 13:22.9
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/005.mp3
            text:  قَالَ رَجُلَانِ مِنَ ٱلَّذِينَ يَخَافُونَ أَنْعَمَ ٱللَّهُ عَلَيْهِمَا ٱدْخُلُوا۟ عَلَيْهِمُ ٱلْبَابَ
-  ... and 531 more
+  ... and 532 more
 
---- Empty ASR Phonemes (64) ---
+--- Empty ASR Phonemes (69) ---
   [1.0000]  4:171:1-4:171:12  @ 1:02:35.4 - 1:02:44.6
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
            text:  يَـٰٓأَهْلَ ٱلْكِتَـٰبِ لَا تَغْلُوا۟ فِى دِينِكُمْ وَلَا تَقُولُوا۟ عَلَى ٱللَّهِ إِلَّا ٱلْحَقَّ ۚ
@@ -191,21 +152,21 @@ Generated: 2026-05-09 10:07:46
   [1.0000]  20:24:1-20:24:5  @ 2:22.6 - 2:26.2
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
            text:  ٱذْهَبْ إِلَىٰ فِرْعَوْنَ إِنَّهُۥ طَغَىٰ
-  ... and 54 more
+  ... and 59 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
 
 --- Category Counts (machine-readable) ---
-  failed 2
-  missing_verses 2
-  missing_words 1
+  failed 0
+  missing_verses 0
+  missing_words 0
   structural_errors 0
   low_confidence 0
   repetitions 0
   audio_bleeding 0
   boundary_adj 0
-  cross_verse 10
-  qalqala 541
+  cross_verse 2
+  qalqala 542
   muqattaat 29
 
