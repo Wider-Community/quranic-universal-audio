@@ -187,13 +187,11 @@ export function _playRange(startMs: number, endMs: number): void {
     }
 
     // Ensure the port is covering the requested file-absolute window. In
-    // edit mode the caller (enterTrimMode/enterSplitMode) has already
-    // pre-loaded `[seg.time_start, seg.time_end]` with `EDIT_LOAD_PAD_MS`,
-    // so this is the no-op fast path for split-left/right toggles and
-    // trim handle nudges — no fresh ffmpeg invocation per press. CBR
-    // chapters always cover (window.endMs is Infinity), so this is also
-    // a no-op there. Only edit-mode drags that push past the loaded
-    // edge actually swap; in that case `ready` resolves on canplay.
+    // edit mode the caller has already pre-loaded the segment with post-roll.
+    // CBR chapters always cover (window.endMs is Infinity). VBR only reuses
+    // that clip when the requested playback start matches the loaded clip
+    // start; a new start gets a fresh clip so play begins from clip time 0
+    // rather than seeking inside a streamed response.
     const { ready, swapped } = segPort.loadCovering(startMs, endMs);
 
     const doPlay = (): void => {

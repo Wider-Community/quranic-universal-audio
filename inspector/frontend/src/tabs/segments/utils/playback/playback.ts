@@ -139,9 +139,9 @@ function _onRangeBoundary(ev: { reason: string }): void {
         // — otherwise the port still has the prior seg's chapter source and
         // the clip URL builds against the wrong audio. setSource is a no-op
         // when the source is unchanged (same-chapter advance).
-        const nextSource = resolveSegSource(next);
-        if (nextSource) segPort.setSource(nextSource);
         const nextChapter = next.chapter ?? active.chapter;
+        const nextSource = resolveSegSource(next, nextChapter);
+        if (nextSource) segPort.setSource(nextSource);
         setPlayingSegment({ chapter: nextChapter, index: next.index });
         segCurrentIdx.set(next.index);
         playEndMs.set(next.time_end);
@@ -193,7 +193,7 @@ export function playFromSegment(
     // no-op for the active chapter; for cross-chapter rows it invalidates
     // `_window` so the next `loadCovering` issues a fresh swap against
     // the row's chapter URL.
-    const segSource = resolveSegSource(seg);
+    const segSource = resolveSegSource(seg, resolvedChapter);
     if (segSource) segPort.setSource(segSource);
 
     // Autoplay is intentionally main-list only: accordion plays always stop

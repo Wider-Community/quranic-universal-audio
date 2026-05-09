@@ -80,10 +80,11 @@ export interface LoadCoveringResult {
 }
 
 export interface AudioPortOptions {
-    /** Default coverage padding (ms) added to each side of every
-     *  `loadCovering` call when the caller doesn't pass one. CBR ignores;
-     *  VBR uses to widen clip windows so subsequent in-window operations
-     *  don't trigger a fresh ffmpeg invocation. Default 0. */
+    /** Default coverage padding (ms) for `loadCovering` when the caller
+     *  doesn't pass one. CBR ignores it; VBR uses it only as post-roll.
+     *  VBR clips must still begin at the requested playback start so the
+     *  browser plays from clip time 0 rather than seeking inside a streamed
+     *  clip. Default 0. */
     defaultPadMs?: number;
 }
 
@@ -227,13 +228,15 @@ export class AudioPort {
     // -----------------------------------------------------------------------
 
     /** Ensure the audio element has a src that covers the requested
-     *  file-absolute window. Idempotent — if the current `_window` already
-     *  covers `[startMs - pad, endMs + pad]`, returns a sync-resolved
-     *  `ready` and `swapped: false`. Otherwise swaps the src, attaches a
-     *  canplay listener, and resolves `ready` when canplay fires.
+     *  file-absolute window. Idempotent — if the current `_window` is reusable
+     *  for the requested transport/window, returns a sync-resolved `ready` and
+     *  `swapped: false`. For CBR, reusable means broad coverage. For VBR,
+     *  reusable also requires the same clip start, because playback must begin
+     *  from clip time 0. Otherwise swaps the src, attaches a canplay listener,
+     *  and resolves `ready` when canplay fires.
      *
-     *  Padding is per-call — not stored. A subsequent zero-pad call that
-     *  fits inside the existing wider window no-ops correctly.
+     *  Padding is per-call — not stored. Under VBR it extends only the clip
+     *  end, never the start.
      *
      *  Throws if no element is attached or no source is bound. */
     loadCovering(startMs: number, endMs: number, pad?: number): LoadCoveringResult {
@@ -259,7 +262,12 @@ export class AudioPort {
         let desiredUrl: string;
         let desiredWin: LoadedWindow;
         if (useVbr) {
-            const clipStart = Math.max(0, needStart);
+            // VBR correctness depends on avoiding browser-side seeks. The
+            // segment-clip endpoint is a streamed response, and a seek into a
+            // not-yet-buffered clip can stall or be ignored. Keep the clip
+            // start pinned to the requested playback start; padding is
+            // post-roll only so boundary flushes have real audio to drain.
+            const clipStart = Math.max(0, startMs);
             const clipEnd = needEnd;
             desiredUrl = buildClipUrl(src.reciter as string, src.audioUrl, clipStart, clipEnd);
             desiredWin = {
@@ -290,8 +298,7 @@ export class AudioPort {
         // `swapped: true` so the caller awaits canplay before playing.
         if (this._window
             && this._window.isClip === desiredWin.isClip
-            && this._window.startMs <= needStart
-            && this._window.endMs >= needEnd) {
+            && this._canReuseWindow(this._window, desiredWin, needStart, needEnd)) {
             if (this.pendingPromise) {
                 return { ready: this.pendingPromise, swapped: true, window: this._window };
             }
@@ -324,6 +331,22 @@ export class AudioPort {
 
     get window(): LoadedWindow | null {
         return this._window;
+    }
+
+    private _canReuseWindow(
+        current: LoadedWindow,
+        desired: LoadedWindow,
+        needStart: number,
+        needEnd: number,
+    ): boolean {
+        if (desired.isClip) {
+            // For VBR clips, "covering" is not enough. Reusing a clip whose
+            // start is earlier than the requested start forces currentTime to
+            // seek inside the server stream, which is exactly the VBR failure
+            // mode this abstraction is supposed to hide.
+            return current.startMs === desired.startMs && current.endMs >= needEnd;
+        }
+        return current.startMs <= needStart && current.endMs >= needEnd;
     }
 
     // -----------------------------------------------------------------------

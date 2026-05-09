@@ -49,6 +49,7 @@
     export let validationCategory: string | null = null;
     export let instanceRole: 'main' | 'accordion' | 'history' | 'preview' = 'accordion';
     export let readOnly: boolean = false;
+    export let fallbackChapter: number = 0;
 
     // Which side the user most recently clicked. Threaded into TimeEdit as
     // `autoFocusGroup` so the clicked side promotes its first editable group
@@ -114,14 +115,14 @@
         // trim mode so the user can Apply/Cancel as normal, matching the
         // Adjust button behavior.
         const chStr = get(selectedChapter);
-        const chapter = seg.chapter || parseInt(chStr);
+        const chapter = seg.chapter || fallbackChapter || parseInt(chStr);
         const currentChapter = parseInt(chStr);
         const chapterSegs = chapter === currentChapter ? getCurrentChapterSegs() : getChapterSegments(chapter);
         const cfg = get(segConfig);
         const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
         const peaksDuration = getWaveformPeaks(audioUrl)?.duration_ms;
         void computeTrimBounds({ ...seg, chapter }, chapterSegs, cfg, peaksDuration);
-        enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, mountId);
+        enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, mountId, chapter);
     }
 
     function commitStart(newMs: number): void {

@@ -27,6 +27,9 @@ interface Variant {
     /** ms added to file-absolute time to get clip-relative `audio.currentTime`.
      *  CBR variant uses 0; VBR variant uses 5000 (clip starts at segment 5s). */
     offset: number;
+    /** CBR can seek within a loaded chapter. VBR must reload when the desired
+     *  playback start moves inside the existing clip, so play begins at clip 0. */
+    reusesSubranges: boolean;
     setup: (port: AudioPort) => Promise<void>;
 }
 
@@ -34,6 +37,7 @@ const VARIANTS: Variant[] = [
     {
         name: 'CBR',
         offset: 0,
+        reusesSubranges: true,
         async setup(port) {
             port.setSource({ audioUrl: 'http://x/seg.mp3', reciter: null, vbr: false });
             const r = port.loadCovering(0, 10_000);
@@ -44,6 +48,7 @@ const VARIANTS: Variant[] = [
     {
         name: 'VBR (offset 5000)',
         offset: 5000,
+        reusesSubranges: false,
         async setup(port) {
             port.setSource({ audioUrl: 'http://x/seg.mp3', reciter: 'r1', vbr: true });
             const r = port.loadCovering(5000, 15_000);
@@ -55,7 +60,7 @@ const VARIANTS: Variant[] = [
     },
 ];
 
-describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, setup }) => {
+describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubranges, setup }) => {
     let raf: RafMock;
     let audio: AudioStub;
     let port: AudioPort;
@@ -156,7 +161,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, setup }) =>
         it('seeks back to startMs and reports loop boundary', () => {
             const onBoundary = vi.fn();
             const r = buildRange({
-                range: { startMs: 200, endMs: 1000 },
+                range: { startMs: 0, endMs: 1000 },
                 policy: { kind: 'loop' },
                 onBoundary,
             });
@@ -166,7 +171,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, setup }) =>
 
             expect(audio.pause).not.toHaveBeenCalled();
             // Port-mode loop seek: port.seek(range.startMs) → clip-relative.
-            expect(audio.currentTime).toBeCloseTo(0.2, 5);
+            expect(audio.currentTime).toBeCloseTo(0, 5);
             expect(onBoundary).toHaveBeenCalledTimes(1);
             expect(onBoundary.mock.calls[0]?.[0]).toMatchObject({ reason: 'loop' });
             expect(r.isRunning()).toBe(true);
@@ -198,7 +203,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, setup }) =>
     // -----------------------------------------------------------------------
 
     describe('advance policy', () => {
-        it('pauses, gaps, then resumes at nextRange.startMs', () => {
+        it('pauses, gaps, then resumes at nextRange.startMs', async () => {
             vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
             const next: AudioRangeSpec = { startMs: offset + 2000, endMs: offset + 3000 };
             const onBoundary = vi.fn();
@@ -220,9 +225,15 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, setup }) =>
 
             vi.advanceTimersByTime(200);
 
-            // After gap: port.seekAndPlay(next.startMs) → file-absolute 2000
-            // translated to clip-relative (file - offset) / 1000.
-            expect(audio.currentTime).toBeCloseTo(2.0, 5);
+            if (!reusesSubranges) {
+                // VBR reloads to a clip whose byte 0 is nextRange.startMs.
+                audio._fireEvent('canplay');
+                await Promise.resolve();
+            }
+
+            // After gap: CBR seeks inside the already-loaded chapter; VBR
+            // swaps to a new clip and starts from clip time 0.
+            expect(audio.currentTime).toBeCloseTo(reusesSubranges ? 2.0 : 0, 5);
             expect(audio.play.mock.calls.length).toBeGreaterThan(playBefore);
         });
 
@@ -363,13 +374,23 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, setup }) =>
     // -----------------------------------------------------------------------
 
     describe('start - already covered', () => {
-        it('plays immediately without canplay wait', () => {
+        it('plays immediately without canplay wait when the transport can reuse the loaded window', async () => {
             const r = buildRange({ range: { startMs: 100, endMs: 1000 } });
             r.start();
-            // Pre-load (the variant.setup) covered [0..10000] file-absolute,
-            // so this start() takes the no-swap fast path: seek + play sync.
-            expect(audio.play).toHaveBeenCalledTimes(1);
-            expect(audio.currentTime).toBeCloseTo(0.1, 5);
+            if (reusesSubranges) {
+                // CBR pre-load covered [0..10000] file-absolute, so this takes
+                // the no-swap fast path: seek + play sync.
+                expect(audio.play).toHaveBeenCalledTimes(1);
+                expect(audio.currentTime).toBeCloseTo(0.1, 5);
+            } else {
+                // VBR must not seek 100ms into the old clip. It waits for a
+                // fresh clip starting at the requested file-absolute time.
+                expect(audio.play).toHaveBeenCalledTimes(0);
+                audio._fireEvent('canplay');
+                await Promise.resolve();
+                expect(audio.play).toHaveBeenCalledTimes(1);
+                expect(audio.currentTime).toBeCloseTo(0, 5);
+            }
         });
     });
 });

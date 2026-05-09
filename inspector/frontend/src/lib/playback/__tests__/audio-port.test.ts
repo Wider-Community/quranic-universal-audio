@@ -100,14 +100,25 @@ describe('AudioPort — VBR routing', () => {
         await r.ready;
     });
 
-    it('subsequent window-inside-clip is a no-op', async () => {
+    it('subsequent VBR request with the same start and shorter end is a no-op', async () => {
+        port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: true });
+        const r1 = port.loadCovering(1000, 2000);
+        audio._fireEvent('canplay');
+        await r1.ready;
+
+        const r2 = port.loadCovering(1000, 1800);
+        expect(r2.swapped).toBe(false);
+    });
+
+    it('VBR request inside an earlier clip reloads so playback can start at clip time 0', async () => {
         port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: true });
         const r1 = port.loadCovering(1000, 2000);
         audio._fireEvent('canplay');
         await r1.ready;
 
         const r2 = port.loadCovering(1500, 1800);
-        expect(r2.swapped).toBe(false);
+        expect(r2.swapped).toBe(true);
+        expect(audio.src).toContain('start_ms=1500');
     });
 
     it('window-outside-clip triggers a fresh swap', async () => {
@@ -136,32 +147,32 @@ describe('AudioPort — VBR routing', () => {
 // ---------------------------------------------------------------------------
 
 describe('AudioPort — padding', () => {
-    it('expands the loaded clip window by pad on each side (VBR)', async () => {
+    it('keeps VBR clip start at playback start and applies pad as post-roll', async () => {
         port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: true });
         const r = port.loadCovering(1000, 2000, 200);
-        expect(audio.src).toContain('start_ms=800');
+        expect(audio.src).toContain('start_ms=1000');
         expect(audio.src).toContain('end_ms=2200');
-        expect(r.window).toMatchObject({ startMs: 800, endMs: 2200, offsetMs: 800 });
+        expect(r.window).toMatchObject({ startMs: 1000, endMs: 2200, offsetMs: 1000 });
         audio._fireEvent('canplay');
         await r.ready;
     });
 
-    it('subsequent zero-pad call inside the wider window no-ops', async () => {
+    it('subsequent zero-pad VBR call with same start inside the post-roll window no-ops', async () => {
         port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: true });
         const r1 = port.loadCovering(1000, 2000, 200);
         audio._fireEvent('canplay');
         await r1.ready;
 
-        const r2 = port.loadCovering(900, 2100, 0);
+        const r2 = port.loadCovering(1000, 2100, 0);
         expect(r2.swapped).toBe(false);
     });
 
-    it('clamps clipStart to 0 when pad would overshoot file start', async () => {
+    it('does not move VBR clip start earlier when pad would overshoot file start', async () => {
         port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: true });
         const r = port.loadCovering(100, 1000, 2000);
-        expect(audio.src).toContain('start_ms=0');
-        expect(r.window?.startMs).toBe(0);
-        expect(r.window?.offsetMs).toBe(0);
+        expect(audio.src).toContain('start_ms=100');
+        expect(r.window?.startMs).toBe(100);
+        expect(r.window?.offsetMs).toBe(100);
         audio._fireEvent('canplay');
         await r.ready;
     });
@@ -171,7 +182,7 @@ describe('AudioPort — padding', () => {
         padded.attachElement(audio as unknown as HTMLAudioElement);
         padded.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: true });
         const r = padded.loadCovering(1000, 2000);
-        expect(audio.src).toContain('start_ms=500');
+        expect(audio.src).toContain('start_ms=1000');
         expect(audio.src).toContain('end_ms=2500');
         audio._fireEvent('canplay');
         await r.ready;
@@ -449,9 +460,9 @@ describe('AudioPort — covers', () => {
         const r = port.loadCovering(1000, 2000, 100);
         audio._fireEvent('canplay');
         await r.ready;
-        expect(port.covers(900, 2100)).toBe(true);
-        expect(port.covers(800, 2100)).toBe(false);
-        expect(port.covers(900, 2200)).toBe(false);
+        expect(port.covers(1000, 2100)).toBe(true);
+        expect(port.covers(900, 2100)).toBe(false);
+        expect(port.covers(1000, 2200)).toBe(false);
     });
 });
 
