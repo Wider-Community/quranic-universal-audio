@@ -1,0 +1,13 @@
+{
+  "_meta": {
+    "created_at": "2026-05-08T10:24:14Z",
+    "aligner_model": "quran_aligner_model",
+    "method": "kalpy",
+    "beam": 2,
+    "reciter": "mishary_alafasi",
+    "source_file_hash": "sha256:c61d3cb3a32511c08aa511426a18c57de52c4066cebcffe6cea63f4f51cd60bb"
+  },
+  "failures": [
+    "838346a3-81ba-5c44-84df-e64c64d46351"
+  ]
+}

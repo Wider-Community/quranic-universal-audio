@@ -19,6 +19,7 @@ import type {
 } from '../../../../lib/types/api';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import {
+    reciterVbrChapters,
     segAllData,
     selectedChapter,
     selectedReciter,
@@ -92,6 +93,7 @@ export async function reloadCurrentReciter(): Promise<void> {
             console.error('Error loading all segments:', (allResult.value as any).error);
         } else {
             segAllData.set(allResult.value);
+            reciterVbrChapters.set(new Set(allResult.value.reciter_vbr_chapters ?? []));
             _rewriteAudioUrls();
             preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
             if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);

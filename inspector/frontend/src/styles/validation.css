@@ -85,37 +85,6 @@
     max-width: 180px;
 }
 
-.qalqala-pad-row {
-    flex-wrap: wrap;
-}
-.qalqala-pad-row .val-action-btn {
-    margin-left: 4px;
-}
-
-.val-card-issue-label + .qalqala-pad-end-field,
-.seg-row + .qalqala-pad-end-field {
-    margin-top: 4px;
-}
-.qalqala-pad-end-field {
-    padding: 2px 12px 6px;
-    font-size: 0.75rem;
-}
-.qalqala-pad-end-label {
-    color: #aaa;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.qalqala-pad-end-input {
-    width: 100px;
-    padding: 2px 6px;
-    font-size: 0.75rem;
-    background: #0f0f23;
-    border: 1px solid #444;
-    border-radius: 4px;
-    color: #ddd;
-}
-
 .seg-validation .val-items {
     display: flex;
     flex-wrap: wrap;

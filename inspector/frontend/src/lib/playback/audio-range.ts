@@ -2,31 +2,56 @@
  * AudioRange — unified [startMs, endMs] window playback primitive.
  *
  * Owns ONE rAF loop and ONE boundary check per frame against a caller-supplied
- * range on a caller-supplied HTMLAudioElement. Pluggable boundary policy
+ * range on a caller-supplied audio surface. Pluggable boundary policy
  * (stop / loop / advance) handles the three behaviors the inspector needs:
  * single-segment play, trim/split loop preview, and autoplay advance.
  *
+ * Two construction modes:
+ *
+ *   - **Port mode (preferred)**: pass `port: AudioPort`. Spec is purely
+ *     file-absolute (`{startMs, endMs}`). The port owns transport
+ *     (chapter URL vs server-clip URL), src-swap, and offset bookkeeping;
+ *     AudioRange just enforces the boundary against `port.currentTimeMs()`.
+ *   - **Legacy mode**: pass `audioEl: HTMLAudioElement`. Spec may be
+ *     clip-relative when `clipFileOffsetMs` is set; AudioRange does its
+ *     own canplay-based src-swap. Retained transitionally so consumers
+ *     can migrate one at a time; deleted in the final cleanup phase.
+ *
  * Composes existing infra:
  *   - `lib/utils/animation.ts::createAnimationLoop` — rAF wrapper.
- *   - `lib/utils/audio.ts::safePlay` / `audioSrcMatches`.
+ *   - `lib/utils/audio.ts::safePlay` / `audioSrcMatches` (legacy mode).
+ *   - `lib/playback/audio-graph.ts::cutAudio` / `uncutAudio` (legacy mode).
  *
  * No store imports — callers wire `onTick` / `onBoundary` to their own state.
  *
- * Caller contract: only ONE AudioRange may run on a given audio element at a
- * time. `enterEditMode` must `dispose()` the segments-main range before
- * starting an edit-preview range; `exitEditMode` does the reverse.
+ * Caller contract: only ONE AudioRange may run on a given audio element /
+ * port at a time. `enterEditMode` must `dispose()` the segments-main range
+ * before starting an edit-preview range; `exitEditMode` does the reverse.
  */
 
 import { type AnimationLoop,createAnimationLoop } from '../utils/animation';
 import { audioSrcMatches, safePlay } from '../utils/audio';
 import { cutAudio, uncutAudio } from './audio-graph';
+import type { AudioPort } from './audio-port';
 
 export interface AudioRangeSpec {
+    /** Window start. **Port mode**: file-absolute ms. **Legacy**: clip-
+     *  relative when `clipFileOffsetMs` is set, file-absolute otherwise. */
     startMs: number;
+    /** Window end. Same coordinate space as `startMs`. */
     endMs: number;
-    /** When set and !audioSrcMatches(audioEl.src, src), `start()` swaps the
-     *  audio element's src and waits for `canplay` before seeking + playing. */
+    /** Legacy mode only — when set and `!audioSrcMatches(audioEl.src, src)`,
+     *  `start()` swaps the audio element's src and waits for `canplay`
+     *  before seeking + playing. Ignored in port mode (the port owns
+     *  src-swap via `loadCovering`). */
     src?: string | null;
+    /** Legacy mode only — when set, `audioEl.currentTime` is clip-relative;
+     *  file-absolute time is `clipFileOffsetMs + audioEl.currentTime * 1000`.
+     *  Used by the rAF tick so the playhead and segment-detection see
+     *  file-absolute time while the audio element seeks against the byte-0
+     *  clip. Undefined or 0 means the audio plays the chapter file directly.
+     *  Ignored in port mode (the port owns offset bookkeeping). */
+    clipFileOffsetMs?: number;
 }
 
 export type RangePolicy =
@@ -48,7 +73,10 @@ export interface BoundaryEvent {
 }
 
 export interface AudioRangeOptions {
-    audioEl: HTMLAudioElement;
+    /** Provide exactly ONE of `port` or `audioEl`. Port-mode is preferred;
+     *  audioEl is the legacy path retained for transitional consumers. */
+    port?: AudioPort;
+    audioEl?: HTMLAudioElement;
     range: AudioRangeSpec;
     policy: RangePolicy;
     onTick?: (timeMs: number) => void;
@@ -59,6 +87,7 @@ export interface AudioRangeOptions {
 }
 
 export class AudioRange {
+    private readonly port: AudioPort | null;
     private readonly audioEl: HTMLAudioElement;
     private range: AudioRangeSpec;
     private policy: RangePolicy;
@@ -73,11 +102,19 @@ export class AudioRange {
      *  in the legacy `play-range.ts:123`. */
     private seekedThisFrame = false;
     private gapTimeout: ReturnType<typeof setTimeout> | null = null;
+    /** Legacy-mode canplay handler. Port-mode delegates to
+     *  `port.loadCovering(...).ready`. */
     private canplayHandler: (() => void) | null = null;
     private disposed = false;
 
     constructor(opts: AudioRangeOptions) {
-        this.audioEl = opts.audioEl;
+        if (opts.port && opts.audioEl) {
+            throw new Error('AudioRange: pass exactly one of port / audioEl');
+        }
+        this.port = opts.port ?? null;
+        const el = opts.port?.element ?? opts.audioEl ?? null;
+        if (!el) throw new Error('AudioRange: port has no element / audioEl missing');
+        this.audioEl = el;
         this.range = opts.range;
         this.policy = opts.policy;
         this.onTick = opts.onTick;
@@ -92,6 +129,10 @@ export class AudioRange {
 
     start(): void {
         if (this.disposed) return;
+        if (this.port) {
+            this._startWithPort(this.range);
+            return;
+        }
         const { src } = this.range;
         if (src && !audioSrcMatches(this.audioEl.src, src)) {
             this._loadAndStart(this.range);
@@ -133,7 +174,7 @@ export class AudioRange {
         // Repros as silent audio after auto-next/auto-random in the
         // Timestamps tab, where AudioPlayer.load() drives the next play()
         // (so AudioRange's internal _seekAndPlay → uncutAudio never runs).
-        uncutAudio(this.audioEl);
+        this._uncut();
     }
 
     setPolicy(p: RangePolicy): void {
@@ -151,7 +192,7 @@ export class AudioRange {
         // Lift any in-flight gain ramp before another path (edit-preview,
         // direct seek) plays this element. Without this, a dispose that
         // lands mid-cut would leave the next play() silent.
-        uncutAudio(this.audioEl);
+        this._uncut();
     }
 
     // -----------------------------------------------------------------------
@@ -165,20 +206,49 @@ export class AudioRange {
         // We just don't tick onTick or check the boundary — those resume on unpause.
         if (this.audioEl.paused) return;
 
-        const timeMs = this.audioEl.currentTime * 1000;
+        // Coordinate space:
+        //   - Port mode: file-absolute everywhere. `port.currentTimeMs()`
+        //     applies the offset; `range.startMs/endMs` are file-absolute.
+        //   - Legacy mode: `audioEl.currentTime` is in the same space as
+        //     `range.startMs/endMs` (clip-relative when `clipFileOffsetMs`
+        //     is set, file-absolute otherwise). Boundary firing uses this
+        //     value directly; `onTick` callers want file-absolute time.
+        let cmpMs: number;  // value compared against range.endMs
+        let fileMs: number; // value passed to onTick
+        if (this.port) {
+            fileMs = this.port.currentTimeMs();
+            cmpMs = fileMs;
+        } else {
+            const clipMs = this.audioEl.currentTime * 1000;
+            cmpMs = clipMs;
+            fileMs = this.range.clipFileOffsetMs != null
+                ? this.range.clipFileOffsetMs + clipMs
+                : clipMs;
+        }
 
-        // Seeked-this-frame guard: clear once currentTime has dropped below
+        // Seeked-this-frame guard: clear once cmp has dropped below
         // endMs at least once after a loop seek-back.
-        if (this.seekedThisFrame && timeMs < this.range.endMs) {
+        if (this.seekedThisFrame && cmpMs < this.range.endMs) {
             this.seekedThisFrame = false;
         }
 
-        if (timeMs >= this.range.endMs && !this.seekedThisFrame) {
+        if (cmpMs >= this.range.endMs && !this.seekedThisFrame) {
             return this._handleBoundary();
         }
 
-        this.onTick?.(timeMs);
+        this.onTick?.(fileMs);
         return;
+    }
+
+    /** Return file-absolute current time in ms, accounting for clip offset.
+     *  Callers outside the rAF tick (e.g. timeupdate handler) read this so
+     *  they see the same coordinate space the playhead draws in. */
+    getCurrentTimeMs(): number {
+        if (this.port) return this.port.currentTimeMs();
+        const clipMs = this.audioEl.currentTime * 1000;
+        return this.range.clipFileOffsetMs != null
+            ? this.range.clipFileOffsetMs + clipMs
+            : clipMs;
     }
 
     private _handleBoundary(): boolean | void {
@@ -189,7 +259,7 @@ export class AudioRange {
                 return false;
             }
             case 'loop': {
-                this.audioEl.currentTime = this.range.startMs / 1000;
+                this._seekClip(this.range.startMs);
                 this.seekedThisFrame = true;
                 this.onBoundary?.({ reason: 'loop' });
                 return;
@@ -221,6 +291,11 @@ export class AudioRange {
      *  the audio element (set in `lib/components/AudioElement.svelte`)
      *  and matching CORS headers from the audio route. */
     private _pauseAndFlush(): void {
+        if (this.port) {
+            this.port.pauseAndFlush();
+            this.port.seek(this.range.endMs);
+            return;
+        }
         cutAudio(this.audioEl);
         this.audioEl.pause();
         this.audioEl.currentTime = this.range.endMs / 1000;
@@ -237,6 +312,10 @@ export class AudioRange {
             if (this.disposed) return;
             this.range = next;
             this.seekedThisFrame = false;
+            if (this.port) {
+                this._startWithPort(next);
+                return;
+            }
             if (next.src && !audioSrcMatches(this.audioEl.src, next.src)) {
                 this._loadAndStart(next);
             } else {
@@ -254,7 +333,52 @@ export class AudioRange {
     }
 
     // -----------------------------------------------------------------------
-    // Internal: src-swap + seek + play
+    // Port-mode helpers
+    // -----------------------------------------------------------------------
+
+    private _startWithPort(spec: AudioRangeSpec): void {
+        if (!this.port) return;
+        const { ready, swapped } = this.port.loadCovering(spec.startMs, spec.endMs);
+        if (!swapped) {
+            this._seekAndPlayWithPort(spec.startMs);
+            if (!this.loop.running()) this.loop.start();
+            return;
+        }
+        // Async swap: defer seek + play until canplay resolves. The port
+        // detaches its own canplay listener; AbortError bubbles when a
+        // newer load supersedes this one.
+        ready.then(() => {
+            if (this.disposed) return;
+            this._seekAndPlayWithPort(spec.startMs);
+            if (!this.loop.running()) this.loop.start();
+        }).catch((e: unknown) => {
+            if (e && (e as { name?: string }).name !== 'AbortError') console.error(e);
+        });
+    }
+
+    private _seekAndPlayWithPort(fileMs: number): void {
+        if (!this.port) return;
+        if (this.playbackRate) this.port.setPlaybackRate(this.playbackRate());
+        this.port.seekAndPlay(fileMs);
+    }
+
+    private _seekClip(startMs: number): void {
+        if (this.port) {
+            // startMs is file-absolute under port mode.
+            this.port.seek(startMs);
+            return;
+        }
+        // Legacy: clip-relative or file-absolute depending on clipFileOffsetMs.
+        this.audioEl.currentTime = startMs / 1000;
+    }
+
+    private _uncut(): void {
+        if (this.port) { this.port.uncut(); return; }
+        uncutAudio(this.audioEl);
+    }
+
+    // -----------------------------------------------------------------------
+    // Internal: src-swap + seek + play (legacy mode)
     // -----------------------------------------------------------------------
 
     private _loadAndStart(spec: AudioRangeSpec): void {

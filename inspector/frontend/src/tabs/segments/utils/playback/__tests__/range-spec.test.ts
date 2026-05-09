@@ -2,7 +2,7 @@ import { describe, expect,it } from 'vitest';
 
 import type { Segment } from '../../../../../lib/types/domain';
 import { AUTOPLAY_GAP_PAUSE_MS } from '../../constants';
-import { buildSegPolicy, buildSegRangeSpec, resolveSegNextRange } from '../range-spec';
+import { buildSegmentClipUrl, buildSegPolicy, buildSegRangeSpec, resolveSegNextRange } from '../range-spec';
 
 function makeSegment(overrides: Partial<Segment> = {}): Segment {
     return {
@@ -12,7 +12,6 @@ function makeSegment(overrides: Partial<Segment> = {}): Segment {
         time_end: 1000,
         matched_ref: '1:1:1-1:1:1',
         matched_text: 'x',
-        display_text: 'x',
         confidence: 1.0,
         audio_url: 'http://x/seg.mp3',
         ...overrides,
@@ -20,7 +19,10 @@ function makeSegment(overrides: Partial<Segment> = {}): Segment {
 }
 
 describe('buildSegRangeSpec', () => {
-    it('emits {startMs, endMs, src} from segment fields', () => {
+    // Spec is file-absolute regardless of CBR/VBR — the AudioPort owns
+    // transport (chapter URL vs server-clip URL) and offset translation.
+    // Per-transport routing is verified in audio-port.test.ts.
+    it('emits file-absolute {startMs, endMs} from segment fields', () => {
         const seg = makeSegment({
             index: 5,
             time_start: 1500,
@@ -30,7 +32,6 @@ describe('buildSegRangeSpec', () => {
         const spec = buildSegRangeSpec(seg);
         expect(spec.startMs).toBe(1500);
         expect(spec.endMs).toBe(2500);
-        expect(spec.src).toBe('http://x/abc.mp3');
     });
 
     it('honors seekToMs override', () => {
@@ -39,10 +40,13 @@ describe('buildSegRangeSpec', () => {
         expect(spec.startMs).toBe(1234);
         expect(spec.endMs).toBe(2000);
     });
+});
 
-    it('falls back src to null when audio_url is empty', () => {
-        const seg = makeSegment({ audio_url: '' });
-        expect(buildSegRangeSpec(seg).src).toBeNull();
+describe('buildSegmentClipUrl', () => {
+    it('encodes the source url and segment window into the clip endpoint path', () => {
+        const seg = makeSegment({ time_start: 100, time_end: 250, audio_url: 'https://server.example.com/path with space.mp3' });
+        const url = buildSegmentClipUrl('reciter_slug', seg);
+        expect(url).toBe('/api/seg/segment-clip/reciter_slug?url=https%3A%2F%2Fserver.example.com%2Fpath+with+space.mp3&start_ms=100&end_ms=250');
     });
 });
 

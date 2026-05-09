@@ -20,6 +20,13 @@ from datetime import datetime
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Ensure repo-root is on sys.path so `from validators.X import Y` resolves
+# whether this module is imported (already on path) or run as a script
+# (CWD-only path by default).
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from validators.boundary_check import compute_boundary_mismatches  # noqa: E402
 
 
 def _rel_path(p: Path) -> str:
@@ -113,18 +120,6 @@ def parse_timestamps_full(path: Path) -> tuple[dict[str, dict], dict]:
     return doc, meta
 
 
-def parse_segments(path: Path) -> tuple[dict[str, list[list]], dict]:
-    """Parse segments.json → (verses, meta).
-
-    verses: {verse_key: [[w_from, w_to, t_from_ms, t_to_ms], ...]}
-    meta: dict from _meta line
-    """
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
-    meta = doc.pop("_meta", {})
-    return doc, meta
-
-
 # ── Core validation ─────────────────────────────────────────────────────
 
 
@@ -158,7 +153,7 @@ def validate_reciter(
     # ── 1. Structural / Integrity ──
 
     # Meta check
-    meta_fields = {"created_at", "aligner_model", "audio_source", "method", "beam", "retry_beam", "shared_cmvn", "padding"}
+    meta_fields = {"created_at", "aligner_model", "audio_source", "method", "beam", "shared_cmvn", "padding"}
     missing_meta = meta_fields - set(meta.keys())
     if not meta:
         errors.append({"msg": "_meta line missing or empty", "verse_key": ""})
@@ -402,59 +397,21 @@ def validate_reciter(
 
     # ── 4. Cross-file Consistency ──
 
-    seg_boundary_mismatches = 0
-    seg_boundary_details = []  # [(verse_key, side, diff_ms, msg), ...] for top-N display
-    seg_pad_ms = 0
-    # Look for segments.json alongside (in parent recitation_segments dir)
     # The timestamps dir is data/timestamps/<category>/<reciter>/
     # The segments dir is data/recitation_segments/<reciter>/
     seg_dir = reciter_dir.parent.parent.parent / "recitation_segments" / reciter
     seg_path = seg_dir / "segments.json"
-    if seg_path.exists():
-        seg_verses, seg_meta = parse_segments(seg_path)
-        seg_pad_ms = seg_meta.get("pad_ms", 0)
-        # Tolerance = 3x pad duration (MFA last word can end up to ~pad
-        # before the acoustic speech edge, plus the segment pad itself)
-        tolerance = 3 * seg_pad_ms if seg_pad_ms > 0 else 500
-        for verse_key in verses:
-            if verse_key not in seg_verses:
-                continue
-            ts_words = verses[verse_key]
-            segs = seg_verses[verse_key]
-            if not ts_words or not segs:
-                continue
-            ts_first_start = ts_words[0][1]
-            ts_last_end = ts_words[-1][2]
-
-            # Find the segment whose boundary best matches the timestamp
-            # range.  For repeated verses (multiple segments with the same
-            # word range), blindly using segs[0]/segs[-1] would compare
-            # against the repetition instead of the matching occurrence.
-            best_start_seg = min(segs, key=lambda s: abs(s[2] - ts_first_start))
-            best_end_seg = min(segs, key=lambda s: abs(s[3] - ts_last_end))
-
-            # Directional: only flag when timestamps are NARROWER than
-            # segments (missing coverage).  Timestamps extending beyond
-            # segments is expected (cross-verse words bleed in).
-            # start: flag if ts starts AFTER segment start (late)
-            start_diff = ts_first_start - best_start_seg[2]
-            if start_diff > tolerance:
-                seg_boundary_mismatches += 1
-                msg = (f"start mismatch: timestamps {_ms_to_hms(ts_first_start)} "
-                       f"vs segments {_ms_to_hms(best_start_seg[2])} "
-                       f"(diff {start_diff}ms)")
-                warnings.append({"msg": msg, "verse_key": verse_key})
-                seg_boundary_details.append((verse_key, "start", start_diff, msg))
-
-            # end: flag if ts ends BEFORE segment end (short)
-            end_diff = best_end_seg[3] - ts_last_end
-            if end_diff > tolerance:
-                seg_boundary_mismatches += 1
-                msg = (f"end mismatch: timestamps {_ms_to_hms(ts_last_end)} "
-                       f"vs segments {_ms_to_hms(best_end_seg[3])} "
-                       f"(diff {end_diff}ms)")
-                warnings.append({"msg": msg, "verse_key": verse_key})
-                seg_boundary_details.append((verse_key, "end", end_diff, msg))
+    boundary = compute_boundary_mismatches(verses, seg_path)
+    seg_pad_ms = boundary["pad_ms"]
+    tolerance = boundary["tolerance_ms"]
+    seg_boundary_mismatches = len(boundary["mismatches"])
+    # [(verse_key, side, diff_ms, msg), ...] for top-N display + warnings.
+    seg_boundary_details = [
+        (m["verse_key"], m["side"], m["diff_ms"], m["msg"])
+        for m in boundary["mismatches"]
+    ]
+    for m in boundary["mismatches"]:
+        warnings.append({"msg": m["msg"], "verse_key": m["verse_key"]})
 
     # ── 5. Verse-level timestamp checks ──
     # Use verse_start_ms/verse_end_ms from timestamps_full.json when available,
@@ -465,7 +422,9 @@ def validate_reciter(
 
     short_verses = 0
     verse_overlaps = 0
+    overlap_details: list[dict] = []
     large_gaps = 0
+    large_gap_details: list[dict] = []
     verse_durations = []
 
     # Build {(surah, ayah): (start_ms, end_ms)} for all regular verse keys
@@ -518,6 +477,11 @@ def validate_reciter(
                 if cur_start < prev_end:
                     overlap = prev_end - cur_start
                     verse_overlaps += 1
+                    overlap_details.append({
+                        "verse_key": f"{surah}:{cur_ayah}",
+                        "prev_verse_key": f"{surah}:{prev_ayah}",
+                        "overlap_ms": int(overlap),
+                    })
                     errors.append({
                         "msg": f"verse overlap with {surah}:{prev_ayah}: "
                                f"{surah}:{prev_ayah} ends {_ms_to_hms(prev_end)}, "
@@ -530,6 +494,11 @@ def validate_reciter(
                 gap = cur_start - prev_end
                 if gap > 10000:
                     large_gaps += 1
+                    large_gap_details.append({
+                        "verse_key": f"{surah}:{cur_ayah}",
+                        "prev_verse_key": f"{surah}:{prev_ayah}",
+                        "gap_ms": int(gap),
+                    })
                     warnings.append({
                         "msg": f"large gap after {surah}:{prev_ayah}: "
                                f"{_ms_to_hms(prev_end)} to {_ms_to_hms(cur_start)} "
@@ -583,6 +552,9 @@ def validate_reciter(
             {"verse_key": vk, "side": side, "diff_ms": round(diff)}
             for vk, side, diff, _msg in seg_boundary_details
         ],
+        "_missing_verses": list(missing_verses),
+        "_verse_overlaps": overlap_details,
+        "_large_gaps": large_gap_details,
     }
 
     if verbose:

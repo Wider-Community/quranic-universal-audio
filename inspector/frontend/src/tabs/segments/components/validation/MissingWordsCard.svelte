@@ -113,6 +113,17 @@
         return n;
     })();
 
+    // Ordered sibling list — render order — passed to every SegmentRow so
+    // playback prefetch can warm the next sibling's clip URL by list
+    // position. Mirrors the template below exactly.
+    $: siblings = ((): Segment[] => {
+        const out: Segment[] = [];
+        if (prevSeg) out.push(prevSeg);
+        for (const s of segmentsInRange) out.push(s);
+        if (nextSeg) out.push(nextSeg);
+        return out;
+    })();
+
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }
     export function showContextForced(): void { showContext = true; dispatch('contextchange', true); }
@@ -124,12 +135,12 @@
     }
 
     // ---- Auto-fix handler ----
-    async function handleAutoFix(autoFix: SegValAutoFix | undefined): Promise<void> {
+    function handleAutoFix(autoFix: SegValAutoFix | undefined): void {
         if (!autoFix) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;
         const newRef = `${autoFix.new_ref_start}-${autoFix.new_ref_end}`;
-        await autoFixMissingWord(targetSeg, newRef);
+        autoFixMissingWord(targetSeg, newRef);
     }
 
 </script>
@@ -143,6 +154,7 @@
             contextLabel="Previous"
             showPlayBtn={true}
             showChapter={true}
+            accordionSiblings={siblings}
         />
     {/if}
     {#each segmentsInRange as s (s.segment_uid ?? `${s.chapter}:${s.index}`)}
@@ -153,6 +165,7 @@
             showChapter={true}
             missingWordSegIndices={missingWordSegIndices}
             validationCategory="missing_words"
+            accordionSiblings={siblings}
         />
     {/each}
     {#if nextSeg}
@@ -162,6 +175,7 @@
             contextLabel="Next"
             showPlayBtn={true}
             showChapter={true}
+            accordionSiblings={siblings}
         />
     {/if}
     <div class="val-card-actions">

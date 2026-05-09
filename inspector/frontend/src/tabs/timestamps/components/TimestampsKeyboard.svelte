@@ -2,16 +2,20 @@
     import { createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { safePlay } from '../../../lib/utils/audio';
     import { shouldHandleKey } from '../../../lib/utils/keyboard-guard';
     import { wordBoundaryScan } from '../../../lib/utils/word-boundary';
     import { TS_VIEW_MODES,viewMode } from '../stores/display';
+    import { tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import type TimestampsAudio from './TimestampsAudio.svelte';
 
     // ---- Props ----
-    /** Bound ref to the audio component — keyboard shortcuts call its methods. */
-    export let audioComp: TimestampsAudio | null = null;
+    /** Bound ref to the audio component — kept for backwards compat with
+     *  callers that still pass it; keyboard shortcuts now route through
+     *  `tsPort` directly so the prop is unused inside this component.
+     *  `export const` form (rather than `let`) advertises external-only
+     *  reference so svelte-check doesn't flag it as unused. */
+    export const audioComp: TimestampsAudio | null = null;
 
     const dispatch = createEventDispatcher<{
         navigateVerse: number;
@@ -27,50 +31,57 @@
 
     function handleKeydown(e: KeyboardEvent): void {
         if (!shouldHandleKey(e, 'timestamps')) return;
-        const audio = audioComp?.element();
-        if (!audio) return;
+        if (!tsPort.element) return;
         const lv = get(loadedVerse);
         const segOffset = lv?.tsSegOffset ?? 0;
         const segEnd = lv?.tsSegEnd ?? 0;
 
+        // Read in seconds (file-absolute under the port; same value as
+        // audio.currentTime under the current Timestamps-tab CBR-only
+        // setup, but routed through the port so a future VBR migration
+        // is a no-op for these handlers).
+        const cur = tsPort.currentTimeMs() / 1000;
+
         switch (e.code) {
             case 'Space':
                 e.preventDefault();
-                if (audio.paused) {
-                    if (segEnd > 0 && audio.currentTime >= segEnd) {
-                        audio.currentTime = segOffset;
+                if (tsPort.paused) {
+                    if (segEnd > 0 && cur >= segEnd) {
+                        tsPort.seek(segOffset * 1000);
                     }
-                    safePlay(audio);
+                    tsPort.play();
                 } else {
-                    audio.pause();
+                    tsPort.pause();
                 }
                 break;
             case 'ArrowLeft':
                 e.preventDefault();
-                audio.currentTime = Math.max(segOffset, audio.currentTime - 3);
+                tsPort.seek(Math.max(segOffset, cur - 3) * 1000);
                 dispatch('tick');
                 break;
-            case 'ArrowRight':
+            case 'ArrowRight': {
                 e.preventDefault();
-                audio.currentTime = Math.min(segEnd || audio.duration, audio.currentTime + 3);
+                const dur = tsPort.element.duration || 0;
+                tsPort.seek(Math.min(segEnd || dur, cur + 3) * 1000);
                 dispatch('tick');
                 break;
+            }
             case 'ArrowUp': {
                 e.preventDefault();
-                const t = audio.currentTime - segOffset;
+                const t = cur - segOffset;
                 const ws = lv?.data.words ?? [];
                 const prevStart = wordBoundaryScan(ws, t, 'up');
-                audio.currentTime = prevStart !== null ? prevStart + segOffset : segOffset;
+                tsPort.seek((prevStart !== null ? prevStart + segOffset : segOffset) * 1000);
                 dispatch('tick');
                 break;
             }
             case 'ArrowDown': {
                 e.preventDefault();
-                const t = audio.currentTime - segOffset;
+                const t = cur - segOffset;
                 const ws = lv?.data.words ?? [];
                 const nextStart = wordBoundaryScan(ws, t, 'down');
-                audio.currentTime =
-                    nextStart !== null ? nextStart + segOffset : segEnd || audio.duration;
+                const dur = tsPort.element.duration || 0;
+                tsPort.seek((nextStart !== null ? nextStart + segOffset : segEnd || dur) * 1000);
                 dispatch('tick');
                 break;
             }

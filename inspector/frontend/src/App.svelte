@@ -1,14 +1,13 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { get } from 'svelte/store';
 
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import AudioTab from './tabs/audio/AudioTab.svelte';
-    import { audAudioElement } from './tabs/audio/stores/audio';
+    import { audPort } from './tabs/audio/stores/audio';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
-    import { segAudioElement } from './tabs/segments/stores/playback';
-    import { tsAudioElement } from './tabs/timestamps/stores/playback';
+    import { segPort } from './tabs/segments/stores/playback';
+    import { tsPort } from './tabs/timestamps/stores/playback';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
     let activeTab = getActiveTab();
@@ -17,15 +16,11 @@
         setActiveTab(tab);
         activeTab = tab;
         localStorage.setItem(LS_KEYS.ACTIVE_TAB, tab);
-        if (tab !== TAB_NAMES.TIMESTAMPS) {
-            get(tsAudioElement)?.pause();
-        }
-        if (tab !== TAB_NAMES.SEGMENTS) {
-            get(segAudioElement)?.pause();
-        }
-        if (tab !== TAB_NAMES.AUDIO) {
-            get(audAudioElement)?.pause();
-        }
+        // Pause whichever tabs the user is leaving. Each tab's port owns
+        // its element + transport; pause is no-op when nothing's playing.
+        if (tab !== TAB_NAMES.TIMESTAMPS) tsPort.pause();
+        if (tab !== TAB_NAMES.SEGMENTS) segPort.pause();
+        if (tab !== TAB_NAMES.AUDIO) audPort.pause();
     }
 
     onMount(() => {

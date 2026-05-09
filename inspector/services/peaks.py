@@ -21,6 +21,7 @@ from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     ID3_PROBE_TIMEOUT, DEFAULT_BYTES_PER_SEC,
                     RANGE_DECODE_PAD_SEC, TEMP_AUDIO_SUFFIX)
 from services import cache
+from services.audio_meta import is_vbr_for_url
 from services.data_loader import load_detailed
 from utils.references import chapter_from_ref
 
@@ -160,7 +161,12 @@ def _get_audio_meta(url: str) -> dict:
 
 def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
                           meta: dict) -> bytes | None:
-    """Download an HTTP Range byte-slice and decode to raw PCM via ffmpeg."""
+    """Download an HTTP Range byte-slice and decode to raw PCM via ffmpeg.
+
+    CBR-only path: maps time → byte by ``bytes_per_sec * t`` then fetches a
+    padded Range and trims with ffmpeg ``-ss``. Cheap (~0.4 s) but assumes
+    constant bitrate. Use :func:`_ffmpeg_decode_segment` for VBR sources.
+    """
     bps = meta["bytes_per_sec"]
     id3 = meta["id3_offset"]
     pad = RANGE_DECODE_PAD_SEC
@@ -209,6 +215,33 @@ def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
         Path(tmp_path).unlink(missing_ok=True)
 
 
+def _ffmpeg_decode_segment(source: str, start_sec: float, duration_sec: float) -> bytes | None:
+    """VBR-safe segment decode: ffmpeg seeks the source by time, not bytes.
+
+    For VBR-without-Xing files the byte arithmetic in
+    :func:`_range_decode_segment` mis-estimates by tens of seconds for late
+    segments (Maher s76 produced 6.7 s of audio for an 8.7 s window in the
+    bench). ``ffmpeg -ss <t> -i <source>`` does frame-aware seeking using
+    HTTP Range internally — slower than the CBR fast path (~0.7 s vs 0.4 s)
+    but VBR-correct by construction. ``source`` is either a local cached
+    path or a CDN URL.
+    """
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-ss", str(start_sec), "-i", source,
+             "-t", str(duration_sec),
+             "-f", "s16le", "-ac", "1",
+             "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
+             "-v", "quiet", "-"],
+            capture_output=True, timeout=FFMPEG_TIMEOUT,
+        )
+        if result.returncode != 0 or len(result.stdout) < 4:
+            return None
+        return result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+
+
 def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
                           reciter: str | None = None,
                           cached_only: bool = False) -> dict | None:
@@ -234,8 +267,16 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     start_sec = start_ms / 1000
     duration_sec = (end_ms - start_ms) / 1000
 
-    meta = _get_audio_meta(url)
-    raw = _range_decode_segment(url, start_sec, duration_sec, meta)
+    if reciter and is_vbr_for_url(reciter, url):
+        # VBR source: skip byte-arith, let ffmpeg seek the source by time.
+        # Prefer the local cached file when present (audio_proxy populates it
+        # via /api/seg/prepare-audio) — drops latency from ~0.7 s to ~0.2 s.
+        local_path = cache.audio_cache_path(reciter, url)
+        source = str(local_path) if local_path.exists() else url
+        raw = _ffmpeg_decode_segment(source, start_sec, duration_sec)
+    else:
+        meta = _get_audio_meta(url)
+        raw = _range_decode_segment(url, start_sec, duration_sec, meta)
     if raw is None:
         return None
 

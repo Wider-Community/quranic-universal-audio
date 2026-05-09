@@ -7,3 +7,4 @@ __pycache__/
 .venv
 captures/
 CLAUDE.md
+AGENTS.md

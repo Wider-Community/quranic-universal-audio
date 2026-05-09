@@ -18,10 +18,13 @@ import type {
     SegReciter,
     SurahInfoMap,
     TsBoundaryMismatch,
+    TsLargeGap,
     TsMfaFailure,
+    TsMissingVerse,
     TsMissingWords,
     TsReciter,
     TsVerseData,
+    TsVerseOverlap,
     VerseRef,
 } from './domain';
 
@@ -36,8 +39,14 @@ export type SurahInfoResponse = SurahInfoMap;
 // /api/ts/* — Timestamps
 // ===========================================================================
 
-/** GET /api/ts/config */
+/** GET /api/ts/config — display constants + read-path URLs. */
 export interface TsConfigResponse {
+    /** "local" (Flask serves shards) or "huggingface" (frontend reads from CDN). */
+    mode: 'local' | 'huggingface';
+    /** Full URL the frontend fetches once to populate the in-memory manifest. */
+    manifest_url: string;
+    /** URL template with `{reciter}` + `{chapter}` placeholders. */
+    shard_url_template: string;
     unified_display_max_height: number;
     anim_highlight_color: string;
     anim_word_transition_duration: number;
@@ -50,25 +59,95 @@ export interface TsConfigResponse {
     analysis_letter_font_size: number;
 }
 
-/** GET /api/ts/reciters */
+/** Per-reciter block inside `manifest.json.gz`. */
+export interface TsManifestReciter {
+    name_en: string;
+    name_ar?: string | null;
+    riwayah: string;
+    style: string;
+    source?: string;
+    /** "by_surah" or "by_ayah" — shard-internal short form, not "*_audio". */
+    audio_category: 'by_surah' | 'by_ayah';
+    /** Templated URL (`{surah:03d}` / `{ayah:03d}`). Empty string when audio
+     *  manifests don't fit a templatable pattern; clients then fall back to
+     *  per-verse URLs in the shard's `_meta.audio_urls`. */
+    url_template: string;
+    /** Sorted list of chapter numbers the reciter has shards for. */
+    ts_chapters: number[];
+    validation: { boundary_mismatches: TsBoundaryMismatch[] };
+    /** Build-internal payload — not relied on by the read path. */
+    _build?: { shard_hashes?: Record<string, string> };
+}
+
+/** Body of `manifest.json.gz` (decompressed). */
+export interface TsManifestResponse {
+    schema_version: number;
+    generated_at: string;
+    commit?: string;
+    /** "" in local mode (resources are absolute Flask paths); full URL in HF mode. */
+    dataset_base_url: string;
+    shard_url_template: string;
+    /** Filenames keyed by purpose; resolved against `dataset_base_url` in HF
+     *  mode and used as absolute paths in local mode (where `dataset_base_url=""`). */
+    resources: Record<'qpc_hafs' | 'digital_khatt' | string, string>;
+    reciters: Record<string, TsManifestReciter>;
+}
+
+/** Per-shard `_meta` block. Aligner-side fields (padding, beam, …) pass through. */
+export interface TsShardMeta {
+    schema_version: number;
+    reciter: string;
+    chapter: number;
+    audio_category: 'by_surah' | 'by_ayah';
+    url_template: string;
+    /** Per-verse audio URL fallback when `url_template` is empty. */
+    audio_urls?: Record<string, string>;
+    /** Per-chapter slice of `mfa_failures` for the validation panel. */
+    mfa_failures?: Array<Record<string, unknown>>;
+    [k: string]: unknown;
+}
+
+/** Encoded verse row inside a shard. Flat tuples to keep gzipped payload small. */
+export type TsShardWord = [
+    /** word_idx (1-based) */ number,
+    /** start_ms */ number,
+    /** end_ms */ number,
+    /** letters: [char, start_ms|null, end_ms|null][] */ Array<[string, number | null, number | null]>,
+    /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
+];
+
+/** Verse value inside a shard — either ``{words: [...]}`` or a bare list. */
+export type TsShardVerse = { words: TsShardWord[]; [k: string]: unknown } | TsShardWord[];
+
+/** Body of one chapter shard (decompressed). Verse keys may be compound (e.g. "37:151:3-37:152:2"). */
+export interface TsShardResponse {
+    _meta: TsShardMeta;
+    [verseRef: string]: TsShardMeta | TsShardVerse;
+}
+
+/** Verse payload assembled by the frontend ts_client — same shape as the legacy
+ *  ``/api/ts/data`` response so consumer components stay unchanged. */
+export type TsDataResponse = TsVerseData;
+
+/** @deprecated Reciter list now read from {@link TsManifestResponse.reciters}. */
 export type TsRecitersResponse = TsReciter[];
 
-/** GET /api/ts/chapters/:reciter — 200 returns numbers, 404 returns error. */
+/** @deprecated Chapter list now read from {@link TsManifestReciter.ts_chapters}. */
 export type TsChaptersResponse = number[] | ApiErrorBody;
 
-/** GET /api/ts/verses/:reciter/:chapter */
+/** @deprecated Verse list now derived client-side from a chapter shard. */
 export interface TsVersesResponse {
     verses: Array<{ ref: VerseRef; audio_url: string }>;
 }
 
-/** GET /api/ts/data/:reciter/:verse_ref (also used by /random and /random/:reciter). */
-export type TsDataResponse = TsVerseData;
-
 /** GET /api/ts/validate/:reciter */
 export interface TsValidateResponse {
     mfa_failures: TsMfaFailure[];
+    missing_verses: TsMissingVerse[];
     missing_words: TsMissingWords[];
+    verse_overlaps: TsVerseOverlap[];
     boundary_mismatches: TsBoundaryMismatch[];
+    large_gaps: TsLargeGap[];
     meta: {
         has_segments: boolean;
         tolerance_ms: number;
@@ -107,9 +186,23 @@ export type SegChaptersResponse = number[] | ApiErrorBody;
 /** GET /api/seg/data/:reciter/:chapter[?verse=:n] — 404 returns {error}. */
 export interface SegDataResponse {
     audio_url: string;
+    /** True when the chapter audio is VBR (per data/.audio_meta.json).
+     *  Frontend routes playback through the segment-clip endpoint instead of
+     *  HTML5 `<audio>.currentTime` (which mis-seeks Xing-less VBR files).
+     *  Defaults to false for unknown / unprobed chapters. */
+    vbr: boolean;
+    /** All chapters of this reciter known VBR. Populated from the same
+     *  `data/.audio_meta.json` source as `vbr`, but covers the full reciter
+     *  rather than just the active chapter — needed for cross-chapter
+     *  accordion prefetch to pick the clip endpoint vs chapter URL based on
+     *  the next sibling's chapter. */
+    reciter_vbr_chapters: number[];
     segments: Segment[];
     summary: SegmentsChapterSummary;
     verse_word_counts: Record<VerseRef, number>;
+    /** Flat ``"surah:ayah:word" -> Digital Khatt text`` slice for this chapter.
+     *  Consumed by `dkTextForRef` to render row body text from `matched_ref`. */
+    dk_words: Record<string, string>;
     /** Present when the route returns 404 (reciter/chapter not found). */
     error?: string;
 }
@@ -118,7 +211,14 @@ export interface SegDataResponse {
 export interface SegAllResponse {
     segments: Segment[];
     audio_by_chapter: Record<string, string>;
+    /** All chapters of this reciter known VBR. Reciter-level mirror of
+     *  SegDataResponse.reciter_vbr_chapters so global accordions can route
+     *  cross-chapter playback before/independent of a chapter-data refresh. */
+    reciter_vbr_chapters?: number[];
     verse_word_counts: Record<VerseRef, number>;
+    /** Flat ``"surah:ayah:word" -> Digital Khatt text`` map (full corpus).
+     *  Consumed by `dkTextForRef` to render row body text from `matched_ref`. */
+    dk_words: Record<string, string>;
     /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
     pad_ms: number;
     pad_left_ms: number;
@@ -129,12 +229,6 @@ export interface SegAllResponse {
 // ===========================================================================
 // /api/seg/* — Segments tab (edit)
 // ===========================================================================
-
-/** GET /api/seg/resolve_ref?ref=<ref> */
-export interface SegResolveRefResponse {
-    text: string;
-    display_text: string;
-}
 
 /** POST /api/seg/save/:reciter/:chapter — request body (subset — all that JS sends). */
 export interface SegSaveRequest {

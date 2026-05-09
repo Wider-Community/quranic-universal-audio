@@ -256,7 +256,7 @@ def apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]) -> No
         _reverse_via_patch(entries, op, chapter_set)
         return
     op_type = op.get("op_type", "")
-    if op_type in ("trim_segment", "auto_fix_missing_word", "qalqala_pad"):
+    if op_type in ("trim_segment", "auto_fix_missing_word"):
         _reverse_trim(entries, op, chapter_set)
     elif op_type == "split_segment":
         _reverse_split(entries, op, chapter_set)

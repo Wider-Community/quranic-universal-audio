@@ -1,31 +1,10 @@
-"""Segments tab edit routes (/api/seg/ — save, undo, resolve_ref)."""
+"""Segments tab edit routes (/api/seg/ — save, undo)."""
 from flask import Blueprint, jsonify, request
 
-from services.data_loader import dk_text_for_ref
-from services.phonemizer_service import get_phonemizer, has_phonemizer
 from services.save import save_seg_data as _save_seg_data
 from services.undo import undo_batch as _undo_batch, undo_ops as _undo_ops
 
 seg_edit_bp = Blueprint("seg_edit", __name__, url_prefix="/api/seg")
-
-
-@seg_edit_bp.route("/resolve_ref")
-def seg_resolve_ref():
-    """Resolve a word-range reference to its Arabic text via the phonemizer."""
-    ref = request.args.get("ref", "").strip()
-    if not ref:
-        return jsonify({"error": "No ref provided"}), 400
-    if not has_phonemizer():
-        return jsonify({"error": "Phonemizer not available"}), 503
-    try:
-        pm = get_phonemizer()
-        result = pm.phonemize(ref=ref)
-        mapping = result.get_mapping()
-        text = " ".join(w.text for w in mapping.words)
-        display_text = dk_text_for_ref(ref)
-        return jsonify({"text": text, "display_text": display_text or text})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
 
 
 @seg_edit_bp.route("/save/<reciter>/<int:chapter>", methods=["POST"])

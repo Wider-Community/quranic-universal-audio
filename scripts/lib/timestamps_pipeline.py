@@ -359,6 +359,85 @@ def _seg_is_home_for_key(matched_ref: str, output_key: str) -> bool:
     return _matched_ref_to_output_key(matched_ref) == output_key
 
 
+def _repeat_pass_skip_indices(segments: list[dict]) -> set[int]:
+    """Identify home segs that belong to a re-pass and should be skipped.
+
+    Reciters sometimes re-recite a verse (or short run of verses) after
+    moving on. The segmenter emits home segs for every pass, and keeping
+    them all produces two disjoint copies of the same verse — the verse's
+    `start`/`end` then spans both, manifesting downstream as a "verse
+    overlap" against neighbours.
+
+    The picker works at the *run* level rather than the seg level. A run
+    for verse V is a maximal contiguous sequence of V's home segs in
+    seg-order, allowed to be punctuated by cross-verse segs (which are
+    transition audio, not a new home). A different home verse breaks the
+    run.
+
+    For each verse with multiple runs, the run that covers the widest set
+    of widxs wins; on a tie the earliest run wins (so a clean first
+    take is preferred over a clean re-pass of the same range). All segs
+    in losing runs are skipped from timestamp extraction. Within the
+    winning run, multi-seg coverage and within-verse stutter still flow
+    through `_merge_seg_words`'s primary-append path unchanged.
+
+    Picking by widx coverage handles the partial-then-complete shape
+    (e.g. seg ``19:30:1-4`` then later ``19:30:1-8``): the fuller run
+    wins, so the verse ends up complete instead of stuck at the early
+    partial pass. Reciters don't jump forward and back-fill mid-pass, so
+    we don't worry about merging widxs across runs.
+    """
+    runs_by_verse: dict[str, list[dict]] = {}
+    cur_verse: str | None = None
+    cur_run: dict | None = None
+
+    def _finalize() -> None:
+        nonlocal cur_verse, cur_run
+        if cur_verse is not None and cur_run is not None:
+            runs_by_verse.setdefault(cur_verse, []).append(cur_run)
+        cur_verse = None
+        cur_run = None
+
+    for idx, seg in enumerate(segments):
+        matched_ref = seg.get("matched_ref", "")
+        if not matched_ref:
+            continue
+        out_key = _matched_ref_to_output_key(matched_ref)
+        if out_key is None:
+            continue
+        # Cross-verse: out_key is the compound matched_ref itself —
+        # transition audio, doesn't break the active home's run.
+        is_single_home = ":" in out_key and "-" not in out_key
+        if not is_single_home:
+            continue
+
+        widx_range = _declared_widx_range(matched_ref)
+        if widx_range is None:
+            continue
+        seg_widxs = set(range(widx_range[0], widx_range[1] + 1))
+
+        if cur_verse != out_key:
+            _finalize()
+            cur_verse = out_key
+            cur_run = {"seg_idxs": [], "widxs": set()}
+        cur_run["seg_idxs"].append(idx)
+        cur_run["widxs"] |= seg_widxs
+
+    _finalize()
+
+    skip: set[int] = set()
+    for runs in runs_by_verse.values():
+        if len(runs) <= 1:
+            continue
+        # Wider coverage wins; earliest first-seg breaks ties.
+        best = max(runs, key=lambda r: (len(r["widxs"]),
+                                        -min(r["seg_idxs"])))
+        for r in runs:
+            if r is not best:
+                skip.update(r["seg_idxs"])
+    return skip
+
+
 def _declared_widx_range(matched_ref: str) -> tuple[int, int] | None:
     """Return (W1, W2) widx range declared by a single-verse matched_ref.
 
@@ -1034,10 +1113,21 @@ def process(input_dir: Path,
         full_data = dict(seed_existing) if seed_existing else {}
         words_data = {}
         mfa_failures = []
+        # Per-verse min(time_start) / max(time_end) of accepted home segs.
+        # Drives `verse_start_ms` / `verse_end_ms` in `full_data` so dataset
+        # consumers cut audio along seg boundaries (which include natural
+        # leading/trailing silence) rather than MFA's tight phone-level
+        # boundaries. Cross-verse segs don't contribute (their audio is
+        # shared across two verses; the home segs alone bracket each verse).
+        seg_bounds: dict[str, list[int]] = {}
         if seed_existing:
             for ref, val in seed_existing.items():
                 words_only = [[w[0], w[1], w[2]] for w in val["words"]]
                 words_data[ref] = words_only
+                vs = val.get("verse_start_ms")
+                ve = val.get("verse_end_ms")
+                if vs is not None and ve is not None:
+                    seg_bounds[ref] = [vs, ve]
 
         for ch_idx, chapter in enumerate(chapters):
             ch_ref = str(chapter.get("ref", ""))
@@ -1052,7 +1142,14 @@ def process(input_dir: Path,
                 continue
 
             if audio_category == "by_surah_audio":
+                repeat_skip = _repeat_pass_skip_indices(chapter["segments"])
+                if repeat_skip:
+                    log.info(
+                        "Surah %s: dropping %d re-pass home seg(s): %s",
+                        ch_ref, len(repeat_skip), sorted(repeat_skip))
                 for seg_idx, result in results_by_ch[ch_idx]:
+                    if seg_idx in repeat_skip:
+                        continue
                     seg = chapter["segments"][seg_idx]
                     matched_ref = seg.get("matched_ref", "")
 
@@ -1069,6 +1166,19 @@ def process(input_dir: Path,
                         continue
 
                     seg_offset_ms = seg["time_start"]
+                    seg_end_ms = seg.get("time_end", seg_offset_ms)
+                    seg_home_key = _matched_ref_to_output_key(matched_ref)
+                    seg_is_single_home = (seg_home_key is not None
+                                          and ":" in seg_home_key
+                                          and "-" not in seg_home_key)
+                    if seg_is_single_home:
+                        cur = seg_bounds.get(seg_home_key)
+                        if cur is None:
+                            seg_bounds[seg_home_key] = [seg_offset_ms, seg_end_ms]
+                        else:
+                            cur[0] = min(cur[0], seg_offset_ms)
+                            cur[1] = max(cur[1], seg_end_ms)
+
                     words_by_verse: dict[str, list] = {}
                     for w in result.get("words", []):
                         location = w["location"]
@@ -1126,9 +1236,23 @@ def process(input_dir: Path,
             val.pop("_provenance", None)
             words = val["words"]
             words.sort(key=lambda w: w[1])
-            if words:
-                val["verse_start_ms"] = words[0][1]
-                val["verse_end_ms"] = words[-1][2]
+            bound = seg_bounds.get(ref)
+            # Verse boundaries take the union of accepted home segs (carries
+            # the segmenter's natural leading/trailing silence — preferred
+            # for dataset clip cuts) and the actual MFA word bounds (so a
+            # cross-verse bleed contributing widxs outside the home segs'
+            # range still falls inside the clip).
+            word_start = words[0][1] if words else None
+            word_end = max((w[2] for w in words), default=None)
+            if bound is not None and words:
+                val["verse_start_ms"] = min(bound[0], word_start)
+                val["verse_end_ms"] = max(bound[1], word_end)
+            elif bound is not None:
+                val["verse_start_ms"] = bound[0]
+                val["verse_end_ms"] = bound[1]
+            elif words:
+                val["verse_start_ms"] = word_start
+                val["verse_end_ms"] = word_end
 
         for ref, val in full_data.items():
             if ref not in words_data:

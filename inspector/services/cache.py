@@ -52,29 +52,10 @@ class _KeyedCache(Generic[_T]):
         return self._data
 
 
-# Timestamps
-_ts: _KeyedCache[dict] = _KeyedCache()
-_ts_reciters: _SingletonCache[list[dict]] = _SingletonCache()
-
-
-def get_ts_cache(reciter: str) -> dict | None:
-    return _ts.get(reciter)
-
-
-def set_ts_cache(reciter: str, data: dict) -> None:
-    _ts.set(reciter, data)
-
-
-def get_all_ts_cache() -> dict[str, dict]:
-    return _ts.all()
-
-
-def get_ts_reciters_cache() -> list[dict] | None:
-    return _ts_reciters.get()
-
-
-def set_ts_reciters_cache(reciters: list[dict]) -> None:
-    _ts_reciters.set(reciters)
+# Timestamps tab — local-mode shard cache lives in `services/ts_local.py`
+# (manifest + per-chapter gzipped bytes, lazy-built). Nothing for this tab
+# is registered here: the legacy `_ts` / `_ts_reciters` slots that pinned
+# full ``timestamps_full.json`` docs in memory are gone.
 
 
 # Segments
@@ -203,6 +184,20 @@ def set_url_audio_meta(url: str, meta: dict) -> None:
     _url_audio_meta.set(url, meta)
 
 
+# data/.audio_meta.json document cache — VBR detection results from
+# scripts/probe_audio_meta.py. Tuple of (mtime_ns, parsed_doc) so the
+# loader can detect file changes without parsing on every request.
+_audio_meta_doc: _SingletonCache[tuple[int, dict]] = _SingletonCache()
+
+
+def get_audio_meta_doc() -> tuple[int, dict] | None:
+    return _audio_meta_doc.get()
+
+
+def set_audio_meta_doc(mtime_ns: int, doc: dict) -> None:
+    _audio_meta_doc.set((mtime_ns, doc))
+
+
 # Phonemizer singleton
 _phonemizer: _SingletonCache[Any] = _SingletonCache()
 
@@ -312,6 +307,10 @@ def set_audio_sources_cache(sources: dict) -> None:
 # QPC / DK data
 _qpc: _SingletonCache[dict[str, dict]] = _SingletonCache()
 _dk: _SingletonCache[dict[str, dict]] = _SingletonCache()
+# Flat ``"surah:ayah:word" -> text`` projection of _dk, served to the FE so
+# it can resolve ref → display text locally instead of round-tripping. Built
+# once on first request.
+_dk_words_flat: _SingletonCache[dict[str, str]] = _SingletonCache()
 
 
 def get_qpc_cache():
@@ -328,6 +327,14 @@ def get_dk_cache():
 
 def set_dk_cache(data: dict) -> None:
     _dk.set(data)
+
+
+def get_dk_words_flat_cache():
+    return _dk_words_flat.get()
+
+
+def set_dk_words_flat_cache(data: dict[str, str]) -> None:
+    _dk_words_flat.set(data)
 
 
 # Surah info lite

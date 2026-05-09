@@ -2,12 +2,11 @@
     /**
      * MergePanel — Svelte shell for merge-mode.
      *
-     * Merge is a one-shot async operation (`mergeAdjacent`) — no persistent
-     * drag UI. EditOverlay delegates to this panel via the `$editMode ===
-     * 'merge'` branch; the imperative `mergeAdjacent` runs to completion and
-     * calls `clearEdit()` itself. The panel exists as a Svelte mount point
-     * so future refinements (e.g. "Resolving merged ref…" progress text)
-     * can be added without re-threading the entry path.
+     * Merge is a one-shot operation (`mergeAdjacent`) — no persistent drag UI.
+     * EditOverlay delegates to this panel via the `$editMode === 'merge'`
+     * branch; the imperative `mergeAdjacent` runs to completion and calls
+     * `clearEdit()` itself. The panel exists as a Svelte mount point so future
+     * refinements can be added without re-threading the entry path.
      */
 
     /** Audio element ref passed from SegmentsAudioControls — reserved for

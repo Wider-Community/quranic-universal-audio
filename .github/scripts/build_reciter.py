@@ -79,6 +79,7 @@ from reciter_eligibility import (  # noqa: E402
     find_eligible_reciters,
     has_tracked_timestamps,
 )
+from timestamps_shards import derive_url_template as _derive_url_template  # noqa: E402
 
 REPO_ID = repo_config()["hf_dataset"]
 SAMPLE_PCT = int(os.environ.get("SAMPLE_PCT", "0"))
@@ -161,6 +162,17 @@ def load_data(slug, audio_type):
     with open(surah_info_path) as f:
         surah_info = json.load(f)
 
+    # timestamps_full.json carries per-verse `verse_start_ms` / `verse_end_ms`
+    # derived from accepted home segs (incl. leading/trailing silence captured
+    # by the segmenter). Prefer those for clip boundaries; fall back to MFA
+    # word bounds if the field is absent (older ts data without seg-based
+    # bounds). Letter-level data also comes from this file.
+    ts_full_raw: dict = {}
+    if ts_full_path.exists():
+        log.info("Loading letter timestamps from %s...", ts_full_path.name)
+        with open(ts_full_path) as f:
+            ts_full_raw = json.load(f)
+
     # Reshape timestamps.json ([[word_idx, start, end], ...]) into the
     # structure build_rows expects: {ref: {"words": [...], "verse_start_ms",
     # "verse_end_ms"}}
@@ -171,33 +183,36 @@ def load_data(slug, audio_type):
         if not words:
             timestamps[ref] = {"words": [], "verse_start_ms": 0, "verse_end_ms": 0}
             continue
+        full_entry = ts_full_raw.get(ref) if isinstance(ts_full_raw, dict) else None
+        verse_start_ms = None
+        verse_end_ms = None
+        if isinstance(full_entry, dict):
+            verse_start_ms = full_entry.get("verse_start_ms")
+            verse_end_ms = full_entry.get("verse_end_ms")
+        if verse_start_ms is None or verse_end_ms is None:
+            verse_start_ms = words[0][1]
+            verse_end_ms = max(w[2] for w in words)
         timestamps[ref] = {
             "words": words,
-            "verse_start_ms": words[0][1],
-            "verse_end_ms": words[-1][2],
+            "verse_start_ms": verse_start_ms,
+            "verse_end_ms": verse_end_ms,
         }
 
-    # Optionally load letter data from timestamps_full.json
-    # Each word in full format: [word_idx, start, end, [[char,s,e],...], [[phone,s,e],...]]
     letter_data = {}
-    if ts_full_path.exists():
-        log.info("Loading letter timestamps from %s...", ts_full_path.name)
-        with open(ts_full_path) as f:
-            ts_full_raw = json.load(f)
-        for ref, verse in ts_full_raw.items():
-            if ref == "_meta":
-                continue
-            words = verse.get("words") if isinstance(verse, dict) else verse
-            if not words:
-                letter_data[ref] = []
-                continue
-            word_letters = []
-            for word in words:
-                word_idx = word[0]
-                letters = word[3] if len(word) > 3 else []
-                word_letters.append((word_idx, letters))
-            letter_data[ref] = word_letters
-        del ts_full_raw
+    for ref, verse in ts_full_raw.items():
+        if ref == "_meta":
+            continue
+        words = verse.get("words") if isinstance(verse, dict) else verse
+        if not words:
+            letter_data[ref] = []
+            continue
+        word_letters = []
+        for word in words:
+            word_idx = word[0]
+            letters = word[3] if len(word) > 3 else []
+            word_letters.append((word_idx, letters))
+        letter_data[ref] = word_letters
+    ts_full_raw.clear()
 
     # Build verse-level lookup: by_ayah entries have ref="surah:ayah",
     # by_surah entries have ref="chapter_num" (one entry per whole surah).
@@ -836,71 +851,6 @@ def _find_audio_manifest_meta(slug):
     return data.get("_meta", {}) if data else None
 
 
-def _derive_url_template(manifest_data, audio_cat):
-    """Derive a URL template from manifest entries.
-
-    Returns a template string with protocol stripped (e.g.
-    'server8.mp3quran.net/afs/{surah:03d}.mp3') or empty string on failure.
-    Only replaces in the filename portion to avoid hitting patterns in hostnames.
-    """
-    entries = {k: v for k, v in manifest_data.items() if k != "_meta"}
-    if not entries:
-        return ""
-
-    if audio_cat == "by_surah":
-        if "1" in entries:
-            url, surah_num = entries["1"], 1
-        else:
-            first_key = min(entries.keys(), key=int)
-            url, surah_num = entries[first_key], int(first_key)
-
-        base, _, filename = url.rpartition("/")
-        if not base:
-            return ""
-        padded = f"{surah_num:03d}"
-        if padded in filename:
-            template = base + "/" + filename.replace(padded, "{surah:03d}", 1)
-        else:
-            s = str(surah_num)
-            if s in filename:
-                template = base + "/" + filename.replace(s, "{surah}", 1)
-            else:
-                return ""
-
-        # Validate against another entry
-        val_key = "2" if "2" in entries else ("3" if "3" in entries else None)
-        if val_key:
-            expected = template.format(surah=int(val_key))
-            if expected != entries[val_key]:
-                return ""
-
-    elif audio_cat == "by_ayah":
-        url = entries.get("1:1")
-        if not url:
-            return ""
-        base, _, filename = url.rpartition("/")
-        if not base:
-            return ""
-        if "001001" in filename:
-            template = base + "/" + filename.replace("001001", "{surah:03d}{ayah:03d}", 1)
-        else:
-            return ""
-        val = entries.get("2:1")
-        if val:
-            expected = template.format(surah=2, ayah=1)
-            if expected != val:
-                return ""
-    else:
-        return ""
-
-    # Strip protocol so HF dataset viewer doesn't render as audio widget
-    for prefix in ("https://", "http://"):
-        if template.startswith(prefix):
-            template = template[len(prefix):]
-            break
-    return template
-
-
 def _build_reciter_info(eligible):
     """Build a list of info dicts for eligible reciters, grouped by riwayah."""
     from collections import defaultdict
@@ -1126,6 +1076,694 @@ def delete_reciter(slug):
 
 
 # ---------------------------------------------------------------------------
+# Timestamp shards (deployed Inspector read path)
+# ---------------------------------------------------------------------------
+
+# Lazy imports — keep this module importable even when scripts/lib isn't on
+# sys.path (e.g. for the existing `--reciters-config` flow on a fresh CI runner).
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+
+
+def _load_existing_shard_hashes(
+    slug: str, *, hash_key: str = "shard_hashes",
+) -> dict[str, str]:
+    """Read shard hashes for `slug` out of the dataset's manifest.json.gz.
+
+    ``hash_key`` selects which hash table to read from
+    ``manifest.reciters.<slug>._build`` — defaults to the timestamps shards
+    (``shard_hashes``); pass ``"seg_shard_hashes"`` for segments shards.
+
+    Returns ``{chapter_str: sha256_hex}``. Empty dict if manifest doesn't
+    exist yet (first build), the slug isn't in it (new reciter), or the
+    requested key is missing (manifest predates the parallel hashes block).
+    """
+    import gzip
+    from huggingface_hub import HfApi
+    api = HfApi(token=HF_TOKEN)
+    try:
+        path = api.hf_hub_download(
+            repo_id=REPO_ID, repo_type="dataset",
+            filename="manifest.json.gz",
+        )
+    except Exception:
+        return {}
+    try:
+        with gzip.open(path, "rb") as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Could not parse existing manifest.json.gz: %s", e)
+        return {}
+    reciter_block = (manifest.get("reciters") or {}).get(slug, {})
+    return (reciter_block.get("_build") or {}).get(hash_key) or {}
+
+
+def _resolve_audio_template(slug: str, audio_type: str) -> tuple[str, str, dict]:
+    """Find audio manifest, derive (template, audio_category, manifest_dict).
+
+    `audio_type` is the timestamps-side category (`by_surah_audio` /
+    `by_ayah_audio`); the audio manifest's category drops the `_audio` suffix.
+    """
+    audio_cat = audio_type.replace("_audio", "")  # by_surah_audio → by_surah
+    manifest = _find_audio_manifest(slug) or {}
+    template = _derive_url_template(manifest, audio_cat) if manifest else ""
+    return template, audio_cat, manifest
+
+
+def build_timestamp_shards(slug: str, *, dry_run: bool = False) -> None:
+    """Split a reciter's timestamps_full.json into per-chapter gzipped shards
+    and upload only the changed ones to the HF dataset.
+
+    Diffs against ``manifest.reciters.<slug>._build.shard_hashes`` from the
+    last manifest build. New + changed shards are uploaded; chapters present
+    on HF but not locally are deleted. A single ``create_commit`` keeps the
+    per-reciter sync atomic.
+
+    With ``dry_run=True``, the upload/delete plan is printed to stdout but
+    no commit is made. Useful for CI safety + local verification.
+    """
+    from huggingface_hub import (
+        CommitOperationDelete,
+        CommitOperationAdd,
+        HfApi,
+    )
+
+    from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
+
+    audio_type = detect_audio_source(slug)
+    if not audio_type:
+        sys.exit(f"Could not detect audio source for {slug}")
+
+    ts_path = (
+        ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
+    )
+    if not ts_path.exists():
+        sys.exit(f"timestamps_full.json not found for {slug} at {ts_path}")
+    log.info("Loading %s", ts_path)
+    doc = json.loads(ts_path.read_bytes())
+
+    template, audio_cat, audio_manifest = _resolve_audio_template(slug, audio_type)
+    if not template:
+        log.warning(
+            "%s: url_template empty — falling back to per-verse audio_urls "
+            "in shard _meta", slug,
+        )
+
+    shards = split_to_shards(
+        doc,
+        reciter=slug,
+        audio_category=audio_cat,
+        url_template=template,
+        audio_urls_fallback=audio_manifest if not template else None,
+    )
+
+    # Hash each shard, diff against existing manifest hashes.
+    new_hashes: dict[str, str] = {}
+    payloads: dict[str, bytes] = {}
+    for chapter, shard in shards.items():
+        body = gzip_shard(shard)
+        digest = sha256_hex(body)
+        new_hashes[str(chapter)] = digest
+        payloads[str(chapter)] = body
+
+    existing_hashes = _load_existing_shard_hashes(slug)
+    to_upload = [c for c, h in new_hashes.items() if existing_hashes.get(c) != h]
+    to_delete = [c for c in existing_hashes if c not in new_hashes]
+
+    log.info(
+        "%s: %d total chapters, %d to upload, %d to delete (unchanged: %d)",
+        slug, len(shards), len(to_upload), len(to_delete),
+        len(shards) - len(to_upload),
+    )
+
+    if dry_run:
+        log.info("[dry-run] would upload:")
+        for c in sorted(to_upload, key=int):
+            log.info("  + timestamps/%s/%s.json.gz  (%d bytes, sha %s...)",
+                     slug, c, len(payloads[c]), new_hashes[c][:12])
+        log.info("[dry-run] would delete:")
+        for c in sorted(to_delete, key=int):
+            log.info("  - timestamps/%s/%s.json.gz", slug, c)
+        return
+
+    if not to_upload and not to_delete:
+        log.info("%s: nothing to do (all shard hashes match)", slug)
+        return
+
+    operations = []
+    for c in to_upload:
+        operations.append(CommitOperationAdd(
+            path_in_repo=f"timestamps/{slug}/{c}.json.gz",
+            path_or_fileobj=payloads[c],
+        ))
+    for c in to_delete:
+        operations.append(CommitOperationDelete(
+            path_in_repo=f"timestamps/{slug}/{c}.json.gz",
+        ))
+
+    api = HfApi(token=HF_TOKEN)
+    api.create_commit(
+        repo_id=REPO_ID, repo_type="dataset",
+        operations=operations,
+        commit_message=(
+            f"timestamps/{slug}: upload {len(to_upload)}, delete {len(to_delete)}"
+        ),
+    )
+    log.info("Pushed %d shard ops for %s", len(operations), slug)
+
+
+def _resolve_segments_doc(slug: str) -> tuple[dict, str]:
+    """Load `data/recitation_segments/<slug>/detailed.json` + audio category.
+
+    The audio category (`by_surah` / `by_ayah`) is read from the document's
+    `_meta.audio_source` field (e.g. ``"by_surah/mp3quran"`` → ``"by_surah"``).
+    Falls back to ``detect_audio_source`` if `_meta` is silent.
+    """
+    detailed_path = ROOT / "data" / "recitation_segments" / slug / "detailed.json"
+    if not detailed_path.exists():
+        sys.exit(f"detailed.json not found for {slug} at {detailed_path}")
+
+    log.info("Loading %s", detailed_path)
+    doc = json.loads(detailed_path.read_bytes())
+
+    audio_source = (doc.get("_meta") or {}).get("audio_source", "") or ""
+    if "/" in audio_source:
+        audio_cat = audio_source.split("/", 1)[0]
+    else:
+        ts_audio_type = detect_audio_source(slug) or ""
+        audio_cat = ts_audio_type.replace("_audio", "")
+
+    if audio_cat not in ("by_surah", "by_ayah"):
+        sys.exit(
+            f"Could not determine audio category for {slug} "
+            f"(audio_source={audio_source!r})"
+        )
+    return doc, audio_cat
+
+
+def build_segment_shards(slug: str, *, dry_run: bool = False) -> None:
+    """Split a reciter's detailed.json into per-chapter gzipped segments shards
+    and upload only the changed ones to the HF dataset.
+
+    Twin of ``build_timestamp_shards`` — same diff/upload/delete contract,
+    consumed by the aligner Space's preload mode (see plan
+    ``wondrous-hopping-mochi.md``). Reads from
+    ``manifest.reciters.<slug>._build.seg_shard_hashes`` for diff-skip.
+    """
+    from huggingface_hub import (
+        CommitOperationDelete,
+        CommitOperationAdd,
+        HfApi,
+    )
+
+    from segments_shards import (
+        gzip_shard as seg_gzip_shard,
+        sha256_hex as seg_sha256_hex,
+        split_to_shards as seg_split_to_shards,
+    )
+
+    detailed_doc, audio_cat = _resolve_segments_doc(slug)
+
+    shards = seg_split_to_shards(
+        detailed_doc, reciter=slug, audio_category=audio_cat,
+    )
+
+    new_hashes: dict[str, str] = {}
+    payloads: dict[str, bytes] = {}
+    for chapter, shard in shards.items():
+        body = seg_gzip_shard(shard)
+        digest = seg_sha256_hex(body)
+        new_hashes[str(chapter)] = digest
+        payloads[str(chapter)] = body
+
+    existing_hashes = _load_existing_shard_hashes(slug, hash_key="seg_shard_hashes")
+    to_upload = [c for c, h in new_hashes.items() if existing_hashes.get(c) != h]
+    to_delete = [c for c in existing_hashes if c not in new_hashes]
+
+    log.info(
+        "%s: %d total chapters, %d to upload, %d to delete (unchanged: %d)",
+        slug, len(shards), len(to_upload), len(to_delete),
+        len(shards) - len(to_upload),
+    )
+
+    if dry_run:
+        log.info("[dry-run] would upload:")
+        for c in sorted(to_upload, key=int):
+            log.info("  + segments/%s/%s.json.gz  (%d bytes, sha %s...)",
+                     slug, c, len(payloads[c]), new_hashes[c][:12])
+        log.info("[dry-run] would delete:")
+        for c in sorted(to_delete, key=int):
+            log.info("  - segments/%s/%s.json.gz", slug, c)
+        return
+
+    if not to_upload and not to_delete:
+        log.info("%s: nothing to do (all segment shard hashes match)", slug)
+        return
+
+    operations = []
+    for c in to_upload:
+        operations.append(CommitOperationAdd(
+            path_in_repo=f"segments/{slug}/{c}.json.gz",
+            path_or_fileobj=payloads[c],
+        ))
+    for c in to_delete:
+        operations.append(CommitOperationDelete(
+            path_in_repo=f"segments/{slug}/{c}.json.gz",
+        ))
+
+    api = HfApi(token=HF_TOKEN)
+    api.create_commit(
+        repo_id=REPO_ID, repo_type="dataset",
+        operations=operations,
+        commit_message=(
+            f"segments/{slug}: upload {len(to_upload)}, delete {len(to_delete)}"
+        ),
+    )
+    log.info("Pushed %d segment shard ops for %s", len(operations), slug)
+
+
+# ---------------------------------------------------------------------------
+# Global resources (qpc, dk, font) — fetched once per Inspector session
+# ---------------------------------------------------------------------------
+
+# Source paths under .local/spaces/quranic_universal_aligner/data/.
+# Tuple shape: (manifest_key, source_path, dataset_path, gzip).
+_RESOURCE_SPECS = [
+    ("qpc_hafs",
+     "qpc_hafs.json", "qpc_hafs.json.gz", True),
+    ("digital_khatt",
+     "digital_khatt_v2_script.json", "digital_khatt_v2_script.json.gz", True),
+    ("digital_khatt_otf",
+     "DigitalKhattV2.otf", "DigitalKhattV2.otf", False),
+]
+_QUA_DATA_DIR = ROOT / ".local" / "spaces" / "quranic_universal_aligner" / "data"
+
+
+def _hash_file_payload(path: Path, *, gzip_it: bool) -> tuple[bytes, str]:
+    """Read `path`, optionally gzip, return (payload_bytes, sha256_hex)."""
+    import gzip as _gz
+
+    from timestamps_shards import sha256_hex
+
+    body = path.read_bytes()
+    if gzip_it:
+        body = _gz.compress(body, compresslevel=6, mtime=0)
+    return body, sha256_hex(body)
+
+
+def _load_existing_resource_hashes() -> dict[str, str]:
+    """Return ``manifest._build.resource_hashes`` from the live manifest."""
+    import gzip
+    from huggingface_hub import HfApi
+    api = HfApi(token=HF_TOKEN)
+    try:
+        path = api.hf_hub_download(
+            repo_id=REPO_ID, repo_type="dataset",
+            filename="manifest.json.gz",
+        )
+    except Exception:
+        return {}
+    try:
+        with gzip.open(path, "rb") as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return (manifest.get("_build") or {}).get("resource_hashes") or {}
+
+
+def build_resources(*, dry_run: bool = False) -> None:
+    """Upload global qpc/dk/font resources to the dataset root.
+
+    Idempotent — diffs each file's SHA-256 against the last manifest's
+    ``_build.resource_hashes`` and skips uploads that match. Safe to call
+    on every sync.
+    """
+    from huggingface_hub import CommitOperationAdd, HfApi
+
+    existing = _load_existing_resource_hashes()
+    operations: list = []
+    new_hashes: dict[str, str] = {}
+    for key, src_name, dst_name, gzip_it in _RESOURCE_SPECS:
+        src_path = _QUA_DATA_DIR / src_name
+        if not src_path.exists():
+            log.warning("Resource missing: %s — skipping", src_path)
+            continue
+        body, digest = _hash_file_payload(src_path, gzip_it=gzip_it)
+        new_hashes[key] = digest
+        if existing.get(key) == digest:
+            log.info("resource %s: unchanged (sha %s...)", dst_name, digest[:12])
+            continue
+        log.info("resource %s: %s (%d bytes, sha %s...)",
+                 dst_name, "would upload" if dry_run else "queued",
+                 len(body), digest[:12])
+        operations.append(CommitOperationAdd(
+            path_in_repo=dst_name, path_or_fileobj=body,
+        ))
+
+    if dry_run:
+        log.info("[dry-run] resource hash plan: %s",
+                 {k: v[:12] for k, v in new_hashes.items()})
+        return
+
+    if not operations:
+        log.info("resources: nothing to upload (all hashes match)")
+        return
+
+    api = HfApi(token=HF_TOKEN)
+    api.create_commit(
+        repo_id=REPO_ID, repo_type="dataset",
+        operations=operations,
+        commit_message=f"resources: upload {len(operations)} file(s)",
+    )
+    log.info("Pushed %d resource ops", len(operations))
+
+
+# ---------------------------------------------------------------------------
+# Deployment manifest (the catalog clients fetch on Inspector start)
+# ---------------------------------------------------------------------------
+
+def _list_dataset_chapters(slug: str, *, subdir: str = "timestamps") -> list[int]:
+    """Return chapter numbers currently published under ``<subdir>/<slug>/``.
+
+    Returns ``[]`` if the path doesn't exist on HF yet (new reciter or
+    one that hasn't had a build run against it).
+    """
+    from huggingface_hub import HfApi
+    from huggingface_hub.errors import RepositoryNotFoundError, RemoteEntryNotFoundError
+    api = HfApi(token=HF_TOKEN)
+    try:
+        items = list(api.list_repo_tree(
+            REPO_ID, path_in_repo=f"{subdir}/{slug}",
+            repo_type="dataset", recursive=False,
+        ))
+    except (RepositoryNotFoundError, RemoteEntryNotFoundError):
+        return []
+    except Exception as e:
+        log.warning("list_repo_tree(%s/%s) failed: %s", subdir, slug, e)
+        return []
+    chapters: list[int] = []
+    for item in items:
+        name = getattr(item, "rfilename", None) or getattr(item, "path", "")
+        if not name:
+            continue
+        base = name.rsplit("/", 1)[-1]
+        if not base.endswith(".json.gz"):
+            continue
+        try:
+            chapters.append(int(base[:-len(".json.gz")]))
+        except ValueError:
+            continue
+    return sorted(chapters)
+
+
+def _list_dataset_reciter_slugs(*, subdir: str = "timestamps") -> list[str]:
+    """Return slugs that currently have a ``<subdir>/<slug>/`` directory on HF."""
+    from huggingface_hub import HfApi
+    from huggingface_hub.errors import RepositoryNotFoundError, RemoteEntryNotFoundError
+    api = HfApi(token=HF_TOKEN)
+    try:
+        items = list(api.list_repo_tree(
+            REPO_ID, path_in_repo=subdir,
+            repo_type="dataset", recursive=False,
+        ))
+    except (RepositoryNotFoundError, RemoteEntryNotFoundError):
+        return []
+    except Exception as e:
+        log.warning("list_repo_tree(%s) failed: %s", subdir, e)
+        return []
+    slugs: list[str] = []
+    for item in items:
+        path = getattr(item, "rfilename", None) or getattr(item, "path", "")
+        if not path:
+            continue
+        # Directory entries surface as "<subdir>/<slug>" with no extension.
+        leaf = path.rsplit("/", 1)[-1]
+        if leaf and "." not in leaf:
+            slugs.append(leaf)
+    return sorted(set(slugs))
+
+
+def _local_reciter_state(slug: str) -> dict:
+    """Compute manifest fields that come from local source files in one pass.
+
+    Returns ``{"validation": {...}, "shard_hashes": {...},
+    "seg_shard_hashes": {...}}`` where the hash dicts are SHA-256 of each
+    gzipped shard recomputed from local source files (same code path as
+    --build-timestamps / --build-segments, so hashes match what was
+    uploaded). Either hash dict is empty when the corresponding source
+    file is missing locally — keeps partial-eligibility reciters from
+    poisoning the manifest.
+    """
+    sys.path.insert(0, str(ROOT))
+    from validators.boundary_check import compute_boundary_mismatches  # noqa: E402
+
+    from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
+    from segments_shards import (
+        gzip_shard as seg_gzip_shard,
+        sha256_hex as seg_sha256_hex,
+        split_to_shards as seg_split_to_shards,
+    )
+
+    out: dict = {
+        "validation": {"boundary_mismatches": []},
+        "shard_hashes": {},
+        "seg_shard_hashes": {},
+    }
+
+    audio_type = detect_audio_source(slug)
+    if not audio_type:
+        return out
+    ts_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
+    seg_path = ROOT / "data" / "recitation_segments" / slug / "segments.json"
+    detailed_path = ROOT / "data" / "recitation_segments" / slug / "detailed.json"
+    if not ts_path.exists():
+        return out
+
+    try:
+        doc = json.loads(ts_path.read_bytes())
+    except (json.JSONDecodeError, OSError):
+        return out
+
+    # Validation: compare ts/seg boundaries (same logic the runtime
+    # validator uses; pre-computed here so the deployed Inspector
+    # doesn't need segments.json on the read path).
+    verses = {
+        k: v.get("words", []) if isinstance(v, dict) else v
+        for k, v in doc.items()
+        if not k.startswith("_")
+    }
+    boundary = compute_boundary_mismatches(verses, seg_path)
+    out["validation"]["boundary_mismatches"] = [
+        {"verse_key": m["verse_key"], "side": m["side"], "diff_ms": m["diff_ms"]}
+        for m in boundary["mismatches"]
+    ]
+
+    # Shard hashes: regenerate locally so we don't have to round-trip
+    # through HF for what is essentially a deterministic function of
+    # the source file. The hashes match what --build-timestamps wrote.
+    audio_cat = audio_type.replace("_audio", "")
+    audio_manifest = _find_audio_manifest(slug) or {}
+    template = (
+        _derive_url_template(audio_manifest, audio_cat) if audio_manifest else ""
+    )
+    shards = split_to_shards(
+        doc, reciter=slug, audio_category=audio_cat, url_template=template,
+        audio_urls_fallback=audio_manifest if not template else None,
+    )
+    out["shard_hashes"] = {
+        str(ch): sha256_hex(gzip_shard(shard)) for ch, shard in shards.items()
+    }
+
+    # Segment shard hashes: same idea, computed from detailed.json. The
+    # aligner preload UI consumes these via the manifest's
+    # `segments_shard_url_template`. We only emit hashes when the
+    # detailed.json is locally present — eligibility is enforced upstream
+    # via `find_eligible_reciters`.
+    if detailed_path.exists():
+        try:
+            detailed_doc = json.loads(detailed_path.read_bytes())
+        except (json.JSONDecodeError, OSError):
+            detailed_doc = None
+        if detailed_doc is not None:
+            seg_shards = seg_split_to_shards(
+                detailed_doc, reciter=slug, audio_category=audio_cat,
+            )
+            out["seg_shard_hashes"] = {
+                str(ch): seg_sha256_hex(seg_gzip_shard(shard))
+                for ch, shard in seg_shards.items()
+            }
+    return out
+
+
+def build_manifest(*, dry_run: bool = False) -> None:
+    """Walk the dataset, compose manifest.json.gz, and push it.
+
+    The manifest carries:
+      - dataset_base_url + shard_url_template + resources (URL templating)
+      - per-reciter metadata (name, riwayah, style, audio_category,
+        url_template, ts_chapters, validation.boundary_mismatches)
+      - _build.shard_hashes per reciter + _build.resource_hashes globally
+        (drives next run's diff-skip)
+      - schema_version, generated_at, commit
+
+    Orphan reciters (present on HF but not eligible locally) are reported
+    and their `timestamps/<slug>/` trees deleted in the same commit.
+    """
+    import gzip
+    from datetime import datetime, timezone
+
+    from huggingface_hub import (
+        CommitOperationAdd,
+        CommitOperationDelete,
+        HfApi,
+    )
+
+    sys.path.insert(0, str(ROOT))
+    from list_reciters import discover_reciters  # noqa: E402
+
+    # Per-slug local metadata (one row per slug, prefer by_surah).
+    records = discover_reciters()
+    by_slug: dict[str, dict] = {}
+    for rec in records:
+        slug = rec["slug"]
+        if slug not in by_slug:
+            by_slug[slug] = rec
+        elif rec["audio_cat"] == "by_surah" and by_slug[slug]["audio_cat"] == "by_ayah":
+            by_slug[slug] = rec
+
+    eligible = set(find_eligible_reciters(ROOT))
+    log.info("manifest: %d eligible reciter(s)", len(eligible))
+
+    on_hf_slugs_ts = set(_list_dataset_reciter_slugs(subdir="timestamps"))
+    on_hf_slugs_seg = set(_list_dataset_reciter_slugs(subdir="segments"))
+    orphans_ts = sorted(on_hf_slugs_ts - eligible)
+    orphans_seg = sorted(on_hf_slugs_seg - eligible)
+    if orphans_ts:
+        log.warning("Orphans on HF timestamps/ (will delete): %s",
+                    ", ".join(orphans_ts))
+    if orphans_seg:
+        log.warning("Orphans on HF segments/ (will delete): %s",
+                    ", ".join(orphans_seg))
+
+    reciters_block: dict[str, dict] = {}
+    for slug in sorted(eligible):
+        rec = by_slug.get(slug, {})
+        audio_cat = rec.get("audio_cat", "")
+        manifest_data = _find_audio_manifest(slug) or {}
+        url_template = (
+            _derive_url_template(manifest_data, audio_cat) if manifest_data else ""
+        )
+
+        chapters = _list_dataset_chapters(slug, subdir="timestamps")
+        seg_chapters = _list_dataset_chapters(slug, subdir="segments")
+        # Recompute validation + shard hashes from local source files in one
+        # pass — deterministic, no HF round-trip, hashes always match what
+        # --build-timestamps / --build-segments wrote.
+        local_state = _local_reciter_state(slug)
+
+        block: dict = {
+            "name_en": rec.get("name_en", slug.replace("_", " ").title()),
+            "name_ar": rec.get("name_ar"),
+            "riwayah": rec.get("riwayah", "hafs_an_asim"),
+            "style": rec.get("style", "murattal"),
+            "source": rec.get("source", ""),
+            "audio_category": audio_cat,
+            "url_template": url_template,
+            "ts_chapters": chapters,
+            # `seg_chapters` mirrors `ts_chapters` once the segments build has
+            # caught up — the aligner Space's preload UI reads it as the
+            # surah-dropdown source of truth. Build invariant: a chapter is
+            # "published" iff both lists contain it.
+            "seg_chapters": seg_chapters,
+            "validation": local_state["validation"],
+            "_build": {
+                "shard_hashes": local_state["shard_hashes"],
+                "seg_shard_hashes": local_state["seg_shard_hashes"],
+            },
+        }
+        reciters_block[slug] = block
+
+    # Resource hashes — recomputed from local files for source-of-truth.
+    resource_hashes: dict[str, str] = {}
+    for key, src_name, _dst, gzip_it in _RESOURCE_SPECS:
+        src_path = _QUA_DATA_DIR / src_name
+        if src_path.exists():
+            _, digest = _hash_file_payload(src_path, gzip_it=gzip_it)
+            resource_hashes[key] = digest
+
+    # Resolve commit sha (best-effort — falls back to empty when not in a git repo).
+    commit_sha = ""
+    try:
+        import subprocess
+        commit_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
+        ).strip()
+    except Exception:
+        pass
+
+    manifest = {
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "commit": commit_sha,
+        "dataset_base_url": (
+            f"https://huggingface.co/datasets/{REPO_ID}/resolve/main"
+        ),
+        "shard_url_template": "timestamps/{reciter}/{chapter}.json.gz",
+        # Aligner Space preload reads this; Inspector ignores unknown keys.
+        "segments_shard_url_template": "segments/{reciter}/{chapter}.json.gz",
+        "resources": {
+            "qpc_hafs": "qpc_hafs.json.gz",
+            "digital_khatt": "digital_khatt_v2_script.json.gz",
+            "digital_khatt_otf": "DigitalKhattV2.otf",
+        },
+        "reciters": reciters_block,
+        "_build": {"resource_hashes": resource_hashes},
+    }
+
+    body = gzip.compress(
+        json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
+        compresslevel=6, mtime=0,
+    )
+    log.info(
+        "manifest.json.gz: %d bytes (%d reciters, %d ts orphans, %d seg orphans)",
+        len(body), len(reciters_block), len(orphans_ts), len(orphans_seg),
+    )
+
+    operations: list = [CommitOperationAdd(
+        path_in_repo="manifest.json.gz", path_or_fileobj=body,
+    )]
+    # Recursive delete of orphan reciter trees — separate per subdir since the
+    # ts and segments rollouts can drift during transitions.
+    for slug in orphans_ts:
+        for ch in _list_dataset_chapters(slug, subdir="timestamps"):
+            operations.append(CommitOperationDelete(
+                path_in_repo=f"timestamps/{slug}/{ch}.json.gz",
+            ))
+    for slug in orphans_seg:
+        for ch in _list_dataset_chapters(slug, subdir="segments"):
+            operations.append(CommitOperationDelete(
+                path_in_repo=f"segments/{slug}/{ch}.json.gz",
+            ))
+
+    if dry_run:
+        log.info("[dry-run] would push manifest + %d orphan deletion(s)",
+                 len(operations) - 1)
+        log.info("[dry-run] sample reciter: %s", next(iter(reciters_block.values()), {}))
+        return
+
+    total_orphans = len(orphans_ts) + len(orphans_seg)
+    api = HfApi(token=HF_TOKEN)
+    api.create_commit(
+        repo_id=REPO_ID, repo_type="dataset",
+        operations=operations,
+        commit_message=(
+            f"manifest: {len(reciters_block)} reciters"
+            + (f", drop {total_orphans} orphan(s)" if total_orphans else "")
+        ),
+    )
+    log.info("Pushed manifest (%d ops)", len(operations))
+
+
+# ---------------------------------------------------------------------------
 # Reciters catalog config
 # ---------------------------------------------------------------------------
 def build_reciters_config():
@@ -1242,12 +1880,46 @@ def main():
     parser.add_argument("--update-readme", action="store_true", help="Update dataset card only")
     parser.add_argument("--reciters-config", action="store_true",
                         help="Build and push reciters catalog config")
+    parser.add_argument("--build-timestamps", metavar="SLUG",
+                        help="Split timestamps_full.json into per-chapter "
+                             "gzipped shards and upload changed ones")
+    parser.add_argument("--build-segments", metavar="SLUG",
+                        help="Split detailed.json into per-chapter gzipped "
+                             "segments shards (consumed by aligner Space "
+                             "preload mode) and upload changed ones")
+    parser.add_argument("--build-resources", action="store_true",
+                        help="Upload qpc/dk/font global resources to "
+                             "dataset root (idempotent — hash-skip)")
+    parser.add_argument("--build-manifest", action="store_true",
+                        help="Build and push manifest.json.gz "
+                             "(catalog + per-reciter validation + hashes)")
     parser.add_argument("--full-rebuild", action="store_true",
                         help="Force full audio re-download (skip smart reuse)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print upload/delete plan without committing "
+                             "(applies to --build-timestamps, "
+                             "--build-segments, --build-resources, "
+                             "--build-manifest)")
     args = parser.parse_args()
 
     if not HF_TOKEN:
         sys.exit("HF_TOKEN not set")
+
+    if args.build_timestamps:
+        build_timestamp_shards(args.build_timestamps, dry_run=args.dry_run)
+        return
+
+    if args.build_segments:
+        build_segment_shards(args.build_segments, dry_run=args.dry_run)
+        return
+
+    if args.build_resources:
+        build_resources(dry_run=args.dry_run)
+        return
+
+    if args.build_manifest:
+        build_manifest(dry_run=args.dry_run)
+        return
 
     if args.reciters_config:
         build_reciters_config()

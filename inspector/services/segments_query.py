@@ -7,8 +7,9 @@ import statistics
 
 from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
 from services import cache
+from services.audio_meta import is_vbr, vbr_chapters_for_reciter
 from services.data_loader import (
-    dk_text_for_ref,
+    get_dk_words_flat,
     get_word_counts,
     load_detailed,
     resolve_pad,
@@ -46,7 +47,6 @@ def get_chapter_data(reciter: str, chapter: int,
                 "time_end": t_end,
                 "matched_ref": mref,
                 "matched_text": seg.get("matched_text", ""),
-                "display_text": dk_text_for_ref(mref),
                 "confidence": round(seg.get("confidence", 0.0), 4),
                 "audio_url": entry_audio,
             }
@@ -127,9 +127,20 @@ def get_chapter_data(reciter: str, chapter: int,
         if s == chapter:
             verse_word_counts[f"{chapter}:{v}"] = n
 
+    # Chapter-scoped slice of the flat DK map. Sent so the FE can build per-row
+    # display text directly from ``matched_ref`` (covers history snapshots that
+    # never stored ``display_text``). Scoping by chapter keeps the per-chapter
+    # payload small; ``/api/seg/all`` ships the full map.
+    chapter_prefix = f"{chapter}:"
+    dk_full = get_dk_words_flat()
+    dk_words = {k: v for k, v in dk_full.items() if k.startswith(chapter_prefix)}
+
     return {
         "audio_url": audio_url,
+        "vbr": is_vbr(reciter, chapter),
+        "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
         "segments": segments,
         "summary": summary,
         "verse_word_counts": verse_word_counts,
+        "dk_words": dk_words,
     }

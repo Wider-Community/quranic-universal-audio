@@ -26,7 +26,7 @@ EXPECTED_MATRIX = {
     "audio_bleeding":    {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
     "boundary_adj":      {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
     "cross_verse":       {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
-    "qalqala":           {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "info"},
+    "qalqala":           {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "info"},
     "muqattaat":         {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "info"},
 }
 

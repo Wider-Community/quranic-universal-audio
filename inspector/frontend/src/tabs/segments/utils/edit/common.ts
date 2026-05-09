@@ -21,7 +21,7 @@ import {
     editCanvas,
     editingSegUid,
 } from '../../stores/edit';
-import { segAudioElement } from '../../stores/playback';
+import { segPort } from '../../stores/playback';
 import type { SegmentState } from '../../stores/segments';
 import { applyVerseFilterAndRender } from '../data/filters-apply';
 import {
@@ -79,16 +79,15 @@ export function exitEditMode(): void {
     clearPreviewCanplayHandler();
     const stopHandler = getPreviewStopHandler();
     if (stopHandler) {
-        const audioEl = get(segAudioElement);
-        if (audioEl) audioEl.removeEventListener('timeupdate', stopHandler);
+        const el = segPort.element;
+        if (el) el.removeEventListener('timeupdate', stopHandler);
         setPreviewStopHandler(null);
     }
-    const audioEl2 = get(segAudioElement);
     // If preview left audio playing (e.g. user hit Apply mid-loop), hand
     // playback back to the main rAF loop. `startSegAnimation` is a no-op
     // while editMode is set — we reach it here only AFTER `clearEdit()`
     // above, so the gate is open and the main-list playhead resumes.
-    if (audioEl2 && !audioEl2.paused) startSegAnimation();
+    if (!segPort.paused) startSegAnimation();
 }
 
 // Re-export play-range implementation so existing callers still work.
