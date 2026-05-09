@@ -1155,8 +1155,33 @@ def cmd_promote_sweep(args):
     )
     subprocess.run(["ssh", "katana", cmd], check=True)
 
+    local_dir = REPO_ROOT / "data/recitation_segments" / slug
+    local_dir.mkdir(parents=True, exist_ok=True)
     print("Fetching canonical to local...")
-    subprocess.run(["bash", str(REPO_ROOT / ".local/extraction/fetch_results.sh"), slug], check=True)
+    subprocess.run(
+        ["rsync", "-az",
+         f"katana:{canonical_remote}/", f"{local_dir}/"],
+        check=True,
+    )
+
+    print("Cleaning sweep artifacts (local + remote)...")
+    for p in list(local_dir.glob("segments__sil*.json")) + \
+             list(local_dir.glob("detailed__sil*.json")) + \
+             list(local_dir.glob("edit_history__sil*.jsonl")) + \
+             list(local_dir.glob("sweep_report.txt")):
+        p.unlink()
+    subprocess.run(
+        ["ssh", "katana",
+         f"rm -f {remote}/segments__sil*.json {remote}/detailed__sil*.json "
+         f"{remote}/edit_history__sil*.jsonl {remote}/sweep_report.txt"],
+        check=True,
+    )
+
+    print("Validating...")
+    subprocess.run(
+        ["python3", str(REPO_ROOT / "validators/validate_segments.py"), str(local_dir)],
+        check=False,
+    )
 
     if not args.no_probe:
         print(f"Submitting probe_mfa.pbs for {slug}...")
