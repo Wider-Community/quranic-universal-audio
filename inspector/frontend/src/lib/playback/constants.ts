@@ -5,12 +5,13 @@
 /**
  * Coverage padding (ms) that edit-mode entry adds around `[seg.time_start,
  * seg.time_end]` when calling `port.loadCovering(...)`. Under VBR routing,
- * this means edit-mode loads a wider per-segment clip ONCE so subsequent
- * trim/split adjustments and split-left/split-right toggles stay inside the
- * loaded window — no fresh ffmpeg invocation per press.
+ * the port treats this as post-roll only: the clip still begins at
+ * `seg.time_start` so playback starts from clip time 0 and does not rely on
+ * seeking inside the streamed clip.
  *
- * 2 s is enough for typical edit nudges; if a drag pushes the trim window
- * past the loaded edge, the trim handler issues a fresh `loadCovering` with
- * the new wider range. See the edit-mode entry sites in `utils/edit/`.
+ * 2 s is enough for typical end-boundary nudges; if an edit changes the
+ * start boundary under VBR, the port intentionally issues a fresh clip whose
+ * byte 0 is the new playback start. See the edit-mode entry sites in
+ * `utils/edit/`.
  */
 export const EDIT_LOAD_PAD_MS = 2000;

@@ -1,4 +1,4 @@
-Generated: 2026-05-01 21:39:31
+Generated: 2026-05-08 20:37:28
 
 ========================================================================
   Timestamps: mohammed_siddiq_al_minshawi
@@ -8,8 +8,8 @@ Generated: 2026-05-01 21:39:31
 --- MFA Settings ---
   Audio source:  by_surah/mp3quran
   Method:        kalpy
-  Beam:          60
-  Retry beam:    50
+  Beam:          50
+  Retry beam:    ?
   Shared CMVN:   False
 
 --- Coverage ---
@@ -21,8 +21,8 @@ Generated: 2026-05-01 21:39:31
 
 --- Word Duration ---
   Min:      0.04s
-  Median:   1.07s
-  Mean:     1.16s
+  Median:   1.09s
+  Mean:     1.19s
   Max:      10.37s
 
 --- Temporal Issues ---
@@ -31,8 +31,8 @@ Generated: 2026-05-01 21:39:31
 
 --- Verse Timestamps ---
   Duration min:     0.79s
-  Duration median:  12.10s
-  Duration mean:    15.61s
+  Duration median:  12.36s
+  Duration mean:    15.85s
   Duration max:     176.50s
   Short (<500ms):   0
 
@@ -41,29 +41,12 @@ Generated: 2026-05-01 21:39:31
   Phone issues:              0
 
 --- Cross-file Consistency (segments.json) ---
-  Boundary mismatches (>480ms):  8
-
-  Top 8 boundary violations (by diff):
-    1:1          start mismatch: timestamps 0:10.6 vs segments 0:07.5 (diff 3100ms)
-    22:9         end mismatch: timestamps 3:54.6 vs segments 3:55.2 (diff 645ms)
-    40:4         end mismatch: timestamps 0:42.3 vs segments 0:42.9 (diff 645ms)
-    40:21        end mismatch: timestamps 5:33.5 vs segments 5:34.1 (diff 585ms)
-    13:37        end mismatch: timestamps 17:19.0 vs segments 17:19.5 (diff 565ms)
-    89:29        end mismatch: timestamps 3:39.6 vs segments 3:40.1 (diff 535ms)
-    22:5         end mismatch: timestamps 2:55.5 vs segments 2:55.9 (diff 495ms)
-    84:17        end mismatch: timestamps 2:02.0 vs segments 2:02.5 (diff 495ms)
+  Boundary mismatches (>975ms):  0
 
 --- Validation Issues ---
   Errors:     0
-  Warnings:   8
+  Warnings:   1
 
-  Warnings (first 8 of 8):
-    WARN   1:1  start mismatch: timestamps 0:10.6 vs segments 0:07.5 (diff 3100ms)
-    WARN   13:37  end mismatch: timestamps 17:19.0 vs segments 17:19.5 (diff 565ms)
-    WARN   22:5  end mismatch: timestamps 2:55.5 vs segments 2:55.9 (diff 495ms)
-    WARN   22:9  end mismatch: timestamps 3:54.6 vs segments 3:55.2 (diff 645ms)
-    WARN   40:4  end mismatch: timestamps 0:42.3 vs segments 0:42.9 (diff 645ms)
-    WARN   40:21  end mismatch: timestamps 5:33.5 vs segments 5:34.1 (diff 585ms)
-    WARN   84:17  end mismatch: timestamps 2:02.0 vs segments 2:02.5 (diff 495ms)
-    WARN   89:29  end mismatch: timestamps 3:39.6 vs segments 3:40.1 (diff 535ms)
+  Warnings (first 1 of 1):
+    WARN     _meta missing fields: ['retry_beam']
 

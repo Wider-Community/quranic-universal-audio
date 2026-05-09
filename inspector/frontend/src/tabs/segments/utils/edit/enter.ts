@@ -27,6 +27,7 @@ export function enterEditWithBuffer(
     mode: 'trim' | 'split',
     contextCategory: string | null = null,
     mountId: symbol | null = null,
+    chapterOverride: number | null = null,
 ): void {
     if (get(editMode)) return;
 
@@ -44,16 +45,14 @@ export function enterEditWithBuffer(
     // — wrong audio. setSource is a no-op for active-chapter Adjust and
     // invalidates `_window` for cross-chapter so the loadCovering below
     // swaps to the row's chapter clip.
-    const segSource = resolveSegSource(seg);
+    const segSource = resolveSegSource(seg, chapterOverride);
     if (segSource) segPort.setSource(segSource);
 
-    // Pre-load the audio for the whole segment ± edit-mode padding. Under
-    // VBR this issues ONE ffmpeg invocation that covers all subsequent
-    // edit-preview operations: split-left toggle, split-right toggle, trim
-    // nudge, click-to-seek inside the row. Each of those was previously
-    // its own clip URL → bug #2 (split latency) and #3 (drag past clip
-    // edge had no audio). Now the port's idempotent fast path absorbs
-    // them. CBR chapters cover everything regardless, so no-op.
+    // Pre-load the audio for the whole segment with edit-mode post-roll.
+    // Under VBR the port keeps clip byte 0 aligned to seg.time_start; it
+    // never reuses an earlier-starting clip for a later playback start,
+    // because that would make the browser seek inside the streamed clip.
+    // CBR chapters cover everything regardless, so no-op.
     segPort.loadCovering(seg.time_start, seg.time_end, EDIT_LOAD_PAD_MS);
 
     const pending = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment',

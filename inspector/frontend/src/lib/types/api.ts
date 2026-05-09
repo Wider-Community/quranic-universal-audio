@@ -18,10 +18,13 @@ import type {
     SegReciter,
     SurahInfoMap,
     TsBoundaryMismatch,
+    TsLargeGap,
     TsMfaFailure,
+    TsMissingVerse,
     TsMissingWords,
     TsReciter,
     TsVerseData,
+    TsVerseOverlap,
     VerseRef,
 } from './domain';
 
@@ -140,8 +143,11 @@ export interface TsVersesResponse {
 /** GET /api/ts/validate/:reciter */
 export interface TsValidateResponse {
     mfa_failures: TsMfaFailure[];
+    missing_verses: TsMissingVerse[];
     missing_words: TsMissingWords[];
+    verse_overlaps: TsVerseOverlap[];
     boundary_mismatches: TsBoundaryMismatch[];
+    large_gaps: TsLargeGap[];
     meta: {
         has_segments: boolean;
         tolerance_ms: number;
@@ -205,6 +211,10 @@ export interface SegDataResponse {
 export interface SegAllResponse {
     segments: Segment[];
     audio_by_chapter: Record<string, string>;
+    /** All chapters of this reciter known VBR. Reciter-level mirror of
+     *  SegDataResponse.reciter_vbr_chapters so global accordions can route
+     *  cross-chapter playback before/independent of a chapter-data refresh. */
+    reciter_vbr_chapters?: number[];
     verse_word_counts: Record<VerseRef, number>;
     /** Flat ``"surah:ayah:word" -> Digital Khatt text`` map (full corpus).
      *  Consumed by `dkTextForRef` to render row body text from `matched_ref`. */

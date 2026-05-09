@@ -390,6 +390,7 @@
                     opId ?? undefined,
                     wfStartMs,
                     wfEndMs,
+                    rowChapter,
                 );
             }
         }
@@ -489,12 +490,12 @@
 
     function onAdjustClick(e: MouseEvent): void {
         e.stopPropagation();
-        enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId);
+        enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId, rowChapter);
     }
 
     function onSplitClick(e: MouseEvent): void {
         e.stopPropagation();
-        enterEditWithBuffer(seg, rowEl, 'split', validationCategory, _mountId);
+        enterEditWithBuffer(seg, rowEl, 'split', validationCategory, _mountId, rowChapter);
     }
 
     function onMergePrevClick(e: MouseEvent): void {
@@ -527,7 +528,7 @@
         if (get(editMode) || readOnly) return;
         const t = e.target as Element;
         if (t.closest('.seg-row-controls') || t.closest('canvas') || t.closest('.seg-text-ref')) return;
-        playFromSegment(seg.index, seg.chapter ?? 0, undefined, {
+        playFromSegment(seg.index, rowChapter, undefined, {
             isAccordionPlay: instanceRole !== 'main',
             accordionSiblings,
         });
@@ -695,6 +696,7 @@
                     {validationCategory}
                     {instanceRole}
                     {readOnly}
+                    fallbackChapter={rowChapter}
                 />
             </div>
             {#if contextLabel}

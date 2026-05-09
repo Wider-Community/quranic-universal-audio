@@ -158,10 +158,48 @@ def ts_validate(reciter):
         })
     boundary_mismatches.sort(key=lambda x: x["diff_ms"], reverse=True)
 
+    missing_verses = []
+    for vk in result.get("_missing_verses", []):
+        parts = vk.split(":")
+        ch = int(parts[0]) if parts and parts[0].isdigit() else 0
+        missing_verses.append({
+            "verse_key": vk, "chapter": ch,
+            "label": vk,
+        })
+    missing_verses.sort(key=lambda x: (x["chapter"],
+        int(x["verse_key"].split(":")[1]) if ":" in x["verse_key"] else 0))
+
+    verse_overlaps = []
+    for ov in result.get("_verse_overlaps", []):
+        parts = ov["verse_key"].split(":")
+        ch = int(parts[0]) if parts else 0
+        verse_overlaps.append({
+            "verse_key": ov["verse_key"], "chapter": ch,
+            "prev_verse_key": ov["prev_verse_key"],
+            "overlap_ms": ov["overlap_ms"],
+            "label": f"{ov['verse_key']} [-{ov['overlap_ms']}ms]",
+        })
+    verse_overlaps.sort(key=lambda x: x["overlap_ms"], reverse=True)
+
+    large_gaps = []
+    for g in result.get("_large_gaps", []):
+        parts = g["verse_key"].split(":")
+        ch = int(parts[0]) if parts else 0
+        large_gaps.append({
+            "verse_key": g["verse_key"], "chapter": ch,
+            "prev_verse_key": g["prev_verse_key"],
+            "gap_ms": g["gap_ms"],
+            "label": f"{g['verse_key']} [{g['gap_ms']/1000:.1f}s gap]",
+        })
+    large_gaps.sort(key=lambda x: x["gap_ms"], reverse=True)
+
     return jsonify({
         "mfa_failures": mfa_failures,
+        "missing_verses": missing_verses,
         "missing_words": missing_words,
+        "verse_overlaps": verse_overlaps,
         "boundary_mismatches": boundary_mismatches,
+        "large_gaps": large_gaps,
         "meta": {
             "has_segments": result.get("has_segments", False),
             "tolerance_ms": result.get("seg_tolerance_ms", TS_BOUNDARY_TOLERANCE_MS),

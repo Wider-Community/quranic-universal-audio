@@ -4,12 +4,17 @@ Design for migrating the Inspector from a local-Docker-only tool to a hosted, fr
 
 This document captures architectural decisions only. It is not an implementation plan — concrete TODOs are derived from it later, phase by phase.
 
+**Companion docs:**
+- [`inspector-data-storage.md`](inspector-data-storage.md) — implementation-grade reference for the deployed file-IO model: github-fetch service, scratch dir lifecycle, Git Data API write path, image build rules, per-phase acceptance criteria.
+- [`inspector-state-management.md`](inspector-state-management.md) — implementation-grade reference for reciter state: state file schema, catalog file schema, state machine + event vocabulary, the consolidated state workflow, identity convention with full marker/template registry, GitHub mirroring, per-phase acceptance criteria.
+
 ## Goals
 
 - Public website, view-only by default for everyone — all three tabs (Audio, Segments, Timestamps).
 - Editing requires a single click ("Claim") that handles GitHub authentication, collaborator invitation, and assignment in one flow.
 - One reciter, one reviewer at a time. Locked at the API gate, not just hidden in UI.
-- GitHub remains the source of truth for reciter state, PR review, edit history, and merge gating.
+- A single repo file (`data/reciter_state.json`) is the source of truth for reciter state. GitHub primitives (labels, assignees, comments) mirror it for human UX but are not authoritative.
+- GitHub remains the source of truth for review-content (PR diff, edit history on branch, merge events). The Inspector is the primary contribution surface; GitHub is the automation backend.
 - The contributor's GitHub identity is preserved as the author of every commit.
 - Existing CI for validation, timestamps refresh, and dataset publishing keeps working with minimal changes.
 
@@ -20,69 +25,72 @@ This document captures architectural decisions only. It is not an implementation
 - Public rejection / re-extraction / param-rerun flows. These remain internal-only operations performed by maintainers from the CLI; the website does not surface them as states.
 - Schema migration of `edit_history.jsonl` for backwards compatibility. The hash chain is being removed (see §7); writes after rollout follow the new schema.
 
-## 1. Reciter lifecycle (simplified)
+## 1. Reciter lifecycle (six states)
 
-Four states, derived live from labels + on-disk data + open PRs:
+State is owned by `data/reciter_state.json`. GitHub labels and assignees mirror the file. See [`inspector-state-management.md`](inspector-state-management.md) §4 for the full state machine, event vocabulary, and transition matrix.
 
-| State | Label combination | Data on disk | PR | Editable | Inspector behaviour |
-|---|---|---|---|---|---|
-| **Catalogued** | *(none — entry only in `reciters_index.json`)* | No | No | No | Hidden from segments tab. Surfaced via "Request alignment" button which dispatches to the existing Reciter Requests Space. |
-| **Pending alignment** | `request-alignment` + `status:pending-alignment` | No | No | No | Tab card shows "Awaiting pipeline" with the issue link. Cannot be claimed for review. |
-| **Available for review** | `request-alignment` + `status:awaiting-review` + `reviewer-needed` | Yes (PR head) | Yes (draft) | Claimable by anyone | Listed in "Available for review" tab. Claim button visible. |
-| **Under review** | `request-alignment` + `status:awaiting-review` + `reviewer-assigned` | Yes (PR head) | Yes | **Yes** for the assignee. View-only for everyone else. | Listed in "Under review" tab. Lock banner for non-assignees. |
-| **Completed** | `status:awaiting-timestamps` or `status:completed` | Yes (`main`) | Merged | No | Listed in "Completed" tab. View-only. |
+| State | Editable | Inspector behaviour |
+|---|---|---|
+| `catalogued` | No | Hidden from segments tab. Surfaced via "Request alignment" which fires `reciter.alignment_requested`. |
+| `awaiting_alignment` | No | Tab card shows "Pipeline running" with the issue link. Cannot be claimed. |
+| `awaiting_review` | No (claimable) | Listed in "Available for review". Claim button visible. |
+| `under_review` | **Yes** for the assignee, view-only otherwise | Listed in "Under review". Lock banner for non-assignees. |
+| `awaiting_timestamps` | No | Segments on main; TS data not yet on main. Listed in "Completed" tab; view-only. |
+| `completed` | No | Listed in "Completed" tab. View-only. |
 
-Drops vs. the original proposal:
+Deferred (schema flexible to add later, no automation today):
 
-- No `status:awaiting-rerun` — re-extraction is internal only.
-- No `status:rejected` / `status:discarded` surface in the Inspector — internal triage handles these and the reciter simply disappears from the website.
-- No website-side "request again after rejection" path — handled by maintainer comment + manual re-trigger.
-- No multi-reviewer / pair-review path.
+- Re-edits of completed reciters — the existing CI (segments change → TS regenerate) handles staleness implicitly; no explicit revision flow.
+- Audio-source changes forcing realignment.
+- Alignment-failed retry surfaces.
+- `discarded` / abandon flow.
+- Multi-reviewer / pair-review.
 
 ## 2. Identity convention (slug as the canonical ID)
 
-Today's identity is brittle: PR title is the display name, slug is buried in issue body, `find_segments_pr.py` exists as a four-way fuzzy fallback. The new convention puts the slug everywhere, machine-parseable.
+Today's identity is brittle: PR title is the display name, slug is buried in the issue body, `find_segments_pr.py` exists as a four-way fuzzy fallback. The new convention puts the slug in a machine-parseable position on every artifact. Timestamps no longer get a separate branch/PR (TS is deterministic compute output, pushed direct to main), so there's no `kind` disambiguator anywhere.
 
 | Artifact | Convention | Example |
 |---|---|---|
-| Issue title | `[request] <slug> — <Display Name> (<riwayah>, <style>)` | `[request] saad_al_ghamdi — Saad Al-Ghamdi (Hafs, Murattal)` |
-| Issue body marker | HTML comment + structured frontmatter block | `<!-- reciter-task: slug=saad_al_ghamdi kind=segments issue=42 -->` |
-| Segments branch | `reciter/<slug>/segments` | `reciter/saad_al_ghamdi/segments` |
-| Timestamps branch | `reciter/<slug>/timestamps` | `reciter/saad_al_ghamdi/timestamps` |
-| Inspector edit pushes | Same as segments branch — Inspector backend pushes onto the existing PR head | — |
-| PR title (segments) | `[<slug>] segments — <Display Name>` | `[saad_al_ghamdi] segments — Saad Al-Ghamdi` |
-| PR title (timestamps) | `[<slug>] timestamps — <Display Name>` | — |
-| PR body | HTML comment marker + human header | `<!-- reciter-task: slug=... kind=segments issue=42 -->` |
-| Commit subject | `[<slug>] <kind>: <message>` | `[saad_al_ghamdi] segments: trim 2:34:1 left edge` |
+| Issue title | `[request] <slug>: <Display Name>` | `[request] saad_al_ghamdi: Saad Al-Ghamdi` |
+| PR title | `[<slug>] <description>` | `[saad_al_ghamdi] alignment for Saad Al-Ghamdi` |
+| Branch | `reciter/<slug>` | `reciter/saad_al_ghamdi` |
+| Commit (human edit) | `[<slug>] [wip] <op summary>` | `[saad_al_ghamdi] [wip] trim 2:34:1 left edge` |
+| Commit (pipeline) | `[<slug>] [pipeline] <message>` | `[saad_al_ghamdi] [pipeline] timestamps refresh` |
+| Commit (state file) | `[state] <slug>: <event>` | `[state] saad_al_ghamdi: claimed by alice` |
+| Issue/PR body marker | HTML comment | `<!-- reciter-task: slug=saad_al_ghamdi schema=1 -->` |
 
-A single helper module owns parsing and resolution:
+`scripts/lib/reciter_task.py` is the single resolver — given any of `(slug | issue_number | pr_number | branch_name)`, returns a `ReciterTask` dataclass. Every CI script, `process_requests.py`, the Inspector backend, and the Reciter Requests Space go through it. Full marker registry, body templates, and squash-merge subject convention in [`inspector-state-management.md`](inspector-state-management.md) §6–§7.
 
-- `scripts/lib/reciter_task.py` — given any of `(slug | issue_number | pr_number | branch_name)`, returns a `ReciterTask` dataclass with all four. Used by every CI script, `process_requests.py`, the Inspector backend, and the Reciter Requests Space.
-- All workflows that today regex-parse `Ref #N` from PR bodies switch to reading the structured HTML comment marker.
-
-Once adopted, `find_segments_pr.py` collapses to a single `gh pr list --head reciter/<slug>/segments --state open` call and can be deleted.
+Once adopted, `find_segments_pr.py` collapses to a single `gh pr list --head reciter/<slug>` call and can be deleted.
 
 ## 3. Deployment architecture (Inspector backend)
 
-The Inspector backend stays Python (Flask) — its 11 validators, the phonemizer integration, peaks/ffmpeg, and the save flow's atomic-write + history append are too much code to port to the browser. The deployed backend is stateless, with a per-PR git working tree as its persistence layer.
+The Inspector backend stays Python (Flask) — its 11 validators, the phonemizer integration, peaks/ffmpeg, and the save flow's atomic-write + history append are too much code to port to the browser. The deployed backend is **stateless for reads** and **near-stateless for writes**: no git worktrees, no persistent disk for repo data. See [`inspector-data-storage.md`](inspector-data-storage.md) for the file-by-file specification, github-fetch service contract, scratch dir lifecycle, image build rules, and per-phase acceptance criteria.
 
 ### Read path
 
 1. Browser requests data for reciter `X`.
-2. Backend resolves `X`'s state via the live state computation (see §6).
-3. If `Completed`: read from a cached `git worktree` of `main`.
-4. If `Under review` or `Available for review`: read from a cached `git worktree` of `reciter/<slug>/segments`.
-5. Subsequent reads served from `services/cache.py` exactly as today.
+2. Backend resolves `X`'s state via the live state computation (see §6) and picks a ref: `main` for completed, `reciter/<slug>/segments` for under-review.
+3. Backend's `services/github_fetch.py` returns the requested file from a server-side LRU cache, falling back to `https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>` (authenticated via the GitHub App installation token) on miss. ETag-revalidated, TTL'd, single-flight.
+4. Subsequent reads served from `services/cache.py` (in-memory parsed forms) exactly as today.
 
-Worktrees live under `INSPECTOR_DATA_DIR/.worktrees/<slug>` on the deployed instance's persistent volume. Cold start on a worktree = `git fetch origin reciter/<slug>/segments && git worktree add ...`. Warm reads = filesystem cache + in-memory cache.
+No worktrees. No on-disk repo. Anonymous viewers and active reviewers share the same read path; the only difference is the ref.
+
+Audio plays browser → origin direct. Timestamps come browser → HF CDN direct (already implemented per [`timestamps-tab-deployment-plan.md`](timestamps-tab-deployment-plan.md)).
 
 ### Write path
 
+Writes are gated to the one active reviewer per reciter (locking model in §5). For that reviewer:
+
 1. Browser POSTs to `/api/seg/save/<reciter>/<chapter>` with the user's session cookie.
 2. Backend's `@require_edit_lock(reciter)` decorator verifies the authenticated user is the assignee of this reciter's open PR. Returns 403 otherwise.
-3. `save_seg_data()` runs unchanged inside the worktree — atomic write `detailed.json`, rebuild `segments.json`, snapshot validation, append `edit_history.jsonl`.
-4. Backend marks the worktree dirty and starts/extends a debounce timer (default 30s of inactivity, hard cap 5 minutes).
-5. When the timer fires, backend performs `git add -A && git commit && git push` against the PR branch. Multiple in-window saves coalesce into one commit.
+3. On first save of a session, backend materialises a small **scratch dir** at `<INSPECTOR_SCRATCH_DIR>/<slug>/data/recitation_segments/<slug>/` populated with the 4–5 editable files fetched from the PR branch via github-fetch.
+4. `save_seg_data()` runs unchanged against the scratch dir — atomic write `detailed.json`, rebuild `segments.json`, snapshot validation, append `edit_history.jsonl`.
+5. Backend marks the scratch dirty and starts/extends a debounce timer (30 s inactivity, 5 min hard cap).
+6. When the timer fires, backend issues a **multi-file commit via the GitHub Git Data API** (blobs → tree → commit → ref update) against the PR branch. Multiple in-window saves coalesce into one commit. No `git push`, no worktree.
+
+Scratch dir is per-active-reviewer and ephemeral — backend restart loses at most the unflushed debounce window, recovered on next session by re-fetching from the PR branch. Total scratch footprint: ~9–19 MB per active reviewer.
 
 ### Commit attribution
 
@@ -97,7 +105,7 @@ This contradicts the `process-requests` skill's "all bot artifacts appear as `gi
 
 ### Hosting target
 
-Fly.io with a small persistent volume is the path of least resistance: it supports Python + ffmpeg + git + persistent disk + websockets in a single small VM. Cloud Run/Render/Railway are also viable. The deployed image is the same `inspector/Dockerfile` artifact reviewers use locally (`docker-publish.yml` already builds and pushes it to GHCR).
+Fly.io is the path of least resistance: supports Python + ffmpeg + websockets in a single small VM. **No persistent volume required** — the github-fetch LRU is in-memory, scratch is ephemeral disk, and audio/timestamps bypass the backend entirely. Cloud Run / Render / Railway are equally viable since the persistent-disk requirement is gone. The deployed image is the same `inspector/Dockerfile` artifact reviewers use locally (`docker-publish.yml` already builds and pushes it to GHCR), with a stripped `.dockerignore` excluding per-reciter and pipeline-only data — see [`inspector-data-storage.md`](inspector-data-storage.md) §7.
 
 ## 4. Authentication & first-time contributor flow
 
@@ -114,21 +122,21 @@ GitHub OAuth via a GitHub App installed on the repo. Scopes: `read:user`, `user:
 The current `/claim` issue-comment dance is preserved as a CLI fallback but **not surfaced to web users**. The website collapses it into one button:
 
 1. Logged-in user clicks **Claim** on an Available reciter.
-2. Backend calls `GET /repos/{owner}/{repo}/collaborators/{login}` (using PAT, since `GITHUB_TOKEN` lacks scope).
-3. **If collaborator (204):** backend immediately calls `POST /repos/.../issues/<N>/assignees`. Done. The existing `issue-commands.yml` `assigned` handler swaps `reviewer-needed` → `reviewer-assigned` and the `pr-assignee-sync.yml` workflow propagates assignment to the PR. UI flips to edit mode.
+2. Backend calls `GET /repos/{owner}/{repo}/collaborators/{login}` (using App token).
+3. **If collaborator (204):** backend fires `repository_dispatch reciter.claimed { slug, login }` and returns 202. `update-reciter-state.yml` validates the transition, writes `data/reciter_state.json`, and mirrors to GitHub primitives (assigns issue, flips state label). UI flips to edit mode optimistically; reconciles on the next state-file poll (~10 s).
 4. **If not collaborator (404):** backend calls `PUT /repos/.../collaborators/{login}` to send the invite, then shows a modal:
    > *We've sent you a collaborator invite. [Accept invite ↗](https://github.com/{owner}/{repo}/invitations) — once accepted, return here and the page will auto-claim.*
 5. The page polls `GET /api/me/collaborator-status` every few seconds. When `true`, it auto-fires the claim API call (step 3). User never has to re-click; never has to type `/claim` or `/confirm`.
 
-CLI fallback (`/claim` and `/confirm` as issue comments) remains for users who prefer terminal flow or who can't run the web UI.
+CLI fallback (`/claim` and `/confirm` as issue comments) remains for users who prefer terminal flow or who can't run the web UI; these go through `issue-commands.yml`, which fires the same `reciter.claimed` / `reciter.released` dispatch events.
 
 ### Release flow (assigned reviewer changes mind)
 
-A new **Release claim** button on the website calls `DELETE /repos/.../issues/<N>/assignees`. The existing `issue-commands.yml` `unassigned` handler restores `reviewer-needed`. The user's saved edits remain on the PR branch — a future reviewer continues from there.
+A new **Release claim** button calls `POST /api/release/<slug>` which fires `reciter.released { slug, login }`. The state workflow flips state `under_review → awaiting_review`, clears assignee, mirrors to issue + PR. Saved edits remain on the PR branch — a future reviewer continues from there.
 
 ### What CI gives us for free
 
-The existing `issue-commands.yml`, `pr-assignee-sync.yml`, and `segments-pr-merged.yml` workflows already handle label transitions, assignee sync to the linked PR, and post-merge cleanup. The website's claim/release endpoints just trigger the right primitives; the workflows fan out the rest.
+Every contribution event (claim, release, alignment complete, PR merge, TS complete) flows through `repository_dispatch` into the single `update-reciter-state.yml` workflow. Other workflows shrink to event emitters: `issue-commands.yml` parses comments and fires dispatch, `segments-pr-merged.yml` fires `reciter.review_merged`, `timestamps-refresh.yml` fires `reciter.timestamps_completed`. The state workflow handles label/body/assignee mirroring in one place.
 
 ## 5. Locking model
 
@@ -147,13 +155,15 @@ def require_edit_lock(reciter_param='reciter'):
             user = current_user()
             if not user:
                 abort(401)
-            task = resolve_reciter_task(reciter)
-            if task.state != 'under_review' or task.assignee != user.login:
+            entry = state_store.get(reciter)  # parsed data/reciter_state.json
+            if entry is None or entry.state != 'under_review' or entry.assignee != user.login:
                 abort(403, description="Reciter is not editable by this user")
             return fn(*args, **kwargs)
         return wrapper
     return decorator
 ```
+
+The lookup is a dict access on the parsed state file — no live GitHub calls. Freshness is bounded by the in-memory cache TTL (~30 s) plus the state-workflow propagation latency (~10 s).
 
 Endpoints to gate (audit checklist):
 
@@ -176,43 +186,47 @@ The frontend hides the buttons; the backend rejects unauthorized POSTs even if t
 
 In-memory lock keyed on `(reciter, user)` with a short lease (~60s, refreshed on each save). Prevents the same user opening two tabs from racing on commits. If the deployment scales to multiple backend nodes later, this lock moves to Redis or to git itself (`git push --force-with-lease` semantics).
 
-## 6. State computation (single workflow + helper)
+## 6. State management (file is source of truth)
 
-Today, label transitions are scattered across four workflows (`segments-pr-merged.yml`, `timestamps-refresh.yml`, `issue-commands.yml`, `process_requests.py`). Centralizing into one helper + one workflow:
+Pipeline state, assignee, issue/PR numbers, and event history for every reciter live in **`data/reciter_state.json`** — a repo-tracked file written only by `update-reciter-state.yml`. GitHub labels and assignees are one-way mirrors of that file, displayed for human UX in the issues list but **not authoritative**. Manual edits to GitHub labels/assignees get reverted on the next workflow run.
 
-### Helper module
+Static identity (display name, riwayah, audio source, url_template) lives separately in **`data/reciter_catalog.json`**, updated by manual PRs from the Reciter Requests intake. Two files, two cadences, two clean git histories. Mixing state-change auto-commits with catalog PR-edits would race on the same file and noise up `git blame`.
 
-`scripts/lib/reciter_state.py` — given a `ReciterTask`, computes the current state from:
+Inspector reads both files (parsed once on startup, refreshed on webhook or 30 s poll) and bases every UI affordance on them.
 
-- The issue's labels.
-- Whether an open PR with the matching `reciter/<slug>/segments` head exists.
-- Whether `data/recitation_segments/<slug>/segments.json` is on `main`.
-- Whether `data/timestamps/<cat>/<slug>/timestamps.json` is on `main`.
+### Why a flat file beats labels-as-state and a database
 
-Returns one of `catalogued | pending_alignment | available_for_review | under_review | completed`. Pure function; no GitHub API calls inside (caller passes in fetched data).
+- Labels drift (manual edits, race conditions across workflows). The file does not — one workflow, declared `concurrency: singleton`, is the only writer.
+- Database adds operational surface (auth, backups, schema migrations, connection management) for a sub-1/sec write rate. A JSON file with `git log` as the audit trail is simpler at every level. ~150 KB at 300 reciters.
+- Inspector ingests it as parsed JSON; trivial to cache in memory.
 
-### Live endpoint
+### One workflow, all transitions
 
-`GET /api/reciter-task/<slug>` on the Inspector backend returns the full `ReciterTask` plus computed state plus `can_edit_for_current_user`. Cached 30s. Drives every UI affordance (claim button, lock banner, data-fetch path).
+`update-reciter-state.yml` is the only writer. It listens for `repository_dispatch` events emitted by every other workflow (`reciter.alignment_requested`, `reciter.alignment_completed`, `reciter.claimed`, `reciter.released`, `reciter.review_merged`, `reciter.timestamps_completed`, plus `catalog_synced` from `push` triggers on the catalog file). For each event it validates the transition, applies it to `data/reciter_state.json`, commits with subject `[state] <slug>: <event>`, then mirrors the new state to GitHub primitives (issue body re-render, label flip, assignee set/unset).
+
+All other workflows fire dispatch events; **none of them write state directly.** Full event vocabulary, transition matrix, dispatch payload schemas, and mirror logic in [`inspector-state-management.md`](inspector-state-management.md) §4–§5.
+
+### Inspector reads the file, not the GitHub API
+
+`/api/reciter-task/<slug>` is a thin lookup into the parsed state file — no live GitHub API calls. The "is current user the assignee?" check the API gate (§5) does is `state.reciters[slug].assignee == user.login`. State-mutating endpoints (`/api/claim/<slug>`, `/api/release/<slug>`) **fire `repository_dispatch`** and return 202; the workflow does the actual work; the file changes propagate back via webhook or poll within ~10 s.
 
 ### Workflow consolidation
 
-| Existing | Action | Notes |
-|---|---|---|
-| `bot-create-issue.yml`, `bot-create-pr.yml`, `bot-comment.yml` | Keep | Generic primitives. |
-| `issue-commands.yml` (`/claim`, `/confirm`) | Keep | CLI fallback. Website calls assignee API directly. |
-| `pr-assignee-sync.yml` | Keep, simplify | Linked-PR lookup uses branch convention `reciter/<slug>/segments` instead of body regex. |
-| `validate-segments-pr.yml` | Keep, gate | Skip on commits whose subject contains `[wip]`. Inspector debounced pushes use that prefix; full validation only fires when the PR is marked ready for review. |
-| `segments-pr-merged.yml` | Keep, simplify | Slug parsed from PR title prefix `[<slug>]` (with file-diff fallback). |
-| `timestamps-refresh.yml` | Keep | Unchanged. |
-| `update-reciters.yml` | Extend | Generated `reciters_index.json` carries `state`, `issue_number`, `pr_number`, `assignee`, `last_updated`. Triggered also on `issues.types: [labeled, unlabeled]` so state updates land within seconds. |
-| `validate-audio-pr.yml` | Keep | Unchanged. |
-| `release.yml`, `sync-dataset.yml` | Keep | Unchanged. |
-| `docker-publish.yml` | Keep | Unchanged. |
-| `validate-edit-history.py` | **Remove the file-hash check** (see §7). Keep batch-id chain + tampering checks. | |
-| `find_segments_pr.py` | **Delete** | Replaced by branch-name lookup. |
-| `pr-uniqueness.yml` (NEW) | Add | Fail PR if any other open PR already touches `data/recitation_segments/<slug>/`. Prevents two PRs racing on one reciter. With branch convention this is also enforced at the git level (one branch per slug per kind), so the workflow is a belt-and-suspenders check. |
-| `inspector-deploy.yml` (NEW) | Add | On push to `main` of `inspector/**`, deploys the new Docker image to the hosted environment. |
+| Existing | Action |
+|---|---|
+| `bot-create-issue.yml`, `bot-create-pr.yml`, `bot-comment.yml` | Keep as primitives — they create artifacts, then fire dispatch events; never write state |
+| `issue-commands.yml` (`/claim`, `/confirm`) | Reduce to comment parser; fire `reciter.claimed` / `reciter.released` |
+| `pr-assignee-sync.yml` | **Delete** — state workflow mirrors assignment to issue + PR in one shot |
+| `validate-segments-pr.yml` | Keep, gate on `[wip]` commit prefix — Inspector debounced pushes skip full validation |
+| `segments-pr-merged.yml` | Reduce to "fire `reciter.review_merged`"; state workflow handles label/body cleanup |
+| `timestamps-refresh.yml` | Keep as pipeline runner; on completion fire `reciter.timestamps_completed` |
+| `update-reciters.yml` | Repurpose — regenerate `RECITERS.md` and badge files **from the state file**. Doesn't write state itself |
+| `validate-audio-pr.yml`, `release.yml`, `sync-dataset.yml`, `docker-publish.yml` | Keep, unchanged |
+| `validate-edit-history.py` | Drop file-hash check (§7); keep batch-id chain + tampering checks |
+| `find_segments_pr.py` | **Delete** — replaced by branch-name lookup (`gh pr list --head reciter/<slug>`) |
+| `update-reciter-state.yml` (NEW) | Add — sole writer of `data/reciter_state.json`, dispatches in, mirrors out |
+| `pr-uniqueness.yml` (NEW) | Add — fail PR if another open PR already touches `data/recitation_segments/<slug>/` |
+| `inspector-deploy.yml` (NEW) | Add — on `inspector/**` push to main, deploy new Docker image |
 
 ## 7. Edit-history simplifications
 
@@ -238,15 +252,14 @@ So the file-hash field and its validator check go away. What remains useful and 
 
 The genesis record can also go — it exists to anchor the hash chain and has no other purpose.
 
-### Drop `edit_history_peaks.jsonl`
+### Keep `edit_history_peaks.jsonl` (corrected)
 
-Today's `edit_history_peaks.jsonl` exists so cross-session History viewing can show the waveform shape of an op's affected region without recomputing peaks from audio. In the deployed model:
+An earlier draft of this plan proposed dropping `edit_history_peaks.jsonl` on the assumption that it was a 20+ MB file with no read path. Both assumptions were wrong:
 
-- The backend has the audio cached and ffmpeg installed.
-- Peak compute for one op's region is ~50ms.
-- Recomputing on demand is faster than fetching a 20MB+ JSONL on cold load.
+- Real file size in the repo today is ~1–2 MB per reciter (not 20 MB).
+- The read path **does** exist at `routes/peaks.py:82` (`seg_history_peaks_get`) and is wired to the History panel via `tabs/segments/utils/data/reciter-actions.ts:72` (parallel fetch on session load) and `tabs/segments/utils/playback/preview.ts:209` (lazy POST during playback).
 
-Drop the file, drop `services/peaks_history.py`, drop the `op_peaks` payload field on save. The history viewer fetches peaks via the existing `/api/peaks` endpoint when an op row is expanded.
+The feature lets anyone — including anonymous viewers — open a reciter's History panel and see waveform shapes render instantly without recomputing from audio. Dropping it would regress that UX. So the file, `services/peaks_history.py`, and the `op_peaks` save-payload field all stay. The file ships in scratch alongside the other 4 editable files (~2 MB extra) and is fetched by anonymous viewers via github-fetch like every other per-reciter data file. See [`inspector-data-storage.md`](inspector-data-storage.md) §8.
 
 ### Drop the `_meta.audio_source` peek
 
@@ -261,6 +274,8 @@ These are not strictly required for deployment but reduce surface area while we'
 - **`update-reciters.yml`'s auto-PR + auto-merge cycle.** Currently it opens a docs PR every time a state changes. In the new model, the live `/api/reciter-task/<slug>` endpoint serves the website, so the index file's role shrinks to "snapshot for the Reciter Requests Space + RECITERS.md badge generator." Run it on a slower cadence (every 30 min instead of every push) to cut Action minutes.
 - **Drop the validate-segments comment edit/insert dance.** Post one comment per push, let GitHub collapse the timeline. Saves ~30 lines of yaml.
 - **Drop the audio proxy** (`routes/audio_proxy.py`) for the deployed instance. The backend's only role for audio is to set `Access-Control-Allow-Origin: *`, which the browser can get directly from origin if origin permits CORS, or from a small CDN-cached pass-through. Local Docker keeps the proxy.
+- **Drop the validation panel in deployed mode.** `routes/timestamps.py::ts_validate` is removed from the deployed image entirely — there is no UI surface for it on the website. Validation remains in local mode for maintainers. This kills the cross-file timestamps↔segments dependency and removes the only Inspector code path that would otherwise need to fetch from HF for a server-side compute.
+- **Audio manifests via github-fetch, not bundled in the image.** All 391 `data/audio/<cat>/<src>/<reciter>.json` files are pulled per-reciter from GitHub raw on demand (cached server-side). Adding/changing a reciter's audio config no longer triggers a Docker image rebuild + redeploy. See [`inspector-data-storage.md`](inspector-data-storage.md) §3 and §8.
 
 ## 9. First-time-contributor bootstrapping
 
@@ -285,42 +300,62 @@ The OAuth/App install also gives us:
 
 ## 10. Phased migration
 
-1. **Phase 0 — preparation**
-   - Adopt the slug-first identity convention. Update `process_requests.py::cmd_prepare_pr` to use the new branch and title format.
-   - Add `scripts/lib/reciter_task.py` and `scripts/lib/reciter_state.py`.
-   - Add `editingDisabled` store and `@require_edit_lock` decorator (no-op until states are wired up).
+Detailed per-phase file-IO scope, acceptance criteria, and risks live in [`inspector-data-storage.md`](inspector-data-storage.md) §9. High-level shape:
 
-2. **Phase 1 — read-only deployment**
-   - Deploy the Inspector image to Fly.io.
-   - GitHub OAuth on the website. Anonymous = view-only on `main` data only.
+1. **Phase 0 — preparation (foundational, no deploy)**
+   - Adopt the slug-first identity convention: branch `reciter/<slug>`, new title formats, marker registry, commit-subject prefixes. Update `process_requests.py::cmd_prepare_pr` accordingly.
+   - Land `scripts/lib/reciter_task.py` (resolver) and `scripts/lib/reciter_state.py` (file parser + transition machine + mirror helpers).
+   - Land `scripts/lib/markers.py` (parse/render every HTML-comment marker in [`inspector-state-management.md`](inspector-state-management.md) §6).
+   - Create `data/reciter_catalog.json` (split static identity out of existing `reciters_index.json`).
+   - Create `data/reciter_state.json` (seeded from current GitHub state via a one-shot script).
+   - Add `update-reciter-state.yml` workflow handling all `repository_dispatch` event types.
+   - Migrate other workflows to fire dispatch events instead of writing state. Decommission `pr-assignee-sync.yml`, `find_segments_pr.py`.
+   - Add `@require_edit_lock` decorator (lookups state file; no-op while state file is unpopulated).
+
+2. **Phase 1 — read-only deployment** (anonymous, `main` data only)
+   - Implement `services/github_fetch.py` (LRU + TTL + ETag + single-flight) and route reads through it.
+   - Image built with `.dockerignore` excluding `data/audio/`, `data/recitation_segments/`, `data/timestamps/`, `data/qul_downloads/`, `data/.cache/` — image stays ~22 MB of static data.
+   - `INSPECTOR_TS_SOURCE=huggingface` flipped on for the image.
+   - Deploy to Fly.io (no persistent volume needed).
+   - `routes/timestamps.py::ts_validate`, `routes/audio_proxy.py`, `app.py::serve_audio` excluded from deployed image.
    - `/api/reciter-task/<slug>` endpoint live; UI shows reciter status pills.
+   - Anonymous = view-only on completed reciters via github-fetch at `main`.
 
 3. **Phase 2 — PR-branch reads**
-   - Backend learns to clone `reciter/<slug>/segments` worktrees.
-   - Available and Under review tabs render data from PR branches.
+   - github-fetch extended with `ref` parameter; differentiated TTLs (5 min main, 30 s branch).
+   - Available + Under-review tabs render data from PR branches via github-fetch.
    - Edit affordances still hidden globally.
+   - Add `editingDisabled` store consumed by every edit-affordance component.
 
 4. **Phase 3 — claim flow**
+   - GitHub OAuth / App on the website.
    - Wire the Claim button + collaborator-invite + auto-poll modal.
-   - Enforce single-writer lock.
+   - Enforce single-writer lock (no writes yet — saves still 403).
 
-5. **Phase 4 — writes**
-   - Enable saves with debounced commit-and-push.
-   - Drop the file-hash chain, drop `edit_history_peaks.jsonl`, drop genesis record.
-   - Test end-to-end with one volunteer reciter.
+5. **Phase 5a — writes against existing edit_history schema**
+   - `services/scratch.py` for scratch dir lifecycle.
+   - `services/github_commit.py` for Git Data API multi-file commits.
+   - Save flow rewired through scratch + debounced commit + user-attributed authorship.
+   - Test end-to-end with one volunteer reviewer.
 
-6. **Phase 5 — workflow consolidation**
+6. **Phase 5b — edit_history schema simplification**
+   - Drop the file-hash chain (`file_hash_after`, `check_file_hash`, `file_sha256`).
+   - Drop genesis record write + check.
+   - Drop `backup_file()` calls in deployed save path.
+   - Keep `edit_history_peaks.jsonl` (corrected — see §7).
+
+7. **Phase 6 — workflow consolidation + decommission**
    - Add `pr-uniqueness.yml`, `inspector-deploy.yml`.
+   - Cache invalidation webhook from `segments-pr-merged.yml` to `/api/internal/cache-invalidate`.
    - Delete `find_segments_pr.py`.
-   - Update `validate-edit-history.py` to drop the hash check.
-   - Slow `update-reciters.yml` cadence.
-
-7. **Phase 6 — docs and decommission**
+   - Slow `update-reciters.yml` cadence to every 30 min.
    - Update contributor docs to point to the website as the primary path.
    - Local Docker is now the offline / maintainer fallback.
 
 ## Open questions
 
 - **Anonymous viewing of in-review PRs.** Default to yes (transparent process). Can flip later if maintainers prefer to keep WIP private.
-- **Persistent volume size on Fly.io.** With ~300 reciters and ~50MB of data per active worktree, plus audio caches, expect to start at 5–10GB. Tune after measuring.
-- **OAuth App vs. GitHub App.** GitHub App is preferred (server-side installation token avoids needing user OAuth tokens to have `repo` scope), but a small OAuth App is easier to bootstrap. Decide before Phase 1.
+- **OAuth App vs. GitHub App.** GitHub App is preferred (server-side installation token avoids needing user OAuth tokens to have `repo` scope, and it's the same token github-fetch + Git Data API commits use). A small OAuth App is easier to bootstrap. Decide before Phase 3.
+- **CDN in front of Inspector.** Cold-start cache miss after a deploy hits github-fetch for every active user's first request. Fronting `/api/seg/data/*` with Cloudflare or Fly's edge cache makes only the first global user pay. Decision deferred to Phase 1 measurements.
+
+Detailed file-storage risks (rate limits, `detailed.json` size cap, single-flight semantics, App token expiry, scratch crash recovery, etc.) live in [`inspector-data-storage.md`](inspector-data-storage.md) §10.

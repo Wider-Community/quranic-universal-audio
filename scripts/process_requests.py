@@ -550,7 +550,7 @@ def cmd_prepare_pr(args):
                 try:
                     result = subprocess.run(
                         ["gh", "issue", "develop", str(req["issue_number"]),
-                         "--branch", branch, "--base", "main"],
+                         "--name", branch, "--base", "main"],
                         cwd=str(REPO_ROOT), capture_output=True, text=True,
                     )
                     if result.returncode == 0:
@@ -1083,6 +1083,87 @@ def cmd_complete_timestamps(args):
 
 
 # ---------------------------------------------------------------------------
+# generate-sweep-pbs / promote-sweep
+# ---------------------------------------------------------------------------
+KATANA_REMOTE_DIR = "/srv/scratch/z5344896/mfa_segments_extract"
+
+
+def _rewrite_sweep_pbs_block(pbs_text: str, reciter: str, source: str,
+                             silences: list[int], run_probe: bool) -> str:
+    sub = (
+        f'RECITER="{reciter}"\n'
+        f'SOURCE="{source}"\n'
+        f'MIN_SILENCE_VALUES=({" ".join(str(s) for s in silences)})\n'
+        f'PAD_LEFT=150\n'
+        f'PAD_RIGHT=500\n'
+        f'MIN_SILENCE_FLOOR=40\n'
+        f'MODEL="Large"\n'
+        f'RUN_PROBE={1 if run_probe else 0}\n'
+    )
+    return re.sub(
+        r"RECITER=\"[^\"]*\"\nSOURCE=\"[^\"]*\"\nMIN_SILENCE_VALUES=\([^)]*\)\n"
+        r"PAD_LEFT=\d+\nPAD_RIGHT=\d+\nMIN_SILENCE_FLOOR=\d+\nMODEL=\"[^\"]*\"\nRUN_PROBE=\d+\n",
+        sub, pbs_text, count=1,
+    )
+
+
+def cmd_generate_sweep_pbs(args):
+    """Rewrite extract_segments_sweep.pbs for one reciter + silence sweep."""
+    state = load_state()
+    accepted = [r for r in state["requests"] if r["action"] == "accept"]
+    if len(accepted) != 1:
+        sys.exit(f"sweep needs exactly 1 accepted reciter in state, got {len(accepted)}")
+    rec = accepted[0]
+    silences = [int(s) for s in args.silences.split(",")]
+    if len(silences) < 2:
+        sys.exit("--silences needs at least 2 comma-separated values")
+
+    pbs_path = REPO_ROOT / ".local/extraction/extract_segments_sweep.pbs"
+    text = pbs_path.read_text()
+    text = _rewrite_sweep_pbs_block(
+        text, rec["slug"], rec["source"], silences, run_probe=not args.no_probe,
+    )
+    pbs_path.write_text(text)
+    print(f"Sweep PBS updated: {pbs_path}")
+    print(f"  Reciter:   {rec['slug']}  (source: {rec['source']})")
+    print(f"  Silences:  {silences}")
+    print(f"  Run probe: {not args.no_probe}")
+    print()
+    print("Next:")
+    print("  bash .local/extraction/sync_mfa.sh")
+    print(f'  ssh katana "cd {KATANA_REMOTE_DIR} && qsub .local/extraction/extract_segments_sweep.pbs"')
+
+
+def cmd_promote_sweep(args):
+    """Promote one sweep pass to canonical, fetch, optionally probe."""
+    slug = args.reciter
+    sil = args.silence
+    remote = f"{KATANA_REMOTE_DIR}/{slug}"
+    canonical_remote = f"{KATANA_REMOTE_DIR}/data/recitation_segments/{slug}"
+    cmd = (
+        f"set -e; "
+        f"test -f {remote}/segments__sil{sil}.json || (echo missing && exit 1); "
+        f"mkdir -p {canonical_remote}; "
+        f"cp {remote}/segments__sil{sil}.json {canonical_remote}/segments.json; "
+        f"cp {remote}/detailed__sil{sil}.json {canonical_remote}/detailed.json; "
+        f"cp {remote}/edit_history__sil{sil}.jsonl {canonical_remote}/edit_history.jsonl; "
+        f"echo promoted sil={sil} for {slug}"
+    )
+    subprocess.run(["ssh", "katana", cmd], check=True)
+
+    print("Fetching canonical to local...")
+    subprocess.run(["bash", str(REPO_ROOT / ".local/extraction/fetch_results.sh"), slug], check=True)
+
+    if not args.no_probe:
+        print(f"Submitting probe_mfa.pbs for {slug}...")
+        subprocess.run(
+            ["ssh", "katana",
+             f"cd {KATANA_REMOTE_DIR} && qsub -v RECITER={slug} .local/extraction/probe_mfa.pbs"],
+            check=True,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
@@ -1093,6 +1174,19 @@ def main():
 
     sub.add_parser("triage", help="Fetch and triage pending requests")
     sub.add_parser("generate-pbs", help="Generate PBS job array")
+
+    sp = sub.add_parser("generate-sweep-pbs",
+                        help="Rewrite sweep PBS for single reciter + silence sweep")
+    sp.add_argument("--silences", required=True,
+                    help="Comma-separated min_silence values (e.g. 100,200,400)")
+    sp.add_argument("--no-probe", action="store_true",
+                    help="Skip the post-extract MFA probe submission")
+
+    sp = sub.add_parser("promote-sweep",
+                        help="Copy chosen sweep pass to canonical + fetch + optional probe")
+    sp.add_argument("--reciter", required=True)
+    sp.add_argument("--silence", required=True, type=int)
+    sp.add_argument("--no-probe", action="store_true")
 
     sp = sub.add_parser("set-status", help="Update status for current batch")
     sp.add_argument("status", choices=["pending", "rejected", "awaiting-review", "completed"])
@@ -1113,6 +1207,8 @@ def main():
     commands = {
         "triage": cmd_triage,
         "generate-pbs": cmd_generate_pbs,
+        "generate-sweep-pbs": cmd_generate_sweep_pbs,
+        "promote-sweep": cmd_promote_sweep,
         "set-status": cmd_set_status,
         "prepare-pr": cmd_prepare_pr,
         "detect-timestamps": cmd_detect_timestamps,
