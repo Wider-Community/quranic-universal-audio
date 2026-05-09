@@ -1100,11 +1100,15 @@ def _rewrite_sweep_pbs_block(pbs_text: str, reciter: str, source: str,
         f'MODEL="Large"\n'
         f'RUN_PROBE={1 if run_probe else 0}\n'
     )
-    return re.sub(
-        r"RECITER=\"[^\"]*\"\nSOURCE=\"[^\"]*\"\nMIN_SILENCE_VALUES=\([^)]*\)\n"
-        r"PAD_LEFT=\d+\nPAD_RIGHT=\d+\nMIN_SILENCE_FLOOR=\d+\nMODEL=\"[^\"]*\"\nRUN_PROBE=\d+\n",
+    new_text, n = re.subn(
+        r"RECITER=\"[^\"]*\"[^\n]*\nSOURCE=\"[^\"]*\"[^\n]*\nMIN_SILENCE_VALUES=\([^)]*\)[^\n]*\n"
+        r"PAD_LEFT=\d+[^\n]*\nPAD_RIGHT=\d+[^\n]*\nMIN_SILENCE_FLOOR=\d+[^\n]*\n"
+        r"MODEL=\"[^\"]*\"[^\n]*\nRUN_PROBE=\d+[^\n]*\n",
         sub, pbs_text, count=1,
     )
+    if n != 1:
+        sys.exit("sweep PBS rewrite failed: config block regex did not match")
+    return new_text
 
 
 def cmd_generate_sweep_pbs(args):
