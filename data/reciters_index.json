@@ -666,7 +666,7 @@
     "source": "mp3quran",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
-    "country": "unknown",
+    "country": "Kuwait",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": true
@@ -4566,7 +4566,7 @@
     "source": "qul",
     "style": "murattal",
     "riwayah": "hafs_an_asim",
-    "country": "unknown",
+    "country": "Kuwait",
     "audio_cat": "by_ayah",
     "coverage": 6236,
     "has_timing": false
