@@ -1,0 +1,30 @@
+[
+  {
+    "name": "MP3Quran",
+    "slug": "mp3quran",
+    "url": "https://mp3quran.net/",
+    "audio_categories": ["by_surah"],
+    "description": "Largest open Quran audio library with multiple riwayat, verse timing data, and reciter metadata"
+  },
+  {
+    "name": "EveryAyah",
+    "slug": "everyayah",
+    "url": "https://everyayah.com/",
+    "audio_categories": ["by_ayah"],
+    "description": "Per-ayah audio files for major reciters, pre-split at verse boundaries"
+  },
+  {
+    "name": "QUL",
+    "slug": "qul",
+    "url": "https://qul.tarteel.ai/resources/recitation",
+    "audio_categories": ["by_surah", "by_ayah"],
+    "description": "Tarteel CDN with curated reciter catalogue in both surah and ayah formats"
+  },
+  {
+    "name": "Surah-Quran",
+    "slug": "surah-quran",
+    "url": "https://surahquran.com/quran-mp3-english.html",
+    "audio_categories": ["by_surah"],
+    "description": "Community-sourced surah-level recordings from diverse reciters"
+  }
+]
