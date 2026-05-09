@@ -10,6 +10,7 @@ This document captures architectural decisions only. It is not an implementation
 - [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md) — operational runbook: HF Space setup (dev + prod), GitHub App setup, upload pipeline, test environment conventions, smoke tests per phase, rollback procedure, the three concrete file structures (HF dataset / HF Space repo / `/tmp` on the running container).
 - [`inspector-admin-perms.md`](inspector-admin-perms.md) — implementation-grade reference for admin and permissions: roles, maintainer/owner identity, permission matrix, override actions (force-release, reassign, force-claim, manual state override, discard, catalog edit, pipeline trigger), admin dashboard, audit log, new state events, per-phase acceptance criteria.
 - [`inspector-auth-claim.md`](inspector-auth-claim.md) — implementation-grade reference for authentication and the user-facing claim/release/mark-ready flow: GitHub App configuration, token lifecycle, endpoint contracts, optimistic UI reconciliation, identity attribution, edge cases.
+- [`inspector-cleanup-registry.md`](inspector-cleanup-registry.md) — running ledger of code deletions, modifications, new files, doc amendments, and open questions, all phase-tagged. Audit checklist per phase. Edit as you go; strike out completed items with commit refs.
 
 ## Goals
 
