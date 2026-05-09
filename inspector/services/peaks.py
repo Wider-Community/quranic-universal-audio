@@ -21,7 +21,7 @@ from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     ID3_PROBE_TIMEOUT, DEFAULT_BYTES_PER_SEC,
                     RANGE_DECODE_PAD_SEC, TEMP_AUDIO_SUFFIX)
 from services import cache
-from services.audio_meta import is_vbr_for_url
+from services.audio_meta import is_vbr, is_vbr_for_url
 from services.data_loader import load_detailed
 from utils.references import chapter_from_ref
 
@@ -244,7 +244,8 @@ def _ffmpeg_decode_segment(source: str, start_sec: float, duration_sec: float) -
 
 def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
                           reciter: str | None = None,
-                          cached_only: bool = False) -> dict | None:
+                          cached_only: bool = False,
+                          chapter: int | str | None = None) -> dict | None:
     """Compute peaks for a specific segment time range via HTTP Range request.
 
     Returns ``{start_ms, end_ms, duration_ms, peaks}`` or ``None``.
@@ -267,7 +268,11 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     start_sec = start_ms / 1000
     duration_sec = (end_ms - start_ms) / 1000
 
-    if reciter and is_vbr_for_url(reciter, url):
+    vbr = bool(reciter) and (
+        (chapter is not None and is_vbr(reciter, chapter))
+        or is_vbr_for_url(reciter, url)
+    )
+    if vbr:
         # VBR source: skip byte-arith, let ffmpeg seek the source by time.
         # Prefer the local cached file when present (audio_proxy populates it
         # via /api/seg/prepare-audio) — drops latency from ~0.7 s to ~0.2 s.

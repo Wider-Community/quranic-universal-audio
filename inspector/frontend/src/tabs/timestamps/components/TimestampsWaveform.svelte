@@ -208,6 +208,7 @@
     $: reactToVerse(
         $loadedVerse?.data.audio_url ?? null,
         $loadedVerse?.data.reciter ?? '',
+        $loadedVerse?.data.chapter ?? 0,
         $loadedVerse?.tsSegOffset ?? 0,
         $loadedVerse?.tsSegEnd ?? 0,
     );
@@ -215,6 +216,7 @@
     async function reactToVerse(
         url: string | null,
         reciter: string,
+        chapter: number,
         startSec: number,
         endSec: number,
     ): Promise<void> {
@@ -245,7 +247,7 @@
         let entry: SegmentPeaks | null | undefined = _lruGet(key);
         if (!entry) {
             try {
-                entry = await fetchSegmentPeaks(reciter, url, startMs, endMs);
+                entry = await fetchSegmentPeaks(reciter, url, startMs, endMs, chapter || undefined);
             } catch (e) {
                 console.error('Waveform peaks fetch failed:', e);
                 return;

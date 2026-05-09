@@ -70,10 +70,18 @@ def seg_segment_peaks(reciter):
         url = seg.get("url", "")
         start_ms = seg.get("start_ms", 0)
         end_ms = seg.get("end_ms", 0)
+        chapter = seg.get("chapter")
         if not url or end_ms <= start_ms:
             continue
         key = f"{url}:{start_ms}:{end_ms}"
-        data = compute_segment_peaks(url, start_ms, end_ms, reciter, cached_only=cached_only)
+        data = compute_segment_peaks(
+            url,
+            start_ms,
+            end_ms,
+            reciter,
+            cached_only=cached_only,
+            chapter=chapter,
+        )
         if data:
             results[key] = data
     return jsonify({"peaks": results})

@@ -41,6 +41,7 @@ from scripts.lib.timestamps_shards import (
     gzip_shard,
     split_to_shards,
 )
+from services.audio_meta import vbr_chapters_for_reciter
 from utils.formatting import slug_to_name
 
 log = logging.getLogger("inspector")
@@ -165,6 +166,7 @@ def _build_reciter_block(
         "audio_category": audio_cat_short,
         "url_template": url_template,
         "ts_chapters": sorted(shards.keys()),
+        "vbr_chapters": vbr_chapters_for_reciter(slug),
         # Validation falls through to /api/ts/validate/<slug> in local mode;
         # the manifest carries no pre-computed boundary_mismatches.
         "validation": {"boundary_mismatches": []},

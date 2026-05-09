@@ -15,6 +15,7 @@
         tsPortReady,
     } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
+    import { loadTimestampsAudio } from '../utils/audio-load';
     import { buildTimestampsRangeSpec } from '../utils/range-spec';
 
     // ---- Props ----
@@ -50,7 +51,11 @@
         atTime?: number,
         autoplay: boolean = true,
     ): Promise<void> {
-        await _player?.load(url, atTime, autoplay);
+        if (!tsPort.source && url) {
+            tsPort.setSource({ audioUrl: url, cbrSrc: url, reciter: null, vbr: false });
+        }
+        await loadTimestampsAudio(tsPort, get(loadedVerse), atTime ?? 0, autoplay);
+        currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     // ---- AudioRange wiring ----
@@ -130,9 +135,9 @@
     // ---- Audio event handlers ----
 
     function onPlay(): void {
-        // attach (not start) — `_player.load(url, atTime, autoplay)` has
-        // already seeked to the verse start and kicked off playback. We only
-        // want the boundary-watcher rAF on top.
+        // attach (not start) — `loadTimestampsAudio(...)` has already loaded
+        // the covering source, seeked to the verse start, and kicked off
+        // playback. We only want the boundary-watcher rAF on top.
         //
         // Gate on autoAdvancing: during auto-advance the boundary handler
         // re-arms playback via `tsPort.play()` BEFORE the dispatch chain
