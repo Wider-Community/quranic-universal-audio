@@ -8,14 +8,16 @@
 
 import { get } from 'svelte/store';
 
+import { EDIT_LOAD_PAD_MS } from '../../../../lib/playback/constants';
 import type { Segment } from '../../../../lib/types/domain';
 import { createOp, setPendingOp, snapshotSeg } from '../../stores/dirty';
 import { clearEdit, editMode } from '../../stores/edit';
 import {
     continuousPlay,
-    segAudioElement,
+    segPort,
 } from '../../stores/playback';
 import { disposeSegRange, stopSegAnimation } from '../playback/playback';
+import { resolveSegSource } from '../playback/source';
 import { enterSplitMode } from './split';
 import { enterTrimMode } from './trim';
 
@@ -25,17 +27,33 @@ export function enterEditWithBuffer(
     mode: 'trim' | 'split',
     contextCategory: string | null = null,
     mountId: symbol | null = null,
+    chapterOverride: number | null = null,
 ): void {
     if (get(editMode)) return;
 
-    const audioEl = get(segAudioElement);
-    const prePausePlayMs = !audioEl || audioEl.paused ? null : audioEl.currentTime * 1000;
+    const prePausePlayMs = segPort.paused ? null : segPort.currentTimeMs();
 
-    if (audioEl && !audioEl.paused) { audioEl.pause(); stopSegAnimation(); }
+    if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
     // Dispose the segments-main AudioRange so its rAF + pending advance gap
     // can't fire onto the audio element while edit-preview owns it.
     disposeSegRange();
     continuousPlay.set(false);
+
+    // Bind the port to THIS seg's source. Cross-chapter Adjust/Split
+    // (launched from a validation accordion row whose chapter ≠ active)
+    // would otherwise build the wider clip from the active chapter's URL
+    // — wrong audio. setSource is a no-op for active-chapter Adjust and
+    // invalidates `_window` for cross-chapter so the loadCovering below
+    // swaps to the row's chapter clip.
+    const segSource = resolveSegSource(seg, chapterOverride);
+    if (segSource) segPort.setSource(segSource);
+
+    // Pre-load the audio for the whole segment with edit-mode post-roll.
+    // Under VBR the port keeps clip byte 0 aligned to seg.time_start; it
+    // never reuses an earlier-starting clip for a later playback start,
+    // because that would make the browser seek inside the streamed clip.
+    // CBR chapters cover everything regardless, so no-op.
+    segPort.loadCovering(seg.time_start, seg.time_end, EDIT_LOAD_PAD_MS);
 
     const pending = createOp(mode === 'trim' ? 'trim_segment' : 'split_segment',
         contextCategory ? { contextCategory } : undefined);

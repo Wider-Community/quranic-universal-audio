@@ -28,7 +28,6 @@ export interface Segment {
     time_end: number; // milliseconds
     matched_ref: Ref;
     matched_text: string;
-    display_text: string;
     confidence: number; // 0..1
     audio_url: string;
     ignored_categories?: string[];
@@ -265,6 +264,28 @@ export interface TsBoundaryMismatch {
     chapter: number;
     side: string;
     diff_ms: number;
+    label: string;
+}
+
+export interface TsMissingVerse {
+    verse_key: string;
+    chapter: number;
+    label: string;
+}
+
+export interface TsVerseOverlap {
+    verse_key: string;
+    chapter: number;
+    prev_verse_key: string;
+    overlap_ms: number;
+    label: string;
+}
+
+export interface TsLargeGap {
+    verse_key: string;
+    chapter: number;
+    prev_verse_key: string;
+    gap_ms: number;
     label: string;
 }
 

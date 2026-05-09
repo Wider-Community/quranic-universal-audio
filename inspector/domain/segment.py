@@ -22,7 +22,6 @@ class Segment:
     time_end: int
     matched_ref: str
     matched_text: str
-    display_text: str
     confidence: float
     phonemes_asr: str
     entry_ref: str

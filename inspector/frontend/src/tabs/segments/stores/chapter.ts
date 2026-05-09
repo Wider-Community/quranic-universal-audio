@@ -36,6 +36,13 @@ export const segAllData = writable<SegAllResponse | null>(null);
 /** Per-chapter loaded data (audio_url, pad fields, segments). */
 export const segData = writable<SegDataState | null>(null);
 
+/** All chapters of the active reciter known VBR (from `data/.audio_meta.json`).
+ *  Populated from the chapter-data response — every chapter load refreshes the
+ *  full reciter map. Used by `vbrClipForChapter` so cross-chapter accordion
+ *  prefetch can route by the *next* sibling's chapter, not just the active one
+ *  (`segData.vbr`). Empty Set means no VBR chapters known for this reciter. */
+export const reciterVbrChapters = writable<Set<number>>(new Set());
+
 /** Currently-playing segment index (shared across playback + row/card UI). */
 export const segCurrentIdx = writable<number>(-1);
 

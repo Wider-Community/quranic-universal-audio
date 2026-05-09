@@ -112,9 +112,9 @@
     "card_type": "generic",
     "severity": "info",
     "accordion_order": 10,
-    "can_ignore": true,
-    "auto_suppress": true,
-    "persists_ignore": true,
+    "can_ignore": false,
+    "auto_suppress": false,
+    "persists_ignore": false,
     "scope": "per_segment",
     "display_title": "Qalqala",
     "description": ""

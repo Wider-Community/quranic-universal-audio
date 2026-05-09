@@ -21,7 +21,6 @@ from config import RECITATION_SEGMENTS_PATH
 RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset({
     "boundary_adj",
     "audio_bleeding",
-    "qalqala",
     "repetitions",
 })
 

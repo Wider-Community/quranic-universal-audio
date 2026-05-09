@@ -1,0 +1,172 @@
+Generated: 2026-05-08 22:14:48
+
+========================================================================
+  nasser_alqatami
+  data/recitation_segments/nasser_alqatami
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   150 ms
+  Min speech:    150 ms
+  Padding L/R:   150/500 ms
+  Silence floor: 30 ms
+
+--- Coverage ---
+  Verses found:   6235 / 6236
+  Missing verses: 1
+  Word gaps:      0 verses
+
+--- Segments ---
+  Total:            13423
+  Single-seg:       2605
+  Multi-seg verses: 3630 (10818 segs)
+  Cross-verse keys: 22
+  Max segs/verse:   20
+
+--- Segment Duration ---
+  Min:    1.03s
+  Median: 7.05s
+  Mean:   7.15s
+  Max:    19.73s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.68s
+  Median: 0.68s
+  Mean:   0.80s
+  Max:    55.76s
+
+--- Alignment Confidence ---
+  Min:       0.8800
+  Median:    1.0000
+  Mean:      0.9848
+  Max:       1.0000
+  Below 60%: 0
+  Below 80%: 0
+  Failed:    0 (no alignment)
+  Empty ASR: 248 (matched but no phonemes)
+
+--- Failed Alignments (0) ---
+
+--- Missing Verses (1) ---
+  MISS  1:1  (4 words)
+
+--- May Require Boundary Adjustment (1) ---
+  [1.0000]  101:11:1-101:11:1  @ 2:21.6 - 2:26.4
+           audio: https://server6.mp3quran.net/qtm/101.mp3
+           text:  نَارٌ
+
+--- Muqatta'at (29) ---
+  [1.0000]  2:1:1-2:1:1  @ 0:03.8 - 0:13.3
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  الٓمٓ
+  [1.0000]  3:1:1-3:1:1  @ 0:03.8 - 0:13.6
+           audio: https://server6.mp3quran.net/qtm/003.mp3
+           text:  الٓمٓ
+  [1.0000]  7:1:1-7:1:1  @ 0:04.5 - 0:17.3
+           audio: https://server6.mp3quran.net/qtm/007.mp3
+           text:  الٓمٓصٓ
+  [1.0000]  10:1:1-10:1:1  @ 0:03.3 - 0:09.2
+           audio: https://server6.mp3quran.net/qtm/010.mp3
+           text:  الٓر ۚ
+  [1.0000]  11:1:1-11:1:1  @ 0:03.4 - 0:09.4
+           audio: https://server6.mp3quran.net/qtm/011.mp3
+           text:  الٓر ۚ
+  [1.0000]  12:1:1-12:1:1  @ 0:03.2 - 0:09.1
+           audio: https://server6.mp3quran.net/qtm/012.mp3
+           text:  الٓر ۚ
+  [1.0000]  13:1:1-13:1:1  @ 0:03.2 - 0:12.3
+           audio: https://server6.mp3quran.net/qtm/013.mp3
+           text:  الٓمٓر ۚ
+  [1.0000]  14:1:1-14:1:1  @ 0:03.5 - 0:09.6
+           audio: https://server6.mp3quran.net/qtm/014.mp3
+           text:  الٓر ۚ
+  [1.0000]  15:1:1-15:1:1  @ 0:03.5 - 0:08.9
+           audio: https://server6.mp3quran.net/qtm/015.mp3
+           text:  الٓر ۚ
+  [1.0000]  19:1:1-19:1:1  @ 0:03.4 - 0:14.7
+           audio: https://server6.mp3quran.net/qtm/019.mp3
+           text:  كٓهيعٓصٓ
+  ... and 19 more
+
+--- Qalqala (720) ---
+  [1.0000]  2:19:1-2:19:8  [ق]  @ 4:12.2 - 4:22.5
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
+  [1.0000]  2:44:1-2:44:8  [ب]  @ 13:49.8 - 14:02.3
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  ۞ أَتَأْمُرُونَ ٱلنَّاسَ بِٱلْبِرِّ وَتَنسَوْنَ أَنفُسَكُمْ وَأَنتُمْ تَتْلُونَ ٱلْكِتَـٰبَ ۚ
+  [1.0000]  2:49:1-2:49:8  [ب]  @ 15:40.3 - 15:52.5
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَإِذْ نَجَّيْنَـٰكُم مِّنْ ءَالِ فِرْعَوْنَ يَسُومُونَكُمْ سُوٓءَ ٱلْعَذَابِ
+  [1.0000]  2:61:51-2:61:54  [ق]  @ 20:45.4 - 20:51.4
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [1.0000]  2:85:39-2:85:44  [ب]  @ 30:53.0 - 31:01.4
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَيَوْمَ ٱلْقِيَـٰمَةِ يُرَدُّونَ إِلَىٰٓ أَشَدِّ ٱلْعَذَابِ ۗ
+  [1.0000]  2:90:21-2:90:24  [ب]  @ 33:08.1 - 33:13.4
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  فَبَآءُو بِغَضَبٍ عَلَىٰ غَضَبٍ ۚ
+  [1.0000]  2:91:8-2:91:17  [ق]  @ 33:32.3 - 33:42.8
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  قَالُوا۟ نُؤْمِنُ بِمَآ أُنزِلَ عَلَيْنَا وَيَكْفُرُونَ بِمَا وَرَآءَهُۥ وَهُوَ ٱلْحَقُّ
+  [1.0000]  2:102:57-2:102:66  [ق]  @ 39:00.5 - 39:08.8
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَلَقَدْ عَلِمُوا۟ لَمَنِ ٱشْتَرَىٰهُ مَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ ۚ
+  [1.0000]  2:109:12-2:109:21  [ق]  @ 41:15.8 - 41:26.3
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  حَسَدًا مِّنْ عِندِ أَنفُسِهِم مِّن بَعْدِ مَا تَبَيَّنَ لَهُمُ ٱلْحَقُّ ۖ
+  [1.0000]  2:113:1-2:113:15  [ب]  @ 42:34.1 - 42:48.7
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَقَالَتِ ٱلْيَهُودُ لَيْسَتِ ٱلنَّصَـٰرَىٰ عَلَىٰ شَىْءٍ وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
+  ... and 710 more
+
+--- Empty ASR Phonemes (248) ---
+  [1.0000]  2:61:51-2:61:54  @ 20:45.4 - 20:51.4
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [1.0000]  2:91:8-2:91:17  @ 33:32.3 - 33:42.8
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  قَالُوا۟ نُؤْمِنُ بِمَآ أُنزِلَ عَلَيْنَا وَيَكْفُرُونَ بِمَا وَرَآءَهُۥ وَهُوَ ٱلْحَقُّ
+  [1.0000]  2:109:12-2:109:21  @ 41:15.8 - 41:26.3
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  حَسَدًا مِّنْ عِندِ أَنفُسِهِم مِّن بَعْدِ مَا تَبَيَّنَ لَهُمُ ٱلْحَقُّ ۖ
+  [1.0000]  2:113:1-2:113:15  @ 42:34.1 - 42:48.7
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَقَالَتِ ٱلْيَهُودُ لَيْسَتِ ٱلنَّصَـٰرَىٰ عَلَىٰ شَىْءٍ وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
+  [1.0000]  2:165:28-2:165:31  @ 1:02:27.0 - 1:02:32.0
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَأَنَّ ٱللَّهَ شَدِيدُ ٱلْعَذَابِ
+  [1.0000]  2:186:1-2:186:6  @ 1:11:48.7 - 1:11:58.3
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَإِذَا سَأَلَكَ عِبَادِى عَنِّى فَإِنِّى قَرِيبٌ ۖ
+  [1.0000]  2:186:5-2:186:6  @ 1:11:58.3 - 1:12:03.5
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  فَإِنِّى قَرِيبٌ ۖ
+  [1.0000]  2:186:5-2:186:6  @ 1:12:20.5 - 1:12:26.6
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  فَإِنِّى قَرِيبٌ ۖ
+  [1.0000]  2:189:4-2:189:8  @ 1:14:32.4 - 1:14:37.4
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  قُلْ هِىَ مَوَٰقِيتُ لِلنَّاسِ وَٱلْحَجِّ ۗ
+  [1.0000]  2:240:6-2:240:12  @ 1:39:15.0 - 1:39:23.0
+           audio: https://server6.mp3quran.net/qtm/002.mp3
+           text:  وَصِيَّةً لِّأَزْوَٰجِهِم مَّتَـٰعًا إِلَى ٱلْحَوْلِ غَيْرَ إِخْرَاجٍ ۚ
+  ... and 238 more
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
+--- Category Counts (machine-readable) ---
+  failed 0
+  missing_verses 1
+  missing_words 0
+  structural_errors 0
+  low_confidence 0
+  repetitions 0
+  audio_bleeding 0
+  boundary_adj 1
+  cross_verse 0
+  qalqala 720
+  muqattaat 29
+

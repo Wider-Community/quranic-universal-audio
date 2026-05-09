@@ -7,7 +7,6 @@
 
 import { get } from 'svelte/store';
 
-import { WAVEFORM_STROKE_COLOR } from '../../../../lib/utils/constants';
 import { segConfig } from '../../stores/config';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { drawEditPeakBase } from './draw-seg';
@@ -25,30 +24,11 @@ export function _ensureTrimBaseCache(canvas: SegCanvas): boolean {
 
     // Slice peaks for the VISIBLE window (viewStart/End), not the absolute
     // clamp window — wheel zoom rebuilds this cache after dropping the prior
-    // ImageData via `_trimBaseCache = null`.
-    const data = drawEditPeakBase(canvas, tw.audioUrl || '', tw.viewStart, tw.viewEnd);
-    if (!data) return false;
+    // ImageData via `_trimBaseCache = null`. drawEditPeakBase paints the
+    // shared bg + fill + top/bottom outline; we just snapshot it.
+    if (!drawEditPeakBase(canvas, tw.audioUrl || '', tw.viewStart, tw.viewEnd)) return false;
 
-    const width = canvas.width;
-    const height = canvas.height;
-    const centerY = height / 2;
-    const scale = data.scale ?? (height / 2) * 0.9;
-
-    // Trim strokes the full max+min outline (top and bottom) for a closed look.
-    ctx.beginPath();
-    for (let i = 0; i < width; i++) {
-        const y = centerY - (data.maxVals[i] ?? 0) * scale;
-        if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
-    }
-    for (let i = width - 1; i >= 0; i--) {
-        ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
-    }
-    ctx.closePath();
-    ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    canvas._trimBaseCache = ctx.getImageData(0, 0, width, height);
+    canvas._trimBaseCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
     return true;
 }
 

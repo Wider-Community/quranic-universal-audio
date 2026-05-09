@@ -5,8 +5,6 @@ import {
     PREVIEW_PLAYHEAD_COLOR,
     WAVEFORM_BG_COLOR,
     WAVEFORM_DIM_OVERLAY_COLOR,
-    WAVEFORM_FILL_COLOR,
-    WAVEFORM_SILENCE_THRESHOLD,
 } from '../../../../lib/utils/constants';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { drawWaveformPeaks } from '../../../../lib/utils/waveform-draw';
@@ -119,7 +117,6 @@ export function drawSegBaseAndOverlays(
     _drawSplitHighlight(canvas, visSeg);
     _drawTrimHighlight(canvas, visSeg);
     _drawMergeHighlight(canvas, visSeg);
-    _drawPadHighlight(canvas, visSeg);
 
     canvas._wfCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
     canvas._wfCacheKey = `${startMs}:${endMs}`;
@@ -170,68 +167,57 @@ export function drawSegPlayhead(
     ctx.fill();
 }
 
-export interface SlicedPeaks {
+interface SlicedPeaks {
     maxVals: Float32Array;
     minVals: Float32Array;
-    scale?: number;
 }
 
 /**
- * Draw the shared blue peak-fill base used by trim and split edit modes:
- *   1. fill the canvas with the dark editor background
- *   2. slice peaks for [startMs, endMs] and draw a closed max/min polygon
- *      filled with translucent blue
+ * Draw the shared blue peak-fill base used by trim and split edit modes.
  *
- * Returns the sliced peak data so the caller can layer its own stroke on
- * top (trim strokes the full outline; split strokes only the top), or null
- * if no peak data is available. Callers that need a "no data" fallback
- * (e.g. split) render it themselves when null is returned.
+ * Slices peaks for `[startMs, endMs]` via the block-min/max resampler in
+ * `_slicePeaks` (preserves transients on short clips), zips the per-pixel
+ * min/max into a `PeakBucket[]` at canvas resolution, and delegates the
+ * actual fill+stroke render to `drawWaveformPeaks` so every consumer shares
+ * the same look (translucent fill + top-and-bottom 1px outline).
+ *
+ * Returns true when peaks were drawn, false when no peak data is available
+ * — callers that need a textual "no data" fallback (e.g. split) render it
+ * themselves on the false branch.
  */
 export function drawEditPeakBase(
     canvas: SegCanvas,
     audioUrl: string,
     startMs: number,
     endMs: number,
-): SlicedPeaks | null {
+): boolean {
     const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
+    if (!ctx) return false;
     const width = canvas.width;
     const height = canvas.height;
-    const centerY = height / 2;
-
-    ctx.fillStyle = WAVEFORM_BG_COLOR;
-    ctx.fillRect(0, 0, width, height);
 
     const data = _slicePeaks(audioUrl, startMs, endMs, width);
-    if (!data) return null;
-
-    const halfH = height / 2;
-    let maxAmp = 0;
-    for (let i = 0; i < data.maxVals.length; i++) {
-        const a = Math.max(Math.abs(data.maxVals[i] ?? 0), Math.abs(data.minVals[i] ?? 0));
-        if (a > maxAmp) maxAmp = a;
+    if (!data) {
+        ctx.fillStyle = WAVEFORM_BG_COLOR;
+        ctx.fillRect(0, 0, width, height);
+        return false;
     }
-    const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD ? halfH * 0.9 : halfH / maxAmp;
 
-    ctx.beginPath();
+    // Zip the resampled per-pixel min/max into PeakBucket[min, max] at canvas
+    // resolution. drawWaveformPeaks then paints bg + closed polygon (fill +
+    // top/bottom stroke); its internal sampling becomes 1:1 at this density,
+    // so the block-resampler's transients survive intact.
+    const buckets: PeakBucket[] = new Array(width);
     for (let i = 0; i < width; i++) {
-        const y = centerY - (data.maxVals[i] ?? 0) * scale;
-        if (i === 0) ctx.moveTo(i, y);
-        else ctx.lineTo(i, y);
+        buckets[i] = [data.minVals[i] ?? 0, data.maxVals[i] ?? 0];
     }
-    for (let i = width - 1; i >= 0; i--) {
-        ctx.lineTo(i, centerY - (data.minVals[i] ?? 0) * scale);
-    }
-    ctx.closePath();
-    ctx.fillStyle = WAVEFORM_FILL_COLOR;
-    ctx.fill();
+    drawWaveformPeaks(ctx, buckets, { width, height });
 
-    data.scale = scale;
-    return data;
+    return true;
 }
 
 /** Slice peaks for a time range and resample to `buckets` bins. */
-export function _slicePeaks(
+function _slicePeaks(
     audioUrl: string,
     startMs: number,
     endMs: number,
@@ -327,24 +313,6 @@ export function _drawSplitHighlight(canvas: SegCanvas, wfSeg: Segment): void {
 
     ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
     if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
-}
-
-/** Yellow fill between original segment end and padded preview end (qalqala batch). */
-export function _drawPadHighlight(canvas: SegCanvas, seg: Segment): void {
-    const hl = canvas._padHL;
-    if (!hl) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const w = canvas.width;
-    const h = canvas.height;
-    const dur = seg.time_end - seg.time_start;
-    if (dur <= 0) return;
-    const toX = (ms: number): number => Math.max(0, Math.min(w, ((ms - seg.time_start) / dur) * w));
-    const x1 = toX(hl.padStart);
-    const x2 = toX(hl.padEnd);
-    if (x2 <= x1) return;
-    ctx.fillStyle = 'rgba(255, 200, 0, 0.35)';
-    ctx.fillRect(x1, 0, x2 - x1, h);
 }
 
 /** Draw yellow cursor on merge result card showing the point of merge. */

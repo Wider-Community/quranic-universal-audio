@@ -11,8 +11,11 @@
         currentTime,
         loopTarget,
         tsAudioElement,
+        tsPort,
+        tsPortReady,
     } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
+    import { loadTimestampsAudio } from '../utils/audio-load';
     import { buildTimestampsRangeSpec } from '../utils/range-spec';
 
     // ---- Props ----
@@ -48,7 +51,11 @@
         atTime?: number,
         autoplay: boolean = true,
     ): Promise<void> {
-        await _player?.load(url, atTime, autoplay);
+        if (!tsPort.source && url) {
+            tsPort.setSource({ audioUrl: url, cbrSrc: url, reciter: null, vbr: false });
+        }
+        await loadTimestampsAudio(tsPort, get(loadedVerse), atTime ?? 0, autoplay);
+        currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     // ---- AudioRange wiring ----
@@ -64,16 +71,23 @@
         // per verse-end crossing, guarded by autoAdvancing against re-entry.
         if (get(autoAdvancing)) return;
         const mode = get(autoMode);
-        if (mode === 'next') {
-            autoAdvancing.set(true);
-            dispatch('autoNext');
-        } else if (mode === 'random-any') {
-            autoAdvancing.set(true);
-            dispatch('autoRandomAny');
-        } else if (mode === 'random-current') {
-            autoAdvancing.set(true);
-            dispatch('autoRandomCurrent');
-        }
+        if (!mode) return;
+        autoAdvancing.set(true);
+        // AudioRange._pauseAndFlush just paused the element on the rAF tick.
+        // The eventual audio.play() in ingestVerseData runs after the await
+        // chain in loadTimestampVerse / loadRandomTimestamp, by which time
+        // Chrome's autoplay policy can deny it (no transient activation
+        // surviving across the awaits) — manifests as "next verse loads but
+        // audio stays paused". Re-arm playback synchronously here so the
+        // element stays in the playing state across the transition;
+        // ingestVerseData's audioComp.load then just seeks + no-op-plays.
+        // Safe against a stale-range re-attach because onPlay below gates on
+        // autoAdvancing, and the loadedVerse reactive block re-attaches the
+        // rAF once the new range/policy land.
+        tsPort.play();
+        if (mode === 'next') dispatch('autoNext');
+        else if (mode === 'random-any') dispatch('autoRandomAny');
+        else if (mode === 'random-current') dispatch('autoRandomCurrent');
     }
 
     function _disposeRange(): void {
@@ -82,8 +96,7 @@
     }
 
     function _ensureRangeForCurrentState(): AudioRange | null {
-        const audio = _player?.element();
-        if (!audio) return null;
+        if (!tsPort.element) return null;
         const spec = buildTimestampsRangeSpec(get(loadedVerse), get(loopTarget));
         if (!spec) return null;
         if (_range) {
@@ -92,7 +105,7 @@
             return _range;
         }
         _range = new AudioRange({
-            audioEl: audio,
+            port: tsPort,
             range: spec.range,
             policy: spec.policy,
             onTick: _onTick,
@@ -103,27 +116,48 @@
 
     // Re-spec the running range whenever loop or verse state changes — avoids
     // a stale loop window after the user toggles loopTarget mid-playback or
-    // navigates verses.
+    // navigates verses. Also re-attaches the rAF loop when audio is playing
+    // — covers the auto-advance path where the `tsPort.play()` re-arm in
+    // `_onBoundary` fires its 'play' event while `autoAdvancing` is still true
+    // (so `onPlay` skips the attach to avoid a second-boundary trigger), and
+    // ingestVerseData's same-URL `audio.play()` is a no-op (no fresh 'play'
+    // event). Without this, the loop would stay stopped through the rest of
+    // the verse and karaoke ticks would freeze.
     $: {
         void $loopTarget;
         void $loadedVerse;
-        if (_range) _ensureRangeForCurrentState();
+        if (_range) {
+            _ensureRangeForCurrentState();
+            if (!tsPort.paused) _range.attach();
+        }
     }
 
     // ---- Audio event handlers ----
 
     function onPlay(): void {
-        // attach (not start) — `_player.load(url, atTime, autoplay)` has
-        // already seeked to the verse start and kicked off playback. We only
-        // want the boundary-watcher rAF on top.
+        // attach (not start) — `loadTimestampsAudio(...)` has already loaded
+        // the covering source, seeked to the verse start, and kicked off
+        // playback. We only want the boundary-watcher rAF on top.
+        //
+        // Gate on autoAdvancing: during auto-advance the boundary handler
+        // re-arms playback via `tsPort.play()` BEFORE the dispatch chain
+        // navigates to the next verse. The resulting 'play' event would
+        // otherwise re-attach the rAF here against the OLD range — currentTime
+        // is still pinned at the old verse's endMs (where _pauseAndFlush left
+        // it), so the loop's first frame would fire the boundary AGAIN and
+        // `_pauseAndFlush` would pause the element a second time. By the time
+        // ingestVerseData's same-URL `audio.play()` runs, the element is
+        // paused with no transient activation to revive it — manifests as
+        // "auto-next loads but the audio stays paused".
+        // The reactive block above handles re-attach once loadedVerse updates.
+        if (get(autoAdvancing)) return;
         const r = _ensureRangeForCurrentState();
         r?.attach();
     }
 
     function onPause(): void {
         _range?.stop();
-        const audio = _player?.element();
-        if (audio) currentTime.set(audio.currentTime);
+        if (tsPort.element) currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     function onEnded(): void {
@@ -134,8 +168,7 @@
         // AudioRange's rAF loop owns boundary enforcement at frame precision.
         // Keep the handler only as a tick when audio is paused (so the playhead
         // store catches a manual seek the rAF doesn't see while paused).
-        const audio = _player?.element();
-        if (audio?.paused) currentTime.set(audio.currentTime);
+        if (tsPort.paused) currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     function onError(): void {
@@ -155,12 +188,19 @@
     }
 
     onMount(() => {
-        tsAudioElement.set(_player?.element() ?? null);
+        const el = _player?.element() ?? null;
+        tsAudioElement.set(el);
+        if (el) {
+            tsPort.attachElement(el);
+            tsPortReady.set(true);
+        }
     });
 
     onDestroy(() => {
         _disposeRange();
         tsAudioElement.set(null);
+        tsPort.attachElement(null);
+        tsPortReady.set(false);
     });
 </script>
 

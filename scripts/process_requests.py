@@ -6,19 +6,17 @@ Subcommands (segments):
   triage              — Fetch pending requests from GitHub, cross-check, output triage table
   generate-pbs        — Derive VAD params and rewrite PBS job array for accepted requests
   set-status          — Update GitHub labels for the current batch
-  notify              — Send emails via Gmail SMTP for the current batch
   prepare-pr          — Edit RECITERS.md + README.md for segments PR
 
 Subcommands (timestamps):
   detect-timestamps    — Find processed reciters needing timestamp extraction
   run-timestamps       — Run extract_timestamps.py in parallel for detected reciters
-  complete-timestamps  — Create per-reciter PRs, auto-merge, wait for CI, set status, notify
+  complete-timestamps  — Create per-reciter PRs, auto-merge, wait for CI, set status
 
 Usage:
   python scripts/process_requests.py triage
   python scripts/process_requests.py generate-pbs
   python scripts/process_requests.py set-status <status>
-  python scripts/process_requests.py notify <template>
   python scripts/process_requests.py prepare-pr
   python scripts/process_requests.py detect-timestamps
   python scripts/process_requests.py run-timestamps
@@ -53,7 +51,6 @@ from request_helpers import (
     gh_create_draft_pr,
     gh_create_bot_pr,
     gh_comment_on_issue,
-    send_email,
     slug_from_name,
     parse_processed_table,
     detect_reciters_needing_timestamps,
@@ -72,16 +69,6 @@ _STYLE_DISPLAY_TO_SLUG = {
 
 def _style_display_to_slug(s):
     return _STYLE_DISPLAY_TO_SLUG.get(s, s.lower() if s else "")
-
-
-from email_templates import (
-    email_receipt,
-    email_rejected_non_hafs,
-    email_rejected_duplicate,
-    email_rejected_already_processed,
-    email_segments_ready,
-    email_timestamps_done,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -220,37 +207,6 @@ def cmd_triage(args):
 
     save_state(state)
     print(f"\nState saved to {state['batch_id']}")
-
-    # Auto-send rejection emails
-    rejected = [r for r in state["requests"] if r["action"] == "reject"]
-    if rejected:
-        print(f"\nSending rejection emails ({len(rejected)})...")
-        for req in rejected:
-            if not req.get("requester_email"):
-                print(f"  {req['name']}: No email, skipping")
-                continue
-            reason = req.get("reject_reason", "")
-            try:
-                if reason == "non-hafs":
-                    subj, html = email_rejected_non_hafs(
-                        req["name"], req["requester_name"],
-                        req.get("riwayah", "unknown"), req["issue_url"],
-                    )
-                elif reason == "duplicate":
-                    subj, html = email_rejected_duplicate(
-                        req["name"], req["requester_name"],
-                        req["issue_url"], "pending", req["issue_url"],
-                    )
-                elif reason == "already-processed":
-                    subj, html = email_rejected_already_processed(
-                        req["name"], req["requester_name"], req["issue_url"],
-                    )
-                else:
-                    continue
-                send_email(req["requester_email"], subj, html)
-                print(f"  {req['name']}: sent to {req['requester_email']}")
-            except Exception as e:
-                print(f"  {req['name']}: failed — {e}")
 
 
 def _triage_one(req, processed_slugs, open_by_slug, processed):
@@ -436,9 +392,6 @@ def cmd_generate_pbs(args):
     print("  bash .local/extraction/sync_mfa.sh")
     print('  ssh katana "cd /srv/scratch/speechdata/ahmed/mfa_segments_extract && qsub .local/extraction/extract_segments.pbs"')
 
-    # Receipt emails are now sent at form submission (HF Space),
-    # not here.  Use `notify receipt` to manually re-send if needed.
-
 
 # ---------------------------------------------------------------------------
 # set-status
@@ -474,83 +427,6 @@ def cmd_set_status(args):
 
     save_state(state)
     print(f"\nUpdated {len(targets)} request(s).")
-
-
-# ---------------------------------------------------------------------------
-# notify
-# ---------------------------------------------------------------------------
-def cmd_notify(args):
-    """Send email notifications for the current batch."""
-    template = args.template
-    print(f"Sending '{template}' emails...")
-
-    state = load_state()
-
-    if template == "rejected":
-        targets = [r for r in state["requests"] if r["action"] == "reject"]
-        for req in targets:
-            if not req.get("requester_email"):
-                print(f"  #{req['issue_number']} {req['name']}: No email, skipping")
-                continue
-
-            reason = req.get("reject_reason", "")
-            if reason == "non-hafs":
-                subj, html = email_rejected_non_hafs(
-                    req["name"], req["requester_name"],
-                    req.get("riwayah", "unknown"), req["issue_url"],
-                )
-            elif reason == "duplicate":
-                subj, html = email_rejected_duplicate(
-                    req["name"], req["requester_name"],
-                    req["issue_url"], "pending", req["issue_url"],
-                )
-            elif reason == "already-processed":
-                subj, html = email_rejected_already_processed(
-                    req["name"], req["requester_name"], req["issue_url"],
-                )
-            else:
-                continue
-
-            send_email(req["requester_email"], subj, html)
-
-    elif template == "receipt":
-        targets = [r for r in state["requests"] if r["action"] == "accept"]
-        for req in targets:
-            if not req.get("requester_email"):
-                print(f"  #{req['issue_number']} {req['name']}: No email, skipping")
-                continue
-            subj, html = email_receipt(
-                req["name"], req["requester_name"], req["issue_url"],
-            )
-            send_email(req["requester_email"], subj, html)
-
-    elif template == "segments_ready":
-        targets = [r for r in state["requests"] if r["action"] == "accept"]
-        for req in targets:
-            if not req.get("requester_email"):
-                continue
-            has_reviewer = req.get("review_opt_in") and req.get("github_username")
-            subj, html = email_segments_ready(
-                req["name"], req["requester_name"],
-                req["issue_url"], req.get("pr_url", ""),
-                collab_status="invited" if has_reviewer else "passive",
-                github_username=req.get("github_username", ""),
-            )
-            send_email(req["requester_email"], subj, html)
-
-    elif template == "timestamps_done":
-        targets = [r for r in state["requests"] if r["action"] == "accept"]
-        for req in targets:
-            if not req.get("requester_email"):
-                continue
-            subj, html = email_timestamps_done(
-                req["name"], req["requester_name"], req["issue_url"],
-            )
-            send_email(req["requester_email"], subj, html)
-
-    else:
-        print(f"Unknown template: {template}")
-        print("Available: rejected, receipt, segments_ready, timestamps_done")
 
 
 # ---------------------------------------------------------------------------
@@ -674,7 +550,7 @@ def cmd_prepare_pr(args):
                 try:
                     result = subprocess.run(
                         ["gh", "issue", "develop", str(req["issue_number"]),
-                         "--branch", branch, "--base", "main"],
+                         "--name", branch, "--base", "main"],
                         cwd=str(REPO_ROOT), capture_output=True, text=True,
                     )
                     if result.returncode == 0:
@@ -732,20 +608,6 @@ def cmd_prepare_pr(args):
                 gh_comment_on_issue(req["issue_number"], comment_body)
             except Exception as e:
                 print(f"    Warning: failed to comment on issue: {e}")
-
-            # Send segments-ready email (template varies by contributor status)
-            if req.get("requester_email"):
-                try:
-                    subj, html = email_segments_ready(
-                        req["name"], req["requester_name"],
-                        req["issue_url"], pr_url,
-                        collab_status=collab_status,
-                        github_username=req.get("github_username", ""),
-                    )
-                    send_email(req["requester_email"], subj, html)
-                    print(f"    Email sent to {req['requester_email']} ({collab_status})")
-                except Exception as e:
-                    print(f"    Warning: failed to send email: {e}")
 
         except subprocess.CalledProcessError as e:
             print(f"    ERROR: {e.cmd[0]} failed: {e.stderr.strip()}")
@@ -1198,34 +1060,10 @@ def cmd_complete_timestamps(args):
         else:
             print("  sync-dataset did not succeed; skipping release wait.")
 
-    # --- Phase 7: Send notifications (after CI, so links are valid) ---
-    release_url = (
-        f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{release_tag}"
-        if release_tag else ""
-    )
-
-    print("\nSending notifications...")
-    for pr in merged:
-        rec = pr["reciter"]
-        slug = rec["slug"]
-        riwayah = rec.get("riwayah", "hafs_an_asim")
-
-        dataset_url = (
-            f"https://huggingface.co/datasets/{HF_DATASET_ID}"
-            f"/viewer/{riwayah}/{slug}"
+    if release_tag:
+        print(
+            f"\nRelease: https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{release_tag}"
         )
-
-        if rec.get("requester_email"):
-            subj, html = email_timestamps_done(
-                rec["name"], rec.get("requester_name", ""),
-                rec.get("issue_url", ""),
-                dataset_url=dataset_url,
-                release_url=release_url,
-            )
-            send_email(rec["requester_email"], subj, html)
-            print(f"  Emailed {rec['requester_email']}")
-        else:
-            print(f"  {rec['name']}: no email on file, skipping notification")
 
     # --- Summary ---
     print("\n" + "=" * 60)
@@ -1245,6 +1083,116 @@ def cmd_complete_timestamps(args):
 
 
 # ---------------------------------------------------------------------------
+# generate-sweep-pbs / promote-sweep
+# ---------------------------------------------------------------------------
+KATANA_REMOTE_DIR = "/srv/scratch/z5344896/mfa_segments_extract"
+
+
+def _rewrite_sweep_pbs_block(pbs_text: str, reciter: str, source: str,
+                             silences: list[int], run_probe: bool) -> str:
+    sub = (
+        f'RECITER="{reciter}"\n'
+        f'SOURCE="{source}"\n'
+        f'MIN_SILENCE_VALUES=({" ".join(str(s) for s in silences)})\n'
+        f'PAD_LEFT=150\n'
+        f'PAD_RIGHT=500\n'
+        f'MIN_SILENCE_FLOOR=40\n'
+        f'MODEL="Large"\n'
+        f'RUN_PROBE={1 if run_probe else 0}\n'
+    )
+    new_text, n = re.subn(
+        r"RECITER=\"[^\"]*\"[^\n]*\nSOURCE=\"[^\"]*\"[^\n]*\nMIN_SILENCE_VALUES=\([^)]*\)[^\n]*\n"
+        r"PAD_LEFT=\d+[^\n]*\nPAD_RIGHT=\d+[^\n]*\nMIN_SILENCE_FLOOR=\d+[^\n]*\n"
+        r"MODEL=\"[^\"]*\"[^\n]*\nRUN_PROBE=\d+[^\n]*\n",
+        sub, pbs_text, count=1,
+    )
+    if n != 1:
+        sys.exit("sweep PBS rewrite failed: config block regex did not match")
+    return new_text
+
+
+def cmd_generate_sweep_pbs(args):
+    """Rewrite extract_segments_sweep.pbs for one reciter + silence sweep."""
+    state = load_state()
+    accepted = [r for r in state["requests"] if r["action"] == "accept"]
+    if len(accepted) != 1:
+        sys.exit(f"sweep needs exactly 1 accepted reciter in state, got {len(accepted)}")
+    rec = accepted[0]
+    silences = [int(s) for s in args.silences.split(",")]
+    if len(silences) < 2:
+        sys.exit("--silences needs at least 2 comma-separated values")
+
+    pbs_path = REPO_ROOT / ".local/extraction/extract_segments_sweep.pbs"
+    text = pbs_path.read_text()
+    text = _rewrite_sweep_pbs_block(
+        text, rec["slug"], rec["source"], silences, run_probe=not args.no_probe,
+    )
+    pbs_path.write_text(text)
+    print(f"Sweep PBS updated: {pbs_path}")
+    print(f"  Reciter:   {rec['slug']}  (source: {rec['source']})")
+    print(f"  Silences:  {silences}")
+    print(f"  Run probe: {not args.no_probe}")
+    print()
+    print("Next:")
+    print("  bash .local/extraction/sync_mfa.sh")
+    print(f'  ssh katana "cd {KATANA_REMOTE_DIR} && qsub .local/extraction/extract_segments_sweep.pbs"')
+
+
+def cmd_promote_sweep(args):
+    """Promote one sweep pass to canonical, fetch, optionally probe."""
+    slug = args.reciter
+    sil = args.silence
+    remote = f"{KATANA_REMOTE_DIR}/{slug}"
+    canonical_remote = f"{KATANA_REMOTE_DIR}/data/recitation_segments/{slug}"
+    cmd = (
+        f"set -e; "
+        f"test -f {remote}/segments__sil{sil}.json || (echo missing && exit 1); "
+        f"mkdir -p {canonical_remote}; "
+        f"cp {remote}/segments__sil{sil}.json {canonical_remote}/segments.json; "
+        f"cp {remote}/detailed__sil{sil}.json {canonical_remote}/detailed.json; "
+        f"cp {remote}/edit_history__sil{sil}.jsonl {canonical_remote}/edit_history.jsonl; "
+        f"echo promoted sil={sil} for {slug}"
+    )
+    subprocess.run(["ssh", "katana", cmd], check=True)
+
+    local_dir = REPO_ROOT / "data/recitation_segments" / slug
+    local_dir.mkdir(parents=True, exist_ok=True)
+    print("Fetching canonical to local...")
+    subprocess.run(
+        ["rsync", "-az",
+         f"katana:{canonical_remote}/", f"{local_dir}/"],
+        check=True,
+    )
+
+    print("Cleaning sweep artifacts (local + remote)...")
+    for p in list(local_dir.glob("segments__sil*.json")) + \
+             list(local_dir.glob("detailed__sil*.json")) + \
+             list(local_dir.glob("edit_history__sil*.jsonl")) + \
+             list(local_dir.glob("sweep_report.txt")):
+        p.unlink()
+    subprocess.run(
+        ["ssh", "katana",
+         f"rm -f {remote}/segments__sil*.json {remote}/detailed__sil*.json "
+         f"{remote}/edit_history__sil*.jsonl {remote}/sweep_report.txt"],
+        check=True,
+    )
+
+    print("Validating...")
+    subprocess.run(
+        ["python3", str(REPO_ROOT / "validators/validate_segments.py"), str(local_dir)],
+        check=False,
+    )
+
+    if not args.no_probe:
+        print(f"Submitting probe_mfa.pbs for {slug}...")
+        subprocess.run(
+            ["ssh", "katana",
+             f"cd {KATANA_REMOTE_DIR} && qsub -v RECITER={slug} .local/extraction/probe_mfa.pbs"],
+            check=True,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
@@ -1256,12 +1204,22 @@ def main():
     sub.add_parser("triage", help="Fetch and triage pending requests")
     sub.add_parser("generate-pbs", help="Generate PBS job array")
 
+    sp = sub.add_parser("generate-sweep-pbs",
+                        help="Rewrite sweep PBS for single reciter + silence sweep")
+    sp.add_argument("--silences", required=True,
+                    help="Comma-separated min_silence values (e.g. 100,200,400)")
+    sp.add_argument("--no-probe", action="store_true",
+                    help="Skip the post-extract MFA probe submission")
+
+    sp = sub.add_parser("promote-sweep",
+                        help="Copy chosen sweep pass to canonical + fetch + optional probe")
+    sp.add_argument("--reciter", required=True)
+    sp.add_argument("--silence", required=True, type=int)
+    sp.add_argument("--no-probe", action="store_true")
+
     sp = sub.add_parser("set-status", help="Update status for current batch")
     sp.add_argument("status", choices=["pending", "rejected", "awaiting-review", "completed"])
     sp.add_argument("--job-id", help="PBS job ID to track")
-
-    sp = sub.add_parser("notify", help="Send email notifications")
-    sp.add_argument("template", choices=["rejected", "receipt", "segments_ready", "timestamps_done"])
 
     sub.add_parser("prepare-pr", help="Prepare PR staging instructions")
 
@@ -1269,7 +1227,7 @@ def main():
     sub.add_parser("run-timestamps", help="Run timestamp extraction in parallel")
 
     sp = sub.add_parser("complete-timestamps",
-                        help="Auto PR + merge + CI wait + notify")
+                        help="Auto PR + merge + CI wait")
     sp.add_argument("--skip-ci", action="store_true",
                     help="Skip waiting for CI workflows")
 
@@ -1278,8 +1236,9 @@ def main():
     commands = {
         "triage": cmd_triage,
         "generate-pbs": cmd_generate_pbs,
+        "generate-sweep-pbs": cmd_generate_sweep_pbs,
+        "promote-sweep": cmd_promote_sweep,
         "set-status": cmd_set_status,
-        "notify": cmd_notify,
         "prepare-pr": cmd_prepare_pr,
         "detect-timestamps": cmd_detect_timestamps,
         "run-timestamps": cmd_run_timestamps,

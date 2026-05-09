@@ -1,7 +1,16 @@
-"""Timestamps tab routes (/api/ts/*)."""
-import random
+"""Timestamps tab routes (/api/ts/*).
 
-from flask import Blueprint, jsonify, request
+Two read paths share the same shard-fetch model on the frontend:
+  - **local** mode: this blueprint's `/manifest`, `/shard/<reciter>/<int:chapter>`,
+    and `/resource/<name>` endpoints serve gzipped bodies sliced from the
+    on-disk timestamps tree (`services/ts_local.py`).
+  - **huggingface** mode: the frontend reads directly from the HF dataset
+    CDN — Flask is only consulted for `/config` and `/validate/<reciter>`.
+
+`/config` advertises the active mode + manifest/shard URL templates so the
+frontend can pick the right base without needing its own env knob.
+"""
+from flask import Blueprint, Response, jsonify
 
 from config import (
     UNIFIED_DISPLAY_MAX_HEIGHT,
@@ -11,26 +20,39 @@ from config import (
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
     SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
-    TS_RANDOM_MAX_RETRIES,
     TS_BOUNDARY_TOLERANCE_MS,
+    TS_SOURCE,
+    TS_HF_DATASET_BASE_URL,
     MISSING_WORD_DIFF_MS_WEIGHT,
 )
 from constants import TS_AUDIO_CATEGORIES
-from services.data_loader import (
-    discover_ts_reciters,
-    load_audio_urls,
-    load_timestamps,
-)
-from services.ts_query import get_verse_data
-from utils.formatting import format_ms
+from services.audio_meta import vbr_chapters_for_reciter
+from services import ts_local
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 
 
 @ts_bp.route("/config")
 def ts_config():
-    """Return display configuration for Timestamps tab."""
+    """Return display configuration + read-path URLs for Timestamps tab.
+
+    `mode`, `manifest_url`, and `shard_url_template` drive the frontend's
+    shard-fetch model (parameterised by mode):
+      local       — Flask serves manifest + sliced shards from on-disk data.
+      huggingface — frontend fetches directly from the HF dataset CDN.
+    """
+    if TS_SOURCE == "huggingface":
+        base = TS_HF_DATASET_BASE_URL.rstrip("/")
+        manifest_url = f"{base}/manifest.json.gz"
+        shard_url_template = f"{base}/timestamps/{{reciter}}/{{chapter}}.json.gz"
+    else:
+        manifest_url = "/api/ts/manifest"
+        shard_url_template = "/api/ts/shard/{reciter}/{chapter}"
+
     return jsonify({
+        "mode": TS_SOURCE,
+        "manifest_url": manifest_url,
+        "shard_url_template": shard_url_template,
         "unified_display_max_height": UNIFIED_DISPLAY_MAX_HEIGHT,
         "anim_highlight_color": ANIM_HIGHLIGHT_COLOR,
         "anim_word_transition_duration": ANIM_WORD_TRANSITION_DURATION,
@@ -44,86 +66,44 @@ def ts_config():
     })
 
 
-@ts_bp.route("/reciters")
-def ts_reciters():
-    """Return list of reciters with timestamps data."""
-    return jsonify(discover_ts_reciters())
+# Bodies are pre-gzipped (`mtime=0`, deterministic). Sent without a
+# `Content-Encoding: gzip` header — the frontend decompresses with
+# `DecompressionStream('gzip')` so the same code path handles HF + local.
+_GZIP_HEADERS = {"Cache-Control": "no-cache"}
 
 
-@ts_bp.route("/chapters/<reciter>")
-def ts_chapters(reciter):
-    """Return sorted list of chapter numbers derived from verse keys."""
-    data = load_timestamps(reciter)
-    if not data:
-        return jsonify({"error": "Reciter not found"}), 404
-    chapters = sorted(set(int(k.split(":")[0]) for k in data["verses"]))
-    return jsonify(chapters)
-
-
-@ts_bp.route("/verses/<reciter>/<int:chapter>")
-def ts_verses(reciter, chapter):
-    """Return verse refs and audio URLs for a chapter."""
-    data = load_timestamps(reciter)
-    if not data:
-        return jsonify({"error": "Reciter not found"}), 404
-
-    prefix = f"{chapter}:"
-    verse_refs = sorted(
-        (k for k in data["verses"] if k.startswith(prefix)),
-        key=lambda k: int(k.split(":")[1]),
+@ts_bp.route("/manifest")
+def ts_manifest():
+    """Local-mode: serve the pre-built gzipped manifest."""
+    return Response(
+        ts_local.manifest_bytes(),
+        mimetype="application/octet-stream",
+        headers=_GZIP_HEADERS,
     )
-    if not verse_refs:
-        return jsonify({"error": "Chapter not found"}), 404
-
-    audio_source = data["meta"].get("audio_source", "")
-    audio_reciter = data["meta"].get("audio_reciter", reciter)
-    urls = load_audio_urls(audio_source, audio_reciter) if audio_source else {}
-
-    verses = []
-    for ref in verse_refs:
-        verses.append({
-            "ref": ref,
-            "audio_url": urls.get(ref, urls.get(str(chapter), "")),
-        })
-    return jsonify({"verses": verses})
 
 
-@ts_bp.route("/data/<reciter>/<verse_ref>")
-def ts_data(reciter, verse_ref):
-    """Return full verse data for visualization."""
-    result = get_verse_data(reciter, verse_ref)
-    err = result.get("_error") if result else None
-    if err == "reciter_not_found":
-        return jsonify({"error": "Reciter not found"}), 404
-    if err == "verse_not_found":
-        return jsonify({"error": "Verse not found"}), 404
-    return jsonify(result)
+@ts_bp.route("/shard/<reciter>/<int:chapter>")
+def ts_shard(reciter, chapter):
+    """Local-mode: serve a per-chapter gzipped shard sliced from `timestamps_full.json`."""
+    body = ts_local.shard_bytes(reciter, chapter)
+    if body is None:
+        return jsonify({"error": "Shard not found"}), 404
+    return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
 
 
-@ts_bp.route("/random")
-def ts_random():
-    """Pick a random verse from a random reciter and return full data."""
-    reciters = discover_ts_reciters()
-    if not reciters:
-        return jsonify({"error": "No timestamps data"}), 500
-    for _ in range(TS_RANDOM_MAX_RETRIES):
-        r = random.choice(reciters)
-        data = load_timestamps(r["slug"])
-        if not data or not data["verses"]:
-            continue
-        verse_ref = random.choice(list(data["verses"].keys()))
-        return ts_data(r["slug"], verse_ref)
-    return jsonify({"error": "No verses found"}), 500
+@ts_bp.route("/resource/<name>")
+def ts_resource(name):
+    """Local-mode: serve gzipped reference data referenced by the manifest's `resources` block."""
+    body = ts_local.resource_bytes(name)
+    if body is None:
+        return jsonify({"error": "Resource not found"}), 404
+    return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
 
 
-@ts_bp.route("/random/<reciter>")
-def ts_random_reciter(reciter):
-    """Pick a random verse from the specified reciter and return full data."""
-    data = load_timestamps(reciter)
-    if not data or not data["verses"]:
-        return jsonify({"error": f"No timestamps data for reciter '{reciter}'"}), 404
-    verse_ref = random.choice(list(data["verses"].keys()))
-    return ts_data(reciter, verse_ref)
+@ts_bp.route("/vbr/<reciter>")
+def ts_vbr(reciter):
+    """Return VBR chapters for timestamp clients reading older HF manifests."""
+    return jsonify({"vbr_chapters": vbr_chapters_for_reciter(reciter)})
 
 
 @ts_bp.route("/validate/<reciter>")
@@ -185,10 +165,48 @@ def ts_validate(reciter):
         })
     boundary_mismatches.sort(key=lambda x: x["diff_ms"], reverse=True)
 
+    missing_verses = []
+    for vk in result.get("_missing_verses", []):
+        parts = vk.split(":")
+        ch = int(parts[0]) if parts and parts[0].isdigit() else 0
+        missing_verses.append({
+            "verse_key": vk, "chapter": ch,
+            "label": vk,
+        })
+    missing_verses.sort(key=lambda x: (x["chapter"],
+        int(x["verse_key"].split(":")[1]) if ":" in x["verse_key"] else 0))
+
+    verse_overlaps = []
+    for ov in result.get("_verse_overlaps", []):
+        parts = ov["verse_key"].split(":")
+        ch = int(parts[0]) if parts else 0
+        verse_overlaps.append({
+            "verse_key": ov["verse_key"], "chapter": ch,
+            "prev_verse_key": ov["prev_verse_key"],
+            "overlap_ms": ov["overlap_ms"],
+            "label": f"{ov['verse_key']} [-{ov['overlap_ms']}ms]",
+        })
+    verse_overlaps.sort(key=lambda x: x["overlap_ms"], reverse=True)
+
+    large_gaps = []
+    for g in result.get("_large_gaps", []):
+        parts = g["verse_key"].split(":")
+        ch = int(parts[0]) if parts else 0
+        large_gaps.append({
+            "verse_key": g["verse_key"], "chapter": ch,
+            "prev_verse_key": g["prev_verse_key"],
+            "gap_ms": g["gap_ms"],
+            "label": f"{g['verse_key']} [{g['gap_ms']/1000:.1f}s gap]",
+        })
+    large_gaps.sort(key=lambda x: x["gap_ms"], reverse=True)
+
     return jsonify({
         "mfa_failures": mfa_failures,
+        "missing_verses": missing_verses,
         "missing_words": missing_words,
+        "verse_overlaps": verse_overlaps,
         "boundary_mismatches": boundary_mismatches,
+        "large_gaps": large_gaps,
         "meta": {
             "has_segments": result.get("has_segments", False),
             "tolerance_ms": result.get("seg_tolerance_ms", TS_BOUNDARY_TOLERANCE_MS),

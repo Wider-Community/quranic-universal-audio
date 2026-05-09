@@ -10,6 +10,7 @@
 import { clearWaveformCache } from '../../../../lib/utils/waveform-cache';
 import { cacheStatus } from '../../stores/audio-cache';
 import {
+    reciterVbrChapters,
     segAllData,
     segCurrentIdx,
     segData,
@@ -43,6 +44,7 @@ export function clearPerReciterState(): void {
     resetWaveformState();
     segAllData.set(null);
     segData.set(null);
+    reciterVbrChapters.set(new Set());
     segCurrentIdx.set(-1);
     clearDirtyMap();
     clearOpLog();

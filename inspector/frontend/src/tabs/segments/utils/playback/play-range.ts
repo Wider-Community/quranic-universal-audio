@@ -1,17 +1,27 @@
 /**
  * _playRange — preview playback with animated playhead overlay.
+ *
+ * Edit-mode (trim / split) preview, including loop-back. Owns its own
+ * rAF loop because the playhead also drives a per-frame canvas redraw
+ * (it can't ride AudioRange's onTick directly without extra wiring).
+ *
+ * Coordinate space: file-absolute milliseconds throughout. The `segPort`
+ * port translates to clip-relative `<audio>.currentTime` internally for
+ * VBR clip loads. Callers never touch `clipFileOffsetMs`.
+ *
+ * Edit-mode pre-load: callers (enterTrimMode / enterSplitMode) issue a
+ * `segPort.loadCovering(seg.time_start, seg.time_end, EDIT_LOAD_PAD_MS)`
+ * ONCE on entry. Subsequent `_playRange` calls (split-left / split-right
+ * toggles, trim-handle nudges) hit the port's idempotent fast path —
+ * no fresh ffmpeg invocation per press. Drags that push beyond the
+ * loaded window can re-issue `loadCovering` to widen.
  */
 
 import { get, writable } from 'svelte/store';
 
-import { audioSrcMatches, safePlay } from '../../../../lib/utils/audio';
 import { PREVIEW_PLAYHEAD_COLOR } from '../../../../lib/utils/constants';
-import { getSegByChapterIndex, selectedChapter } from '../../stores/chapter';
-import { editCanvas, editingSegIndex } from '../../stores/edit';
-import {
-    playbackSpeed,
-    segAudioElement,
-} from '../../stores/playback';
+import { editCanvas } from '../../stores/edit';
+import { playbackSpeed, segPort } from '../../stores/playback';
 import type { PreviewLoopMode, RafHandle } from '../../types/segments';
 import { drawSplitWaveform } from '../waveform/split-draw';
 import { drawTrimWaveform } from '../waveform/trim-draw';
@@ -24,7 +34,6 @@ export const previewLooping = writable<PreviewLoopMode>(false);
 let _previewJustSeeked = false;
 let _playRangeRAF: RafHandle | null = null;
 let _previewStopHandler: ((ev: Event) => void) | null = null;
-let _previewCanplayHandler: (() => void) | null = null;
 
 export function getPreviewLooping(): PreviewLoopMode { return get(previewLooping); }
 export function setPreviewLooping(v: PreviewLoopMode): void { previewLooping.set(v); }
@@ -36,16 +45,13 @@ export function clearPlayRangeRAF(): void {
     if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
 }
 
-/** Detach any pending `canplay` listener from the audio element and clear the
- *  handler ref. Called from exitEditMode so that a canplay event that fires
- *  AFTER the user has cancelled the edit doesn't re-enter `doPlay` and kick
- *  off a phantom preview loop on a canvas whose _trimWindow is already gone. */
+/** No-op kept for back-compat with `exitEditMode`. The port owns canplay
+ *  listener lifecycle; when the user cancels an edit before the load
+ *  resolves, the next `setSource` / `loadCovering` call (or the segments
+ *  main-list `playFromSegment`) will abort the pending load with
+ *  AbortError and we silently swallow it. */
 export function clearPreviewCanplayHandler(): void {
-    const audioEl = get(segAudioElement);
-    if (audioEl && _previewCanplayHandler) {
-        audioEl.removeEventListener('canplay', _previewCanplayHandler);
-    }
-    _previewCanplayHandler = null;
+    /* no-op — port owns canplay */
 }
 
 export function getPreviewStopHandler(): ((ev: Event) => void) | null { return _previewStopHandler; }
@@ -56,14 +62,15 @@ export function setPreviewStopHandler(h: ((ev: Event) => void) | null): void { _
 // ---------------------------------------------------------------------------
 
 export function _playRange(startMs: number, endMs: number): void {
-    const audioEl = get(segAudioElement);
-    if (!audioEl) return;
+    if (!segPort.element) return;
     if (_previewStopHandler) {
-        audioEl.removeEventListener('timeupdate', _previewStopHandler);
+        // Legacy timeupdate-based stop handler — port subscribes via
+        // onTimeUpdate elsewhere; we keep removeEventListener for callers
+        // still attaching it directly.
+        segPort.element.removeEventListener('timeupdate', _previewStopHandler);
         _previewStopHandler = null;
     }
     if (_playRangeRAF) { cancelAnimationFrame(_playRangeRAF); _playRangeRAF = null; }
-    const start = startMs / 1000;
     const canvas = get(editCanvas);
 
     let wfStart: number, wfEnd: number;
@@ -100,11 +107,12 @@ export function _playRange(startMs: number, endMs: number): void {
         // after `doPlay` → the playhead never drew, loop-back never ran,
         // drag-updates-loop-live stopped working. Explicit cleanup uses
         // `clearPlayRangeRAF` to cancel the rAF.
-        if (audioEl!.paused) {
+        if (segPort.paused) {
             _playRangeRAF = requestAnimationFrame(animatePlayhead);
             return;
         }
-        const curMs = audioEl!.currentTime * 1000;
+        // File-absolute throughout — the port owns offset translation.
+        const curMs = segPort.currentTimeMs();
         const loopMode = get(previewLooping);
         let effectiveEnd = endMs;
         let loopStart: number | null = null;
@@ -125,12 +133,27 @@ export function _playRange(startMs: number, endMs: number): void {
         }
         if (curMs >= effectiveEnd && !_previewJustSeeked) {
             if (loopMode && loopStart !== null) {
-                audioEl!.currentTime = loopStart / 1000;
+                // OS-sink flush across the loop seek-back. Without
+                // pauseAndFlush the platform audio sink (Windows WASAPI
+                // ~50–200ms of pre-decoded samples) keeps playing past
+                // `effectiveEnd` while the seek queues — pre-refactor's
+                // tight per-press clip ended at endMs so those queued
+                // samples were silence/EOF, but the post-refactor wider
+                // EDIT_LOAD_PAD_MS clip has REAL audio in the post-pad
+                // zone. The cut+pause silences and drains the sink; the
+                // seekAndPlay then uncuts and resumes from loopStart.
+                // Port handles file-absolute → clip-relative translation.
+                segPort.pauseAndFlush();
+                segPort.seekAndPlay(loopStart);
                 _previewJustSeeked = true;
                 _playRangeRAF = requestAnimationFrame(animatePlayhead);
                 return;
             }
-            audioEl!.pause();
+            // Stop branch (non-loop preview reaching its endMs): same
+            // sink-flush rationale — replace bare `pause()` with
+            // `pauseAndFlush()` so the wider clip's post-pad samples
+            // queued in the OS sink don't audibly leak after the boundary.
+            segPort.pauseAndFlush();
             cleanup();
             return;
         }
@@ -163,44 +186,33 @@ export function _playRange(startMs: number, endMs: number): void {
         _playRangeRAF = requestAnimationFrame(animatePlayhead);
     }
 
+    // Ensure the port is covering the requested file-absolute window. In
+    // edit mode the caller has already pre-loaded the segment with post-roll.
+    // CBR chapters always cover (window.endMs is Infinity). VBR only reuses
+    // that clip when the requested playback start matches the loaded clip
+    // start; a new start gets a fresh clip so play begins from clip time 0
+    // rather than seeking inside a streamed response.
+    const { ready, swapped } = segPort.loadCovering(startMs, endMs);
+
     const doPlay = (): void => {
-        _previewCanplayHandler = null;
-        audioEl.currentTime = start;
-        audioEl.playbackRate = get(playbackSpeed);
-        safePlay(audioEl);
+        segPort.setPlaybackRate(get(playbackSpeed));
+        segPort.seekAndPlay(startMs);
         // Start the rAF immediately. `animatePlayhead` is now resilient to
-        // paused state (see the early-continue above), so whether `safePlay`
+        // paused state (see the early-continue above), so whether `play`
         // has resolved yet doesn't matter — the chain keeps ticking and
-        // starts drawing the playhead as soon as `audioEl.paused` flips false.
+        // starts drawing the playhead as soon as `port.paused` flips false.
         _playRangeRAF = requestAnimationFrame(animatePlayhead);
     };
 
-    const chStr = get(selectedChapter);
-    const targetUrl = canvas?._splitData?.audioUrl
-        || canvas?._trimWindow?.audioUrl
-        || (() => { const ch = chStr ? parseInt(chStr) : null;
-                     const editIdx = get(editingSegIndex);
-                     const s = ch != null ? getSegByChapterIndex(ch, editIdx) : null;
-                     return s && s.audio_url; })();
-    if (targetUrl && !audioSrcMatches(audioEl.src, targetUrl)) {
-        if (_previewCanplayHandler) {
-            audioEl.removeEventListener('canplay', _previewCanplayHandler);
-            _previewCanplayHandler = null;
-        }
-        _previewCanplayHandler = doPlay;
-        audioEl.src = targetUrl;
-        audioEl.addEventListener('canplay', doPlay, { once: true });
-        audioEl.load();
-    } else if (audioEl.src && audioEl.readyState >= 1) {
+    if (!swapped) {
+        // Same src — play immediately.
         doPlay();
-    } else if (targetUrl) {
-        if (_previewCanplayHandler) {
-            audioEl.removeEventListener('canplay', _previewCanplayHandler);
-            _previewCanplayHandler = null;
-        }
-        _previewCanplayHandler = doPlay;
-        audioEl.src = targetUrl;
-        audioEl.addEventListener('canplay', doPlay, { once: true });
-        audioEl.load();
+    } else {
+        // New clip pending — wait for canplay then play. AbortError swallowed
+        // (overlapping load supersedes us, e.g. user cancelled the edit).
+        ready.then(() => doPlay()).catch((e: unknown) => {
+            if (e && (e as { name?: string }).name !== 'AbortError') console.error(e);
+        });
     }
 }
+

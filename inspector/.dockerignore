@@ -6,7 +6,10 @@
 mfa_aligner/
 quranic_universal_aligner/
 reciter_requests/
-scripts/
+# scripts/ has local CLIs at the top level; runtime only needs lib/.
+scripts/*
+!scripts/__init__.py
+!scripts/lib
 extract_timestamps.py
 
 # --- Data (mounted at runtime, not baked in) ---
