@@ -52,7 +52,7 @@ Timestamps: `✓✓` = words + letters/phonemes, `✓` = words only.
 | Nasser Alqatami | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,235 | 27.0 | ✓ | ✓ | ✓✓ |
 | Raad Al Kurdi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,233 | 32.3 | ✓ | ✓ | ✗ |
 | Saad Al-Ghamdi | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,235 | 24.8 | ✓ | ✓ | ✓✓ |
-| Yasser Al-Dosari | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,236 | 25.8 | ✓ | ✓ | ✗ |
+| Yasser Al-Dosari | Murattal | MP3Quran | Surah + Ayah timings | 114, 6,235 | 25.8 | ✓ | ✓ | ✗ |
 
 
 ---
