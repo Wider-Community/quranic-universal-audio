@@ -1,4 +1,4 @@
-Generated: 2026-05-09 09:04:50
+Generated: 2026-05-09 09:36:16
 
 ========================================================================
   ahmad_talib_bin_humaid
@@ -17,17 +17,17 @@ Generated: 2026-05-09 09:04:50
   Word gaps:      0 verses
 
 --- Segments ---
-  Total:            9502
-  Single-seg:       3044
-  Multi-seg verses: 2362 (6458 segs)
-  Cross-verse keys: 144
+  Total:            9508
+  Single-seg:       3047
+  Multi-seg verses: 2363 (6461 segs)
+  Cross-verse keys: 141
   Max segs/verse:   17
 
 --- Segment Duration ---
   Min:    1.19s
-  Median: 7.29s
+  Median: 7.28s
   Mean:   7.67s
-  Max:    21.66s
+  Max:    21.44s
 
 --- True Silence Duration (padding reversed) ---
   Min:    0.65s
@@ -43,7 +43,7 @@ Generated: 2026-05-09 09:04:50
   Below 60%: 0
   Below 80%: 0
   Failed:    1 (no alignment)
-  Empty ASR: 26 (matched but no phonemes)
+  Empty ASR: 32 (matched but no phonemes)
 
 --- Failed Alignments (1) ---
   1:43.6 - 2:02.7  (19.05s)
@@ -54,38 +54,38 @@ Generated: 2026-05-09 09:04:50
   MISS  21:10  (8 words)
   MISS  21:11  (10 words)
 
---- Cross-verse (134) ---
+--- Cross-verse (81) ---
   [1.0000]  19:88:1-19:89:4  @ 15:45.1 - 15:52.5
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/019.mp3
            text:  وَقَالُوا۟ ٱتَّخَذَ ٱلرَّحْمَـٰنُ وَلَدًا لَّقَدْ جِئْتُمْ شَيْـًٔا إِدًّا
-  [1.0000]  20:19:1-20:20:5  @ 1:59.7 - 2:05.9
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
-           text:  قَالَ أَلْقِهَا يَـٰمُوسَىٰ فَأَلْقَىٰهَا فَإِذَا هِىَ حَيَّةٌ تَسْعَىٰ
-  [0.9600]  20:25:1-20:28:2  @ 2:26.3 - 2:34.9
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
-           text:  قَالَ رَبِّ ٱشْرَحْ لِى صَدْرِى وَيَسِّرْ لِىٓ أَمْرِى وَٱحْلُلْ عُقْدَةً مِّن لِّسَانِى يَفْقَهُوا۟ قَوْلِى
-  [0.9700]  20:29:1-20:30:2  @ 2:35.0 - 2:39.6
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
-           text:  وَٱجْعَل لِّى وَزِيرًا مِّنْ أَهْلِى هَـٰرُونَ أَخِى
-  [1.0000]  20:31:1-20:32:3  @ 2:39.6 - 2:43.4
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
-           text:  ٱشْدُدْ بِهِۦٓ أَزْرِى وَأَشْرِكْهُ فِىٓ أَمْرِى
-  [0.9200]  20:33:1-20:34:2  @ 2:43.4 - 2:47.9
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
-           text:  كَىْ نُسَبِّحَكَ كَثِيرًا وَنَذْكُرَكَ كَثِيرًا
-  [0.9800]  21:90:17-21:91:7  @ 17:28.7 - 17:37.5
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/021.mp3
-           text:  وَكَانُوا۟ لَنَا خَـٰشِعِينَ وَٱلَّتِىٓ أَحْصَنَتْ فَرْجَهَا فَنَفَخْنَا فِيهَا مِن رُّوحِنَا
-  [0.9700]  22:42:1-22:44:4  @ 11:44.6 - 11:58.6
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/022.mp3
-           text:  وَإِن يُكَذِّبُوكَ فَقَدْ كَذَّبَتْ قَبْلَهُمْ قَوْمُ نُوحٍ وَعَادٌ وَثَمُودُ وَقَوْمُ إِبْرَٰهِيمَ وَقَوْمُ لُوطٍ وَأَصْحَـٰبُ مَدْيَنَ ۖ وَكُذِّبَ مُوسَىٰ
-  [0.9800]  26:10:1-26:11:4  @ 1:08.8 - 1:16.7
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/026.mp3
-           text:  وَإِذْ نَادَىٰ رَبُّكَ مُوسَىٰٓ أَنِ ٱئْتِ ٱلْقَوْمَ ٱلظَّـٰلِمِينَ قَوْمَ فِرْعَوْنَ ۚ أَلَا يَتَّقُونَ
-  [0.9900]  26:12:1-26:13:8  @ 1:16.7 - 1:27.6
-           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/026.mp3
-           text:  قَالَ رَبِّ إِنِّىٓ أَخَافُ أَن يُكَذِّبُونِ وَيَضِيقُ صَدْرِى وَلَا يَنطَلِقُ لِسَانِى فَأَرْسِلْ إِلَىٰ هَـٰرُونَ
-  ... and 124 more
+  [0.9800]  27:2:1-27:3:9  @ 0:07.7 - 0:18.6
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/027.mp3
+           text:  هُدًى وَبُشْرَىٰ لِلْمُؤْمِنِينَ ٱلَّذِينَ يُقِيمُونَ ٱلصَّلَوٰةَ وَيُؤْتُونَ ٱلزَّكَوٰةَ وَهُم بِٱلْـَٔاخِرَةِ هُمْ يُوقِنُونَ
+  [1.0000]  27:16:14-27:17:9  @ 3:07.5 - 3:20.5
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/027.mp3
+           text:  إِنَّ هَـٰذَا لَهُوَ ٱلْفَضْلُ ٱلْمُبِينُ وَحُشِرَ لِسُلَيْمَـٰنَ جُنُودُهُۥ مِنَ ٱلْجِنِّ وَٱلْإِنسِ وَٱلطَّيْرِ فَهُمْ يُوزَعُونَ
+  [1.0000]  29:15:1-29:16:13  @ 3:18.2 - 3:37.9
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/029.mp3
+           text:  فَأَنجَيْنَـٰهُ وَأَصْحَـٰبَ ٱلسَّفِينَةِ وَجَعَلْنَـٰهَآ ءَايَةً لِّلْعَـٰلَمِينَ وَإِبْرَٰهِيمَ إِذْ قَالَ لِقَوْمِهِ ٱعْبُدُوا۟ ٱللَّهَ وَٱتَّقُوهُ ۖ ذَٰلِكُمْ خَيْرٌ لَّكُمْ إِن كُنتُمْ تَعْلَمُونَ
+  [1.0000]  30:27:10-30:28:16  @ 4:54.9 - 5:16.3
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/030.mp3
+           text:  وَلَهُ ٱلْمَثَلُ ٱلْأَعْلَىٰ فِى ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضِ ۚ وَهُوَ ٱلْعَزِيزُ ٱلْحَكِيمُ ضَرَبَ لَكُم مَّثَلًا مِّنْ أَنفُسِكُمْ ۖ هَل لَّكُم مِّن مَّا مَلَكَتْ أَيْمَـٰنُكُم مِّن شُرَكَآءَ فِى مَا رَزَقْنَـٰكُمْ
+  [0.9800]  32:2:1-32:3:3  @ 0:12.2 - 0:21.3
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/032.mp3
+           text:  تَنزِيلُ ٱلْكِتَـٰبِ لَا رَيْبَ فِيهِ مِن رَّبِّ ٱلْعَـٰلَمِينَ أَمْ يَقُولُونَ ٱفْتَرَىٰهُ ۚ
+  [0.9700]  35:6:1-35:7:13  @ 1:06.6 - 1:27.4
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
+           text:  إِنَّ ٱلشَّيْطَـٰنَ لَكُمْ عَدُوٌّ فَٱتَّخِذُوهُ عَدُوًّا ۚ إِنَّمَا يَدْعُوا۟ حِزْبَهُۥ لِيَكُونُوا۟ مِنْ أَصْحَـٰبِ ٱلسَّعِيرِ ٱلَّذِينَ كَفَرُوا۟ لَهُمْ عَذَابٌ شَدِيدٌ ۖ وَٱلَّذِينَ ءَامَنُوا۟ وَعَمِلُوا۟ ٱلصَّـٰلِحَـٰتِ لَهُم مَّغْفِرَةٌ وَأَجْرٌ كَبِيرٌ
+  [0.9800]  35:16:1-35:17:5  @ 4:01.6 - 4:10.1
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
+           text:  إِن يَشَأْ يُذْهِبْكُمْ وَيَأْتِ بِخَلْقٍ جَدِيدٍ وَمَا ذَٰلِكَ عَلَى ٱللَّهِ بِعَزِيزٍ
+  [0.9100]  35:19:1-35:21:4  @ 4:33.7 - 4:40.9
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/035.mp3
+           text:  وَمَا يَسْتَوِى ٱلْأَعْمَىٰ وَٱلْبَصِيرُ وَلَا ٱلظُّلُمَـٰتُ وَلَا ٱلنُّورُ وَلَا ٱلظِّلُّ وَلَا ٱلْحَرُورُ
+  [0.9800]  37:129:1-37:130:4  @ 17:21.8 - 17:32.2
+           audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  وَتَرَكْنَا عَلَيْهِ فِى ٱلْـَٔاخِرِينَ سَلَـٰمٌ عَلَىٰٓ إِلْ يَاسِينَ
+  ... and 71 more
 
 --- Muqatta'at (28) ---
   [0.8000]  2:1:1-2:1:1  @ 0:03.7 - 0:11.0
@@ -153,7 +153,7 @@ Generated: 2026-05-09 09:04:50
            text:  قَالَ رَجُلَانِ مِنَ ٱلَّذِينَ يَخَافُونَ أَنْعَمَ ٱللَّهُ عَلَيْهِمَا ٱدْخُلُوا۟ عَلَيْهِمُ ٱلْبَابَ
   ... and 525 more
 
---- Empty ASR Phonemes (26) ---
+--- Empty ASR Phonemes (32) ---
   [1.0000]  4:171:1-4:171:12  @ 1:02:35.4 - 1:02:44.6
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/004.mp3
            text:  يَـٰٓأَهْلَ ٱلْكِتَـٰبِ لَا تَغْلُوا۟ فِى دِينِكُمْ وَلَا تَقُولُوا۟ عَلَى ٱللَّهِ إِلَّا ٱلْحَقَّ ۚ
@@ -184,7 +184,7 @@ Generated: 2026-05-09 09:04:50
   [1.0000]  20:24:1-20:24:5  @ 2:22.6 - 2:26.2
            audio: https://server16.mp3quran.net/a_binhameed/Rewayat-Hafs-A-n-Assem/020.mp3
            text:  ٱذْهَبْ إِلَىٰ فِرْعَوْنَ إِنَّهُۥ طَغَىٰ
-  ... and 16 more
+  ... and 22 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
@@ -198,7 +198,7 @@ Generated: 2026-05-09 09:04:50
   repetitions 0
   audio_bleeding 0
   boundary_adj 0
-  cross_verse 134
+  cross_verse 81
   qalqala 535
   muqattaat 28
 
