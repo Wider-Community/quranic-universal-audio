@@ -4,6 +4,7 @@ docs/reciters-research/
 # Cache
 __pycache__/
 .cache/
+.pytest_cache
 *.bak
 node_modules/
 
