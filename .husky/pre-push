@@ -11,12 +11,20 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 
   if [ "$remote_sha" = "$zero_hash" ]; then
-    range="$local_sha"
+    # New branch on the remote — diff against the merge-base with the
+    # default branch so we only see commits actually being pushed.
+    # Falls back to listing the single commit if no merge-base exists.
+    base="$(git merge-base origin/main "$local_sha" 2>/dev/null || true)"
+    if [ -n "$base" ]; then
+      range="$base..$local_sha"
+    else
+      range="$local_sha~..$local_sha"
+    fi
   else
     range="$remote_sha..$local_sha"
   fi
 
-  changed_paths="$(git diff --name-only "$range")"
+  changed_paths="$(git log --name-only --pretty=format: "$range" 2>/dev/null | sort -u)"
   for path in $changed_paths; do
     case "$path" in
       inspector/frontend/*)
