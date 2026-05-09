@@ -1,8 +1,8 @@
-Generated: 2026-05-08 09:16:45
+Generated: 2026-05-09 09:53:48
 
 ========================================================================
   yasser_al_dosari
-  yasser_al_dosari
+  data/recitation_segments/yasser_al_dosari
 ========================================================================
 
 --- VAD Settings ---
@@ -43,7 +43,7 @@ Generated: 2026-05-08 09:16:45
   Below 60%: 0
   Below 80%: 0
   Failed:    0 (no alignment)
-  Empty ASR: 18 (matched but no phonemes)
+  Empty ASR: 19 (matched but no phonemes)
 
 --- Failed Alignments (0) ---
 
@@ -79,11 +79,6 @@ Generated: 2026-05-08 09:16:45
            audio: https://server11.mp3quran.net/yasser/009.mp3
            text:  وَيَتُوبُ ٱللَّهُ عَلَىٰ مَن يَشَآءُ ۗ
   ... and 14 more
-
---- May Require Boundary Adjustment (1) ---
-  [0.9200]  4:176:1-4:176:1  @ 1:12:46.7 - 1:12:48.6
-           audio: https://server11.mp3quran.net/yasser/004.mp3
-           text:  يَسْتَفْتُونَكَ
 
 --- Cross-verse (197) ---
   [0.9800]  1:6:1-1:7:4  @ 0:29.5 - 0:36.3
@@ -184,13 +179,16 @@ Generated: 2026-05-08 09:16:45
            text:  وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
   ... and 718 more
 
---- Empty ASR Phonemes (18) ---
+--- Empty ASR Phonemes (19) ---
   [1.0000]  2:176:1-2:176:6  @ 1:03:11.7 - 1:03:17.6
            audio: https://server11.mp3quran.net/yasser/002.mp3
            text:  ذَٰلِكَ بِأَنَّ ٱللَّهَ نَزَّلَ ٱلْكِتَـٰبَ بِٱلْحَقِّ ۗ
   [1.0000]  2:274:6-2:274:17  @ 1:52:19.1 - 1:52:35.7
            audio: https://server11.mp3quran.net/yasser/002.mp3
            text:  سِرًّا وَعَلَانِيَةً فَلَهُمْ أَجْرُهُمْ عِندَ رَبِّهِمْ وَلَا خَوْفٌ عَلَيْهِمْ وَلَا هُمْ يَحْزَنُونَ
+  [0.9800]  4:5:10-4:5:16  @ 2:03.4 - 2:11.2
+           audio: https://server11.mp3quran.net/yasser/004.mp3
+           text:  وَٱرْزُقُوهُمْ فِيهَا وَٱكْسُوهُمْ وَقُولُوا۟ لَهُمْ قَوْلًا مَّعْرُوفًا
   [0.8200]  4:12:81-4:12:82  @ 6:53.9 - 6:58.1
            audio: https://server11.mp3quran.net/yasser/004.mp3
            text:  غَيْرَ مُضَآرٍّ ۚ
@@ -212,10 +210,7 @@ Generated: 2026-05-08 09:16:45
   [1.0000]  9:15:4-9:15:8  @ 5:14.9 - 5:21.0
            audio: https://server11.mp3quran.net/yasser/009.mp3
            text:  وَيَتُوبُ ٱللَّهُ عَلَىٰ مَن يَشَآءُ ۗ
-  [1.0000]  10:62:5-10:62:10  @ 22:23.6 - 22:28.1
-           audio: https://server11.mp3quran.net/yasser/010.mp3
-           text:  لَا خَوْفٌ عَلَيْهِمْ وَلَا هُمْ يَحْزَنُونَ
-  ... and 8 more
+  ... and 9 more
 
 --- Cross-file Consistency (detailed.json ↔ segments.json) ---
   Mismatches: 0
@@ -228,7 +223,7 @@ Generated: 2026-05-08 09:16:45
   low_confidence 0
   repetitions 24
   audio_bleeding 0
-  boundary_adj 1
+  boundary_adj 0
   cross_verse 197
   qalqala 728
   muqattaat 30
