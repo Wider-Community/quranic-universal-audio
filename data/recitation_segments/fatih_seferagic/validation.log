@@ -1,0 +1,562 @@
+Generated: 2026-05-10 02:47:58
+
+========================================================================
+  fatih_seferagic
+  data/recitation_segments/fatih_seferagic
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   100 ms
+  Min speech:    0 ms
+  Padding L/R:   150/500 ms
+  Silence floor: 40 ms
+
+--- Coverage ---
+  Verses found:   6236 / 6236
+  Missing verses: 0
+  Word gaps:      16 verses
+
+--- Segments ---
+  Total:            11274
+  Single-seg:       3208
+  Multi-seg verses: 2941 (8066 segs)
+  Cross-verse keys: 157
+  Max segs/verse:   18
+
+--- Segment Duration ---
+  Min:    0.85s
+  Median: 6.80s
+  Mean:   7.66s
+  Max:    31.85s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.69s
+  Median: 0.69s
+  Mean:   0.69s
+  Max:    9.93s
+
+--- Alignment Confidence ---
+  Min:       0.5600
+  Median:    0.9800
+  Mean:      0.9732
+  Max:       1.0000
+  Below 60%: 2
+  Below 80%: 35
+  Failed:    6 (no alignment)
+  Empty ASR: 0 (matched but no phonemes)
+
+--- Failed Alignments (6) ---
+  42:39.2 - 42:41.8  (2.54s)
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+    asr:   ʔ i f i: n
+  2:58.8 - 2:59.2  (0.41s)
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//028.mp3
+    asr:   tˤ aˤ
+  5:19.9 - 5:20.5  (0.60s)
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//028.mp3
+    asr:   q aˤ b Q
+  17:05.2 - 17:07.0  (1.77s)
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//029.mp3
+    asr:   n
+  8:40.3 - 8:44.3  (4.01s)
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//059.mp3
+    asr:   m m
+  3:40.3 - 3:41.9  (1.53s)
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//079.mp3
+    asr:   s a: h a:
+
+--- Missing Words (16) ---
+  2:17  @ 3:48.7 - 4:08.2
+    missing words: [5]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+  2:68  @ 23:08.4 - 23:30.2
+    missing words: [8]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+  2:103  @ 38:29.3 - 38:38.5
+    missing words: [10, 11, 12]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+  2:114  @ 42:18.7 - 42:49.7
+    missing words: [21]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+  2:271  @ 1:59:27.4 - 1:59:53.1
+    missing words: [5]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+  3:154  @ 49:20.2 - 50:37.4
+    missing words: [40]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//003.mp3
+  6:80  @ 23:47.1 - 24:26.4
+    missing words: [18]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//006.mp3
+  10:67  @ 22:19.7 - 22:33.0
+    missing words: [1]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//010.mp3
+  13:12  @ 4:21.0 - 4:31.6
+    missing words: [1]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//013.mp3
+  16:10  @ 1:46.5 - 2:01.7
+    missing words: [1]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//016.mp3
+  16:76  @ 17:59.9 - 18:26.2
+    missing words: [22]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//016.mp3
+  31:33  @ 8:33.3 - 9:05.1
+    missing words: [18]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//031.mp3
+  43:66  @ 12:33.9 - 12:44.5
+    missing words: [1]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//043.mp3
+  53:32  @ 3:53.9 - 4:28.5
+    missing words: [12]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//053.mp3
+  57:4  @ 0:33.7 - 1:02.7
+    missing words: [1]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//057.mp3
+  62:2  @ 1:02:39.0 - 1:02:59.7
+    missing words: [1]
+    audio: https://download.quranicaudio.com/quran/fatih_seferagic//062.mp3
+
+--- Low Confidence <80% (35) ---
+  [0.5600]  10:18:13-10:18:14  @ 6:19.8 - 6:23.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//010.mp3
+           text:  عِندَ ٱللَّهِ ۚ
+  [0.5700]  5:8:16-5:8:16  @ 5:24.3 - 5:25.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  ٱعْدِلُوا۟
+  [0.6000]  3:1:1-3:1:1  @ 0:05.7 - 0:14.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//003.mp3
+           text:  الٓمٓ
+  [0.6000]  30:1:1-30:1:1  @ 0:04.8 - 0:13.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//030.mp3
+           text:  الٓمٓ
+  [0.6200]  13:1:1-13:1:1  @ 0:04.5 - 0:14.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//013.mp3
+           text:  الٓمٓر ۚ
+  [0.6200]  17:17:13-17:17:13  @ 5:12.4 - 5:15.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//017.mp3
+           text:  بَصِيرًا
+  [0.6700]  7:1:1-7:1:1  @ 0:04.6 - 0:13.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//007.mp3
+           text:  الٓمٓصٓ
+  [0.6700]  68:1:1-68:1:1  @ 0:04.8 - 0:07.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//068.mp3
+           text:  نٓ ۚ
+  [0.7000]  2:1:1-2:1:1  @ 0:06.8 - 0:14.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  الٓمٓ
+  [0.7000]  24:35:10-24:35:12  @ 12:02.8 - 12:05.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//024.mp3
+           text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
+  [0.7000]  29:1:1-29:1:1  @ 0:04.5 - 0:12.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//029.mp3
+           text:  الٓمٓ
+  [0.7000]  30:28:22-30:28:22  @ 6:19.8 - 6:21.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//030.mp3
+           text:  أَنفُسَكُمْ ۚ
+  [0.7100]  20:18:1-20:18:3  @ 2:25.3 - 2:27.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//020.mp3
+           text:  قَالَ هِىَ عَصَاىَ
+  [0.7100]  46:35:22-46:35:22  @ 11:37.3 - 11:39.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//046.mp3
+           text:  بَلَـٰغٌ ۚ
+  [0.7300]  26:50:1-26:50:3  @ 6:21.0 - 6:23.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//026.mp3
+           text:  قَالُوا۟ لَا ضَيْرَ ۖ
+  [0.7500]  20:101:1-20:101:2  @ 17:35.7 - 17:38.0
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//020.mp3
+           text:  خَـٰلِدِينَ فِيهِ ۖ
+  [0.7500]  41:12:15-41:12:15  @ 2:47.5 - 2:48.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//041.mp3
+           text:  وَحِفْظًا ۚ
+  [0.7500]  42:2:1-42:2:1  @ 0:08.4 - 0:19.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//042.mp3
+           text:  عٓسٓقٓ
+  [0.7500]  44:28:1-44:28:1  @ 3:19.4 - 3:20.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//044.mp3
+           text:  كَذَٰلِكَ ۖ
+  [0.7600]  5:75:12-5:75:13  @ 32:51.1 - 32:54.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  وَأُمُّهُۥ صِدِّيقَةٌ ۖ
+  [0.7600]  6:80:1-6:80:2  @ 23:47.1 - 23:53.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//006.mp3
+           text:  وَحَآجَّهُۥ قَوْمُهُۥ ۚ
+  [0.7700]  7:184:3-7:184:6  @ 55:47.7 - 55:52.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//007.mp3
+           text:  مَا بِصَاحِبِهِم مِّن جِنَّةٍ ۚ
+  [0.7700]  15:59:1-15:59:3  @ 8:19.4 - 8:23.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//015.mp3
+           text:  إِلَّآ ءَالَ لُوطٍ
+  [0.7700]  16:75:22-16:75:23  @ 17:53.5 - 17:56.0
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//016.mp3
+           text:  ٱلْحَمْدُ لِلَّهِ ۚ
+  [0.7700]  24:35:33-24:35:35  @ 12:37.1 - 12:41.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//024.mp3
+           text:  نُّورٌ عَلَىٰ نُورٍ ۗ
+  [0.7700]  39:29:14-39:29:15  @ 8:14.9 - 8:17.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//039.mp3
+           text:  ٱلْحَمْدُ لِلَّهِ ۚ
+  [0.7700]  68:11:1-68:11:3  @ 0:59.5 - 1:08.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//068.mp3
+           text:  هَمَّازٍ مَّشَّآءٍ بِنَمِيمٍ
+  [0.7800]  12:19:11-12:19:12  @ 4:47.3 - 4:49.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//012.mp3
+           text:  وَأَسَرُّوهُ بِضَـٰعَةً ۚ
+  [0.7800]  33:13:19-33:13:21  @ 3:53.7 - 3:55.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//033.mp3
+           text:  وَمَا هِىَ بِعَوْرَةٍ ۖ
+  [0.7900]  3:34:1-3:34:4  @ 11:22.6 - 11:27.0
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//003.mp3
+           text:  ذُرِّيَّةً بَعْضُهَا مِن بَعْضٍ ۗ
+  ... and 5 more
+
+--- Detected Repetitions (1) ---
+  [0.9500]  27:93:1-27:93:11  @ 19:57.9 - 20:14.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//027.mp3
+           text:  وَقُلِ ٱلْحَمْدُ لِلَّهِ سَيُرِيكُمْ ءَايَـٰتِهِۦ فَتَعْرِفُونَهَا ۚ وَمَا رَبُّكَ بِغَـٰفِلٍ عَمَّا تَعْمَلُونَ
+
+--- May Require Boundary Adjustment (17) ---
+  [1.0000]  2:112:1-2:112:1  @ 41:29.4 - 41:30.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  بَلَىٰ
+  [0.9200]  4:176:1-4:176:1  @ 1:07:03.6 - 1:07:05.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//004.mp3
+           text:  يَسْتَفْتُونَكَ
+  [0.5700]  5:8:16-5:8:16  @ 5:24.3 - 5:25.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  ٱعْدِلُوا۟
+  [1.0000]  5:15:23-5:15:23  @ 8:39.8 - 8:41.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  مُّبِينٌ
+  [0.6200]  17:17:13-17:17:13  @ 5:12.4 - 5:15.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//017.mp3
+           text:  بَصِيرًا
+  [1.0000]  18:71:1-18:71:1  @ 19:18.7 - 19:20.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  18:74:1-18:74:1  @ 19:49.7 - 19:51.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  18:77:1-18:77:1  @ 20:26.8 - 20:29.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  20:116:9-20:116:9  @ 20:13.9 - 20:14.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//020.mp3
+           text:  أَبَىٰ
+  [0.9200]  23:67:1-23:67:1  @ 11:34.4 - 11:37.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//023.mp3
+           text:  مُسْتَكْبِرِينَ
+  [0.7000]  30:28:22-30:28:22  @ 6:19.8 - 6:21.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//030.mp3
+           text:  أَنفُسَكُمْ ۚ
+  [1.0000]  30:34:4-30:34:4  @ 7:41.9 - 7:43.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//030.mp3
+           text:  فَتَمَتَّعُوا۟
+  [1.0000]  36:81:11-36:81:11  @ 13:45.2 - 13:46.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//036.mp3
+           text:  بَلَىٰ
+  [0.7500]  41:12:15-41:12:15  @ 2:47.5 - 2:48.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//041.mp3
+           text:  وَحِفْظًا ۚ
+  [0.8900]  42:52:27-42:52:27  @ 15:17.9 - 15:20.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//042.mp3
+           text:  مُّسْتَقِيمٍ
+  [1.0000]  44:49:1-44:49:1  @ 5:39.1 - 5:40.0
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//044.mp3
+           text:  ذُقْ
+  [0.8800]  49:18:10-49:18:10  @ 7:40.3 - 7:42.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//049.mp3
+           text:  تَعْمَلُونَ
+
+--- Cross-verse (157) ---
+  [0.9800]  2:86:7-2:87:8  @ 30:58.9 - 31:13.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  فَلَا يُخَفَّفُ عَنْهُمُ ٱلْعَذَابُ وَلَا هُمْ يُنصَرُونَ وَلَقَدْ ءَاتَيْنَا مُوسَى ٱلْكِتَـٰبَ وَقَفَّيْنَا مِن بَعْدِهِۦ بِٱلرُّسُلِ ۖ
+  [0.9700]  2:93:20-2:94:12  @ 34:23.1 - 34:46.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  قُلْ بِئْسَمَا يَأْمُرُكُم بِهِۦٓ إِيمَـٰنُكُمْ إِن كُنتُم مُّؤْمِنِينَ قُلْ إِن كَانَتْ لَكُمُ ٱلدَّارُ ٱلْـَٔاخِرَةُ عِندَ ٱللَّهِ خَالِصَةً مِّن دُونِ ٱلنَّاسِ
+  [0.9800]  2:252:7-2:253:13  @ 1:48:33.3 - 1:48:53.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَإِنَّكَ لَمِنَ ٱلْمُرْسَلِينَ ۞ تِلْكَ ٱلرُّسُلُ فَضَّلْنَا بَعْضَهُمْ عَلَىٰ بَعْضٍ ۘ مِّنْهُم مَّن كَلَّمَ ٱللَّهُ ۖ وَرَفَعَ بَعْضَهُمْ دَرَجَـٰتٍ ۚ
+  [0.9600]  4:39:12-4:40:15  @ 18:25.1 - 18:41.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//004.mp3
+           text:  وَكَانَ ٱللَّهُ بِهِمْ عَلِيمًا إِنَّ ٱللَّهَ لَا يَظْلِمُ مِثْقَالَ ذَرَّةٍ ۖ وَإِن تَكُ حَسَنَةً يُضَـٰعِفْهَا وَيُؤْتِ مِن لَّدُنْهُ أَجْرًا عَظِيمًا
+  [0.9600]  4:162:23-4:163:10  @ 1:02:39.0 - 1:02:59.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//004.mp3
+           text:  أُو۟لَـٰٓئِكَ سَنُؤْتِيهِمْ أَجْرًا عَظِيمًا ۞ إِنَّآ أَوْحَيْنَآ إِلَيْكَ كَمَآ أَوْحَيْنَآ إِلَىٰ نُوحٍ وَٱلنَّبِيِّـۧنَ مِن بَعْدِهِۦ ۚ
+  [0.9800]  5:14:20-5:15:16  @ 8:09.6 - 8:33.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  وَسَوْفَ يُنَبِّئُهُمُ ٱللَّهُ بِمَا كَانُوا۟ يَصْنَعُونَ يَـٰٓأَهْلَ ٱلْكِتَـٰبِ قَدْ جَآءَكُمْ رَسُولُنَا يُبَيِّنُ لَكُمْ كَثِيرًا مِّمَّا كُنتُمْ تُخْفُونَ مِنَ ٱلْكِتَـٰبِ وَيَعْفُوا۟ عَن كَثِيرٍ ۚ
+  [0.9600]  5:31:23-5:32:17  @ 14:19.4 - 14:38.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  فَأَصْبَحَ مِنَ ٱلنَّـٰدِمِينَ مِنْ أَجْلِ ذَٰلِكَ كَتَبْنَا عَلَىٰ بَنِىٓ إِسْرَٰٓءِيلَ أَنَّهُۥ مَن قَتَلَ نَفْسًا بِغَيْرِ نَفْسٍ أَوْ فَسَادٍ فِى ٱلْأَرْضِ
+  [0.9800]  5:70:16-5:71:15  @ 31:08.6 - 31:31.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  فَرِيقًا كَذَّبُوا۟ وَفَرِيقًا يَقْتُلُونَ وَحَسِبُوٓا۟ أَلَّا تَكُونَ فِتْنَةٌ فَعَمُوا۟ وَصَمُّوا۟ ثُمَّ تَابَ ٱللَّهُ عَلَيْهِمْ ثُمَّ عَمُوا۟ وَصَمُّوا۟ كَثِيرٌ مِّنْهُمْ ۚ
+  [0.9900]  5:89:39-5:90:12  @ 37:37.4 - 38:04.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  كَذَٰلِكَ يُبَيِّنُ ٱللَّهُ لَكُمْ ءَايَـٰتِهِۦ لَعَلَّكُمْ تَشْكُرُونَ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوٓا۟ إِنَّمَا ٱلْخَمْرُ وَٱلْمَيْسِرُ وَٱلْأَنصَابُ وَٱلْأَزْلَـٰمُ رِجْسٌ مِّنْ عَمَلِ ٱلشَّيْطَـٰنِ
+  [1.0000]  5:100:10-5:101:11  @ 42:08.2 - 42:29.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  فَٱتَّقُوا۟ ٱللَّهَ يَـٰٓأُو۟لِى ٱلْأَلْبَـٰبِ لَعَلَّكُمْ تُفْلِحُونَ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ لَا تَسْـَٔلُوا۟ عَنْ أَشْيَآءَ إِن تُبْدَ لَكُمْ تَسُؤْكُمْ
+  [1.0000]  5:108:15-5:109:7  @ 45:44.9 - 46:00.0
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  وَٱتَّقُوا۟ ٱللَّهَ وَٱسْمَعُوا۟ ۗ وَٱللَّهُ لَا يَهْدِى ٱلْقَوْمَ ٱلْفَـٰسِقِينَ ۞ يَوْمَ يَجْمَعُ ٱللَّهُ ٱلرُّسُلَ فَيَقُولُ مَاذَآ أُجِبْتُمْ ۖ
+  [0.9800]  5:113:8-5:114:18  @ 47:54.5 - 48:22.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//005.mp3
+           text:  وَنَعْلَمَ أَن قَدْ صَدَقْتَنَا وَنَكُونَ عَلَيْهَا مِنَ ٱلشَّـٰهِدِينَ قَالَ عِيسَى ٱبْنُ مَرْيَمَ ٱللَّهُمَّ رَبَّنَآ أَنزِلْ عَلَيْنَا مَآئِدَةً مِّنَ ٱلسَّمَآءِ تَكُونُ لَنَا عِيدًا لِّأَوَّلِنَا وَءَاخِرِنَا وَءَايَةً مِّنكَ ۖ
+  [0.9500]  6:60:15-6:61:7  @ 17:39.2 - 17:54.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//006.mp3
+           text:  ثُمَّ إِلَيْهِ مَرْجِعُكُمْ ثُمَّ يُنَبِّئُكُم بِمَا كُنتُمْ تَعْمَلُونَ وَهُوَ ٱلْقَاهِرُ فَوْقَ عِبَادِهِۦ ۖ وَيُرْسِلُ عَلَيْكُمْ حَفَظَةً
+  [0.9500]  6:73:22-6:74:8  @ 22:01.1 - 22:12.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//006.mp3
+           text:  وَهُوَ ٱلْحَكِيمُ ٱلْخَبِيرُ ۞ وَإِذْ قَالَ إِبْرَٰهِيمُ لِأَبِيهِ ءَازَرَ أَتَتَّخِذُ أَصْنَامًا ءَالِهَةً ۖ
+  [0.9800]  7:91:1-7:92:7  @ 28:17.5 - 28:28.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//007.mp3
+           text:  فَأَخَذَتْهُمُ ٱلرَّجْفَةُ فَأَصْبَحُوا۟ فِى دَارِهِمْ جَـٰثِمِينَ ٱلَّذِينَ كَذَّبُوا۟ شُعَيْبًا كَأَن لَّمْ يَغْنَوْا۟ فِيهَا ۚ
+  [0.9700]  7:126:11-7:127:13  @ 35:16.2 - 35:34.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//007.mp3
+           text:  رَبَّنَآ أَفْرِغْ عَلَيْنَا صَبْرًا وَتَوَفَّنَا مُسْلِمِينَ وَقَالَ ٱلْمَلَأُ مِن قَوْمِ فِرْعَوْنَ أَتَذَرُ مُوسَىٰ وَقَوْمَهُۥ لِيُفْسِدُوا۟ فِى ٱلْأَرْضِ وَيَذَرَكَ وَءَالِهَتَكَ ۚ
+  [1.0000]  8:69:8-8:70:13  @ 22:14.0 - 22:34.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//008.mp3
+           text:  إِنَّ ٱللَّهَ غَفُورٌ رَّحِيمٌ يَـٰٓأَيُّهَا ٱلنَّبِىُّ قُل لِّمَن فِىٓ أَيْدِيكُم مِّنَ ٱلْأَسْرَىٰٓ إِن يَعْلَمِ ٱللَّهُ فِى قُلُوبِكُمْ
+  [0.9800]  9:33:12-9:34:16  @ 11:38.8 - 12:03.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//009.mp3
+           text:  وَلَوْ كَرِهَ ٱلْمُشْرِكُونَ ۞ يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوٓا۟ إِنَّ كَثِيرًا مِّنَ ٱلْأَحْبَارِ وَٱلرُّهْبَانِ لَيَأْكُلُونَ أَمْوَٰلَ ٱلنَّاسِ بِٱلْبَـٰطِلِ وَيَصُدُّونَ عَن سَبِيلِ ٱللَّهِ ۗ
+  [1.0000]  10:6:6-10:7:10  @ 2:17.8 - 2:38.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//010.mp3
+           text:  وَمَا خَلَقَ ٱللَّهُ فِى ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضِ لَـَٔايَـٰتٍ لِّقَوْمٍ يَتَّقُونَ إِنَّ ٱلَّذِينَ لَا يَرْجُونَ لِقَآءَنَا وَرَضُوا۟ بِٱلْحَيَوٰةِ ٱلدُّنْيَا وَٱطْمَأَنُّوا۟ بِهَا
+  [1.0000]  10:85:1-10:86:5  @ 27:33.7 - 27:51.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//010.mp3
+           text:  فَقَالُوا۟ عَلَى ٱللَّهِ تَوَكَّلْنَا رَبَّنَا لَا تَجْعَلْنَا فِتْنَةً لِّلْقَوْمِ ٱلظَّـٰلِمِينَ وَنَجِّنَا بِرَحْمَتِكَ مِنَ ٱلْقَوْمِ ٱلْكَـٰفِرِينَ
+  [0.9900]  12:63:13-12:64:11  @ 18:07.3 - 18:23.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//012.mp3
+           text:  نَكْتَلْ وَإِنَّا لَهُۥ لَحَـٰفِظُونَ قَالَ هَلْ ءَامَنُكُمْ عَلَيْهِ إِلَّا كَمَآ أَمِنتُكُمْ عَلَىٰٓ أَخِيهِ مِن قَبْلُ ۖ
+  [0.9900]  12:93:10-12:94:12  @ 27:30.9 - 27:48.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//012.mp3
+           text:  وَأْتُونِى بِأَهْلِكُمْ أَجْمَعِينَ وَلَمَّا فَصَلَتِ ٱلْعِيرُ قَالَ أَبُوهُمْ إِنِّى لَأَجِدُ رِيحَ يُوسُفَ ۖ لَوْلَآ أَن تُفَنِّدُونِ
+  [0.9700]  13:4:22-13:5:11  @ 1:44.7 - 2:05.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//013.mp3
+           text:  إِنَّ فِى ذَٰلِكَ لَـَٔايَـٰتٍ لِّقَوْمٍ يَعْقِلُونَ ۞ وَإِن تَعْجَبْ فَعَجَبٌ قَوْلُهُمْ أَءِذَا كُنَّا تُرَٰبًا أَءِنَّا لَفِى خَلْقٍ جَدِيدٍ ۗ
+  [0.9800]  13:33:33-13:34:8  @ 12:39.7 - 12:53.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//013.mp3
+           text:  وَمَن يُضْلِلِ ٱللَّهُ فَمَا لَهُۥ مِنْ هَادٍ لَّهُمْ عَذَابٌ فِى ٱلْحَيَوٰةِ ٱلدُّنْيَا ۖ وَلَعَذَابُ ٱلْـَٔاخِرَةِ أَشَقُّ ۖ
+  [0.9800]  16:60:7-16:61:15  @ 13:19.5 - 13:45.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//016.mp3
+           text:  وَلِلَّهِ ٱلْمَثَلُ ٱلْأَعْلَىٰ ۚ وَهُوَ ٱلْعَزِيزُ ٱلْحَكِيمُ وَلَوْ يُؤَاخِذُ ٱللَّهُ ٱلنَّاسَ بِظُلْمِهِم مَّا تَرَكَ عَلَيْهَا مِن دَآبَّةٍ وَلَـٰكِن يُؤَخِّرُهُمْ إِلَىٰٓ أَجَلٍ مُّسَمًّى ۖ
+  [0.9400]  18:74:13-18:75:9  @ 20:03.4 - 20:14.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//018.mp3
+           text:  لَّقَدْ جِئْتَ شَيْـًٔا نُّكْرًا ۞ قَالَ أَلَمْ أَقُل لَّكَ إِنَّكَ لَن تَسْتَطِيعَ مَعِىَ صَبْرًا
+  [1.0000]  19:89:1-19:90:9  @ 16:31.1 - 16:44.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//019.mp3
+           text:  لَّقَدْ جِئْتُمْ شَيْـًٔا إِدًّا تَكَادُ ٱلسَّمَـٰوَٰتُ يَتَفَطَّرْنَ مِنْهُ وَتَنشَقُّ ٱلْأَرْضُ وَتَخِرُّ ٱلْجِبَالُ هَدًّا
+  [0.9700]  20:24:1-20:26:3  @ 3:09.4 - 3:22.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//020.mp3
+           text:  ٱذْهَبْ إِلَىٰ فِرْعَوْنَ إِنَّهُۥ طَغَىٰ قَالَ رَبِّ ٱشْرَحْ لِى صَدْرِى وَيَسِّرْ لِىٓ أَمْرِى
+  [0.9700]  20:27:1-20:28:2  @ 3:22.1 - 3:29.0
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//020.mp3
+           text:  وَٱحْلُلْ عُقْدَةً مِّن لِّسَانِى يَفْقَهُوا۟ قَوْلِى
+  [0.9000]  20:29:1-20:31:3  @ 3:29.1 - 3:39.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//020.mp3
+           text:  وَٱجْعَل لِّى وَزِيرًا مِّنْ أَهْلِى هَـٰرُونَ أَخِى ٱشْدُدْ بِهِۦٓ أَزْرِى
+  ... and 127 more
+
+--- Muqatta'at (30) ---
+  [0.7000]  2:1:1-2:1:1  @ 0:06.8 - 0:14.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  الٓمٓ
+  [0.6000]  3:1:1-3:1:1  @ 0:05.7 - 0:14.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//003.mp3
+           text:  الٓمٓ
+  [0.6700]  7:1:1-7:1:1  @ 0:04.6 - 0:13.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//007.mp3
+           text:  الٓمٓصٓ
+  [0.8000]  10:1:1-10:1:1  @ 0:05.2 - 0:09.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//010.mp3
+           text:  الٓر ۚ
+  [0.8000]  11:1:1-11:1:1  @ 0:04.6 - 0:08.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//011.mp3
+           text:  الٓر ۚ
+  [0.8000]  12:1:1-12:1:1  @ 0:04.4 - 0:08.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//012.mp3
+           text:  الٓر ۚ
+  [0.6200]  13:1:1-13:1:1  @ 0:04.5 - 0:14.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//013.mp3
+           text:  الٓمٓر ۚ
+  [0.8000]  14:1:1-14:1:1  @ 0:06.5 - 0:11.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//014.mp3
+           text:  الٓر ۚ
+  [0.8000]  15:1:1-15:1:1  @ 0:04.8 - 0:09.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//015.mp3
+           text:  الٓر ۚ
+  [0.8700]  19:1:1-19:1:1  @ 0:05.0 - 0:14.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//019.mp3
+           text:  كٓهيعٓصٓ
+  [1.0000]  20:1:1-20:1:1  @ 0:05.3 - 0:07.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//020.mp3
+           text:  طه
+  [1.0000]  26:1:1-26:1:1  @ 0:05.3 - 0:14.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//026.mp3
+           text:  طسٓمٓ
+  [1.0000]  27:1:1-27:1:6  @ 0:04.5 - 0:14.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//027.mp3
+           text:  طسٓ ۚ تِلْكَ ءَايَـٰتُ ٱلْقُرْءَانِ وَكِتَابٍ مُّبِينٍ
+  [0.9700]  28:1:1-28:2:4  @ 0:04.6 - 0:17.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//028.mp3
+           text:  طسٓمٓ تِلْكَ ءَايَـٰتُ ٱلْكِتَـٰبِ ٱلْمُبِينِ
+  [0.7000]  29:1:1-29:1:1  @ 0:04.5 - 0:12.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//029.mp3
+           text:  الٓمٓ
+  [0.6000]  30:1:1-30:1:1  @ 0:04.8 - 0:13.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//030.mp3
+           text:  الٓمٓ
+  [0.8000]  31:1:1-31:1:1  @ 0:05.5 - 0:14.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//031.mp3
+           text:  الٓمٓ
+  [0.8000]  32:1:1-32:1:1  @ 0:05.3 - 0:13.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//032.mp3
+           text:  الٓمٓ
+  [1.0000]  36:1:1-36:1:1  @ 0:05.9 - 0:10.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//036.mp3
+           text:  يسٓ
+  [1.0000]  38:1:1-38:1:4  @ 0:04.7 - 0:11.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//038.mp3
+           text:  صٓ ۚ وَٱلْقُرْءَانِ ذِى ٱلذِّكْرِ
+  [1.0000]  40:1:1-40:1:1  @ 0:04.9 - 0:07.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//040.mp3
+           text:  حمٓ
+  [1.0000]  41:1:1-41:2:4  @ 0:05.1 - 0:14.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//041.mp3
+           text:  حمٓ تَنزِيلٌ مِّنَ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ
+  [1.0000]  42:1:1-42:1:1  @ 0:04.7 - 0:08.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//042.mp3
+           text:  حمٓ
+  [0.7500]  42:2:1-42:2:1  @ 0:08.4 - 0:19.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//042.mp3
+           text:  عٓسٓقٓ
+  [1.0000]  43:1:1-43:1:1  @ 0:05.2 - 0:08.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//043.mp3
+           text:  حمٓ
+  [0.9900]  44:1:1-44:3:8  @ 0:05.4 - 0:24.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//044.mp3
+           text:  حمٓ وَٱلْكِتَـٰبِ ٱلْمُبِينِ إِنَّآ أَنزَلْنَـٰهُ فِى لَيْلَةٍ مُّبَـٰرَكَةٍ ۚ إِنَّا كُنَّا مُنذِرِينَ
+  [1.0000]  45:1:1-45:1:1  @ 0:04.2 - 0:06.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//045.mp3
+           text:  حمٓ
+  [1.0000]  46:1:1-46:2:6  @ 0:05.0 - 0:15.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//046.mp3
+           text:  حمٓ تَنزِيلُ ٱلْكِتَـٰبِ مِنَ ٱللَّهِ ٱلْعَزِيزِ ٱلْحَكِيمِ
+  [1.0000]  50:1:1-50:1:1  @ 0:04.7 - 0:07.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//050.mp3
+           text:  قٓ ۚ
+  [0.6700]  68:1:1-68:1:1  @ 0:04.8 - 0:07.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//068.mp3
+           text:  نٓ ۚ
+
+--- Qalqala (706) ---
+  [0.8200]  2:17:1-2:17:4  [د]  @ 3:48.7 - 3:53.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  مَثَلُهُمْ كَمَثَلِ ٱلَّذِى ٱسْتَوْقَدَ
+  [0.9800]  2:19:1-2:19:8  [ق]  @ 4:17.1 - 4:27.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
+  [0.9800]  2:44:1-2:44:8  [ب]  @ 14:31.5 - 14:46.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  ۞ أَتَأْمُرُونَ ٱلنَّاسَ بِٱلْبِرِّ وَتَنسَوْنَ أَنفُسَكُمْ وَأَنتُمْ تَتْلُونَ ٱلْكِتَـٰبَ ۚ
+  [0.9700]  2:61:45-2:61:54  [ق]  @ 20:55.8 - 21:07.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  ذَٰلِكَ بِأَنَّهُمْ كَانُوا۟ يَكْفُرُونَ بِـَٔايَـٰتِ ٱللَّهِ وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [0.9500]  2:71:17-2:71:20  [ق]  @ 24:28.2 - 24:31.6
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  قَالُوا۟ ٱلْـَٔـٰنَ جِئْتَ بِٱلْحَقِّ ۚ
+  [0.9800]  2:85:39-2:85:44  [ب]  @ 30:37.2 - 30:44.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَيَوْمَ ٱلْقِيَـٰمَةِ يُرَدُّونَ إِلَىٰٓ أَشَدِّ ٱلْعَذَابِ ۗ
+  [0.9200]  2:90:21-2:90:24  [ب]  @ 32:56.8 - 33:01.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  فَبَآءُو بِغَضَبٍ عَلَىٰ غَضَبٍ ۚ
+  [0.9900]  2:101:1-2:101:15  [ب]  @ 36:40.1 - 36:56.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَلَمَّا جَآءَهُمْ رَسُولٌ مِّنْ عِندِ ٱللَّهِ مُصَدِّقٌ لِّمَا مَعَهُمْ نَبَذَ فَرِيقٌ مِّنَ ٱلَّذِينَ أُوتُوا۟ ٱلْكِتَـٰبَ
+  [0.9800]  2:102:57-2:102:66  [ق]  @ 38:10.6 - 38:17.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَلَقَدْ عَلِمُوا۟ لَمَنِ ٱشْتَرَىٰهُ مَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ ۚ
+  [0.9400]  2:109:12-2:109:21  [ق]  @ 40:29.5 - 40:37.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  حَسَدًا مِّنْ عِندِ أَنفُسِهِم مِّن بَعْدِ مَا تَبَيَّنَ لَهُمُ ٱلْحَقُّ ۖ
+  [0.9600]  2:113:7-2:113:15  [ب]  @ 41:54.4 - 42:03.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
+  [0.9600]  2:115:1-2:115:3  [ب]  @ 42:49.8 - 42:53.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  [0.9900]  2:125:12-2:125:22  [د]  @ 46:17.1 - 46:33.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَعَهِدْنَآ إِلَىٰٓ إِبْرَٰهِـۧمَ وَإِسْمَـٰعِيلَ أَن طَهِّرَا بَيْتِىَ لِلطَّآئِفِينَ وَٱلْعَـٰكِفِينَ وَٱلرُّكَّعِ ٱلسُّجُودِ
+  [0.9700]  2:132:1-2:132:5  [ب]  @ 48:37.8 - 48:45.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَوَصَّىٰ بِهَآ إِبْرَٰهِـۧمُ بَنِيهِ وَيَعْقُوبُ
+  [0.9400]  2:136:1-2:136:13  [ب]  @ 49:59.4 - 50:20.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  قُولُوٓا۟ ءَامَنَّا بِٱللَّهِ وَمَآ أُنزِلَ إِلَيْنَا وَمَآ أُنزِلَ إِلَىٰٓ إِبْرَٰهِـۧمَ وَإِسْمَـٰعِيلَ وَإِسْحَـٰقَ وَيَعْقُوبَ
+  [0.9700]  2:136:7-2:136:14  [ط]  @ 50:20.4 - 50:33.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَمَآ أُنزِلَ إِلَىٰٓ إِبْرَٰهِـۧمَ وَإِسْمَـٰعِيلَ وَإِسْحَـٰقَ وَيَعْقُوبَ وَٱلْأَسْبَاطِ
+  [0.9100]  2:137:9-2:137:14  [ق]  @ 51:03.6 - 51:10.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَّإِن تَوَلَّوْا۟ فَإِنَّمَا هُمْ فِى شِقَاقٍ ۖ
+  [0.9200]  2:142:12-2:142:15  [ب]  @ 52:50.8 - 52:54.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  قُل لِّلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  [0.9400]  2:159:1-2:159:15  [ب]  @ 59:39.6 - 59:59.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  إِنَّ ٱلَّذِينَ يَكْتُمُونَ مَآ أَنزَلْنَا مِنَ ٱلْبَيِّنَـٰتِ وَٱلْهُدَىٰ مِن بَعْدِ مَا بَيَّنَّـٰهُ لِلنَّاسِ فِى ٱلْكِتَـٰبِ ۙ
+  [0.9600]  2:163:1-2:163:3  [د]  @ 1:00:52.1 - 1:00:56.4
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَإِلَـٰهُكُمْ إِلَـٰهٌ وَٰحِدٌ ۖ
+  [1.0000]  2:165:17-2:165:31  [ب]  @ 1:02:37.8 - 1:02:55.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَلَوْ يَرَى ٱلَّذِينَ ظَلَمُوٓا۟ إِذْ يَرَوْنَ ٱلْعَذَابَ أَنَّ ٱلْقُوَّةَ لِلَّهِ جَمِيعًا وَأَنَّ ٱللَّهَ شَدِيدُ ٱلْعَذَابِ
+  [0.9800]  2:166:1-2:166:12  [ب]  @ 1:02:55.3 - 1:03:07.2
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  إِذْ تَبَرَّأَ ٱلَّذِينَ ٱتُّبِعُوا۟ مِنَ ٱلَّذِينَ ٱتَّبَعُوا۟ وَرَأَوُا۟ ٱلْعَذَابَ وَتَقَطَّعَتْ بِهِمُ ٱلْأَسْبَابُ
+  [0.9700]  2:176:1-2:176:6  [ق]  @ 1:06:56.6 - 1:07:02.5
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  ذَٰلِكَ بِأَنَّ ٱللَّهَ نَزَّلَ ٱلْكِتَـٰبَ بِٱلْحَقِّ ۗ
+  [0.9800]  2:176:7-2:176:14  [د]  @ 1:07:02.5 - 1:07:12.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَإِنَّ ٱلَّذِينَ ٱخْتَلَفُوا۟ فِى ٱلْكِتَـٰبِ لَفِى شِقَاقٍ بَعِيدٍ
+  [0.9600]  2:177:19-2:177:31  [ب]  @ 1:07:35.6 - 1:07:50.1
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَءَاتَى ٱلْمَالَ عَلَىٰ حُبِّهِۦ ذَوِى ٱلْقُرْبَىٰ وَٱلْيَتَـٰمَىٰ وَٱلْمَسَـٰكِينَ وَٱبْنَ ٱلسَّبِيلِ وَٱلسَّآئِلِينَ وَفِى ٱلرِّقَابِ
+  [0.9500]  2:186:1-2:186:6  [ب]  @ 1:12:12.8 - 1:12:22.9
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَإِذَا سَأَلَكَ عِبَادِى عَنِّى فَإِنِّى قَرِيبٌ ۖ
+  [0.9600]  2:187:43-2:187:53  [د]  @ 1:13:25.3 - 1:13:40.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  ثُمَّ أَتِمُّوا۟ ٱلصِّيَامَ إِلَى ٱلَّيْلِ ۚ وَلَا تُبَـٰشِرُوهُنَّ وَأَنتُمْ عَـٰكِفُونَ فِى ٱلْمَسَـٰجِدِ ۗ
+  [1.0000]  2:196:67-2:196:73  [ب]  @ 1:17:53.8 - 1:18:04.8
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَٱتَّقُوا۟ ٱللَّهَ وَٱعْلَمُوٓا۟ أَنَّ ٱللَّهَ شَدِيدُ ٱلْعِقَابِ
+  [0.9700]  2:197:4-2:197:15  [ج]  @ 1:18:12.0 - 1:18:22.3
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  فَمَن فَرَضَ فِيهِنَّ ٱلْحَجَّ فَلَا رَفَثَ وَلَا فُسُوقَ وَلَا جِدَالَ فِى ٱلْحَجِّ ۗ
+  [1.0000]  2:197:27-2:197:29  [ب]  @ 1:18:34.6 - 1:18:40.7
+           audio: https://download.quranicaudio.com/quran/fatih_seferagic//002.mp3
+           text:  وَٱتَّقُونِ يَـٰٓأُو۟لِى ٱلْأَلْبَـٰبِ
+  ... and 676 more
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
+--- Category Counts (machine-readable) ---
+  failed 6
+  missing_verses 0
+  missing_words 16
+  structural_errors 0
+  low_confidence 35
+  repetitions 1
+  audio_bleeding 0
+  boundary_adj 17
+  cross_verse 157
+  qalqala 706
+  muqattaat 30
+
