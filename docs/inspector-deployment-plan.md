@@ -306,10 +306,11 @@ Detailed per-phase file-IO scope, acceptance criteria, and risks live in [`inspe
    - Adopt the slug-first identity convention: branch `reciter/<slug>`, new title formats, marker registry, commit-subject prefixes. Update `process_requests.py::cmd_prepare_pr` accordingly.
    - Land `scripts/lib/reciter_task.py` (resolver) and `scripts/lib/reciter_state.py` (file parser + transition machine + mirror helpers).
    - Land `scripts/lib/markers.py` (parse/render every HTML-comment marker in [`inspector-state-management.md`](inspector-state-management.md) §6).
-   - Create `data/reciter_catalog.json` (split static identity out of existing `reciters_index.json`).
+   - Create `data/reciter_catalog.json` (v2 schema with `reciter_id`, variant fields — see [`inspector-state-management.md`](inspector-state-management.md) §3).
    - Create `data/reciter_state.json` (seeded from current GitHub state via a one-shot script).
    - Add `update-reciter-state.yml` workflow handling all `repository_dispatch` event types.
    - Migrate other workflows to fire dispatch events instead of writing state. Decommission `pr-assignee-sync.yml`, `find_segments_pr.py`.
+   - **Rewrite downstream producers** (`list_reciters.py`, `build_reciter.py --build-manifest`) to read identity from the catalog and status from the state file. Extend `sync-dataset.yml` and `update-reciters.yml` triggers. Land all producer rewrites in one merge group with a regression test against the pre-migration `reciters_index.json` shape — see [`inspector-state-management.md`](inspector-state-management.md) §10.
    - Add `@require_edit_lock` decorator (lookups state file; no-op while state file is unpopulated).
 
 2. **Phase 1 — read-only deployment** (anonymous, `main` data only)

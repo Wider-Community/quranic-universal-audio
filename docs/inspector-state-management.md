@@ -92,21 +92,30 @@ Failure halts the workflow, reverts the commit, and pings maintainers.
 
 ## 3. Static identity: `data/reciter_catalog.json`
 
-### Schema
+### Design principle: slug is opaque, catalog is structured
+
+The slug is just a unique ID string. **No parser ever extracts semantic meaning from it.** All dimensions that matter — name, riwayah, style, source, year, variant grouping — are catalog fields. This decouples slug format from data dimensions: adding a new style or recording-year or any future axis is a schema-additive change to the catalog, never a slug reshape. Existing slugs and URLs and branch names stay valid forever.
+
+### Schema (v2)
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "reciters": {
-    "saad_al_ghamdi": {
-      "slug": "saad_al_ghamdi",
-      "name_en": "Saad Al-Ghamdi",
-      "name_ar": "سعد الغامدي",
+    "alafasy_mujawwad": {
+      "slug": "alafasy_mujawwad",
+      "reciter_id": "alafasy",
+      "name_en": "Mishary Rashid Alafasy",
+      "name_ar": "مشاري راشد العفاسي",
+      "country": "kw",
       "riwayah": "hafs_an_asim",
-      "style": "murattal",
-      "audio_source": "everyayah",
-      "audio_category": "by_ayah",
-      "url_template": "everyayah.com/data/Ghamadi_40kbps/{surah:03d}{ayah:03d}.mp3",
+      "style": "mujawwad",
+      "audio_source": "mp3quran",
+      "audio_category": "by_surah",
+      "url_template": "...",
+      "recording_year": null,
+      "variant_label": "Mujawwad",
+      "is_canonical": false,
       "added_at": "2026-04-15T...",
       "added_by": "bob"
     }
@@ -114,20 +123,102 @@ Failure halts the workflow, reverts the commit, and pings maintainers.
 }
 ```
 
+### Field semantics
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `slug` | string | yes | Primary key. Matches the regex below. Immutable. |
+| `reciter_id` | string | yes | Same shape as slug. Groups variants of the same human reciter. Defaults to slug for single-variant reciters. Immutable. |
+| `name_en`, `name_ar` | string | yes | Display |
+| `country` | ISO-2 code | yes | `unknown` if undisclosed |
+| `riwayah`, `style`, `audio_source` | string | yes | Controlled vocab in `data/{riwayat,sources,styles}.json` |
+| `audio_category` | enum | yes | `by_surah` or `by_ayah` |
+| `url_template` | string | yes | Per [`timestamps-tab-deployment-plan.md`](timestamps-tab-deployment-plan.md) §3; empty allowed (forces per-verse map fallback) |
+| `recording_year` | int | no | When same reciter+style+riwayah+source has multiple recordings |
+| `variant_label` | string | no | Human-readable distinguisher in UI when ≥2 entries share `reciter_id` |
+| `is_canonical` | bool | no | Exactly one `true` per `reciter_id`. Default landing variant when only `reciter_id` is requested |
+| `added_at`, `added_by` | metadata | yes | Audit |
+
+### Slug naming rules
+
+Slug format is enforced only for safety, not for parsing:
+
+- Regex: `^[a-z][a-z0-9_]{1,39}$`
+- ASCII lowercase, single underscores between tokens, no double-underscore, no trailing underscore
+- 2–40 characters
+- Branch-name-safe and URL-safe by construction
+- Immutable after first publish
+
+Same rules for `reciter_id`. CI fails any catalog PR that violates them.
+
+### Naming convention (advisory)
+
+Maintainer judgment when picking a new slug. The convention exists to keep the catalog readable; nothing parses it.
+
+```
+<reciter_short_id>                            canonical/default rendition
+<reciter_short_id>_<qualifier>                variant
+<reciter_short_id>_<q1>_<q2>                  multi-dimensional variant
+```
+
+Examples:
+
+```
+ghamdi                  canonical Saad Al-Ghamdi (Hafs, Murattal, everyayah)
+ghamdi_mujawwad         mujawwad variant
+ghamdi_warsh            Warsh riwayah variant
+ghamdi_2010             earlier recording
+ghamdi_mujawwad_2010    combined
+```
+
+Most-distinguishing qualifier first. A maintainer breaking the convention is fine — the slug is still a valid unique ID, the catalog row still says what fields it has.
+
+### Adding a new dimension later
+
+The whole point of "slug opaque, catalog structured" is that future dimensions cost nothing. Adding `recording_year` (or any other field) is purely additive:
+
+- The schema gains an optional field
+- Existing rows have it `null` or absent
+- New rows fill it in
+- **Existing slugs are never reshaped.** `ghamdi` doesn't become `ghamdi_2005` retroactively when `ghamdi_2018` is later added — `ghamdi` keeps meaning whatever it meant when first published. The two coexist as distinct slugs sharing one `reciter_id`.
+- No URL, branch, commit subject, or marker ever needs rewriting
+
+The same holds for editorial flags, recording-venue tags, deprecation markers, alternate transliterations — anything we discover we need.
+
+### Validation rules
+
+CI runs `scripts/validate_reciter_catalog.py` on every PR touching the file:
+
+- JSON parses; `schema_version` is 2
+- Every `slug` and `reciter_id` matches the regex
+- `riwayah`, `style`, `audio_source` exist in their respective controlled-vocab files
+- `audio_category ∈ {by_surah, by_ayah}`
+- `url_template` matches one of the two supported patterns or is empty
+- At most one `is_canonical: true` per `reciter_id`
+- No duplicate slugs
+
 ### Update path
 
-- **Adds** come from the Reciter Requests intake — Space submits a PR (or fires a workflow that opens one) that adds the entry. PR-reviewed by maintainer, merged.
-- **Edits** (typo fixes, audio source updates) are also PRs, manually authored.
-- On merge to main, a `push` event triggers `update-reciter-state.yml` with synthetic `catalog_synced` event. The workflow:
-  - Adds new slugs to `reciter_state.json` with `state: catalogued`.
-  - Re-renders any existing issue body that references a changed catalog field (live "snapshot" lines stay in sync).
-  - Logs catalog-removal as a no-op for now (`discarded` flow deferred).
+- **Adds** come from the Reciter Requests intake — the Space submits a PR (or fires a workflow that opens one) that adds the entry. PR-reviewed by maintainer, merged.
+- **Edits** (typo fixes, source corrections, adding optional fields) are also PRs, manually authored.
+- **Adding a variant** of an existing reciter is just adding a new row with the same `reciter_id` as the existing canonical entry. The intake form prompts for "what's different about this recording?" mapping to style/riwayah/source/year so duplicate-slug-for-same-recording is avoided.
+- On merge to main, a `push` event triggers `update-reciter-state.yml` with a synthetic `catalog_synced` event. The workflow adds new slugs to `reciter_state.json` with `state: catalogued`, re-renders any existing issue body referencing a changed field, and logs catalog-removal as a no-op (`discarded` flow deferred).
 
 ### Constraints
 
-- Slugs are immutable for now. A slug-rename event is deferred (would require coordinated PR-branch rename, history rewrite, dataset republish).
-- `riwayah`, `style`, `audio_source` use the controlled vocab in `data/{riwayat,sources,styles}.json`. CI validates.
-- `url_template` must match one of the two patterns the timestamps build pipeline supports (see [`timestamps-tab-deployment-plan.md`](timestamps-tab-deployment-plan.md) §3) or omit — CI fails the catalog PR otherwise.
+- Slugs and `reciter_id`s are immutable for now. A rename event would require coordinated PR-branch rename, history rewrite, dataset republish — deferred until a real need appears.
+- Removing a row is not supported (use `discarded` flow when implemented).
+
+### Migration (one-shot)
+
+`scripts/migrate_catalog_v2.py` runs once during Phase 0:
+
+1. Read existing identity sources (`data/reciters_index.json` + per-reciter audio manifests' `_meta`).
+2. For each known reciter: emit a v2 row with `reciter_id = slug`, `is_canonical = true`, all other new optional fields null.
+3. Bump `schema_version` to 2.
+4. Run `validate_reciter_catalog.py`; commit.
+
+No state-file changes. No PR-branch impact. Inspector reads new fields gracefully (`reciter_id` defaults to slug if missing; UI ignores absent variant fields).
 
 ## 4. State machine
 
@@ -500,7 +591,54 @@ The Inspector App needs:
 
 The App's installation token is what github-fetch and the commit pathway use. The contributor's OAuth token (issued by the App's user-token flow) is only used for identity establishment — never for repo writes.
 
-## 10. Phased rollout
+## 10. Downstream consumers and producers
+
+The new files (`reciter_catalog.json`, `reciter_state.json`) are upstream of several producers that today derive their output from on-disk data + the legacy `reciters_index.json`. After Phase 0 lands, these producers must be reworked to read from the new files — otherwise they silently go stale.
+
+### Files derived from catalog + state
+
+| Output | Producer | Pre-migration source | Post-migration source |
+|---|---|---|---|
+| `data/reciters_index.json` | `.github/scripts/list_reciters.py` | walks data tree + ad-hoc inferences | catalog (identity) + state (status) + data tree (only for `coverage` / `has_timing`) |
+| `data/RECITERS.md` | same | same | same |
+| README badge counts | same | same | same |
+| HF dataset `manifest.json.gz` | `.github/scripts/build_reciter.py --build-manifest` | per-reciter audio manifests + ts data | catalog (identity) + state (`completed` filter) + ts data (shard hashes) |
+| GitHub release `manifest.json` | `.github/scripts/package_release.py` | `reciter_eligibility.py` (file-presence check) | (optional) `state == "completed"` lookup; file-presence check is still correct so long as state workflow is bug-free |
+| Publish-email summary | `.github/scripts/send_publish_email.py` | `reciters_index.json` | catalog directly, or via the regenerated `reciters_index.json` |
+
+### Keeping `reciters_index.json` alive (transitional)
+
+External consumers — the Reciter Requests Space chiefly — read `reciters_index.json` for the catalog of known reciters. Two paths:
+
+A. **Keep regenerating** as a derived snapshot. `update-reciters.yml` rebuilds it from `reciter_catalog.json` + `reciter_state.json` + on-disk data on every relevant change. External consumers see no change.
+B. **Drop entirely** and update external consumers to read both new files directly.
+
+**Decision:** start with (A) (low-risk migration), schedule (B) as later cleanup once the Reciter Requests Space and any other external readers are migrated.
+
+### `sync-dataset.yml` triggers
+
+Today triggers on `data/audio/**`, `data/timestamps/**`. Add:
+
+- `data/reciter_catalog.json` — identity changes (typo fixes, source corrections, new variants) propagate to the HF manifest's per-reciter block.
+- `data/reciter_state.json` — transitions to `completed` should pull a reciter into the next HF publish window. Today this is implicit via segments/timestamps file presence; making it explicit removes ambiguity when the state workflow lands a transition before the actual data files are written by their respective pipelines.
+
+`update-reciters.yml` listens on the same paths so `reciters_index.json` and `RECITERS.md` stay current.
+
+### Staleness scenarios if migration is partial
+
+| Scenario | Symptom | Mitigation |
+|---|---|---|
+| `list_reciters.py` not updated | `reciters_index.json` regenerated from old logic; new catalog fields (variant_label, recording_year, etc.) invisible to external consumers | Rewrite is in scope of Phase 0 |
+| `--build-manifest` not updated | HF manifest carries stale name/riwayah/url after a catalog typo fix | Rewrite is in scope of Phase 0 |
+| `package_release.py` left on file-presence check | Two truth sources for "is reciter completed"; can diverge if the state workflow has a bug | Optional cleanup in Phase 6; works correctly so long as the state workflow is bug-free |
+| Reciter Requests Space points at old `reciters_index.json` shape | Space's reciter dropdown stale on new fields | Keep regenerating until the Space is updated |
+| `sync-dataset.yml` triggers not extended | Catalog edits don't republish the HF manifest | Add catalog/state paths to the workflow's `paths:` filter |
+
+### `data/.release_history.json` (clarification)
+
+Earlier internal docs and CLAUDE.md reference `data/.release_history.json` for release versioning. The actual implementation in `package_release.py::compute_version` reads version history from the previous GitHub release's `manifest.json`, not a local file. There's nothing to migrate here — the reference in CLAUDE.md should be corrected.
+
+## 11. Phased rollout
 
 This doc's scope lands primarily in **Phase 0** (foundational state work) and bleeds slightly into Phases 1, 3, 5a, and 6.
 
@@ -509,16 +647,22 @@ This doc's scope lands primarily in **Phase 0** (foundational state work) and bl
 **In scope of this doc:**
 - Land `scripts/lib/reciter_task.py` (resolver) and `scripts/lib/reciter_state.py` (file parser, state machine, mirror helpers).
 - Land `scripts/lib/markers.py` for parse/render of every HTML-comment marker.
-- Create `data/reciter_catalog.json` — split static identity out of existing `reciters_index.json`. One-shot migration script.
+- Create `data/reciter_catalog.json` — v2 schema, split static identity out of existing `reciters_index.json`. One-shot migration script.
 - Create `data/reciter_state.json` — seeded from current GitHub state via a one-shot script that walks open issues, open PRs, and the on-main data tree.
 - Land `scripts/update_state.py` with the validate-apply-mirror pipeline.
 - Land `update-reciter-state.yml` workflow with all dispatch triggers.
 - Migrate existing workflows to fire `repository_dispatch` events instead of writing labels/assignees.
 - Decommission `pr-assignee-sync.yml`, `find_segments_pr.py`.
-- Land `scripts/validate_reciter_state.py` + CI gate.
+- Land `scripts/validate_reciter_state.py` + `scripts/validate_reciter_catalog.py` + CI gates.
+- **Rewrite `list_reciters.py`** to read from catalog + state + data tree (per §10).
+- **Rewrite `build_reciter.py --build-manifest`** to read identity from catalog (per §10).
+- **Extend `sync-dataset.yml` and `update-reciters.yml` triggers** to include catalog and state file paths (per §10).
 
 **Acceptance:**
 - `data/reciter_state.json` parses, validates, and matches observable GitHub state for every existing reciter.
+- `data/reciter_catalog.json` v2 parses, validates, every existing reciter has a row with `reciter_id = slug` and `is_canonical = true`.
+- Regenerated `reciters_index.json` is byte-identical (or differ only in newly added fields with documented null values) compared to the pre-migration version, so external consumers see no breakage.
+- HF `manifest.json.gz` rebuilt against catalog produces the same per-reciter metadata as the pre-migration build, plus any catalog corrections.
 - A test event (`workflow_dispatch` with `claim`) successfully transitions a test reciter, mirrors to the issue, and re-renders the body — within 30 s end-to-end.
 - The reconciler workflow finds zero drift on a clean post-migration state.
 - All retired workflows produce no runs over a 7-day observation window.
@@ -555,7 +699,7 @@ This doc's scope lands primarily in **Phase 0** (foundational state work) and bl
 - Slow `update-reciters.yml` cadence to every 30 min (reduce CI minutes).
 - Add the daily `reciter-state-reconcile.yml` cron sweep.
 
-## 11. Risks and open questions (beyond what the parent doc covers)
+## 12. Risks and open questions (beyond what the parent doc covers)
 
 ### State file corruption from a workflow bug
 
@@ -620,3 +764,19 @@ If staging and production deploys point at the same repo's state file, a staging
 ### Inspector cold-start state-file fetch
 
 On every backend boot, fetch state file + catalog file. Two github-fetch calls. If GitHub is unreachable, backend boot fails. **Mitigation:** ship a stale snapshot of both files in the Docker image as a fallback. Boot succeeds with stale data; first webhook or poll refreshes.
+
+### Partial producer migration
+
+Phase 0 lands the catalog + state files but doesn't atomically rewrite every consumer in the same commit. During the migration window, `reciters_index.json` may be regenerated from the old logic by a stale `list_reciters.py` while the catalog has new fields. **Symptom:** external consumers (Reciter Requests Space) see partial data. **Mitigation:** land all of (catalog v2, state file, list_reciters rewrite, build-manifest rewrite, sync-dataset trigger extension) in one merge group, gated by a CI integration test that diffs the regenerated `reciters_index.json` against the pre-migration version.
+
+### `reciter_id` collision with future variants
+
+A reciter is added today as the canonical entry with `reciter_id = slug = ghamdi`. Years later, a maintainer wants to add a Mujawwad variant: `slug = ghamdi_mujawwad`, `reciter_id = ghamdi`. This works, but the original entry's `reciter_id = ghamdi` is now ambiguous in dropdown grouping if the canonical bit isn't set right. **Mitigation:** the catalog validator enforces "exactly one `is_canonical: true` per `reciter_id`", and the migration script sets `is_canonical = true` on every row by default. So when a variant is added later, the maintainer must explicitly mark the original as canonical (already true) and the new one as non-canonical, or flip canonicity if the variant should be the new default. CI catches both-true and both-false cases.
+
+### `variant_label` drift
+
+UI groups by `reciter_id` and shows `variant_label` when count > 1. If a maintainer leaves `variant_label` null on a non-canonical entry, the UI falls back to slug. Acceptable but ugly. **Mitigation:** lint warning (not error) when `is_canonical = false` and `variant_label` is null.
+
+### Reciter Requests intake doesn't know about variants
+
+The current Reciter Requests Space form asks for "reciter name + audio source." A contributor submitting a request for the Mujawwad variant of an existing reciter has no way to express that — the form would just create a duplicate-slug-for-same-recording or reject with "reciter exists." **Mitigation:** Phase 0 extends the intake form with optional fields (style override, riwayah override, recording year, "what's different about this recording") that map to catalog fields. The Space gates new-slug creation on those fields being distinguishing — if every distinguishing field matches an existing entry, reject with "this recording is already catalogued."
