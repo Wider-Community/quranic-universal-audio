@@ -184,7 +184,8 @@ No invitation needed in v2 — HF users don't need any specific repo permission 
 | UI | Dropdown in admin dashboard restricted to the allowed targets for the row's current state |
 
 **Allowed `(from, to)` pairs** (intentionally narrow — extend by adding to this list, not by widening the endpoint):
-- `awaiting_alignment ↔ awaiting_review` (alignment recovery without re-running pipeline)
+- `catalogued ↔ awaiting_alignment` (maintainer kicks off / unwinds an alignment run while Inspector-native intake is still deferred)
+- `awaiting_alignment ↔ awaiting_review` (alignment recovery; also used to advance state once a maintainer-triggered Katana run finishes)
 - `awaiting_timestamps ↔ completed` (timestamps-job recovery)
 - `under_review → awaiting_review` (alternative path to `claim.force_released` that doesn't bump force-release-count)
 

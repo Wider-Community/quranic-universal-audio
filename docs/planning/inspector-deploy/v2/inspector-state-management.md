@@ -1,93 +1,111 @@
 # Inspector State Management Strategy (v2)
 
-Companion to [`inspector-deployment-plan.md`](inspector-deployment-plan.md). Implementation-grade reference for everything reciter-state: the source-of-truth file in the bucket, the catalog file on GitHub, the embedded state machine, the audit log, the identity convention, Inspector integration, per-phase acceptance criteria, and risks.
+Companion to [`inspector-deployment-plan.md`](inspector-deployment-plan.md). Implementation-grade reference for everything reciter-state: the source-of-truth JSON file in the bucket, the catalog JSON file in the bucket, the embedded state machine, the audit log, the identity convention, Inspector integration, per-phase acceptance criteria, and risks.
 
 The parent doc owns deployment architecture, file IO (which lives in [`inspector-data-storage.md`](inspector-data-storage.md)), auth/claim UX, locking, and edit-history simplifications. This doc owns *what state means, where it lives, who writes it, and how it gets reflected back to consumers.*
 
 ## 1. Model in one paragraph
 
-`<bucket>/state/reciter_state.sqlite` is the source of truth for pipeline state, current assignee, and per-reciter event history. It lives in the HF bucket mounted into the Space. **Inspector backend is the only writer** — `inspector/services/state.py` validates every transition through an embedded state machine before persisting. There is no GitHub workflow for state writes (the v1 `update-reciter-state.yml` is not built in v2). Catalog (display name, riwayah, audio source, `url_template`) lives at `<bucket>/catalog/reciter_catalog.sqlite` on the same bucket, also Inspector-managed. External consumers (HF Jobs, GH Actions for `RECITERS.md`/Releases) read both via `huggingface_hub` (download SQLite file → open read-only).
+`<bucket>/state/reciter_state.json` is the source of truth for pipeline state and current assignee. It lives in the single private HF bucket mounted into the Space. **Inspector backend is the only writer** — `inspector/services/state.py` validates every transition through an embedded state machine + pydantic models before persisting. There is no GitHub workflow for state writes (the v1 `update-reciter-state.yml` is not built in v2). Catalog (vocab, reciters, aliases, audio source templates) lives at `<bucket>/catalog/reciter_catalog.json` on the same bucket, also Inspector-managed. External consumers (HF Jobs, GH Actions for `RECITERS.md`/Releases) read both via `huggingface_hub` (download JSON file → parse).
 
-**SQLite, not JSON.** Earlier drafts proposed a single JSON file. SQLite gives WAL atomicity, schema migrations as `ALTER TABLE`, indexes on `state` / `assignee_hf_id`, ad-hoc query language for maintainer investigation, and a clean multi-replica path via Litestream-style replication. The operational surface is identical to a JSON file — `import sqlite3` (stdlib), one file. See §2.1 for the SQLite-on-NFS-mount semantics.
+**Plain JSON, not SQLite.** Earlier drafts proposed SQLite on the mount. The operational surface (WAL semantics on NFS, `-wal`/`-shm` sidecars, mount-flush interaction with the WAL file, the Phase 0 acceptance spike) outweighed any indexing benefit at sub-1/sec write rate and ~300 rows. Pydantic models at the service boundary handle validation + schema migration; in-memory dicts keyed on slug serve point lookups in <1 µs cold; writes are atomic-write-then-rename + per-write `huggingface_hub.upload_file()` for durability. Two files, two pydantic schemas, one bucket.
 
-## 2. Source of truth: `<bucket>/state/reciter_state.sqlite`
+## 2. Source of truth: `<bucket>/state/reciter_state.json`
 
-### Schema (DDL)
+### Schema sketch
 
-```sql
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA foreign_keys = ON;
+The on-bucket file is a JSON object with `schema_version`, `writer_version`, and a `reciters` list. The Inspector backend parses it via the pydantic model `inspector.schemas.state.ReciterStateFile` on startup and on every refresh; writes serialize the model back out.
 
-CREATE TABLE schema_meta (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-INSERT INTO schema_meta (key, value) VALUES
-  ('schema_version', '1'),
-  ('writer_version', 'inspector-v2');
+```jsonc
+{
+  "schema_version": 1,
+  "writer_version": "inspector-v2",
+  "reciters": [
+    {
+      "slug": "saad_al_ghamdi",
+      "state": "under_review",                 // enum, see §4
+      "state_since": "2026-05-08T14:23:11Z",
+      "assignee_hf_id": "12345",                // canonical user ref (immutable)
+      "assignee_login": "alice",                // display cache (mutable; refreshed on session)
+      "assignee_since": "2026-05-08T14:23:11Z",
+      "marked_ready": false,                    // bool; supersedes ready_for_merge state (see §4)
+      "visibility": "public",                   // enum: 'public' | 'discarded'  (archived deferred)
+      "visibility_reason": null,
+      "last_save_at": "2026-05-08T14:25:01Z"
+    }
+  ]
+}
+```
 
-CREATE TABLE reciters (
-  slug              TEXT PRIMARY KEY,
-  state             TEXT NOT NULL,                -- enum, see §4
-  state_since       TEXT NOT NULL,                -- ISO 8601 UTC
-  assignee_hf_id    TEXT,                         -- canonical user ref (immutable)
-  assignee_login    TEXT,                         -- display cache (mutable; refreshed on session)
-  assignee_since    TEXT,                         -- ISO 8601; same lifetime as assignee_hf_id
-  marked_ready      INTEGER NOT NULL DEFAULT 0,   -- boolean 0/1; supersedes ready_for_merge state (see §4)
-  force_assignee_hf_id TEXT,                      -- ephemeral admin force-claim; null when no force-claim
-  force_assignee_since TEXT,                      -- ISO 8601; lease expires force_assignee_since + 30min
-  visibility        TEXT NOT NULL DEFAULT 'public', -- enum: 'public' | 'discarded' | 'archived'
-  visibility_reason TEXT,                         -- required when visibility != 'public'
-  revision          INTEGER NOT NULL DEFAULT 1,   -- monotonic; OCC for future multi-writer
-  last_save_at      TEXT,                         -- updated on every save (drives "stalled" dashboard)
-  CHECK (state IN (
-    'catalogued','awaiting_alignment','awaiting_review',
-    'under_review','awaiting_timestamps','completed'
-  )),
-  CHECK (visibility IN ('public','discarded','archived'))
-);
+The pydantic model:
 
-CREATE INDEX reciters_state_idx       ON reciters(state);
-CREATE INDEX reciters_assignee_idx    ON reciters(assignee_hf_id) WHERE assignee_hf_id IS NOT NULL;
-CREATE INDEX reciters_visibility_idx  ON reciters(visibility) WHERE visibility != 'public';
+```python
+# inspector/schemas/state.py
+class Visibility(str, Enum):
+    PUBLIC = "public"
+    DISCARDED = "discarded"
+
+class ReciterState(str, Enum):
+    CATALOGUED          = "catalogued"
+    AWAITING_ALIGNMENT  = "awaiting_alignment"
+    AWAITING_REVIEW     = "awaiting_review"
+    UNDER_REVIEW        = "under_review"
+    AWAITING_TIMESTAMPS = "awaiting_timestamps"
+    COMPLETED           = "completed"
+
+class ReciterRow(BaseModel):
+    slug: str
+    state: ReciterState
+    state_since: datetime
+    assignee_hf_id: str | None = None
+    assignee_login: str | None = None
+    assignee_since: datetime | None = None
+    marked_ready: bool = False
+    visibility: Visibility = Visibility.PUBLIC
+    visibility_reason: str | None = None
+    last_save_at: datetime | None = None
+
+class ReciterStateFile(BaseModel):
+    schema_version: int
+    writer_version: str
+    reciters: list[ReciterRow]
 ```
 
 **Notable design decisions** (see §2.2 for rationale):
-- **No `history` array per reciter.** Audit log (`<bucket>/state/audit.jsonl`) is the sole source for history; bounded-ring duplicates were a split-brain trap. Dashboard "history of slug X" is `tail-grep audit.jsonl WHERE slug=X | tail 20`.
-- **No `issue_number`** in the state table. GitHub-shaped fields don't belong in canonical state. If/when an external reference is needed, add a separate `external_refs` table (`slug`, `kind`, `value`) — out of scope for v2.
-- **No `assignee` column** keyed by login. Logins are mutable on HF; using login as the canonical identifier breaks on rename. **`assignee_hf_id` is canonical** (immutable, equals OIDC `sub`); `assignee_login` is a refreshable display cache. Every join + every claim ownership check uses `assignee_hf_id`.
-- **`marked_ready` as a boolean column**, not as a separate state. The under_review→ready_for_merge round-trip via `marked/unmarked_ready` was a state-as-flag artifact. One column, three transitions removed. See §4.
-- **`visibility` orthogonal to lifecycle.** A reciter can be discarded from any state without losing the lifecycle position. `discarded` is no longer a state value — it's `visibility = 'discarded'`. Reversal is just clearing the visibility column.
-- **`force_assignee_hf_id` persisted**, not in-memory. Earlier drafts treated the 30-min force-claim lease as ephemeral; that meant Space restart silently dropped it. Now it survives container rebuilds; expiry is computed from `force_assignee_since + 30min`.
-- **`revision` for OCC.** Today single-writer; the column exists so multi-writer (future) doesn't require a schema migration.
+- **No `history` array per reciter.** Audit log (`<bucket>/audit/<YYYY>-<MM>.jsonl`) is the sole source for history. Dashboard "history of slug X" is a tail-grep over the audit partitions.
+- **No `issue_number`.** GitHub-shaped fields don't belong in canonical state.
+- **No `assignee_login` as primary key.** Logins are mutable on HF; using login as the canonical identifier breaks on rename. **`assignee_hf_id` is canonical** (immutable, equals OIDC `sub`); `assignee_login` is a refreshable display cache. Every claim ownership check uses `assignee_hf_id`.
+- **`marked_ready` as a boolean field**, not as a separate state. The under_review↔ready_for_merge round-trip via mark/unmark was a state-as-flag artifact. One field, three transitions removed. See §4.
+- **`visibility` orthogonal to lifecycle.** A reciter can be discarded from any state without losing the lifecycle position. `discarded` is no longer a state value — it's `visibility = 'discarded'`. Reversal is just clearing the visibility field.
+- **No `force_assignee_*` fields.** Force-claim is deferred entirely (see [`inspector-admin-perms.md`](inspector-admin-perms.md) §11). When implemented later, the fields live alongside in this same row.
+- **No `revision` field.** OCC for multi-writer future is itself deferred — adding the field with no current consumer is dead-bytes. When multi-writer scale-out lands, schema migration will add it.
 
-### 2.1 SQLite-on-mount semantics
+### 2.1 Mount semantics
 
-The SQLite file lives on the bucket mount (NFS Advanced). Writes are WAL-mode; readers see committed transactions atomically; Phase 0 spike must verify NFS-with-WAL semantics under our mount (lock files, `-wal` and `-shm` sidecars flush correctly).
+The JSON file lives on the bucket mount (NFS Advanced). Writes are atomic-write-then-rename + a direct `huggingface_hub.upload_file()` call per write (durability beyond the mount's 2–30 s flush window).
 
-- **Reads** within Inspector: `sqlite3.connect(..., uri=True)` with `mode=ro` is fine for everywhere except `services/state.py` itself.
-- **Writes** within Inspector: a single connection in `services/state.py`, opened at boot, kept open. Write transactions wrap each transition.
-- **External readers** (HF Jobs, GH Actions): download the `.sqlite` file via `huggingface_hub`, open read-only locally. Do NOT mount the bucket from outside Inspector — single-mount-point keeps the WAL semantics simple.
-- **Crash safety**: SQLite WAL handles crash-mid-write atomically. Combined with the mount's flush window (2–30 s), a Space crash inside the flush window means the bucket retains the previous WAL state — which is consistent. No torn writes.
-- **Tooling**: `sqlite3 <bucket>/state/reciter_state.sqlite '.dump'` for forensic export; `replay_audit.py` rebuilds the DB from `audit.jsonl` for disaster recovery.
+- **Reads** within Inspector: parsed once at startup into the in-memory `state_store: dict[str, ReciterRow]`; replaced atomically on each write (Inspector is sole writer, so in-memory model is always correct).
+- **Writes** within Inspector: per-slug `threading.Lock` serializes around `(read row, validate, write file, upload_file, append audit)`.
+- **External readers** (HF Jobs, GH Actions): download the JSON file via `huggingface_hub`, parse with the same pydantic model.
+- **Crash safety**: atomic-write-then-rename guarantees the file on disk is either old or new — never torn. The direct `upload_file` provides durability even if the container dies before the mount flush.
+- **Tooling**: `huggingface_hub.hf_hub_download` for forensic export; replay tool reconstructs state from audit log for disaster recovery.
 
 ### 2.2 Why these schema choices
 
 | Decision | Rationale | What was rejected |
 |---|---|---|
-| SQLite over JSON | WAL atomicity, indexes, query language, future migrations via `ALTER TABLE`, free Litestream replication path | Single 150 KB JSON file with no concurrency primitive, no transactions, no indexes |
+| Plain JSON over SQLite | Pydantic validation at the service boundary, atomic-write-then-rename + per-write `upload_file()` covers durability, no `-wal`/`-shm` semantics on NFS, no Phase 0 spike needed | SQLite-on-bucket-mount; required a Phase 0 spike to verify NFS-with-WAL semantics, plus sidecar files in the bucket |
 | `assignee_hf_id` canonical | HF logins are mutable; rename silently breaks login-keyed joins | `assignee` (login) as canonical — silent correctness bug on rename |
 | Drop `history` array | Two SoTs for history (state file + audit log) drift on any forgotten dual-write | Bounded 20-entry ring — vestigial denormalization |
 | Drop `issue_number` | GitHub-shaped field bleeding into canonical state; no longer rely on issues/PRs/GH assignees | Embedding `issue_number` per row — couples state to GitHub |
 | `marked_ready` as bool | `under_review` ↔ `ready_for_merge` round-trip is a flag, not two distinct states | Two states, three transitions, identical assignee/edit semantics |
-| `visibility` orthogonal | Discardable from any lifecycle phase; round-trip preserves position | `discarded` as 8th state value — loses previous lifecycle on un-discard |
-| Persisted force-claim | Container rebuild silently dropping force-claims is a correctness regression | In-memory-only 30-min lease |
-| `revision` column | Multi-writer future shouldn't need a schema bump | Adding OCC later as a migration |
+| `visibility` orthogonal | Discardable from any lifecycle phase; round-trip preserves position | `discarded` as a state value — loses previous lifecycle on un-discard |
+| No `force_assignee_*` | Force-claim deferred; adding columns without consumers is dead-bytes | Carrying columns + 30-min lease + auto-clear timer for an undelivered feature |
+| No `revision` field | Multi-writer scale-out deferred; YAGNI | Forward-compat scaffolding for unspecified future requirements |
 
-### Audit log: `<bucket>/state/audit.jsonl`
+### Audit log: `<bucket>/audit/<YYYY>-<MM>.jsonl`
 
-Append-only, one line per state-changing event. Lives in the **private metadata bucket** (carries PII — `actor.hf_user_id` per event). Partitioned per-month from day one (`audit/<YYYY>-<MM>.jsonl`); one symlink/pointer file `audit/CURRENT` that points at the active partition. Quarterly rollover is automatic; nothing to revisit at scale.
+Append-only, one line per state-changing event. Single `audit/` folder for ALL events (state, catalog, claim, admin) — no separate state/audit and catalog/audit split. Partitioned per-month from day one (`audit/<YYYY>-<MM>.jsonl`).
 
 ```jsonc
 { "ts": "2026-05-08T14:23:11Z",
@@ -98,58 +116,55 @@ Append-only, one line per state-changing event. Lives in the **private metadata 
   "actor": { "hf_user_id": "12345", "login_at_time": "alice", "role": "contributor" },
   "payload": { },
   "request_id": "req_abc123",
-  "prev_hash": "sha256:abc123...",         // sha256 of canonical(prev record); chain integrity
+  "reason": null,
   "result": "ok"
 }
 ```
 
 **Schema notes:**
-- `schema_version` lives in `audit/_meta.json` once per partition file, NOT per record. Per-record version-stamping inflates every line for no read-time benefit.
+- `schema_version` lives in `audit/_meta.json` once per partition, NOT per record. Per-record version-stamping inflates every line for no read-time benefit.
 - `actor.hf_user_id` is canonical (immutable). `login_at_time` snapshots the display login at write time.
 - `actor.role` snapshots the role at write time so audit forensics survive role changes.
-- `prev_hash` chains records for tamper detection. `replay_audit.py` validates the chain and rebuilds `reciter_state.sqlite` on demand.
-- `from_state` / `to_state` null for non-state-changing events (`catalog.edited`, `pipeline.triggered`, `admin.job_rerun`, etc.). Document in §4 events table per event.
+- **No `prev_hash` chain.** Tamper detection comes from offsite versioned snapshots of the bucket (cross-Region snapshot or scheduled `huggingface_hub` download to an air-gapped store), not from in-record cryptographic linkage. Removing the chain also removes the recovery-after-orphan-record pathway, which was a recurring complexity source in early v2 drafts.
+- `from_state` / `to_state` null for non-state-changing events (`catalog.edited`, etc.). Document in §4 events table per event.
+- `reason` populated for events that require it (admin overrides, send-back).
 - Per-event `payload` shape lives alongside its event constant in `services/state.py` as a `TypedDict` — colocation, no separate schema-doc-by-grep.
 
-Read pattern: ad-hoc by maintainers via the admin dashboard; future "your contributions" page (deferred — see [`inspector-deferred.md`](inspector-deferred.md) D10). ~3.6 MB/year sustained.
+Read pattern: ad-hoc by maintainers via the admin dashboard; future "your contributions" page (deferred). ~3.6 MB/year sustained.
 
 ### Write semantics
 
 - **Single writer:** Inspector backend's `services/state.py::transition()` function.
-- **Serialization:** SQLite WAL handles concurrent reads against a serialized writer natively. Inspector still holds a per-slug mutex around `(read row, validate, write)` to keep the transition atomic at the application level.
-- **Atomicity:** WAL transaction wraps every transition. Inspector's transition is one SQL `UPDATE` (or `INSERT` for new slugs) inside `BEGIN EXCLUSIVE`. SQLite's WAL guarantees readers see committed transactions atomically; partial writes are never visible.
-- **Audit append:** every transition appends a line to the current `audit/<YYYY>-<MM>.jsonl` partition BEFORE the SQL `COMMIT`. If the SQL commit fails, the audit entry is a "would-have-transitioned" record (debug forensics). Audit append uses `huggingface_hub.upload_file()` directly, bypassing the mount's flush window — durability is more important than latency for state events (~1/min in steady state).
-- **State file durability:** the SQLite file goes through the mount (NFS Advanced flush window 2–30 s). For state writes specifically, also call `huggingface_hub.upload_file()` direct on the SQLite file at write time — same rationale as audit. The mount's lazy flush is fine for save-data; not fine for state, where the failure mode is silent rollback after a 200 response.
-- **External consumers** (HF Jobs, GH Actions): download the SQLite file via `huggingface_hub`; open read-only. Read after write is bounded by the upload + HF CDN propagation (~5 s typical).
+- **Serialization:** per-slug `threading.Lock` around `(read row, validate, write file, upload_file, append audit)`. Single lock per slug — no `(slug, login)` sub-mutex.
+- **Atomicity:** atomic-write-then-rename on the mount + direct `huggingface_hub.upload_file()` per write. Readers (in-process and external) never see torn writes.
+- **Audit append:** every transition appends a line to the current `audit/<YYYY>-<MM>.jsonl` partition via direct `huggingface_hub.upload_file()` (or append API equivalent), bypassing the mount's flush window — durability is more important than latency for state events (~1/min in steady state).
+- **External consumers** (HF Jobs, GH Actions): download the JSON file via `huggingface_hub`, parse. Read-after-write is bounded by upload + HF CDN propagation (~5 s typical).
 
 ### Read semantics
 
-- **Inspector:** opens the SQLite file read-only at request time (or holds the writer connection open and reads from it). No in-memory parse cache needed — SQLite + indexes serve point lookups in <100 µs. Listing all reciters for the dashboard is a single `SELECT` against the indexed columns.
-- **HF Jobs (publish, snapshot, etc.):** download the `.sqlite` file via `huggingface_hub`; open read-only locally.
-- **GH Actions (`update-reciters.yml`, `release.yml`):** same.
-- **External tools (Reciter Requests Space, etc.):** read via the bucket-read token, or read a snapshot Inspector exposes via `/api/state/snapshot.json` (rate-limited, cached 30 s).
+- **Inspector:** in-memory `state_store: dict[str, ReciterRow]` hydrated from the bucket file at startup; replaced atomically on every write. Listing all reciters for the dashboard is `state_store.values()` filtered/sorted in Python.
+- **HF Jobs / GH Actions:** download the JSON file via `huggingface_hub`; parse with the same pydantic model.
+- **External tools:** read via the bucket-read token, or read a snapshot Inspector exposes via `/api/state/snapshot.json` (rate-limited, cached 30 s).
 
 ### Validation
 
-`inspector/services/state.py::_validate_invariants()` runs inside the transaction, before `COMMIT`:
+`inspector/services/state.py::_validate_invariants()` runs inside the per-slug lock, before persistence:
 
-- `state` is in the closed enum (enforced at SQL level via `CHECK` constraint, but checked again for friendly error messages).
-- Per-state required-field invariants from §4 hold — e.g., `state == 'under_review'` requires `assignee_hf_id IS NOT NULL`.
-- `assignee_login`, when present, has been verified against `https://huggingface.co/api/users/<login>/overview` within the last 24 h (cached at session boundary; refresh on miss).
+- Pydantic enforces field types + enum membership at parse time.
+- Per-state required-field invariants from §4 hold — e.g., `state == 'under_review'` requires `assignee_hf_id is not None`.
 - Timestamps monotonic — `state_since >= prev_state_since`.
-- `force_assignee_since`, when present, is no older than 30 min (auto-clear via `claim.force_released_auto` event before transition if expired).
-- `marked_ready == 1` requires `state == 'under_review'` and `assignee_hf_id IS NOT NULL`.
+- `marked_ready == True` requires `state == 'under_review'` and `assignee_hf_id is not None`.
 
-Failure raises `InvalidTransition`; transaction rolls back; caller receives 400 with the violation. The SQL is untouched; the audit log carries an `attempted` record only if the violation is detected post-audit-append (rare).
+Failure raises `InvalidTransition`; the in-memory model is not mutated; the on-disk file is unchanged; caller receives 400 with the violation message. No audit entry is written for invalid attempts (the request log captures them).
 
-## 3. Catalog: `<bucket>/catalog/reciter_catalog.sqlite`
+## 3. Catalog: `<bucket>/catalog/reciter_catalog.json`
 
-### Why the bucket + SQLite for the catalog
+### Why the bucket + plain JSON for the catalog
 
-Same reasoning as state (§2): SQLite gives indexed lookups, atomicity, schema migrations. Catalog also lives on the bucket because:
+Same reasoning as state (§2): pydantic models at the service boundary handle validation + schema migration; per-write `huggingface_hub.upload_file()` covers durability; in-memory dicts serve point lookups. Catalog also lives on the bucket because:
 
 1. v2's architectural shift is "no per-reciter PRs." Keeping catalog on GitHub PRs means a PR-creation token + auto-merge workflow + PR review queue, just for catalog edits.
-2. The same Inspector-as-sole-writer pattern works for catalog. Maintainer+ role required for `catalog.edited` events; immutable fields (`slug`, `reciter_id`) rejected by the validator.
+2. The same Inspector-as-sole-writer pattern works for catalog. Maintainer+ role required for `catalog.added` / `catalog.edited` events; immutable fields (`slug`, `reciter_id`) rejected by the validator.
 
 `data/inspector_roles.json` (the role file, see §9) **stays on GitHub** — it governs *who can edit*, not *what's edited*. CODEOWNERS-gated PR review is the right gate for role mutations.
 
@@ -157,78 +172,136 @@ Same reasoning as state (§2): SQLite gives indexed lookups, atomicity, schema m
 
 | Consumer | Path |
 |---|---|
-| Inspector backend | Open `<INSPECTOR_BUCKET_MOUNT>/catalog/reciter_catalog.sqlite` read-only via SQLite |
-| GH Actions (`update-reciters.yml`) | Download via `huggingface_hub`; open SQLite read-only |
+| Inspector backend | Parse `<INSPECTOR_BUCKET_MOUNT>/catalog/reciter_catalog.json` via pydantic at startup; in-memory model replaced atomically on each write |
+| GH Actions (`update-reciters.yml`) | Download via `huggingface_hub`; parse with the same pydantic model |
 | HF Jobs | Same |
-| External (Reciter Requests Space, until D2) | Reads `data/reciters_index.json` (regenerated derivative) — unchanged contract |
+| Browser (Audio tab) | Backend serves a cached copy via `/api/static/catalog.json`; browser fetches once on app load |
 
 ### Design principle: slug is opaque, catalog is structured
 
-The slug is just a unique ID string. **No parser ever extracts semantic meaning from it.** All dimensions that matter — name, riwayah, style, source, year, variant grouping — are catalog fields. Adding a new dimension later is `ALTER TABLE`, never a slug reshape.
+The slug is just a unique ID string. **No parser ever extracts semantic meaning from it.** All dimensions that matter — name, riwayah, style, source, year, variant grouping — are catalog fields. Adding a new dimension later is a pydantic schema bump + version migration, never a slug reshape.
 
-### Schema (DDL)
+### Schema sketch
 
-```sql
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA foreign_keys = ON;
+ONE file consolidates: vocab (riwayat, styles, audio sources) + reciters list + aliases. Replaces `data/riwayat.json`, `data/sources.json`, `data/styles.json`, the 381 per-reciter audio manifests under `data/audio/<cat>/<src>/<slug>.json`, and the previously-planned catalog SQLite.
 
-CREATE TABLE schema_meta (
-  key TEXT PRIMARY KEY, value TEXT NOT NULL
-);
-INSERT INTO schema_meta (key, value) VALUES ('schema_version', '2');
+```jsonc
+{
+  "schema_version": 1,
+  "vocab": {
+    "riwayat":  ["Hafs an Asim", "Warsh an Nafi", "Qaloon an Nafi", "..."],
+    "styles":   ["Murattal", "Mujawwad"],
+    "audio_sources": [
+      {
+        "source_id": "mp3quran",
+        "audio_category": "by_surah",
+        "url_template_kind": "by_surah",
+        "url_template_default": "https://server8.mp3quran.net/{slug}/{surah:03d}.mp3",
+        "timing_supported": false
+      },
+      {
+        "source_id": "everyayah",
+        "audio_category": "by_ayah",
+        "url_template_kind": "by_ayah_padded",
+        "url_template_default": "https://everyayah.com/data/{slug}/{surah:03d}{ayah:03d}.mp3",
+        "timing_supported": false
+      }
+    ]
+  },
+  "reciters": [
+    {
+      "slug": "saad_al_ghamdi",
+      "reciter_id": "saad_al_ghamdi",
+      "name_en": "Saad Al-Ghamdi",
+      "name_ar": "سعد الغامدي",
+      "country": "SA",
+      "riwayah": "Hafs an Asim",
+      "style": "Murattal",
+      "audio_source": "mp3quran",
+      "url_template_override": null,
+      "url_overrides": null,             // optional per-chapter map: { "1": "...", "2": "..." }
+      "recording_year": 2018,
+      "variant_label": null,
+      "added_at": "2025-09-01T12:00:00Z",
+      "added_by_hf_id": "67890",
+      "notes": null
+    }
+  ],
+  "aliases": [
+    { "old_slug": "saad_alghamdi", "new_slug": "saad_al_ghamdi", "aliased_at": "2025-12-01T..." }
+  ]
+}
+```
 
-CREATE TABLE audio_sources (              -- factored out from per-reciter denormalization
-  source_id            TEXT PRIMARY KEY,  -- e.g. 'mp3quran', 'everyayah'
-  audio_category       TEXT NOT NULL,     -- 'by_surah' | 'by_ayah'
-  url_template_kind    TEXT NOT NULL,     -- 'by_surah' | 'by_ayah_padded' | 'by_ayah_unpadded' | 'custom'
-  url_template_default TEXT,              -- used when row's url_template_override is null
-  timing_supported     INTEGER NOT NULL DEFAULT 0,
-  CHECK (audio_category IN ('by_surah','by_ayah')),
-  CHECK (url_template_kind IN ('by_surah','by_ayah_padded','by_ayah_unpadded','custom'))
-);
+The pydantic model lives at `inspector/schemas/catalog.py`:
 
-CREATE TABLE reciters (
-  slug                  TEXT PRIMARY KEY,
-  reciter_id            TEXT NOT NULL,            -- groups variants; defaults to slug
-  name_en               TEXT NOT NULL,
-  name_ar               TEXT NOT NULL,
-  country               TEXT NOT NULL DEFAULT 'unknown',  -- ISO-2 or 'unknown'
-  riwayah               TEXT NOT NULL,             -- references controlled vocab (validated app-side)
-  style                 TEXT NOT NULL,             -- references controlled vocab
-  audio_source          TEXT NOT NULL REFERENCES audio_sources(source_id),
-  url_template_override TEXT,                      -- only when reciter doesn't fit the source's default
-  recording_year        INTEGER,
-  variant_label         TEXT,                      -- distinguisher when ≥2 share reciter_id
-  added_at              TEXT NOT NULL,
-  added_by_hf_id        TEXT NOT NULL,
-  notes                 TEXT,                      -- free-form maintainer notes
-  CHECK (slug GLOB '[a-z][a-z0-9_]*' AND length(slug) BETWEEN 2 AND 40),
-  CHECK (reciter_id GLOB '[a-z][a-z0-9_]*' AND length(reciter_id) BETWEEN 2 AND 40)
-);
+```python
+class AudioCategory(str, Enum):
+    BY_SURAH = "by_surah"
+    BY_AYAH  = "by_ayah"
 
-CREATE INDEX reciters_reciter_id_idx ON reciters(reciter_id);
-CREATE INDEX reciters_audio_source_idx ON reciters(audio_source);
+class UrlTemplateKind(str, Enum):
+    BY_SURAH         = "by_surah"
+    BY_AYAH_PADDED   = "by_ayah_padded"
+    BY_AYAH_UNPADDED = "by_ayah_unpadded"
+    CUSTOM           = "custom"
 
-CREATE TABLE reciter_aliases (             -- old slugs that redirect to canonical (forward-compat for D9)
-  old_slug   TEXT PRIMARY KEY,
-  new_slug   TEXT NOT NULL REFERENCES reciters(slug),
-  aliased_at TEXT NOT NULL
-);
+class AudioSource(BaseModel):
+    source_id: str
+    audio_category: AudioCategory
+    url_template_kind: UrlTemplateKind
+    url_template_default: str | None = None
+    timing_supported: bool = False
+
+class Vocab(BaseModel):
+    riwayat: list[str]
+    styles: list[str]
+    audio_sources: list[AudioSource]
+
+class CatalogReciter(BaseModel):
+    slug: str
+    reciter_id: str
+    name_en: str
+    name_ar: str
+    country: str = "unknown"
+    riwayah: str
+    style: str
+    audio_source: str
+    url_template_override: str | None = None
+    url_overrides: dict[str, str] | None = None
+    recording_year: int | None = None
+    variant_label: str | None = None
+    added_at: datetime
+    added_by_hf_id: str
+    notes: str | None = None
+
+class Alias(BaseModel):
+    old_slug: str
+    new_slug: str
+    aliased_at: datetime
+
+class ReciterCatalog(BaseModel):
+    schema_version: int
+    vocab: Vocab
+    reciters: list[CatalogReciter]
+    aliases: list[Alias]
 ```
 
 ### Field semantics
 
 | Field | Required | Notes |
 |---|---|---|
-| `slug` | yes | Primary key. Immutable. |
+| `slug` | yes | Primary key inside the list; uniqueness enforced by `services/catalog.py`. Immutable. |
 | `reciter_id` | yes | Groups variants. Convention: **canonical variant has `slug == reciter_id`** (no `is_canonical` bool needed — the convention carries the invariant). Variants have `reciter_id` matching the canonical's slug. |
-| `audio_source` | yes | FK to `audio_sources.source_id`. Most reciters per source share the source's default URL template. |
+| `audio_source` | yes | References `vocab.audio_sources[].source_id`. Most reciters per source share the source's default URL template. |
 | `url_template_override` | no | Only set for reciters that don't fit their source's default — rare. Eliminates the 50-fold denormalization v1 had. |
+| `url_overrides` | no | Per-chapter override map for the rare reciter where individual chapters have anomalous URLs. |
 | `country` | yes | ISO-2 or `unknown`. Validated app-side against an ISO-2 list baked into the validator. |
 | `notes` | no | Free-form. Maintainers always want it; better to have than not. |
 
-**Dropped**: `is_canonical: bool` invariant (replaced by `slug == reciter_id` convention); per-row `audio_category` and `url_template` denormalization (factored to `audio_sources`).
+Audio URLs are computed on-the-fly by `services/audio_url.py::resolve(slug, surah, ayah)` using the source's template (or the reciter's `url_template_override`, or the per-chapter `url_overrides[str(surah)]`).
+
+**Dropped**: `is_canonical: bool` invariant (replaced by `slug == reciter_id` convention); per-row `audio_category` and `url_template` denormalization (factored to `vocab.audio_sources`); the 381 per-reciter manifests (one source-template per source covers them all).
 
 ### Slug naming rules
 
@@ -240,35 +313,37 @@ ASCII lowercase, single underscores between tokens, no double-underscore, no tra
 
 ### Update path
 
-- **Adds:** maintainer uses `POST /api/admin/catalog/add` (admin §5.6); Inspector validates + writes + audits. Future request intake (D2) will route through the same endpoint.
+- **Adds:** maintainer uses `POST /api/admin/catalog/add` (admin §5.6); Inspector validates + writes + audits. New requests in v2 = GitHub issue with `<!-- reciter-task: slug=... schema=1 -->` body marker; maintainer reads the issue, manually adds the catalog row.
 - **Edits:** maintainer uses `POST /api/admin/catalog/edit/<slug>`. Validator rejects mutations to `slug` and `reciter_id`.
-- **New variants:** add a new row with `reciter_id` matching the canonical row's `slug`.
+- **New variants:** add a new entry with `reciter_id` matching the canonical entry's `slug`.
 
 On any catalog write, Inspector fires `repository_dispatch reciter.catalog_changed` to trigger `update-reciters.yml`. Inspector's own cache is fresh by construction (it's the writer).
 
 ### Validation
 
-`inspector/services/catalog.py::_validate()` runs inside the SQLite write transaction:
+`inspector/services/catalog.py::_validate()` runs inside the per-slug lock, before persistence:
 
-- Schema CHECK constraints handle slug regex + audio_category enum + url_template_kind enum (SQL-level).
-- App-side: `riwayah`, `style` exist in their respective controlled-vocab files (`data/{riwayat,styles}.json` baked into the image).
-- App-side: `audio_source` row exists in the `audio_sources` table.
-- App-side: `country` is in the ISO-2 list or `'unknown'`.
-- App-side: variant rows reference an existing canonical row via `reciter_id`.
+- Pydantic enforces field types + enum membership at parse time.
+- `slug` matches the regex; `reciter_id` matches the regex.
+- `riwayah` is in `vocab.riwayat`; `style` is in `vocab.styles`.
+- `audio_source` references an existing entry in `vocab.audio_sources`.
+- `country` is in the ISO-2 list or `'unknown'`.
+- Variant entries reference an existing canonical entry via `reciter_id`.
+- `aliases[].new_slug` references an existing `reciters[].slug`.
 
-Failure rolls back the transaction; admin endpoint returns 400 with the violation message.
+Failure raises `InvalidCatalogChange`; the in-memory model is not mutated; admin endpoint returns 400 with the violation message.
 
 ### Constraints
 
 - `slug` and `reciter_id` immutable post-add (validator rejects updates to either).
-- Removing a row is via `visibility = 'archived'` (state machine §4); the row stays for forensics.
+- Removing a reciter is not exposed in v2 admin endpoints (the data is small; soft-delete via `visibility = 'archived'` is deferred).
 
 ### Initial seed (one-shot, manual at cutover)
 
 There are ~15 reciters at v2 cutover. Maintainer authors the seed locally:
 
-1. Run `scripts/seed_catalog.py` — reads existing `data/reciters_index.json` + per-reciter manifest `_meta` blocks, generates a `seed.sql` script that populates the catalog SQLite from current identity sources. (`audio_sources` rows authored once by hand for the ~6 known sources — `mp3quran`, `everyayah`, etc.)
-2. Run `scripts/seed_state.py` — reads the catalog seed + on-disk file presence, generates a `seed.sql` for state per these mapping rules:
+1. Hand-author `<bucket>/catalog/reciter_catalog.json` from existing `data/reciters_index.json` + per-reciter manifest `_meta` blocks. Audio source entries authored once for the ~6 known sources (`mp3quran`, `everyayah`, etc.).
+2. Hand-author `<bucket>/state/reciter_state.json` from on-disk file presence per these mapping rules:
 
 | Signal | → Initial state |
 |---|---|
@@ -277,87 +352,104 @@ There are ~15 reciters at v2 cutover. Maintainer authors the seed locally:
 | Open GitHub issue + no on-disk segments | `awaiting_alignment` |
 | Catalog entry only | `catalogued` |
 
-3. Apply seed: `sqlite3 reciter_state.sqlite < seed.sql`; same for catalog.
-4. `hf buckets cp` the two `.sqlite` files into the target bucket.
+3. `huggingface_hub.upload_file()` both into the target bucket.
+4. Audit log gets one `reciter.seeded` entry per row at cutover.
 
-Initial seed fields per row: `assignee_*` columns null (reviewers re-claim fresh); `state_since = now`; `marked_ready = 0`; `visibility = 'public'`. Audit log gets one `reciter.seeded` entry per row at cutover.
+Initial seed fields per row: `assignee_*` null (reviewers re-claim fresh); `state_since = now`; `marked_ready = false`; `visibility = 'public'`.
 
-After cutover, all subsequent transitions go through `state.py::transition()` — direct SQLite mutation outside Inspector is forbidden by convention (Inspector is sole writer).
+After cutover, all subsequent transitions go through `state.py::transition()` — direct mutation outside Inspector is forbidden by convention (Inspector is sole writer).
+
+### Audio metadata sidecars on the bucket
+
+- `<bucket>/catalog/audio_meta.json` — VBR + ffprobe cache (was `data/.audio_meta.json`).
+- `<bucket>/catalog/audio_durations.json` — duration cache (was `data/.audio_durations.json`).
+
+Both are written by maintainer scripts (running `huggingface_hub`-based CLI tools) and read-only at Inspector runtime.
 
 ## 4. State machine
 
 ### Lifecycle states
 
-Six lifecycle phases. **`ready_for_merge` is NOT a state** — it's a `marked_ready: bool` column on `under_review`. **`discarded` is NOT a state** — it's `visibility: 'discarded'` orthogonal to lifecycle.
+Six lifecycle phases. **`ready_for_merge` is NOT a state** — it's a `marked_ready: bool` field on `under_review` rows. **`discarded` is NOT a state** — it's `visibility: 'discarded'` orthogonal to lifecycle.
 
 | State | Definition | Editable | Required fields | Forbidden fields |
 |---|---|---|---|---|
 | `catalogued` | In catalog. No alignment work has started. | No | none beyond identity | `assignee_hf_id` null |
 | `awaiting_alignment` | Alignment pipeline pending or running. | No | none | `assignee_hf_id` null |
 | `awaiting_review` | Alignment done. Bucket entry exists. No reviewer claimed. | No (claimable) | none | `assignee_hf_id` null |
-| `under_review` | A reviewer has claimed. `marked_ready` may be 0 or 1. | Yes (assignee only, **and** `marked_ready == 0`) | `assignee_hf_id`, `assignee_login`, `assignee_since` | none |
-| `awaiting_timestamps` | Publish triggered. Snapshot done. TS data not yet on dataset. | No | none | `assignee_hf_id` null |
-| `completed` | Segments + TS both on dataset, in sync. | No | none | `assignee_hf_id` null |
+| `under_review` | A reviewer has claimed. `marked_ready` may be false or true. | Yes (assignee only, **and** `marked_ready == false`) | `assignee_hf_id`, `assignee_login`, `assignee_since` | none |
+| `awaiting_timestamps` | Publish triggered. Bucket move done. TS data not yet written. | No | none | `assignee_hf_id` null |
+| `completed` | Segments + TS both in `published/<slug>/`, in sync. | No | none | `assignee_hf_id` null |
 
-**`marked_ready` semantics (boolean column on `under_review`):**
-- `marked_ready == 0`: reviewer is editing. Saves accepted.
-- `marked_ready == 1`: reviewer has marked ready for publish. Saves return 410 (frozen). Maintainer can now publish.
-- Unmark = set `marked_ready = 0`. Mark again = set to 1. No state transitions; one column flip per action.
+**`marked_ready` semantics (boolean field on `under_review` rows):**
+- `marked_ready == false`: reviewer is editing. Saves accepted.
+- `marked_ready == true`: reviewer has marked ready for publish. Saves return 410 (frozen). Maintainer can now publish.
+- Unmark = set `marked_ready = false`. Mark again = set to true. No state transitions; one field flip per action.
 
-**`visibility` semantics (orthogonal column):**
+**`visibility` semantics (orthogonal field):**
 - `'public'` (default): visible to everyone with appropriate permissions.
-- `'discarded'`: hidden from anonymous + non-maintainer lists. Surfaced under the admin "Internal" filter. Reversal is just clearing the column back to `'public'`.
-- `'archived'`: post-publish soft-delete (rare; only used if a reciter is permanently retired). Same visibility as `'discarded'` but conceptually different (the reciter was once live).
+- `'discarded'`: hidden from anonymous + non-maintainer lists. Surfaced under the admin "Internal" filter. Reversal is just clearing the field back to `'public'`.
+- `'archived'`: deferred. Not implemented in v2.
 - A `visibility != 'public'` reciter still has a lifecycle state — `discarded` is not "no state."
 
-`assignee_*` columns are preserved through `marked_ready = 1` (the assignee may unmark to continue editing).
+`assignee_*` fields are preserved through `marked_ready = true` (the assignee may unmark to continue editing).
 
 ### Events — canonical vocabulary
 
 **Naming convention: `<noun>.<past-tense-verb>` for every event.** Five nouns: `reciter` (lifecycle), `claim` (assignee bookkeeping), `catalog` (catalog mutations), `pipeline` (admin-triggered pipeline runs), `admin` (admin operational events). This is the **single source of truth** — `inspector/services/state.py` and the audit log both consume from this list. The admin-perms doc ([`inspector-admin-perms.md`](inspector-admin-perms.md) §11) extends the same vocabulary; do not introduce alternate names elsewhere.
 
+**Shipping in v2:**
+
 ```
 # Lifecycle (reciter.*)
-reciter.alignment_requested       # from Reciter Requests Space (until D2)
 reciter.alignment_completed       # pipeline finished, bucket entry seeded
-reciter.published                 # maintainer published — snapshot bucket → dataset
-reciter.timestamps_completed      # TS data on dataset
-reciter.merge_rejected            # maintainer sent ready entry back to reviewer (sets marked_ready=0)
+reciter.published                 # maintainer published — synchronous in-process bucket move
+reciter.timestamps_completed      # TS data written into published/<slug>/
+reciter.merge_rejected            # maintainer flipped marked_ready=false on a ready entry; assignee retained
 reciter.seeded                    # one-shot cutover seed
-reciter.archived                  # post-publish soft-delete (rare; sets visibility='archived')
-reciter.unarchived                # reverse of above
 
 # Visibility (orthogonal — not lifecycle transitions)
 reciter.discarded                 # admin set visibility='discarded' (any lifecycle state)
 reciter.undiscarded               # admin cleared visibility back to 'public'
 
-# Claim cycle (claim.*)
+# Claim cycle (claim.* / reciter.* depending on noun)
 reciter.claimed                   # someone took the reciter
 reciter.released                  # claimant gave it back
-reciter.marked_ready              # reviewer set marked_ready=1 (no state transition)
-reciter.unmarked_ready            # reviewer set marked_ready=0
+reciter.marked_ready              # reviewer set marked_ready=true (no state transition)
+reciter.unmarked_ready            # reviewer set marked_ready=false
 claim.force_released              # admin override
 claim.reassigned                  # admin override
-claim.force_acquired              # admin first-save on a not-owned reciter (writes force_assignee_*)
-claim.force_released_auto         # 30-min lease expired (system timer)
 
-# Discrete admin overrides (replace v1 wildcard `state.manual_override`)
-admin.force_set_state             # direct state column write — narrow, audited
-admin.force_clear_assignee        # clear assignee_* columns explicitly
-admin.force_unmark_ready          # set marked_ready=0 (admin path, distinct from reviewer's)
-admin.force_revision_bump         # bump revision column without other change (debug recovery)
-# NOTE: there is no generic "any → any" admin escape hatch. Add a new named admin.* event
-# if a need arises that none of the above + lifecycle events cover.
+# Discrete admin overrides
+admin.force_set_state             # direct state field write — narrow allowed pairs only
 
 # Catalog (catalog.*)
-catalog.added                     # new row in catalog SQLite
-catalog.edited                    # mutated mutable fields on existing row
-catalog.audio_source_added        # new row in audio_sources table
-
-# Pipeline / Job (pipeline.* / admin.*)
-pipeline.triggered                # admin fired a re-extraction or re-timestamps via web
-admin.job_rerun                   # admin re-ran a failed publish HF Job
+catalog.added                     # new entry in catalog
+catalog.edited                    # mutated mutable fields on existing entry
+catalog.audio_source_added        # new entry in vocab.audio_sources
 ```
+
+**Deferred events (not implemented in v2 — no code, no events, no fields, no endpoints):**
+
+```
+reciter.alignment_requested        # pipeline-triggered awaiting_alignment is now a maintainer admin
+                                   # action (until Inspector-native intake lands)
+reciter.archived                   # visibility='archived' deferred
+reciter.unarchived
+reciter.alignment_failed
+reciter.timestamps_failed
+reciter.timestamps_stale
+reciter.audio_source_changed
+claim.force_acquired               # force-claim entirely deferred — no force_assignee_* fields,
+claim.force_released_auto          # no 30-min lease, no auto-clear timer
+admin.force_clear_assignee         # deferred
+admin.force_unmark_ready           # deferred
+admin.force_revision_bump          # deferred (no revision field exists)
+pipeline.triggered                 # deferred — no in-Inspector pipeline trigger
+admin.job_rerun                    # deferred — maintainer manual re-trigger via "check status" button
+```
+
+The admin-perms doc lists these explicitly under "Deferred admin actions" so endpoints + UI surface stay aligned.
 
 **Renames from v1 / earlier v2 drafts** (all places that used the old name should be updated):
 
@@ -373,103 +465,71 @@ admin.job_rerun                   # admin re-ran a failed publish HF Job
 | `review_merged` (v1) | `reciter.published` |
 | `reciter.catalog_synced` | `catalog.added` (new slug) / `catalog.edited` (existing) |
 
-Deferred (recognized but not implemented in v2 — see [`inspector-deferred.md`](inspector-deferred.md) D11):
-
-```
-reciter.alignment_failed
-reciter.timestamps_failed
-reciter.timestamps_stale
-reciter.audio_source_changed
-```
-
 ### Transition matrix (canonical — single source for `state.py`)
 
-Lifecycle states = `catalogued`, `awaiting_alignment`, `awaiting_review`, `under_review`, `awaiting_timestamps`, `completed` (six total). `marked_ready` and `visibility` are orthogonal columns.
+Lifecycle states = `catalogued`, `awaiting_alignment`, `awaiting_review`, `under_review`, `awaiting_timestamps`, `completed` (six total). `marked_ready` and `visibility` are orthogonal fields.
 
-| Event | From state(s) | To state | Other column changes | Actor role | Side effects |
+| Event | From state(s) | To state | Other field changes | Actor role | Side effects |
 |---|---|---|---|---|---|
-| `catalog.added` (creates state row implicitly) | (no row) | `catalogued` | — | system | New row inserted with defaults |
-| `catalog.edited` | any | (same) | — | maintainer+ | No state transition; catalog SQLite mutated; audit in `<bucket>/catalog/audit.jsonl` |
-| `reciter.alignment_requested` | `catalogued` | `awaiting_alignment` | — | system (forward webhook, until D2) | — |
+| `catalog.added` (creates state row implicitly) | (no row) | `catalogued` | — | system / maintainer+ | New row inserted with defaults |
+| `catalog.edited` | any | (same) | — | maintainer+ | No state transition; catalog file mutated; audit in `<bucket>/audit/<YYYY>-<MM>.jsonl` |
 | `reciter.alignment_completed` | `awaiting_alignment` | `awaiting_review` | — | system (pipeline webhook) | Bucket entry seeded by pipeline |
-| `reciter.claimed` | `awaiting_review` | `under_review` | set `assignee_hf_id`, `assignee_login`, `assignee_since`; `marked_ready = 0` | contributor+ | One-claim-per-user check |
-| `reciter.released` | `under_review` | `awaiting_review` | clear assignee_*; `marked_ready = 0` | claim-holder OR maintainer+ | — |
-| `reciter.marked_ready` | `under_review` | (same) | `marked_ready = 1` | claim-holder | — |
-| `reciter.unmarked_ready` | `under_review` | (same) | `marked_ready = 0` | claim-holder | — |
-| `reciter.merge_rejected` | `under_review` (with `marked_ready = 1`) | (same) | `marked_ready = 0` | maintainer+ | Reason required ≥10 chars |
-| `reciter.published` | `under_review` (with `marked_ready = 1`) | `awaiting_timestamps` | clear assignee_*; `marked_ready = 0` | maintainer+ | Triggers HF Jobs + GH Actions per [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md). Bucket entry archived/deleted post-snapshot |
-| `reciter.timestamps_completed` | `awaiting_timestamps` | `completed` | — | system (job callback) | TS HF Job confirmed |
-| `reciter.archived` | `completed` (only) | (same) | `visibility = 'archived'`, `visibility_reason = ...` | maintainer+ | — |
-| `reciter.unarchived` | (any with `visibility = 'archived'`) | (same) | `visibility = 'public'` | maintainer+ | — |
+| `reciter.claimed` | `awaiting_review` | `under_review` | set `assignee_hf_id`, `assignee_login`, `assignee_since`; `marked_ready = false` | contributor+ | One-claim-per-user check |
+| `reciter.released` | `under_review` | `awaiting_review` | clear assignee_*; `marked_ready = false` | claim-holder OR maintainer+ | — |
+| `reciter.marked_ready` | `under_review` | (same) | `marked_ready = true` | claim-holder | — |
+| `reciter.unmarked_ready` | `under_review` | (same) | `marked_ready = false` | claim-holder | — |
+| `reciter.merge_rejected` | `under_review` (with `marked_ready = true`) | (same) | `marked_ready = false` (assignee retained) | maintainer+ | Reason required ≥10 chars |
+| `reciter.published` | `under_review` (with `marked_ready = true`) | `awaiting_timestamps` | clear assignee_*; `marked_ready = false` | maintainer+ | Synchronous in-process: bucket move `wip/<slug>/` → `published/<slug>/`; fire `repository_dispatch reciter.completed`; enqueue ONE timestamps HF Job |
+| `reciter.timestamps_completed` | `awaiting_timestamps` | `completed` | — | system (job callback via `POST /api/internal/job-completed`) | TS HF Job confirmed |
 | `reciter.discarded` | (any) | (same) | `visibility = 'discarded'`, `visibility_reason = ...` | maintainer+ | Typed confirmation phrase + reason ≥10 chars |
 | `reciter.undiscarded` | (any with `visibility = 'discarded'`) | (same) | `visibility = 'public'` | maintainer+ | — |
-| `claim.force_released` | `under_review` | `awaiting_review` | clear assignee_*; `marked_ready = 0` | maintainer+ | Reason required |
-| `claim.reassigned` | `awaiting_review`, `under_review` | `under_review` | set new assignee_* (HF API resolved per admin §5.2); `marked_ready = 0` | maintainer+ | Reason required |
-| `claim.force_acquired` | `under_review` | (same) | set `force_assignee_hf_id`, `force_assignee_since` | maintainer+ | 30-min lease. Persisted (NOT ephemeral) so survives Space restart |
-| `claim.force_released_auto` | (any with `force_assignee_hf_id IS NOT NULL`) | (same) | clear `force_assignee_*` | system (timer or boot-time check) | Lease expired |
-| `admin.force_set_state` | any | (specified, narrow set) | — | maintainer+ | Allowed transitions: `awaiting_alignment ↔ awaiting_review`, `awaiting_timestamps ↔ completed`. Other targets return 400 — must use a discrete operation. |
-| `admin.force_clear_assignee` | (any with `assignee_hf_id IS NOT NULL`) | (same) | clear assignee_*; `marked_ready = 0` | maintainer+ | — |
-| `admin.force_unmark_ready` | `under_review` | (same) | `marked_ready = 0` | maintainer+ | Distinct from `reciter.unmarked_ready` (admin path; reviewer not required to be assignee) |
-| `admin.force_revision_bump` | any | (same) | `revision += 1` | maintainer+ | Debug-only; for OCC-related recovery |
+| `claim.force_released` | `under_review` | `awaiting_review` | clear assignee_*; `marked_ready = false` | maintainer+ | Reason required |
+| `claim.reassigned` | `awaiting_review`, `under_review` | `under_review` | set new assignee_* (HF API resolved per admin §5.2); `marked_ready = false` | maintainer+ | Reason required |
+| `admin.force_set_state` | (narrow allowed pairs) | (specified) | — | maintainer+ | Allowed transitions: `catalogued ↔ awaiting_alignment` (maintainer-triggered alignment until Inspector-native intake lands), `awaiting_alignment ↔ awaiting_review`, `awaiting_timestamps ↔ completed`. Other targets return 400. |
 | `reciter.seeded` | (no row) | (specified) | initial values per cutover spec | manual (one-shot) | One-time only |
-| `pipeline.triggered` | (any compatible) | (none — pipeline emits follow-up) | — | maintainer+ | Fires `repository_dispatch pipeline.triggered`; reason required |
-| `admin.job_rerun` | (any) | (same) | — | maintainer+ | Re-enqueues a specific failed HF Job |
 
 **Notes:**
 
-- Direct `under_review → reciter.published` requires `marked_ready = 1` — the validator enforces this per the §4 invariants table.
+- Direct `under_review → reciter.published` requires `marked_ready = true` — the validator enforces this per the §4 invariants table.
 - `visibility = 'discarded'` does NOT change the lifecycle state — the row keeps its `state`, just becomes hidden. `reciter.undiscarded` un-hides without the lifecycle losing position.
-- The discrete admin `admin.force_*` events replace the v1/early-v2 wildcard `state.manual_override`. **No `* → *` escape hatch exists.** If a recovery scenario isn't covered by the listed admin events, add a new named one (audit pattern: write the use case, name the event, add to this matrix, ship).
+- **No `* → *` escape hatch exists.** `admin.force_set_state` accepts only the narrow allowed pairs above. If a recovery scenario isn't covered, add a new named event (audit pattern: write the use case, name the event, add to this matrix, ship).
+- The "Deferred events" callout above lists every event that v2 explicitly does NOT implement. Re-introducing any of them is a separate decision.
 
 ### Why re-edits don't get their own state
 
-Re-edits of `completed` reciters are deferred — see [`inspector-deferred.md`](inspector-deferred.md) D5. When implemented, the path will be: maintainer calls a re-claim endpoint → Inspector triggers an HF Job that downloads `inspector/segments/<slug>/v<n>/...` shards from the dataset and writes them back into `<bucket>/wip/<slug>/...` → state transitions `completed → awaiting_review`. The re-edit then follows the normal `awaiting_review → under_review → published` path. **CDN URLs already include a publish-version segment** (`v<n>/`) so browser caches don't break across re-publishes, even with `Cache-Control: immutable`.
+Re-edits of `completed` reciters are deferred — see [`inspector-deferred.md`](inspector-deferred.md). When implemented, the path will be: maintainer calls a re-claim endpoint → Inspector copies `<bucket>/published/<slug>/...` back into `<bucket>/wip/<slug>/...` (in-process, server-side) → state transitions `completed → awaiting_review`. The re-edit then follows the normal `awaiting_review → under_review → published` path. Browser caches behave correctly because inspector segment shards use `Cache-Control: max-age=86400` (1 day, NOT immutable) — re-publishes propagate within a day without versioned URLs.
 
 ## 5. State machine implementation
 
 `inspector/services/state.py` is the single point of truth for state writes. Pseudocode:
 
 ```python
-@dataclass(frozen=True)
-class ReciterRow:
-    slug: str
-    state: ReciterState
-    state_since: datetime
-    assignee_hf_id: str | None
-    assignee_login: str | None
-    assignee_since: datetime | None
-    marked_ready: bool
-    force_assignee_hf_id: str | None
-    force_assignee_since: datetime | None
-    visibility: Visibility               # 'public' | 'discarded' | 'archived'
-    visibility_reason: str | None
-    revision: int
-    last_save_at: datetime | None
-
-class StateMachine:
-    def __init__(self, db: SqliteConnection, audit_log: AuditLog, mutex: PerSlugMutex):
-        self.db = db
+class StateStore:
+    def __init__(self, bucket: HfBucket, audit_log: AuditLog, locks: PerSlugLocks):
+        self.bucket = bucket
         self.audit_log = audit_log
-        self.mutex = mutex
-        # No in-memory state cache — SQLite + indexes serve point lookups in <100µs.
+        self.locks = locks                                  # one threading.Lock per slug
+        self._model: ReciterStateFile = self._load()        # parse on startup
+        self._index: dict[str, ReciterRow] = {r.slug: r for r in self._model.reciters}
 
     def transition(self, slug: str, event: Event, actor: User) -> ReciterRow:
-        with self.mutex.acquire(slug):
-            with self.db:                              # BEGIN EXCLUSIVE
-                row = self._read(slug)                 # SELECT ... FROM reciters WHERE slug=?
-                new_row = self._apply(row, event, actor)  # pure function; raises InvalidTransition
-                self._validate_invariants(new_row)
-                # Audit FIRST (durable via direct upload_file), then SQL commit.
-                self.audit_log.append(AuditRecord(
-                    ts=now_utc(), slug=slug, event=event.name,
-                    from_state=row.state if row else None, to_state=new_row.state,
-                    actor=actor.audit_view(), payload=event.payload,
-                    request_id=current_request_id(), result='ok',
-                    prev_hash=self.audit_log.tip_hash(),
-                ))
-                self._write(new_row)                   # UPDATE/INSERT; revision auto-bumps
-                # Direct upload_file on the .sqlite file too — bypasses mount flush window.
-                self.bucket.upload_state_file()
+        with self.locks.acquire(slug):                      # one lock per slug, no sub-mutex
+            row = self._index.get(slug)
+            new_row = self._apply(row, event, actor)        # pure function; raises InvalidTransition
+            self._validate_invariants(new_row)
+            self.audit_log.append(AuditRecord(
+                ts=now_utc(), slug=slug, event=event.name,
+                from_state=row.state if row else None, to_state=new_row.state,
+                actor=actor.audit_view(), payload=event.payload,
+                request_id=current_request_id(), reason=event.reason, result='ok',
+            ))
+            self._index[slug] = new_row
+            self._model = ReciterStateFile(
+                schema_version=self._model.schema_version,
+                writer_version=self._model.writer_version,
+                reciters=list(self._index.values()),
+            )
+            self.bucket.write_state(self._model)            # atomic-write-then-rename + upload_file
             return new_row
 
     def _apply(self, row, event, actor):
@@ -479,22 +539,23 @@ class StateMachine:
         #   - reciter.released / reciter.unmarked_ready / reciter.marked_ready:
         #       actor.hf_user_id must equal row.assignee_hf_id (NOT login).
         #   - reciter.merge_rejected / reciter.published: actor.role >= maintainer.
-        #   - admin.force_*: actor.role >= maintainer; reason required.
+        #   - admin.force_set_state: actor.role >= maintainer; reason required;
+        #       (from_state, to_state) must be in the narrow allowed-pairs whitelist.
         ...
 ```
 
 **Concurrency:**
 
-- **Per-slug mutex** serializes transitions within Inspector — pairs with SQLite's `BEGIN EXCLUSIVE` for transaction-level serialization. The mutex is the **application-level** boundary; the SQL transaction is the **storage-level** boundary.
-- **Cross-slug transitions** run concurrently (different mutexes; SQLite WAL allows concurrent transactions on different rows).
-- **`hf_user_id` everywhere** — the lookup is `WHERE assignee_hf_id = ?`, not `WHERE assignee_login = ?`. Login renames don't break locks.
+- **Per-slug `threading.Lock`** serializes transitions within Inspector. ONE lock per slug — no `(slug, login)` sub-mutex, no force-claim sub-mutex coordination (force-claim is deferred entirely).
+- **Cross-slug transitions** run concurrently (different locks).
+- **`hf_user_id` everywhere** — the lookup is `row.assignee_hf_id == user.hf_user_id`, not `row.assignee_login == user.login`. Login renames don't break locks.
 
 **Fault model:**
 
-- Audit append fails before SQL commit → caller gets 503; SQL untouched; no inconsistency.
-- SQL commit fails after audit append → audit log carries an `attempted` entry (`result: 'failed'` would be added in a follow-up audit entry on recovery). `replay_audit.py` detects orphaned attempted records and either retries or marks them failed.
-- Inspector crashes mid-transition → SQLite WAL guarantees the row is either old or new, never torn. Audit log may have a leading `attempted` entry without a follow-up; recovery on next boot.
-- Mount flush window: bypassed for state SQLite writes (direct `upload_file` on every transition) and audit appends (same). The mount is read-only-with-fallback for these two files.
+- Audit append fails before file write → caller gets 503; in-memory model untouched; no inconsistency.
+- File write / `upload_file` fails after audit append → in-memory model rolled back to prior; audit log retains the entry (with `result: 'ok'` — durability of the audit means the change *was* recorded; on recovery, replay tool reconciles).
+- Inspector crashes mid-transition → atomic-write-then-rename guarantees the file is either old or new, never torn. Per-write `upload_file` makes durability independent of mount flush.
+- Mount flush window: bypassed for state file writes (direct `upload_file` on every transition) and audit appends (same).
 
 ## 5.1 The single-writer assertion (`-w 1`)
 
@@ -504,7 +565,7 @@ class StateMachine:
 workers = int(os.environ.get("GUNICORN_WORKERS", "1"))
 if workers != 1:
     raise RuntimeError(
-        "Inspector v2 assumes single-process: state mutex, force-claim leases, "
+        "Inspector v2 assumes single-process: state lock, in-memory state_store, "
         "and parsed seg cache are per-process. -w 2+ requires a shared coordinator "
         "(see inspector-deferred.md D6)."
     )
@@ -520,19 +581,20 @@ The slug-rules-only convention. No PR/branch/commit conventions in v2.
 |---|---|---|
 | Reciter request issue title | `[request] <slug>: <Display Name>` | `[request] saad_al_ghamdi: Saad Al-Ghamdi` |
 | Issue body marker | `<!-- reciter-task: slug=<slug> schema=1 -->` | `<!-- reciter-task: slug=saad_al_ghamdi schema=1 -->` |
-| Bucket path for in-flight | `<bucket>/wip/<slug>/` | |
-| HF dataset path for completed | `inspector/segments/<slug>/` | |
+| Bucket path, in-flight | `<bucket>/wip/<slug>/` | `<bucket>/wip/saad_al_ghamdi/` |
+| Bucket path, published | `<bucket>/published/<slug>/` | `<bucket>/published/saad_al_ghamdi/` |
 | Inspector URL | `/r/<slug>` | `/r/saad_al_ghamdi` |
 
 Dropped vs v1: branch convention `reciter/<slug>`, PR title convention, commit subject conventions, squash-merge subject convention, HTML-comment markers in PR bodies.
 
-## 7. Reciter request issue body templates (transitional)
+## 7. Reciter request flow
 
-While the Reciter Requests Space is still in use (deprecation tracked in [`inspector-deferred.md`](inspector-deferred.md) D2), it creates GitHub issues with this body:
+The Reciter Requests Space is being decommissioned (separate cleanup work; see [`inspector-deferred.md`](inspector-deferred.md)). Inspector-native intake is explicitly deferred.
+
+In the meantime, new requests in v2 = a GitHub issue with a body marker:
 
 ```markdown
 <!-- reciter-task: slug=saad_al_ghamdi schema=1 -->
-**[Open in Inspector](https://hetchyy-quranic-inspector.hf.space/r/saad_al_ghamdi)**
 
 | | |
 |---|---|
@@ -543,16 +605,21 @@ While the Reciter Requests Space is still in use (deprecation tracked in [`inspe
 | Audio source | everyayah |
 ```
 
-The issue body is **not re-rendered on every state transition** — it's set once at request creation and stays static. Live state lives in the Inspector website. The issue is closed when state transitions to `completed` (HF Job calls GitHub API to close). All other transitions don't touch the issue.
+A maintainer reads the issue, manually adds the catalog entry via `POST /api/admin/catalog/add`, and the row's lifecycle starts at `catalogued`. Pipeline-triggered `awaiting_alignment` transitions are now a maintainer admin action (until the in-Inspector intake lands later).
 
-When D2 lands, the entire issue-tracking surface goes away — requests become Inspector-internal records.
+**Dropped vs earlier v2 drafts:**
+
+- `forward-to-inspector.yml` workflow.
+- `/api/internal/inspector-event` endpoint.
+- `INSPECTOR_FORWARD_SECRET` (and `_PREV`).
+- `reciter.alignment_requested` event from the canonical event vocabulary (§4).
 
 ## 8. Inspector integration
 
 ### State refresh strategy
 
-- **On startup:** open `<INSPECTOR_BUCKET_MOUNT>/state/reciter_state.sqlite` and `.../catalog/reciter_catalog.sqlite` via SQLite. No parse-into-memory step — read at request time via indexed queries.
-- **On every state write:** Inspector commits the SQLite transaction (`BEGIN EXCLUSIVE` → `UPDATE` → `COMMIT`); other readers see the new row on next query.
+- **On startup:** parse `<INSPECTOR_BUCKET_MOUNT>/state/reciter_state.json` and `.../catalog/reciter_catalog.json` via pydantic. Hydrate `state_store: dict[str, ReciterRow]` and the catalog model.
+- **On every state write:** Inspector replaces the in-memory model atomically; on-disk file written via atomic-write-then-rename + `huggingface_hub.upload_file()`.
 - **No webhook from anywhere else** — there is no other writer.
 
 ### API endpoints
@@ -563,39 +630,45 @@ Full contracts in [`inspector-deployment-plan.md`](inspector-deployment-plan.md)
 # Identity
 GET  /api/me                            → { hf_user_id, login, role, active_claim }
 GET  /api/auth/login                    → initiates HF OAuth flow
-GET  /api/auth/callback                 → handles HF redirect, sets session cookie
-POST /api/auth/logout                   → clears session
+GET  /api/auth/callback                 → handles HF redirect, sets signed-cookie session
+POST /api/auth/logout                   → clears session cookie
 
 # State reads
 GET  /api/reciters                      → [{ slug, display, state, marked_ready, visibility, riwayah, style }]
 GET  /api/reciter-task/<slug>           → full row + can_*_for_current_user predicates
-GET  /api/state/snapshot.json           → public read-only snapshot, rate-limited; cached 30 s
+GET  /api/state/snapshot.json           → read-only snapshot, rate-limited; cached 30 s
 
-# Claim flow (mutating — write directly to bucket SQLite, return 200 with authoritative row)
+# Claim flow (mutating — write directly to bucket state file, return 200 with authoritative row)
 POST /api/claim/<slug>                  → state.transition(slug, ReciterClaimedEvent(actor))
 POST /api/release/<slug>                → state.transition(slug, ReciterReleasedEvent(actor))
 POST /api/mark-ready/<slug>             → state.transition(slug, ReciterMarkedReadyEvent(actor))
 POST /api/unmark-ready/<slug>           → state.transition(slug, ReciterUnmarkedReadyEvent(actor))
 
-# Admin (maintainer+ only) — discrete operations, no wildcard
-POST /api/admin/publish/<slug>          → publish under_review (with marked_ready=1) → awaiting_timestamps
-POST /api/admin/send-back/<slug>        → reciter.merge_rejected (resets marked_ready)
-POST /api/admin/discard/<slug>          → set visibility=discarded
-POST /api/admin/undiscard/<slug>        → clear visibility back to public
-POST /api/admin/archive/<slug>          → set visibility=archived (for completed only)
-POST /api/admin/unarchive/<slug>        → clear archived
+# Admin (maintainer+ only) — the v2-shipped subset
+POST /api/admin/publish/<slug>          → reciter.published; under_review (with marked_ready=true) → awaiting_timestamps
+POST /api/admin/send-back/<slug>        → reciter.merge_rejected (flips marked_ready=false; assignee retained)
+POST /api/admin/discard/<slug>          → reciter.discarded; set visibility='discarded'
+POST /api/admin/undiscard/<slug>        → reciter.undiscarded; clear visibility back to 'public'
 POST /api/admin/claim/force-release/<slug>   → claim.force_released
 POST /api/admin/claim/reassign/<slug>        → claim.reassigned (resolves to_login → hf_user_id server-side)
-POST /api/admin/claim/clear/<slug>            → admin.force_clear_assignee
-POST /api/admin/state/force-set/<slug>        → admin.force_set_state (narrow allowed targets only)
-POST /api/admin/state/force-unmark-ready/<slug> → admin.force_unmark_ready
+POST /api/admin/state/force-set/<slug>       → admin.force_set_state (narrow allowed pairs only)
 POST /api/admin/catalog/add                  → catalog.added
 POST /api/admin/catalog/edit/<slug>          → catalog.edited
-POST /api/admin/pipeline/trigger/<slug>      → pipeline.triggered
-POST /api/admin/job/rerun/<slug>             → admin.job_rerun
+
+# Internal callbacks (not user-facing)
+POST /api/internal/job-completed             → reciter.timestamps_completed; Bearer-auth via INSPECTOR_JOB_CALLBACK_SECRET
 ```
 
-**Endpoint conventions:** slug always in the URL path (no slug-in-body). HMAC + Bearer choices documented per endpoint family in publish-pipeline doc.
+**Deferred admin endpoints (NOT in v2):**
+
+- `POST /api/admin/archive/<slug>` / `unarchive/<slug>` — `visibility='archived'` deferred
+- `POST /api/admin/claim/clear/<slug>` — `admin.force_clear_assignee` deferred
+- `POST /api/admin/state/force-unmark-ready/<slug>` — `admin.force_unmark_ready` deferred
+- `POST /api/admin/pipeline/trigger/<slug>` — `pipeline.triggered` deferred
+- `POST /api/admin/job/rerun/<slug>` — `admin.job_rerun` deferred (maintainer manually re-triggers from a "check status" button)
+- `POST /api/internal/inspector-event` — forward-from-Reciter-Requests endpoint deferred (D17)
+
+**Endpoint conventions:** slug always in the URL path (no slug-in-body). Internal endpoints use Bearer token (constant-time compare) via `INSPECTOR_JOB_CALLBACK_SECRET` — single secret, no `_PREV` rotation slot. (Earlier-v2-draft "HMAC" wording is gone.)
 
 ### Predicates
 
@@ -636,7 +709,7 @@ def can_publish(row, user):
             and row.marked_ready)
 ```
 
-`can_edit` gates `@require_edit_lock` on every mutating *save* endpoint. `under_review + marked_ready=1` is explicitly **not editable** — saves return 410.
+`can_edit` gates `@require_edit_lock` on every mutating *save* endpoint. `under_review + marked_ready=true` is explicitly **not editable** — saves return 410.
 
 ### No optimistic UI needed
 
@@ -712,41 +785,34 @@ The HF OAuth `hf_oauth_authorized_org` setting can additionally restrict who can
 
 | Output | Producer | Reads from |
 |---|---|---|
-| `data/reciters_index.json` | `.github/scripts/list_reciters.py` (GH Action) | catalog (identity) + bucket state (status) + dataset (ts/segments coverage). Calls `huggingface_hub` to read state |
-| `data/RECITERS.md` | same | same |
+| `data/RECITERS.md` | `.github/scripts/list_reciters.py` (GH Action) | bucket catalog (identity) + bucket state (status) + dataset (ts/segments coverage). Calls `huggingface_hub` to read both |
 | README badge counts | same | same |
-| HF dataset `manifest.json.gz` | `.github/scripts/build_reciter.py --build-manifest` (HF Job) | catalog + bucket state + dataset shard hashes |
-| GitHub release `manifest.json` | `.github/scripts/package_release.py` (GH Action) | bucket state (`completed` filter) + dataset shards |
-| Reciter Requests Space's reciter catalog | The Space itself | reads `data/reciters_index.json` from GitHub (unchanged interface; Space sees no breakage) |
+| HF dataset `manifest.json.gz` | `.github/scripts/build_reciter.py --build-manifest` (GH Action / HF Job) | bucket catalog + bucket state + dataset shard hashes |
+| GitHub release `manifest.json` | `.github/scripts/package_release.py` (GH Action) | bucket state (`completed` filter) + bucket published shards |
 
-### Keeping `reciters_index.json` alive (transitional)
-
-External consumers — chiefly the Reciter Requests Space — read `reciters_index.json`. Two paths:
-
-A. **Keep regenerating** as a derived snapshot from catalog + state. `update-reciters.yml` rebuilds it on every relevant change. External consumers see no change.
-
-B. **Drop entirely** and update external consumers to read catalog and state directly.
-
-**Decision:** start with (A) (low-risk migration), schedule (B) as later cleanup once the Reciter Requests Space and any other external readers are migrated to read state via `huggingface_hub`.
+**`data/reciters_index.json` is dropped.** Bucket catalog (`reciter_catalog.json`) is the source of truth for releases + downstream consumers from day one (no transitional period). External consumers re-fetch the catalog via `huggingface_hub`. The Reciter Requests Space is being decommissioned (separate cleanup work).
 
 ### Trigger sources for the regeneration
 
 `update-reciters.yml` triggers on:
 
-- `repository_dispatch` event `reciter.completed` and `reciter.catalog_changed` (both fired by Inspector via `INSPECTOR_GITHUB_DISPATCH_TOKEN`)
+- `repository_dispatch` events `reciter.completed` and `reciter.catalog_changed` (both fired by Inspector via `INSPECTOR_GITHUB_DISPATCH_TOKEN`)
 - `schedule` cron hourly (catches anything missed; reduced from 30 min — primary triggers are dispatch events)
 - `workflow_dispatch` for manual runs
 
-It reads BOTH SQLite files (state + catalog) from the buckets via `huggingface_hub` at the start of each run. Workflow has `concurrency: { group: update-reciters, cancel-in-progress: false }` to avoid races between dispatch + cron.
+It reads BOTH JSON files (state + catalog) from the bucket via `huggingface_hub` at the start of each run. Workflow has `concurrency: { group: update-reciters, cancel-in-progress: false }` to avoid races between dispatch + cron.
+
+### Bucket data hygiene
+
+A new scheduled `bucket-data-hygiene.yml` GH Action runs validators (`validate_segments`, `validate_audio`, `validate_edit_history`, `validate_timestamps` — now libraries, see [`inspector-deployment-plan.md`](inspector-deployment-plan.md) §10 Phase 5) across every reciter in the bucket weekly (or on-demand via `workflow_dispatch`). Findings surface to the admin dashboard; CRITICAL findings open a GH issue automatically. This replaces the deleted `validate-segments-pr.yml` PR-gate.
 
 ### Staleness scenarios
 
 | Scenario | Symptom | Mitigation |
 |---|---|---|
-| `update-reciters.yml` workflow file outdated | `reciters_index.json` stale | Rewrite in scope of Phase 0 |
+| `update-reciters.yml` not yet rewritten for bucket reads | `RECITERS.md` stale | Rewrite in scope of Phase 0 |
 | `--build-manifest` outdated | HF dataset manifest stale | Rewrite in scope of Phase 0 |
-| `package_release.py` left on file-presence check | Two truth sources for "is reciter completed" | Optional cleanup in Phase 6 |
-| Reciter Requests Space points at old `reciters_index.json` shape | Space's reciter dropdown stale on new fields | Keep regenerating until D2 (Space deprecation) lands |
+| `package_release.py` left on file-presence check | Two truth sources for "is reciter completed" | Cleanup in Phase 6 |
 
 ## 11. Phased rollout
 
@@ -755,68 +821,69 @@ It reads BOTH SQLite files (state + catalog) from the buckets via `huggingface_h
 **In scope:**
 - Land `scripts/lib/reciter_task.py` (slug resolver against catalog + state).
 - Land `scripts/lib/reciter_state.py` — bucket-aware state file parser, used by `list_reciters.py` and other GH Action scripts.
-- Land `inspector/services/state.py` (state machine + bucket persistence + audit log).
-- Land `inspector/services/hf_bucket.py` (mount path resolver + write helpers).
-- Create `data/reciter_catalog.json` (v2 schema).
-- Create the dev + prod HF buckets.
+- Land `inspector/schemas/` (pydantic models for state, catalog, audit, edit_history v2).
+- Land `inspector/services/state.py` (state machine + JSON persistence + audit log; per-slug `threading.Lock`; per-write `huggingface_hub.upload_file()`).
+- Land `inspector/services/catalog.py` (mirrors `state.py` write pattern; vocab + reciters + aliases in one file).
+- Land `inspector/services/hf_bucket.py` (mount path resolver + write helpers + atomic-write-then-rename).
+- Create the dev + prod single private HF buckets.
 - **Manually seed** `<bucket>/state/reciter_state.json` and `<bucket>/catalog/reciter_catalog.json` per §3 mapping rules. No script — too few rows.
-- Land `scripts/validate_reciter_state.py` + `scripts/validate_reciter_catalog.py` + CI gates.
-- **Rewrite `list_reciters.py`** to read identity from catalog and state from bucket via `huggingface_hub`.
-- **Rewrite `build_reciter.py --build-manifest`** to read identity from catalog.
-- **Extend `update-reciters.yml` triggers** to include catalog file paths and `reciter.completed` dispatch events.
+- Land `scripts/validate_reciter_state.py` + `scripts/validate_reciter_catalog.py` (libraries; CLI wrappers retained for ad-hoc maintainer use against the bucket via `huggingface_hub`).
+- **Rewrite `list_reciters.py`** to read identity from bucket catalog and state from bucket state via `huggingface_hub`.
+- **Rewrite `build_reciter.py --build-manifest`** to read identity from bucket catalog.
+- **Extend `update-reciters.yml` triggers** to include `reciter.completed` and `reciter.catalog_changed` dispatch events.
 
 **Acceptance:**
 - Bucket state file matches observable GitHub state for every existing reciter.
-- Catalog v2 parses, validates, every existing reciter has a row.
-- Regenerated `reciters_index.json` is byte-identical (or differ only in newly added fields with documented null values) compared to pre-migration.
-- A test event (manual call to `state.transition()`) successfully transitions a test reciter.
+- Catalog parses, validates, every existing reciter has an entry.
+- Regenerated `RECITERS.md` matches pre-migration (or differ only in newly added fields with documented null values).
+- A test event (manual call to `state.transition()`) successfully transitions a test reciter and appends an audit line.
 
 ### Phase 1 — Read-only deploy
 
-Inspector backend reads `reciter_state.json` from bucket on startup; reads `reciter_catalog.json` from GitHub raw. In-memory `state_store` populated. `/api/reciter-task/<slug>`, `/api/reciters` endpoints serve from the parsed store. Anonymous viewers see correct state pills.
+Inspector backend parses `reciter_state.json` and `reciter_catalog.json` from bucket on startup. In-memory `state_store` and catalog model populated. `/api/reciter-task/<slug>`, `/api/reciters` endpoints serve from the parsed store. Anonymous viewers see correct state pills.
 
 ### Phase 3 — HF OAuth + claim flow
 
-`/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` endpoints fire transitions through `state.py`. No dispatch events. Synchronous. 200 returned with authoritative state.
+`/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` endpoints fire transitions through `state.py`. Self-contained signed-cookie session (Flask `itsdangerous`) — no server-side session store. No dispatch events. Synchronous. 200 returned with authoritative state.
 
-### Phase 5 — Writes
+### Phase 5 — Writes + 4 admin events
 
-Reuses the `assignee` lookup for `@require_edit_lock`. Out of scope of this doc beyond the lock semantics.
+Save flow + the 4 v2 admin events: `claim.force_released`, `claim.reassigned`, `admin.force_set_state` (narrow allowed pairs only), `reciter.merge_rejected`. Reuses `assignee_hf_id` lookup for `@require_edit_lock`.
 
 ### Phase 6 — Publish pipeline
 
-`POST /api/admin/publish/<slug>` is the new completion gate. Fires HF Jobs + GH Actions per [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md). State transitions `ready_for_merge → awaiting_timestamps`.
+`POST /api/admin/publish/<slug>` is the new completion gate. Synchronous in-process: state transition + bucket move `wip/<slug>/` → `published/<slug>/` + `repository_dispatch reciter.completed` + ONE timestamps HF Job enqueue. The job-completion webhook (`POST /api/internal/job-completed`, Bearer-auth via single `INSPECTOR_JOB_CALLBACK_SECRET`) flips `awaiting_timestamps → completed`. See [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md).
 
 ## 12. Risks and open questions
 
-### State SQLite corruption from Inspector bug
+### State file corruption from Inspector bug
 
-A bug in `state.py::_apply` could write structurally-valid but semantically-wrong rows. Validators (§2 invariants + SQL CHECK constraints) catch most. **Mitigation:** audit log captures every transition with full payload + `prev_hash` chain; `scripts/replay_audit.py` rebuilds the SQLite file from scratch given the audit log. SQLite's `.dump` provides forensic export.
+A bug in `state.py::_apply` could write structurally-valid but semantically-wrong rows. Pydantic validation + invariant checks catch most. **Mitigation:** audit log captures every transition with full payload; offsite versioned snapshot of the bucket (cross-Region or scheduled `huggingface_hub` download) is the recovery copy. A replay tool can rebuild `reciter_state.json` from scratch given the audit log if needed.
 
 ### Audit log corruption / loss
 
-Audit lives in the **private** metadata bucket and is partitioned per-month. Tampering by an owner is mitigated by: (a) `prev_hash` chain detects breaks; (b) periodic backup snapshot to a versioned location (quarterly).
+Audit lives in the (single, private) bucket and is partitioned per-month. Tampering by an owner is mitigated by offsite versioned snapshots — there is **no `prev_hash` chain** in v2. Periodic backup snapshot to a cross-Region versioned location is the audit guarantee.
 
 ### Catalog ↔ state drift
 
-Catalog and state are both Inspector-written; in-process they're consistent. External readers re-download both files; they may see one updated and not the other within a ~5s upload window. Acceptable. **Mitigation:** consumers tolerate missing catalog rows for a state slug (and vice versa) gracefully.
+Catalog and state are both Inspector-written; in-process they're consistent. External readers re-download both files; they may see one updated and not the other within a ~5s upload window. Acceptable. **Mitigation:** consumers tolerate missing catalog entries for a state slug (and vice versa) gracefully.
 
 ### Bucket write fails mid-transition
 
-`upload_file` for state SQLite or audit append raises (network, HF outage, token revoked). The SQL transaction rolls back; caller gets 503. Audit log entry was written before SQL commit (durability-first), so the audit may show an `attempted` record without a corresponding state change — recoverable on next boot via the reconciler.
+`upload_file` for state JSON or audit append raises (network, HF outage, token revoked). The in-memory model is rolled back to prior; caller gets 503. Audit log entry was written first (durability-first), so the audit may show an entry without a corresponding state change — recoverable on next boot via reconciliation.
 
 ### Stalled lifecycle states
 
-Stalled `awaiting_alignment` (pipeline crash), `awaiting_timestamps` (TS Job fail), `under_review + marked_ready=1` (maintainer never publishes) — all surface in the admin dashboard's "stalled" filter. No automatic recovery in v2; first-class `_failed` events deferred ([`inspector-deferred.md`](inspector-deferred.md) D11).
+Stalled `awaiting_alignment` (pipeline crash), `awaiting_timestamps` (TS Job fail), `under_review + marked_ready=true` (maintainer never publishes) — all surface in the admin dashboard's "stalled" filter. No automatic recovery in v2; first-class `_failed` events deferred (see [`inspector-deferred.md`](inspector-deferred.md)). The maintainer can manually re-trigger the timestamps job from a "check status" button if needed.
 
-### Reciter Requests Space integration
+### HF Jobs reliability for the timestamps job
 
-The current Reciter Requests Space (planned for deprecation — [`inspector-deferred.md`](inspector-deferred.md) D2) fires `repository_dispatch reciter.alignment_requested` into GH Actions, which is forwarded to Inspector via `forward-to-inspector.yml` (HMAC-POSTs to `/api/internal/inspector-event`). When the Space is replaced by an in-Inspector request flow, the forward webhook + the `reciter.alignment_requested` event source become Inspector-internal.
+The publish path enqueues exactly one HF Job. If it fails, the row sits in `awaiting_timestamps`. Maintainer surfaces include: status indicator on the admin dashboard, a manual "re-trigger" button. No automated retry/backoff in v2.
 
 ### Slug rename
 
-Immutable in v2. Deferred — see [`inspector-deferred.md`](inspector-deferred.md) D9. The `reciter_aliases` table in the catalog schema (§3) is forward-compat groundwork.
+Immutable in v2. Deferred — see [`inspector-deferred.md`](inspector-deferred.md). The `aliases[]` array in the catalog schema (§3) is forward-compat groundwork.
 
 ### Multi-replica scaling
 
-Single-process today (`-w 1` asserted at boot). Multi-replica deferred — see [`inspector-deferred.md`](inspector-deferred.md) D6. The `revision` column on `reciters` is forward-compat groundwork for OCC.
+Single-process today (`-w 1` asserted at boot). Multi-replica deferred — see [`inspector-deferred.md`](inspector-deferred.md). When it lands, `revision` field gets added via pydantic schema migration; per-slug `threading.Lock` moves to a shared coordinator (Redis or bucket-CAS).

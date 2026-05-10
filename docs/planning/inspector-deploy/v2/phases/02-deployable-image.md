@@ -1,0 +1,103 @@
+# Phase 2 — Deployable image + read-only deploy
+
+> Inspector goes live on the dev Space. Anonymous users can browse all reciters (in-flight + completed) read-only. No auth, no writes, but the production-grade image, gunicorn, and bucket-mediated reads are all in place.
+
+**Status:** not started
+**Depends on:** Phase 1 (Foundation) complete
+**Blocks:** Phase 3, Phase 4
+
+## Goal
+
+First public surface. Image is slim and production-grade (gunicorn-gthread, `-w 1`, `create_app()` factory). Backend serves both `wip/<slug>/` and `published/<slug>/` reciter data from the bucket via a single read path. Frontend renders the segments + timestamps + audio tabs in view-only mode for everyone, with no edit affordances yet. dev Space is reachable and survives a smoke-test pass; prod Space cutover blocked on Phase 3.
+
+## Deliverables
+
+- [ ] `inspector/Dockerfile` — gunicorn-gthread CMD with `-w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30`
+- [ ] `inspector/Dockerfile` — ENV defaults flipped to deployed profile (`INSPECTOR_DATA_DIR=/app/data`, `INSPECTOR_QUA_DATA_PATH=/app/data`, `INSPECTOR_TS_SOURCE=bucket`, `INSPECTOR_AUDIO_PROXY_ENABLED=0`, `INSPECTOR_CACHE_DIR=/tmp/inspector-cache`, `INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket`, `INSPECTOR_PARSED_CACHE_BYTES=134217728`)
+- [ ] `inspector/Dockerfile` — slim COPY list: only `data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs,inspector_roles}.json`
+- [ ] `inspector/Dockerfile` — runtime deps added: `gunicorn`, `huggingface_hub`, `authlib`, `itsdangerous`
+- [ ] Root `.dockerignore` covering excluded paths from data-storage §7
+- [ ] `inspector/app.py::create_app()` factory + `GUNICORN_WORKERS == 1` startup assertion
+- [ ] `Cache-Control: public, max-age=86400` on inspector segment-shard responses (`/api/seg/data/...`)
+- [ ] `Cache-Control: public, max-age=31536000, immutable` on hash-keyed peaks routes
+- [ ] Backend serves `/api/seg/data/<slug>/...` from `<bucket>/{wip,published}/<slug>/` via the resolver from Phase 1
+- [ ] Backend serves `/api/static/catalog.json` from the in-memory parsed catalog (browser fetch on app load)
+- [ ] Frontend segments tab dual-mode: same client code; URL templating against the backend catalog response
+- [ ] Frontend `editingDisabled` derived store consumed by every edit-affordance component (buttons hidden globally)
+- [ ] `routes/timestamps.py::ts_validate` and `routes/audio_proxy.py` excluded from the deployed image
+- [ ] `.github/workflows/inspector-deploy.yml` — selective rsync to dev Space on push to `dev` branch (and prod Space on push to `main`, but prod cutover gated on Phase 3 sign-off)
+- [ ] `scripts/upload_inspector.sh` selective-push script
+- [ ] dev Space configured: `hf_oauth: true` frontmatter (auth wired in Phase 3 but env vars must inject), Storage Bucket attached at `/data/inspector-bucket`
+- [ ] dev Space secrets: `INSPECTOR_HF_TOKEN`, `INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev`, `INSPECTOR_SESSION_SECRET` (Phase 3 wires it), `INSPECTOR_GITHUB_DISPATCH_TOKEN` (stub; only used in Phase 5)
+
+## Out of scope
+
+- HF OAuth flow / signed-cookie session (Phase 3).
+- Any `/api/claim`, `/api/release`, `/api/save` endpoints (Phase 3, Phase 4).
+- `/admin` route (Phase 6).
+- prod Space cutover — only dev in Phase 2.
+- CDN front (deferred — D12).
+- HF dataset reads from frontend (gone for good per D4).
+
+## Acceptance criteria
+
+- [ ] Anonymous user lands on `https://hetchyy-quranic-inspector-dev.hf.space` and sees the segments tab with the reciter list rendered.
+- [ ] p99 cold page load for a completed reciter ≤ 800 ms.
+- [ ] p99 warm page load ≤ 50 ms.
+- [ ] Image size ≤ 400 MB.
+- [ ] gunicorn process visible in container — Werkzeug dev server is gone.
+- [ ] `GUNICORN_WORKERS == 1` startup assertion verified (boot fails if `-w 2+` is set).
+- [ ] Image discipline check passes: no `data/recitation_segments/`, `data/timestamps/`, `data/audio/`, `data/reciters_index.json`, `data/{riwayat,sources,styles}.json`, `audio_catalog.json.gz` inside `/app/data`.
+- [ ] Bucket mount visible at `/data/inspector-bucket` inside the container.
+- [ ] State + catalog parsed at startup; `/healthz` returns `bucket_mounted: true, state_loaded: true, reciters_count: <N>`.
+- [ ] 10 concurrent same-file requests don't degrade p95 below 1 s once warm.
+- [ ] Edit affordances are NOT visible anywhere in the UI (frontend `editingDisabled` true globally).
+- [ ] No `Cache-Control: immutable` on segment-shard responses (only on peaks).
+
+## Verification
+
+```bash
+SPACE=https://hetchyy-quranic-inspector-dev.hf.space
+
+# Health
+curl -fsS $SPACE/healthz | jq
+
+# Anonymous reciter list
+curl -fsS $SPACE/api/reciters | jq 'length'
+
+# Anonymous reciter task
+curl -fsS $SPACE/api/reciter-task/saad_al_ghamdi | jq '.state'  # expect "completed"
+
+# Backend → bucket round-trip for a completed reciter shard
+curl -fsSI $SPACE/api/seg/data/saad_al_ghamdi/1 | head -10
+# Expect Cache-Control: public, max-age=86400 (NOT immutable)
+
+# Peaks immutable header
+curl -fsSI "$SPACE/api/seg/segment-peaks?slug=saad_al_ghamdi&seg=...&hash=..." | head -10
+# Expect Cache-Control: public, max-age=31536000, immutable
+
+# Image discipline
+docker run --rm hetchyy/quranic-inspector-dev:latest sh -c '
+  find /app/data \( \
+    -path "*/recitation_segments/*" -o -path "*/timestamps/*" -o -path "*/audio/*" -o \
+    -name "audio_catalog.json.gz" -o -name "reciters_index.json" -o \
+    -name "riwayat.json" -o -name "sources.json" -o -name "styles.json" \
+  \) -print | head -1
+' | grep -q . && echo "FAIL" || echo "OK"
+
+# Concurrent burst
+for i in {1..10}; do curl -fsS "$SPACE/api/seg/data/saad_al_ghamdi/1" >/dev/null & done; wait
+```
+
+## Risks
+
+- **Bucket mount cold-fetch latency** — first read per reciter per Space replica pays NFS lazy-fetch (~100–300 ms estimated). Acceptable; CDN front (D12) is the lever if measurement shows otherwise.
+- **HF outage blast radius** — the bucket is now in the read path for everything. `/healthz` will report it; runbook §7 documents pause/disable rollback.
+- **Image rebuild time** — 1–5 min on free tier; users get 503s during. Document in runbook §1.
+
+## Reference
+
+- [`inspector-deployment-plan.md`](../inspector-deployment-plan.md) §3 — read path, free-tier prerequisites
+- [`inspector-data-storage.md`](../inspector-data-storage.md) §6, §7 — env config, image build
+- [`inspector-deploy-runbook.md`](../inspector-deploy-runbook.md) §1, §2, §4, §6 (Phase 1 smoke tests)
+- [`inspector-cleanup-registry.md`](../inspector-cleanup-registry.md) §3 (Dockerfile/COPY/CMD modifications)
