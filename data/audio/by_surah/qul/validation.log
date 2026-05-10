@@ -1,15 +1,19 @@
-Generated: 2026-03-25 16:01:55
+Generated: 2026-05-11 03:08:44
 
 ========================================================================
-  Audio Validation: data/audio/by_surah/qul/abdul_basit_abdul_samad_mujawwad.json
+  Audio Validation: data/audio/by_surah/qul/mishary_alafasi.json
   Format: sura_json (sura-level)
 ========================================================================
 
 --- Metadata ---
-  reciter            abdul_basit_abdul_samad_mujawwad
-  qiraah             hafs_an_asim
+  reciter            mishary_alafasi
+  name_en            Mishary Alafasi
+  name_ar            مشاري العفاسي
+  riwayah            hafs_an_asim
+  style              murattal
   audio_category     by_surah
   source             https://qul.tarteel.ai/resources/recitation
+  country            unknown
 
 --- Coverage ---
   Surahs found:       114 / 114  (100.0%)
@@ -22,5 +26,6 @@ Generated: 2026-03-25 16:01:55
   Total sources:  114
   Source type:    url
   Errors:         0
-  Warnings:       0
+  Warnings:       1
+    - _meta.country is "unknown"
 
