@@ -857,6 +857,7 @@ def _tee_to_file(path: Path):
 
 
 def main():
+    global MIN_AUDIO_BYTES
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -895,12 +896,20 @@ def main():
         help=f"Timeout per URL check in seconds (default: {DEFAULT_URL_TIMEOUT}).",
     )
     parser.add_argument(
+        "--min-audio-bytes",
+        type=int,
+        default=MIN_AUDIO_BYTES,
+        help=f"Reject 200 responses with Content-Length below this floor "
+             f"(default: {MIN_AUDIO_BYTES}). Lower for low-bitrate sources.",
+    )
+    parser.add_argument(
         "--top", "-n",
         type=int,
         default=30,
         help="Max items to show per category (default: 30).",
     )
     args = parser.parse_args()
+    MIN_AUDIO_BYTES = args.min_audio_bytes
 
     target = args.path.resolve()
     if not target.exists():
