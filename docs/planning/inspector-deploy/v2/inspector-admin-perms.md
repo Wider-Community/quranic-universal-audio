@@ -6,7 +6,7 @@ The parent doc's three roles (anonymous, contributor, claim-holder) are the happ
 
 ## 1. Model in one paragraph
 
-Authorization is layered on top of authentication. Authentication answers "who is this user" (HF OAuth → login + hf_user_id). Authorization answers "what can they do" — derived from a single source: `data/inspector_owners.json` on GitHub (and optionally `data/inspector_maintainers.json` if owners want a separate tier). Anonymous users see public completed reciters. Logged-in contributors can claim one reciter at a time. Maintainers can override claim assignments, force-release stuck sessions, edit catalog entries via PR, manually set state, publish, and access the admin dashboard. Owners (small subset) can additionally rotate the Space's HF token, edit the maintainers list itself, and approve irrecoverable destructive actions. Every elevated action is named, audited to `<bucket>/state/audit.jsonl`, and confined to the smallest blast radius that solves a real recurring problem.
+Authorization is layered on top of authentication. Authentication answers "who is this user" (HF OAuth → `hf_user_id` canonical, `login` display-only). Authorization answers "what can they do" — derived from a single source: `data/inspector_roles.json` on GitHub (consolidated owners + maintainers — see §3). Anonymous users see public completed reciters. Logged-in contributors can claim one reciter at a time. Maintainers get a named, audited set of override actions — each one a discrete admin endpoint, **no `state.manual_override` wildcard**. Owners (small subset) can additionally rotate the Space's HF token, edit the roles file itself, and approve irrecoverable destructive actions. Every elevated action is named, audited to `<bucket>/state/audit/<YYYY>-<MM>.jsonl`, and confined to the smallest blast radius that solves a real recurring problem.
 
 ## 2. Roles
 
@@ -28,69 +28,66 @@ A contributor becomes a **claim-holder** while a claim is active. The claim-hold
 
 ### `maintainer`
 
-Authenticated HF user whose login is in `data/inspector_maintainers.json` (or `data/inspector_owners.json`, since owners are a superset). Adds: force-release, reassign, manual state override, catalog edit (via PR), publish, send-back from ready, scratch flush, internal data views.
+Authenticated HF user with `role: maintainer` in `data/inspector_roles.json`. Adds: force-release, reassign, discrete admin overrides (force-set-state on narrow targets, force-clear-assignee, force-unmark-ready), catalog edit (direct to bucket, no PR), publish, send-back from ready, discard/undiscard, archive/unarchive, internal data views.
 
-Cannot: rotate the Space's HF token, edit the owner/maintainer lists, approve owner-only destructive actions.
+Cannot: rotate the Space's HF token, edit the roles file, approve owner-only destructive actions.
 
 ### `owner`
 
-Maintainer whose login appears in `data/inspector_owners.json`. Superset of maintainer. Adds: edit `inspector_owners.json` and `inspector_maintainers.json` (CODEOWNERS-gated), rotate the Space's HF token, accept the irrecoverable destructive actions (e.g. mass discard).
+Authenticated HF user with `role: owner` in `data/inspector_roles.json`. Superset of maintainer. Adds: edit `data/inspector_roles.json` (CODEOWNERS-gated PR), rotate the Space's HF token, accept irrecoverable destructive actions (e.g. mass discard).
 
 Owners count: recommend 2–3 minimum for bus-factor, ≤5 maximum to keep responsibility concentrated.
 
-## 3. Maintainer identity — file-only
+## 3. Role identity — single consolidated file
 
-**Sole source of role truth: `data/inspector_owners.json` (and optional `data/inspector_maintainers.json`) on GitHub.**
+**Sole source of role truth: `data/inspector_roles.json` on GitHub** (was two separate files in earlier drafts).
 
 Schema:
 
 ```jsonc
-// data/inspector_owners.json
 {
   "schema_version": 1,
-  "owners": [
-    { "login": "ahmed", "added_at": "...", "added_by": "..." },
-    { "login": "alice", "added_at": "...", "added_by": "..." }
+  "members": [
+    {
+      "hf_user_id": "12345",                // canonical (immutable)
+      "login": "ahmed",                     // display cache (refreshed periodically)
+      "role": "owner",                      // 'owner' | 'maintainer'
+      "added_at": "2026-04-01T...",
+      "added_by_hf_id": "67890",
+      "removed_at": null,                   // soft-delete; preserves audit
+      "removed_by_hf_id": null
+    }
   ]
 }
 ```
 
-```jsonc
-// data/inspector_maintainers.json (optional; if absent, all maintainer power belongs to owners)
-{
-  "schema_version": 1,
-  "maintainers": [
-    { "login": "bob",   "added_at": "...", "added_by": "..." },
-    { "login": "carol", "added_at": "...", "added_by": "..." }
-  ]
-}
-```
+PR-reviewed (CODEOWNERS gates to existing owners). Adding/removing/promoting is a deliberate audited action.
 
-Both files are PR-reviewed (CODEOWNERS gates them to existing owners). Adding/removing maintainers/owners is a deliberate audited action.
+### Why one file, why `hf_user_id` canonical, why soft-delete
+
+- **One file** instead of two (`inspector_owners.json` + `inspector_maintainers.json`): collapses the failure mode where one file exists and the other doesn't, makes "promote to owner" a single-row edit instead of cross-file move.
+- **`hf_user_id` canonical:** if a maintainer renames themselves on HF, login-keyed lookup silently revokes their role. The lookup is `member.hf_user_id == user.hf_user_id`, never `login`.
+- **Soft-delete via `removed_at`:** historical role membership stays queryable. "Who was an owner when X bad action happened?" is a JSON scan, not a `git blame`.
 
 ### Backend resolution
 
 ```python
 def resolve_role(user: AuthenticatedUser) -> Role:
-    if user.login in OWNERS_SET:           # cached from inspector_owners.json
-        return Role.OWNER
-    if user.login in MAINTAINERS_SET:      # cached from inspector_maintainers.json (if file exists)
-        return Role.MAINTAINER
-    return Role.CONTRIBUTOR
+    member = next(
+        (m for m in MEMBERS_CACHE
+         if m.hf_user_id == user.hf_user_id and m.removed_at is None),
+        None,
+    )
+    return member.role if member else Role.CONTRIBUTOR
 ```
 
-Cache: 60 s. Sources are GitHub raw URLs (no auth needed for public repo). Refreshed via `huggingface_hub`-equivalent simple HTTP fetch.
+Cache: 60 s. Source: GitHub raw URL (no auth, public repo). Refreshed via simple HTTP fetch. Owner-only `POST /api/admin/refresh-roles` forces immediate refresh for emergency revocation.
 
-If both files are unreachable on Inspector startup, fall back to a stale snapshot baked into the Space image (`data/inspector_owners.json` is in the COPY list of the Dockerfile). If the file in the image disagrees with the live one (e.g. live has new entries), live wins on next refresh.
+If the live file is unreachable on Inspector startup, fall back to a stale snapshot baked into the Space image (`data/inspector_roles.json` is in the COPY list of the Dockerfile). Live wins on next refresh.
 
-### Why not GitHub team
+### Why GitHub for the roles file (not the bucket)
 
-v1 considered a `<org>/inspector-maintainers` GitHub team queried via the App's team-membership API at request time. v2 drops this:
-
-- We dropped the GitHub App entirely (HF OAuth replaces it).
-- A small `huggingface_hub`-style HTTP fetch of one file is simpler than authed GitHub team API calls + caching.
-- The PR-reviewed file is more transparent than team membership changes (visible in `git log`).
-- Recovery: if the file is misconfigured, an owner edits it via PR; no need for a backup mechanism.
+Roles govern *who can edit*, not *what's edited*. CODEOWNERS-gated PR review is the right gate for security-critical role changes (existing owners must approve). The bucket is the right place for *content* (catalog, state); GitHub is the right place for *permissions*.
 
 ## 4. Permission matrix
 
@@ -111,16 +108,19 @@ v1 considered a `<org>/inspector-maintainers` GitHub team queried via the App's 
 | **Force-release someone else's claim** | — | — | ✓ | ✓ |
 | **Reassign claim to specific user** | — | — | ✓ | ✓ |
 | **Edit segments without holding claim** (force-claim) | — | — | ✓ ² | ✓ ² |
-| **Manually set state (override state machine)** | — | — | ✓ | ✓ |
-| **Catalog entry edit** (opens PR to GitHub) | — | — | ✓ | ✓ |
-| **Discard / mark rejected** | — | — | ✓ | ✓ |
+| **Discrete state overrides** (`admin.force_set_state` on narrow targets, `force_clear_assignee`, `force_unmark_ready`) | — | — | ✓ | ✓ |
+| **Catalog entry edit** (direct to bucket, no PR) | — | — | ✓ | ✓ |
+| **Discard / undiscard** (visibility flag, not a state) | — | — | ✓ | ✓ |
+| **Archive / unarchive** (visibility flag, completed reciters only) | — | — | ✓ | ✓ |
 | **Trigger pipeline rerun** ³ | — | — | ✓ | ✓ |
 | Re-run a failed publish HF Job | — | — | ✓ | ✓ |
 | View admin dashboard | — | — | ✓ | ✓ |
 | View audit log | — | — | ✓ | ✓ |
-| Edit `inspector_owners.json` / `inspector_maintainers.json` | — | — | — | ✓ |
+| Edit `data/inspector_roles.json` | — | — | — | ✓ |
 | Rotate the Space's `INSPECTOR_HF_TOKEN` | — | — | — | ✓ |
 | Mass discard / bulk destructive | — | — | — | ✓ ⁴ |
+
+**No `state.manual_override` wildcard.** Earlier drafts had a single "any → any" admin endpoint as an escape hatch. v2 replaces it with discrete named operations (see §5.4–§5.10 + state-mgmt §4 events list). If a recovery scenario isn't covered by the listed admin events, the response is to add a new named one — not extend a wildcard. Discipline: write the use case, name the event, add to the matrix, ship.
 
 ¹ Default per parent doc Open Questions; can flip to maintainer-only later.
 ² Maintainer edit-without-claim auto-acquires a temporary force-claim with a 30-min lease. Released on session end or after 30 min of inactivity. Original assignee retains their claim; maintainer's writes coexist (see §5.3).
@@ -182,37 +182,93 @@ The original assignee retains their claim. Both writers' saves go to the bucket;
 
 This is a v2 simplification vs v1: there's no separate "PR branch" to commit on; both writers write to the same bucket entry; the mutex is the coordination point.
 
-### 5.4 Manual state override
+### 5.4 Discrete state overrides (replaces v1 `state.manual_override` wildcard)
 
-**Use case:** state machine rejected a transition that should have happened, or a manual operational fix is needed.
+**Use case:** state machine rejected a transition that should have happened, or a manual operational fix is needed. Each scenario has a discrete named endpoint — no wildcard.
 
-| Field | Value |
-|---|---|
-| HTTP | `POST /api/admin/state/set` |
-| Body | `{ "slug": "...", "to_state": "...", "reason": "..." }` |
-| Preconditions | caller is maintainer+; `to_state` is in the closed enum |
-| State transition | from-state → to-state (no automatic side effects) |
-| Event in audit | `state.manual_override { slug, by_login, from_state, to_state, reason }` |
-| Reversibility | Manual — set back |
-| UI | Dropdown in admin dashboard for the reciter, listing all states. Confirmation modal repeats the slug name and target state |
-
-Manual overrides do **not** automatically clean up assignee fields if the target state implies they should be null. The maintainer is responsible for setting them via separate admin endpoints (`/api/admin/claim/clear`, etc.). Intentional friction.
-
-### 5.5 Discard
-
-**Use case:** reciter request was made in error, audio source is broken, etc.
+#### 5.4a Force-set state (narrow allowed targets)
 
 | Field | Value |
 |---|---|
-| HTTP | `POST /api/admin/discard` |
-| Body | `{ "slug": "...", "reason": "...", "confirmation_phrase": "discard <slug>" }` |
+| HTTP | `POST /api/admin/state/force-set/<slug>` |
+| Body | `{ "to_state": "...", "reason": "..." }` |
+| Preconditions | caller is maintainer+; `(from, to)` is in the allowed-pairs list (see below) |
+| State transition | from → to (no automatic side effects) |
+| Event in audit | `admin.force_set_state { slug, by_hf_id, from_state, to_state, reason }` |
+| Reversibility | Manual — set back via the reverse-pair if allowed |
+| UI | Dropdown in admin dashboard restricted to the allowed targets for the row's current state |
+
+**Allowed `(from, to)` pairs** (intentionally narrow — extend by adding to this list, not by widening the endpoint):
+- `awaiting_alignment ↔ awaiting_review` (alignment recovery without re-running pipeline)
+- `awaiting_timestamps ↔ completed` (TS-job recovery)
+- `under_review → awaiting_review` (alternative path to `claim.force_released` that doesn't bump force-release-count)
+
+Any other pair returns 400 with the message "use a discrete operation: see admin §5.X." If a real use case appears for a missing pair, add it to the list and to the state-mgmt matrix; do NOT widen this endpoint to "any → any."
+
+#### 5.4b Force-clear assignee
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/claim/clear/<slug>` |
+| Body | `{ "reason": "..." }` |
+| Preconditions | caller is maintainer+; row has `assignee_hf_id IS NOT NULL` |
+| Effect | Clear `assignee_*`, `marked_ready = 0`. State unchanged. |
+| Event in audit | `admin.force_clear_assignee { slug, by_hf_id, original_assignee_hf_id, reason }` |
+| UI | Button in admin dashboard's "Active sessions" panel |
+
+This is distinct from `claim.force_released` (which transitions `under_review → awaiting_review`). `force_clear_assignee` only clears the columns; useful for state-machine cleanup after an `admin.force_set_state` that left orphaned assignee data.
+
+#### 5.4c Force-unmark-ready (admin path)
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/state/force-unmark-ready/<slug>` |
+| Body | `{ "reason": "..." }` |
+| Preconditions | caller is maintainer+; row has `marked_ready = 1` |
+| Effect | `marked_ready = 0`. State + assignee unchanged. |
+| Event in audit | `admin.force_unmark_ready { slug, by_hf_id, original_assignee_hf_id, reason }` |
+
+Distinct from `reciter.unmarked_ready` (reviewer-driven; requires actor to be the assignee). The admin path doesn't require assignee match — useful when the assignee is unreachable.
+
+#### 5.4d Force revision bump (debug only)
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/state/force-revision-bump/<slug>` |
+| Body | `{ "reason": "..." }` |
+| Effect | `revision += 1`. No other change. |
+| Event in audit | `admin.force_revision_bump { slug, by_hf_id, reason }` |
+
+For OCC-related recovery scenarios. Not normally used.
+
+### 5.5 Discard / Undiscard (visibility flag)
+
+**Use case:** reciter request was made in error, audio source is broken, etc. **`discarded` is NOT a state** — it's `visibility = 'discarded'` orthogonal to lifecycle (see [`inspector-state-management.md`](inspector-state-management.md) §4). Reversal preserves the original lifecycle position.
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/discard/<slug>` |
+| Body | `{ "reason": "...", "confirmation_phrase": "discard <slug>" }` |
 | Preconditions | caller is maintainer+; `confirmation_phrase` matches `discard <slug>` exactly |
-| State transition | (any) → `discarded` (new state — see §11) |
-| Event in audit | `reciter.discarded { slug, by_login, reason }` |
-| Reversibility | Manual state override back; bucket entry preserved unless owner deletes |
+| Effect | `visibility = 'discarded'`, `visibility_reason = <reason>`. **Lifecycle state unchanged.** |
+| Event in audit | `reciter.discarded { slug, by_hf_id, reason }` |
+| Reversibility | `POST /api/admin/undiscard/<slug>` clears the visibility flag back to `'public'`; lifecycle position preserved |
 | UI | "Discard" button only visible after typing `discard <slug>` in a confirmation field |
 
-Discarded reciters are hidden from anonymous viewers and from the regular reciter list. Maintainers see them in an "Internal" filter on the admin dashboard. Bucket entry stays; recovery is `state.manual_override` back.
+Discarded reciters are hidden from anonymous viewers and from the regular reciter list. Maintainers see them under "Internal" filter on the admin dashboard. The reciter retains its lifecycle position — un-discarding is just clearing the flag.
+
+### 5.5b Archive / Unarchive (visibility flag — completed only)
+
+**Use case:** rare — a `completed` reciter is permanently retired (e.g., audio source disappeared post-publish).
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/archive/<slug>` / `POST /api/admin/unarchive/<slug>` |
+| Body | `{ "reason": "..." }` (typed confirmation also required for archive) |
+| Preconditions | caller is maintainer+; lifecycle state is `completed` |
+| Effect | `visibility = 'archived'` / `'public'`. Lifecycle unchanged. |
+| Event in audit | `reciter.archived` / `reciter.unarchived` |
+| UI | Distinct from discard — archive is for retired-but-once-live reciters; discard is for never-shipped or rejected requests. |
 
 ### 5.6 Catalog edit (revised — direct to bucket per H3+H4)
 
@@ -371,48 +427,61 @@ Each bulk action lists affected slugs in a preview before firing. Soft-lock: cli
 
 ### File
 
-`<bucket>/state/audit.jsonl` — append-only JSONL. Written by Inspector backend on every state-mutating event. **Bucket is mutable but Inspector only ever appends** to this file — there's no Inspector code path that rewrites it.
+`<bucket>/state/audit/<YYYY>-<MM>.jsonl` (private metadata bucket). Append-only JSONL, partitioned per-month from day one. Written by Inspector backend on every state-mutating event via direct `huggingface_hub.upload_file()` (bypasses mount flush window — durability is the priority for state events).
 
-### Schema
+A separate `<bucket>/catalog/audit/<YYYY>-<MM>.jsonl` (public data bucket) carries `catalog.*` events.
+
+### Record schema
+
+`schema_version` lives once per partition file in `<bucket>/state/audit/_meta.json`, NOT per record. Per-record version-stamping inflates every line for no read-time benefit.
 
 ```jsonc
+// audit/2026-05.jsonl (one line per event)
 {
-  "schema_version": 1,
   "ts": "2026-05-09T14:23:11Z",
-  "actor": { "login": "alice", "hf_user_id": "12345", "role": "maintainer" },
   "event": "claim.force_released",
   "slug": "saad_al_ghamdi",
   "from_state": "under_review",
   "to_state": "awaiting_review",
-  "reason": "Reviewer unresponsive for 8 days, freeing for next contributor.",
-  "payload": {
-    "original_assignee": "bob"
+  "actor": {
+    "hf_user_id": "12345",                 // canonical (immutable)
+    "login_at_time": "alice",              // display snapshot
+    "role": "maintainer"                   // role snapshot — survives later role changes
   },
-  "result": "ok",
+  "reason": "Reviewer unresponsive for 8 days, freeing for next contributor.",
+  "payload": { "original_assignee_hf_id": "67890" },
   "request_id": "req_abc123",
-  "replica": "inspector-prod"
+  "prev_hash": "sha256:abc123...",         // sha256 of canonical(prev record); chain integrity
+  "result": "ok"
 }
 ```
 
-Fields:
+Per-event `payload` shape lives alongside its event constant in `inspector/services/state.py` as a `TypedDict` — colocation, no separate schema-doc-by-grep.
+
+### Field semantics
 
 | Field | Required | Notes |
 |---|---|---|
-| `schema_version` | yes | Bump on schema change |
-| `ts` | yes | ISO 8601 |
-| `actor` | yes | Authenticated user; populated from session |
-| `event` | yes | Event name from §5 / §11 |
-| `slug` | yes (or `null` for non-reciter actions like bulk) | |
-| `from_state`, `to_state` | yes for state transitions | Otherwise null |
+| `ts` | yes | ISO 8601 UTC |
+| `event` | yes | Event name from §5 / §11; canonical `<noun>.<verb>` form |
+| `slug` | yes when applicable | Null for non-reciter actions (e.g. bulk preview) |
+| `from_state`, `to_state` | yes for state transitions | Both null for orthogonal-flag events (visibility, marked_ready) and admin events with no state change |
+| `actor.hf_user_id` | yes | Canonical immutable identifier |
+| `actor.login_at_time` | yes | Snapshot — survives login renames |
+| `actor.role` | yes | Snapshot — survives role changes |
 | `reason` | yes for admin actions | Free-form, ≥10 chars |
-| `payload` | yes | Event-specific |
+| `payload` | yes | Event-specific TypedDict from `services/state.py` |
+| `request_id` | yes | For traceability across Inspector + HF Job + dispatch logs |
+| `prev_hash` | yes | sha256 of canonical(prev record) — chain integrity. `replay_audit.py` validates. |
 | `result` | yes | `ok` or `failed` |
-| `request_id` | yes | For traceability across logs |
-| `replica` | yes | Inspector instance id (multi-replica future) |
+
+### Integrity
+
+`prev_hash` chains records. `scripts/lib/admin_audit.py::verify_chain()` walks the file end-to-end and reports any break. Chain breaks indicate either tampering or a bug; both are surfaced in the admin dashboard.
 
 ### Retention
 
-Forever, in bucket. ~3.6 MB/year sustained at typical scale. If pathological growth ever appears, archive to dated subdirs quarterly (`<bucket>/state/audit/<YYYY>/<MM>.jsonl`).
+Forever, partitioned monthly. ~3.6 MB/year sustained → ~300 KB/partition. No manual cleanup needed. Periodic backup (quarterly snapshot of the private bucket to a versioned location) provides tamper-recovery.
 
 ### Query
 
@@ -462,38 +531,42 @@ Web admin and CLI tools complement; they don't replace.
 | Re-extraction with custom params | — | ✓ | Too many parameters for a sane web form |
 | Param-rerun | — | ✓ | Same |
 | Mass schema migration | — | ✓ | Repo-wide changes belong in version-controlled scripts |
-| Edit `inspector_owners.json` | — | PR | Single canonical workflow |
+| Edit `data/inspector_roles.json` | — | PR | Single canonical workflow (consolidated owners + maintainers) |
 | Rotate Space `INSPECTOR_HF_TOKEN` | ✓ (owner-instructions) | ✓ | Web shows the runbook step; the actual rotation is in HF Space settings UI |
 
 The CLI surfaces stay documented in the `process-requests` skill and `inspector/CLAUDE.md`.
 
-## 11. New events for the state-management vocabulary
+## 11. Events introduced or extended by admin actions
 
-Extends [`inspector-state-management.md`](inspector-state-management.md) §4 events list:
+All event names use canonical `<noun>.<verb>` namespacing. Full vocabulary lives in [`inspector-state-management.md`](inspector-state-management.md) §4. This table is the admin-facing slice.
 
-| Event | Fired by | Required fields | Allowed transitions |
+| Event | Fired by | Required fields (in `payload` unless noted) | Effect |
 |---|---|---|---|
-| `reciter.marked_ready` | contributor endpoint | `slug, login` | `under_review → ready_for_merge` (assignee retained) |
-| `reciter.unmarked_ready` | contributor endpoint | `slug, login` | `ready_for_merge → under_review` (assignee retained) |
-| `reciter.merge_rejected` | maintainer endpoint | `slug, by_login, original_assignee, reason` | `ready_for_merge → under_review` (assignee retained) |
-| `reciter.published` | maintainer endpoint | `slug, by_login` | `ready_for_merge → awaiting_timestamps`, fires HF Jobs + GH Actions fan-out |
-| `claim.force_released` | admin endpoint | `slug, by_login, original_assignee, reason` | `under_review → awaiting_review`, `ready_for_merge → awaiting_review` |
-| `claim.reassigned` | admin endpoint | `slug, by_login, from_login, to_login, reason` | various → `under_review` |
-| `claim.force_acquired` | admin endpoint (implicit via first save) | `slug, by_login, original_assignee` | none (ephemeral) |
-| `claim.force_released_auto` | backend timer | `slug, by_login, original_assignee` | none (ephemeral) |
-| `state.manual_override` | admin endpoint | `slug, by_login, from_state, to_state, reason` | any → any |
-| `reciter.discarded` | admin endpoint | `slug, by_login, reason` | any → `discarded` |
-| `catalog.edited` | admin endpoint (via PR) | `slug, by_login, patch, reason` | none (catalog file is on GitHub; bucket state unchanged until catalog PR merges) |
-| `pipeline.triggered` | admin endpoint | `slug, by_login, kind, reason` | none (state may transition later when pipeline emits its own event) |
-| `admin.job_rerun` | admin endpoint | `slug, by_login, job_type, original_job_id, new_job_id, reason` | none |
+| `reciter.marked_ready` | contributor endpoint | `slug, actor.hf_user_id` | `marked_ready = 1` (no state transition) |
+| `reciter.unmarked_ready` | contributor endpoint | `slug, actor.hf_user_id` | `marked_ready = 0` |
+| `reciter.merge_rejected` | maintainer endpoint | `slug, original_assignee_hf_id, reason` | `marked_ready = 0` (admin path) |
+| `reciter.published` | maintainer endpoint | `slug` | `under_review (marked_ready=1) → awaiting_timestamps`; fires HF Jobs + GH Actions fan-out |
+| `claim.force_released` | admin endpoint | `slug, original_assignee_hf_id, reason` | `under_review → awaiting_review`; clears assignee + marked_ready |
+| `claim.reassigned` | admin endpoint | `slug, from_hf_id, to_hf_id, to_login, reason` | various → `under_review`; sets new assignee_* |
+| `claim.force_acquired` | admin endpoint (implicit via first save on not-owned reciter) | `slug, original_assignee_hf_id` | Sets `force_assignee_hf_id`, `force_assignee_since` (persisted in SQLite, NOT ephemeral) |
+| `claim.force_released_auto` | backend timer (or boot-time check) | `slug, original_assignee_hf_id` | Clears `force_assignee_*` after 30-min lease |
+| `admin.force_set_state` | admin endpoint | `slug, from_state, to_state, reason` | Narrow allowed pairs only — see §5.4a. Returns 400 for any other pair. |
+| `admin.force_clear_assignee` | admin endpoint | `slug, original_assignee_hf_id, reason` | Clear assignee_* + marked_ready. State unchanged. |
+| `admin.force_unmark_ready` | admin endpoint | `slug, original_assignee_hf_id, reason` | `marked_ready = 0` (admin path; doesn't require assignee match) |
+| `admin.force_revision_bump` | admin endpoint | `slug, reason` | `revision += 1` (debug-only) |
+| `reciter.discarded` | admin endpoint | `slug, reason` | `visibility = 'discarded'`. **Lifecycle state unchanged.** |
+| `reciter.undiscarded` | admin endpoint | `slug` | `visibility = 'public'` (from `'discarded'`) |
+| `reciter.archived` | admin endpoint | `slug, reason` | `visibility = 'archived'`. Allowed only from `completed`. |
+| `reciter.unarchived` | admin endpoint | `slug` | `visibility = 'public'` (from `'archived'`) |
+| `catalog.added` | admin endpoint | `slug, row, reason` | New row in catalog SQLite |
+| `catalog.edited` | admin endpoint | `slug, patch, reason` | Mutated mutable fields on existing row |
+| `catalog.audio_source_added` | admin endpoint (rare) | `source_id, row, reason` | New row in `audio_sources` table |
+| `pipeline.triggered` | admin endpoint | `slug, kind, reason` | None (state may transition later when pipeline emits its own event) |
+| `admin.job_rerun` | admin endpoint | `slug, job_type, original_job_id, new_job_id, reason` | None (re-enqueues HF Job) |
 
-Plus a new state value:
+**No `state.manual_override` wildcard.** Replaced by the discrete `admin.force_*` events above. If a recovery scenario doesn't fit any of them, add a new named event — that's the workflow. State-machine transition matrix in [`inspector-state-management.md`](inspector-state-management.md) §4 enforces this at the validator level.
 
-| State | Description | Editable | Inspector behaviour |
-|---|---|---|---|
-| `discarded` | Reciter request rejected / abandoned. Hidden from anonymous lists. | No | Visible only to maintainers under "Internal" filter. |
-
-The state-management transition matrix needs updating to allow `* → discarded` and to document `discarded → *` only via `state.manual_override`.
+**No `discarded` state.** Replaced by `visibility = 'discarded'` orthogonal to lifecycle ([`inspector-state-management.md`](inspector-state-management.md) §4). Round-trip preserves lifecycle position.
 
 ## 12. Phased rollout
 
@@ -538,13 +611,13 @@ Maps onto the parent doc's phases.
 
 ## 13. Risks and open questions
 
-### `inspector_owners.json` cache stale during emergency
+### `data/inspector_roles.json` cache stale during emergency
 
-Owner needs to revoke a maintainer's role urgently. The 60 s cache means the change takes up to 60 s to propagate. Acceptable. Owner can additionally call `POST /api/admin/refresh-roles` (owner-only) to force-refresh.
+Owner needs to revoke a role urgently. The 60 s cache means the change takes up to 60 s to propagate. Acceptable. Owner can additionally call `POST /api/admin/refresh-roles` (owner-only) to force-refresh.
 
 ### Audit log tampering
 
-Even though Inspector only appends, an owner with bucket-write access could in principle truncate or rewrite. Mitigation: periodic backup to a versioned location (quarterly snapshot to a dataset). Real defense is process: the audit log is a check on maintainer behavior; tampering with it is itself a recordable event (the resulting absence of expected entries).
+Even though Inspector only appends, an owner with bucket-write access could in principle truncate or rewrite. **Mitigation:** the `prev_hash` chain detects breaks (`scripts/lib/admin_audit.py::verify_chain()` runs in the dashboard); periodic backup of the private bucket's `state/` to a versioned location (quarterly). Real defense is process: the audit log is a check on maintainer behavior; tampering with it is itself a recordable event (chain break + absence of expected entries).
 
 ### Force-claim race with original assignee
 
@@ -568,9 +641,9 @@ Earlier draft routed catalog edits through GitHub PRs, which would have created 
 
 The web button fires `pipeline.triggered` but the actual pipeline runs on Katana / HF Job. If those are down or the slug isn't on Katana, the trigger silently fails. Mitigation: the workflow validates pre-conditions and fires back a `pipeline.failed_to_start` event with reason. Visible in dashboard.
 
-### `discarded` state and existing reciters
+### `discarded` no longer a state — visibility flag instead
 
-Adding `discarded` to the state enum is a schema bump. Migration: increment `schema_version`, update validator to accept both old and new for one cycle, then drop old.
+Earlier drafts modeled `discarded` as an 8th state value, requiring a schema bump and lifecycle-position loss on round-trip. v2 ships with `visibility: 'public' | 'discarded' | 'archived'` orthogonal to lifecycle. No schema bump needed; un-discard preserves the original state.
 
 ### Dashboard performance at scale
 

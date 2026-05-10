@@ -24,20 +24,22 @@ Three tiers: **server-image** (baked into the Docker image), **HF dataset** (pub
 | `data/riwayat.json`, `sources.json`, `styles.json` | static | server-image | n/a | Controlled vocab |
 | `data/.audio_meta.json`, `.audio_durations.json` | static | server-image | n/a | VBR + duration cache |
 | `data/audio/<cat>/<src>/<slug>.json` (~381 files, ~67 MB pretty) | per-reciter manifests | **server-image as `audio_catalog.json.gz`** (consolidated, compact, gzipped — ~6 MB total) | n/a (build-time) | One catalog covers all reciters. Build step strips `_timing` (~70 KB), compacts JSON (51% saved), gzips (92% saved overall). Browser fetches once on Audio-tab mount. |
-| `data/reciter_catalog.json` | curated metadata | **GitHub raw** (no auth, public repo); cached in-memory | manual PRs to GitHub | Slow-cadence PR-reviewed metadata; stays on GitHub. Inspector fetches via `https://raw.githubusercontent.com/...` on startup + on demand. |
-| `data/inspector_owners.json` | role mgmt | **GitHub raw**; cached in-memory | manual PRs to GitHub (CODEOWNERS-gated) | Source of truth for maintainer/owner roles |
-| `inspector/segments/<slug>/segments.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser) | n/a (publish via HF Job on completion) | Published by `--build-inspector-segments`. Stays per-reciter, not chapter-sharded |
-| `inspector/segments/<slug>/detailed.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser) | n/a | Per-reciter cap ~5.2 MB raw / ~1 MB gz; cohort avg ~4.4 MB raw |
-| `inspector/segments/<slug>/edit_history.jsonl.gz` | per-reciter, completed | **HF dataset CDN direct** (browser, lazy on History panel expand) | n/a | Per-reciter avg ~1-2 MB gz from ~8 MB raw |
-| `inspector/segments/<slug>/edit_history_peaks.jsonl.gz` | per-reciter, completed | **HF dataset CDN direct** (browser, lazy on History panel expand) | n/a | Per-reciter avg ~300 KB gz from ~1.1 MB raw |
-| `inspector/segments/<slug>/low_confidence_v2.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser) | n/a | Tiny (KB) |
-| `<bucket>/wip/<slug>/data/recitation_segments/<slug>/segments.json` | per-reciter, **in-flight** | **bucket mount** (server reads from `<MOUNT>/wip/<slug>/...`) | bucket mount (atomic write; mount flushes within 2–30 s) | Same file layout the existing save flow expects. Mount is mounted at `INSPECTOR_BUCKET_MOUNT`, exposed to the save flow as the data dir |
-| `<bucket>/wip/<slug>/data/recitation_segments/<slug>/detailed.json` | per-reciter, **in-flight** | bucket mount | bucket mount | |
-| `<bucket>/wip/<slug>/data/recitation_segments/<slug>/edit_history.jsonl` | per-reciter, **in-flight** | bucket mount | bucket mount | Append-only |
-| `<bucket>/wip/<slug>/data/recitation_segments/<slug>/edit_history_peaks.jsonl` | per-reciter, **in-flight** | bucket mount | bucket mount | History panel waveform cache |
-| `<bucket>/wip/<slug>/data/recitation_segments/<slug>/low_confidence_v2.json` | per-reciter, **in-flight** | bucket mount | n/a (pipeline-written, copied in on alignment-completed) | Read-only sidecar |
-| `<bucket>/state/reciter_state.json` | global state | bucket mount + in-memory cache | Inspector backend (sole writer) | See [`inspector-state-management.md`](inspector-state-management.md) for schema |
-| `<bucket>/state/audit.jsonl` | global audit | append-only | Inspector backend | One line per state-changing event |
+| `<bucket>/catalog/reciter_catalog.sqlite` | curated metadata | bucket mount (SQLite read-only) | Inspector backend (sole writer; via `services/catalog.py`) | Catalog moved from GitHub-JSON to SQLite-on-bucket. Schema in [`inspector-state-management.md`](inspector-state-management.md) §3. |
+| `<bucket>/catalog/audit/<YYYY>-<MM>.jsonl` | catalog audit | append-only via direct upload | Inspector backend | One line per `catalog.*` event; partitioned per-month |
+| `data/inspector_roles.json` | role mgmt | **GitHub raw**; cached in-memory (60s) | manual PRs to GitHub (CODEOWNERS-gated) | Single consolidated file (was `inspector_owners.json` + `inspector_maintainers.json`). `hf_user_id` canonical. Schema in [`inspector-state-management.md`](inspector-state-management.md) §9. |
+| `inspector/segments/<slug>/v<n>/segments.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser) | n/a (publish via HF Job on completion) | **`v<n>/` segment** so re-edits don't break browser caches with `Cache-Control: immutable`. `<n>` increments on every publish. |
+| `inspector/segments/<slug>/v<n>/detailed.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser) | n/a | Per-reciter cap ~5.2 MB raw / ~1 MB gz; cohort avg ~4.4 MB raw |
+| `inspector/segments/<slug>/v<n>/edit_history.jsonl.gz` | per-reciter, completed | **HF dataset CDN direct** (browser, lazy on History panel expand) | n/a | Per-reciter avg ~1-2 MB gz from ~8 MB raw |
+| `inspector/segments/<slug>/v<n>/edit_history_peaks.jsonl.gz` | per-reciter, completed | **HF dataset CDN direct** (browser, lazy on History panel expand) | n/a | Per-reciter avg ~300 KB gz from ~1.1 MB raw |
+| `inspector/segments/<slug>/v<n>/low_confidence_v2.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser) | n/a | Tiny (KB) |
+| `inspector/segments/<slug>/CURRENT` | pointer | HF dataset (browser fetches once to know which `v<n>/` to read) | n/a (HF Job updates on each publish) | Tiny pointer file containing the integer publish version. Versioned URLs are immutable; this pointer is mutable. |
+| `<bucket>/wip/<slug>/segments.json` | per-reciter, **in-flight** | **bucket mount** | bucket mount (atomic write; mount flushes within 2–30 s) | **Flat layout** — no `data/recitation_segments/<slug>/` nesting. Save flow uses `data_dir.resolve(slug)` to map this back from legacy code. |
+| `<bucket>/wip/<slug>/detailed.json` | per-reciter, **in-flight** | bucket mount | bucket mount | |
+| `<bucket>/wip/<slug>/edit_history.jsonl` | per-reciter, **in-flight** | bucket mount | bucket mount | Append-only |
+| `<bucket>/wip/<slug>/edit_history_peaks.jsonl` | per-reciter, **in-flight** | bucket mount | bucket mount | History panel waveform cache |
+| `<bucket>/wip/<slug>/low_confidence_v2.json` | per-reciter, **in-flight** | bucket mount | n/a (pipeline-written, copied in on alignment-completed) | Read-only sidecar |
+| `<bucket>/state/reciter_state.sqlite` (private bucket) | global state | SQLite read-only via mount + direct read connection in `services/state.py` | Inspector backend (sole writer; transactional via SQLite WAL); also direct `huggingface_hub.upload_file()` per write to bypass mount flush window | See [`inspector-state-management.md`](inspector-state-management.md) §2 for schema |
+| `<bucket>/state/audit/<YYYY>-<MM>.jsonl` (private bucket) | global audit | append-only | Inspector backend (direct upload, not via mount) | Partitioned per-month from day one. `prev_hash` chain for tamper detection. |
 | `timestamps/<slug>/<chapter>.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser) | offline pipeline | Already implemented per [`timestamps-tab-deployment-plan.md`](../../timestamps-tab-deployment-plan.md) |
 | `segments/<slug>/<chapter>.json.gz` | per-reciter, completed | **HF dataset CDN direct** (browser, Aligner Space only) | offline pipeline (`--build-segments`) | Slim shards (segments + audio URL only) for the Aligner preload mode; Inspector does not consume these |
 | Audio mp3/wav | per-reciter | **origin direct** (browser) | n/a | Backend never touches |
@@ -61,24 +63,25 @@ A single HF bucket per environment, mounted into the Space at `INSPECTOR_BUCKET_
 
 **Choice: NFS Advanced mode.** Single mount per Space; one configuration; works for every file the save flow touches. The 2–30 s flush window is functionally equivalent to v1's debounce (30 s inactivity, 5 min hardcap) — same staleness bound, but the mount handles it instead of Inspector code.
 
-### Mount layout (two buckets per env, per H2)
+### Mount layout (two buckets per env)
 
 **Public data bucket** at `<INSPECTOR_BUCKET_MOUNT>` (default `/data/inspector-bucket`):
 
 ```
 <INSPECTOR_BUCKET_MOUNT>/
-├── wip/                 # one subtree per in-flight reciter
+├── wip/                              # one subtree per in-flight reciter (FLAT layout)
 │   └── <slug>/
-│       └── data/recitation_segments/<slug>/
-│           ├── segments.json
-│           ├── detailed.json
-│           ├── edit_history.jsonl
-│           ├── edit_history_peaks.jsonl
-│           └── low_confidence_v2.json
-├── catalog/                       # moved from GitHub per H3+H4
-│   ├── reciter_catalog.json       # Inspector sole writer; maintainer+ via catalog.edited
-│   └── audit.jsonl                # one line per catalog mutation
-└── _archive/                       # (optional) post-publish snapshots, see §9
+│       ├── segments.json
+│       ├── detailed.json
+│       ├── edit_history.jsonl
+│       ├── edit_history_peaks.jsonl
+│       └── low_confidence_v2.json
+├── catalog/
+│   ├── reciter_catalog.sqlite        # Inspector sole writer; maintainer+ via catalog.edited
+│   ├── reciter_catalog.sqlite-wal    # SQLite WAL sidecar
+│   ├── reciter_catalog.sqlite-shm    # SQLite shared-memory sidecar
+│   └── audit/<YYYY>-<MM>.jsonl       # one line per catalog mutation; partitioned monthly
+└── _archive/                         # post-publish snapshots, see §9
     └── <slug>/<published_at>/...
 ```
 
@@ -87,13 +90,19 @@ A single HF bucket per environment, mounted into the Space at `INSPECTOR_BUCKET_
 ```
 <INSPECTOR_META_MOUNT>/
 └── state/
-    ├── reciter_state.json         # source of truth, Inspector sole writer
-    └── audit.jsonl                # append-only, one line per state event (PII)
+    ├── reciter_state.sqlite          # source of truth, Inspector sole writer (SQLite WAL)
+    ├── reciter_state.sqlite-wal
+    ├── reciter_state.sqlite-shm
+    └── audit/<YYYY>-<MM>.jsonl       # append-only state events (PII); partitioned monthly
 ```
 
-State and audit go in the **private** bucket — `audit.jsonl` carries `actor.login + actor.hf_user_id` per event, which is correlatable PII; state file exposes assignee identity. No product use case requires anonymous read of these. Inspector + GH Actions + HF Jobs read both buckets via `INSPECTOR_HF_TOKEN` (which has scope on both).
+**Why two buckets:** state + audit carry PII (`actor.hf_user_id` per event) and assignee identity. No product use case requires anonymous read. The data bucket can stay public for transparent in-flight viewing; the metadata bucket stays private. Inspector + GH Actions + HF Jobs read both via `INSPECTOR_HF_TOKEN`.
 
-Per state-write-durability concern (B2): state and audit writes go via **direct `huggingface_hub.upload_file()` calls**, NOT via the mount, even though the mount is available. The two files are tiny (~150 KB state, append-only audit) and infrequent; direct upload eliminates the "container-rebuild-loses-the-flush-queue" failure mode. Mount is read-side only for these paths.
+**Why flat `wip/<slug>/` layout** (no `data/recitation_segments/<slug>/` nesting): the v1 nesting only exists to share a path shape with local-mode. With `services/data_dir.py::resolve(slug)` indirecting all save-flow paths anyway, the flat layout is cleaner across publish + restore + admin tooling.
+
+**Why SQLite sidecars (`-wal`, `-shm`) appear in the bucket:** SQLite WAL mode requires both. They're managed by SQLite itself; never edit by hand. The flush-window concern still applies, so state/catalog writes also call `huggingface_hub.upload_file()` directly on `.sqlite` (the WAL sidecar is included in the upload by the helper) to bypass the mount's lazy flush.
+
+**Per state-write-durability concern (B2):** state and audit writes go via **direct `huggingface_hub.upload_file()` calls** in addition to the mount-side write. The mount is read-side and best-effort write-side; direct upload is the durability guarantee. The two files are tiny (~150 KB state SQLite, append-only audit) and infrequent (~1/min steady state); the latency cost of direct upload is acceptable.
 
 ### Auth model
 
@@ -111,12 +120,13 @@ Per-edit attribution lives in `<bucket>/state/audit.jsonl`, written by Inspector
 
 ### Cache layers
 
-Two in-memory caches inside the Space backend, both bounded:
+One in-memory cache inside the Space backend (the parsed seg cache). State + catalog are read directly from SQLite — indexed point lookups are <100 µs, no parse-cache layer needed.
 
 | Layer | Purpose | Eviction |
 |---|---|---|
-| **State store** (`state_store: dict[str, ReciterEntry]`) | Parsed `reciter_state.json`. Single dict, ~150 KB at full scale. | Replaced wholesale on every write (Inspector writes both bucket and in-memory atomically). Refreshed from bucket on startup or admin-triggered reload. |
 | **Parsed seg cache** (`_seg`) | Parsed Python representation of `detailed.json` per active reciter | LRU 128 MB; invalidated on save for the active slug |
+
+State + catalog are NOT memory-cached — SQLite gives indexed lookup (`SELECT ... WHERE slug = ?` on the primary key) in <100 µs cold, faster warm via SQLite's own page cache. Eliminating the in-memory `state_store` removes a class of "is the cache fresh?" bugs and is one less thing to invalidate on every write.
 
 The github-fetch + raw-bytes LRU + parsed-cache + single-flight machinery from v1 is **gone** — there's no upstream API the cache fronts. Bucket mount NFS reads have their own kernel-level cache; the parsed seg cache sits above that to avoid re-parsing 5 MB JSON on every request.
 
@@ -176,14 +186,12 @@ Backend memory footprint: the parsed seg cache holds at most 1 active reciter pe
 
 ## 5. Save flow
 
-The deployed save flow is **identical to local mode** at the code level. The only difference is `INSPECTOR_DATA_DIR` (and `INSPECTOR_QUA_DATA_PATH`). Local: `INSPECTOR_DATA_DIR=/data` with bind-mount. Deployed: `INSPECTOR_DATA_DIR=<INSPECTOR_BUCKET_MOUNT>/wip/<slug>` (computed per-request based on the active slug) — wait, that's per-slug not stable.
+The deployed save flow is **identical to local mode** at the code level — the indirection is `inspector/services/data_dir.py::resolve(slug)`:
 
-Better: the save flow gets a per-request data dir resolver. `inspector/services/data_dir.py::resolve(slug)` returns:
+- Local mode: returns `{INSPECTOR_DATA_DIR}/data/recitation_segments/{slug}/`
+- Deployed mode: returns `{INSPECTOR_BUCKET_MOUNT}/wip/{slug}/` (flat layout)
 
-- Local mode: `INSPECTOR_DATA_DIR` (single bind mount, contains every slug's directory tree under `data/recitation_segments/`)
-- Deployed mode: `<INSPECTOR_BUCKET_MOUNT>/wip/<slug>` (per-slug subtree of the bucket mount)
-
-Existing code constructs paths like `{data_dir}/data/recitation_segments/{slug}/segments.json` — works in both modes once `data_dir` is resolved through the helper.
+The save flow asks the resolver for the per-reciter data dir; it gets back something it can `open()` against in both modes. Save code itself is unchanged.
 
 ### Removed in deployed save path
 
@@ -426,19 +434,20 @@ Realistic sizes from disk (15 reciters with committed `segments.json` as of writ
 - **Returned with HTTP headers:** `Cache-Control: public, max-age=31536000, immutable; ETag: <hash>`. Browser caches forever; CDN in front of Inspector caches across users.
 - **Performance reality:** disk-cache hit <5 ms; cold compute ~400–700 ms (HTTP Range fetch + ffmpeg). 10 concurrent scrubbing users hitting cold peaks saturate the 2 vCPU on free CPU-basic — see §11.
 
-### `<bucket>/state/reciter_state.json`
+### `<bucket>/state/reciter_state.sqlite` (private bucket)
 
-- **Read:** Inspector backend on startup; refreshed in-memory on every write.
-- **Written by:** Inspector backend, sole writer, serialized through embedded state machine.
-- **Mount flushes:** within 2–30 s of write — non-Inspector readers (HF Jobs, GH Actions) see writes within that bound.
+- **Read:** Inspector backend opens at boot, keeps a single read+write connection. Other consumers download via `huggingface_hub` and open read-only.
+- **Written by:** Inspector backend, sole writer, transactional via SQLite WAL.
+- **Mount flushes** within 2–30 s of write; **also** direct `huggingface_hub.upload_file()` per write to bypass the flush window for durability.
 - **Schema:** see [`inspector-state-management.md`](inspector-state-management.md) §2.
-- **Acceptance:** state writes are atomic from Inspector's perspective; readers never see torn JSON. (Mount Advanced mode + atomic local file write semantics preserve this.)
+- **Acceptance:** state writes are transactional; readers never see partial rows; container restart mid-write retains either old or new row, never torn.
 
-### `<bucket>/state/audit.jsonl`
+### `<bucket>/state/audit/<YYYY>-<MM>.jsonl` (private bucket)
 
-- **Append-only.** One line per state-changing event (claim / release / mark-ready / unmark-ready / publish / admin-override).
-- **Read pattern:** ad-hoc by maintainers via the admin dashboard; potential future "your contributions" page.
-- **No size cap** — append-only forever; storage cost trivial. If it ever becomes burdensome, archive to a dated subdir on a quarterly cadence.
+- **Append-only.** One line per state-changing or admin event. Partitioned per-month (`audit/2026-05.jsonl`).
+- **Read pattern:** ad-hoc by maintainers via the admin dashboard; backstop for `replay_audit.py`.
+- **Integrity:** `prev_hash` chain detects tampering.
+- **Storage:** ~3.6 MB/year sustained; partitioning is automatic.
 
 ## 9. Phased rollout
 
@@ -447,33 +456,39 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 ### Phase 0 — Foundation (no deploy)
 
 **In scope:**
-- Create the dev + prod HF buckets.
-- Implement `inspector/services/hf_bucket.py` (mount path resolver, write helpers, atomic-write wrapper).
-- Implement `inspector/services/state.py` (state machine + bucket persistence + audit append).
-- Manually seed `<bucket>/state/reciter_state.json` for the ~15 existing reciters per the mapping rules in [`inspector-state-management.md`](inspector-state-management.md) §3. No script — the row count doesn't justify one.
+- Create the dev + prod HF buckets (data + meta, two per env).
+- Implement `inspector/services/hf_bucket.py` (mount path resolver, write helpers, direct-upload wrapper for SQLite + audit).
+- Implement `inspector/services/state.py` (state machine + SQLite persistence + audit append + `prev_hash` chain).
+- Implement `inspector/services/catalog.py` (mirrors `state.py` — same write pattern, validation, audit).
 - Implement `inspector/services/data_dir.py::resolve(slug)` per-mode data dir resolver.
+- Land `scripts/seed_catalog.py` and `scripts/seed_state.py` — generate `seed.sql` from existing identity sources + file presence per [`inspector-state-management.md`](inspector-state-management.md) §3.
+- Apply seed: produce two `.sqlite` files locally, validate, `hf buckets cp` into target buckets.
+- Land `data/inspector_roles.json` (consolidated owners + maintainers per §9).
 
 **Acceptance:**
-- Dev bucket mounts successfully into a one-off test Space.
-- `state.py::transition()` validates and rejects every invalid transition from the matrix.
-- Migration script produces a state file that matches observable GitHub state for every existing reciter.
+- Dev buckets (data + meta) mount successfully into a one-off test Space.
+- `state.py::transition()` validates and rejects every invalid transition from the §4 matrix; SQL CHECK constraints catch malformed states at write time.
+- `catalog.py::transition()` rejects mutations to immutable fields (`slug`, `reciter_id`).
+- Seeded SQLite files load, every existing reciter has a row in both, lifecycle states match observable file presence.
+- Phase 0 spike (mount-semantics): SQLite WAL on NFS Advanced mount survives 100 rapid writes + concurrent reader + container kill.
 
 ### Phase 1 — Read-only deploy (anonymous, completed reciters via HF)
 
 **In scope:**
 - **Free-tier perf prerequisites (deploy-blockers):**
-  - Replace `app.run()` in `inspector/app.py:180` with `gunicorn -k gthread -w 2 --threads 8` in the Dockerfile CMD.
+  - Replace `app.run()` in `inspector/app.py` with `gunicorn -k gthread -w 1 --threads 16` in the Dockerfile CMD. **`-w 1` is load-bearing — see §7 CMD section + `app.py` startup assertion.**
   - Add `Cache-Control: public, max-age=31536000, immutable` headers to `/api/seg/segment-peaks` and `/api/seg/peaks`.
 - Image build:
   - Root `.dockerignore` excludes per-reciter data dirs.
   - ENV defaults flipped to deployed profile.
-  - COPY list extended to all 10 static `data/*.json` files.
+  - COPY list extended to static `data/*.json` files.
   - `scripts/build_audio_catalog.py` runs at build time.
 - HF dataset extension:
-  - `build_reciter.py --build-inspector-segments <slug>` publishes the 5 per-reciter completed-reciter files under `inspector/segments/<slug>/`.
-  - One-shot bootstrap seeds the dataset for currently-eligible reciters.
+  - `build_reciter.py --build-inspector-segments <slug>` publishes the 5 per-reciter files under `inspector/segments/<slug>/v<n>/`. The `v<n>/` segment is **load-bearing** (re-edit forward-compat per [`inspector-deferred.md`](inspector-deferred.md) D5).
+  - Tiny `inspector/segments/<slug>/CURRENT` pointer file written at the same time, contains the integer `<n>`.
+  - One-shot bootstrap seeds the dataset for currently-eligible reciters at `v1/`.
 - Frontend:
-  - `services/segments_hf_client.ts` fetches completed-reciter data direct from HF CDN.
+  - `services/segments_hf_client.ts` fetches `CURRENT`, then the versioned shards. Cache the `CURRENT` lookup for 30 s in-session.
 - Bucket mount attached to Space (read-only fine for Phase 1; no writes yet).
 - Backend exclusions:
   - `routes/timestamps.py::ts_validate` deleted from deployed image.
@@ -485,13 +500,13 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 - Anonymous user lands on deployed website, segments tab for any completed reciter renders within p99 ≤ 800 ms cold, ≤ 50 ms warm.
 - Image ≤ ~400 MB.
 - No `data/audio/<cat>/`, `data/recitation_segments/`, `data/timestamps/` paths in `/app/data`.
-- gunicorn workers handle 6 concurrent cache-warm reads with p95 ≤ 1 s.
+- gunicorn (single worker, 16 threads) handles 6 concurrent cache-warm reads with p95 ≤ 1 s.
 
 ### Phase 2 — Bucket reads for in-flight reciters
 
 **In scope:**
-- Inspector backend reads under-review/awaiting-review data from `<bucket>/wip/<slug>/...`.
-- One-shot migration: copy current `data/recitation_segments/<slug>/` for any in-flight reciter into the dev bucket.
+- Inspector backend reads under-review/awaiting-review data from `<bucket>/wip/<slug>/...` (flat layout).
+- One-shot migration: copy current `data/recitation_segments/<slug>/` files into the dev bucket's flat `wip/<slug>/` layout (drop the `data/recitation_segments/<slug>/` nesting).
 - Available + Under-review tabs render data from the bucket.
 - `editingDisabled` store consumed by every edit-affordance component (writes still 403'd).
 
@@ -522,17 +537,18 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 ### Phase 5 — Writes
 
 **In scope:**
-- Save flow points at `<INSPECTOR_BUCKET_MOUNT>/wip/<slug>/...` (via `data_dir.resolve(slug)` helper).
-- Existing `save_seg_data()` runs unchanged.
-- Mount flush handles persistence — no debounce code in Inspector.
+- Save flow points at `<INSPECTOR_BUCKET_MOUNT>/wip/<slug>/...` (via `data_dir.resolve(slug)` helper). **Flat layout** — no `data/recitation_segments/<slug>/` nesting in the bucket.
+- Existing `save_seg_data()` runs unchanged at the call-site; `data_dir.resolve` is the single point of difference between modes.
+- `INSPECTOR_FORCE_FLUSH_ON_SAVE=1` is the **default** in deployed mode (durability across container rebuilds).
 - Drop `file_hash_after`, genesis record, `backup_file()` calls in deployed save path.
-- `validate_edit_history.py` updated.
+- `validate_edit_history.py` updated to drop `check_file_hash` and `check_genesis_record`.
+- Edit history schema refinement in scope (separate task — see cleanup-registry §3): define `validation_summary` shape with explicit category list + version; document operation patch dialect; add per-record `record_hash` for tamper detection; add `actor` column.
 
 **Acceptance:**
 - Volunteer reviewer end-to-end edits a `_test_*` reciter, edits visible to other viewers within 30 s of pause.
-- Backend restart mid-session: the bucket has the last-flushed state intact; reviewer's just-typed unflushed state is lost (≤30 s).
-- Save POST during `ready_for_merge` returns 410 cleanly.
-- New `edit_history.jsonl` lines have no `file_hash_after`.
+- Backend restart mid-session: the bucket has the last-durable state intact (force-flush guarantees); only the unflushed-since-last-save typing is lost.
+- Save POST during `under_review + marked_ready=1` returns 410 cleanly.
+- New `edit_history.jsonl` lines have no `file_hash_after`, no genesis record.
 
 ### Phase 6 — Publish pipeline + cleanup
 
@@ -572,31 +588,31 @@ Bucket mount survives container rebuild — that's the entire point. Local NFS c
 
 ### Mount flush window staleness
 
-Reviewer's typing within 30 s of the last save isn't visible to other viewers. Acceptable per the freshness contract in §3. **Mitigation if pain:** force-flush on save POST (synchronous flush), trading save latency for visibility — opt-in via `INSPECTOR_FORCE_FLUSH_ON_SAVE=1`.
+Reviewer's typing within 30 s of the last save isn't visible to other viewers. Acceptable per the freshness contract in §3. State + audit + catalog don't have this concern (direct upload bypasses the flush window). For save-data, `INSPECTOR_FORCE_FLUSH_ON_SAVE=1` is the **default** in deployed mode.
 
 ### Bucket write rate ceiling
 
-HF buckets don't publish a write QPS limit. Realistic write rate: 1 reviewer × 1 save / 10 s = 0.1 writes/s sustained per reciter; 10 concurrent reviewers = 1 write/s aggregate. Trivially under any plausible limit. **Mitigation:** monitor via mount logs.
+HF buckets don't publish a write QPS limit. Realistic write rate: 1 reviewer × 1 save / 10 s = 0.1 writes/s sustained per reciter; 10 concurrent reviewers = 1 write/s aggregate. Trivially under any plausible limit.
 
-### Atomic write semantics on the mount
+### SQLite-on-NFS write semantics
 
-Inspector's `save_seg_data` writes to a tempfile then `os.replace` — POSIX atomic on local disks, **not guaranteed atomic across an NFS mount**. **Mitigation:** the mount caches writes locally before flushing — the rename happens locally, then the mount flushes the renamed file. End consumers see either old or new, never torn. Verify in Phase 2 with a stress test (rapid saves + concurrent reads from another mount session).
+SQLite WAL mode requires lock files (`-wal`, `-shm` sidecars). On an NFS mount, lock files work but with implementation-specific gotchas. **Phase 0 spike must verify** (see §9 Phase 0 acceptance): 100 rapid `BEGIN EXCLUSIVE` + `UPDATE` + `COMMIT` cycles + concurrent read connection + container kill mid-write retains a consistent SQLite file. If the spike fails, fallback is to keep the SQLite file on `/tmp` and snapshot to bucket via `huggingface_hub.upload_file()` on every commit (slower but bulletproof).
 
 ### Concurrent active reviewers
 
-Locking enforces one reviewer per reciter. Across reciters, multiple reviewers can be active. Each holds an in-process mutex + parsed cache slot. With 128 MB parsed cache and ~5 MB per slot, capacity is ~25 simultaneous active reciters per replica. Beyond that, eviction churn rises. **Mitigation:** scale vertically (larger Space tier) or move to multi-replica with bucket-side optimistic concurrency.
+Locking enforces one reviewer per reciter. Across reciters, multiple reviewers can be active. Each holds an in-process mutex + parsed cache slot. With 128 MB parsed cache and ~5 MB per slot, capacity is ~25 simultaneous active reciters per replica. Beyond that, eviction churn rises. **Mitigation:** scale vertically (larger Space tier) or address per [`inspector-deferred.md`](inspector-deferred.md) D6.
 
 ### Mount unavailable on container start
 
-If the bucket mount fails to attach during Space build, the container won't see `<INSPECTOR_BUCKET_MOUNT>`. Inspector's startup checks for the path's existence and refuses to start with a clear log message. **Mitigation:** Space-side healthcheck retries; runbook documents recovery (re-attach via Space settings → Volumes).
+If a bucket mount fails to attach during Space build, the container won't see the mount point. Inspector's startup checks for paths' existence and refuses to start with a clear log message. **Mitigation:** Space-side healthcheck retries; runbook documents recovery (re-attach via Space settings → Volumes).
 
-### Append-only audit log growth
+### Audit log growth
 
-`<bucket>/state/audit.jsonl` grows forever — ~200 bytes per state event × ~50 events/day = ~10 KB/day = ~3.6 MB/year. Trivial. If pathological growth ever appears, archive to dated subdirs quarterly.
+Per-month partitioning (`audit/<YYYY>-<MM>.jsonl`) handles growth automatically. ~3.6 MB/year sustained means a partition file is ~300 KB. No manual cleanup needed.
 
-### Single-replica mutex limit
+### Single-replica assumption
 
-The in-process `(slug, login)` mutex assumes one Space replica. If we ever scale to N replicas, the mutex needs to move out of Python memory — into the bucket itself (read-version → write-if-version), or into Redis. **Decision:** defer until measured; HF Spaces don't auto-replicate at our tier.
+Whole v2 design assumes one Inspector replica (`-w 1` asserted at boot). Multi-replica scale-out deferred — see [`inspector-deferred.md`](inspector-deferred.md) D6. The `revision` column on `reciters` is forward-compat groundwork.
 
 ## 11. Performance budget on free CPU-basic
 

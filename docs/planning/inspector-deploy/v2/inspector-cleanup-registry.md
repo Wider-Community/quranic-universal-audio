@@ -2,7 +2,9 @@
 
 Running ledger for the inspector deployment migration. Each item has a phase tag and a status. Edit as you go — strike out completed items with a commit reference.
 
-This is **not** a design doc. For *why* something is being done, see [`inspector-deployment-plan.md`](inspector-deployment-plan.md), [`inspector-data-storage.md`](inspector-data-storage.md), [`inspector-state-management.md`](inspector-state-management.md), [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md). This doc tracks *what's actually done* vs *what should not exist anymore*.
+This is **not** a design doc. For *why* something is being done, see [`inspector-deployment-plan.md`](inspector-deployment-plan.md), [`inspector-data-storage.md`](inspector-data-storage.md), [`inspector-state-management.md`](inspector-state-management.md), [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md). For deferred items see [`inspector-deferred.md`](inspector-deferred.md). This doc tracks *what's actually done* vs *what should not exist anymore*.
+
+**Reference docs and schema-doc generation are NOT in v2 scope.** v2 ships pydantic models for runtime validation only. The hand-written reference docs and the auto-generation system (JSON Schema, TS types, rendered MD) land later under [`../../schema-docs.md`](../../schema-docs.md). Anything currently under `docs/reference/inspector/` is a pre-v2 sketch, not authoritative.
 
 Status legend: `open` / `wip` / `done` (with commit short SHA in `[brackets]` once landed).
 
@@ -10,10 +12,10 @@ Status legend: `open` / `wip` / `done` (with commit short SHA in `[brackets]` on
 
 The Inspector supports **two modes**, not three. Speculative third-mode hybrids are an explicit "do not add."
 
-| Mode | Filesystem access | Audio proxy | TS source | Validation panel | Audio manifests | State file | Invocation |
+| Mode | Filesystem access | Audio proxy | TS source | Validation panel | Audio manifests | State store | Invocation |
 |---|---|---|---|---|---|---|---|
-| `local` | Yes (repo `data/`) | On | Local files | On | Individual `data/audio/<cat>/<src>/<slug>.json` | `data/reciter_state.json` (committed locally for testing) | `python3 inspector/app.py` OR `docker compose up` (bind-mounts data) |
-| `deployed` | No (HF dataset / bucket mount) | Off | HF CDN | Off | Consolidated `audio_catalog.json.gz` from `/app/data` | `<bucket>/state/reciter_state.json` (mounted at `/data/inspector-bucket/state/`) | HF Space build |
+| `local` | Yes (repo `data/`) | On | Local files | On | Individual `data/audio/<cat>/<src>/<slug>.json` | Local SQLite at `data/reciter_state.sqlite` (gitignored; for local testing only) | `python3 inspector/app.py` OR `docker compose up` (bind-mounts data) |
+| `deployed` | No (HF dataset / bucket mount) | Off | HF CDN | Off | Consolidated `audio_catalog.json.gz` from `/app/data` | `<bucket>/state/reciter_state.sqlite` (private metadata bucket); `<bucket>/catalog/reciter_catalog.sqlite` (public data bucket) | HF Space build |
 
 `local Python` and `local Docker` are two ways to invoke the same `local` mode — the Dockerfile is single-image-two-profile via env vars (`INSPECTOR_TS_SOURCE`, `INSPECTOR_AUDIO_PROXY_ENABLED`, `INSPECTOR_DATA_DIR`, `INSPECTOR_QUA_DATA_PATH`, `INSPECTOR_BUCKET_MOUNT`). Code branches only on these env vars, never on "is this Docker?".
 
@@ -74,7 +76,7 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 | File / area | Change | Phase | Status |
 |---|---|---|---|
 | `inspector/Dockerfile` ENV defaults | Flip to `INSPECTOR_DATA_DIR=/app/data`, `INSPECTOR_QUA_DATA_PATH=/app/data` (was `/data`); add `INSPECTOR_AUDIO_PROXY_ENABLED=0`, `INSPECTOR_CACHE_DIR=/tmp/inspector-cache`, `INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket`, `INSPECTOR_PARSED_CACHE_BYTES=134217728` | 1 | open |
-| `inspector/Dockerfile` COPY list | Extend from current 3 static files to all 12 static reference files (incl. `inspector_owners.json`, `inspector_maintainers.json`, `audio_catalog.json.gz`) | 1 | open |
+| `inspector/Dockerfile` COPY list | Extend from current 3 static files to all static reference files (incl. `inspector_roles.json`, `audio_catalog.json.gz`) — single consolidated roles file, not two | 1 | open |
 | `inspector/Dockerfile` CMD | `app.run()` → `gunicorn -k gthread -w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30`. **`-w 1` is load-bearing** — every in-memory structure assumes single-process. App startup must assert workers==1 | 1 | open |
 | Root `.dockerignore` | Create at repo root with the exclusion list from data-storage §7 | 1 | open |
 | `inspector/services/cache.py` `_seg` dict | Replace with parsed seg cache layer keyed `(slug, "detailed_parsed")`, sized by `INSPECTOR_PARSED_CACHE_BYTES` | 1 | open |
@@ -95,10 +97,10 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 
 | Path | Purpose | Phase | Status |
 |---|---|---|---|
-| `inspector/services/hf_bucket.py` | Mount path resolver, atomic-write helper for the bucket; ~30 LoC | 0 | open |
-| `inspector/services/state.py` | State machine + bucket persistence + audit append; sole writer of `<bucket>/state/reciter_state.json` | 0 | open |
-| `inspector/services/catalog.py` | Catalog state-machine-style writer for `<bucket>/catalog/reciter_catalog.json`; mirrors state.py pattern (validate → atomic write → audit append) | 0 | open |
-| `inspector/services/data_dir.py` | Per-mode data dir resolver: local returns `INSPECTOR_DATA_DIR`; deployed returns `<INSPECTOR_BUCKET_MOUNT>/wip/<slug>` | 5 | open |
+| `inspector/services/hf_bucket.py` | Mount path resolver, atomic-write helper for the bucket, direct-`upload_file` wrapper for state SQLite + audit append (bypasses mount flush window for durability); ~50 LoC | 0 | open |
+| `inspector/services/state.py` | State machine + SQLite persistence + audit append + `prev_hash` chain; sole writer of `<bucket>/state/reciter_state.sqlite`. Asserts `GUNICORN_WORKERS == 1` at boot. | 0 | open |
+| `inspector/services/catalog.py` | Catalog state-machine-style writer for `<bucket>/catalog/reciter_catalog.sqlite`; mirrors state.py pattern (validate → SQL transaction → audit append). Rejects mutations to immutable `slug`, `reciter_id`. | 0 | open |
+| `inspector/services/data_dir.py` | Per-mode data dir resolver: local returns `{INSPECTOR_DATA_DIR}/data/recitation_segments/{slug}/`; deployed returns flat `{INSPECTOR_BUCKET_MOUNT}/wip/{slug}/` | 5 | open |
 | `inspector/services/github_dispatch.py` | Fire `repository_dispatch` events to GitHub via `INSPECTOR_GITHUB_DISPATCH_TOKEN`; ~30 LoC | 6 | open |
 | `inspector/services/hf_jobs.py` | Enqueue HF Jobs via API; track in-memory `job_id → (slug, type, fired_at)` for admin dashboard | 6 | open |
 | `inspector/services/publish.py` | Orchestrate publish event: state transition + fan-out trigger | 6 | open |
@@ -109,17 +111,18 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 | `inspector/routes/internal.py` | `/api/internal/job-completed`, `/api/internal/inspector-event` (HMAC-auth) | 6 | open |
 | `inspector/routes/static_data.py` | Flask static route for `/api/static/audio_catalog.json.gz`, `/api/static/qpc_hafs.json.gz`, etc. with `Cache-Control: immutable` | 1 | open |
 | `scripts/build_audio_catalog.py` | Walk `data/audio/**/*.json`, drop `_timing`, compact + gzip into `data/audio_catalog.json.gz` (~6 MB) | 1 | open |
-<!-- Migration scripts removed — too few existing rows (~15 reciters) to justify scripting. State + catalog seeded manually at v2 cutover by a maintainer using `hf buckets cp`. Mapping rules documented in inspector-state-management.md §3. -->
+| `scripts/seed_state.py` | Generate `seed.sql` for `reciter_state.sqlite` from on-disk file presence per state-mgmt §3 mapping rules. Run at v2 cutover. | 0 | open |
+| `scripts/seed_catalog.py` | Generate `seed.sql` for `reciter_catalog.sqlite` from `data/reciters_index.json` + per-reciter manifest `_meta`. Includes `audio_sources` rows. | 0 | open |
 
 | `scripts/upload_inspector.sh` | Selective rsync into Space repo + frontend build + audio catalog + commit/push to HF Space | 1 | open |
-| `scripts/jobs/snapshot_bucket_to_dataset.py` | HF Job entry point: download bucket → gzip → upload to dataset → archive bucket | 6 | open |
+| `scripts/jobs/snapshot_bucket_to_dataset.py` | HF Job entry point: download bucket → gzip → upload to dataset (writes versioned `inspector/segments/<slug>/v<n>/` + updates `CURRENT` pointer) → archive bucket | 6 | open |
 | `scripts/jobs/timestamps_refresh.py` | HF Job entry point: read bucket → call MFA Aligner Space → write TS shards to dataset | 6 | open |
 | `scripts/jobs/build_per_verse_audio.py` | HF Job entry point: existing `build_reciter.py` main path, reads from bucket | 6 | open |
-| `scripts/lib/admin_audit.py` | Read audit log from bucket; query helpers for dashboard | 1 | open |
-| `scripts/validate_reciter_state.py` | Schema validation for state file; runs inside Inspector after every transition + as a CI smoke test | 0 | open |
-| `scripts/validate_reciter_catalog.py` | Schema validation for catalog file; runs in `validate-catalog.yml` on PRs | 0 | open |
-| `data/inspector_owners.json` | List of owner logins; CODEOWNERS-gated | 0 | open |
-| `data/inspector_maintainers.json` | List of maintainer logins; CODEOWNERS-gated; optional (if absent, all maintainer power belongs to owners) | 0 | open |
+| `scripts/lib/admin_audit.py` | Read audit log from bucket; query helpers for dashboard; `verify_chain()` walks `prev_hash` chain | 1 | open |
+| `scripts/lib/replay_audit.py` | Rebuild `reciter_state.sqlite` from `audit/<YYYY>-<MM>.jsonl` partitions; disaster recovery + chain verification | 0 | open |
+| `scripts/validate_reciter_state.py` | Schema validation for state SQLite; runs inside Inspector after every transition + as a CI smoke test | 0 | open |
+| `scripts/validate_reciter_catalog.py` | Schema validation for catalog SQLite; runs in `validate-catalog.yml` on PRs touching the seed scripts or `audio_sources` data | 0 | open |
+| `data/inspector_roles.json` | Consolidated owners + maintainers (replaces two separate files). `hf_user_id` canonical, `login` display, `removed_at` soft-delete. CODEOWNERS-gated. | 0 | open |
 | `.github/workflows/inspector-deploy.yml` | Selective Space upload on push to `main` (prod) or `dev` (dev Space) | 1 | open |
 | `.github/workflows/inspector-deploy-dev.yml` | Same as above but for `dev` branch / dev Space | 1 | open |
 | `.github/workflows/forward-to-inspector.yml` | Receives `reciter.alignment_requested` from Reciter Requests Space; HMAC-POSTs to Inspector `/api/internal/inspector-event` | 6 | open |
@@ -168,59 +171,71 @@ Run before marking each phase complete.
 
 ### Phase 0 — Foundation
 
-- [ ] HF buckets created (dev + prod)
-- [ ] Bucket state file manually seeded (~15 reciters) per state-mgmt §3 mapping rules
-- [ ] Catalog file manually seeded into `<bucket>/catalog/reciter_catalog.json` from existing `data/reciters_index.json` + per-reciter manifest `_meta` blocks
-- [ ] `data/inspector_owners.json` exists with at least 2 owners
-- [ ] `inspector/services/hf_bucket.py` lands
-- [ ] `inspector/services/state.py` lands; passes unit tests for every transition in the matrix
-- [ ] `list_reciters.py` rewritten to read state from bucket; regenerated `reciters_index.json` is byte-equivalent (modulo new fields) to pre-migration
-- [ ] `build_reciter.py --build-manifest` rewritten to read identity from catalog
-- [ ] `validate-catalog.yml` workflow lands
+- [ ] HF buckets created (dev + prod, both data + metadata = 4 buckets total)
+- [ ] **Spike** — SQLite WAL on NFS Advanced mount: 100 rapid writes + concurrent reader + container kill mid-write retains consistent file (Phase 0 acceptance gate)
+- [ ] Bucket state SQLite manually seeded via `seed_state.py` (~15 reciters) per state-mgmt §3 mapping rules
+- [ ] Catalog SQLite seeded via `seed_catalog.py` (includes `audio_sources` rows for ~6 known sources)
+- [ ] `data/inspector_roles.json` exists with at least 2 owners; `hf_user_id` populated
+- [ ] `inspector/services/hf_bucket.py` lands (mount + direct-upload helpers)
+- [ ] `inspector/services/state.py` lands; passes unit tests for every transition in the matrix; `GUNICORN_WORKERS == 1` startup assertion in place
+- [ ] `inspector/services/catalog.py` lands; rejects mutations to immutable fields
+- [ ] `list_reciters.py` rewritten to read state + catalog SQLite via `huggingface_hub`; regenerated `reciters_index.json` is byte-equivalent (modulo new fields) to pre-migration
+- [ ] `build_reciter.py --build-manifest` rewritten to read identity from catalog SQLite
+- [ ] `validate-catalog.yml` workflow lands (validates `seed_catalog.py` output + `audio_sources` data)
 - [ ] All §2 entries tagged Phase 0 are `done`
+- [ ] Pydantic models for state, catalog, audit shapes used by `services/state.py` + `services/catalog.py` for runtime validation (no doc generation — see [`../../schema-docs.md`](../../schema-docs.md))
 
 ### Phase 1 — Read-only deploy
 
 - [ ] All §2/§3/§4 entries tagged Phase 1 are `done`
-- [ ] gunicorn (not werkzeug) running in deployed Space
+- [ ] gunicorn (`-w 1 --threads 16`, not werkzeug) running in deployed Space
+- [ ] `GUNICORN_WORKERS == 1` startup assertion verified
 - [ ] Image discipline check passes (no `data/recitation_segments/`, etc., in `/app/data`)
 - [ ] `audio_catalog.json.gz` baked in, ~6 MB
-- [ ] HF dataset has `inspector/segments/<slug>/...` for currently-eligible reciters
+- [ ] HF dataset has `inspector/segments/<slug>/v1/...` for currently-eligible reciters + `CURRENT` pointer files
 - [ ] Smoke tests in [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md) §6 Phase 1 pass
 - [ ] §5 doc amendments triggered by Phase 1 work are landed
 
 ### Phase 2 — Bucket reads for in-flight
 
-- [ ] In-flight reciter renders via bucket mount
-- [ ] One-shot migration of current in-flight reciter data into dev bucket complete
+- [ ] In-flight reciter renders via bucket mount (flat `wip/<slug>/` layout)
+- [ ] One-shot migration of current in-flight reciter data into dev bucket complete (flat layout, not nested)
 - [ ] Edit affordances hidden globally (`editingDisabled` store wired)
 - [ ] Smoke tests Phase 2 pass
 
 ### Phase 3 — HF OAuth + claim flow
 
 - [ ] HF OAuth + claim flow live; ≤ 3 clicks for new contributors, 1 for returning
-- [ ] State writes synchronous (no propagation lag)
-- [ ] `<bucket>/state/audit.jsonl` populated correctly
+- [ ] State writes transactional (SQLite WAL + direct-upload for durability)
+- [ ] `<bucket>/state/audit/<YYYY>-<MM>.jsonl` populated correctly with `prev_hash` chain
 - [ ] In-process single-writer mutex per slug works
+- [ ] All claim-ownership checks use `hf_user_id`, NOT `login`
 - [ ] Smoke tests Phase 3 pass
-- [ ] Admin dashboard read-only views work for maintainer+
+
+### Phase 4 — Read-only admin dashboard + role resolution
+
+- [ ] `data/inspector_roles.json` resolution working (60s cache + force-refresh endpoint)
+- [ ] `/admin` route 404s for non-maintainers; renders for maintainer+
+- [ ] System health, all-reciters, stalled-reciters, recent-events panels render
+- [ ] Audit log `verify_chain()` runs in dashboard
 
 ### Phase 5 — Writes
 
 - [ ] Volunteer round-trips an edit on a `_test_*` reciter
-- [ ] Bucket flush ≤ 30 s after save
-- [ ] Backend restart mid-session is harmless (bucket has last-flushed state)
+- [ ] `INSPECTOR_FORCE_FLUSH_ON_SAVE=1` is the default (verified)
+- [ ] Backend restart mid-session is harmless (bucket has last-durable state)
 - [ ] All §2/§3 entries tagged Phase 5 are `done`
-- [ ] New `edit_history.jsonl` lines have no `file_hash_after`
-- [ ] Force-claim parallel-write scenario tested
+- [ ] New `edit_history.jsonl` lines have no `file_hash_after`, no genesis record
+- [ ] Edit-history schema refinement landed (validation_summary shape, op patch dialect, per-record `record_hash`, `actor` column)
+- [ ] Force-claim parallel-write scenario tested; `force_assignee_*` survives Space restart
 - [ ] Publish endpoint live (state transition only; fan-out fires in Phase 6)
 
 ### Phase 6 — Publish pipeline + cleanup
 
 - [ ] All §2/§3/§4 entries tagged Phase 6 are `done`
-- [ ] HF Jobs image published to GHCR
-- [ ] `forward-to-inspector.yml` workflow live; Reciter Requests Space's `alignment_requested` events flow through correctly
-- [ ] Publishing a `_test_*` reciter end-to-end: bucket → dataset, timestamps, audio dataset, GitHub Release, RECITERS.md PR all complete within 15 min
+- [ ] HF Jobs image published to GHCR (or HF Spaces fallback)
+- [ ] `forward-to-inspector.yml` workflow live; Reciter Requests Space's `alignment_requested` events flow through correctly (until D2 deprecates the Space)
+- [ ] Publishing a `_test_*` reciter end-to-end: bucket → dataset (`v1/` shards + `CURRENT` pointer), timestamps, audio dataset, GitHub Release, RECITERS.md PR all complete within 15 min
 - [ ] Decommissioned workflows (`bot-create-pr.yml`, `bot-comment.yml`, `issue-commands.yml`, `pr-assignee-sync.yml`, `validate-segments-pr.yml`, `segments-pr-merged.yml`, `find_segments_pr.py`) produced no runs in a 7-day observation window
 - [ ] Skill audit: re-grep `.claude/skills/` for `find_segments_pr`, `pr-assignee-sync`, `file_hash_after`, `bot-only attribution`, `repository_dispatch reciter.claimed`, `update-reciter-state.yml` — should be either gone or documented as v1-archive references
 - [ ] Contributor docs point at the website as primary path
@@ -258,17 +273,45 @@ For quick reference. Anything not listed: unchanged.
 | Per-reciter under-review writes | Git Data API blob+tree+commit+ref → PR branch | bucket file write (mount handles flush 2–30 s) |
 | Scratch dir | `/tmp/inspector-scratch/<slug>/` per active reviewer | None — bucket mount IS the working surface |
 | Debounce loop | Inspector code, 30 s inactivity / 5 min hardcap | Mount handles; same window characteristics |
-| State file location | `data/reciter_state.json` (GitHub repo) | `<bucket>/state/reciter_state.json` (HF bucket) |
-| State file writer | `update-reciter-state.yml` workflow | Inspector backend `services/state.py` (sole writer, embedded state machine) |
-| Audit trail | `git log -- data/reciter_state.json` + `data/admin_audit.jsonl` | `<bucket>/state/audit.jsonl` (append-only) |
+| State store | `data/reciter_state.json` (GitHub repo) | **`<bucket>/state/reciter_state.sqlite`** (SQLite WAL on private metadata bucket) |
+| State writer | `update-reciter-state.yml` workflow | Inspector backend `services/state.py` (sole writer, transactional via SQLite WAL) |
+| Audit trail | `git log -- data/reciter_state.json` + `data/admin_audit.jsonl` | `<bucket>/state/audit/<YYYY>-<MM>.jsonl` (append-only, partitioned monthly, `prev_hash` chain) |
+| Catalog store | n/a (per-reciter audio manifests + `reciters_index.json`) | **`<bucket>/catalog/reciter_catalog.sqlite`** (Inspector-managed, audio_sources factored into separate table) |
+| Roles file | n/a (GitHub team) | **Single `data/inspector_roles.json`** (consolidated owners + maintainers; `hf_user_id` canonical; soft-delete) |
+| Admin override | `state.manual_override` wildcard (any → any) | **Discrete named operations** — `admin.force_set_state` (narrow allowed pairs), `admin.force_clear_assignee`, `admin.force_unmark_ready`, etc. No wildcard. |
+| Lifecycle of `discarded` reciters | New 8th state value with schema bump | **`visibility = 'discarded'` orthogonal to lifecycle** (no schema bump; round-trip preserves position) |
+| `ready_for_merge` | Separate state | **`marked_ready: bool` column on `under_review`** (one column, two flips, three transitions removed) |
+| Bucket WIP layout | `wip/<slug>/data/recitation_segments/<slug>/...` | **Flat `wip/<slug>/...`** (data_dir.resolve handles indirection) |
+| Completed reciter URL | `inspector/segments/<slug>/<file>.gz` | **Versioned: `inspector/segments/<slug>/v<n>/<file>.gz`** + `CURRENT` pointer (re-edit forward-compat) |
 | Per-reciter PR branches | `reciter/<slug>` | None |
 | Per-edit GitHub commit attribution | `<id>+<login>@users.noreply.github.com` author + bot committer | None — attribution is in audit log |
 | Per-reciter merge gate | Maintainer clicks Squash & Merge on github.com | Maintainer clicks Publish in Inspector admin dashboard |
 | Snapshot to HF dataset | `segments-pr-merged.yml` → `--build-inspector-segments` | Publish HF Job |
-| Maintainer team identity | GitHub team `<org>/inspector-maintainers` (App team-API call) | `data/inspector_owners.json` + optional `data/inspector_maintainers.json` |
+| Maintainer team identity | GitHub team `<org>/inspector-maintainers` (App team-API call) | `data/inspector_roles.json` (single consolidated file) |
 | Reciter request intake | Reciter Requests Space → `repository_dispatch` → `update-reciter-state.yml` | Same Space → `repository_dispatch` → `forward-to-inspector.yml` → POST to Inspector → state transition |
 | Cache-invalidate webhook | Required (`segments-pr-merged.yml` POSTs to Inspector) | Not needed (no cache; bucket serves live state) |
 | GitHub App permissions | Contents/Pull-requests/Issues/Members write | None (App removed) |
 | GitHub PAT used by Inspector | None | `INSPECTOR_GITHUB_DISPATCH_TOKEN` (small, only fires `repository_dispatch`) |
 | Code in `services/github_*.py` (deleted in v2) | ~450 LoC | 0 |
-| New code in `services/state.py + hf_bucket.py + auth.py + role.py + publish.py + hf_jobs.py + github_dispatch.py + data_dir.py` | n/a | ~600 LoC |
+| New code in `services/state.py + catalog.py + hf_bucket.py + auth.py + role.py + publish.py + hf_jobs.py + github_dispatch.py + data_dir.py` | n/a | ~700 LoC |
+
+## 10. Reference docs and schema doc generation — deferred
+
+**Not in v2 scope.** See [`../../schema-docs.md`](../../schema-docs.md) for the post-v2 plan covering:
+
+- Tier model for schema placement (`scripts/lib/schemas/` for cross-component, `inspector/schemas/` for inspector-internal, etc.)
+- `scripts/gen_schemas.py` generator for JSON Schema, rendered MD, TS types
+- CI drift gate
+- VS Code JSON-schema association
+- Trigger conditions to start (v2 stable + actual contributor/frontend pain)
+
+What v2 ships at the schema layer:
+
+- **Pydantic models** for `state`, `catalog`, `audit`, `edit_history` shapes — used by `services/*.py` for runtime validation. Lives at `inspector/schemas/`. ~150 LoC total for Phase 0.
+- Nothing else. No generator, no rendered MD per schema, no TS types, no `.vscode` config, no audit script, no per-phase doc landing gate.
+
+What's already at `docs/reference/inspector/`:
+
+- `README.md`, `state-machine.md`, `schemas/README.md` exist as **pre-v2 sketches**. They are reference-quality but not authoritative — code is the contract while v2 is in flight. The schema-docs plan revisits them when it lands; until then they're best-effort design exploration.
+
+**Why deferred:** v2 is on the critical path. Pydantic models used directly by services is enough until a second contributor or the frontend feels actual drift pain. Solving "the next person needs nice rendered docs" before that person exists is premature optimization.
