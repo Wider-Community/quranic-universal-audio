@@ -1,87 +1,103 @@
-# Inspector Admin & Permissions
+# Inspector Admin & Permissions (v2)
 
-Companion to [`inspector-deployment-plan.md`](inspector-deployment-plan.md). Implementation-grade reference for user roles, the permission matrix, override actions, the admin dashboard, the audit log, and the new events the state workflow learns to handle. Pairs with [`inspector-state-management.md`](inspector-state-management.md) (events vocabulary), [`inspector-data-storage.md`](inspector-data-storage.md) (admin cache endpoints), and the future `inspector-auth-claim.md` (authentication mechanics, distinct from authorization handled here).
+Companion to [`inspector-deployment-plan.md`](inspector-deployment-plan.md). Implementation-grade reference for user roles, the permission matrix, override actions, the admin dashboard, and the audit trail. Pairs with [`inspector-state-management.md`](inspector-state-management.md) (events vocabulary), [`inspector-data-storage.md`](inspector-data-storage.md) (bucket layout), and [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) (publish/HF Jobs orchestration).
 
 The parent doc's three roles (anonymous, contributor, claim-holder) are the happy path. This doc adds the elevated **maintainer** and **owner** tiers, the override surfaces they unlock, the dashboard that gives them visibility, and the audit trail that keeps them honest.
 
 ## 1. Model in one paragraph
 
-Authorization is layered on top of authentication. Authentication answers "who is this user" (GitHub OAuth → login + id). Authorization answers "what can they do" — derived from a single source: a GitHub team membership check at request time. Anonymous users see public completed reciters. Logged-in contributors can claim one reciter at a time. Members of `<org>/inspector-maintainers` can override claim assignments, force-release stuck sessions, edit catalog entries, manually set state, and access an admin dashboard. A small set of owners (subset of maintainers, listed in `data/inspector_owners.json`) can additionally manage the maintainer team, rotate App credentials, and toggle feature flags. Every elevated action is named, audited, and confined to the smallest blast radius that solves a real recurring problem.
+Authorization is layered on top of authentication. Authentication answers "who is this user" (HF OAuth → login + hf_user_id). Authorization answers "what can they do" — derived from a single source: `data/inspector_owners.json` on GitHub (and optionally `data/inspector_maintainers.json` if owners want a separate tier). Anonymous users see public completed reciters. Logged-in contributors can claim one reciter at a time. Maintainers can override claim assignments, force-release stuck sessions, edit catalog entries via PR, manually set state, publish, and access the admin dashboard. Owners (small subset) can additionally rotate the Space's HF token, edit the maintainers list itself, and approve irrecoverable destructive actions. Every elevated action is named, audited to `<bucket>/state/audit.jsonl`, and confined to the smallest blast radius that solves a real recurring problem.
 
 ## 2. Roles
 
 ### `anonymous`
 
-Not authenticated. Read-only access to public data — i.e. completed reciters, plus under-review reciters if the parent doc's "anonymous viewing of in-review PRs" defaults to yes (current default).
+Not authenticated. Read-only access to public data — completed reciters, plus in-flight reciters if the parent doc's "anonymous viewing of in-review data" defaults to yes.
 
 ### `contributor`
 
-Authenticated GitHub user. Can:
+Authenticated HF user. Can:
 
 - Read everything an anonymous user can read.
 - Claim one `awaiting_review` reciter at a time.
 - Edit segments for the reciter they hold a claim on.
-- Release their own claim.
-- View their own contribution history (claims made, PRs merged).
+- Release / mark-ready / unmark-ready their own claim.
+- View their own contribution history (claims made, publishes, etc.) — sourced from `<bucket>/state/audit.jsonl`.
 
-A contributor becomes a **claim-holder** while a claim is active. The claim-holder distinction is implicit (derived from `data/reciter_state.json[<slug>].assignee == user.login`) and not a separate role.
+A contributor becomes a **claim-holder** while a claim is active. The claim-holder distinction is implicit (derived from `state.assignee == user.login`) and not a separate role.
 
 ### `maintainer`
 
-Authenticated GitHub user who is a member of the `<org>/inspector-maintainers` GitHub team. Superset of contributor.
+Authenticated HF user whose login is in `data/inspector_maintainers.json` (or `data/inspector_owners.json`, since owners are a superset). Adds: force-release, reassign, manual state override, catalog edit (via PR), publish, send-back from ready, scratch flush, internal data views.
 
-Adds: force-release, reassign, manual state override, catalog edit, pipeline triggers, cache invalidate, scratch flush, internal data views.
-
-Cannot: manage the maintainer team itself, rotate App credentials, toggle feature flags.
+Cannot: rotate the Space's HF token, edit the owner/maintainer lists, approve owner-only destructive actions.
 
 ### `owner`
 
-Maintainer whose login appears in `data/inspector_owners.json`. Superset of maintainer.
+Maintainer whose login appears in `data/inspector_owners.json`. Superset of maintainer. Adds: edit `inspector_owners.json` and `inspector_maintainers.json` (CODEOWNERS-gated), rotate the Space's HF token, accept the irrecoverable destructive actions (e.g. mass discard).
 
-Adds: manage the maintainer team (add/remove via state-changing PR to `inspector_owners.json` or via GitHub team UI), rotate App credentials, toggle feature flags, accept the irrecoverable destructive actions (e.g. mass discard).
+Owners count: recommend 2–3 minimum for bus-factor, ≤5 maximum to keep responsibility concentrated.
 
-Owners count is constrained — recommend 2–3 minimum for bus-factor, ≤5 maximum to keep responsibility concentrated.
+## 3. Maintainer identity — file-only
 
-## 3. Maintainer identity — decision
+**Sole source of role truth: `data/inspector_owners.json` (and optional `data/inspector_maintainers.json`) on GitHub.**
 
-Three viable models. **Recommendation: GitHub team.**
+Schema:
 
-| Model | Setup cost | Audit | Source-of-truth | Failure mode |
-|---|---|---|---|---|
-| **GitHub team** (`<org>/inspector-maintainers`) | Requires the org to exist + team UI access | Native — GitHub already logs team membership changes | The team itself (single API call) | If the team is deleted, lockout. Backup: `inspector_owners.json` always grants owner-level access regardless of team membership. |
-| Config file (`data/inspector_maintainers.json`) | None | Repo PR history | A JSON file | Susceptible to merge-conflict drift if many maintainer changes; manual sync with reality |
-| Repo admin role | None | Native | GitHub repo admin list | Couples Inspector privileges to repo write — far too broad; admins of the repo aren't necessarily Inspector reviewers |
-
-**Adopted model:**
-
-```
-Maintainer = (member of <org>/inspector-maintainers) OR (login in inspector_owners.json)
-Owner     = (login in inspector_owners.json)
+```jsonc
+// data/inspector_owners.json
+{
+  "schema_version": 1,
+  "owners": [
+    { "login": "ahmed", "added_at": "...", "added_by": "..." },
+    { "login": "alice", "added_at": "...", "added_by": "..." }
+  ]
+}
 ```
 
-The OR with `inspector_owners.json` ensures that if the GitHub team is misconfigured or deleted, owners can recover access via the repo file. Owners are also the only ones who can edit `inspector_owners.json` — the file's PR review is owner-only via a CODEOWNERS entry.
+```jsonc
+// data/inspector_maintainers.json (optional; if absent, all maintainer power belongs to owners)
+{
+  "schema_version": 1,
+  "maintainers": [
+    { "login": "bob",   "added_at": "...", "added_by": "..." },
+    { "login": "carol", "added_at": "...", "added_by": "..." }
+  ]
+}
+```
 
-Backend resolution at request time:
+Both files are PR-reviewed (CODEOWNERS gates them to existing owners). Adding/removing maintainers/owners is a deliberate audited action.
+
+### Backend resolution
 
 ```python
 def resolve_role(user: AuthenticatedUser) -> Role:
-    if user.login in OWNERS_SET:           # from cached inspector_owners.json
+    if user.login in OWNERS_SET:           # cached from inspector_owners.json
         return Role.OWNER
-    if github_app.is_team_member(
-        org=ORG, team='inspector-maintainers', login=user.login
-    ):
+    if user.login in MAINTAINERS_SET:      # cached from inspector_maintainers.json (if file exists)
         return Role.MAINTAINER
     return Role.CONTRIBUTOR
 ```
 
-Cache: 60 s. On a 401 / 403 from the team membership endpoint, fall back to `CONTRIBUTOR` (fail-closed for elevation).
+Cache: 60 s. Sources are GitHub raw URLs (no auth needed for public repo). Refreshed via `huggingface_hub`-equivalent simple HTTP fetch.
+
+If both files are unreachable on Inspector startup, fall back to a stale snapshot baked into the Space image (`data/inspector_owners.json` is in the COPY list of the Dockerfile). If the file in the image disagrees with the live one (e.g. live has new entries), live wins on next refresh.
+
+### Why not GitHub team
+
+v1 considered a `<org>/inspector-maintainers` GitHub team queried via the App's team-membership API at request time. v2 drops this:
+
+- We dropped the GitHub App entirely (HF OAuth replaces it).
+- A small `huggingface_hub`-style HTTP fetch of one file is simpler than authed GitHub team API calls + caching.
+- The PR-reviewed file is more transparent than team membership changes (visible in `git log`).
+- Recovery: if the file is misconfigured, an owner edits it via PR; no need for a backup mechanism.
 
 ## 4. Permission matrix
 
 | Action | anon | contrib | maint | owner |
 |---|:---:|:---:|:---:|:---:|
 | View completed reciter | ✓ | ✓ | ✓ | ✓ |
-| View under-review reciter | ✓¹ | ✓ | ✓ | ✓ |
+| View in-flight reciter | ✓¹ | ✓ | ✓ | ✓ |
 | View `discarded` / internal-only reciter | — | — | ✓ | ✓ |
 | View own claim history | — | ✓ | ✓ | ✓ |
 | View any user's claim history | — | — | ✓ | ✓ |
@@ -90,52 +106,47 @@ Cache: 60 s. On a 401 / 403 from the team membership endpoint, fall back to `CON
 | Edit segments (own claim) | — | ✓ | ✓ | ✓ |
 | Mark own claim ready for merge | — | ✓ | ✓ | ✓ |
 | Unmark own claim (pull back to under_review) | — | ✓ | ✓ | ✓ |
-| **Force-release someone else's claim** | — | — | ✓ | ✓ |
+| **Publish a `ready_for_merge` reciter** | — | — | ✓ | ✓ |
 | **Send back from ready_for_merge** | — | — | ✓ | ✓ |
-| **Merge ready PR** ⁵ | — | — | ✓ | ✓ |
+| **Force-release someone else's claim** | — | — | ✓ | ✓ |
 | **Reassign claim to specific user** | — | — | ✓ | ✓ |
-| **Edit segments without holding claim** | — | — | ✓ ² | ✓ ² |
-| **Manually set state (override workflow)** | — | — | ✓ | ✓ |
-| **Catalog entry edit (display name, riwayah, …)** | — | — | ✓ | ✓ |
+| **Edit segments without holding claim** (force-claim) | — | — | ✓ ² | ✓ ² |
+| **Manually set state (override state machine)** | — | — | ✓ | ✓ |
+| **Catalog entry edit** (opens PR to GitHub) | — | — | ✓ | ✓ |
 | **Discard / mark rejected** | — | — | ✓ | ✓ |
 | **Trigger pipeline rerun** ³ | — | — | ✓ | ✓ |
-| Cache invalidate (`/api/internal/cache-invalidate`) | — | — | ✓ | ✓ |
-| Force flush stuck scratch dir | — | — | ✓ | ✓ |
+| Re-run a failed publish HF Job | — | — | ✓ | ✓ |
 | View admin dashboard | — | — | ✓ | ✓ |
 | View audit log | — | — | ✓ | ✓ |
-| Manage maintainer team | — | — | — | ✓ |
-| Edit `inspector_owners.json` | — | — | — | ✓ |
-| Rotate App credentials | — | — | — | ✓ |
-| Toggle feature flags | — | — | — | ✓ |
+| Edit `inspector_owners.json` / `inspector_maintainers.json` | — | — | — | ✓ |
+| Rotate the Space's `INSPECTOR_HF_TOKEN` | — | — | — | ✓ |
 | Mass discard / bulk destructive | — | — | — | ✓ ⁴ |
 
 ¹ Default per parent doc Open Questions; can flip to maintainer-only later.
-² Maintainer edit-without-claim auto-acquires a temporary claim labelled `force_held_by=<login>` that fires `claim.force_acquired` for audit. Released on session end or after 30 min of inactivity.
-³ Web surface fires the pipeline; the pipeline itself remains CLI/HPC-driven. The web button just dispatches the job.
+² Maintainer edit-without-claim auto-acquires a temporary force-claim with a 30-min lease. Released on session end or after 30 min of inactivity. Original assignee retains their claim; maintainer's writes coexist (see §5.3).
+³ Web surface fires the trigger; the pipeline itself runs unchanged on Katana / HF Space / HF Job.
 ⁴ Destructive bulk actions also require a typed confirmation phrase and a 24-hour soft-lock window before they fire (see §6.5).
-⁵ Merge happens via the GitHub native squash-merge button; `segments-pr-merged.yml` fires `reciter.review_merged`. Inspector dashboard surfaces a deep-link to the PR — no separate API.
 
 ## 5. Override actions — full spec
 
-Each override has: trigger, preconditions, request shape, dispatch event fired, audit-log entry shape, reversibility, UI affordance.
+Each override has: trigger, preconditions, request shape, side effects, audit-log entry, reversibility, UI affordance. **All overrides go through Inspector backend's `services/state.py::transition()` for state mutations** — same path as user actions, just gated by maintainer+ role. This keeps the state machine the single point of validation.
 
 ### 5.1 Force-release
 
-**Use case:** reviewer disappeared mid-session; reciter has been `under_review` with no commits for >7 days; need to free it up for someone else.
+**Use case:** reviewer disappeared mid-session; reciter has been `under_review` with no edits for >7 days; need to free it up for someone else.
 
 | Field | Value |
 |---|---|
 | HTTP | `POST /api/admin/claim/force-release` |
 | Body | `{ "slug": "...", "reason": "..." }` |
-| Preconditions | reciter is `under_review`; caller is maintainer+ |
-| Dispatch event | `claim.force_released { slug, by_login, original_assignee, reason }` |
-| State transition | `under_review → awaiting_review`, clears assignee |
-| Audit entry | yes (see §7) |
-| Reversibility | Soft — the original assignee can re-claim (no auto-restore); their unflushed scratch is lost (was flushed to PR branch on lock break) |
+| Preconditions | reciter is `under_review` or `ready_for_merge`; caller is maintainer+ |
+| State transition | (current) → `awaiting_review`, clears assignee |
+| Event in audit | `claim.force_released { slug, by_login, original_assignee, reason }` |
+| Reversibility | Soft — the original assignee can re-claim; their bucket entry's last-flushed state is preserved |
 | UI | Button on reciter card in dashboard ("Force-release") + on the reciter's segments tab when viewed by a maintainer |
-| Confirmation | Modal: "Force-release `<slug>` from `<assignee>`? Their unflushed edits will be flushed to the PR branch. Reason (required):" |
+| Confirmation | Modal: "Force-release `<slug>` from `<assignee>`? Reason (required):" |
 
-Implementation note: before firing the dispatch, the backend force-flushes the active reviewer's scratch dir (multi-file commit on the PR branch as authored by the original reviewer). Their edits are not lost — they're just no longer locked.
+The bucket entry's current contents are preserved — the reviewer's last-flushed state stays in `<bucket>/inspector-wip/<slug>/...` for the next reviewer to pick up. Anything still buffered locally on the original reviewer's container (within the 30 s mount flush window) is lost.
 
 ### 5.2 Reassign
 
@@ -144,15 +155,14 @@ Implementation note: before firing the dispatch, the backend force-flushes the a
 | Field | Value |
 |---|---|
 | HTTP | `POST /api/admin/claim/reassign` |
-| Body | `{ "slug": "...", "to_login": "...", "reason": "..." }` |
-| Preconditions | reciter is `awaiting_review` OR `under_review`; `to_login` exists on GitHub; if not a collaborator, an invite is sent first |
-| Dispatch event | `claim.reassigned { slug, by_login, from_login, to_login, reason }` |
-| State transition | (any) → `under_review`, sets assignee to `to_login` |
-| Audit entry | yes |
+| Body | `{ "slug": "...", "to_login": "...", "to_hf_user_id": "...", "reason": "..." }` |
+| Preconditions | reciter is `awaiting_review`, `under_review`, or `ready_for_merge`; `to_login` is a valid HF user (verified via HF API on submit) |
+| State transition | → `under_review`, sets assignee to `to_login` |
+| Event in audit | `claim.reassigned { slug, by_login, from_login, to_login, reason }` |
 | Reversibility | Soft — reassign back |
-| UI | "Reassign…" button + searchable user picker |
+| UI | "Reassign…" button + searchable user picker (HF user search) |
 
-If `to_login` isn't a collaborator, the flow auto-invites and sets the state to `awaiting_review` with a `pending_invite_for: to_login` field — claim auto-fires when the invite is accepted.
+No invitation needed in v2 — HF users don't need any specific repo permission to use the Inspector; the reassign just sets the assignee field.
 
 ### 5.3 Edit-without-claim (force-claim)
 
@@ -161,47 +171,46 @@ If `to_login` isn't a collaborator, the flow auto-invites and sets the state to 
 | Field | Value |
 |---|---|
 | HTTP | none — implicit; first save under maintainer auth on a reciter they don't own auto-acquires |
-| Dispatch event | `claim.force_acquired { slug, by_login, original_assignee }` |
 | State transition | none (assignee field unchanged); a separate `force_assignee` field is added with a 30-min lease |
-| Audit entry | yes |
+| Event in audit | `claim.force_acquired { slug, by_login, original_assignee }` |
 | Reversibility | Auto-released after 30 min inactivity or maintainer explicit release |
-| UI | Banner: "You are editing a reciter held by `<assignee>`. Your edits will commit as you and auto-release in 30 min." |
+| UI | Banner: "You are editing a reciter held by `<assignee>`. Your edits will save as you and auto-release in 30 min." |
 
-The original assignee retains their claim. Force-claim is a parallel write lock with strict precedence: original assignee's saves are queued behind the maintainer's debounced commit until the maintainer releases. Visible to original assignee as: "A maintainer is making corrections — your saves will queue."
+The original assignee retains their claim. Both writers' saves go to the bucket; the in-process mutex per-`(slug)` serializes them — neither overwrites the other's in-flight state. Visible to original assignee as: "A maintainer is making corrections — your saves may briefly pause."
+
+This is a v2 simplification vs v1: there's no separate "PR branch" to commit on; both writers write to the same bucket entry; the mutex is the coordination point.
 
 ### 5.4 Manual state override
 
-**Use case:** workflow rejected a transition that should have happened (e.g. rare race), or a manual operational fix is needed.
+**Use case:** state machine rejected a transition that should have happened, or a manual operational fix is needed.
 
 | Field | Value |
 |---|---|
 | HTTP | `POST /api/admin/state/set` |
 | Body | `{ "slug": "...", "to_state": "...", "reason": "..." }` |
-| Preconditions | caller is maintainer+; `to_state` is in the closed enum from `inspector-state-management.md` §4; transition is not strictly forbidden by §5 business rules (warn, do not block) |
-| Dispatch event | `state.manual_override { slug, by_login, from_state, to_state, reason }` |
+| Preconditions | caller is maintainer+; `to_state` is in the closed enum |
 | State transition | from-state → to-state (no automatic side effects) |
-| Audit entry | yes; includes prior state file diff |
-| Reversibility | Manual — set back to the prior state |
+| Event in audit | `state.manual_override { slug, by_login, from_state, to_state, reason }` |
+| Reversibility | Manual — set back |
 | UI | Dropdown in admin dashboard for the reciter, listing all states. Confirmation modal repeats the slug name and target state |
 
-Manual overrides do **not** automatically clean up assignee/PR fields if the target state implies they should be null. The maintainer is responsible for setting them via separate endpoints (`/api/admin/claim/clear`, etc.). This is intentional friction.
+Manual overrides do **not** automatically clean up assignee fields if the target state implies they should be null. The maintainer is responsible for setting them via separate admin endpoints (`/api/admin/claim/clear`, etc.). Intentional friction.
 
 ### 5.5 Discard
 
-**Use case:** reciter request was made in error, audio source is broken, etc. Currently CLI-only per parent doc non-goals; this surfaces it on the web.
+**Use case:** reciter request was made in error, audio source is broken, etc.
 
 | Field | Value |
 |---|---|
 | HTTP | `POST /api/admin/discard` |
 | Body | `{ "slug": "...", "reason": "...", "confirmation_phrase": "discard <slug>" }` |
 | Preconditions | caller is maintainer+; `confirmation_phrase` matches `discard <slug>` exactly |
-| Dispatch event | `reciter.discarded { slug, by_login, reason }` |
-| State transition | (any) → `discarded` (new state — see §11 for vocabulary additions) |
-| Audit entry | yes |
-| Reversibility | Manual state override back; PR remains closed but can be reopened |
+| State transition | (any) → `discarded` (new state — see §11) |
+| Event in audit | `reciter.discarded { slug, by_login, reason }` |
+| Reversibility | Manual state override back; bucket entry preserved unless owner deletes |
 | UI | "Discard" button only visible after typing `discard <slug>` in a confirmation field |
 
-Discarded reciters are hidden from anonymous viewers and from the regular reciter list. Maintainers see them in an "Internal" filter on the admin dashboard.
+Discarded reciters are hidden from anonymous viewers and from the regular reciter list. Maintainers see them in an "Internal" filter on the admin dashboard. Bucket entry stays; recovery is `state.manual_override` back.
 
 ### 5.6 Catalog edit
 
@@ -212,13 +221,12 @@ Discarded reciters are hidden from anonymous viewers and from the regular recite
 | HTTP | `POST /api/admin/catalog/edit` |
 | Body | `{ "slug": "...", "patch": { "display_name": "...", ... }, "reason": "..." }` |
 | Preconditions | caller is maintainer+; patch passes catalog schema validation; slug already exists |
-| Dispatch event | `catalog.edited { slug, by_login, patch, reason }` |
-| Side effect | Workflow opens a PR against `data/reciter_catalog.json` with the patch applied (does NOT push directly to main — catalog edits are normal PRs) |
-| Audit entry | yes |
+| Side effect | Inspector backend opens a PR against `data/reciter_catalog.json` on GitHub via the dispatch token. The PR uses the maintainer's login as author (via `Co-authored-by:` trailer in the commit message; the bot creates the commit since dispatch can't author commits as users). |
+| Event in audit | `catalog.edited { slug, by_login, patch, reason }` |
 | Reversibility | Reverse PR |
 | UI | Catalog editor modal with form fields per schema |
 
-Catalog edits flow through a PR rather than direct-to-main because they're rare, deserve scrutiny, and the existing PR review affordances are valuable. State edits go direct because they're frequent and the workflow validation is the review.
+Catalog edits flow through a PR rather than direct-to-main because they're rare, deserve scrutiny, and the existing PR review affordances are valuable on GitHub. State edits go direct (to bucket) because they're frequent and the state machine validation is the review.
 
 ### 5.7 Pipeline trigger
 
@@ -229,63 +237,43 @@ Catalog edits flow through a PR rather than direct-to-main because they're rare,
 | HTTP | `POST /api/admin/pipeline/trigger` |
 | Body | `{ "slug": "...", "kind": "extraction" \| "timestamps" \| "validation", "reason": "..." }` |
 | Preconditions | caller is maintainer+; reciter is in a state compatible with the requested operation |
-| Dispatch event | `pipeline.triggered { slug, by_login, kind, reason }` |
-| Side effect | Workflow dispatches the corresponding pipeline job (existing CLI/HPC job, no new infra) |
-| Audit entry | yes |
+| Side effect | Fires `repository_dispatch pipeline.triggered { slug, by_login, kind, reason }` to GitHub. The corresponding pipeline workflow handles it. |
+| Event in audit | `pipeline.triggered` (also recorded in audit) |
 | Reversibility | None — pipelines, once started, run to completion |
 | UI | "Run pipeline…" picker on the reciter card |
 
-The web surface only triggers; the pipeline itself runs unchanged on Katana / HF Space / GitHub Actions per existing wiring. Status visible in the dashboard's "CI health" section.
+The web surface only triggers; the pipeline itself runs unchanged on Katana / HF Space / HF Job per existing wiring.
 
-### 5.8 Cache invalidate
+### 5.8 Re-run a failed publish HF Job
 
-**Use case:** stale data after a manual fix or unusual event. Already exists in `inspector-data-storage.md` §3 as an internal endpoint; this doc spells out who's allowed.
-
-| Field | Value |
-|---|---|
-| HTTP | `POST /api/internal/cache-invalidate?slug=<slug>` |
-| HTTP (broad) | `POST /api/internal/cache-invalidate-all` |
-| Auth | shared internal secret (existing — used by `segments-pr-merged.yml`) **OR** maintainer+ session cookie |
-| Audit entry | yes (when triggered by user; not when triggered by webhook) |
-| Reversibility | none needed (cache repopulates) |
-| UI | "Invalidate cache" button on reciter card; "Flush all caches" button in dashboard system-health section (owner-only) |
-
-### 5.9 Force flush scratch
-
-**Use case:** scratch dir got into a weird state; want to discard pending in-memory changes and restart from PR branch.
+**Use case:** the publish fan-out fired three Jobs; one failed. Maintainer wants to re-run the failed one without re-firing the others.
 
 | Field | Value |
 |---|---|
-| HTTP | `POST /api/admin/scratch/flush` |
-| Body | `{ "slug": "...", "mode": "commit" \| "discard" }` |
-| Preconditions | caller is maintainer+; reciter has an active scratch dir |
-| Dispatch event | none (backend-internal) |
-| Side effect | `commit` → fires the debounced commit then deletes scratch; `discard` → deletes scratch without committing |
-| Audit entry | yes |
-| Reversibility | `commit` mode: edits are now on PR branch; `discard` mode: edits are gone |
-| UI | "Flush scratch" button on active session in dashboard |
+| HTTP | `POST /api/admin/rerun-job` |
+| Body | `{ "slug": "...", "job_type": "snapshot" \| "timestamps" \| "audio-dataset", "reason": "..." }` |
+| Preconditions | caller is maintainer+; reciter has a failed Job of that type in the in-memory tracker |
+| Side effect | Inspector POSTs to HF Jobs API to enqueue the same Job (with same payload) |
+| Event in audit | `admin.job_rerun { slug, by_login, job_type, original_job_id, new_job_id, reason }` |
+| Reversibility | Cancel the new Job before completion |
+| UI | Per-Job retry button in the dashboard's "Active Publish Operations" section |
 
-`discard` mode requires a typed confirmation. Used for recovery from rare corruption.
+### 5.9 Send back from ready_for_merge
 
-### 5.10 Send back from ready_for_merge
-
-**Use case:** maintainer reviewed a `ready_for_merge` PR, found issues, wants the reviewer to fix them rather than merging or force-claiming a quick fix themselves.
+**Use case:** maintainer reviewed a `ready_for_merge` reciter, found issues, wants the reviewer to fix them rather than publishing.
 
 | Field | Value |
 |---|---|
 | HTTP | `POST /api/admin/ready/send-back` |
 | Body | `{ "slug": "...", "reason": "..." }` |
 | Preconditions | reciter is `ready_for_merge`; caller is maintainer+ |
-| Dispatch event | `reciter.merge_rejected { slug, by_login, original_assignee, reason }` |
 | State transition | `ready_for_merge → under_review` (assignee retained) |
-| Audit entry | yes |
+| Event in audit | `reciter.merge_rejected { slug, by_login, original_assignee, reason }` |
 | Reversibility | Reviewer can mark ready again after fixes |
 | UI | "Send back…" button on the reciter card when state is `ready_for_merge` |
 | Confirmation | Modal with required reason field (≥10 chars) |
 
-The reason text is posted as a comment on the issue and pinged at the original assignee. The PR is left open. Reviewer reads, makes changes, marks ready again.
-
-Lighter alternative: maintainer can just leave a PR review comment on github.com requesting changes; the reviewer then unmark themselves. This admin endpoint is for the case where the maintainer wants the state to flip immediately (e.g. to free up the dashboard's stalled-ready queue).
+The reason text is appended to the reciter's history entry in the state file; surfaced in the reviewer's dashboard banner.
 
 ## 6. Admin dashboard
 
@@ -297,19 +285,19 @@ Live-refreshing card. Sources from `/api/admin/health`:
 
 ```jsonc
 {
-  "app_token": { "issued_at": "...", "expires_at": "...", "seconds_to_refresh": 480 },
-  "github_rate_limit": { "limit": 5000, "remaining": 4612, "reset_at": "..." },
-  "github_fetch_cache": { "entries": 184, "bytes": 312000000, "hit_rate_5m": 0.94 },
-  "scratch": { "active_sessions": 3, "total_bytes": 28000000, "max_bytes": 524288000 },
-  "debounce": { "queued": 1, "oldest_age_seconds": 12 },
+  "hf_oauth_session_count": 12,
+  "bucket_mount": { "mounted": true, "rw": true, "writes_last_5m": 18 },
+  "parsed_seg_cache": { "entries": 4, "bytes": 18000000, "hit_rate_5m": 0.94 },
+  "active_sessions": 3,
+  "inflight_publish_jobs": 1,
   "backend": { "version": "...", "commit": "...", "uptime_seconds": 184231 },
-  "state_file": { "last_updated_at": "...", "last_workflow_run": 1234, "reciters_count": 287 }
+  "state_file": { "last_updated_at": "...", "reciters_count": 287 }
 }
 ```
 
 ### 6.2 All reciters
 
-Sortable, filterable table. Columns: slug, state pill, days-in-state, assignee, pr_number, last activity, quick-action buttons.
+Sortable, filterable table. Columns: slug, state pill, days-in-state, assignee, last activity, quick-action buttons.
 
 Filters: state (multi), assignee (text), riwayah, source, "stalled only" toggle, "internal only" toggle (shows discarded).
 
@@ -323,8 +311,8 @@ Auto-populated from these rules (configurable per-state thresholds):
 |---|---|
 | `awaiting_alignment` | >7 days since transition |
 | `awaiting_review` | >30 days with `assignee == null` |
-| `under_review` | >14 days since last commit on PR head |
-| `ready_for_merge` | >7 days awaiting maintainer merge |
+| `under_review` | >14 days since last save in audit log |
+| `ready_for_merge` | >7 days awaiting maintainer publish |
 | `awaiting_timestamps` | >7 days since transition |
 
 Each row shows: slug, state, days stalled, recommended action, action button.
@@ -333,74 +321,72 @@ Each row shows: slug, state, days stalled, recommended action, action button.
 
 Real-time view of in-memory state:
 
-| slug | assignee | claim_age | last_save_age | scratch_size | debounce_in |
-|---|---|---|---|---|---|
+| slug | assignee | claim_age | last_save_age | parsed_cache_hit |
+|---|---|---|---|---|
 
-Quick actions per row: force-release, force-flush, view session details (recent saves).
+Quick actions per row: force-release, view session details (recent saves from `edit_history.jsonl`).
 
-### 6.5 Recent events log
+### 6.5 Active publish operations
 
-Merged stream of:
+For any reciter in `awaiting_timestamps`, show the three subordinate Jobs and their status:
 
-- Last 100 entries from `data/reciter_state.json` history arrays (across all reciters, sorted by `at` desc).
-- Last 100 entries from `data/admin_audit.jsonl`.
+| slug | snapshot-bucket-to-dataset | timestamps-refresh | build-per-verse-audio | published_at |
+|---|---|---|---|---|
+| saad_al_ghamdi | ✓ done (12s) | ⟳ running (4m) | ✓ done (3m) | — |
+
+Per-Job retry button if any is `failed`.
+
+### 6.6 Recent events log
+
+Sourced from `<bucket>/state/audit.jsonl`. Last 100 entries, sorted desc.
 
 Filterable by event type, actor, slug. Each entry expandable to show the full payload.
 
-### 6.6 CI health
-
-Last 7 days of failed runs grouped by workflow + reciter. Quick-link to the GitHub run, retry button (calls `gh run rerun` via the App).
-
 ### 6.7 Contributor activity
 
-Per-user (last 30 days):
+Per-user (last 30 days), derived from audit log:
 
 - Claims made
-- Edits committed (count of `[wip]` commits on PR branches authored by them)
-- PRs merged
-- Pending invitations
-- Average days from claim to merge
+- Saves performed (count of save batches)
+- Reciters published
+- Average days from claim to mark-ready
 
-Sortable. Linkable to the user's GitHub profile.
+Sortable. Linkable to the user's HF profile.
 
-### 6.8 Pending invitations
+### 6.8 Bulk actions (owner-only)
 
-Issued via `PUT /repos/.../collaborators/{login}` from the claim flow. Tracked in `data/reciter_state.json[<slug>].pending_invite_for` (new optional field). Dashboard shows: invitee, slug, invited_at, status (pending / accepted / expired). Action: cancel invitation.
+Separate tab. Operations:
 
-### 6.9 Bulk actions (owner-only)
-
-A separate tab. Operations like:
-
-- Discard all reciters in state X older than Y days (with typed confirmation + 24h soft-lock)
-- Bulk reassign all reciters from user A to user B (e.g. when a reviewer leaves)
+- Discard all reciters in state X older than Y days (typed confirmation + 24h soft-lock)
+- Bulk reassign all reciters from user A to user B (when a reviewer leaves)
 - Bulk re-trigger pipeline for slugs matching a filter
 
-Each bulk action lists the affected slugs in a preview before firing. Soft-lock means: clicking Run schedules the action 24h in the future; another owner can cancel during that window. Designed to make accidental mass-action recoverable.
+Each bulk action lists affected slugs in a preview before firing. Soft-lock: clicking Run schedules the action 24h in the future; another owner can cancel during that window.
 
 ## 7. Audit log
 
 ### File
 
-`data/admin_audit.jsonl` — repo-tracked, append-only JSONL. Written by `update-reciter-state.yml` (which adds entries when admin-triggered events come through dispatch). Owner-only edit via CODEOWNERS — even maintainers can't tamper with the audit log.
+`<bucket>/state/audit.jsonl` — append-only JSONL. Written by Inspector backend on every state-mutating event. **Bucket is mutable but Inspector only ever appends** to this file — there's no Inspector code path that rewrites it.
 
 ### Schema
 
 ```jsonc
 {
   "schema_version": 1,
-  "at": "2026-05-09T14:23:11Z",
-  "actor": "alice",
-  "actor_role": "maintainer",
-  "action": "claim.force_released",
+  "ts": "2026-05-09T14:23:11Z",
+  "actor": { "login": "alice", "hf_user_id": "12345", "role": "maintainer" },
+  "event": "claim.force_released",
   "slug": "saad_al_ghamdi",
+  "from_state": "under_review",
+  "to_state": "awaiting_review",
   "reason": "Reviewer unresponsive for 8 days, freeing for next contributor.",
   "payload": {
-    "original_assignee": "bob",
-    "scratch_was_dirty": true,
-    "scratch_flushed_to_branch": true
+    "original_assignee": "bob"
   },
   "result": "ok",
-  "workflow_run_id": 1234
+  "request_id": "req_abc123",
+  "replica": "inspector-prod"
 }
 ```
 
@@ -409,72 +395,71 @@ Fields:
 | Field | Required | Notes |
 |---|---|---|
 | `schema_version` | yes | Bump on schema change |
-| `at` | yes | ISO 8601 |
-| `actor` | yes | GitHub login |
-| `actor_role` | yes | `maintainer` or `owner` |
-| `action` | yes | Event name from §5 / §11 |
-| `slug` | yes (or `null` for non-reciter actions like cache flush all) | |
-| `reason` | yes | Free-form maintainer-supplied; required by every override endpoint |
-| `payload` | yes | Action-specific structured data |
+| `ts` | yes | ISO 8601 |
+| `actor` | yes | Authenticated user; populated from session |
+| `event` | yes | Event name from §5 / §11 |
+| `slug` | yes (or `null` for non-reciter actions like bulk) | |
+| `from_state`, `to_state` | yes for state transitions | Otherwise null |
+| `reason` | yes for admin actions | Free-form, ≥10 chars |
+| `payload` | yes | Event-specific |
 | `result` | yes | `ok` or `failed` |
-| `workflow_run_id` | yes | For traceability |
+| `request_id` | yes | For traceability across logs |
+| `replica` | yes | Inspector instance id (multi-replica future) |
 
 ### Retention
 
-Forever, in repo. Truncate to last 100k entries with archive-to-release if it ever bloats — not expected for years at the maintainer-action rate.
+Forever, in bucket. ~3.6 MB/year sustained at typical scale. If pathological growth ever appears, archive to dated subdirs quarterly (`<bucket>/state/audit/<YYYY>/<MM>.jsonl`).
 
 ### Query
 
-`scripts/lib/admin_audit.py::query()` for CLI / dashboard use. Plus the dashboard recent-events log §6.5.
+`scripts/lib/admin_audit.py::query()` for CLI / dashboard use. Plus the dashboard recent-events log §6.6.
 
 ## 8. UI surfaces summary
 
 | Surface | Visibility | Component |
 |---|---|---|
-| `/admin` route | maintainer+ | Dashboard SPA (Svelte tab + sub-routes) |
+| `/admin` route | maintainer+ | Dashboard SPA |
 | Inline force-release / reassign on reciter card | maintainer+ | `tabs/segments/components/reciter-card/AdminQuickActions.svelte` (new) |
-| "Internal view" toggle | maintainer+ | adds `internal: true` to reciter list query — surfaces discarded etc. |
+| "Internal view" toggle | maintainer+ | adds `internal: true` to reciter list query — surfaces discarded |
 | Banner: "You are editing a reciter held by …" | maintainer force-claiming | `lib/components/ForceClaimBanner.svelte` |
 | Banner: "A maintainer is making corrections" | original assignee during force-claim | same component |
 | Reason-required modals | every override | `lib/components/ConfirmWithReason.svelte` |
 | Discard confirmation phrase | discard action | `lib/components/TypedConfirmation.svelte` |
+| Per-Job retry buttons | maintainer+ | `tabs/admin/PublishOperations.svelte` |
 
 ## 9. Anti-creep design rules
 
 Three rules, hard:
 
-1. **Default flow handles 95% of cases.** Every override action must document the recurring problem it solves. No speculative admin features — add when there's a real recurring problem the normal flow can't handle.
-2. **No "edit anything" admin role.** Each override is a specific named action with a specific dispatch event with a specific audit entry. There is no generic "as admin, do X" escape hatch.
-3. **Maintainer count stays small.** Recommend 3–10. Reviewed via PR for the team config (or via GitHub team UI with owner approval). Onboarding doc explains expected response times and revocation criteria.
+1. **Default flow handles 95% of cases.** Every override action must document the recurring problem it solves. No speculative admin features.
+2. **No "edit anything" admin role.** Each override is a specific named action with a specific audit entry. No generic escape hatch.
+3. **Maintainer count stays small.** Recommend 3–10. Reviewed via PR for `inspector_maintainers.json`. Onboarding doc explains expected response times.
 
 Soft conventions:
 
-- Every override requires a `reason` string ≥ 10 chars. The dashboard logs short reasons in red as a soft signal of carelessness.
+- Every override requires a `reason` string ≥ 10 chars.
 - Destructive actions (discard, mass-bulk) require typed confirmation matching the slug name.
 - Bulk owner-only actions have a 24h soft-lock cancellable by another owner.
-- No silent maintainer actions — everything fires a dispatch event and lands in the audit log.
+- No silent maintainer actions — everything lands in the audit log.
 
 ## 10. CLI parity
 
-Web admin and CLI tools complement; they don't replace. The split:
+Web admin and CLI tools complement; they don't replace.
 
 | Action | Web | CLI | Why |
 |---|:---:|:---:|---|
-| Force-release | ✓ | ✓ | High-frequency, low-risk; web is faster |
-| Reassign | ✓ | ✓ | Same |
+| Force-release | ✓ | — | Web is faster; CLI dropped (no GitHub PR primitive to fall back to in v2) |
+| Reassign | ✓ | — | Same |
 | Force-claim edit | ✓ | — | Tied to a session, web-only |
-| Manual state override | ✓ | ✓ | CLI for batch / scripted recovery |
+| Manual state override | ✓ | ✓ | CLI for batch / scripted recovery (writes via `huggingface_hub` directly to bucket) |
 | Discard | ✓ | ✓ | Same |
 | Catalog edit | ✓ | ✓ | CLI exists today (`process_requests.py`) |
 | Pipeline rerun | ✓ (trigger) | ✓ (full) | Web fires; CLI / HPC owns execution |
 | Re-extraction with custom params | — | ✓ | Too many parameters for a sane web form |
 | Param-rerun | — | ✓ | Same |
 | Mass schema migration | — | ✓ | Repo-wide changes belong in version-controlled scripts |
-| Cache invalidate | ✓ | ✓ | Both useful |
-| Scratch flush | ✓ | — | Backend-internal — only meaningful while session is live |
-| Manage maintainer team | GitHub team UI | — | Lives outside Inspector |
 | Edit `inspector_owners.json` | — | PR | Single canonical workflow |
-| Rotate App credentials | ✓ (owner) | ✓ | Both useful |
+| Rotate Space `INSPECTOR_HF_TOKEN` | ✓ (owner-instructions) | ✓ | Web shows the runbook step; the actual rotation is in HF Space settings UI |
 
 The CLI surfaces stay documented in the `process-requests` skill and `inspector/CLAUDE.md`.
 
@@ -487,16 +472,16 @@ Extends [`inspector-state-management.md`](inspector-state-management.md) §4 eve
 | `reciter.marked_ready` | contributor endpoint | `slug, login` | `under_review → ready_for_merge` (assignee retained) |
 | `reciter.unmarked_ready` | contributor endpoint | `slug, login` | `ready_for_merge → under_review` (assignee retained) |
 | `reciter.merge_rejected` | maintainer endpoint | `slug, by_login, original_assignee, reason` | `ready_for_merge → under_review` (assignee retained) |
+| `reciter.published` | maintainer endpoint | `slug, by_login` | `ready_for_merge → awaiting_timestamps`, fires HF Jobs + GH Actions fan-out |
 | `claim.force_released` | admin endpoint | `slug, by_login, original_assignee, reason` | `under_review → awaiting_review`, `ready_for_merge → awaiting_review` |
-| `claim.reassigned` | admin endpoint | `slug, by_login, from_login, to_login, reason` | `awaiting_review → under_review`, `under_review → under_review` (assignee swap), `ready_for_merge → under_review` (swap and demote) |
-| `claim.force_acquired` | admin endpoint (implicit via first save) | `slug, by_login, original_assignee` | none (ephemeral; no state file change) |
+| `claim.reassigned` | admin endpoint | `slug, by_login, from_login, to_login, reason` | various → `under_review` |
+| `claim.force_acquired` | admin endpoint (implicit via first save) | `slug, by_login, original_assignee` | none (ephemeral) |
 | `claim.force_released_auto` | backend timer | `slug, by_login, original_assignee` | none (ephemeral) |
 | `state.manual_override` | admin endpoint | `slug, by_login, from_state, to_state, reason` | any → any |
 | `reciter.discarded` | admin endpoint | `slug, by_login, reason` | any → `discarded` |
-| `catalog.edited` | admin endpoint (via PR) | `slug, by_login, patch, reason` | none (state file unchanged; catalog file changes via PR) |
-| `pipeline.triggered` | admin endpoint | `slug, by_login, kind, reason` | none (state may transition later when the pipeline emits its own event) |
-| `admin.cache_invalidated` | admin endpoint | `by_login, scope (slug or 'all'), reason` | none |
-| `admin.scratch_flushed` | admin endpoint | `slug, by_login, mode` | none |
+| `catalog.edited` | admin endpoint (via PR) | `slug, by_login, patch, reason` | none (catalog file is on GitHub; bucket state unchanged until catalog PR merges) |
+| `pipeline.triggered` | admin endpoint | `slug, by_login, kind, reason` | none (state may transition later when pipeline emits its own event) |
+| `admin.job_rerun` | admin endpoint | `slug, by_login, job_type, original_job_id, new_job_id, reason` | none |
 
 Plus a new state value:
 
@@ -504,120 +489,99 @@ Plus a new state value:
 |---|---|---|---|
 | `discarded` | Reciter request rejected / abandoned. Hidden from anonymous lists. | No | Visible only to maintainers under "Internal" filter. |
 
-The state-management transition matrix (§4 of that doc) needs updating to allow `* → discarded` and to document `discarded → *` only via `state.manual_override` (i.e. the recovery path is the manual override).
+The state-management transition matrix needs updating to allow `* → discarded` and to document `discarded → *` only via `state.manual_override`.
 
-## 12. GitHub App permissions delta
+## 12. Phased rollout
 
-Already-required (per [`inspector-auth-claim.md`](inspector-auth-claim.md) §3 / [`inspector-state-management.md`](inspector-state-management.md) §9):
-
-- `Contents: Write` (state file commits, edit pushes)
-- `Pull requests: Write` (creating / updating review PRs)
-- `Issues: Write` (label/assignee mirroring)
-- `Metadata: Read`
-- `Actions: Read` (workflow run statuses for the dashboard)
-- `Members: Read` on the org (team membership lookup)
-
-Added by this doc:
-
-- None. `/api/admin/pipeline/trigger` fires `repository_dispatch` (Contents: write covers it) or `workflow_dispatch` via the existing Actions: Read + a small write extension if needed — confirm at implementation time. No `Administration: write` is requested anywhere; collaborator invites are not part of the deployed flow.
-
-No additional user-token scopes — admin authorization is derived from the App's team-membership lookup, not from broader OAuth scopes on the user side.
-
-## 13. Phased rollout
-
-Maps onto the parent doc's phases. Admin work lands incrementally — the dashboard ships in Phase 1 (read-only visibility), override actions phase in alongside the underlying operations they override.
+Maps onto the parent doc's phases.
 
 ### Phase 1 — Read-only admin dashboard
 
-- `/admin` route gated by maintainer team membership.
+- `/admin` route gated by maintainer role (resolved against `inspector_owners.json` + optional `inspector_maintainers.json`).
 - System health, all-reciters, stalled-reciters, recent-events sections wired up (read-only).
 - No override actions yet.
-- Audit log file created and read in dashboard, but no writers yet.
+- Audit log file readable in dashboard, but no writers yet (the bucket has the file pre-seeded by the migration script with an initial entry).
 
-**Acceptance:** maintainers can see the full state of the system; non-maintainers get a 404 on `/admin`; performance tests show dashboard renders in p99 ≤ 800 ms.
+**Acceptance:** maintainers see full state of the system; non-maintainers get 404 on `/admin`; dashboard renders in p99 ≤ 800 ms.
 
 ### Phase 3 — Claim overrides
 
 - Force-release, reassign, force-claim, send-back-from-ready implemented as admin endpoints.
-- Dispatch events `claim.force_released`, `claim.reassigned`, `claim.force_acquired`, `reciter.merge_rejected` added to the state workflow.
-- Dashboard quick-action buttons wired up.
+- All write through `state.transition()` with maintainer role check.
 - Audit log writes flowing.
 
-**Acceptance:** all four actions work end-to-end, audit entries appear, dispatch events update state file correctly, original assignees see appropriate UI feedback.
+**Acceptance:** all four actions work end-to-end; audit entries appear; original assignees see appropriate UI feedback.
 
-### Phase 5a — Lock overrides
+### Phase 5 — Lock overrides + publish
 
-- Force-claim edit pathway implemented (parallel write lock).
-- Force flush scratch endpoint live.
+- Force-claim edit pathway implemented (parallel writes serialized by mutex).
+- Publish endpoint live (`POST /api/admin/publish/<slug>` → state transition + fan-out).
 - Banner UX for original assignee + force-claiming maintainer.
 
-**Acceptance:** force-claim doesn't corrupt the original assignee's edits; auto-release after 30 min works; both parties' commits are properly attributed.
+**Acceptance:** force-claim doesn't corrupt the original assignee's bucket state; auto-release after 30 min works; both parties' saves appear correctly attributed in audit log.
 
 ### Phase 6 — Catalog, state override, pipeline trigger, discard, bulk
 
 - Catalog edit endpoint + opens PR flow.
-- Manual state override endpoint + dispatch event.
-- Pipeline trigger endpoint.
+- Manual state override.
+- Pipeline trigger.
 - Discard endpoint + new `discarded` state.
 - Bulk actions tab (owner-only).
 - 24h soft-lock implementation for owner-only destructive actions.
+- Re-run failed publish Job endpoint.
 
-**Acceptance:** every override is reachable both from the dashboard and from CLI parity tests; audit log captures every action; bulk soft-lock can be cancelled by another owner mid-window.
+**Acceptance:** every override reachable from the dashboard; audit log captures every action; bulk soft-lock can be cancelled by another owner mid-window.
 
-## 14. Risks and open questions
+## 13. Risks and open questions
 
-### Maintainer team setup dependency
+### `inspector_owners.json` cache stale during emergency
 
-Phase 1 depends on the GitHub team existing. If the org doesn't have one yet, that's a Phase 0 prerequisite (create the team, add 2–3 trusted users, document onboarding). Recover via `inspector_owners.json` if the team is misconfigured later.
+Owner needs to revoke a maintainer's role urgently. The 60 s cache means the change takes up to 60 s to propagate. Acceptable. Owner can additionally call `POST /api/admin/refresh-roles` (owner-only) to force-refresh.
 
 ### Audit log tampering
 
-Even though CODEOWNERS gates `data/admin_audit.jsonl` to owners, an owner could in principle edit it. Mitigation: the audit log is **append-only** in the workflow that writes it (any commit that deletes lines from the file fails CI). The check lives in `validate_admin_audit.py`. Owner-side tampering would require disabling CI, which is loud.
+Even though Inspector only appends, an owner with bucket-write access could in principle truncate or rewrite. Mitigation: periodic backup to a versioned location (quarterly snapshot to a dataset). Real defense is process: the audit log is a check on maintainer behavior; tampering with it is itself a recordable event (the resulting absence of expected entries).
 
 ### Force-claim race with original assignee
 
-Original assignee saves while maintainer force-claim is active. Two writers, one PR branch. Mitigation: the parallel-lock model serialises both through the same debounce timer — original assignee's saves queue behind the maintainer's debounced commit. Worst case: the original assignee sees a "queued" indicator until the maintainer's debounce fires. Edge case: if both have unflushed work and the maintainer's session crashes, the original assignee's queue remains queued until cleanup. Acceptance test required for this scenario in Phase 5a.
+Original assignee saves while maintainer force-claim is active. Mutex on `(slug)` serializes both. Each save commits to the bucket in turn. The only conflict is if both edit the same segment in the same window — the mutex orders them; the audit log records both. Acceptable.
 
 ### Bulk action mistakes
 
-A maintainer accidentally clicks "Discard all `awaiting_review` older than 365 days" and walks away. Mitigation: 24h soft-lock + typed confirmation + preview list of affected slugs + another owner can cancel + restricted to owner role. Combined, this should make it very hard to do real damage. But not impossible — recovery path is the manual state override (per discarded reciter).
-
-### Maintainer churn
-
-Inactive maintainers with stale GitHub team membership are a soft security risk. Soft mitigation: quarterly review by an owner of the team list. No automated revocation — manual is fine at this scale.
+A maintainer accidentally clicks "Discard all `awaiting_review` older than 365 days" and walks away. Mitigation: 24h soft-lock + typed confirmation + preview list + another owner can cancel + restricted to owner role.
 
 ### Web admin replacing CLI
 
-Risk: web becomes "good enough" for most things, CLI atrophies, edge cases requiring CLI become unreachable. Mitigation: §10 explicitly carves out which actions stay CLI-only. CLI parity test runs on every release.
+Risk: web becomes "good enough", CLI atrophies. Mitigation: §10 explicitly carves out which actions stay CLI-only.
 
 ### Catalog edit PR review burden
 
-Every catalog edit opens a PR. If many small typo corrections come through, the PR queue becomes noise. Mitigation: catalog edit PRs auto-merge after a delay (e.g. 1h) if no maintainer requests review and a CI validation passes. Tunable per-field — display name typos auto-merge; riwayah reclassifications require manual review.
+Every catalog edit opens a PR. If many small typo corrections come through, the queue becomes noise. Mitigation: catalog edit PRs auto-merge after a delay (e.g. 1h) if no maintainer requests review and CI validation passes.
 
 ### Pipeline trigger from web vs HPC reality
 
-The web button fires `pipeline.triggered` but the actual pipeline runs on Katana / HF Space. If those are down or the slug isn't on Katana, the trigger silently fails. Mitigation: the workflow that handles `pipeline.triggered` validates pre-conditions and fires back a `pipeline.failed_to_start` event with a reason. Visible in dashboard CI health.
+The web button fires `pipeline.triggered` but the actual pipeline runs on Katana / HF Job. If those are down or the slug isn't on Katana, the trigger silently fails. Mitigation: the workflow validates pre-conditions and fires back a `pipeline.failed_to_start` event with reason. Visible in dashboard.
 
 ### `discarded` state and existing reciters
 
-Adding `discarded` to the state enum is a schema bump (per `inspector-state-management.md` §2 validation rules). Migration: increment `schema_version`, update validator to accept both old and new for one cycle, then drop old. Existing reciters never transition automatically — discard is always explicit.
+Adding `discarded` to the state enum is a schema bump. Migration: increment `schema_version`, update validator to accept both old and new for one cycle, then drop old.
 
 ### Dashboard performance at scale
 
-300 reciters × 20 history entries each + 100 audit entries fits in memory easily. But if the dashboard auto-refreshes every 5s and 50 maintainers are watching, the backend could see significant duplicate work. Mitigation: ETag on the `/api/admin/health` and `/api/admin/reciters` responses; clients revalidate; backend caches the assembly for 1s.
+300 reciters × 20 history entries each + 100 audit entries fits in memory easily. But auto-refresh every 5 s × 50 maintainers = duplicate work. Mitigation: ETag on `/api/admin/health` and `/api/admin/reciters`; clients revalidate; backend caches the assembly for 1 s.
 
 ### Owner concentration
 
-Having too few owners (1) is a bus-factor risk; too many (10+) dilutes accountability. Recommend 2–3. Documented in onboarding.
+Too few owners (1) is bus-factor risk; too many (10+) dilutes accountability. Recommend 2–3.
 
 ### Action visibility for non-admin contributors
 
-Should a reviewer see "this reciter was reassigned by maintainer X 2 days ago" in their UI? Soft-yes for transparency, but the audit log isn't anonymous-readable. Compromise: surface admin actions on the affected reciter's history panel in muted form, without actor names for non-maintainers.
+Should a reviewer see "this reciter was reassigned by maintainer X 2 days ago"? Soft-yes for transparency, but the audit log isn't anonymous-readable. Compromise: surface admin actions on the affected reciter's history panel in muted form, without actor names for non-maintainers.
 
 ### Self-assignment of admin role
 
-The team-membership lookup needs to be the App's view, not the user's. A user could in theory present a forged "I'm a maintainer" claim if the backend trusts user-supplied data. Mitigation: every authorization check goes through `github_app.is_team_member()` — backend never trusts the user's claim. Failure mode: GitHub team API outage → fail-closed (treat user as contributor).
+The lookup needs to come from the file, not user-supplied data. Inspector resolves role server-side every request; never trusts client claims. Failure mode: GitHub raw fetch fails → fall back to baked-in snapshot (Phase 0 deploy includes a snapshot of the file in the image).
 
 ### Cross-tab session for maintainer
 
-Maintainer opens dashboard in tab A and segments tab in tab B. Override actions in A should reflect in B without a refresh. Mitigation: same state-refresh strategy as the rest of the app (SSE / 30s poll / webhook). Edge: tab B's stale UI state may show actions that are no longer permitted. The backend rejecting the action with the proper error is the safety net.
+Maintainer opens dashboard in tab A and segments tab in tab B. Override actions in A should reflect in B. Mitigation: same state-refresh strategy as the rest of the app (30 s poll).
