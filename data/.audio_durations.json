@@ -1,7 +1,13 @@
 {
+  "abbadi_houssem_eddine": {
+    "duration_s": 28983.4,
+    "hash": "4f0196cdbdf60851134570c3e3cb8c90",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "abdallah_abdal": {
     "duration_s": 110646.8,
-    "hash": "427ae36834c374115f28d991ca72fbd4",
+    "hash": "e8a86ced7f2413447718b869f9adea22",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -9,6 +15,18 @@
     "duration_s": 109072.1,
     "hash": "a32bfe6696609a28eaf18217aa544a36",
     "probed_at": "2026-03-29",
+    "source": "by_surah/surah-quran"
+  },
+  "abdelaziz_algaraani": {
+    "duration_s": 9317.3,
+    "hash": "52da7655c48b70a51e75c295c90994d1",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "abdelaziz_sheim": {
+    "duration_s": 16294.7,
+    "hash": "36ec0085e12a2c31f6bdc853ffbf307c",
+    "probed_at": "2026-05-10",
     "source": "by_surah/surah-quran"
   },
   "abdelaziz_sheim_warsh": {
@@ -49,7 +67,7 @@
   },
   "abdul_mun_im_abdul_mubdi": {
     "duration_s": 105634.9,
-    "hash": "266bff93928f879a9ac0e7fe845a2aad",
+    "hash": "c04f420506f881d4e783628d1a4f1daa",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -65,9 +83,15 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "abdul_wali_al_arkani": {
+    "duration_s": 50825.8,
+    "hash": "bdf7c9958c3772832c903b0f95536c1b",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "abdulazeez_al_ahmad": {
     "duration_s": 74406.5,
-    "hash": "bba04e968e6225ec4bf6336062f8cfb4",
+    "hash": "a44a5e8d590cca948635cc5ca58338d9",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -83,6 +107,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "abdulaziz_asiri": {
+    "duration_s": 72753.3,
+    "hash": "b7e0061cda74cbb51487ed6daadab56b",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "abdulaziz_az_zahrani": {
     "duration_s": 115296.5,
     "hash": "b55f80a577a04f558a7b988161d54931",
@@ -91,7 +121,7 @@
   },
   "abdulaziz_bin_saleh_al_zahrani": {
     "duration_s": 115201.1,
-    "hash": "f40e61be8070f8daa9b272a14e0d8ae7",
+    "hash": "b32c642004271cca2d91d97ccb7ae1c9",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -103,7 +133,7 @@
   },
   "abdulbari_ath_thubaity": {
     "duration_s": 71173.5,
-    "hash": "3eca92729206dc4d7a19048d631c9e83",
+    "hash": "e973b0815bf62d83cd9f3c78801ebb87",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -121,19 +151,19 @@
   },
   "abdulbaset_abdulsamad": {
     "duration_s": 112177.1,
-    "hash": "647f2ff5ce896f7c67c24e4e702ccf04",
+    "hash": "dc0e398e8f514fb7540162b0b584c9c3",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdulbaset_abdulsamad_mujawwad": {
     "duration_s": 219411.2,
-    "hash": "33fe375fc7f0545f0099391f0cb1c07f",
+    "hash": "c52a797ec7b4972546f18ad52d5a4b09",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdulbaset_abdulsamad_warsh": {
     "duration_s": 124548.3,
-    "hash": "671b7b8edd90b33a41bbe687719977b7",
+    "hash": "5fa2b34fc9e24cbae5685c336cae1cb6",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -193,7 +223,7 @@
   },
   "abdulkareem_al_hazmi": {
     "duration_s": 84841.1,
-    "hash": "422248089ce8f9a35e7802b87577e8b9",
+    "hash": "0cf871cc805a1e0daf8ac23f4e99ec15",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -271,7 +301,7 @@
   },
   "abdullah_ali_jabir": {
     "duration_s": 91616.7,
-    "hash": "438cb6b24c8e07bb3ddda09d5ed1dfd9",
+    "hash": "a53db628c0118d9517e454df9ab4a341",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -283,13 +313,13 @@
   },
   "abdullah_awad_al_juhani": {
     "duration_s": 73275.3,
-    "hash": "792f7cec82db3fcecaa7d94ff3a46b39",
+    "hash": "f76a1e238a501ff82c2f7f6c162f9520",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdullah_basfar": {
     "duration_s": 91548.5,
-    "hash": "cb04c6458acbbdf4a4489987c1300226",
+    "hash": "73545763c49e82f5ebef4520671d7ce3",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -319,7 +349,7 @@
   },
   "abdullah_khayat": {
     "duration_s": 70445.0,
-    "hash": "64d2f19346e1792b3f1620c0084aa291",
+    "hash": "a1d914294662ddce94dabe01d99ee04d",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -331,7 +361,7 @@
   },
   "abdullah_matroud": {
     "duration_s": 100580.2,
-    "hash": "e50baa6ca1ef46613779b2ebf0e9262d",
+    "hash": "a44d339f4c0cd38bf0350a4898359734",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -379,7 +409,7 @@
   },
   "abdulmuhsin_al_qasim": {
     "duration_s": 74676.3,
-    "hash": "a0246fa52900c2b5e960b276f8d10d43",
+    "hash": "948ce2a09393271c91c3aa4b2a1167d4",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -391,7 +421,7 @@
   },
   "abdulrahman_al_shahat": {
     "duration_s": 81056.7,
-    "hash": "6062ab6ed1ef72dddc9612a75432e268",
+    "hash": "9945dea41e1f09fac5c1ab24bef34b2d",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -445,7 +475,7 @@
   },
   "abdulwadud_haneef": {
     "duration_s": 66205.5,
-    "hash": "6ed4d95410dac677ce6f34c6082ffeed",
+    "hash": "759e9c8e605561940e288bc6ac7f5c81",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -457,61 +487,67 @@
   },
   "abdur_rahman_as_sudais": {
     "duration_s": 75697.0,
-    "hash": "99adda2eb8d004985f609db0e169fd29",
+    "hash": "b8e445216988a49739e3e15d1bb31b03",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_rashid_sufi": {
     "duration_s": 87776.3,
-    "hash": "c49bd2afc3b4db76de1b6e1d4becdba9",
+    "hash": "cb81ab69ea0aabb3d06a7757d4f15fe8",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_rashid_sufi_duri": {
     "duration_s": 87941.0,
-    "hash": "f92937e185ded1bc00ceb1887dd19a42",
+    "hash": "83a49a75541fde6cff5d5aac67c8ba25",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_rashid_sufi_khalaf": {
     "duration_s": 95361.3,
-    "hash": "86669812400bcb59601031e18993e2ef",
+    "hash": "1537ab03a9457248b30800da66eff3dc",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_rashid_sufi_layth": {
     "duration_s": 89877.1,
-    "hash": "46f0ef7d416d6e001520920b07467026",
+    "hash": "b294c83b3b871f5fcd1c5cce7ba1a00e",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_rashid_sufi_shubah": {
     "duration_s": 87950.1,
-    "hash": "6d7c276e317325c2f40ccf746fbedae4",
+    "hash": "34adfe291fe10dee59b718802e63a76c",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_rashid_sufi_susi": {
     "duration_s": 84139.0,
-    "hash": "a9a09ac56497bdd0c81e5ce1244bb32e",
+    "hash": "dfb13ae1dd8cff5187ca53f1970349b7",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_rashid_sufi_susi_abu_amr": {
     "duration_s": 76125.2,
-    "hash": "e48987e2b706401ce9698339285a23b9",
+    "hash": "eff4675f2bce5857a0203bdc819b329a",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "abdur_razaq_bin_abtan_al_dulaimi_mujawwad": {
     "duration_s": 189137.7,
-    "hash": "5f1771fe522085684785a45e4daf3783",
+    "hash": "2f7e230c4e9fae6276aedb311bedc1d2",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
+  "abdurrazzaq_al_dulaimi": {
+    "duration_s": 189140.3,
+    "hash": "85e55a0f062a4aea8c1db9290311b118",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "abu_bakr_al_shatri_taraweeh": {
     "duration_s": 91609.7,
-    "hash": "7be538c7bd523b656f98489eeeb5c1d0",
+    "hash": "70b85fa1a23f7ac34e445168fd453449",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -539,6 +575,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "adham_nabulsi": {
+    "duration_s": 5760.7,
+    "hash": "2a573e6e4331f406ee5be211aa285975",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "ahmad_al_ajmy": {
     "duration_s": 95050.5,
     "hash": "370aec5b4654f47a4b313ee5a7a48711",
@@ -553,7 +595,7 @@
   },
   "ahmad_al_huthaify": {
     "duration_s": 25942.0,
-    "hash": "8aa8ad8fb0cf762a7c3ba0357e37ed21",
+    "hash": "223410798338d9686c1a7e83881d7e38",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -713,6 +755,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/surah-quran"
   },
+  "ahmed_alsaed_mndur": {
+    "duration_s": 74759.2,
+    "hash": "ee30970f37e54182a3269f89a9d9da64",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "ahmed_amer": {
     "duration_s": 101769.0,
     "hash": "4cff38ff161396505037ccda993db015",
@@ -721,9 +769,15 @@
   },
   "ahmed_ibn_ali_al_ajmy": {
     "duration_s": 94931.3,
-    "hash": "5e021b664dc23bedb36bdaa41a1d4e7a",
+    "hash": "811d34a7d392a34ad7e8df7255af95f8",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "ahmed_khedr": {
+    "duration_s": 39409.8,
+    "hash": "78ec00d2f763fbc1ff8b83bb4c9b3238",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "ahmed_mohammed_taher": {
     "duration_s": 101632.0,
@@ -751,7 +805,7 @@
   },
   "akram_al_alaqmi": {
     "duration_s": 101156.3,
-    "hash": "bf623aec48b8269ad1ee5e922879a9ef",
+    "hash": "04e2c067a9932c1655421f1c3a6ad8e8",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -761,9 +815,21 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
-  "al_hussayni_al_azazy_with_children": {
+  "al_hosary_children_repeat": {
+    "duration_s": 231662.8,
+    "hash": "cccf6d25126d61d7873f9608af182a27",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "al_husary_qalon": {
+    "duration_s": 96316.3,
+    "hash": "3c451ef93fd1c0d015e21989f9a4cd84",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "al_hussayni_al_azazy_children_repeat": {
     "duration_s": 220301.8,
-    "hash": "7e2a38f3aab5aaa77e94811aff532ab4",
+    "hash": "f12b3a3ffe0a0381e61ebf42b8912086",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -772,6 +838,12 @@
     "hash": "6db51352966d9d8d2bc20cf3d8aa4443",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "alaa_aqel": {
+    "duration_s": 23846.3,
+    "hash": "c4929846d3667427ded5d9ca5d183384",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "alashri_omran": {
     "duration_s": 96700.9,
@@ -791,9 +863,15 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "ali_abdulsalam_al_youssef": {
+    "duration_s": 18267.4,
+    "hash": "7fb2761435f43fe2499dbf689df5c382",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "ali_abdur_rahman_al_huthaify": {
     "duration_s": 106838.9,
-    "hash": "d78a898f6831472438a1f8e59a01cb4c",
+    "hash": "18744753d15fe3071903e71a83f0bdf0",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -805,7 +883,7 @@
   },
   "ali_al_huthaify_qalon": {
     "duration_s": 96383.9,
-    "hash": "dcb1285cc32760b2bfba929be2660420",
+    "hash": "051766bf138a341d07744f077bb9124f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -841,7 +919,7 @@
   },
   "alijon_qari": {
     "duration_s": 110808.0,
-    "hash": "65d895ce63b258d71b649ff86018d63c",
+    "hash": "4b7621fb152c60a58eb6a6293aebf7d9",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -899,15 +977,27 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/surah-quran"
   },
+  "anas_bourak": {
+    "duration_s": 13912.8,
+    "hash": "450c760af430a56342addb7547310839",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "anas_jalhoum": {
     "duration_s": 98978.5,
     "hash": "25d78e1e51ad7d9b208da11c0ef33433",
     "probed_at": "2026-03-29",
     "source": "by_surah/surah-quran"
   },
+  "anas_mohamed": {
+    "duration_s": 11657.0,
+    "hash": "00eab814c6bf36fba003fc443f80b5ad",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "asim_abdul_aleem": {
     "duration_s": 86754.0,
-    "hash": "d8f2118ee1acb0c691d87427dc31e662",
+    "hash": "8d12f47ea33682c30a10c8593b2edc2b",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -917,9 +1007,15 @@
     "probed_at": "2026-03-29",
     "source": "by_ayah/everyayah"
   },
+  "ayman_sweid": {
+    "duration_s": 19259.6,
+    "hash": "6d7d6ba52f3d42166da16c0972958669",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "aziz_alili": {
     "duration_s": 92294.2,
-    "hash": "be4cb3b4690441630eb9dbeaddaa1289",
+    "hash": "0fab00d8588a35f0ca9351e20946610b",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -931,13 +1027,13 @@
   },
   "badr_al_turki": {
     "duration_s": 90462.0,
-    "hash": "e2453291d5516f7219d9380d0011d807",
+    "hash": "a4819e4865ebc421096070492d8a43e8",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "bandar_baleela": {
     "duration_s": 103713.6,
-    "hash": "1376602f6104db47d938cde6f2f4f0fe",
+    "hash": "9676db1cfe35002ea200a1b88631b862",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -955,7 +1051,7 @@
   },
   "dr_shawqy_hamed": {
     "duration_s": 67785.1,
-    "hash": "229cc666df02b4f41144bcef0ca9a5a5",
+    "hash": "341102d3763890f961e3ab76446789d9",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -997,7 +1093,7 @@
   },
   "farman_shawani": {
     "duration_s": 104040.4,
-    "hash": "3ef13fcd47230581a4db0aec312f284a",
+    "hash": "605ad2719f68f69d701abd8b8bf7d225",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1031,6 +1127,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/surah-quran"
   },
+  "hadi_toure": {
+    "duration_s": 131532.7,
+    "hash": "84a5748de36c6bfe03c67518c057628f",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "hady_toure": {
     "duration_s": 130208.8,
     "hash": "2526c98301b52bfb8b05145909f883e8",
@@ -1057,7 +1159,7 @@
   },
   "hamad_sinan": {
     "duration_s": 88734.7,
-    "hash": "bd76cb9811e253ba1d892cbb4041b0f2",
+    "hash": "e4287c79447d3bdf86474fd294cf0a56",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1065,6 +1167,12 @@
     "duration_s": 65399.6,
     "hash": "a72ac01b6b147c18cde9597aeb44c7ec",
     "probed_at": "2026-03-29",
+    "source": "by_surah/surah-quran"
+  },
+  "hamza_boudib": {
+    "duration_s": 7331.4,
+    "hash": "048d2bacf26be2bc349e22ef89837192",
+    "probed_at": "2026-05-10",
     "source": "by_surah/surah-quran"
   },
   "hamza_el_far": {
@@ -1075,7 +1183,7 @@
   },
   "hani_ar_rifai": {
     "duration_s": 92377.5,
-    "hash": "26903ce30d7b0873961cf361acfae96f",
+    "hash": "0c6983baa07af385943127645ad94ee3",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1115,6 +1223,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/surah-quran"
   },
+  "hassan_saleh": {
+    "duration_s": 99787.3,
+    "hash": "f0aa468828dc96b19c136d2357d7d874",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "hatem_fareed_alwaer": {
     "duration_s": 94170.8,
     "hash": "bed76af68a00c27a3e571111b4fcd532",
@@ -1123,9 +1237,21 @@
   },
   "hatem_farid": {
     "duration_s": 75726.3,
-    "hash": "ae58be5c2d43cb202bf0b10881a66d8a",
+    "hash": "4b31714ac2f67f6b06846bf450caab44",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "hazaa_balushi": {
+    "duration_s": 33840.0,
+    "hash": "912508d7e0f4f451a6c6318cb05b02f1",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "hazem_seif": {
+    "duration_s": 37391.8,
+    "hash": "8181f4cc39b18f6bec89ca85bee31690",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "hazza_al_balushi": {
     "duration_s": 39024.8,
@@ -1151,6 +1277,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "husseini_azazi": {
+    "duration_s": 102151.7,
+    "hash": "6903e755426a8321e212720e2e329491",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "ibrahem_assadan": {
     "duration_s": 37333.6,
     "hash": "04c262464468c8dc77e8f4ae040844ea",
@@ -1165,7 +1297,7 @@
   },
   "ibrahim_al_akhdar": {
     "duration_s": 118380.0,
-    "hash": "d7658cb4e87bc9dbdf85ab04d0b6f4a2",
+    "hash": "dcaa10fc48d4285ff8f2e8acdf54b372",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1183,7 +1315,7 @@
   },
   "ibrahim_al_jibrin": {
     "duration_s": 39779.3,
-    "hash": "1049034641ecb4afa5e9b10dfce89c32",
+    "hash": "82df6acd5dbb4a5dd547486f2925f50b",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1219,7 +1351,7 @@
   },
   "idrees_abkar": {
     "duration_s": 107359.7,
-    "hash": "77c2e45cdf2dde2322cb36ec85fb0591",
+    "hash": "a4e3ba3797f43d879e22a527177dc964",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1229,6 +1361,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "ilyas_hajri": {
+    "duration_s": 48524.4,
+    "hash": "fbdaf9bf7cf02428655341414ea9e91f",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "imad_almansri": {
     "duration_s": 86592.5,
     "hash": "5cb44d8b5e0be0504fe9d8bca528d1ff",
@@ -1237,9 +1375,15 @@
   },
   "imad_zuhair_hafez": {
     "duration_s": 104034.8,
-    "hash": "bc1ec2d4957bb2d87eac97a80af6334c",
+    "hash": "896d321e03beddbb5180bc1f97540965",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "imams_of_alharam_mosque": {
+    "duration_s": 80209.7,
+    "hash": "cc4658d5a87d2862dee62bd80bae38d7",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "ishak_danish": {
     "duration_s": 105928.4,
@@ -1309,7 +1453,7 @@
   },
   "khalid_al_ghamdi": {
     "duration_s": 10585.8,
-    "hash": "0f04febce23fb963ead1389f0ba54f79",
+    "hash": "995c85b984e2899f0890f2e8fb7103a7",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1327,7 +1471,7 @@
   },
   "khalid_al_qahtani": {
     "duration_s": 99849.1,
-    "hash": "3bf6477ad529252d5f0e4409ad436a8a",
+    "hash": "d899a692afc320ce2e33081719e96b85",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1381,7 +1525,7 @@
   },
   "khalifah_taniji": {
     "duration_s": 98322.6,
-    "hash": "9224236c2182f30b738d2a2642d5087b",
+    "hash": "58b1f860c2ceb68b74dc2cfdf00b378b",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1399,133 +1543,133 @@
   },
   "madinah_taraweeh_1419": {
     "duration_s": 73794.6,
-    "hash": "7dfb938917adc032452526ccedf3257f",
+    "hash": "4fc8e7fc690c78de6ca0a16bb01502fd",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1423": {
     "duration_s": 75613.1,
-    "hash": "453d261d08a3e1faf700022829707258",
+    "hash": "54e50716ffcfd83c6571b1ff4c66f118",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1426": {
     "duration_s": 75200.4,
-    "hash": "988e81a2c4be848a5a0d1d1086adc30a",
+    "hash": "fd9dd0243f86fc55a9f8b4cd9afe153a",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1427": {
     "duration_s": 74346.0,
-    "hash": "d541d69ee16fdc9c789879944676711c",
+    "hash": "cc688923753b807c6722f9034197a967",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1428": {
     "duration_s": 77989.0,
-    "hash": "fbf00ad00c8db035127a2cc9e35ca906",
+    "hash": "959a406ed121b27db704abde4edc54f5",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1429": {
     "duration_s": 75985.4,
-    "hash": "79d45e4644fcf816674468c211430e23",
+    "hash": "6fb418cdaabe2dd817fc67801c1db61c",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1430": {
     "duration_s": 79443.7,
-    "hash": "b4a530439856a0e672f41285090d3031",
+    "hash": "57c64a8e4d5cc7394266de7a54fb4cd8",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1431": {
     "duration_s": 80632.8,
-    "hash": "27980965e2eaf48ef9f4b95a4ccf4412",
+    "hash": "0d32a0b8a5ab73392d3a2355123a9809",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1432": {
     "duration_s": 79015.4,
-    "hash": "bf49dbd7b6b66de31bc9aca1c1ecbd05",
+    "hash": "328cc4740b2d8694d2c431433a4652db",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1433": {
     "duration_s": 74677.4,
-    "hash": "de8d0ce714cc6ba2721427576208c26b",
+    "hash": "cb4b23ac3bd994ab638e7a20dfaf7506",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1434": {
     "duration_s": 77503.9,
-    "hash": "5330c75946ce8816b2a61635c9987d91",
+    "hash": "6a7d01915adb0937709f310583f270c6",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1435": {
     "duration_s": 72717.7,
-    "hash": "f97facbafe144fd604a537fc2cebc194",
+    "hash": "b841d5090d8a5d2014c513bd02c6c46f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1436": {
     "duration_s": 74633.7,
-    "hash": "39fd8360e34fd906c28ee8e2de926949",
+    "hash": "9987e1f38fb74a7376afe28bbba32502",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1437": {
     "duration_s": 79547.0,
-    "hash": "0c13b5a5bae20c9e47cc5f9c9eee9b91",
+    "hash": "995ef2a94396184519e1694e37603f78",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1439": {
     "duration_s": 83026.8,
-    "hash": "7b61d63e6da1c1f5f9b7f047f3d9faa4",
+    "hash": "f16371bf842e3b29c19c441ba7c07731",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1440": {
     "duration_s": 80242.9,
-    "hash": "fed735da01b062897a42a3c36aeaf836",
+    "hash": "c3fc4c5091ddc5e22f1f5e519f2a1bdb",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1441": {
     "duration_s": 81994.6,
-    "hash": "d2be80fb43a4edd4f3b744debeb74ed7",
+    "hash": "888596cef8a450c6a8b8c8669bb24943",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1442": {
     "duration_s": 80221.8,
-    "hash": "44c912270fb856e15ebf6825ca073e3d",
+    "hash": "3464b09211615e2f46070fcf68441a4f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1443": {
     "duration_s": 78269.2,
-    "hash": "42afbc0c1f2ff8ba42d09ba281812ed7",
+    "hash": "c39b59b2d01efa579850b986f4570b49",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1444": {
     "duration_s": 80925.0,
-    "hash": "6303f6e33017ee37da5c53897f011771",
+    "hash": "9cae1f7ccb2b6cf33f76310a447fbce0",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1445": {
     "duration_s": 84360.0,
-    "hash": "68e9103dd5e89d9c15297154ce7eee37",
+    "hash": "61f2e677832d22442dc7e9bb268b2644",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "madinah_taraweeh_1446": {
     "duration_s": 85138.2,
-    "hash": "6a3db0b08adb0f424d463548a53ed194",
+    "hash": "59f94ab29fbb7746873e3c960c4bfda7",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1549,7 +1693,7 @@
   },
   "maher_al_muaiqly": {
     "duration_s": 117136.2,
-    "hash": "9bdbc23281445cef1b0a80170d1da0a6",
+    "hash": "4eb07bba0bc9f43727eef6a8d0b73cab",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1573,7 +1717,7 @@
   },
   "mahmood_ali_al_bana": {
     "duration_s": 94138.6,
-    "hash": "ed40511f16ca28725b0fe7fb827d4516",
+    "hash": "6209b093b349e7428df0cfb5a942217b",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1582,6 +1726,12 @@
     "hash": "d6c7580d7b09dff8a5e060258bf3175c",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "mahmoud_abdelhakam": {
+    "duration_s": 112512.3,
+    "hash": "a7df248045a947c3cca6eb5ad50eb8f2",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "mahmoud_abdul_hakam": {
     "duration_s": 112741.8,
@@ -1601,21 +1751,33 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "mahmoud_el_banna": {
+    "duration_s": 97052.4,
+    "hash": "7e1206d3b695c3153872332548ba039a",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "mahmoud_el_shahat_anwar": {
+    "duration_s": 90205.8,
+    "hash": "26d02fe0d63ee5effcf17d1e04b75cc3",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "mahmoud_khaleel_al_husary": {
     "duration_s": 104513.6,
-    "hash": "26b042b2ab28610195e07b42d576e330",
+    "hash": "d87ecbb10b1dd7ea24326b6c99dbeeab",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "mahmoud_khaleel_al_husary_duri": {
     "duration_s": 126350.6,
-    "hash": "e933d359a1a434db3212ac70bc3fad83",
+    "hash": "fd80f2cec1ccc16dbc6ab1a0a5445f0e",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "mahmoud_khaleel_al_husary_mujawwad": {
     "duration_s": 222996.9,
-    "hash": "42110dcfdc06f0f9c0372bcd15e3b7c7",
+    "hash": "443f5a03c69b1779ae1f1e015f6ccb2a",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1675,145 +1837,145 @@
   },
   "makkah_taraweeh_1424": {
     "duration_s": 69127.1,
-    "hash": "1bd75deebeb9a9112b7d85c5261154be",
+    "hash": "44f9222ca06676c90e2eed3b71a25e26",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1425": {
     "duration_s": 67506.7,
-    "hash": "59a7a2545ce1a1e08f6afdf261d64539",
+    "hash": "1d351f4b0d7fd8fb8bbbde80a864c5ae",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1426": {
     "duration_s": 74614.4,
-    "hash": "a88b2bbfbc16b6b47e25732f3fe4d392",
+    "hash": "df18f859311eaa9b4437a38b4d3a7441",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1427": {
     "duration_s": 75207.5,
-    "hash": "2a5d2731b5a6e4f4245268fb136ab6b3",
+    "hash": "470aa898d75da64155a5e053a4be8016",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1428": {
     "duration_s": 74709.5,
-    "hash": "88e83282f750509ba0787123d52b6117",
+    "hash": "236d487fe44f61839a831445f13289eb",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1429": {
     "duration_s": 77154.6,
-    "hash": "de9c98b2a596cae863a25ba27c386787",
+    "hash": "5357dac1dbe6931ca30772e43920abb9",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1430": {
     "duration_s": 76380.1,
-    "hash": "5b223813b65c837e58dca5afa8573925",
+    "hash": "b8b2fd079c44488fc7d5fbcd8233410c",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1431": {
     "duration_s": 75219.1,
-    "hash": "9a8ac95808c2a2401ae958bdc96c3e5e",
+    "hash": "f4d20742346fb13a14d08ecbe152630f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1432": {
     "duration_s": 77297.8,
-    "hash": "840a53be784be631e72d5752b0750e36",
+    "hash": "b7b53abd303ddfee6ad51a0c58d7ae8a",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1433": {
     "duration_s": 75168.3,
-    "hash": "5c1e9df4a6abf3bec16e3ea89a6eba1d",
+    "hash": "6f6c65cf4dec4b078faded8c51a35ade",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1434": {
     "duration_s": 75190.7,
-    "hash": "b683184a2f03014634104d56171ef7e3",
+    "hash": "c9aaa7b322936984fa876620bbe5650a",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1435": {
     "duration_s": 82749.7,
-    "hash": "47c01bb0c45a66982cf420b3adf1658d",
+    "hash": "2c85d580ad192324daeb7403c466276c",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1436": {
     "duration_s": 81618.5,
-    "hash": "db0302d465442ec67aad09a6d74897e3",
+    "hash": "242e0f83853161570b9e78bcc0ca4e04",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1437": {
     "duration_s": 81658.8,
-    "hash": "d21d85dcebf10ab23129a616f5752a22",
+    "hash": "a1c483ad744c83db269d879bb0020042",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1438": {
     "duration_s": 81304.5,
-    "hash": "87af76fc818a5b9968331debdf28f53e",
+    "hash": "8053987944a92c34392ed02f451e2d3f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1439": {
     "duration_s": 80197.3,
-    "hash": "3908da803a598b6ac7a4d6ae5e4936dd",
+    "hash": "bfe836b81ae208e6f56c64fb40a9e8ed",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1440": {
     "duration_s": 76397.5,
-    "hash": "fea4b36c7a4c37cc13016ec403bc2a79",
+    "hash": "71eac8486cc86e45a062041353d2e6eb",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1441": {
     "duration_s": 77993.2,
-    "hash": "2cec64f4db367b80fc76584d93db51a0",
+    "hash": "b7a72f41d800e980b1d5f2cfe1dee123",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1442": {
     "duration_s": 81806.9,
-    "hash": "9b63fe55fd3f60605fed54f9f86fd1cd",
+    "hash": "54ffe6a5402207ba2c9c954f3e1e4906",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1443": {
     "duration_s": 78411.8,
-    "hash": "4479ebc2a8c0c9e93763f6d5a68e522d",
+    "hash": "f332131e4395717ea493c3a35ac040a7",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1444": {
     "duration_s": 79952.6,
-    "hash": "bbd5b611174071527e26785988f877d7",
+    "hash": "8973d0fa01cf229f561002bd366d49ea",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1445": {
     "duration_s": 80681.9,
-    "hash": "40bed009997467a01525a496ecd5a10b",
+    "hash": "d903aec7cb63325013f5c621b3f3b560",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1446": {
     "duration_s": 80907.7,
-    "hash": "684724f1cfa77a71c859604f23002532",
+    "hash": "169069039f0199bebdf3da31e234dfc6",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "makkah_taraweeh_1447": {
     "duration_s": 78163.7,
-    "hash": "019a24fcccbec99cacef6f48f1d859ff",
+    "hash": "3d1bc7844797c37706d37d9883c82f8f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1822,6 +1984,12 @@
     "hash": "912791e5e7b74f14a55a032a98ac9cfa",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "mamdouh_amer": {
+    "duration_s": 40920.2,
+    "hash": "3cbab161ca611e92d317f5ab7a76e381",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "mansour_al_salemi": {
     "duration_s": 105926.3,
@@ -1837,7 +2005,7 @@
   },
   "masjid_quba_taraweeh_1434": {
     "duration_s": 88181.4,
-    "hash": "4b9e97f0becb1584d01aac060b3bab09",
+    "hash": "80f367ff8f3125101c9c0a3e4e77909f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1847,9 +2015,15 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/surah-quran"
   },
+  "minshawi_children_repeat": {
+    "duration_s": 190489.7,
+    "hash": "5ec33a7c5954bf4f36822231c7d478a8",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "mishari_rashid_al_afasy": {
     "duration_s": 107589.0,
-    "hash": "47158269b2821f523316aa99114b40d7",
+    "hash": "0ccde25bb6f800b1cbe1ee08eecf9d6e",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1915,7 +2089,7 @@
   },
   "mohammad_al_tablawi": {
     "duration_s": 106782.0,
-    "hash": "31a842a5189d62bdeb827988266dbc28",
+    "hash": "a3cc6100130ff75c3bb3b46b1726d97c",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -1933,7 +2107,7 @@
   },
   "mohammad_ismaeel_al_muqaddim": {
     "duration_s": 80492.1,
-    "hash": "e3fb78f4054a3d274efcd19d8a4474f7",
+    "hash": "5a6c87db13623f20bd96ec0d56204430",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2015,6 +2189,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "mohammed_hassan": {
+    "duration_s": 91075.5,
+    "hash": "fea845c3453e79eb629415a4cb1353cd",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "mohammed_jibreel": {
     "duration_s": 95343.4,
     "hash": "e2a84ef2626c3089d9a9e7766a325f84",
@@ -2057,11 +2237,23 @@
     "probed_at": "2026-05-10",
     "source": "by_surah/qul"
   },
+  "mohmed_hesham": {
+    "duration_s": 31444.3,
+    "hash": "c222925305f580a30faf5243dfa476da",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "mostafa_ismaeel": {
     "duration_s": 108407.0,
-    "hash": "ccc059eddf08c439183f4855a85f0db6",
+    "hash": "c5ab0564d594608513ce15f07a0ba3b4",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "mouad_douik": {
+    "duration_s": 42233.1,
+    "hash": "b25b1cf22daa602efd5922173f45298a",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "mousa_bilal": {
     "duration_s": 75366.2,
@@ -2074,6 +2266,12 @@
     "hash": "7a6e50075cc733aa02188f6ed2ff9ced",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "muftah_al_sultani": {
+    "duration_s": 89378.3,
+    "hash": "63736c741d02b0efc8c9e4ef86983cc4",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "muftah_alsaltany": {
     "duration_s": 77457.3,
@@ -2107,7 +2305,7 @@
   },
   "muhammad_abdul_kareem": {
     "duration_s": 82178.3,
-    "hash": "1c85be9ad867680727655bc36e3121ef",
+    "hash": "f91ff5a6c1fc983ff53fa91b40803798",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2116,6 +2314,12 @@
     "hash": "a7c1c7f2ddf35da76e309a8f51bfe974",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "muhammad_al_barrak": {
+    "duration_s": 18333.3,
+    "hash": "3bb5ebc3dde3590fab5547fc49ffe8a4",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "muhammad_al_faqih": {
     "duration_s": 79681.9,
@@ -2129,15 +2333,21 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "muhammad_al_hudayri": {
+    "duration_s": 104236.1,
+    "hash": "7e48206293d90242bf7a74bfd49b5c10",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "muhammad_al_luhaidan": {
     "duration_s": 80071.2,
-    "hash": "eb6eaad5ec62d241ae1f8cf4a405f45e",
+    "hash": "1779d29f867d0c3e209bad22d1110520",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "muhammad_al_mehysni": {
     "duration_s": 70789.1,
-    "hash": "4af5aea82232a13e0268bf8ed4b75b72",
+    "hash": "404b619ed4d10d63e57a69eb1e8cceb0",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2155,7 +2365,7 @@
   },
   "muhammad_ayyoob_taraweeh": {
     "duration_s": 76496.4,
-    "hash": "499d66b4e4c599711e55b80abd83492c",
+    "hash": "b3e802af5431c908edad35de605ee7c5",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2165,41 +2375,53 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "muhammad_dibirov": {
+    "duration_s": 6613.8,
+    "hash": "b7f4998a36f722a385f27d3c9d4bd850",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "muhammad_hassan": {
     "duration_s": 89895.3,
-    "hash": "b2cdc3299b12b2e17aea3e465e1117cc",
+    "hash": "d0a9cafc91da7d01f2da19cf3ce3caed",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "muhammad_jibreel": {
     "duration_s": 94503.1,
-    "hash": "c1d4d3414b7e649647386300ff36d2eb",
+    "hash": "e9d87a937bea3c4b86a6bdcbb9bff1ba",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "muhammad_khaleel": {
     "duration_s": 23973.0,
-    "hash": "5382b38fffe3d088f25f19330e92e88a",
+    "hash": "7f3608b6cb48e19daac8f74f63bfab09",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "muhammad_siddiq_al_minshawi": {
     "duration_s": 104105.3,
-    "hash": "41ce823f5253cb0e8d62f6938652033c",
+    "hash": "465a2418a06c3fd27d00fd7b476fbb59",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "muhammad_siddiq_al_minshawi_mujawwad": {
     "duration_s": 223894.9,
-    "hash": "2d1e640a97dfc48aec0c237905e27f69",
+    "hash": "99dd8e2ce1c6fd9f0d0be6d6d9669f99",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "muhammad_sulaiman_patel": {
     "duration_s": 68474.5,
-    "hash": "a0ffa204f269d3fd5a2d4ace9bdd2c46",
+    "hash": "fa965263cc0a71e0bd607989997f5724",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "muhammad_taha_al_junaid": {
+    "duration_s": 34387.6,
+    "hash": "674f63383be2ac4181b7df524b8ebc55",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "muhammed_husayn_amer": {
     "duration_s": 175300.7,
@@ -2221,9 +2443,15 @@
   },
   "mustafa_al_azawi": {
     "duration_s": 91176.0,
-    "hash": "82860a2428654d747004996ea1789290",
+    "hash": "324c515bc9c323e92b8c1c811f445e9f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "mustafa_al_ferjani": {
+    "duration_s": 41993.4,
+    "hash": "ebbef628cda94c15421528fd1755c911",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "mustafa_al_lahoni": {
     "duration_s": 97413.3,
@@ -2263,7 +2491,7 @@
   },
   "nabil_ar_rifai": {
     "duration_s": 87898.4,
-    "hash": "e290fe7ed40ecf2b7cbc95554a9d291a",
+    "hash": "5a9148cfbac8fbe4185cdd00d1f43724",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2275,7 +2503,7 @@
   },
   "nasser_al_qatami": {
     "duration_s": 97131.6,
-    "hash": "db5ee3a7e25f58f20106ee9e27c9523c",
+    "hash": "b0b1164efacbbd423e4d18de1fbeb1f8",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2317,9 +2545,15 @@
   },
   "noreen_siddiq_duri": {
     "duration_s": 96837.8,
-    "hash": "74c78916d74f60f5d164fba7619704df",
+    "hash": "700f61d917b5617d7ab13dcaca462aec",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "noureddine_salim_nouri": {
+    "duration_s": 9921.2,
+    "hash": "2680568ea69bfcbe73d534d5458cbf74",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "obaida_muafaq": {
     "duration_s": 94260.7,
@@ -2351,6 +2585,18 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "omar_bin_abdulaziz": {
+    "duration_s": 16763.0,
+    "hash": "d1e57c1c628b992eb83b7b010ff2141e",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "omar_hisham": {
+    "duration_s": 40631.0,
+    "hash": "a97b23657c53212776e2e228a4e933f0",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "othman_al_ansary": {
     "duration_s": 41423.9,
     "hash": "6ad3274d3735ca8e0799bd28483c0122",
@@ -2365,7 +2611,7 @@
   },
   "peshawa_qadir_al_kurdi": {
     "duration_s": 88532.1,
-    "hash": "33aa80ead6c0bd3cded447bace3c3d69",
+    "hash": "da1cc2c88ad5f643bd075a74de46d230",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2383,7 +2629,7 @@
   },
   "raad_mohammad_al_kurdi": {
     "duration_s": 119756.3,
-    "hash": "cd53ae26771c11b6f4b2c7153d6144d4",
+    "hash": "2ce4318882bf4621adab85194b8c4c48",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2391,6 +2637,12 @@
     "duration_s": 61068.2,
     "hash": "0effef1e5bdbd0e1b649bab5206dd512",
     "probed_at": "2026-03-29",
+    "source": "by_surah/surah-quran"
+  },
+  "rachid_belalia": {
+    "duration_s": 90050.6,
+    "hash": "08940dc7a27faecd24183d9d65a4f4c7",
+    "probed_at": "2026-05-10",
     "source": "by_surah/surah-quran"
   },
   "rachid_belalya": {
@@ -2429,6 +2681,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/surah-quran"
   },
+  "rizgar_kurdy": {
+    "duration_s": 13648.2,
+    "hash": "efe515bc3f1df2e16e22834b145420db",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "rodziah_abdulrahman": {
     "duration_s": 2352.8,
     "hash": "88aa6de1bb78c15ad55bb2076803bb3c",
@@ -2443,7 +2701,7 @@
   },
   "sa_ud_ash_shuraym": {
     "duration_s": 65739.0,
-    "hash": "955f064ba8fb70ca3465d4dc4ca99538",
+    "hash": "3149869f4a94ce03e43a2f13d6991977",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2467,7 +2725,7 @@
   },
   "sadaqat_ali": {
     "duration_s": 73032.8,
-    "hash": "cfa06a2f81b215528a92f3d6ea97dec7",
+    "hash": "86b6e991f76a877844bff8d37ed09df6",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2479,7 +2737,7 @@
   },
   "sahl_yasin": {
     "duration_s": 87565.6,
-    "hash": "909c243f22792f5f7c5855a90d149753",
+    "hash": "7a5ab2509a1655bb90260f395d833af7",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2495,15 +2753,21 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "salah_al_baji": {
+    "duration_s": 9143.9,
+    "hash": "0bc236d02af02ae9b9af326df00e8521",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "salah_al_budair": {
     "duration_s": 75470.5,
-    "hash": "bb791518d6d7835b3bebb2b117369405",
+    "hash": "23c9d41b0cb23ffe1a1097ec6a607d80",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
   "salah_al_hashim": {
     "duration_s": 94309.9,
-    "hash": "aeff09a0fca7b46c727706143f2fea6f",
+    "hash": "33e46f390fad35d675445285002399a1",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2539,7 +2803,7 @@
   },
   "salah_bukhatir": {
     "duration_s": 85096.5,
-    "hash": "9fec93e0c280039a11d480f48a6fb50f",
+    "hash": "25ffefe6d33d6e2d6a6bbb2d58ded65b",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2549,6 +2813,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "saleh_al_ansari": {
+    "duration_s": 54423.7,
+    "hash": "af5f8a7980bc35e2c7c2b8361560611d",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "saleh_al_habdan": {
     "duration_s": 95922.9,
     "hash": "86faa448763ffac2d3cbcc72e55db3ab",
@@ -2557,7 +2827,7 @@
   },
   "saleh_al_taleb": {
     "duration_s": 11254.8,
-    "hash": "09d3c5ff14bd8c17b1e560946b9133bc",
+    "hash": "91940ab1e0b711631eddb8dc70d878d8",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2584,6 +2854,12 @@
     "hash": "57b4d9fc00282dac37d7f4b37dfe8ea5",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "salem_al_ruwaili": {
+    "duration_s": 16014.3,
+    "hash": "fcfd11f46b1d0b9eea7f0f1b3bc9e4e9",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "salih_ahmed_salih": {
     "duration_s": 89189.0,
@@ -2639,6 +2915,12 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "sayid_mutauli": {
+    "duration_s": 8608.8,
+    "hash": "4e7fcb0a854f53914b5b3ce508a2adf9",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "shaban_al_sayiaad": {
     "duration_s": 79230.1,
     "hash": "8aff33e269e05c0f71d6ab0d6b6d61dd",
@@ -2650,6 +2932,12 @@
     "hash": "37c7d8f22fa652ee0d03ca867e3270cb",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "sherif_mostafa": {
+    "duration_s": 14538.0,
+    "hash": "1eea43479121e8c7f3ef7e843424fd5b",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "shirazad_taher": {
     "duration_s": 104049.2,
@@ -2665,15 +2953,27 @@
   },
   "sudais_and_shuraym": {
     "duration_s": 68268.9,
-    "hash": "e0004691f1e58bfeafb9dec05c359eab",
+    "hash": "ceca3451ad962f3561f928e79d1bf938",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
+  },
+  "syed_saeed": {
+    "duration_s": 60291.8,
+    "hash": "7e908de98c02553e6c70d7e7a520702d",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "tareq_abdulgani_daawob_qalon": {
     "duration_s": 98932.2,
     "hash": "3e53b4a704186ac3311d884aef455152",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "tareq_mohammad": {
+    "duration_s": 40321.4,
+    "hash": "bb163228ae6ce256a5566afa83bdfbf0",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "tawfeeq_as_sayegh": {
     "duration_s": 91724.5,
@@ -2683,7 +2983,7 @@
   },
   "tawfeeq_ibn_sa_id_as_sawa_igh": {
     "duration_s": 91782.4,
-    "hash": "4bfabed5e052f6c430c9a0c6da179f26",
+    "hash": "3b699f5749595485894ec9caa5eee347",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2695,7 +2995,7 @@
   },
   "wadee_hammadi_al_yamani": {
     "duration_s": 104919.4,
-    "hash": "c2f7504d6a243a3c5bdaca49d1e87eb1",
+    "hash": "c491fa18faa281dd3716a0c80499fb15",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2704,6 +3004,12 @@
     "hash": "0dbea2bf6868da63f592be0de783e0ce",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "waleed_al_shamsan": {
+    "duration_s": 11942.9,
+    "hash": "423969e7c78a5efe38cfa9204cd15775",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "waleed_alnaehi_qalon": {
     "duration_s": 86406.7,
@@ -2716,6 +3022,12 @@
     "hash": "273e29a3a80c355c7f26653f529673d2",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "walid_mehsas": {
+    "duration_s": 87232.5,
+    "hash": "603e105575ac0e48db2fadc4a4a6ed7f",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "wasel_almethen": {
     "duration_s": 9741.4,
@@ -2735,9 +3047,15 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "yaseer_alzailaie": {
+    "duration_s": 4516.6,
+    "hash": "d40b5f42b3772fe286f0077d641cbf50",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "yasser_ad_dussary": {
     "duration_s": 93340.7,
-    "hash": "efbf79655a27171b43d153b35240a2fe",
+    "hash": "e62533fc2bf81dabe10e79adc6be743f",
     "probed_at": "2026-05-10",
     "source": "by_surah/quranicaudio"
   },
@@ -2771,6 +3089,18 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "yassin_al_jazaery": {
+    "duration_s": 102928.8,
+    "hash": "f56183d1d3a8047811829afa4f1c1166",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "younes_aswelis": {
+    "duration_s": 36787.3,
+    "hash": "a3697aca411e27450a0b733bddfcd0ce",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "younes_souilass_warsh": {
     "duration_s": 71372.0,
     "hash": "9630e99887682e8d731fa7ec4f2a5763",
@@ -2789,11 +3119,29 @@
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
   },
+  "youssef_al_suqair": {
+    "duration_s": 10302.6,
+    "hash": "f261e2506726de84d886467da239ea1b",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
   "youssef_edghouch": {
     "duration_s": 4499.5,
     "hash": "743c54cfa226174dd81e04895dbb1d81",
     "probed_at": "2026-03-29",
     "source": "by_surah/mp3quran"
+  },
+  "youssef_maaty": {
+    "duration_s": 78437.2,
+    "hash": "c688ae54255521c2a3fe0f2deca4b6f3",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
+  },
+  "yusuf_al_aidroos": {
+    "duration_s": 14947.7,
+    "hash": "0de4319b31a7ca4db81bf2b45d0ae31b",
+    "probed_at": "2026-05-10",
+    "source": "by_surah/surah-quran"
   },
   "yusuf_alaidroos": {
     "duration_s": 95437.4,
