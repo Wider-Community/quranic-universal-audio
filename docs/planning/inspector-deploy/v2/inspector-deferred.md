@@ -13,19 +13,17 @@ This is the single canonical home for "we know about it, not now." If a v2 doc s
 ```jsonc
 "state": "published",
 "jobs": {
-  "snapshot":   { "status": "done|pending|failed", "job_id": "...", "completed_at": "..." },
-  "timestamps": { "status": "...", ... },
-  "audio":      { "status": "...", ... }
+  "timestamps": { "status": "done|pending|failed", "job_id": "...", "completed_at": "..." }
 }
 ```
 
-Display state computed from the tuple; `completed` requires all three done. Each job retried independently.
+Display state computed from the tuple; `completed` requires the timestamps job done. Each job retried independently, and the structure naturally extends if more publish-time jobs land later.
 
-**Why deferred.** The current single-state model has a real correctness issue (snapshot or audio failure → state still becomes `completed` driven by timestamps job alone). But we're likely to refactor the publish workflow itself in a later iteration anyway — the per-job sub-status work belongs in that refactor, not as a standalone change now.
+**Why deferred.** The current single-state model has a real correctness issue (a silent timestamps-refresh failure leaves the slug stuck in `awaiting_timestamps` until a maintainer notices on the dashboard). v2's publish path was simplified to a single async job (D16) which limits the blast radius, but the "stuck" failure mode still exists and is the structural slot a sub-status would fill. We're likely to refactor the publish workflow itself in a later iteration anyway — the per-job sub-status work belongs in that refactor, not as a standalone change now.
 
-**Trigger to revisit.** Whenever the publish workflow gets reworked (HF Jobs API changes, server-side Xet copy lands, new artifact added to the publish set, or a real partial-failure incident).
+**Trigger to revisit.** Whenever the publish workflow gets reworked (HF Jobs API changes, new artifact added to the publish set, or a real silent-failure incident).
 
-**Affected if never done.** Maintainers see "completed" reciters that aren't actually fully published. Recovery is manual via admin dashboard. Acceptable risk at the publish cadence (~10/month) and current observability.
+**Affected if never done.** Maintainers see "completed" reciters that aren't actually fully published, or `awaiting_timestamps` rows that need manual triage from the dashboard. Recovery is manual via "re-enqueue timestamps". Acceptable risk at the publish cadence (~10/month) and current observability.
 
 **Cross-refs.** [`inspector-state-management.md`](inspector-state-management.md) §4 (current state model), [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §3 (publish flow).
 
@@ -33,23 +31,22 @@ Display state computed from the tuple; `completed` requires all three done. Each
 
 ## D2 — Reciter Requests Space deprecation
 
-**What.** The current Reciter Requests Space (Gradio + FastAPI public intake at `reciter_requests/`) is on its way out. New requests will eventually flow through the Inspector itself — likely a "Request a reciter" button in the Inspector UI that writes the catalog row + initial state directly through the same admin endpoints maintainers use today.
+**What.** The current Reciter Requests Space (Gradio + FastAPI public intake at `reciter_requests/`) is being decommissioned in v2 cleanup. The Space goes away alongside `forward-to-inspector.yml` and `INSPECTOR_FORWARD_SECRET`. New requests for the v2 transitional period are **GitHub issues** carrying the body marker `<!-- reciter-task: slug=... schema=1 -->`; a maintainer reads the issue and adds the catalog row via `POST /api/admin/catalog/add`.
 
-**Why deferred.** Whole separate work item. Would entail:
+What's actually deferred here: a **native in-Inspector request flow** — likely a "Request a reciter" button on the Inspector UI that writes the catalog row + initial state directly through the same admin endpoints maintainers use today, with a permission model where anonymous can submit and maintainers approve. See D14 for the Inspector-native intake entry.
+
+**Why deferred.** The native flow is a whole separate work item. Would entail:
 - Designing the public-facing request form inside Inspector
 - Permission model (anonymous can submit, maintainer approves)
 - Migration of existing intake (open issues, Notion pages)
-- Sunsetting the existing Space (it has its own URL, users may have bookmarked)
-- Removing `reciter_requests/` from this repo
-- Removing `forward-to-inspector.yml` workflow
 
-None of v2's other phases require this. The forward-webhook is a small piece of operational tape that bridges existing intake into v2 cleanly.
+None of v2's other phases require this. The GH issue body marker is the lightweight bridge that lets us decommission the Space immediately while deferring the native UX.
 
 **Trigger to revisit.** After v2 is stable in production AND we have a concrete UX design for the in-Inspector request flow.
 
-**Affected if never done.** Two intake surfaces (Inspector for editing, separate Space for requesting). Mild UX inconsistency. Operational overhead of maintaining a second Space. No correctness issue.
+**Affected if never done.** Two intake surfaces (Inspector for editing, GH issues + maintainer manual add for new requests). Mild UX inconsistency. No correctness issue.
 
-**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §4a (forward webhook), `reciter_requests/` source dir.
+**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §2 (decommissioned workflows), `reciter_requests/` source dir (slated for removal).
 
 ---
 
@@ -67,9 +64,9 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 **Why deferred.** Planned feature — depends on knowing the contributor's preferred contact channel (HF inbox? email scraped from HF profile? in-app banner only?), and on the request-tracking system (D2) that links a reciter back to its original requester. Tying both threads together.
 
-**Trigger to revisit.** When a maintainer reports the missing notification is causing real workflow pain (reciters stuck in `ready_for_merge` because nobody knows). Or alongside D2 work.
+**Trigger to revisit.** When a maintainer reports the missing notification is causing real workflow pain (reciters stuck in `marked_ready=1` because nobody knows). Or alongside D2 work.
 
-**Affected if never done.** Reciters can sit in `ready_for_merge` indefinitely until a maintainer happens to check the dashboard. Reviewers don't know their work was rejected until they next visit. Original requesters never hear back. All workable via the admin dashboard "stalled" filter; not a correctness issue.
+**Affected if never done.** Reciters can sit in `marked_ready=1` indefinitely until a maintainer happens to check the dashboard. Reviewers don't know their work was rejected until they next visit. Original requesters never hear back. All workable via the admin dashboard "stalled" filter; not a correctness issue.
 
 **Cross-refs.** [`inspector-state-management.md`](inspector-state-management.md) §4 (events vocabulary — these are the trigger sources), [`inspector-admin-perms.md`](inspector-admin-perms.md) §6.3 (stalled-reciter dashboard, the workaround).
 
@@ -79,8 +76,7 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 **What.** Concrete UI behavior when each backend data source is unavailable:
 
-- HF dataset CDN down → completed reciters fail to load — banner + retry?
-- Bucket mount inaccessible → in-flight reciters fail — banner + which tab works?
+- Bucket inaccessible (mount or API) → reciters fail to load — banner + retry?
 - HF OAuth callback fails → sign-in broken — what's the fallback?
 - Audio origin returns 404 → which reciters are unplayable; how does the Audio tab signal it?
 - Catalog read fails → Inspector boots with stale catalog — banner?
@@ -97,15 +93,15 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 ## D5 — Re-edits of completed reciters
 
-**What.** A maintainer re-claims a `completed` reciter (typo fix, audio replacement, schema migration). Inspector restores the bucket entry from the latest `inspector/segments/<slug>/...` shards on the dataset (HF Job downloads + extracts). State transitions back to `awaiting_review`.
+**What.** A maintainer re-claims a `completed` reciter (typo fix, audio replacement, schema migration). Inspector restores the bucket WIP entry from the latest `<bucket>/published/<slug>/...` snapshot (server-side copy). State transitions back to `awaiting_review`.
 
-**Why deferred.** No published reciter currently needs a re-edit. Building it pre-emptively would commit us to a CDN URL versioning scheme + restore HF Job + state-machine `completed → awaiting_review` transition that may need rework once we have a real use case.
+**Why deferred.** No published reciter currently needs a re-edit. Building it pre-emptively would commit us to a `completed → awaiting_review` transition, a re-claim semantics question, and a cache-bust mechanism that may need rework once we have a real use case.
 
-**Pre-work to make later cheap.** [Done in v2] CDN URL scheme should already include a publish-version segment (`inspector/segments/<slug>/v<n>/<file>.gz`) so re-edits don't break browser caches with `Cache-Control: immutable`. **Action:** verify [`inspector-data-storage.md`](inspector-data-storage.md) §2 includes the `v<n>/` segment; if not, add it before Phase 1 ships.
+**Pre-work to make later cheap.** When implemented, the response-cache strategy will need a cache-bust mechanism then; in v2, `Cache-Control: public, max-age=86400` (1 day) on inspector segment shards keeps caches fresh enough for re-edits to propagate within a day. Versioned dataset URLs (`v<n>/` segments) and `CURRENT` pointer files are NOT used in v2 (per canonical decision D3) — `published/<slug>/` is overwritten in place when a re-edit lands.
 
 **Trigger to revisit.** First real re-edit request from a maintainer.
 
-**Affected if never done.** Typo fixes on completed reciters require admin `state.manual_override` + manual bucket restore via CLI. Painful but not blocking.
+**Affected if never done.** Typo fixes on completed reciters require manual maintainer steps: `admin.force_set_state` to set `completed → under_review` (not in the v2 allowed-pairs list, so this would itself need a small extension), copy `published/<slug>/` back to `wip/<slug>/`, edit, republish. Painful but not blocking.
 
 **Cross-refs.** [`inspector-state-management.md`](inspector-state-management.md) §4 (deferred-events list), [`inspector-data-storage.md`](inspector-data-storage.md) §4 (lifecycle).
 
@@ -113,32 +109,34 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 ## D6 — Multi-replica scale-out
 
-**What.** Run more than one Space replica (or move to a multi-process setup like `gunicorn -w 2+`). Requires moving every in-memory structure (state_store, per-slug mutex, session cache, force-claim leases, parsed seg cache, role cache, pending_jobs map) to a shared coordinator: Redis OR bucket-side optimistic concurrency (read-version → write-if-version).
+**What.** Run more than one Space replica (or move to a multi-process setup like `gunicorn -w 2+`). Requires moving every in-memory structure (state_store, per-slug `threading.Lock`, parsed seg cache, role cache) to a shared coordinator: Redis OR bucket-side optimistic concurrency (read-version → write-if-version).
 
-**Why deferred.** v2's whole concurrency model assumes one Python process. `gunicorn -w 1` is a load-bearing assertion enforced at startup ([`inspector-data-storage.md`](inspector-data-storage.md) §7 CMD). Single replica handles the projected ≤25 concurrent active reviewers comfortably.
+**Why deferred.** v2's whole concurrency model assumes one Python process. `gunicorn -w 1` is a load-bearing assertion enforced at startup ([`inspector-data-storage.md`](inspector-data-storage.md) §7 CMD). Single replica handles the projected ≤25 concurrent active reviewers comfortably. Note that v2 does NOT ship a `revision` column on state rows — OCC is a multi-replica concern that arrives only when we cross this trigger.
 
 **Trigger to revisit.** Any of:
 - p95 latency > 1.5 s under steady load (suggests CPU saturation that more vCPU per replica won't fix)
-- More than ~25 active reviewers concurrently per replica (mutex contention)
+- More than ~25 active reviewers concurrently per replica (lock contention)
 - Memory > 800 MB sustained (parsed cache eviction churn)
 
-**Affected if never done.** Single point of failure at the Space level; Space restart drops force-claim leases and in-progress sessions (re-auth on rebuild is the user-facing pain).
+**Affected if never done.** Single point of failure at the Space level; Space restart drops in-progress sessions (re-auth on rebuild is the user-facing pain).
 
 **Cross-refs.** [`inspector-data-storage.md`](inspector-data-storage.md) §11 scaling triggers.
 
 ---
 
-## D7 — HF server-side Xet copy bucket → dataset
+## D7 — In-bucket server-side copy/move
 
-**What.** Replace the publish snapshot Job's "download from bucket → gzip → upload to dataset" round trip with a single `api.copy_files(...)` call. Per HF docs, "transferring data from a Bucket to a repository (model, dataset, Space) without reuploading is **not yet available, but is on the roadmap**."
+**What.** Inspector's publish path moves files from `<bucket>/wip/<slug>/` to `<bucket>/published/<slug>/`. The preferred shape is a single `copy_files`/`rename` API call inside the bucket; if HF doesn't yet expose that for the bucket-internal pattern we want, the fallback is a download + reupload from inside the running Inspector container (~30 s for ~25 MB).
 
-**Why deferred.** Waiting on HF.
+Either way, both source and destination live in the **same private bucket** — no cross-repo transfer is required. The earlier "bucket → dataset Xet copy" question is obsolete given canonical decision D4 (Inspector reads completed reciter data from the bucket, not from the HF dataset; there is no bucket-to-dataset publish step).
 
-**Trigger to revisit.** HF announces server-side bucket-to-repo copy availability.
+**Why deferred.** Waiting on HF for a clean in-bucket move/rename API. The download + reupload fallback is acceptable at the publish cadence (~10/month).
 
-**Affected if never done.** ~30 s extra wall time per publish (download + reupload of ~25 MB). Acceptable.
+**Trigger to revisit.** HF announces in-bucket server-side copy/move for the pattern Inspector uses.
 
-**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §9.
+**Affected if never done.** ~30 s extra wall time per publish on the synchronous publish path. Acceptable.
+
+**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §3 (publish flow), §10 (risks).
 
 ---
 
@@ -160,7 +158,7 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 **What.** Allow a reciter's `slug` (and thus URL, dataset path, bucket path) to be renamed.
 
-**Why deferred.** Slugs are immutable in v2. A rename would require: coordinated audit-log entry, catalog edit, bucket-path rename, dataset republish under new slug, browser cache invalidation, redirect handling for old URLs. Lots of moving pieces for an undemonstrated need.
+**Why deferred.** Slugs are immutable in v2. A rename would require: coordinated audit-log entry, catalog edit (with an `aliases[]` row), bucket-path rename inside `wip/` and `published/`, browser cache invalidation, redirect handling for old URLs. The catalog already has the `aliases[]` slot for forward-compat, but the actual rename machinery isn't built.
 
 **Trigger to revisit.** First real rename request from a maintainer (typo discovered post-publish; reciter-name change post-marriage; etc.).
 
@@ -172,9 +170,9 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 ## D10 — Public "your contributions" page
 
-**What.** A public page per HF user surfacing their contribution history (claims made, reciters published, etc.), reading from `<bucket>/state/audit.jsonl`. Recovers some of the public attribution that v1's per-edit GitHub commit Co-authored-by gave contributors.
+**What.** A public page per HF user surfacing their contribution history (claims made, reciters published, etc.), reading from `<bucket>/audit/<YYYY>-<MM>.jsonl`. Recovers some of the public attribution that v1's per-edit GitHub commit Co-authored-by gave contributors.
 
-**Why deferred.** Audit log lives in the **private** metadata bucket per [`inspector-data-storage.md`](inspector-data-storage.md) §3 (it carries PII — login + hf_user_id per event). Surfacing per-user contribution data publicly requires either (a) a curated derived feed published to a separate public location, or (b) per-user opt-in. Both need product design.
+**Why deferred.** The audit log lives in the single private bucket per [`inspector-data-storage.md`](inspector-data-storage.md) §3 (it carries PII — `hf_user_id` + `login_at_time` per event). Surfacing per-user contribution data publicly requires either (a) a curated derived feed published to a separate public location, or (b) per-user opt-in. Both need product design.
 
 **Trigger to revisit.** When contributor recognition becomes a friction point (volunteers asking "where do I see my work?").
 
@@ -202,7 +200,7 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 **What.** Front the Inspector backend with Cloudflare free tier (or HF edge cache). Cold-start cache miss after a deploy currently hits backend reads for every active user's first request; CDN absorbs that.
 
-**Why deferred.** Phase 1 measurement decides. CDN headers are already in place for peaks routes; without measured cold-cache pain, adding a CDN is premature.
+**Why deferred.** Phase 1 measurement decides. CDN headers are already in place for peaks routes; without measured cold-cache pain, adding a CDN is premature. Note this is even more relevant in v2 than in earlier drafts: per canonical decision D4, all reciter reads (in-flight AND completed) flow through Flask, so a CDN in front of Inspector now caches the completed-reciter path that previously hit HF dataset CDN directly.
 
 **Trigger to revisit.** Phase 1 metrics show p95 cold > 1 s sustained after a deploy.
 
@@ -222,7 +220,29 @@ None of v2's other phases require this. The forward-webhook is a small piece of 
 
 **Affected if never done.** Bucket `_archive/` grows without bound. ~15 MB per published reciter; at 10 publishes/month, ~1.8 GB/year. Eventually needs cleanup; not urgent.
 
-**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §11.
+**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §10.
+
+---
+
+## D14 — Inspector-native reciter-request flow
+
+**What.** A "Request a reciter" surface inside the Inspector UI itself. Anonymous (or signed-in) users submit a request through Inspector; maintainers approve from the admin dashboard; approval writes the catalog row + initial state in the same path the existing admin endpoints use.
+
+This is the longer-term sibling to D2: D2 is about decommissioning the existing Reciter Requests Space (which is happening in v2 cleanup); D14 is about replacing the bridge with a first-class native flow.
+
+**Why deferred.** v2 ships with GH issues + maintainer manual `POST /api/admin/catalog/add` as the lightweight transitional intake. Building the Inspector-native form requires:
+- Public-facing form UX (anonymous submission flow, captcha or HF-OAuth-gate decision)
+- Maintainer review queue UI
+- Permission model for "approve catalog add"
+- Migration of any in-flight GH issues to the new flow once it lands
+
+None of these block v2.
+
+**Trigger to revisit.** After v2 stabilizes AND request volume justifies investing in a dedicated flow, OR a maintainer reports the GH-issue intake as a real bottleneck.
+
+**Affected if never done.** New reciter requests live as GH issues forever; maintainer manually triages. Workable; mild operational friction.
+
+**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §2 (workflow inventory; the forward webhook is removed in v2 cleanup).
 
 ---
 
