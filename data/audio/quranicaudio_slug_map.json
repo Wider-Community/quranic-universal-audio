@@ -1,0 +1,1253 @@
+{
+  "1": {
+    "slug": "abdullah_awad_al_juhani",
+    "name_en": "Abdullah Awad al-Juhani",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdullaah_3awwaad_al-juhaynee"
+  },
+  "2": {
+    "slug": "abdullah_basfar",
+    "name_en": "Abdullah Basfar",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdullaah_basfar"
+  },
+  "4": {
+    "slug": "sa_ud_ash_shuraym",
+    "name_en": "Sa`ud ash-Shuraym",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "sa3ood_al-shuraym"
+  },
+  "5": {
+    "slug": "mishari_rashid_al_afasy",
+    "name_en": "Mishari Rashid al-`Afasy",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mishaari_raashid_al_3afaasee"
+  },
+  "6": {
+    "slug": "muhammad_siddiq_al_minshawi",
+    "name_en": "Muhammad Siddiq al-Minshawi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "muhammad_siddeeq_al-minshaawee"
+  },
+  "7": {
+    "slug": "abdur_rahman_as_sudais",
+    "name_en": "Abdur-Rahman as-Sudais",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdurrahmaan_as-sudays"
+  },
+  "8": {
+    "slug": "ali_abdur_rahman_al_huthaify",
+    "name_en": "Ali Abdur-Rahman al-Huthaify",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "huthayfi"
+  },
+  "9": {
+    "slug": "khalid_al_qahtani",
+    "name_en": "Khalid al-Qahtani",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "khaalid_al-qahtaanee"
+  },
+  "10": {
+    "slug": "nabil_ar_rifai",
+    "name_en": "Nabil ar-Rifai",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "nabil_rifa3i"
+  },
+  "11": {
+    "slug": "abdulmuhsin_al_qasim",
+    "name_en": "AbdulMuhsin al-Qasim",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdul_muhsin_alqasim"
+  },
+  "12": {
+    "slug": "muhammad_jibreel",
+    "name_en": "Muhammad Jibreel",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "muhammad_jibreel/complete"
+  },
+  "13": {
+    "slug": "saad_al_ghamdi",
+    "name_en": "Saad al-Ghamdi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "sa3d_al-ghaamidi/complete"
+  },
+  "14": {
+    "slug": "fares_abbad",
+    "name_en": "Fares Abbad",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "fares"
+  },
+  "15": {
+    "slug": "abdulbari_ath_thubaity",
+    "name_en": "AbdulBari ath-Thubaity",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "thubaity"
+  },
+  "17": {
+    "slug": "sahl_yasin",
+    "name_en": "Sahl Yasin",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "sahl_yaaseen"
+  },
+  "18": {
+    "slug": "salah_bukhatir",
+    "name_en": "Salah Bukhatir",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "salaah_bukhaatir"
+  },
+  "19": {
+    "slug": "ahmed_ibn_ali_al_ajmy",
+    "name_en": "Ahmed ibn Ali al-Ajmy",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "ahmed_ibn_3ali_al-3ajamy"
+  },
+  "20": {
+    "slug": "sudais_and_shuraym",
+    "name_en": "Sudais and Shuraym",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 111,
+    "source_slug": "sodais_and_shuraim"
+  },
+  "21": {
+    "slug": "abdulazeez_al_ahmad",
+    "name_en": "AbdulAzeez al-Ahmad",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulazeez_al-ahmad"
+  },
+  "23": {
+    "slug": "tawfeeq_ibn_sa_id_as_sawa_igh",
+    "name_en": "Tawfeeq ibn Sa`id as-Sawa'igh",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "tawfeeq_bin_saeed-as-sawaaigh"
+  },
+  "26": {
+    "slug": "muhammad_al_mehysni",
+    "name_en": "Muhammad al-Mehysni",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 112,
+    "source_slug": "mehysni"
+  },
+  "27": {
+    "slug": "hani_ar_rifai",
+    "name_en": "Hani ar-Rifai",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "rifai"
+  },
+  "28": {
+    "slug": "ibrahim_al_jibrin",
+    "name_en": "Ibrahim Al-Jibrin",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 69,
+    "source_slug": "jibreen"
+  },
+  "35": {
+    "slug": "saleh_al_taleb",
+    "name_en": "Saleh al Taleb",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 32,
+    "source_slug": "saleh_al_taleb"
+  },
+  "40": {
+    "slug": "abdulwadud_haneef",
+    "name_en": "AbdulWadud Haneef",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulwadood_haneef"
+  },
+  "43": {
+    "slug": "salah_al_budair",
+    "name_en": "Salah al-Budair",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "salahbudair"
+  },
+  "44": {
+    "slug": "aziz_alili",
+    "name_en": "Aziz Alili",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "aziz_alili"
+  },
+  "53": {
+    "slug": "muhammad_al_luhaidan",
+    "name_en": "Muhammad al-Luhaidan",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 111,
+    "source_slug": "muhammad_alhaidan"
+  },
+  "55": {
+    "slug": "al_hussayni_al_azazy_with_children",
+    "name_en": "Al-Hussayni Al-'Azazy (with Children)",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "alhusaynee_al3azazee_with_children"
+  },
+  "61": {
+    "slug": "sadaqat_ali",
+    "name_en": "Sadaqat `Ali",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "sadaqat_ali"
+  },
+  "64": {
+    "slug": "hamad_sinan",
+    "name_en": "Hamad Sinan",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "hamad_sinan"
+  },
+  "70": {
+    "slug": "muhammad_abdul_kareem",
+    "name_en": "Muhammad Abdul-Kareem",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "muhammad_abdulkareem"
+  },
+  "71": {
+    "slug": "mustafa_al_azawi",
+    "name_en": "Mustafa al-`Azawi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mustafa_al3azzawi"
+  },
+  "72": {
+    "slug": "abdullah_khayat",
+    "name_en": "Abdullah Khayat",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "khayat"
+  },
+  "79": {
+    "slug": "muhammad_hassan",
+    "name_en": "Muhammad Hassan",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mu7ammad_7assan"
+  },
+  "80": {
+    "slug": "salah_al_hashim",
+    "name_en": "Salah Al-Hashim",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 112,
+    "source_slug": "salah_alhashim"
+  },
+  "81": {
+    "slug": "adel_kalbani",
+    "name_en": "Adel Kalbani",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "adel_kalbani"
+  },
+  "85": {
+    "slug": "hatem_farid",
+    "name_en": "Hatem Farid",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 60,
+    "source_slug": "hatem_farid/collection"
+  },
+  "88": {
+    "slug": "mostafa_ismaeel",
+    "name_en": "Mostafa Ismaeel",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mostafa_ismaeel"
+  },
+  "90": {
+    "slug": "muhammad_sulaiman_patel",
+    "name_en": "Muhammad Sulaiman Patel",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "muhammad_patel"
+  },
+  "91": {
+    "slug": "mohammad_al_tablawi",
+    "name_en": "Mohammad Al-Tablawi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mohammad_altablawi"
+  },
+  "92": {
+    "slug": "mohammad_ismaeel_al_muqaddim",
+    "name_en": "Mohammad Ismaeel Al-Muqaddim",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mohammad_ismaeel_almuqaddim"
+  },
+  "93": {
+    "slug": "imad_zuhair_hafez",
+    "name_en": "Imad Zuhair Hafez",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "imad_zuhair_hafez"
+  },
+  "97": {
+    "slug": "yasser_ad_dussary",
+    "name_en": "Yasser ad-Dussary",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "yasser_ad-dussary"
+  },
+  "103": {
+    "slug": "ibrahim_al_akhdar",
+    "name_en": "Ibrahim Al Akhdar",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "ibrahim_al_akhdar"
+  },
+  "104": {
+    "slug": "nasser_al_qatami",
+    "name_en": "Nasser Al Qatami",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "nasser_bin_ali_alqatami"
+  },
+  "105": {
+    "slug": "khalid_al_ghamdi",
+    "name_en": "Khalid Al Ghamdi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 21,
+    "source_slug": "khalid_alghamdi"
+  },
+  "106": {
+    "slug": "abdulkareem_al_hazmi",
+    "name_en": "AbdulKareem Al Hazmi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulkareem_al_hazmi"
+  },
+  "108": {
+    "slug": "abdul_mun_im_abdul_mubdi",
+    "name_en": "Abdul-Mun'im Abdul-Mubdi'",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulmun3im_abdulmubdi2"
+  },
+  "109": {
+    "slug": "abdur_rashid_sufi",
+    "name_en": "Abdur-Rashid Sufi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdurrashid_sufi"
+  },
+  "113": {
+    "slug": "ahmad_al_huthaify",
+    "name_en": "Ahmad al-Huthaify",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 69,
+    "source_slug": "ahmad_alhuthayfi"
+  },
+  "116": {
+    "slug": "idrees_abkar",
+    "name_en": "Idrees Abkar",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "idrees_abkar"
+  },
+  "118": {
+    "slug": "masjid_quba_taraweeh_1434",
+    "name_en": "Masjid Quba Taraweeh 1434",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "masjid_quba_1434"
+  },
+  "119": {
+    "slug": "muhammad_khaleel",
+    "name_en": "Muhammad Khaleel",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 64,
+    "source_slug": "muhammad_khaleel"
+  },
+  "122": {
+    "slug": "mahmoud_khaleel_al_husary",
+    "name_en": "Mahmoud Khaleel Al-Husary",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mahmood_khaleel_al-husaree_iza3a"
+  },
+  "124": {
+    "slug": "abdullah_matroud",
+    "name_en": "Abdullah Matroud",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdullah_matroud"
+  },
+  "125": {
+    "slug": "abdulwadood_haneef",
+    "name_en": "AbdulWadood Haneef",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdul_wadood_haneef_rare"
+  },
+  "126": {
+    "slug": "ahmad_nauina",
+    "name_en": "Ahmad Nauina",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "ahmad_nauina"
+  },
+  "127": {
+    "slug": "akram_al_alaqmi",
+    "name_en": "Akram Al-Alaqmi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "akram_al_alaqmi"
+  },
+  "128": {
+    "slug": "ali_hajjaj_alsouasi",
+    "name_en": "Ali Hajjaj Alsouasi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "ali_hajjaj_alsouasi"
+  },
+  "129": {
+    "slug": "mahmood_ali_al_bana",
+    "name_en": "Mahmood Ali Al-Bana",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "mahmood_ali_albana"
+  },
+  "130": {
+    "slug": "wadee_hammadi_al_yamani",
+    "name_en": "Wadee Hammadi Al Yamani",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "wadee_hammadi_al-yamani"
+  },
+  "135": {
+    "slug": "asim_abdul_aleem",
+    "name_en": "Asim Abdul Aleem",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "asim_abdulaleem"
+  },
+  "136": {
+    "slug": "abdallah_abdal",
+    "name_en": "Abdallah Abdal",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdallah_abdal"
+  },
+  "158": {
+    "slug": "abdullah_ali_jabir",
+    "name_en": "Abdullah Ali Jabir",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "ali_jaber"
+  },
+  "159": {
+    "slug": "maher_al_muaiqly",
+    "name_en": "Maher al-Muaiqly",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "maher_almu3aiqly/year1440"
+  },
+  "160": {
+    "slug": "bandar_baleela",
+    "name_en": "Bandar Baleela",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "bandar_baleela/complete"
+  },
+  "161": {
+    "slug": "khalifah_taniji",
+    "name_en": "Khalifah Taniji",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "khalifah_taniji"
+  },
+  "162": {
+    "slug": "abdulrahman_al_shahat",
+    "name_en": "Abdulrahman al-Shahat",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulrahman_al_shahat"
+  },
+  "163": {
+    "slug": "abdulaziz_bin_saleh_al_zahrani",
+    "name_en": "Abdulaziz bin Saleh al-Zahrani",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulaziz_bin_saleh_alzahrani"
+  },
+  "166": {
+    "slug": "alijon_qari",
+    "name_en": "Alijon Qari",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "alijon_qari/mp3"
+  },
+  "167": {
+    "slug": "badr_al_turki",
+    "name_en": "Badr Al Turki",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "badr_al_turki/mp3"
+  },
+  "168": {
+    "slug": "raad_mohammad_al_kurdi",
+    "name_en": "Raad Mohammad al-Kurdi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "raad_mohammad_al_kurdi/mp3"
+  },
+  "169": {
+    "slug": "peshawa_qadir_al_kurdi",
+    "name_en": "Peshawa Qadir al-Kurdi",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "peshawa_qadir_al-kurdi/mp3"
+  },
+  "170": {
+    "slug": "farman_shawani",
+    "name_en": "Farman Shawani",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "farman_shawani/mp3"
+  },
+  "37": {
+    "slug": "abdulbaset_abdulsamad",
+    "name_en": "AbdulBaset AbdulSamad",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdul_basit_murattal"
+  },
+  "41": {
+    "slug": "muhammad_siddiq_al_minshawi_mujawwad",
+    "name_en": "Muhammad Siddiq al-Minshawi",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "minshawi_mujawwad"
+  },
+  "50": {
+    "slug": "abdulbaset_abdulsamad_mujawwad",
+    "name_en": "AbdulBaset AbdulSamad",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulbaset_mujawwad"
+  },
+  "68": {
+    "slug": "abdur_razaq_bin_abtan_al_dulaimi_mujawwad",
+    "name_en": "Abdur-Razaq bin Abtan al-Dulaimi",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abdulrazaq_bin_abtan_al_dulaimi"
+  },
+  "74": {
+    "slug": "dr_shawqy_hamed",
+    "name_en": "Dr. Shawqy Hamed",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 72,
+    "source_slug": "dr.shawqy_7amed/murattal"
+  },
+  "107": {
+    "slug": "muhammad_ayyoob_taraweeh",
+    "name_en": "Muhammad Ayyoob",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "muhammad_ayyoob_hq"
+  },
+  "115": {
+    "slug": "abu_bakr_al_shatri_taraweeh",
+    "name_en": "Abu Bakr al-Shatri",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "abu_bakr_ash-shatri_tarawee7"
+  },
+  "164": {
+    "slug": "mahmoud_khaleel_al_husary_mujawwad",
+    "name_en": "Mahmoud Khaleel Al-Husary",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "generated/husary_mujawwad"
+  },
+  "54": {
+    "slug": "abdulbaset_abdulsamad_warsh",
+    "name_en": "AbdulBaset AbdulSamad",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "abdulbaset_warsh"
+  },
+  "60": {
+    "slug": "abdur_rashid_sufi_susi",
+    "name_en": "Abdur-Rashid Sufi",
+    "style": "murattal",
+    "riwayah": "susi_abu_amr",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "abdurrashid_sufi_soosi_rec"
+  },
+  "62": {
+    "slug": "abdur_rashid_sufi_khalaf",
+    "name_en": "Abdur-Rashid Sufi",
+    "style": "murattal",
+    "riwayah": "khalaf_an_hamzah",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "abdurrashid_sufi_-_khalaf_3an_7amza_recitation"
+  },
+  "78": {
+    "slug": "mahmoud_khaleel_al_husary_duri",
+    "name_en": "Mahmoud Khaleel Al-Husary",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "section": "non_hafs",
+    "n_present": 113,
+    "source_slug": "mahmood_khaleel_al-husaree_doori"
+  },
+  "110": {
+    "slug": "abdur_rashid_sufi_layth",
+    "name_en": "Abdur-Rashid Sufi",
+    "style": "murattal",
+    "riwayah": "layth_al_kisai",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "abdurrashid_sufi_abi_al7arith"
+  },
+  "111": {
+    "slug": "abdur_rashid_sufi_duri",
+    "name_en": "Abdur-Rashid Sufi",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "abdurrashid_sufi_doori"
+  },
+  "112": {
+    "slug": "abdur_rashid_sufi_shubah",
+    "name_en": "Abdur-Rashid Sufi",
+    "style": "murattal",
+    "riwayah": "shubah_an_asim",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "abdurrashid_sufi_shu3ba"
+  },
+  "114": {
+    "slug": "ali_al_huthaify_qalon",
+    "name_en": "Ali al-Huthaify",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "huthayfi_qaloon"
+  },
+  "137": {
+    "slug": "abdur_rashid_sufi_susi_abu_amr",
+    "name_en": "Abdur-Rashid Sufi",
+    "style": "murattal",
+    "riwayah": "susi_abu_amr",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "abdurrashid_sufi_soosi_2020"
+  },
+  "155": {
+    "slug": "noreen_siddiq_duri",
+    "name_en": "Noreen Siddiq",
+    "style": "murattal",
+    "riwayah": "duri_abu_amr",
+    "section": "non_hafs",
+    "n_present": 114,
+    "source_slug": "noreen_siddiq"
+  },
+  "25": {
+    "slug": "madinah_taraweeh_1419",
+    "name_en": "Madinah Taraweeh 1419",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 113,
+    "source_slug": "madinah_1419"
+  },
+  "29": {
+    "slug": "makkah_taraweeh_1426",
+    "name_en": "Makkah Taraweeh 1426",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1426"
+  },
+  "30": {
+    "slug": "madinah_taraweeh_1426",
+    "name_en": "Madinah Taraweeh 1426",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1426"
+  },
+  "33": {
+    "slug": "madinah_taraweeh_1427",
+    "name_en": "Madinah Taraweeh 1427",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1427"
+  },
+  "34": {
+    "slug": "makkah_taraweeh_1427",
+    "name_en": "Makkah Taraweeh 1427",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1427"
+  },
+  "45": {
+    "slug": "makkah_taraweeh_1425",
+    "name_en": "Makkah Taraweeh 1425",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 113,
+    "source_slug": "makkah_1425"
+  },
+  "46": {
+    "slug": "madinah_taraweeh_1423",
+    "name_en": "Madinah Taraweeh 1423",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1423"
+  },
+  "59": {
+    "slug": "makkah_taraweeh_1428",
+    "name_en": "Makkah Taraweeh 1428",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1428"
+  },
+  "63": {
+    "slug": "makkah_taraweeh_1424",
+    "name_en": "Makkah Taraweeh 1424",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1424"
+  },
+  "73": {
+    "slug": "madinah_taraweeh_1428",
+    "name_en": "Madinah Taraweeh 1428",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1428"
+  },
+  "77": {
+    "slug": "makkah_taraweeh_1429",
+    "name_en": "Makkah Taraweeh 1429",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1429"
+  },
+  "82": {
+    "slug": "makkah_taraweeh_1430",
+    "name_en": "Makkah Taraweeh 1430",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1430"
+  },
+  "83": {
+    "slug": "makkah_taraweeh_1431",
+    "name_en": "Makkah Taraweeh 1431",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1431"
+  },
+  "84": {
+    "slug": "madinah_taraweeh_1431",
+    "name_en": "Madinah Taraweeh 1431",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1431"
+  },
+  "94": {
+    "slug": "makkah_taraweeh_1432",
+    "name_en": "Makkah Taraweeh 1432",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1432"
+  },
+  "98": {
+    "slug": "makkah_taraweeh_1433",
+    "name_en": "Makkah Taraweeh 1433",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1433"
+  },
+  "99": {
+    "slug": "madinah_taraweeh_1429",
+    "name_en": "Madinah Taraweeh 1429",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1429"
+  },
+  "100": {
+    "slug": "madinah_taraweeh_1430",
+    "name_en": "Madinah Taraweeh 1430",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1430"
+  },
+  "101": {
+    "slug": "madinah_taraweeh_1432",
+    "name_en": "Madinah Taraweeh 1432",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1432"
+  },
+  "102": {
+    "slug": "madinah_taraweeh_1433",
+    "name_en": "Madinah Taraweeh 1433",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1433"
+  },
+  "120": {
+    "slug": "makkah_taraweeh_1434",
+    "name_en": "Makkah Taraweeh 1434",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1434"
+  },
+  "123": {
+    "slug": "madinah_taraweeh_1435",
+    "name_en": "Madinah Taraweeh 1435",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1435"
+  },
+  "131": {
+    "slug": "makkah_taraweeh_1435",
+    "name_en": "Makkah Taraweeh 1435",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1435"
+  },
+  "132": {
+    "slug": "makkah_taraweeh_1436",
+    "name_en": "Makkah Taraweeh 1436",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1436"
+  },
+  "133": {
+    "slug": "makkah_taraweeh_1437",
+    "name_en": "Makkah Taraweeh 1437",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1437"
+  },
+  "143": {
+    "slug": "madinah_taraweeh_1434",
+    "name_en": "Madinah Taraweeh 1434",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1434"
+  },
+  "144": {
+    "slug": "madinah_taraweeh_1436",
+    "name_en": "Madinah Taraweeh 1436",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1436"
+  },
+  "145": {
+    "slug": "madinah_taraweeh_1437",
+    "name_en": "Madinah Taraweeh 1437",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1437"
+  },
+  "146": {
+    "slug": "madinah_taraweeh_1439",
+    "name_en": "Madinah Taraweeh 1439",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1439"
+  },
+  "147": {
+    "slug": "madinah_taraweeh_1440",
+    "name_en": "Madinah Taraweeh 1440",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1440"
+  },
+  "148": {
+    "slug": "madinah_taraweeh_1441",
+    "name_en": "Madinah Taraweeh 1441",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1441"
+  },
+  "149": {
+    "slug": "madinah_taraweeh_1442",
+    "name_en": "Madinah Taraweeh 1442",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1442"
+  },
+  "150": {
+    "slug": "makkah_taraweeh_1438",
+    "name_en": "Makkah Taraweeh 1438",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1438"
+  },
+  "151": {
+    "slug": "makkah_taraweeh_1439",
+    "name_en": "Makkah Taraweeh 1439",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1439"
+  },
+  "152": {
+    "slug": "makkah_taraweeh_1440",
+    "name_en": "Makkah Taraweeh 1440",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1440"
+  },
+  "153": {
+    "slug": "makkah_taraweeh_1441",
+    "name_en": "Makkah Taraweeh 1441",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1441"
+  },
+  "154": {
+    "slug": "makkah_taraweeh_1442",
+    "name_en": "Makkah Taraweeh 1442",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1442"
+  },
+  "171": {
+    "slug": "madinah_taraweeh_1443",
+    "name_en": "Madinah Taraweeh 1443",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1443/mp3"
+  },
+  "172": {
+    "slug": "madinah_taraweeh_1444",
+    "name_en": "Madinah Taraweeh 1444",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1444/mp3"
+  },
+  "173": {
+    "slug": "madinah_taraweeh_1445",
+    "name_en": "Madinah Taraweeh 1445",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1445/mp3"
+  },
+  "174": {
+    "slug": "madinah_taraweeh_1446",
+    "name_en": "Madinah Taraweeh 1446",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "madinah_1446/mp3"
+  },
+  "175": {
+    "slug": "makkah_taraweeh_1443",
+    "name_en": "Makkah Taraweeh 1443",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1443/mp3"
+  },
+  "176": {
+    "slug": "makkah_taraweeh_1444",
+    "name_en": "Makkah Taraweeh 1444",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1444/mp3"
+  },
+  "177": {
+    "slug": "makkah_taraweeh_1445",
+    "name_en": "Makkah Taraweeh 1445",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1445/mp3"
+  },
+  "178": {
+    "slug": "makkah_taraweeh_1446",
+    "name_en": "Makkah Taraweeh 1446",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1446/mp3"
+  },
+  "179": {
+    "slug": "makkah_taraweeh_1447",
+    "name_en": "Makkah Taraweeh 1447",
+    "style": "taraweeh",
+    "riwayah": "hafs_an_asim",
+    "section": "taraweeh",
+    "n_present": 114,
+    "source_slug": "makkah_1447/mp3"
+  }
+}
