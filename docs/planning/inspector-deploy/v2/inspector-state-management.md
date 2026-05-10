@@ -111,11 +111,29 @@ Read pattern: ad-hoc by maintainers via the admin dashboard; potential future "y
 
 Failure rolls back the in-memory transition and returns an error to the caller; the bucket file is unchanged.
 
-## 3. Static identity: `data/reciter_catalog.json` (on GitHub)
+## 3. Static identity: `<bucket>/catalog/reciter_catalog.json` (on the HF bucket — moved from GitHub per H3+H4 decision)
 
-### Why GitHub for the catalog
+### Why the bucket for the catalog (revised v2.1)
 
-The catalog is **curated metadata** — display names, riwayah classification, audio source attribution. Low cadence (one PR per new reciter or correction). PR-reviewed. Lives where curation already happens. Moving it to the bucket would be wrong: catalog edits are deliberate maintainer actions, not Inspector-mediated user actions.
+The catalog was originally planned to live on GitHub with PR-reviewed edits. Two problems with that:
+
+1. v2's whole architectural shift is "no per-reciter PRs." Keeping catalog edits on PRs means we still need a PR-creation token + a PR-review queue + a catalog-auto-merge workflow, just for catalog. That's the only PR-creation surface left.
+2. The same `<bucket>/state/audit.jsonl` pattern (Inspector-as-sole-writer + audit log + state-machine validation) works equally well for catalog. Moving catalog to the bucket consolidates the operational model.
+
+**Catalog now lives at `<bucket>/catalog/reciter_catalog.json`** with `<bucket>/catalog/audit.jsonl` for change history. Same writer (Inspector backend, single-process). Same validation discipline. Maintainer+ role required for `catalog.edited` events; immutable fields (`slug`, `reciter_id`) are still rejected by the validator.
+
+`data/inspector_owners.json` and `data/inspector_maintainers.json` **stay on GitHub** — those govern *who can edit*, not *what's edited*. CODEOWNERS-gated PR review is the right gate for role mutations (it's a security-critical change that should require GitHub-account-attested approval).
+
+### Catalog read paths
+
+| Consumer | Path |
+|---|---|
+| Inspector backend | `<INSPECTOR_BUCKET_MOUNT>/catalog/reciter_catalog.json` (mount); refreshed every 5 min in a background thread (single-process) |
+| GH Actions (`update-reciters.yml`) | Reads via `huggingface_hub.HfFileSystem`: `buckets/hetchyy/quranic-inspector-bucket/catalog/reciter_catalog.json` |
+| HF Jobs | Same pattern as GH Actions when needed |
+| External (Reciter Requests Space) | Reads `data/reciters_index.json` (regenerated derivative) — unchanged contract |
+
+The 5-min poll inside Inspector is removed (Inspector is the writer; it knows its own cache is fresh). Other consumers re-fetch on demand.
 
 ### Design principle: slug is opaque, catalog is structured
 
@@ -197,9 +215,30 @@ On merge to main, the catalog is now updated. The next time Inspector reads it (
 - Slugs and `reciter_id`s are immutable for now.
 - Removing a row is not supported (use `discarded` flow when implemented).
 
-### Migration (one-shot, Phase 0)
+### Initial catalog (one-shot, manual)
 
-`scripts/migrate_catalog_v2.py` reads existing identity sources (`data/reciters_index.json` + per-reciter audio manifests' `_meta`), emits a v2 row per reciter with `reciter_id = slug`, `is_canonical = true`, all other new optional fields null. Bumps `schema_version` to 2. Run validator; commit.
+The catalog is seeded **manually** at v2 cutover (~15 rows). Author the JSON locally from existing identity sources (`data/reciters_index.json` + per-reciter audio manifests' `_meta`); set `reciter_id = slug` and `is_canonical = true` for every row, leave new optional fields null. Validate locally with `inspector/services/catalog.py::validate()`, then `hf buckets cp` into the target bucket. After cutover, all changes go through the admin endpoint `POST /api/admin/catalog/edit/<slug>`.
+
+### State seeding (one-shot, manual)
+
+There are only ~15 reciters at the time of v2 cutover. State is seeded **manually** by a maintainer using `hf buckets cp` (or the Hub UI) to upload an initial `reciter_state.json` and an empty `audit.jsonl`. No migration script — the rule complexity isn't worth the script effort at this scale.
+
+For reference when authoring the manual seed, the implicit state of each existing reciter follows file-presence:
+
+| Signal | → Initial state |
+|---|---|
+| Has `data/timestamps/<slug>/...` AND `data/recitation_segments/<slug>/segments.json` (per `scripts/lib/reciter_eligibility.py`) | `completed` |
+| Has `data/recitation_segments/<slug>/segments.json` only | `awaiting_review` (no claim) |
+| Open GitHub issue + no on-disk segments | `awaiting_alignment` |
+| Catalog entry only | `catalogued` |
+
+Initial seed fields per row:
+- `assignee`, `assignee_hf_id`, `assignee_since` → null (reviewers re-claim fresh)
+- `issue_number` → from open issue if present, else null
+- `state_since` → seeding wall-clock
+- `history` → single entry `{ "at": now, "event": "reciter.seeded", "detail": "manual seed v2 cutover" }`
+
+After cutover, all subsequent transitions go through `state.py::transition()`.
 
 ## 4. State machine
 
@@ -217,30 +256,56 @@ On merge to main, the catalog is now updated. The next time Inspector reads it (
 
 `assignee_since` is preserved through `ready_for_merge` (the assignee identity stays when the reviewer marks ready, since they may unmark to continue editing).
 
-### Events
+### Events — canonical vocabulary
+
+**Naming convention: `<noun>.<verb>` namespacing for every event.** Three nouns: `reciter` (lifecycle of a recitation), `claim` (assignee bookkeeping), `state` (manual machine override), plus `catalog` and `pipeline` and `admin` for cross-cutting actions. This is the **single source of truth** — `inspector/services/state.py` and the audit log both consume from this list. The admin-perms doc's events list ([`inspector-admin-perms.md`](inspector-admin-perms.md) §11) extends this same vocabulary; do not introduce alternate names elsewhere.
 
 ```
-# Lifecycle
+# Lifecycle (reciter.*)
 reciter.catalog_synced            # catalog file changed; add new slugs / propagate metadata changes
 reciter.alignment_requested       # from Reciter Requests Space
 reciter.alignment_completed       # pipeline finished, bucket entry seeded
+reciter.published                 # maintainer published — snapshot bucket → dataset
+reciter.timestamps_completed      # TS data on dataset
+reciter.discarded                 # admin marked rejected/abandoned (new state in v2; see admin §11)
+reciter.merge_rejected            # maintainer sent ready entry back to reviewer
 
-# Review cycle
+# Claim cycle (claim.* + reciter.* for state-changing review actions)
 reciter.claimed                   # someone took the reciter
 reciter.released                  # claimant gave it back
 reciter.marked_ready              # reviewer marked ready for maintainer publish
 reciter.unmarked_ready            # reviewer pulled back to under_review
-reciter.merge_rejected            # maintainer sent ready entry back to reviewer for changes
-reciter.published                 # maintainer published — snapshot bucket → dataset
+claim.force_released              # admin override (one-arg or batch)
+claim.reassigned                  # admin override
+claim.force_acquired              # admin first-save on a not-owned reciter (ephemeral, no transition)
+claim.force_released_auto         # 30-min lease timer (ephemeral, no transition)
 
-# Timestamps cycle
-reciter.timestamps_completed      # TS data on dataset
+# State-machine override (state.*)
+state.manual_override             # direct state edit via admin (was 'admin_override' in v1; renamed)
+reciter.seeded            # one-shot manual cutover seed (no migration script)
 
-# Admin
-reciter.admin_override            # direct state edit via maintainer admin action
+# Catalog (catalog.*)
+catalog.edited                    # admin edited a catalog row (writes to <bucket>/catalog/, see H3+H4)
+
+# Pipeline / Job re-run (pipeline.* / admin.*)
+pipeline.triggered                # admin fired a re-extraction or re-timestamps via web
+admin.job_rerun                   # admin re-ran a failed publish HF Job
 ```
 
-The terminology shift from v1: `review_merged` → `published`. There's no merge anymore; the maintainer's action is "publish" — copying the bucket entry to the canonical dataset and cleaning up the bucket.
+**Renames from v1 / earlier v2 drafts** (all places that used the old name should be updated):
+
+| Old name | New canonical name |
+|---|---|
+| `claimed` | `reciter.claimed` |
+| `released` | `reciter.released` |
+| `marked_ready` | `reciter.marked_ready` |
+| `unmarked_ready` | `reciter.unmarked_ready` |
+| `merge_rejected` | `reciter.merge_rejected` |
+| `published` | `reciter.published` |
+| `admin_override` | `state.manual_override` |
+| `review_merged` (v1) | `reciter.published` |
+
+The terminology shift from v1: there's no merge anymore; the maintainer's action is "publish" — copying the bucket entry to the canonical dataset and cleaning up the bucket.
 
 Deferred (recognised but not implemented):
 
@@ -249,27 +314,39 @@ reciter.alignment_failed
 reciter.timestamps_failed
 reciter.timestamps_stale
 reciter.audio_source_changed
-reciter.discarded
 ```
 
-### Transition matrix
+### Transition matrix (canonical — single source for `state.py`)
 
-| Event | From state(s) | To state | Side effects |
-|---|---|---|---|
-| `catalog_synced` (new slug) | (no row) | `catalogued` | Append history `added` |
-| `catalog_synced` (existing) | any | (same) | Diff catalog; no transition |
-| `alignment_requested` | `catalogued` | `awaiting_alignment` | Set `issue_number` from event payload |
-| `alignment_completed` | `awaiting_alignment` | `awaiting_review` | Bucket entry seeded by pipeline; Inspector verifies presence |
-| `claimed` | `awaiting_review` | `under_review` | Set `assignee`, `assignee_hf_id`, `assignee_since` |
-| `released` | `under_review`, `ready_for_merge` | `awaiting_review` | Clear assignee fields |
-| `marked_ready` | `under_review` | `ready_for_merge` | Retain assignee |
-| `unmarked_ready` | `ready_for_merge` | `under_review` | Retain assignee |
-| `merge_rejected` | `ready_for_merge` | `under_review` | Retain assignee; record reason in history detail |
-| `published` | `ready_for_merge` | `awaiting_timestamps` | Clear assignee. Triggers HF Jobs + GH Actions per [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md). Bucket entry archived (or deleted) post-snapshot |
-| `timestamps_completed` | `awaiting_timestamps` | `completed` | TS HF Job confirmed; reciter live on dataset |
-| `admin_override` | any | (specified) | History entry includes `detail` with reason |
+States = `catalogued`, `awaiting_alignment`, `awaiting_review`, `under_review`, `ready_for_merge`, `awaiting_timestamps`, `completed`, `discarded` (8 total — `discarded` added per admin §11).
 
-Direct `under_review → published` is **not** allowed. The reviewer must mark ready first. Maintainer emergency direct-publish uses `admin_override`.
+| Event | From state(s) | To state | Actor role | Side effects |
+|---|---|---|---|---|
+| `reciter.catalog_synced` (new slug) | (no row) | `catalogued` | system | Append history `added` |
+| `reciter.catalog_synced` (existing) | any | (same) | system | Diff catalog; no transition |
+| `reciter.alignment_requested` | `catalogued` | `awaiting_alignment` | system (forward webhook) | Set `issue_number` from event payload |
+| `reciter.alignment_completed` | `awaiting_alignment` | `awaiting_review` | system (pipeline webhook) | Bucket entry seeded by pipeline; Inspector verifies presence |
+| `reciter.claimed` | `awaiting_review` | `under_review` | contributor+ | Set `assignee`, `assignee_hf_id`, `assignee_since`; one-claim-per-user check |
+| `reciter.released` | `under_review`, `ready_for_merge` | `awaiting_review` | claim-holder OR maintainer+ | Clear assignee fields |
+| `reciter.marked_ready` | `under_review` | `ready_for_merge` | claim-holder | Retain assignee |
+| `reciter.unmarked_ready` | `ready_for_merge` | `under_review` | claim-holder | Retain assignee |
+| `reciter.merge_rejected` | `ready_for_merge` | `under_review` | maintainer+ | Retain assignee; record reason in history detail |
+| `reciter.published` | `ready_for_merge` | `awaiting_timestamps` | maintainer+ | Clear assignee. Triggers HF Jobs + GH Actions per [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md). Bucket entry archived (or deleted) post-snapshot |
+| `reciter.timestamps_completed` | `awaiting_timestamps` | `completed` | system (job callback) | TS HF Job confirmed; reciter live on dataset |
+| `reciter.discarded` | any (except `discarded`) | `discarded` | maintainer+ | Requires typed `confirmation_phrase`; reason ≥10 chars |
+| `claim.force_released` | `under_review`, `ready_for_merge` | `awaiting_review` | maintainer+ | Clear assignee; reason required |
+| `claim.reassigned` | `awaiting_review`, `under_review`, `ready_for_merge` | `under_review` | maintainer+ | Set new assignee (resolved via HF API per H7); reason required |
+| `claim.force_acquired` | `under_review` (any) | (same) | maintainer+ | **Ephemeral** — no state transition. Sets `force_assignee` field with 30-min lease. Audit-only. |
+| `claim.force_released_auto` | (any with active force-claim) | (same) | system (timer) | **Ephemeral** — clears `force_assignee` field after 30-min inactivity. Audit-only. |
+| `state.manual_override` | any | (specified) | maintainer+ | Reason ≥10 chars in history detail. Does NOT auto-clean assignee fields if target state implies they should be null — maintainer uses `/api/admin/claim/clear` separately (intentional friction). |
+| `reciter.seeded` | (no row) | (specified — `catalogued` / `awaiting_alignment` / `awaiting_review` / `completed`) | manual (one-shot) | Reflects manual cutover seeding (no migration script in v2 — too few reciters to justify) |
+| `catalog.edited` | (any) | (same) | maintainer+ | **No state-file change.** Mutates `<bucket>/catalog/reciter_catalog.json` (per H3+H4). Audited under `<bucket>/catalog/audit.jsonl`. Fires `repository_dispatch reciter.catalog_changed` for `update-reciters.yml`. |
+| `pipeline.triggered` | (any compatible) | (none — pipeline emits its own follow-up event) | maintainer+ | Fires `repository_dispatch pipeline.triggered`. Reason required. |
+| `admin.job_rerun` | (any) | (same) | maintainer+ | Re-enqueues a specific failed HF Job. Audit only. |
+
+Direct `under_review → reciter.published` is **not** allowed. The reviewer must mark ready first. Maintainer emergency direct-publish uses `state.manual_override`.
+
+`discarded → *` is only via `state.manual_override` (intentional friction — recovery is deliberate).
 
 ### Why re-edits don't get their own state
 
@@ -339,7 +416,7 @@ The slug-rules-only convention. No PR/branch/commit conventions in v2.
 |---|---|---|
 | Reciter request issue title | `[request] <slug>: <Display Name>` | `[request] saad_al_ghamdi: Saad Al-Ghamdi` |
 | Issue body marker | `<!-- reciter-task: slug=<slug> schema=1 -->` | `<!-- reciter-task: slug=saad_al_ghamdi schema=1 -->` |
-| Bucket path for in-flight | `<bucket>/inspector-wip/<slug>/` | |
+| Bucket path for in-flight | `<bucket>/wip/<slug>/` | |
 | HF dataset path for completed | `inspector/segments/<slug>/` | |
 | Inspector URL | `/r/<slug>` | `/r/saad_al_ghamdi` |
 
@@ -525,7 +602,7 @@ It reads the bucket state file via `huggingface_hub.download_bucket_files(...)` 
 - Land `inspector/services/hf_bucket.py` (mount path resolver + write helpers).
 - Create `data/reciter_catalog.json` (v2 schema).
 - Create the dev + prod HF buckets.
-- Land `scripts/migrate_state_to_bucket.py` — one-shot script that walks current GitHub issues + open PRs + on-disk data and seeds `<bucket>/state/reciter_state.json`.
+- **Manually seed** `<bucket>/state/reciter_state.json` and `<bucket>/catalog/reciter_catalog.json` per §3 mapping rules. No script — too few rows.
 - Land `scripts/validate_reciter_state.py` + `scripts/validate_reciter_catalog.py` + CI gates.
 - **Rewrite `list_reciters.py`** to read identity from catalog and state from bucket via `huggingface_hub`.
 - **Rewrite `build_reciter.py --build-manifest`** to read identity from catalog.

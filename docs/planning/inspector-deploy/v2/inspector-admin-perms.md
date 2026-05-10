@@ -146,7 +146,7 @@ Each override has: trigger, preconditions, request shape, side effects, audit-lo
 | UI | Button on reciter card in dashboard ("Force-release") + on the reciter's segments tab when viewed by a maintainer |
 | Confirmation | Modal: "Force-release `<slug>` from `<assignee>`? Reason (required):" |
 
-The bucket entry's current contents are preserved — the reviewer's last-flushed state stays in `<bucket>/inspector-wip/<slug>/...` for the next reviewer to pick up. Anything still buffered locally on the original reviewer's container (within the 30 s mount flush window) is lost.
+The bucket entry's current contents are preserved — the reviewer's last-flushed state stays in `<bucket>/wip/<slug>/...` for the next reviewer to pick up. Anything still buffered locally on the original reviewer's container (within the 30 s mount flush window) is lost.
 
 ### 5.2 Reassign
 
@@ -154,15 +154,17 @@ The bucket entry's current contents are preserved — the reviewer's last-flushe
 
 | Field | Value |
 |---|---|
-| HTTP | `POST /api/admin/claim/reassign` |
-| Body | `{ "slug": "...", "to_login": "...", "to_hf_user_id": "...", "reason": "..." }` |
-| Preconditions | reciter is `awaiting_review`, `under_review`, or `ready_for_merge`; `to_login` is a valid HF user (verified via HF API on submit) |
-| State transition | → `under_review`, sets assignee to `to_login` |
-| Event in audit | `claim.reassigned { slug, by_login, from_login, to_login, reason }` |
+| HTTP | `POST /api/admin/claim/reassign/<slug>` |
+| Body | `{ "to_login": "...", "reason": "..." }` (no `to_hf_user_id` — backend resolves) |
+| Preconditions | reciter is `awaiting_review`, `under_review`, or `ready_for_merge`; `to_login` resolves via `GET https://huggingface.co/api/users/<to_login>/overview` (returns 200 with stable `_id`; 404 → `BadRequest`) |
+| State transition | → `under_review`, sets `assignee = canonical_login`, `assignee_hf_id = _id` (the API's casing wins over user input) |
+| Event in audit | `claim.reassigned { slug, by_login, from_login, to_login, to_hf_user_id, reason }` |
 | Reversibility | Soft — reassign back |
-| UI | "Reassign…" button + searchable user picker (HF user search) |
+| UI | "Reassign…" button + free-text login input (no public typeahead API exists). On blur, the UI calls `/api/admin/users/lookup?login=<x>` (a thin proxy to the HF endpoint) and shows `fullname + avatarUrl` from the response so the maintainer can confirm before submit. |
 
-No invitation needed in v2 — HF users don't need any specific repo permission to use the Inspector; the reassign just sets the assignee field.
+No invitation needed in v2 — HF users don't need any specific repo permission to use the Inspector; the reassign just sets the assignee fields.
+
+**Why store both `to_login` and `to_hf_user_id`:** the HF `_id` (= OIDC `sub`) is **stable across username renames**; the `login` is mutable display only. All claim-ownership checks compare `assignee_hf_id`, never `assignee`. If a reviewer renames their HF account mid-claim, their existing claim survives.
 
 ### 5.3 Edit-without-claim (force-claim)
 
@@ -212,21 +214,23 @@ Manual overrides do **not** automatically clean up assignee fields if the target
 
 Discarded reciters are hidden from anonymous viewers and from the regular reciter list. Maintainers see them in an "Internal" filter on the admin dashboard. Bucket entry stays; recovery is `state.manual_override` back.
 
-### 5.6 Catalog edit
+### 5.6 Catalog edit (revised — direct to bucket per H3+H4)
 
-**Use case:** display name typo, riwayah classification correction, audio source URL change.
+**Use case:** display name typo, riwayah classification correction, audio source URL change, adding a new variant.
 
 | Field | Value |
 |---|---|
-| HTTP | `POST /api/admin/catalog/edit` |
-| Body | `{ "slug": "...", "patch": { "display_name": "...", ... }, "reason": "..." }` |
-| Preconditions | caller is maintainer+; patch passes catalog schema validation; slug already exists |
-| Side effect | Inspector backend opens a PR against `data/reciter_catalog.json` on GitHub via the dispatch token. The PR uses the maintainer's login as author (via `Co-authored-by:` trailer in the commit message; the bot creates the commit since dispatch can't author commits as users). |
-| Event in audit | `catalog.edited { slug, by_login, patch, reason }` |
-| Reversibility | Reverse PR |
-| UI | Catalog editor modal with form fields per schema |
+| HTTP | `POST /api/admin/catalog/edit/<slug>` (edit existing) or `POST /api/admin/catalog/add` (new row) |
+| Body | `{ "patch": { "name_en": "...", "riwayah": "...", ... }, "reason": "..." }` |
+| Preconditions | caller is maintainer+; patch passes catalog schema validation; slug exists (for edit); patch does NOT touch immutable fields (`slug`, `reciter_id`) |
+| Side effect | Direct write to `<bucket>/catalog/reciter_catalog.json` via `inspector/services/catalog.py::transition()` (mirrors `state.py` pattern: schema validate → atomic write → audit append → in-memory cache update). Fires `repository_dispatch reciter.catalog_changed` to trigger `update-reciters.yml`. |
+| Event in audit | `catalog.edited { slug, by_login, patch, reason }` (in `<bucket>/catalog/audit.jsonl`) |
+| Reversibility | Reverse via another `catalog.edited` (audit log preserves prior values) |
+| UI | Catalog editor modal with form fields per schema; immutable fields rendered read-only |
 
-Catalog edits flow through a PR rather than direct-to-main because they're rare, deserve scrutiny, and the existing PR review affordances are valuable on GitHub. State edits go direct (to bucket) because they're frequent and the state machine validation is the review.
+**Why direct, not PR:** v2's whole architectural shift is "no per-reciter PRs." Keeping catalog on PRs would require a catalog-auto-merge workflow, a separate PR-create PAT, and a PR review queue — only for the one remaining PR surface. Catalog has the same write characteristics as state (low cadence, maintainer+ gated, schema-validated, audit-trailed) — so it belongs in the same operational model.
+
+**What stays PR-reviewed:** the role files (`data/inspector_owners.json`, `data/inspector_maintainers.json`) — those govern *who can edit*, and CODEOWNERS-gated PR review is the right gate for changes to the role list.
 
 ### 5.7 Pipeline trigger
 
@@ -453,7 +457,7 @@ Web admin and CLI tools complement; they don't replace.
 | Force-claim edit | ✓ | — | Tied to a session, web-only |
 | Manual state override | ✓ | ✓ | CLI for batch / scripted recovery (writes via `huggingface_hub` directly to bucket) |
 | Discard | ✓ | ✓ | Same |
-| Catalog edit | ✓ | ✓ | CLI exists today (`process_requests.py`) |
+| Catalog edit | ✓ (web → bucket direct) | ✓ (`process_requests.py`, must be updated to write to bucket too) |
 | Pipeline rerun | ✓ (trigger) | ✓ (full) | Web fires; CLI / HPC owns execution |
 | Re-extraction with custom params | — | ✓ | Too many parameters for a sane web form |
 | Param-rerun | — | ✓ | Same |
@@ -495,7 +499,7 @@ The state-management transition matrix needs updating to allow `* → discarded`
 
 Maps onto the parent doc's phases.
 
-### Phase 1 — Read-only admin dashboard
+### Phase 4 — Read-only admin dashboard (was misslotted as Phase 1 in earlier drafts; needs OAuth from Phase 3)
 
 - `/admin` route gated by maintainer role (resolved against `inspector_owners.json` + optional `inspector_maintainers.json`).
 - System health, all-reciters, stalled-reciters, recent-events sections wired up (read-only).
@@ -554,9 +558,11 @@ A maintainer accidentally clicks "Discard all `awaiting_review` older than 365 d
 
 Risk: web becomes "good enough", CLI atrophies. Mitigation: §10 explicitly carves out which actions stay CLI-only.
 
-### Catalog edit PR review burden
+<!-- Resolved by H3+H4: catalog moved to bucket, no PRs to merge. Section retained as historical note. -->
 
-Every catalog edit opens a PR. If many small typo corrections come through, the queue becomes noise. Mitigation: catalog edit PRs auto-merge after a delay (e.g. 1h) if no maintainer requests review and CI validation passes.
+### Catalog edit PR review burden (resolved — no longer applicable)
+
+Earlier draft routed catalog edits through GitHub PRs, which would have created an auto-merge queue burden. **Resolved by moving catalog to the bucket** (state-mgmt §3 + admin §5.6). No PRs, no auto-merge workflow, no PR-create token. Audit trail in `<bucket>/catalog/audit.jsonl` is the new review surface.
 
 ### Pipeline trigger from web vs HPC reality
 

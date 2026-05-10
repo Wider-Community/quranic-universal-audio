@@ -58,11 +58,13 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 | `validators/validate_edit_history.py::check_file_hash` | File-hash chain dropped (data-storage §7) | 5 | open |
 | `validators/validate_edit_history.py::check_genesis_record` | Genesis record dropped (no longer anchors anything) | 5 | open |
 | `inspector/utils/io.py::file_sha256` | Last caller is the file-hash chain | 5 | open |
-| `inspector/config.py::METADATA_PEEK_BYTES` | Audio-source 512-byte peek replaced by catalog | 1 | open |
+<!-- duplicate removed; covered above next to discover_ts_reciters note -->
 | `inspector/services/save.py::backup_file()` calls in deployed save path | Audit log is the recovery; .bak files clutter the bucket | 5 | open |
 | `inspector/services/save.py::_persist_and_record` `file_hash_after` write | Field dropped | 5 | open |
-| `inspector/services/save.py::_append_revert_record` `file_hash_after` write | Field dropped | 5 | open |
-| `inspector/services/data_loader.py::discover_ts_reciters` 512-byte audio_source peek | Audio-source carried in catalog | 1 | open |
+<!-- removed: _append_revert_record does not exist in save.py (verified) -->
+| `inspector/services/save.py` revert record `file_hash_after` write (any path that writes it) | Field dropped | 5 | open |
+<!-- removed: discover_ts_reciters already deleted (verified). METADATA_PEEK_BYTES const still present, see next line. -->
+| `inspector/config.py::METADATA_PEEK_BYTES` | Now unused after `discover_ts_reciters` removal — delete the constant | 1 | open |
 | `seg_save_chart` route + `analysis/*.png` writes | Debug-only, no UI surface | 5 | open |
 | `inspector/app.py` ThreadPoolExecutor startup preload of timestamps | Lazy-load via TS HF static; no eager preload (verify already removed in current code per app.py:171 comment) | 1 | open |
 | `data/audio/<cat>/<src>/<slug>.json` from Docker image (kept in repo, excluded from image via `.dockerignore`) | Replaced by `audio_catalog.json.gz` | 1 | open |
@@ -73,13 +75,13 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 |---|---|---|---|
 | `inspector/Dockerfile` ENV defaults | Flip to `INSPECTOR_DATA_DIR=/app/data`, `INSPECTOR_QUA_DATA_PATH=/app/data` (was `/data`); add `INSPECTOR_AUDIO_PROXY_ENABLED=0`, `INSPECTOR_CACHE_DIR=/tmp/inspector-cache`, `INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket`, `INSPECTOR_PARSED_CACHE_BYTES=134217728` | 1 | open |
 | `inspector/Dockerfile` COPY list | Extend from current 3 static files to all 12 static reference files (incl. `inspector_owners.json`, `inspector_maintainers.json`, `audio_catalog.json.gz`) | 1 | open |
-| `inspector/Dockerfile` CMD | `app.run()` → `gunicorn -k gthread -w 2 --threads 8 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30` | 1 | open |
+| `inspector/Dockerfile` CMD | `app.run()` → `gunicorn -k gthread -w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30`. **`-w 1` is load-bearing** — every in-memory structure assumes single-process. App startup must assert workers==1 | 1 | open |
 | Root `.dockerignore` | Create at repo root with the exclusion list from data-storage §7 | 1 | open |
 | `inspector/services/cache.py` `_seg` dict | Replace with parsed seg cache layer keyed `(slug, "detailed_parsed")`, sized by `INSPECTOR_PARSED_CACHE_BYTES` | 1 | open |
 | `inspector/services/data_loader.py::load_timestamps` | Gate behind `INSPECTOR_TS_SOURCE=local`; deployed mode browser-fetches HF CDN direct | 1 | open |
 | `inspector/services/data_loader.py::load_audio_urls` | Gate behind `INSPECTOR_TS_SOURCE=local`; deployed mode reads from `audio_catalog.json.gz` | 1 | open |
 | `inspector/routes/timestamps.py::config` (`/api/ts/config`) | Extend response with `inspector_shard_url_template`, `globals_url_template` (same-origin in deployed, HF in local) | 1 | open |
-| `inspector/services/save.py` data path resolution | Use `services/data_dir.py::resolve(slug)` helper instead of hard-coded `INSPECTOR_DATA_DIR/data/recitation_segments/<slug>`. In deployed mode this returns `<INSPECTOR_BUCKET_MOUNT>/inspector-wip/<slug>/...` | 5 | open |
+| `inspector/services/save.py` data path resolution | Use `services/data_dir.py::resolve(slug)` helper instead of hard-coded `INSPECTOR_DATA_DIR/data/recitation_segments/<slug>`. In deployed mode this returns `<INSPECTOR_BUCKET_MOUNT>/wip/<slug>/...` | 5 | open |
 | `.github/scripts/build_reciter.py` | Add `--build-inspector-segments <slug>` build target; mirror existing `--build-timestamps` and `--build-segments` patterns | 1 | open |
 | `.github/scripts/build_reciter.py --build-manifest` | Read identity from catalog (GitHub) and state from bucket via `huggingface_hub` | 0 | open |
 | `.github/scripts/list_reciters.py` | Read identity from catalog (GitHub) and state from bucket via `huggingface_hub` | 0 | open |
@@ -95,7 +97,8 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 |---|---|---|---|
 | `inspector/services/hf_bucket.py` | Mount path resolver, atomic-write helper for the bucket; ~30 LoC | 0 | open |
 | `inspector/services/state.py` | State machine + bucket persistence + audit append; sole writer of `<bucket>/state/reciter_state.json` | 0 | open |
-| `inspector/services/data_dir.py` | Per-mode data dir resolver: local returns `INSPECTOR_DATA_DIR`; deployed returns `<INSPECTOR_BUCKET_MOUNT>/inspector-wip/<slug>` | 5 | open |
+| `inspector/services/catalog.py` | Catalog state-machine-style writer for `<bucket>/catalog/reciter_catalog.json`; mirrors state.py pattern (validate → atomic write → audit append) | 0 | open |
+| `inspector/services/data_dir.py` | Per-mode data dir resolver: local returns `INSPECTOR_DATA_DIR`; deployed returns `<INSPECTOR_BUCKET_MOUNT>/wip/<slug>` | 5 | open |
 | `inspector/services/github_dispatch.py` | Fire `repository_dispatch` events to GitHub via `INSPECTOR_GITHUB_DISPATCH_TOKEN`; ~30 LoC | 6 | open |
 | `inspector/services/hf_jobs.py` | Enqueue HF Jobs via API; track in-memory `job_id → (slug, type, fired_at)` for admin dashboard | 6 | open |
 | `inspector/services/publish.py` | Orchestrate publish event: state transition + fan-out trigger | 6 | open |
@@ -106,8 +109,8 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 | `inspector/routes/internal.py` | `/api/internal/job-completed`, `/api/internal/inspector-event` (HMAC-auth) | 6 | open |
 | `inspector/routes/static_data.py` | Flask static route for `/api/static/audio_catalog.json.gz`, `/api/static/qpc_hafs.json.gz`, etc. with `Cache-Control: immutable` | 1 | open |
 | `scripts/build_audio_catalog.py` | Walk `data/audio/**/*.json`, drop `_timing`, compact + gzip into `data/audio_catalog.json.gz` (~6 MB) | 1 | open |
-| `scripts/migrate_state_to_bucket.py` | One-shot script: walk current GitHub issues + open PRs + on-disk data; seed `<bucket>/state/reciter_state.json` and `<bucket>/state/audit.jsonl` | 0 | open |
-| `scripts/migrate_catalog_v2.py` | One-shot: emit `data/reciter_catalog.json` v2 from current identity sources | 0 | open |
+<!-- Migration scripts removed — too few existing rows (~15 reciters) to justify scripting. State + catalog seeded manually at v2 cutover by a maintainer using `hf buckets cp`. Mapping rules documented in inspector-state-management.md §3. -->
+
 | `scripts/upload_inspector.sh` | Selective rsync into Space repo + frontend build + audio catalog + commit/push to HF Space | 1 | open |
 | `scripts/jobs/snapshot_bucket_to_dataset.py` | HF Job entry point: download bucket → gzip → upload to dataset → archive bucket | 6 | open |
 | `scripts/jobs/timestamps_refresh.py` | HF Job entry point: read bucket → call MFA Aligner Space → write TS shards to dataset | 6 | open |
@@ -120,7 +123,7 @@ The Inspector supports **two modes**, not three. Speculative third-mode hybrids 
 | `.github/workflows/inspector-deploy.yml` | Selective Space upload on push to `main` (prod) or `dev` (dev Space) | 1 | open |
 | `.github/workflows/inspector-deploy-dev.yml` | Same as above but for `dev` branch / dev Space | 1 | open |
 | `.github/workflows/forward-to-inspector.yml` | Receives `reciter.alignment_requested` from Reciter Requests Space; HMAC-POSTs to Inspector `/api/internal/inspector-event` | 6 | open |
-| `.github/workflows/inspector-jobs-image.yml` | Build + publish the `hetchyy/inspector-jobs` Docker image to GHCR on push to `scripts/jobs/**` or `scripts/lib/**` | 6 | open |
+| `.github/workflows/inspector-jobs-deploy.yml` | Selective rsync to `hetchyy/inspector-jobs-image` HF Space repo (Docker SDK, paused) on push to `scripts/jobs/**` or `scripts/lib/**`. HF builds the image; Jobs pull via `hf://spaces/hetchyy/inspector-jobs-image:latest`. **Not GHCR.** | 6 | open |
 | `.github/workflows/validate-catalog.yml` | Run `validate_reciter_catalog.py` on PRs touching `data/reciter_catalog.json` | 0 | open |
 
 ## 5. Doc amendments triggered by code changes
@@ -166,8 +169,8 @@ Run before marking each phase complete.
 ### Phase 0 — Foundation
 
 - [ ] HF buckets created (dev + prod)
-- [ ] Bucket state file pre-seeded by `migrate_state_to_bucket.py`
-- [ ] `data/reciter_catalog.json` v2 schema migrated by `migrate_catalog_v2.py`
+- [ ] Bucket state file manually seeded (~15 reciters) per state-mgmt §3 mapping rules
+- [ ] Catalog file manually seeded into `<bucket>/catalog/reciter_catalog.json` from existing `data/reciters_index.json` + per-reciter manifest `_meta` blocks
 - [ ] `data/inspector_owners.json` exists with at least 2 owners
 - [ ] `inspector/services/hf_bucket.py` lands
 - [ ] `inspector/services/state.py` lands; passes unit tests for every transition in the matrix

@@ -149,12 +149,77 @@ The Reciter Requests Space currently fires `repository_dispatch reciter.alignmen
 3. .github/workflows/forward-to-inspector.yml runs:
    - POST https://hetchyy-quranic-inspector.hf.space/api/internal/inspector-event
         Body: { event: "reciter.alignment_requested", payload: { ... } }
-        Auth: HMAC of body with INSPECTOR_FORWARD_SECRET
+        Auth: HMAC-SHA256 (see §4a)
 4. Inspector validates HMAC and applies the state transition
    (catalogued → awaiting_alignment, sets issue_number)
 ```
 
 Why route through GH Actions: the Reciter Requests Space already fires dispatch; rewiring it to talk to Inspector directly is more change. The forward workflow is a 10-line yaml.
+
+### 4a. Internal endpoint auth (Bearer token, two separate secrets)
+
+Both internal endpoints (`/api/internal/inspector-event`, `/api/internal/job-completed`) use a **Bearer shared secret** over TLS. Threat model is "trusted infra calling trusted infra over HTTPS" — both callers are bot-account-owned (GH Actions runner / HF Job container), TLS protects the wire, and Bearer is dead-simple to validate. HMAC's tamper-resistance offers little benefit when both endpoints are on `*.hf.space` and any caller capable of breaching TLS already has bigger leverage.
+
+| Field | Value |
+|---|---|
+| Header | `Authorization: Bearer <secret>` |
+| Validation | Constant-time compare (`hmac.compare_digest`) |
+| Body | Plain JSON, no signing |
+| Replay protection | None (5-min secret rotation if needed; relies on TLS + caller infra trust) |
+
+**Two separate secrets** (blast-radius isolation — a leaked Job image cannot forge intake events):
+
+| Secret | Used by | Endpoint |
+|---|---|---|
+| `INSPECTOR_FORWARD_SECRET` | `forward-to-inspector.yml` GH Actions | `POST /api/internal/inspector-event` |
+| `INSPECTOR_JOB_CALLBACK_SECRET` | HF Job entry-point scripts (`scripts/jobs/*.py`) | `POST /api/internal/job-completed` |
+
+**Zero-downtime rotation.** Server reads both `<NAME>` and `<NAME>_PREV`; validator accepts either. Rotation: copy current to `_PREV`, mint new `current`, deploy Space, update caller secrets, then unset `_PREV` on next deploy.
+
+**Sender (HF Job script):**
+```python
+import requests, os
+
+def post_internal(url: str, payload: dict, secret: str) -> None:
+    r = requests.post(url, json=payload, timeout=10, headers={
+        "Authorization": f"Bearer {secret}",
+    })
+    r.raise_for_status()
+```
+
+**Receiver decorator (Flask):**
+```python
+import hmac, os
+from functools import wraps
+from flask import request, abort, current_app
+
+def require_bearer(secret_env: str):
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*a, **kw):
+            auth = request.headers.get("Authorization", "")
+            if not auth.startswith("Bearer "):
+                abort(401, "missing bearer")
+            token = auth[len("Bearer "):]
+            for env_key in (secret_env, f"{secret_env}_PREV"):
+                expected = os.environ.get(env_key)
+                if expected and hmac.compare_digest(token, expected):
+                    return fn(*a, **kw)
+            abort(401, "invalid bearer")
+        return wrapper
+    return deco
+
+# usage
+@app.post("/api/internal/inspector-event")
+@require_bearer("INSPECTOR_FORWARD_SECRET")
+def inspector_event(): ...
+
+@app.post("/api/internal/job-completed")
+@require_bearer("INSPECTOR_JOB_CALLBACK_SECRET")
+def job_completed(): ...
+```
+
+Lives in `inspector/utils/internal_auth.py::require_bearer(secret_env: str)`.
 
 ## 5. HF Job specifications
 
@@ -164,19 +229,19 @@ Each Job is a small Docker image with `huggingface_hub` + `requests` + the relev
 
 ```bash
 hf jobs run \
-  --image hetchyy/inspector-jobs:latest \
-  -v hf://buckets/hetchyy/quranic-inspector-wip:/data/bucket \
+  --image hf://spaces/hetchyy/inspector-jobs-image:latest \
+  -v hf://buckets/hetchyy/quranic-inspector-bucket:/data/bucket \
   -e SLUG=<slug> \
   python scripts/jobs/snapshot_bucket_to_dataset.py
 ```
 
 Inside the container:
 
-1. Read `/data/bucket/inspector-wip/<slug>/data/recitation_segments/<slug>/{segments,detailed,edit_history,edit_history_peaks,low_confidence_v2}.{json,jsonl}`.
+1. Read `/data/bucket/wip/<slug>/data/recitation_segments/<slug>/{segments,detailed,edit_history,edit_history_peaks,low_confidence_v2}.{json,jsonl}`.
 2. Gzip each file (compresslevel 9, mtime=0 for deterministic output).
 3. Upload to `hetchyy/quranic-universal-ayahs/inspector/segments/<slug>/<file>.gz` via `HfApi.upload_file`.
 4. Compute SHA-256 of each upload, write into `manifest.json.gz`'s `inspector_shard_hashes`.
-5. On success: archive `/data/bucket/inspector-wip/<slug>/` to `/data/bucket/_archive/<slug>/<published_at>/` (or delete if archive policy is "delete").
+5. On success: archive `/data/bucket/wip/<slug>/` to `/data/bucket/_archive/<slug>/<published_at>/` (or delete if archive policy is "delete").
 6. POST `https://hetchyy-quranic-inspector.hf.space/api/internal/job-completed?type=snapshot&slug=<slug>` (with HMAC auth).
 
 Cost: ~30 s per reciter. ~25 MB transfer. Cheap.
@@ -185,15 +250,15 @@ Cost: ~30 s per reciter. ~25 MB transfer. Cheap.
 
 ```bash
 hf jobs run \
-  --image hetchyy/inspector-jobs:latest \
-  -v hf://buckets/hetchyy/quranic-inspector-wip:/data/bucket \
+  --image hf://spaces/hetchyy/inspector-jobs-image:latest \
+  -v hf://buckets/hetchyy/quranic-inspector-bucket:/data/bucket \
   -e SLUG=<slug> \
   python scripts/jobs/timestamps_refresh.py
 ```
 
 Inside:
 
-1. Read `/data/bucket/inspector-wip/<slug>/data/recitation_segments/<slug>/detailed.json`.
+1. Read `/data/bucket/wip/<slug>/data/recitation_segments/<slug>/detailed.json`.
 2. Call MFA Aligner Space (`hetchyy/Quran-phoneme-mfa-dev` by default) for each verse — same flow as the existing `extract_timestamps.py`.
 3. Compute timestamps; gzip per chapter.
 4. Upload to `hetchyy/quranic-universal-ayahs/timestamps/<slug>/<chapter>.json.gz`.
@@ -207,8 +272,8 @@ This is the slowest Job — Inspector tracks it in the admin dashboard.
 
 ```bash
 hf jobs run \
-  --image hetchyy/inspector-jobs:latest \
-  -v hf://buckets/hetchyy/quranic-inspector-wip:/data/bucket \
+  --image hf://spaces/hetchyy/inspector-jobs-image:latest \
+  -v hf://buckets/hetchyy/quranic-inspector-bucket:/data/bucket \
   -e SLUG=<slug> \
   python scripts/jobs/build_per_verse_audio.py
 ```
@@ -219,17 +284,21 @@ Cost: ~5 min per reciter (audio download + slicing).
 
 Trigger source for re-runs: maintainer can manually re-run any of these jobs from the admin dashboard if a step fails — Inspector exposes `POST /api/admin/rerun-job/<slug>?job=<type>`.
 
-### Job image (`hetchyy/inspector-jobs:latest`)
+### Job image (`hf://spaces/hetchyy/inspector-jobs-image`)
 
-A small Docker image with:
+A small Docker image hosted as an **HF Space (Docker SDK, paused)**. The Space doesn't run anything user-facing — it just exists so HF Jobs can pull the image directly from HF infrastructure (`hf jobs run --image hf://spaces/hetchyy/inspector-jobs-image:latest`). Avoids GHCR-as-third-party-registry and the round-trip of building elsewhere then asking HF Jobs to pull from outside.
+
+Contents:
 
 - Python 3.11
 - `huggingface_hub`, `requests`, `orjson`, `numpy`
-- `scripts/lib/` (segment shards, timestamps shards, reciter task)
+- `scripts/lib/` (segment shards, timestamps shards, reciter task, internal_auth_sender)
 - `scripts/jobs/` (job entry points)
 - ffmpeg (for `build-per-verse-audio-dataset`)
 
-Image is published to GHCR by `inspector-jobs-image.yml` (a tiny GH Actions workflow on push to `main` touching `scripts/jobs/**` or `scripts/lib/**`).
+The image rebuilds automatically on push to its Space repo. CI deploys via the same selective-rsync pattern as Inspector — `inspector-jobs-deploy.yml` GH Actions workflow on push to `main` touching `scripts/jobs/**` or `scripts/lib/**`. The Space stays in `paused` state — only its built image artifact matters.
+
+GHCR is **not** used. (Earlier draft suggested GHCR with the caveat "verify HF Jobs supports GHCR" — the HF-Space-hosted-image path is more native and skips that verification entirely.)
 
 ## 6. Workflow specifications
 
@@ -263,7 +332,7 @@ jobs:
       - name: Regenerate
         env:
           INSPECTOR_HF_TOKEN: ${{ secrets.INSPECTOR_HF_TOKEN }}
-          INSPECTOR_BUCKET_REPO: hetchyy/quranic-inspector-wip
+          INSPECTOR_BUCKET_REPO: hetchyy/quranic-inspector-bucket
         run: |
           # Reads catalog from local checkout, state from bucket via huggingface_hub
           python .github/scripts/list_reciters.py --write
@@ -279,7 +348,7 @@ The script reads catalog from the local checkout (catalog is on GitHub) and stat
 ```python
 from huggingface_hub import HfFileSystem
 fs = HfFileSystem()
-with fs.open(f"buckets/hetchyy/quranic-inspector-wip/state/reciter_state.json", "r") as f:
+with fs.open(f"buckets/hetchyy/quranic-inspector-bucket/state/reciter_state.json", "r") as f:
     state = json.load(f)
 ```
 
@@ -391,21 +460,27 @@ HF Jobs don't deliver completion events natively (yet). Two patterns to bridge:
 
 ### Pattern A: Job-side webhook
 
-Each Job's last step POSTs to Inspector:
-
-```bash
-# inside the job
-curl -fsS -X POST \
-  -H "Authorization: Bearer $INSPECTOR_FORWARD_SECRET" \
-  "https://hetchyy-quranic-inspector.hf.space/api/internal/job-completed" \
-  -d "{\"type\": \"snapshot\", \"slug\": \"$SLUG\", \"status\": \"success\"}"
-```
-
-Inspector's handler:
+Each Job's last step POSTs to Inspector via the Bearer sender from §4a:
 
 ```python
-@require_internal_secret
+# inside the job
+import os, requests
+
+requests.post(
+    f"{os.environ['INSPECTOR_CALLBACK_URL']}/api/internal/job-completed",
+    json={"type": "snapshot", "slug": os.environ["SLUG"], "status": "success"},
+    headers={"Authorization": f"Bearer {os.environ['INSPECTOR_JOB_CALLBACK_SECRET']}"},
+    timeout=10,
+).raise_for_status()
+```
+
+`INSPECTOR_CALLBACK_URL` is **passed into the Job invocation as an env var per environment** (dev or prod), so dev Jobs callback to dev Inspector. See `hf_jobs.enqueue()` payload in §4.
+
+Inspector's handler (decorator from §4a):
+
+```python
 @app.post("/api/internal/job-completed")
+@require_bearer("INSPECTOR_JOB_CALLBACK_SECRET")
 def job_completed():
     body = request.json
     if body["type"] == "timestamps" and body["status"] == "success":
@@ -433,11 +508,11 @@ def snapshot(slug: str):
     download_bucket_files(
         BUCKET_REPO,
         files=[
-            (f"inspector-wip/{slug}/data/recitation_segments/{slug}/segments.json",     "/tmp/segments.json"),
-            (f"inspector-wip/{slug}/data/recitation_segments/{slug}/detailed.json",     "/tmp/detailed.json"),
-            (f"inspector-wip/{slug}/data/recitation_segments/{slug}/edit_history.jsonl", "/tmp/edit_history.jsonl"),
-            (f"inspector-wip/{slug}/data/recitation_segments/{slug}/edit_history_peaks.jsonl", "/tmp/edit_history_peaks.jsonl"),
-            (f"inspector-wip/{slug}/data/recitation_segments/{slug}/low_confidence_v2.json", "/tmp/low_confidence_v2.json"),
+            (f"wip/{slug}/data/recitation_segments/{slug}/segments.json",     "/tmp/segments.json"),
+            (f"wip/{slug}/data/recitation_segments/{slug}/detailed.json",     "/tmp/detailed.json"),
+            (f"wip/{slug}/data/recitation_segments/{slug}/edit_history.jsonl", "/tmp/edit_history.jsonl"),
+            (f"wip/{slug}/data/recitation_segments/{slug}/edit_history_peaks.jsonl", "/tmp/edit_history_peaks.jsonl"),
+            (f"wip/{slug}/data/recitation_segments/{slug}/low_confidence_v2.json", "/tmp/low_confidence_v2.json"),
         ],
     )
     # 2. Gzip
@@ -511,9 +586,9 @@ A subordinate Job (e.g., `timestamps-refresh`) fails mid-run. State sits at `awa
 
 Should we archive bucket entries to `<bucket>/_archive/<slug>/<published_at>/` post-snapshot, or delete? **Recommend archive** for the first month (recovery option if dataset publish has a bug); **delete** after that (storage cost is small but accumulates). Configurable via `INSPECTOR_BUCKET_ARCHIVE_POLICY` env var.
 
-### Job image distribution
+### Job image distribution (resolved — uses HF Space)
 
-The `hetchyy/inspector-jobs` image lives on GHCR. HF Jobs needs to pull it; confirm HF Jobs supports GHCR (it does for public images). If not, mirror to Docker Hub or Quay.
+The image is hosted as an HF Space (Docker SDK, paused) at `hetchyy/inspector-jobs-image`. HF Jobs pulls from `hf://spaces/...` natively. No GHCR / Docker Hub / Quay involvement; one less third-party registry to maintain credentials for.
 
 ### Forward-to-Inspector workflow as a single point of failure
 
