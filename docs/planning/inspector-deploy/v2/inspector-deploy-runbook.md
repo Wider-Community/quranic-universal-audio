@@ -4,16 +4,16 @@ Operational companion to [`inspector-deployment-plan.md`](inspector-deployment-p
 
 Audience: anyone executing a deploy phase or maintaining the live Spaces. Does not duplicate architectural rationale.
 
-## 1. Hosting target — HF Spaces, free tier, with HF Bucket mounts
+## 1. Hosting target — HF Spaces, free tier, with one HF Bucket per env
 
-The Inspector deploys as a Hugging Face Space using the Docker SDK on free **CPU-basic** tier (2 vCPU shared, 16 GB RAM, ephemeral disk). Each Space mounts **two HF Storage Buckets** — a public data bucket (in-flight reciter data, catalog) and a private metadata bucket (state file, audit log). The split is for security (audit log carries PII).
+The Inspector deploys as a Hugging Face Space using the Docker SDK on free **CPU-basic** tier (2 vCPU shared, 16 GB RAM, ephemeral disk). Each Space mounts **one private HF Storage Bucket**. All in-flight + completed reciter data, the catalog, the state file, and the audit log live in that single bucket — different folders inside it (`wip/`, `published/`, `catalog/`, `state/`, `audit/`, `_archive/`).
 
 ### Topology
 
-| Purpose | Space | Visibility | Data bucket (public) | Metadata bucket (private) | Branch trigger |
-|---|---|---|---|---|---|
-| **Production** | `hetchyy/quranic-inspector` | Public | `hetchyy/quranic-inspector-bucket` | `hetchyy/quranic-inspector-meta` | push to `main` |
-| **Development** | `hetchyy/quranic-inspector-dev` | Private (`hf_oauth_authorized_org: hetchyy`) | `hetchyy/quranic-inspector-bucket-dev` | `hetchyy/quranic-inspector-meta-dev` | push to `dev` |
+| Purpose | Space | Visibility | Bucket | Branch trigger |
+|---|---|---|---|---|
+| **Production** | `hetchyy/quranic-inspector` | Public | `hetchyy/quranic-inspector-bucket` (private) | push to `main` |
+| **Development** | `hetchyy/quranic-inspector-dev` | Private (`hf_oauth_authorized_org: hetchyy`) | `hetchyy/quranic-inspector-bucket-dev` (private) | push to `dev` |
 
 URLs:
 
@@ -22,20 +22,21 @@ URLs:
 
 URLs are stable across rebuilds, sleep/wake, restarts, and config changes.
 
-### Why split into two buckets per env (H2)
+### One private bucket per env (D5)
 
-| Bucket | Mount path | Visibility | Contents | Why |
-|---|---|---|---|---|
-| `quranic-inspector-bucket{,-dev}` | `/data/inspector-bucket` | **Public** | `wip/<slug>/...`, `catalog/reciter_catalog.json`, `catalog/audit.jsonl` | Anonymous viewing of in-flight reciter data is a v2 product goal. Catalog is non-sensitive. |
-| `quranic-inspector-meta{,-dev}` | `/data/inspector-meta` | **Private** | `state/reciter_state.json`, `state/audit.jsonl` | `audit.jsonl` carries `actor.login + actor.hf_user_id` per event — that's PII (correlatable with HF profiles). State file exposes assignee identity. Anonymous read of these isn't required by any product use case. |
+| Bucket | Mount path | Visibility | Contents |
+|---|---|---|---|
+| `quranic-inspector-bucket{,-dev}` | `/data/inspector-bucket` | **Private** | `state/reciter_state.json`, `audit/<YYYY>-<MM>.jsonl`, `catalog/reciter_catalog.json`, `catalog/audio_meta.json`, `catalog/audio_durations.json`, `wip/<slug>/...`, `published/<slug>/...`, `_archive/<slug>/<published_at>/...` |
 
-Both buckets owned by the same HF org; the Space's `INSPECTOR_HF_TOKEN` has write scope on both namespaces. External consumers (`update-reciters.yml`, HF Jobs) read state via the private bucket using the same token.
+Both browser reads and writes for in-flight + completed reciter data flow through the Inspector backend (which is already in the read path for auth/state/lock). No public bucket — the bucket is private and the backend is the only consumer of `INSPECTOR_HF_TOKEN`. External tools that legitimately need to read state (`update-reciters.yml`, `release.yml`, `bucket-data-hygiene.yml`, the timestamps-refresh HF Job) authenticate with the same token and read via `huggingface_hub`.
+
+This collapses the previous "public data bucket + private metadata bucket" split: every byte is sensitive enough to keep behind a token. The PII-in-audit justification for two buckets is moot now.
 
 ### Test reciter discipline (dev only)
 
-Dev and prod are **completely independent**: separate Spaces, separate buckets, separate catalogs (each catalog lives in its own bucket). So:
+Dev and prod are **completely independent**: separate Spaces, separate buckets, separate catalogs (each catalog is in its own bucket). So:
 
-- Test reciters live only in the dev bucket's catalog. Prod bucket's catalog never sees them — **no cross-contamination is possible**, no `_test_*` filter needed in `list_reciters.py` (which reads from prod bucket when generating prod `RECITERS.md` / `reciters_index.json`).
+- Test reciters live only in the dev bucket's catalog. Prod bucket's catalog never sees them — **no cross-contamination is possible**, no `_test_*` filter needed in `list_reciters.py` (which reads from prod bucket when generating prod `RECITERS.md`).
 - Slug naming for test reciters: any naming works; `_test_*` is just a convention to make them visually obvious in the dev UI.
 - Audio sources for test reciters: tiny verses or even synthetic silence files for fast iteration.
 - The dev bucket can be wiped/reseeded freely; nothing in dev affects prod data.
@@ -48,7 +49,7 @@ Dev and prod are **completely independent**: separate Spaces, separate buckets, 
 
 - Token leak blast-radius confined to the bot account, not a person's whole Hub presence.
 - Easier to rotate (no entanglement with personal subscriptions).
-- The audit log shows `actor.login = bot-account` for system-fired events, which is clearer than seeing a maintainer's personal login on automated transitions.
+- The audit log shows `actor.login_at_time = bot-account` for system-fired events, which is clearer than seeing a maintainer's personal login on automated transitions.
 
 Token scope: when HF supports fine-grained tokens scoped to specific buckets (or via Resource Groups on Team/Enterprise plans), use that. Until then, the bot-account containment is the practical mitigation.
 
@@ -65,35 +66,43 @@ Token scope: when HF supports fine-grained tokens scoped to specific buckets (or
 #### Step 1: Create the Bucket
 
 ```bash
-hf buckets create hetchyy/quranic-inspector-bucket-dev   # public is fine; dev
-hf buckets create hetchyy/quranic-inspector-bucket       # public; prod
+hf buckets create hetchyy/quranic-inspector-bucket-dev --private   # dev
+hf buckets create hetchyy/quranic-inspector-bucket --private       # prod
 ```
 
-Or via the Hub UI: `https://huggingface.co/new-bucket`.
+Or via the Hub UI: `https://huggingface.co/new-bucket` (set visibility to **private**).
 
-**Public** is acceptable — the bucket holds in-flight reciter data, which is intentionally publicly viewable per the parent doc's "anonymous viewing of in-review data" default. Switch to private if you want maintainer-only viewing of in-flight work.
+The bucket holds all in-flight + completed reciter data, catalog, state, and audit. Browsers reach it only through the Inspector backend, which authenticates with `INSPECTOR_HF_TOKEN`.
 
-#### Step 2: Manually seed the buckets
+#### Step 2: Manually seed the bucket
 
 One-time, ~15 reciters at v2 cutover. Author the initial files locally then upload via `hf buckets cp`:
 
 ```bash
-# Public data bucket — catalog only (in-flight reciter dirs come on demand)
+# State (single source of truth in the bucket)
+hf buckets cp ./bootstrap/state/reciter_state.json \
+    hf://buckets/hetchyy/quranic-inspector-bucket-dev/state/reciter_state.json
+
+# Audit (current-month partition seeded with one bootstrap entry)
+hf buckets cp ./bootstrap/audit/2026-05.jsonl \
+    hf://buckets/hetchyy/quranic-inspector-bucket-dev/audit/2026-05.jsonl
+hf buckets cp ./bootstrap/audit/_meta.json \
+    hf://buckets/hetchyy/quranic-inspector-bucket-dev/audit/_meta.json
+
+# Catalog (one consolidated file with vocab + reciters + aliases)
 hf buckets cp ./bootstrap/catalog/reciter_catalog.json \
     hf://buckets/hetchyy/quranic-inspector-bucket-dev/catalog/reciter_catalog.json
-hf buckets cp ./bootstrap/catalog/audit.jsonl \
-    hf://buckets/hetchyy/quranic-inspector-bucket-dev/catalog/audit.jsonl
 
-# Private metadata bucket — state + audit
-hf buckets cp ./bootstrap/state/reciter_state.json \
-    hf://buckets/hetchyy/quranic-inspector-meta-dev/state/reciter_state.json
-hf buckets cp ./bootstrap/state/audit.jsonl \
-    hf://buckets/hetchyy/quranic-inspector-meta-dev/state/audit.jsonl
+# Optional sidecars (cache reseeded on first use otherwise)
+hf buckets cp ./bootstrap/catalog/audio_meta.json \
+    hf://buckets/hetchyy/quranic-inspector-bucket-dev/catalog/audio_meta.json
+hf buckets cp ./bootstrap/catalog/audio_durations.json \
+    hf://buckets/hetchyy/quranic-inspector-bucket-dev/catalog/audio_durations.json
 ```
 
-Mapping rules for `reciter_state.json` are in [`inspector-state-management.md`](inspector-state-management.md) §3 "State seeding". Catalog rows are derived from existing `data/reciters_index.json` + per-reciter manifest `_meta` blocks (one row per reciter, `reciter_id = slug`, `is_canonical = true`).
+Mapping rules for `reciter_state.json` are in [`inspector-state-management.md`](inspector-state-management.md) §3 "State seeding". The catalog `reciters[]` is migrated from the previous `data/reciters_index.json` + per-reciter manifest `_meta` blocks; `vocab.riwayat` / `vocab.styles` / `vocab.audio_sources` migrate from `data/riwayat.json` / `data/sources.json` / `data/styles.json`. After cutover, those `data/*.json` files are deleted from the repo (per cleanup-registry §2).
 
-For the **prod** environment, do the same against `quranic-inspector-bucket` + `quranic-inspector-meta`.
+For the **prod** environment, do the same against `quranic-inspector-bucket`.
 
 #### Step 3: Create the Space
 
@@ -108,7 +117,7 @@ For the **prod** environment, do the same against `quranic-inspector-bucket` + `
 
 In the Space settings → Storage Buckets section:
 - Click "Attach bucket"
-- Select `hetchyy/quranic-inspector-bucket-dev` (or `-wip` for prod)
+- Select `hetchyy/quranic-inspector-bucket-dev` (dev) or `quranic-inspector-bucket` (prod)
 - Mount path: `/data/inspector-bucket`
 - Access mode: **Read & Write**
 
@@ -151,12 +160,13 @@ Settings → Variables and secrets:
 
 | Secret | Source | Notes |
 |---|---|---|
-| `INSPECTOR_HF_TOKEN` | HF user token with **write** scope on the bucket's namespace | Used for bucket writes + HF Jobs API calls. **Different per Space** — dev Space has its own token; prod has another. Rotate quarterly. |
+| `INSPECTOR_HF_TOKEN` | HF user token with **read+write** scope on the bucket's namespace | Used for all bucket reads/writes + HF Jobs API calls. **Different per Space** — dev Space has its own token; prod has another. Rotate quarterly. |
 | `INSPECTOR_GITHUB_DISPATCH_TOKEN` | GitHub PAT with `repo` scope on the project repo | Used to fire `repository_dispatch` events for `update-reciters.yml` and `release.yml`. Rotate quarterly. |
-| `INSPECTOR_FORWARD_SECRET` | Random 32-byte hex | HMAC for the GH Actions → Inspector forward webhook (Reciter Requests intake). Separate per Space. |
-| `INSPECTOR_SESSION_SECRET` | Random 32-byte hex | HMAC for signed session cookies. Separate per Space. |
-<!-- INSPECTOR_ALLOWED_SLUGS_REGEX dropped — independent dev/prod buckets are the isolation. -->
-| `INSPECTOR_BUCKET_REPO` | `hetchyy/quranic-inspector-bucket-dev` (dev) or `-wip` (prod) | For audit log file paths and admin diagnostic UI |
+| `INSPECTOR_JOB_CALLBACK_SECRET` | Random 32-byte hex | Bearer secret for the timestamps-refresh job → Inspector callback. Separate per Space. |
+| `INSPECTOR_SESSION_SECRET` | Random 32-byte hex | Signing key for self-contained signed-cookie sessions. Separate per Space. |
+| `INSPECTOR_BUCKET_REPO` | `hetchyy/quranic-inspector-bucket-dev` (dev) or `hetchyy/quranic-inspector-bucket` (prod) | For audit log file paths and admin diagnostic UI |
+
+(`INSPECTOR_FORWARD_SECRET` and any `_PREV` rotation slots are dropped — see canonical decisions D14 and D17.)
 
 Env vars (non-secret) come from the Dockerfile `ENV` block; most don't need overriding.
 
@@ -179,7 +189,7 @@ curl -fsS https://hetchyy-quranic-inspector-dev.hf.space/healthz | jq
 
 If `bucket_mounted: false`: the Space settings → Storage Buckets section probably didn't pick up the mount. Restart the Space.
 
-If `state_loaded: false`: bucket has no `state/reciter_state.json` — re-run the migration script (§Step 2).
+If `state_loaded: false`: bucket has no `state/reciter_state.json` — re-run the seeding step (§Step 2).
 
 If 503 entirely: watch the Space's build log via Settings → Logs. Common causes: Dockerfile syntax error, missing static file in COPY list, gunicorn binding to wrong port.
 
@@ -225,13 +235,13 @@ Authlib auto-discovers all endpoints from the metadata URL.
 Inspector routes:
 
 - `GET /api/auth/login` — `oauth.huggingface.authorize_redirect(redirect_uri=...)`
-- `GET /api/auth/callback` — `oauth.huggingface.authorize_access_token()` then `oauth.huggingface.userinfo()`; build a **signed-cookie session** carrying `{login, hf_user_id (sub), role, expires_at, csrf}` (no server-side session record needed — see H5 below)
+- `GET /api/auth/callback` — `oauth.huggingface.authorize_access_token()` then `oauth.huggingface.userinfo()`; build a **self-contained signed cookie** carrying `{login, hf_user_id (sub), role, expires_at, csrf}` via Flask `itsdangerous` / Authlib (per D11)
 - `POST /api/auth/logout` — clears the session cookie. **Does not** revoke the HF grant (HF has no revocation endpoint; users revoke at https://huggingface.co/settings/connected-applications)
 - `GET /api/me` — returns the parsed session payload
 
-**Session backing.** v1's "server-side session record" is replaced by a **self-contained signed cookie** (Flask `itsdangerous` / Authlib). With `-w 1` this isn't strictly required, but it removes the only stateful component that wouldn't survive a container restart. Cookie max-age = `hf_oauth_expiration_minutes` (default 480). On expiry, force re-auth (no refresh-token storage in Inspector — smaller blast radius if compromised).
+**Session backing.** The signed cookie IS the session — there is no server-side session record (per D11). With `-w 1` this matters only for restart resilience: the cookie keeps working across container rebuilds. Cookie max-age = `hf_oauth_expiration_minutes` (default 480). On expiry, force re-auth (no refresh-token storage in Inspector — smaller blast radius if compromised).
 
-**Authlib's OAuth state store** (used between authorize redirect and callback) does need server-side persistence. Use Flask's default server-side session via `Flask-Session` with a tmpfs filesystem backend at `/tmp/inspector-flask-sessions/` — survives request hops within one container life, which is enough.
+**Authlib's OAuth state store** (used between authorize redirect and callback) does need short-lived server-side persistence for the CSRF state value — Flask-Session with a tmpfs filesystem backend at `/tmp/inspector-flask-sessions/`, ~30 s lifetime, survives within one container life which is enough.
 
 ### User POV (3 clicks first time, 1 click returning)
 
@@ -245,7 +255,7 @@ Returning user with active HF web session: HF auto-redirects through consent if 
 
 - Same browser, two tabs → same cookie, same identity.
 - Two devices → independent OAuth grants, both valid simultaneously (HF allows concurrent grants per app per user).
-- Logout in tab A clears that browser's cookie; tab B's cookie still works on disk but server-side any cached session state is gone (with signed-cookie design, B's cookie keeps working until expiry). Document this — for "sign out everywhere" we'd need a per-user `iat` cutoff stored in the bucket (out of v2 scope).
+- Logout in tab A clears that browser's cookie; tab B's cookie still works on disk (with self-contained signed-cookie design, B's cookie keeps working until expiry). Document this — for "sign out everywhere" we'd need a per-user `iat` cutoff stored in the bucket (out of v2 scope).
 
 The user's HF access token is **never used by Inspector backend** for bucket writes — those use `INSPECTOR_HF_TOKEN` (the Space's own token). The user token only confirms identity at sign-in.
 
@@ -283,25 +293,25 @@ hetchyy/quranic-inspector/                   # Space repo root = Docker build co
 │   ├── config.py constants.py
 │   ├── adapters/ domain/ routes/ services/ utils/
 │   └── frontend/dist/                       # PRE-BUILT — built at upload time, src/ excluded
-├── validators/
+├── validators/                              # libraries; CLI wrappers retained for ad-hoc maintainer use
 ├── scripts/
 │   ├── __init__.py
 │   └── lib/
-└── data/                                    # static reference only (~89 MB)
-    ├── surah_info.json  qpc_hafs.json  digital_khatt_v2_script.json
-    ├── phoneme_sub_costs.json  reciters_index.json
-    ├── riwayat.json  sources.json  styles.json
-    ├── .audio_meta.json  .audio_durations.json
-    ├── audio_catalog.json.gz                # consolidated 391 manifests
-    ├── inspector_owners.json                # baked-in fallback for role resolution
-    └── inspector_maintainers.json           # if exists; same
+└── data/                                    # static reference only — slim per D8
+    ├── surah_info.json
+    ├── qpc_hafs.json
+    ├── digital_khatt_v2_script.json
+    ├── phoneme_sub_costs.json
+    └── inspector_roles.json                 # baked-in fallback for role resolution
 ```
 
 ### What does NOT get pushed
 
 - `inspector/frontend/src/`, `node_modules/`, `tests/`, vite config — frontend is built once during upload, only `dist/` ships
-- `data/audio/` raw 67 MB of per-source manifests — replaced by `audio_catalog.json.gz`
-- `data/recitation_segments/`, `data/timestamps/`, `data/qul_downloads/`, `data/.cache/` — fetched at runtime (HF dataset / bucket)
+- `data/audio/` — deleted from the repo entirely in v2 cleanup; URL templates + `url_overrides` live in `<bucket>/catalog/reciter_catalog.json`
+- `data/riwayat.json`, `data/sources.json`, `data/styles.json`, `data/reciters_index.json`, `data/.audio_meta.json`, `data/.audio_durations.json` — deleted from the repo (migrated to bucket per D6 + D8)
+- `data/recitation_segments/`, `data/timestamps/`, `data/qul_downloads/`, `data/.cache/` — fetched at runtime (bucket via Inspector backend)
+- `audio_catalog.json.gz` — no longer baked into the image (D7); audio info comes from bucket catalog
 - `.github/`, `.local/`, `docs/`, `reciter_requests/`, validator test trees
 
 ### Upload pipeline implementation
@@ -317,10 +327,7 @@ on:
       - 'inspector/**'
       - 'validators/**'
       - 'scripts/lib/**'
-      - 'data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs,reciters_index,riwayat,sources,styles,inspector_owners,inspector_maintainers}.json'
-      - 'data/.audio_meta.json'
-      - 'data/.audio_durations.json'
-      - 'data/audio/**'
+      - 'data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs,inspector_roles}.json'
       - 'inspector/Dockerfile'
 
 jobs:
@@ -332,8 +339,6 @@ jobs:
         with: { node-version: '20' }
       - name: Build frontend
         run: cd inspector/frontend && npm ci && npm run build
-      - name: Build audio catalog
-        run: python scripts/build_audio_catalog.py --output data/audio_catalog.json.gz
       - name: Push to HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_DEPLOY_TOKEN }}
@@ -366,11 +371,7 @@ rsync -av --delete \
   --include='scripts/__init__.py' --include='scripts/lib/***' \
   --include='data/surah_info.json' --include='data/qpc_hafs.json' \
   --include='data/digital_khatt_v2_script.json' --include='data/phoneme_sub_costs.json' \
-  --include='data/reciters_index.json' \
-  --include='data/riwayat.json' --include='data/sources.json' --include='data/styles.json' \
-  --include='data/.audio_meta.json' --include='data/.audio_durations.json' \
-  --include='data/audio_catalog.json.gz' \
-  --include='data/inspector_owners.json' --include='data/inspector_maintainers.json' \
+  --include='data/inspector_roles.json' \
   --include='inspector/Dockerfile' --include='.dockerignore' --include='README.md' \
   --include='*/' --exclude='*' \
   ./ "$SPACE_REPO_DIR/"
@@ -392,7 +393,7 @@ For local `docker-compose.yml` builds: the **main repo root** also needs a `.doc
 
 ## 5. Test environment conventions
 
-Dev Space writes to the **same monorepo as prod** for catalog/code, but its own bucket for state and in-flight data. Discipline-based isolation:
+Dev Space writes to its own bucket; prod's bucket is untouched. Discipline-based isolation:
 
 | Convention | Enforcement |
 |---|---|
@@ -402,10 +403,10 @@ Dev Space writes to the **same monorepo as prod** for catalog/code, but its own 
 
 To create a test reciter:
 1. Add the new row to `<dev-bucket>/catalog/reciter_catalog.json` via the dev Space's admin endpoint `POST /api/admin/catalog/add` (or by hand `hf buckets cp`).
-2. Run `process_requests.py` to scaffold the alignment job (or manually push a minimal `<dev-bucket>/wip/<slug>/data/recitation_segments/<slug>/` tree).
+2. Use the maintainer admin path to seed the alignment job (until Inspector-native intake lands — see D17 / new deferred entry), or manually push a minimal `<dev-bucket>/wip/<slug>/` tree with a stub `detailed.json`.
 3. Open the dev Space; the slug should appear in the reciter list.
 4. Test the claim → edit → mark-ready → publish flow against the dev Space, signed in as a test HF account.
-5. **Cross-environment isolation is automatic** — dev publish writes to dev's bucket / dev's downstream HF dataset; prod is unaffected. No regex gate needed.
+5. **Cross-environment isolation is automatic** — dev publish writes to the dev bucket's `published/<slug>/`; prod is unaffected.
 
 ## 6. Smoke tests per phase
 
@@ -419,16 +420,15 @@ SPACE=https://hetchyy-quranic-inspector-dev.hf.space
 # Health
 curl -fsS $SPACE/healthz | jq
 
-# Anonymous reciter list
+# Anonymous reciter list (browser → backend → bucket path is the only read path now)
 curl -fsS $SPACE/api/reciter-task/saad_al_ghamdi | jq '.state'  # expect "completed"
 
-# HF CDN read path (browser-direct; verify URL the frontend would generate)
-HF_URL=https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs/resolve/main/inspector/segments/saad_al_ghamdi/segments.json.gz
-curl -fsSI $HF_URL | head -5
+# Browser → backend → bucket round-trip for a completed reciter's data shard
+curl -fsSI $SPACE/api/seg/data/saad_al_ghamdi/1 | head -5
 
 # Image discipline check
 docker run --rm hetchyy/quranic-inspector:latest sh -c '
-  find /app/data \( -path "*/recitation_segments/*" -o -path "*/timestamps/*" \) -print | head -1
+  find /app/data \( -path "*/recitation_segments/*" -o -path "*/timestamps/*" -o -name "audio_catalog.json.gz" -o -name "reciters_index.json" \) -print | head -1
 ' | grep -q . && echo "FAIL: image bloat" || echo "OK: image clean"
 ```
 
@@ -436,6 +436,8 @@ docker run --rm hetchyy/quranic-inspector:latest sh -c '
 - p99 cold-page-load for completed reciter ≤ 800 ms
 - Image size ≤ 400 MB
 - `data/recitation_segments/` empty in running container
+- `audio_catalog.json.gz` absent (D7)
+- `reciters_index.json`, `riwayat.json`, `sources.json`, `styles.json`, `audio/` all absent (D6 + D8)
 - gunicorn process visible (not werkzeug)
 - Bucket mount visible at `/data/inspector-bucket`; `state/reciter_state.json` readable
 
@@ -466,8 +468,8 @@ for i in {1..10}; do curl -fsS "$SPACE/api/seg/data/$SLUG/1" >/dev/null & done; 
 3. Verify:
    - Sign-in modal appears, then HF OAuth screen (or skipped if already signed in)
    - After authorize, page returns with claim active (banner: "You're reviewing X. [Mark ready] [Release]")
-   - <bucket>/state/reciter_state.json shows your login as assignee
-   - <bucket>/state/audit.jsonl appended with claim event
+   - <bucket>/state/reciter_state.json shows your hf_user_id as assignee_hf_id
+   - <bucket>/audit/<YYYY>-<MM>.jsonl appended with claim event
 4. Open the same reciter in another browser/incognito → see lock banner: "Currently claimed by <login>"
 5. Try to claim → 409 with toast "Already claimed by @<other>"
 ```
@@ -484,7 +486,7 @@ for i in {1..10}; do curl -fsS "$SPACE/api/seg/data/$SLUG/1" >/dev/null & done; 
 1. Logged in as the assigned reviewer for an _test_* reciter
 2. Make a small edit (trim a segment), verify:
    - Save POST returns 200
-   - <bucket>/wip/_test_*/data/recitation_segments/_test_*/{detailed,segments,edit_history}.{json,jsonl} updated within 30 s
+   - <bucket>/wip/_test_*/{detailed,segments,edit_history}.{json,jsonl} updated within 30 s
    - Local backend's parsed cache reflects the new state immediately
    - A second browser session loading the same reciter sees the new state within 30 s
 ```
@@ -492,34 +494,34 @@ for i in {1..10}; do curl -fsS "$SPACE/api/seg/data/$SLUG/1" >/dev/null & done; 
 **Acceptance:**
 - Edit → bucket flush ≤ 30 s
 - Backend restart mid-session: bucket has the last-flushed state intact; first save after restart works
-- Save during `ready_for_merge`: 410 with clear message
+- Save during `marked_ready=1`: 410 with clear message
 
 ### Phase 6 — Publish pipeline
 
 ```
 1. Logged in as a maintainer
-2. Pick a _test_* reciter in ready_for_merge state
+2. Pick a _test_* reciter in (under_review, marked_ready=1)
 3. Click Publish in the admin dashboard
-4. Verify:
-   - State transitions ready_for_merge → awaiting_timestamps within 100 ms
-   - Three HF Jobs spawn (visible in dashboard's "Active Publish Operations")
-     - snapshot-bucket-to-dataset (~30 s)
-     - timestamps-refresh (~5-10 min)
-     - build-per-verse-audio-dataset (~5 min)
-   - GH Actions: update-reciters.yml + release.yml fire (visible in repo's Actions tab)
-5. After ~15 min:
-   - HF dataset has inspector/segments/_test_*/...
-   - HF dataset has timestamps/_test_*/...
+4. Verify (synchronous response):
+   - 200 returned with { state: "awaiting_timestamps", timestamps_job_id: "..." }
+   - State transition under_review → awaiting_timestamps within 100 ms
+   - <bucket>/published/_test_*/* populated (server-side copy/move from wip/)
+   - <bucket>/wip/_test_*/* removed (or moved to <bucket>/_archive/_test_*/<ts>/ per archive policy)
+5. ONE async HF Job spawned (visible in dashboard's "Active timestamps refresh"):
+   - timestamps-refresh (~5-10 min)
+6. GH Actions: update-reciters.yml + release.yml fire (visible in repo's Actions tab)
+7. After ~10 min:
+   - <bucket>/published/_test_*/timestamps/<chapter>.json shards exist
    - GitHub Release for _test_*-vX.Y.Z exists
    - RECITERS.md auto-PR opened
-   - State transitions awaiting_timestamps → completed
-   - Bucket entry archived to <bucket>/_archive/_test_*/...
+   - State transitions awaiting_timestamps → completed (driven by job-completion webhook)
 ```
 
 **Acceptance:**
-- Publish event end-to-end ≤ 15 minutes (typical), ≤ 30 minutes (worst-case with MFA Aligner cold start)
-- Audit log entries for `published` + each subordinate Job's completion
-- Failed Job is recoverable via `POST /api/admin/rerun-job`
+- Publish 200 response within 5 s (sync work: state + bucket move + dispatch + job-enqueue)
+- timestamps-refresh end-to-end ≤ 10 minutes (typical), ≤ 30 minutes (worst-case with MFA Aligner cold start)
+- Audit log entries for `published` + `timestamps_completed`
+- Failed timestamps job: state stays in `awaiting_timestamps`; maintainer can manually re-enqueue from the dashboard
 
 ## 7. Rollback procedure
 
@@ -553,16 +555,16 @@ Returns 503 to everyone. Use when bug is severe. Don't forget to unpause; pre-wa
 
 ### HF token revoke (emergency)
 
-If the bucket-write token is compromised:
+If the bucket token is compromised:
 
 ```
-1. Generate a new HF token in https://huggingface.co/settings/tokens (write scope on the bucket namespace)
+1. Generate a new HF token in https://huggingface.co/settings/tokens (read+write scope on the bucket namespace)
 2. Update INSPECTOR_HF_TOKEN in Space secrets
 3. Restart Space (writes resume with new token)
 4. Revoke the old token in HF settings
 ```
 
-While the old token is still valid (between rotation and revoke), Inspector continues to function with the new token. Bucket writes from the old token (if anyone has it) still succeed but log them via HF's audit. Once revoked, old token is dead.
+While the old token is still valid (between rotation and revoke), Inspector continues to function with the new token. Bucket reads/writes from the old token (if anyone has it) still succeed but log them via HF's audit. Once revoked, old token is dead.
 
 ### Bucket access removed (emergency, last resort)
 
@@ -570,55 +572,46 @@ If something goes very wrong and the bucket needs to be sealed:
 
 ```
 hf buckets list   # find the bucket
-# In the Hub UI: Bucket settings → Access → mark private OR remove the Space's mount
+# In the Hub UI: Bucket settings → Access → remove the Space's mount
 ```
 
 This breaks the Inspector entirely until a maintainer re-attaches. Use only for an active incident.
 
 ## 8. Concrete file structures
 
-### HF dataset (`hetchyy/quranic-universal-ayahs`)
+### HF Bucket (`hetchyy/quranic-inspector-bucket{,-dev}`) — single private bucket
 
 ```
-hetchyy/quranic-universal-ayahs/
-├── manifest.json.gz                          # extended with inspector_shard_hashes per reciter
-├── data/...                                  # per-verse audio + word timestamps (existing)
-├── timestamps/<slug>/<chapter>.json.gz       # TS chapter shards
-├── segments/<slug>/<chapter>.json.gz         # slim shards for Aligner preload (existing)
-├── _resources/
-│   ├── qpc_hafs.json.gz                      # also baked into Inspector image
-│   ├── digital_khatt_v2_script.json.gz       # also baked into Inspector image
-│   └── DigitalKhattV2.otf                    # also baked into Inspector image
-└── inspector/                                # NEW namespace — Inspector full-fidelity reads
-    └── segments/<slug>/
-        ├── segments.json.gz
-        ├── detailed.json.gz
-        ├── edit_history.jsonl.gz
-        ├── edit_history_peaks.jsonl.gz
-        └── low_confidence_v2.json.gz
-```
-
-**Storage budget:** ~300 completed reciters × ~3-5 MB gz/reciter ≈ 1-2 GB added.
-
-### HF Bucket (`hetchyy/quranic-inspector-bucket{,-dev}`)
-
-```
-hetchyy/quranic-inspector-bucket/
-├── wip/                            # one subtree per in-flight reciter
-│   └── <slug>/data/recitation_segments/<slug>/
+hetchyy/quranic-inspector-bucket/                # private
+├── state/
+│   └── reciter_state.json                       # source of truth, Inspector is sole writer
+├── audit/
+│   ├── _meta.json                               # schema_version once per partition file
+│   └── <YYYY>-<MM>.jsonl                        # append-only event log, partitioned monthly
+├── catalog/
+│   ├── reciter_catalog.json                     # vocab + reciters[] + aliases[]
+│   ├── audio_meta.json                          # VBR cache (sidecar)
+│   └── audio_durations.json                     # ffprobe duration cache (sidecar)
+├── wip/                                         # one flat subtree per in-flight reciter
+│   └── <slug>/
 │       ├── segments.json
 │       ├── detailed.json
 │       ├── edit_history.jsonl
 │       ├── edit_history_peaks.jsonl
 │       └── low_confidence_v2.json
-├── state/
-│   ├── reciter_state.json                    # source of truth, Inspector is sole writer
-│   └── audit.jsonl                           # append-only state event log
-└── _archive/                                 # post-publish snapshots (or empty if archive policy = delete)
+├── published/                                   # one flat subtree per completed reciter
+│   └── <slug>/
+│       ├── segments.json
+│       ├── detailed.json
+│       ├── edit_history.jsonl
+│       ├── edit_history_peaks.jsonl
+│       ├── low_confidence_v2.json
+│       └── timestamps/<chapter>.json            # written by timestamps-refresh
+└── _archive/                                    # post-publish snapshots (or empty if archive policy = delete)
     └── <slug>/<published_at>/...
 ```
 
-**Storage budget:** ~20 in-flight × ~15 MB ≈ 300 MB sustained working set; archive grows by ~15 MB per published reciter (delete after first month if storage cost matters).
+**Storage budget:** ~20 in-flight × ~15 MB ≈ 300 MB working set in `wip/`; `published/` accumulates by ~25 MB per published reciter; archive grows by ~15 MB per published reciter (delete after first month if storage cost matters). The HF dataset (`hetchyy/quranic-universal-ayahs`) is no longer in Inspector's read path — it's downstream consumers only (training parquet, GitHub release zips).
 
 ### HF Space repo (`hetchyy/quranic-inspector{,-dev}`)
 
@@ -633,13 +626,16 @@ hetchyy/quranic-inspector/
 │   ├── app.py  config.py  constants.py
 │   ├── adapters/  domain/  routes/  services/  utils/
 │   └── frontend/dist/                 # PRE-BUILT
-├── validators/
+├── validators/                        # libraries; CLI wrappers retained
 ├── scripts/
 │   ├── __init__.py
 │   └── lib/
-└── data/                              # static reference only (~89 MB)
-    ├── surah_info.json  qpc_hafs.json  ...
-    └── audio_catalog.json.gz
+└── data/                              # static reference only — slim
+    ├── surah_info.json
+    ├── qpc_hafs.json
+    ├── digital_khatt_v2_script.json
+    ├── phoneme_sub_costs.json
+    └── inspector_roles.json
 ```
 
 Secrets live in HF Space settings, not in the pushed tree.
@@ -650,10 +646,11 @@ Ephemeral filesystem, lost on rebuild/restart.
 
 ```
 /tmp/
-└── inspector-cache/                   # peak/canonical-phoneme cache (INSPECTOR_CACHE_DIR)
-    └── <slug>/
-        ├── peaks/                     # disk-backed peaks cache for warm-rescue
-        └── canonical_phonemes.json    # was .pkl in local mode; JSON in deployed
+├── inspector-cache/                   # peak/canonical-phoneme cache (INSPECTOR_CACHE_DIR)
+│   └── <slug>/
+│       ├── peaks/                     # disk-backed peaks cache for warm-rescue
+│       └── canonical_phonemes.json    # was .pkl in local mode; JSON in deployed
+└── inspector-flask-sessions/          # ~30 s OAuth state store between authorize and callback
 ```
 
 The v1 `inspector-scratch/` is gone — bucket mount is the working surface, no separate scratch concept.
@@ -662,19 +659,28 @@ The v1 `inspector-scratch/` is gone — bucket mount is the working surface, no 
 
 ### Rotating the Space's `INSPECTOR_HF_TOKEN`
 
-1. Generate a new token in https://huggingface.co/settings/tokens with **write** scope on the bucket namespace.
+1. Generate a new token in https://huggingface.co/settings/tokens with **read+write** scope on the bucket namespace.
 2. Update `INSPECTOR_HF_TOKEN` in dev Space settings first; restart dev Space; verify auth via `/healthz` (should show `bucket_mounted: true`) and a test claim.
 3. Update prod Space; restart; verify.
 4. Revoke the old token in HF settings.
 
 Don't rotate dev and prod simultaneously — keep one as a known-good reference during the swap.
 
-### Rotating the dispatch token
+### Rotating `INSPECTOR_GITHUB_DISPATCH_TOKEN`
 
 1. Generate a new GitHub PAT with `repo` scope on the project repo.
 2. Update `INSPECTOR_GITHUB_DISPATCH_TOKEN` in dev Space first; restart; verify by triggering a publish on a test reciter and checking `update-reciters.yml` actually runs.
 3. Update prod Space; verify.
 4. Delete the old PAT in GitHub settings.
+
+### Rotating `INSPECTOR_JOB_CALLBACK_SECRET`
+
+The job-completion webhook is best-effort and the callback window is short (one timestamps-refresh job per publish). Single-secret rotation is fine; no `_PREV` slot.
+
+1. Mint a fresh 32-byte hex value.
+2. Update `INSPECTOR_JOB_CALLBACK_SECRET` in dev Space; restart.
+3. Trigger a publish and confirm the job-completion webhook lands in the audit log (or use the manual "advance to completed" admin button if the callback is rejected during the brief overlap window).
+4. Repeat for prod.
 
 ### Forcing a Space rebuild
 
@@ -690,7 +696,7 @@ Or via HF UI: Settings → Factory rebuild (clears HF-side build cache too).
 
 ```bash
 hf buckets cp \
-  hf://buckets/hetchyy/quranic-inspector-bucket/state/audit.jsonl - \
+  hf://buckets/hetchyy/quranic-inspector-bucket/audit/2026-05.jsonl - \
   | tail -100 | jq
 ```
 
@@ -706,25 +712,27 @@ Or via the admin dashboard's Recent Events panel.
    - Bucket mount cold fetch (NFS lazy fetch on first access; warm cache after)
 3. Verify cache health: `GET /api/admin/health` returns hit/miss ratios per layer.
 
-### Manually running a publish HF Job
+### Manually running the timestamps-refresh job
 
-If a Job fails and the maintainer dashboard isn't responsive:
+If the job fails and the maintainer dashboard isn't responsive:
 
 ```bash
 hf jobs run \
-  --image hetchyy/inspector-jobs:latest \
+  --image hf://spaces/hetchyy/inspector-jobs-image:latest \
   -v "hf://buckets/hetchyy/quranic-inspector-bucket:/data/bucket" \
   -e "SLUG=<slug>" \
-  -- python scripts/jobs/snapshot_bucket_to_dataset.py
+  -e "INSPECTOR_CALLBACK_URL=https://hetchyy-quranic-inspector.hf.space" \
+  -e "INSPECTOR_JOB_CALLBACK_SECRET=$(read-from-secrets)" \
+  -- python scripts/jobs/timestamps_refresh.py
 ```
 
 Same image as the auto-fired Job, just invoked directly via CLI.
 
 ## 10. Phase-by-phase checklist
 
-- [ ] **Phase 0** — Buckets created (dev + prod); state file pre-seeded; `services/state.py` + `services/hf_bucket.py` landed; `inspector_owners.json` + optional `inspector_maintainers.json` created.
-- [ ] **Phase 1** — Dev Space deployed; gunicorn (not werkzeug); `audio_catalog.json.gz` baked in; HF dataset has `inspector/segments/<slug>/...` for currently-eligible reciters; smoke tests pass.
+- [ ] **Phase 0** — One bucket per env created (dev + prod, both private); state file + audit + catalog seeded as JSON; `services/state.py` + `services/catalog.py` + `services/hf_bucket.py` landed; `data/inspector_roles.json` created.
+- [ ] **Phase 1** — Dev Space deployed; gunicorn (not werkzeug); slim `data/` baked (no `audio_catalog.json.gz`, no `reciters_index.json`); browser → backend → bucket path verified for completed reciters; smoke tests pass.
 - [ ] **Phase 2** — Bucket mount working; in-flight reciter renders via bucket; concurrent reads don't degrade.
-- [ ] **Phase 3** — HF OAuth + claim flow live; ≤ 3 clicks for new contributors, 1 for returning; state writes synchronous; audit log appended.
-- [ ] **Phase 5** — Volunteer round-trips an edit on `_test_*` reciter; bucket flush ≤ 30 s; publish endpoint live.
-- [ ] **Phase 6** — Publish pipeline end-to-end: bucket → dataset, timestamps refreshed, GitHub Release created, RECITERS.md auto-PR'd; v1 workflows decommissioned; `find_segments_pr.py` deleted; contributor docs point at the website.
+- [ ] **Phase 3** — HF OAuth + signed-cookie session live; ≤ 3 clicks for new contributors, 1 for returning; state writes synchronous; audit log appended.
+- [ ] **Phase 5** — Volunteer round-trips an edit on `_test_*` reciter; bucket flush ≤ 30 s; publish endpoint live (state transition + in-bucket move + dispatch + 1 timestamps job).
+- [ ] **Phase 6** — Publish pipeline end-to-end: bucket move complete, timestamps refreshed, GitHub Release created, RECITERS.md auto-PR'd; v1 workflows decommissioned; `find_segments_pr.py` deleted; `forward-to-inspector.yml` deleted; contributor docs point at the website.
