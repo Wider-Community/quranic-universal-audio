@@ -5,7 +5,7 @@
   <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Align%20a%20Reciter-E8C32E" alt="Request - Align a Reciter"></a>
   <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-E8C32E" alt="Dataset - Qur'anic Universal Ayahs"></a>
   <br>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Unsegmented-509%20reciters%20%C2%B7%2010,874h-d4842a" alt="Unsegmented"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Unsegmented-591%20reciters%20%C2%B7%2011,750h-d4842a" alt="Unsegmented"></a>
   <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-15%20%2F%2020-f0ad4e" alt="Riwayat"></a>
   <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Segmented-14%20reciters%20%C2%B7%20336h-d4842a" alt="Segmented"></a>
   <br>
