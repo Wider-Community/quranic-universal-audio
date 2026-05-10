@@ -251,15 +251,6 @@
     "n_present": 111,
     "source_slug": "muhammad_alhaidan"
   },
-  "55": {
-    "slug": "al_hussayni_al_azazy_with_children",
-    "name_en": "Al-Hussayni Al-'Azazy (with Children)",
-    "style": "murattal",
-    "riwayah": "hafs_an_asim",
-    "section": "default",
-    "n_present": 114,
-    "source_slug": "alhusaynee_al3azazee_with_children"
-  },
   "61": {
     "slug": "sadaqat_ali",
     "name_en": "Sadaqat `Ali",
@@ -700,6 +691,15 @@
     "section": "default",
     "n_present": 114,
     "source_slug": "abdulbaset_mujawwad"
+  },
+  "55": {
+    "slug": "al_hussayni_al_azazy_children_repeat",
+    "name_en": "Al-Hussayni Al-'Azazy",
+    "style": "children_repeat",
+    "riwayah": "hafs_an_asim",
+    "section": "default",
+    "n_present": 114,
+    "source_slug": "alhusaynee_al3azazee_with_children"
   },
   "68": {
     "slug": "abdur_razaq_bin_abtan_al_dulaimi_mujawwad",

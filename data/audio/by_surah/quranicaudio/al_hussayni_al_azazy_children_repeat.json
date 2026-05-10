@@ -1,10 +1,10 @@
 {
   "_meta": {
-    "reciter": "al_hussayni_al_azazy_with_children",
-    "name_en": "Al-Hussayni Al-'Azazy (with Children)",
+    "reciter": "al_hussayni_al_azazy_children_repeat",
+    "name_en": "Al-Hussayni Al-'Azazy",
     "name_ar": "unknown",
     "riwayah": "hafs_an_asim",
-    "style": "murattal",
+    "style": "children_repeat",
     "audio_category": "by_surah",
     "source": "https://quranicaudio.com/",
     "source_slug": "alhusaynee_al3azazee_with_children",
@@ -12,7 +12,7 @@
     "source_id": 55,
     "source_section": "default",
     "country": "unknown",
-    "fetched": "2026-05-10T17:19:56Z"
+    "fetched": "2026-05-10T18:30:33Z"
   },
   "1": "https://download.quranicaudio.com/quran/alhusaynee_al3azazee_with_children/001.mp3",
   "2": "https://download.quranicaudio.com/quran/alhusaynee_al3azazee_with_children/002.mp3",

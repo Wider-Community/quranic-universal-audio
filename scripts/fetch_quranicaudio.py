@@ -109,10 +109,23 @@ def clean_text(html: str) -> str:
 
 
 def parse_brackets(label: str) -> tuple[str, list[str]]:
-    """Split 'Foo [Mujawwad] [Taraweeh]' → ('Foo', ['Mujawwad', 'Taraweeh'])."""
-    tags = re.findall(r"\[([^\]]+)\]", label)
-    name = re.sub(r"\s*\[[^\]]+\]", "", label).strip()
-    return name, tags
+    """Split tags wrapped in [ ] or ( ) off the trailing end of the name.
+
+    'Foo [Mujawwad] [Taraweeh]' → ('Foo', ['Mujawwad', 'Taraweeh'])
+    'Foo (with Children)'       → ('Foo', ['with Children'])
+    Parentheses are *only* treated as tag markers when they sit at the end of
+    the label, so legitimate parens in a name (none observed yet, but
+    defensive) are not stripped from the middle.
+    """
+    tags: list[str] = []
+    name = label
+    while True:
+        m = re.search(r"\s*[\[\(]([^\]\)]+)[\]\)]\s*$", name)
+        if not m:
+            break
+        tags.insert(0, m.group(1).strip())
+        name = name[: m.start()].rstrip()
+    return name.strip(), tags
 
 
 def parse_reciter_page(html: str) -> dict:
