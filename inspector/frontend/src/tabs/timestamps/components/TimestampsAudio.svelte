@@ -27,6 +27,8 @@
     // ---- Component ref ----
     let _player: AudioPlayer;
     let _range: AudioRange | null = null;
+    let _suppressAutoPause = false;
+    let _suppressAutoPauseTimer: ReturnType<typeof setTimeout> | null = null;
 
     const dispatch = createEventDispatcher<{
         prev: void;
@@ -54,8 +56,12 @@
         if (!tsPort.source && url) {
             tsPort.setSource({ audioUrl: url, cbrSrc: url, reciter: null, vbr: false });
         }
-        await loadTimestampsAudio(tsPort, get(loadedVerse), atTime ?? 0, autoplay);
-        currentTime.set(tsPort.currentTimeMs() / 1000);
+        try {
+            await loadTimestampsAudio(tsPort, get(loadedVerse), atTime ?? 0, autoplay);
+            currentTime.set(tsPort.currentTimeMs() / 1000);
+        } finally {
+            if (autoplay) _finishAutoPauseSuppressionSoon();
+        }
     }
 
     // ---- AudioRange wiring ----
@@ -84,6 +90,7 @@
         // Safe against a stale-range re-attach because onPlay below gates on
         // autoAdvancing, and the loadedVerse reactive block re-attaches the
         // rAF once the new range/policy land.
+        _beginAutoPauseSuppression();
         tsPort.play();
         if (mode === 'next') dispatch('autoNext');
         else if (mode === 'random-any') dispatch('autoRandomAny');
@@ -93,6 +100,24 @@
     function _disposeRange(): void {
         _range?.dispose();
         _range = null;
+    }
+
+    function _beginAutoPauseSuppression(): void {
+        _suppressAutoPause = true;
+        if (_suppressAutoPauseTimer) clearTimeout(_suppressAutoPauseTimer);
+        _suppressAutoPauseTimer = setTimeout(() => {
+            _suppressAutoPause = false;
+            _suppressAutoPauseTimer = null;
+        }, 1500);
+    }
+
+    function _finishAutoPauseSuppressionSoon(): void {
+        if (!_suppressAutoPause) return;
+        if (_suppressAutoPauseTimer) clearTimeout(_suppressAutoPauseTimer);
+        _suppressAutoPauseTimer = setTimeout(() => {
+            _suppressAutoPause = false;
+            _suppressAutoPauseTimer = null;
+        }, 0);
     }
 
     function _ensureRangeForCurrentState(): AudioRange | null {
@@ -156,6 +181,13 @@
     }
 
     function onPause(): void {
+        // Auto-next uses an internal boundary pause before re-arming playback
+        // and swapping/seeking to the next verse. Browsers can deliver that
+        // pause event late; treating it as a user pause stops the next load.
+        if (_suppressAutoPause) {
+            if (tsPort.element) currentTime.set(tsPort.currentTimeMs() / 1000);
+            return;
+        }
         _range?.stop();
         if (tsPort.element) currentTime.set(tsPort.currentTimeMs() / 1000);
     }
@@ -183,6 +215,11 @@
             4: 'unsupported format',
         };
         console.error('Audio load error:', msgs[code] || `code ${code}`, audio.src);
+        _suppressAutoPause = false;
+        if (_suppressAutoPauseTimer) {
+            clearTimeout(_suppressAutoPauseTimer);
+            _suppressAutoPauseTimer = null;
+        }
         autoAdvancing.set(false);
         dispatch('error');
     }
@@ -197,6 +234,7 @@
     });
 
     onDestroy(() => {
+        if (_suppressAutoPauseTimer) clearTimeout(_suppressAutoPauseTimer);
         _disposeRange();
         tsAudioElement.set(null);
         tsPort.attachElement(null);
