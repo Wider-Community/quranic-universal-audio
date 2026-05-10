@@ -1,10 +1,10 @@
 # Inspector Publish Pipeline (v2)
 
-Companion to [`inspector-deployment-plan.md`](inspector-deployment-plan.md), [`inspector-data-storage.md`](inspector-data-storage.md), [`inspector-state-management.md`](inspector-state-management.md). This doc owns the **completion event fan-out**: what happens when a reciter is published, where each subordinate workflow runs, and how the trigger flows from Inspector through GH Actions and HF Jobs.
+Companion to [`inspector-deployment-plan.md`](inspector-deployment-plan.md), [`inspector-data-storage.md`](inspector-data-storage.md), [`inspector-state-management.md`](inspector-state-management.md). This doc owns the **completion event fan-out**: what happens when a reciter is published, where each subordinate workflow runs, and how the trigger flows from Inspector through GH Actions and the one HF Job.
 
 ## 1. Model in one paragraph
 
-The Inspector website is the only thing humans interact with. When a maintainer clicks **Publish** on a `ready_for_merge` reciter, Inspector backend writes the state transition to the bucket, then fires two parallel triggers: a `repository_dispatch` event into GitHub for workflows whose output lands on GitHub (`update-reciters.yml`, `release.yml`), and HF Jobs API calls for workflows whose output lands on HF (`snapshot-bucket-to-dataset`, `timestamps-refresh`, `build-per-verse-audio-dataset`). Each subordinate job runs independently, can fail independently, and can be retried independently. The principle: **GitHub for code, HF for data; each workflow runs where its output lands.**
+The Inspector website is the only thing humans interact with. When a maintainer clicks **Publish** on a reciter that is `under_review` with `marked_ready=1`, Inspector backend runs the publish synchronously in-process: state transition → in-bucket copy/move (`wip/<slug>/` → `published/<slug>/`) → fire `repository_dispatch reciter.completed` into GitHub for `update-reciters.yml` + `release.yml` → enqueue ONE HF Job (`timestamps-refresh`). The endpoint returns 200 with the new state and the timestamps job id. The principle: **GitHub for code, HF for data; do everything you can in-process so the publish is one atomic-feeling operation.**
 
 ## 2. Where each workflow runs
 
@@ -12,28 +12,24 @@ The Inspector website is the only thing humans interact with. When a maintainer 
 |---|---|---|---|---|
 | Inspector code CI (build, test, lint) | GH Actions | GitHub repo | GitHub PR statuses | Push to repo |
 | `inspector-deploy.yml` (HF Space upload) | GH Actions | `inspector/`, `validators/`, `scripts/lib/`, static `data/` files | HF Space repo (`hetchyy/quranic-inspector{,-dev}`) | Push to `main` touching `inspector/**` |
-| `update-reciters.yml` (regenerate `RECITERS.md`, `reciters_index.json`) | GH Actions | Bucket via `huggingface_hub` (state file) + GitHub repo (catalog) | GitHub repo (auto-PR) | `reciter.completed` dispatch from Inspector + scheduled cron + `data/reciter_catalog.json` push |
-| `release.yml` (per-reciter GitHub Release zip) | GH Actions | Bucket + HF dataset | GitHub Release | `reciter.completed` dispatch from Inspector |
-| `validate-catalog.yml` (catalog PR validation) | GH Actions | The PR's catalog | GitHub PR statuses | Push/PR touching `data/reciter_catalog.json` |
-| `snapshot-bucket-to-dataset` | HF Job | Bucket | HF dataset (`inspector/segments/<slug>/`) | Inspector POSTs HF Jobs API on `reciter.published` |
-| `timestamps-refresh` | HF Job | Bucket; calls MFA Aligner Space | HF dataset (`timestamps/<slug>/`) | Inspector POSTs HF Jobs API on `reciter.published` |
-| `build-per-verse-audio-dataset` | HF Job | Bucket | HF dataset (per-verse audio rows) | Inspector POSTs HF Jobs API on `reciter.published` |
-| `bucket-archive` | HF Job (or inline in snapshot) | Bucket | Bucket `_archive/` | Tail of `snapshot-bucket-to-dataset` |
-| Reciter Requests intake (issue creation) | `reciter_requests/` Space (existing) | User submission | GitHub Issues + GH Actions dispatch into Inspector | User-initiated |
+| `update-reciters.yml` (regenerate `RECITERS.md`) | GH Actions | Bucket via `huggingface_hub` (state + catalog) | GitHub repo (auto-PR) | `reciter.completed` dispatch from Inspector + scheduled cron |
+| `release.yml` (per-reciter GitHub Release zip) | GH Actions | Bucket (`published/<slug>/`) via `huggingface_hub` | GitHub Release | `reciter.completed` dispatch from Inspector |
+| `bucket-data-hygiene.yml` (scheduled validators across all reciters) | GH Actions | Bucket | Admin dashboard signal + GH issue for CRITICALs | Weekly cron + manual dispatch |
+| `timestamps-refresh` | HF Job | Bucket; calls MFA Aligner Space | Bucket (`published/<slug>/timestamps/...`) | Inspector POSTs HF Jobs API on `reciter.published` |
 
 What stays on GitHub:
 - Source code + code CI
-- Reciter request issues (intake queue)
-- `data/reciter_catalog.json` (curated metadata)
+- Reciter request issues (intake queue) — body marker `<!-- reciter-task: slug=... schema=1 -->`
 - `RECITERS.md` regeneration
 - Per-reciter GitHub Release zips (consumer-facing offline distribution)
-- `data/inspector_owners.json` (role mgmt)
+- `data/inspector_roles.json` (role mgmt)
 
 What moves to HF:
-- All per-reciter editable data (bucket)
-- All published per-reciter data (dataset)
-- All "completion → publish" data jobs (HF Jobs)
-- Reciter state file (bucket)
+- All per-reciter editable data (bucket `wip/<slug>/`)
+- All per-reciter completed data (same bucket, `published/<slug>/`)
+- Reciter catalog (`<bucket>/catalog/reciter_catalog.json`)
+- State + audit (`<bucket>/state/`, `<bucket>/audit/`)
+- Timestamps refresh (the one HF Job)
 - User identity (HF OAuth)
 - Inspector deployment (Space repos)
 
@@ -42,49 +38,57 @@ What's dropped entirely:
 - `repository_dispatch` flow into a state-writing workflow
 - `cache-invalidate` webhook (no cache to invalidate)
 - `pr-assignee-sync.yml` (no PRs)
-- `validate-segments-pr.yml` (no segments PRs)
+- `validate-segments-pr.yml` (validators are libraries; called by inspector services on writes)
+- `validate-catalog.yml` (catalog isn't git-tracked anymore)
 - `segments-pr-merged.yml` (no merge gate; replaced by Inspector publish)
 - `bot-create-pr.yml`, `bot-comment.yml` (no automated PRs/comments)
 - `issue-commands.yml` (no `/claim`/`/confirm`)
+- `forward-to-inspector.yml` (Reciter Requests Space cleanup brought forward; see D17)
 - `find_segments_pr.py` (no PRs)
+- `snapshot-bucket-to-dataset` HF Job (publish snapshot is in-bucket move/copy, in-process)
+- `build-per-verse-audio-dataset` from the publish path (downstream consumers — training parquet build — may still run separately, scheduled or triggered by `update-reciters.yml`; not Inspector's concern)
 - GitHub App for inspector contribution flow (replaced by HF OAuth)
 
 ## 3. The publish event flow
 
-When a maintainer clicks **Publish** on a `ready_for_merge` reciter:
+When a maintainer clicks **Publish** on a reciter in `under_review` with `marked_ready=1`:
 
 ```
 1. Browser → POST /api/admin/publish/<slug> (with maintainer session cookie)
 
-2. Inspector backend:
+2. Inspector backend (synchronous, in-process):
    a. Verify caller is maintainer+
-   b. Verify state == ready_for_merge
-   c. state.transition(slug, PublishEvent(actor)) — writes:
-      <bucket>/state/reciter_state.json (state ready_for_merge → awaiting_timestamps)
-      <bucket>/state/audit.jsonl (one line)
-   d. Fire two parallel triggers (best-effort, fire-and-forget for now):
-      - repository_dispatch reciter.completed { slug } via GitHub PAT
-      - HF Jobs API: enqueue snapshot-bucket-to-dataset { slug }
-      - HF Jobs API: enqueue timestamps-refresh { slug }
-      - HF Jobs API: enqueue build-per-verse-audio-dataset { slug }
-   e. Return 200 with new authoritative state to the browser
+   b. Verify state == under_review AND marked_ready == 1
+   c. Acquire per-slug threading.Lock
+   d. state.transition(slug, PublishEvent(actor)) — writes via huggingface_hub.upload_file():
+      <bucket>/state/reciter_state.json (under_review → awaiting_timestamps)
+      <bucket>/audit/<YYYY>-<MM>.jsonl (one line)
+   e. Bucket move/copy: <bucket>/wip/<slug>/* → <bucket>/published/<slug>/*
+      (in-bucket server-side copy when available; download+reupload fallback today.
+       Either way: same bucket, no cross-repo transfer.)
+   f. Fire trigger: repository_dispatch reciter.completed { slug } via GitHub PAT
+   g. Enqueue ONE HF Job: timestamps-refresh { slug }; remember its job_id on the state row
+   h. Release lock
+   i. Return 200 with { state: "awaiting_timestamps", timestamps_job_id }
 
 3. In parallel, fan-out runs:
    GH Actions (triggered by repository_dispatch reciter.completed):
-     - update-reciters.yml: regenerate RECITERS.md + reciters_index.json
-     - release.yml: build per-reciter zip + create GitHub Release
+     - update-reciters.yml: regenerate RECITERS.md (reads state + catalog from bucket)
+     - release.yml: build per-reciter zip + create GitHub Release (reads from bucket published/<slug>/)
 
-   HF Jobs (each a separate Job invocation):
-     - snapshot-bucket-to-dataset: gzip + upload bucket files to dataset; archive bucket entry
-     - timestamps-refresh: call MFA Aligner Space, write TS shards to dataset
-     - build-per-verse-audio-dataset: existing build_reciter.py logic
+   HF Job:
+     - timestamps-refresh: read bucket published/<slug>/detailed.json, call MFA Aligner Space,
+       write timestamps shards to <bucket>/published/<slug>/timestamps/<chapter>.json,
+       POST /api/internal/job-completed on success.
 
-4. As HF Jobs complete:
-   - snapshot-bucket-to-dataset finish → bucket entry archived/deleted
-   - timestamps-refresh success → MFA Aligner Space provides timestamps; Inspector receives an internal webhook (POST /api/internal/job-completed?type=timestamps&slug=<slug>) → Inspector transitions awaiting_timestamps → completed
-
-5. Inspector polls HF Jobs API every minute to detect failed/orphaned jobs; surfaces in admin dashboard if any subordinate fails.
+4. On timestamps-refresh completion:
+   - HF Job entry-point POSTs to /api/internal/job-completed (Bearer-auth, see §4a)
+   - Inspector transitions awaiting_timestamps → completed
 ```
+
+If the maintainer needs to know whether the timestamps job actually finished, the dashboard shows the tracked `timestamps_job_id` and its status. If something is wrong, the maintainer manually re-triggers from a "check status" / "rerun timestamps" flow (which is just kicking off another `timestamps-refresh` invocation against the same slug; the publish path itself is not retried — state is already in `awaiting_timestamps` or `completed`).
+
+Note: there is no `pending_jobs` map, no polling backstop, no `/api/admin/rerun-job/` endpoint in v2 scope (see D15, D16). Per-job sub-status is deferred to D1 in [`inspector-deferred.md`](inspector-deferred.md).
 
 ## 4. Trigger sources
 
@@ -109,6 +113,7 @@ Events fired by Inspector:
 | Event | When | Listening workflows |
 |---|---|---|
 | `reciter.completed` | After `publish` transition | `update-reciters.yml`, `release.yml` |
+| `reciter.catalog_changed` | After catalog edit | `update-reciters.yml` |
 
 Caveat: this is a thin GitHub PAT with `repo` scope. Rotate quarterly; `INSPECTOR_GITHUB_DISPATCH_TOKEN` is a Space secret. If rotated, dispatch firing fails silently — covered by the polling backstop in `update-reciters.yml` (scheduled cron picks up missed publish events).
 
@@ -137,44 +142,28 @@ def enqueue(job_name: str, payload: dict) -> str:
     return resp.json()["job_id"]
 ```
 
-The Inspector keeps a small in-memory map `job_id → (slug, type, fired_at)` — polled every minute to surface job status in the admin dashboard.
+In v2, the only job ever enqueued via this path is `timestamps-refresh`. The `job_id` is recorded on the state row's `timestamps_job_id` field for the dashboard to surface; nothing polls it on a timer.
 
-### From Reciter Requests Space to Inspector
+### 4a. Internal endpoint auth (Bearer token, ONE secret)
 
-The Reciter Requests Space currently fires `repository_dispatch reciter.alignment_requested` into the project repo. In v2, this is **kept** — but the dispatch event is consumed by Inspector via an internal webhook receiver (since GH Actions doesn't write state in v2). The flow:
-
-```
-1. User submits a request → Reciter Requests Space
-2. Space fires repository_dispatch reciter.alignment_requested { slug, ... }
-3. .github/workflows/forward-to-inspector.yml runs:
-   - POST https://hetchyy-quranic-inspector.hf.space/api/internal/inspector-event
-        Body: { event: "reciter.alignment_requested", payload: { ... } }
-        Auth: HMAC-SHA256 (see §4a)
-4. Inspector validates HMAC and applies the state transition
-   (catalogued → awaiting_alignment, sets issue_number)
-```
-
-Why route through GH Actions: the Reciter Requests Space already fires dispatch; rewiring it to talk to Inspector directly is more change. The forward workflow is a 10-line yaml.
-
-### 4a. Internal endpoint auth (Bearer token, two separate secrets)
-
-Both internal endpoints (`/api/internal/inspector-event`, `/api/internal/job-completed`) use a **Bearer shared secret** over TLS. Threat model is "trusted infra calling trusted infra over HTTPS" — both callers are bot-account-owned (GH Actions runner / HF Job container), TLS protects the wire, and Bearer is dead-simple to validate. HMAC's tamper-resistance offers little benefit when both endpoints are on `*.hf.space` and any caller capable of breaching TLS already has bigger leverage.
+The internal endpoint (`POST /api/internal/job-completed`) uses a **Bearer shared secret** over TLS. Threat model is "trusted infra calling trusted infra over HTTPS" — the caller is a bot-account-owned HF Job container, TLS protects the wire, and Bearer is dead-simple to validate. Constant-time compare; no HMAC, no body signing.
 
 | Field | Value |
 |---|---|
 | Header | `Authorization: Bearer <secret>` |
 | Validation | Constant-time compare (`hmac.compare_digest`) |
 | Body | Plain JSON, no signing |
-| Replay protection | None (5-min secret rotation if needed; relies on TLS + caller infra trust) |
+| Replay protection | None (relies on TLS + caller infra trust) |
 
-**Two separate secrets** (blast-radius isolation — a leaked Job image cannot forge intake events):
+**ONE secret** for the only internal endpoint:
 
 | Secret | Used by | Endpoint |
 |---|---|---|
-| `INSPECTOR_FORWARD_SECRET` | `forward-to-inspector.yml` GH Actions | `POST /api/internal/inspector-event` |
-| `INSPECTOR_JOB_CALLBACK_SECRET` | HF Job entry-point scripts (`scripts/jobs/*.py`) | `POST /api/internal/job-completed` |
+| `INSPECTOR_JOB_CALLBACK_SECRET` | HF Job entry-point script (`scripts/jobs/timestamps_refresh.py`) | `POST /api/internal/job-completed` |
 
-**Zero-downtime rotation.** Server reads both `<NAME>` and `<NAME>_PREV`; validator accepts either. Rotation: copy current to `_PREV`, mint new `current`, deploy Space, update caller secrets, then unset `_PREV` on next deploy.
+(`INSPECTOR_FORWARD_SECRET` and the previous `_PREV` rotation slot are dropped — see D14, D17.)
+
+**Rotation.** Mint a new value, update the Space secret, redeploy. The job-completion webhook is best-effort: if a callback arrives during the redeploy window with the old secret it gets rejected, the job's retry-on-401 hook re-fires once after a short delay; if it still fails the maintainer sees a "timestamps job done but state stuck in `awaiting_timestamps`" indicator on the dashboard and clicks the manual advance button. Not worth a `_PREV` slot for this rare case.
 
 **Sender (HF Job script):**
 ```python
@@ -191,7 +180,7 @@ def post_internal(url: str, payload: dict, secret: str) -> None:
 ```python
 import hmac, os
 from functools import wraps
-from flask import request, abort, current_app
+from flask import request, abort
 
 def require_bearer(secret_env: str):
     def deco(fn):
@@ -201,19 +190,14 @@ def require_bearer(secret_env: str):
             if not auth.startswith("Bearer "):
                 abort(401, "missing bearer")
             token = auth[len("Bearer "):]
-            for env_key in (secret_env, f"{secret_env}_PREV"):
-                expected = os.environ.get(env_key)
-                if expected and hmac.compare_digest(token, expected):
-                    return fn(*a, **kw)
-            abort(401, "invalid bearer")
+            expected = os.environ.get(secret_env, "")
+            if not expected or not hmac.compare_digest(token, expected):
+                abort(401, "invalid bearer")
+            return fn(*a, **kw)
         return wrapper
     return deco
 
 # usage
-@app.post("/api/internal/inspector-event")
-@require_bearer("INSPECTOR_FORWARD_SECRET")
-def inspector_event(): ...
-
 @app.post("/api/internal/job-completed")
 @require_bearer("INSPECTOR_JOB_CALLBACK_SECRET")
 def job_completed(): ...
@@ -223,28 +207,7 @@ Lives in `inspector/utils/internal_auth.py::require_bearer(secret_env: str)`.
 
 ## 5. HF Job specifications
 
-Each Job is a small Docker image with `huggingface_hub` + `requests` + the relevant pipeline code. Built from the main repo (`scripts/lib/` + relevant entry points).
-
-### Job: `snapshot-bucket-to-dataset`
-
-```bash
-hf jobs run \
-  --image hf://spaces/hetchyy/inspector-jobs-image:latest \
-  -v hf://buckets/hetchyy/quranic-inspector-bucket:/data/bucket \
-  -e SLUG=<slug> \
-  python scripts/jobs/snapshot_bucket_to_dataset.py
-```
-
-Inside the container:
-
-1. Read `/data/bucket/wip/<slug>/data/recitation_segments/<slug>/{segments,detailed,edit_history,edit_history_peaks,low_confidence_v2}.{json,jsonl}`.
-2. Gzip each file (compresslevel 9, mtime=0 for deterministic output).
-3. Upload to `hetchyy/quranic-universal-ayahs/inspector/segments/<slug>/<file>.gz` via `HfApi.upload_file`.
-4. Compute SHA-256 of each upload, write into `manifest.json.gz`'s `inspector_shard_hashes`.
-5. On success: archive `/data/bucket/wip/<slug>/` to `/data/bucket/_archive/<slug>/<published_at>/` (or delete if archive policy is "delete").
-6. POST `https://hetchyy-quranic-inspector.hf.space/api/internal/job-completed?type=snapshot&slug=<slug>` (with HMAC auth).
-
-Cost: ~30 s per reciter. ~25 MB transfer. Cheap.
+In v2 there is exactly one HF Job: `timestamps-refresh`. The image is a small Docker build with `huggingface_hub` + `requests` + the relevant pipeline code from `scripts/lib/` and `scripts/jobs/`.
 
 ### Job: `timestamps-refresh`
 
@@ -256,33 +219,14 @@ hf jobs run \
   python scripts/jobs/timestamps_refresh.py
 ```
 
-Inside:
+Inside the container:
 
-1. Read `/data/bucket/wip/<slug>/data/recitation_segments/<slug>/detailed.json`.
+1. Read `/data/bucket/published/<slug>/detailed.json` (publish snapshot has already moved files there in-process).
 2. Call MFA Aligner Space (`hetchyy/Quran-phoneme-mfa-dev` by default) for each verse — same flow as the existing `extract_timestamps.py`.
-3. Compute timestamps; gzip per chapter.
-4. Upload to `hetchyy/quranic-universal-ayahs/timestamps/<slug>/<chapter>.json.gz`.
-5. POST `/api/internal/job-completed?type=timestamps&slug=<slug>` on success.
+3. Compute timestamps; write per-chapter shards to `/data/bucket/published/<slug>/timestamps/<chapter>.json`.
+4. POST `/api/internal/job-completed` body `{ slug, status: "success" | "failed", error?: "..." }` (Bearer auth).
 
 Cost: ~5–10 min per reciter (MFA alignment is the bottleneck). The MFA Aligner Space is the actual compute; the HF Job is just orchestration.
-
-This is the slowest Job — Inspector tracks it in the admin dashboard.
-
-### Job: `build-per-verse-audio-dataset`
-
-```bash
-hf jobs run \
-  --image hf://spaces/hetchyy/inspector-jobs-image:latest \
-  -v hf://buckets/hetchyy/quranic-inspector-bucket:/data/bucket \
-  -e SLUG=<slug> \
-  python scripts/jobs/build_per_verse_audio.py
-```
-
-Inside: same logic as the existing `.github/scripts/build_reciter.py` main path — slice audio per verse, build parquet rows with word timestamps, upload to dataset. Reads inputs from bucket instead of git checkout.
-
-Cost: ~5 min per reciter (audio download + slicing).
-
-Trigger source for re-runs: maintainer can manually re-run any of these jobs from the admin dashboard if a step fails — Inspector exposes `POST /api/admin/rerun-job/<slug>?job=<type>`.
 
 ### Job image (`hf://spaces/hetchyy/inspector-jobs-image`)
 
@@ -292,13 +236,12 @@ Contents:
 
 - Python 3.11
 - `huggingface_hub`, `requests`, `orjson`, `numpy`
-- `scripts/lib/` (segment shards, timestamps shards, reciter task, internal_auth_sender)
-- `scripts/jobs/` (job entry points)
-- ffmpeg (for `build-per-verse-audio-dataset`)
+- `scripts/lib/` (timestamps shards, reciter task, internal_auth_sender)
+- `scripts/jobs/timestamps_refresh.py`
 
 The image rebuilds automatically on push to its Space repo. CI deploys via the same selective-rsync pattern as Inspector — `inspector-jobs-deploy.yml` GH Actions workflow on push to `main` touching `scripts/jobs/**` or `scripts/lib/**`. The Space stays in `paused` state — only its built image artifact matters.
 
-GHCR is **not** used. (Earlier draft suggested GHCR with the caveat "verify HF Jobs supports GHCR" — the HF-Space-hosted-image path is more native and skips that verification entirely.)
+GHCR is **not** used.
 
 ## 6. Workflow specifications
 
@@ -308,11 +251,7 @@ GHCR is **not** used. (Earlier draft suggested GHCR with the caveat "verify HF J
 name: Update Reciters Index
 on:
   repository_dispatch:
-    types: [reciter.completed]
-  push:
-    branches: [main]
-    paths:
-      - 'data/reciter_catalog.json'
+    types: [reciter.completed, reciter.catalog_changed]
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch:
@@ -334,7 +273,7 @@ jobs:
           INSPECTOR_HF_TOKEN: ${{ secrets.INSPECTOR_HF_TOKEN }}
           INSPECTOR_BUCKET_REPO: hetchyy/quranic-inspector-bucket
         run: |
-          # Reads catalog from local checkout, state from bucket via huggingface_hub
+          # Reads state + catalog from bucket via huggingface_hub
           python .github/scripts/list_reciters.py --write
       - name: Open PR if changes
         run: |
@@ -343,13 +282,15 @@ jobs:
           fi
 ```
 
-The script reads catalog from the local checkout (catalog is on GitHub) and state from bucket via:
+The script reads both state and catalog from the bucket via:
 
 ```python
 from huggingface_hub import HfFileSystem
 fs = HfFileSystem()
-with fs.open(f"buckets/hetchyy/quranic-inspector-bucket/state/reciter_state.json", "r") as f:
+with fs.open("buckets/hetchyy/quranic-inspector-bucket/state/reciter_state.json", "r") as f:
     state = json.load(f)
+with fs.open("buckets/hetchyy/quranic-inspector-bucket/catalog/reciter_catalog.json", "r") as f:
+    catalog = json.load(f)
 ```
 
 ### `release.yml`
@@ -380,7 +321,7 @@ jobs:
           gh release create "$TAG" "$ZIP" --title "..." --notes "..."
 ```
 
-`package_release.py` reads the relevant data files from HF dataset (now that completed reciters are there), zips them with audio (if including), uploads to a new GitHub Release.
+`package_release.py` reads the relevant data files from `<bucket>/published/<slug>/` via `huggingface_hub`, zips them with audio (if including), uploads to a new GitHub Release.
 
 ### `inspector-deploy.yml`
 
@@ -393,10 +334,7 @@ on:
       - 'inspector/**'
       - 'validators/**'
       - 'scripts/lib/**'
-      - 'data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs,reciters_index,riwayat,sources,styles}.json'
-      - 'data/.audio_meta.json'
-      - 'data/.audio_durations.json'
-      - 'data/audio/**'  # because audio_catalog.json.gz is rebuilt
+      - 'data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs,inspector_roles}.json'
       - 'inspector/Dockerfile'
 
 jobs:
@@ -408,8 +346,6 @@ jobs:
         with: { node-version: '20' }
       - name: Build frontend
         run: cd inspector/frontend && npm ci && npm run build
-      - name: Build audio catalog
-        run: python scripts/build_audio_catalog.py --output data/audio_catalog.json.gz
       - name: Push to HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_DEPLOY_TOKEN }}
@@ -423,44 +359,78 @@ The `upload_inspector.sh` script implements the selective-push logic from [`insp
 
 A separate `inspector-deploy-dev.yml` triggers on push to `dev` branch and pushes to `hetchyy/quranic-inspector-dev`.
 
-## 7. Inspector backend's role in the fan-out
+### `bucket-data-hygiene.yml`
 
-`inspector/services/publish.py` orchestrates the publish event:
+```yaml
+name: Bucket Data Hygiene
+on:
+  schedule:
+    - cron: '0 6 * * 0'   # weekly, Sunday 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - run: pip install huggingface_hub
+      - name: Run validators across all reciters in bucket
+        env:
+          INSPECTOR_HF_TOKEN: ${{ secrets.INSPECTOR_HF_TOKEN }}
+          INSPECTOR_BUCKET_REPO: hetchyy/quranic-inspector-bucket
+        run: |
+          python scripts/jobs/bucket_hygiene.py --report-out report.json
+      - name: Open issue for CRITICAL findings
+        if: ${{ steps.validate.outputs.has_critical == 'true' }}
+        run: |
+          gh issue create --title "Bucket hygiene CRITICAL findings $(date +%F)" \
+            --body-file report.md --label hygiene
+```
+
+The hygiene job invokes `validate_segments`, `validate_audio`, `validate_edit_history`, `validate_timestamps` as libraries against every reciter in the bucket; CRITICAL findings produce a GH issue and surface in the admin dashboard's hygiene panel.
+
+## 7. Inspector backend's role in publish
+
+`inspector/services/publish.py` orchestrates the publish event synchronously:
 
 ```python
 def publish(slug: str, actor: User) -> PublishResult:
-    # 1. State transition (synchronous, atomic)
-    state.transition(slug, PublishEvent(actor))
+    with state.lock_for(slug):
+        # 1. State transition (atomic; writes via huggingface_hub.upload_file)
+        state.transition(slug, PublishEvent(actor))
 
-    # 2. Fan-out trigger (best-effort; failures logged, not propagated)
-    failures = []
-    try:
-        github_dispatch.dispatch("reciter.completed", {"slug": slug})
-    except Exception as e:
-        failures.append(("github_dispatch", str(e)))
+        # 2. In-bucket move/copy: wip/<slug>/* -> published/<slug>/*
+        bucket.move_or_copy(f"wip/{slug}/", f"published/{slug}/")
 
-    job_ids = {}
-    for job_name in ["snapshot-bucket-to-dataset", "timestamps-refresh", "build-per-verse-audio-dataset"]:
+        # 3. Fire repository_dispatch (best-effort; failure logged, surfaced in response)
         try:
-            job_ids[job_name] = hf_jobs.enqueue(job_name, {"slug": slug})
+            github_dispatch.dispatch("reciter.completed", {"slug": slug})
+            dispatch_ok = True
         except Exception as e:
-            failures.append((job_name, str(e)))
+            log.warning("dispatch failed: %s", e)
+            dispatch_ok = False
 
-    # 3. Track jobs in memory for admin dashboard
-    pending_jobs[slug] = job_ids
+        # 4. Enqueue ONE timestamps job; persist its id on the state row
+        try:
+            ts_job_id = hf_jobs.enqueue("timestamps-refresh", {"slug": slug})
+            state.set_timestamps_job_id(slug, ts_job_id)
+        except Exception as e:
+            log.error("timestamps-refresh enqueue failed: %s", e)
+            ts_job_id = None
 
-    return PublishResult(state="awaiting_timestamps", job_ids=job_ids, dispatch_failures=failures)
+    return PublishResult(
+        state="awaiting_timestamps",
+        timestamps_job_id=ts_job_id,
+        dispatch_ok=dispatch_ok,
+    )
 ```
 
-If any of the dispatch/job-enqueue calls fail, the maintainer sees the failure in the admin dashboard with a "retry" button. The state transition is independent — once it commits to the bucket, `awaiting_timestamps` is the truth even if all the subordinate jobs fail. (They'll be retried by the maintainer.)
+If the dispatch firing or the job-enqueue step fails, the maintainer sees a degraded result in the publish dialog; they can re-fire the dispatch from the cron in `update-reciters.yml` (it picks up `awaiting_timestamps` rows missing a job id) or kick off a fresh `timestamps-refresh` from the dashboard. The state transition itself is independent — once it commits to the bucket, `awaiting_timestamps` is the truth even if downstream steps haven't caught up yet.
 
-## 8. Job completion callbacks
+## 8. Job completion callback
 
-HF Jobs don't deliver completion events natively (yet). Two patterns to bridge:
-
-### Pattern A: Job-side webhook
-
-Each Job's last step POSTs to Inspector via the Bearer sender from §4a:
+The `timestamps-refresh` Job's last step POSTs to Inspector via the Bearer sender from §4a:
 
 ```python
 # inside the job
@@ -468,7 +438,7 @@ import os, requests
 
 requests.post(
     f"{os.environ['INSPECTOR_CALLBACK_URL']}/api/internal/job-completed",
-    json={"type": "snapshot", "slug": os.environ["SLUG"], "status": "success"},
+    json={"slug": os.environ["SLUG"], "status": "success"},
     headers={"Authorization": f"Bearer {os.environ['INSPECTOR_JOB_CALLBACK_SECRET']}"},
     timeout=10,
 ).raise_for_status()
@@ -476,63 +446,25 @@ requests.post(
 
 `INSPECTOR_CALLBACK_URL` is **passed into the Job invocation as an env var per environment** (dev or prod), so dev Jobs callback to dev Inspector. See `hf_jobs.enqueue()` payload in §4.
 
-Inspector's handler (decorator from §4a):
+Inspector's handler:
 
 ```python
 @app.post("/api/internal/job-completed")
 @require_bearer("INSPECTOR_JOB_CALLBACK_SECRET")
 def job_completed():
     body = request.json
-    if body["type"] == "timestamps" and body["status"] == "success":
-        state.transition(body["slug"], TimestampsCompletedEvent())
-    # update pending_jobs map; surface in admin dashboard
+    slug = body["slug"]
+    if body["status"] == "success":
+        state.transition(slug, TimestampsCompletedEvent())
+    else:
+        # surface in admin dashboard; do not auto-transition
+        state.flag_timestamps_failed(slug, body.get("error"))
+    return {"ok": True}
 ```
 
-### Pattern B: Inspector polls HF Jobs API
+There is no polling backstop. If the webhook never arrives, the slug sits in `awaiting_timestamps`; the maintainer sees it on the dashboard's stalled-reciters panel and can manually advance or re-fire.
 
-Inspector periodically polls `GET https://huggingface.co/api/jobs/<job_id>` for each tracked job. On status change, advances state.
-
-**Decision: Pattern A as primary, Pattern B as backstop.** Pattern A is fast and event-driven; Pattern B catches anything Pattern A drops (network glitch on the curl, etc.). Polling cadence: 1 minute, with exponential backoff after 10 minutes idle.
-
-## 9. Bucket → dataset copy semantics
-
-Per HF docs: "transferring data from a Bucket to a repository (model, dataset, Space) without reuploading is **not yet available**, but is on the roadmap."
-
-So `snapshot-bucket-to-dataset` does **download + reupload** today:
-
-```python
-from huggingface_hub import download_bucket_files, HfApi
-
-def snapshot(slug: str):
-    # 1. Download from bucket
-    download_bucket_files(
-        BUCKET_REPO,
-        files=[
-            (f"wip/{slug}/data/recitation_segments/{slug}/segments.json",     "/tmp/segments.json"),
-            (f"wip/{slug}/data/recitation_segments/{slug}/detailed.json",     "/tmp/detailed.json"),
-            (f"wip/{slug}/data/recitation_segments/{slug}/edit_history.jsonl", "/tmp/edit_history.jsonl"),
-            (f"wip/{slug}/data/recitation_segments/{slug}/edit_history_peaks.jsonl", "/tmp/edit_history_peaks.jsonl"),
-            (f"wip/{slug}/data/recitation_segments/{slug}/low_confidence_v2.json", "/tmp/low_confidence_v2.json"),
-        ],
-    )
-    # 2. Gzip
-    for name in ["segments.json", "detailed.json", "edit_history.jsonl", "edit_history_peaks.jsonl", "low_confidence_v2.json"]:
-        with open(f"/tmp/{name}", "rb") as src, gzip.open(f"/tmp/{name}.gz", "wb", compresslevel=9, mtime=0) as dst:
-            shutil.copyfileobj(src, dst)
-    # 3. Upload to dataset
-    api = HfApi()
-    for name in [...]:
-        api.upload_file(
-            path_or_fileobj=f"/tmp/{name}.gz",
-            path_in_repo=f"inspector/segments/{slug}/{name}.gz",
-            repo_id=DATASET_REPO,
-            repo_type="dataset",
-        )
-```
-
-When server-side Xet copy lands, this collapses to one `api.copy_files(...)` call with no local round-trip.
-
-## 10. Phased rollout
+## 9. Phased rollout
 
 Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md). This doc's scope lands primarily in Phase 6.
 
@@ -540,68 +472,57 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 
 - Land `INSPECTOR_GITHUB_DISPATCH_TOKEN` secret on the dev Space.
 - Land `inspector/services/github_dispatch.py` and `inspector/services/hf_jobs.py` (stub implementations; not yet called from the publish path).
-- Reciter Requests Space → forward-to-inspector workflow set up.
 
 ### Phase 5 — Writes
 
-- Add `inspector/services/publish.py` (state transition + fan-out trigger), but without firing any subordinate jobs yet (only the state transition runs in this phase).
+- Add `inspector/services/publish.py` (state transition + in-bucket move + fan-out trigger), but feature-flag the dispatch/enqueue calls off behind `INSPECTOR_PUBLISH_FANOUT_ENABLED=0` so the state transition can be exercised standalone.
 
 ### Phase 6 — Publish pipeline
 
 **In scope:**
-- Build the inspector-jobs Docker image + GHCR publish.
-- Land `scripts/jobs/snapshot_bucket_to_dataset.py`, `scripts/jobs/timestamps_refresh.py`, `scripts/jobs/build_per_verse_audio.py`.
-- Land `update-reciters.yml`, `release.yml`, `inspector-deploy.yml` GH Actions workflows.
-- Wire `publish.py` to actually fire the dispatch + Jobs.
+- Build the inspector-jobs Docker image + push to `hetchyy/inspector-jobs-image` HF Space.
+- Land `scripts/jobs/timestamps_refresh.py` and `scripts/jobs/bucket_hygiene.py`.
+- Land `update-reciters.yml`, `release.yml`, `inspector-deploy.yml`, `bucket-data-hygiene.yml` GH Actions workflows.
+- Wire `publish.py` to actually fire dispatch + enqueue the timestamps job (flip the feature flag).
 - Land `/api/internal/job-completed` handler.
-- Decommission the v1 workflows: `bot-create-pr.yml`, `bot-comment.yml`, `issue-commands.yml`, `pr-assignee-sync.yml`, `validate-segments-pr.yml`, `segments-pr-merged.yml`, `validate-edit-history.yml` (keep as opt-in CI for catalog PRs).
+- Decommission the v1 workflows: `bot-create-pr.yml`, `bot-comment.yml`, `issue-commands.yml`, `pr-assignee-sync.yml`, `validate-segments-pr.yml`, `segments-pr-merged.yml`, `validate-edit-history.yml` (all retired; validators now run as libraries inside Inspector services). Delete `forward-to-inspector.yml` (D17).
 - Delete `find_segments_pr.py`.
 
 **Acceptance:**
 - Maintainer publishes a `_test_*` reciter end-to-end. Within 1 minute of clicking Publish:
-  - Bucket entry is at `_archive/<slug>/<ts>/...`
-  - HF dataset has `inspector/segments/<slug>/...` shards
+  - Bucket move/copy complete: `published/<slug>/` populated, `wip/<slug>/` removed (or archived to `_archive/<slug>/<ts>/` per policy)
   - GitHub Release `<slug>-v0.X.Y` exists with the zip attached
   - `RECITERS.md` has been auto-PR'd with the slug marked completed
 - Within ~10 minutes:
-  - HF dataset `timestamps/<slug>/...` shards exist
-  - Per-verse audio rows exist for the slug
+  - `<bucket>/published/<slug>/timestamps/<chapter>.json` shards exist
   - State transitions to `completed` (Inspector's `/api/internal/job-completed` handler advances it)
 
-## 11. Risks and open questions
+## 10. Risks and open questions
 
-### HF Jobs dispatch reliability
+### Subordinate Job failures
 
-HF Jobs is relatively new (2025–2026). If the API has hiccups, the publish event can land in state `awaiting_timestamps` with no jobs fired. **Mitigation:** the maintainer sees the dispatch failure in the publish dialog and can manually retry from the admin dashboard. Reconciler workflow flags `awaiting_timestamps` older than 30 min for re-trigger.
+`timestamps-refresh` fails mid-run. State sits at `awaiting_timestamps`; nothing automatically retries. **Mitigation:** the maintainer dashboard shows the tracked `timestamps_job_id` and its current HF Jobs API status when checked on demand. If failed, maintainer can re-enqueue manually. No background polling in v2 (per D15, D16). Per-job sub-status is deferred to D1.
 
 ### `INSPECTOR_GITHUB_DISPATCH_TOKEN` rotation
 
 The PAT used to fire `repository_dispatch` events expires per its own settings (no auto-rotation like a GitHub App). **Mitigation:** quarterly rotation reminder in the runbook. If expired silently, the scheduled cron in `update-reciters.yml` (every 30 min) catches missed events.
 
-### Subordinate Job failures
-
-A subordinate Job (e.g., `timestamps-refresh`) fails mid-run. State sits at `awaiting_timestamps` forever without intervention. **Mitigation:** Inspector polls HF Jobs API every minute; flags failed jobs in the admin dashboard. Maintainer can re-run via `/api/admin/rerun-job/<slug>?job=timestamps-refresh`.
-
 ### Bucket archive policy
 
-Should we archive bucket entries to `<bucket>/_archive/<slug>/<published_at>/` post-snapshot, or delete? **Recommend archive** for the first month (recovery option if dataset publish has a bug); **delete** after that (storage cost is small but accumulates). Configurable via `INSPECTOR_BUCKET_ARCHIVE_POLICY` env var.
+Should we archive `wip/<slug>/` to `<bucket>/_archive/<slug>/<published_at>/` post-publish, or delete? **Recommend archive** for the first month (recovery option if publish has a bug); **delete** after that (storage cost is small but accumulates). Configurable via `INSPECTOR_BUCKET_ARCHIVE_POLICY` env var. See D13 in `inspector-deferred.md` for the cleanup-automation deferral.
 
 ### Job image distribution (resolved — uses HF Space)
 
 The image is hosted as an HF Space (Docker SDK, paused) at `hetchyy/inspector-jobs-image`. HF Jobs pulls from `hf://spaces/...` natively. No GHCR / Docker Hub / Quay involvement; one less third-party registry to maintain credentials for.
 
-### Forward-to-Inspector workflow as a single point of failure
-
-If `forward-to-inspector.yml` is down or misconfigured, alignment requests from the Reciter Requests Space don't reach Inspector — slugs never enter the state file. **Mitigation:** the daily reconciler walks the catalog and adds any missing slugs with state `catalogued`. Worst-case latency: 24h.
-
-### Bucket → dataset copy speed
-
-Today's download + reupload ≈ ~30 s per reciter. When server-side Xet copy lands (HF roadmap), drops to seconds. **No action needed** — code naturally upgrades when HF rolls out the API.
-
 ### Transactional ordering
 
-What if `state.transition(slug, PublishEvent)` succeeds but the fan-out triggers all fail? The reciter is in `awaiting_timestamps` with nothing happening. **Mitigation:** the publish handler returns the failures to the maintainer; the admin dashboard surfaces a "stuck publish" indicator with a retry button. Manual recovery is fine for this rare case.
+What if `state.transition(slug, PublishEvent)` succeeds but the in-bucket move or the dispatch/enqueue fails? Mitigations stack: the per-slug lock means no other writer interleaves; the move/copy is the next step (if it fails the state is `awaiting_timestamps` but `published/<slug>/` is missing — the dashboard surfaces this and the maintainer can manually retry the move via a `POST /api/admin/republish/<slug>` operation). Dispatch failures are absorbed by `update-reciters.yml`'s 30-min cron. Enqueue failures show as a missing `timestamps_job_id` and the maintainer kicks off a fresh job. Manual recovery is fine for these rare cases at the publish cadence (~10/month).
 
 ### Multiple Inspector replicas firing duplicate dispatch
 
-If we ever scale to multi-replica, two replicas might each see the publish event and both fire. **Mitigation:** the bucket state mutex serializes the publish transition itself; only one replica's transition succeeds, the other sees `awaiting_timestamps` and skips. The fan-out triggers must be idempotent — `repository_dispatch` events fired twice are harmless (workflow runs twice, second is a no-op); HF Job duplicates are visible but cheap. Acceptable.
+If we ever scale to multi-replica, two replicas might each see the publish event and both fire. **Mitigation:** the per-slug `threading.Lock` is only intra-process — multi-replica is explicitly deferred (see D6 in `inspector-deferred.md`) and would require moving coordination to bucket-side optimistic concurrency or Redis. In v2's single-replica model the question doesn't arise.
+
+### In-bucket move/copy semantics
+
+In-bucket server-side copy/move on HF Storage Buckets is the preferred path; if the API isn't yet available for the move/rename pattern we want, the fallback is download+reupload from the running container (~30 s for ~25 MB). Either way, both source and destination live in the same private bucket — no cross-repo transfer. See D7 in `inspector-deferred.md`.
