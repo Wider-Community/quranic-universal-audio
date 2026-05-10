@@ -2,7 +2,7 @@
   "_meta": {
     "reciter": "wadee_hammadi_al_yamani",
     "name_en": "Wadee Hammadi Al Yamani",
-    "name_ar": "",
+    "name_ar": "unknown",
     "riwayah": "hafs_an_asim",
     "style": "murattal",
     "audio_category": "by_surah",
@@ -12,7 +12,7 @@
     "source_id": 130,
     "source_section": "default",
     "country": "unknown",
-    "fetched": "2026-05-10T17:04:21Z"
+    "fetched": "2026-05-10T17:19:56Z"
   },
   "1": "https://download.quranicaudio.com/quran/wadee_hammadi_al-yamani/001.mp3",
   "2": "https://download.quranicaudio.com/quran/wadee_hammadi_al-yamani/002.mp3",

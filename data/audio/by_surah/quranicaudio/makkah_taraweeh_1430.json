@@ -2,7 +2,7 @@
   "_meta": {
     "reciter": "makkah_taraweeh_1430",
     "name_en": "Makkah Taraweeh 1430",
-    "name_ar": "",
+    "name_ar": "unknown",
     "riwayah": "hafs_an_asim",
     "style": "taraweeh",
     "audio_category": "by_surah",
@@ -12,7 +12,7 @@
     "source_id": 82,
     "source_section": "taraweeh",
     "country": "unknown",
-    "fetched": "2026-05-10T17:04:21Z",
+    "fetched": "2026-05-10T17:19:56Z",
     "year_hijri": 1430,
     "source_description": "This is Live Recitation from Masjidul-Haram in Al-Makkah Al-Mukarramah, 1430 H./2009 A.D. Contains 4 Imams: Sa'ud al-Shuraym, Maher al-Muaiqly, Abdur-Rahman as-Sudays, and Abdullah Awwad al-Juhany.",
     "imams": [

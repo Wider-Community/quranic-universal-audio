@@ -2,7 +2,7 @@
   "_meta": {
     "reciter": "abdulbaset_abdulsamad_warsh",
     "name_en": "AbdulBaset AbdulSamad",
-    "name_ar": "",
+    "name_ar": "unknown",
     "riwayah": "warsh_an_nafi",
     "style": "murattal",
     "audio_category": "by_surah",
@@ -12,7 +12,7 @@
     "source_id": 54,
     "source_section": "non_hafs",
     "country": "unknown",
-    "fetched": "2026-05-10T17:04:21Z",
+    "fetched": "2026-05-10T17:19:56Z",
     "source_description": "This is the Full Quran recited by AbdulBaset AbdulSamad in the Qiraat of Warsh an Naafi'"
   },
   "1": "https://download.quranicaudio.com/quran/abdulbaset_warsh/001.mp3",

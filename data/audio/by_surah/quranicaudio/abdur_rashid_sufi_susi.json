@@ -2,7 +2,7 @@
   "_meta": {
     "reciter": "abdur_rashid_sufi_susi",
     "name_en": "Abdur-Rashid Sufi",
-    "name_ar": "",
+    "name_ar": "unknown",
     "riwayah": "susi_abu_amr",
     "style": "murattal",
     "audio_category": "by_surah",
@@ -12,7 +12,7 @@
     "source_id": 60,
     "source_section": "non_hafs",
     "country": "unknown",
-    "fetched": "2026-05-10T17:04:21Z",
+    "fetched": "2026-05-10T17:19:56Z",
     "source_description": "This is the Full Quran recited by Abdur Rashid Sufi in the Qiraat of as-Soosi an Abee 'Amru."
   },
   "1": "https://download.quranicaudio.com/quran/abdurrashid_sufi_soosi_rec/001.mp3",

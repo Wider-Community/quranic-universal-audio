@@ -2,7 +2,7 @@
   "_meta": {
     "reciter": "abdullah_awad_al_juhani",
     "name_en": "Abdullah Awad al-Juhani",
-    "name_ar": "",
+    "name_ar": "unknown",
     "riwayah": "hafs_an_asim",
     "style": "murattal",
     "audio_category": "by_surah",
@@ -12,7 +12,7 @@
     "source_id": 1,
     "source_section": "default",
     "country": "unknown",
-    "fetched": "2026-05-10T17:04:20Z"
+    "fetched": "2026-05-10T17:19:55Z"
   },
   "1": "https://download.quranicaudio.com/quran/abdullaah_3awwaad_al-juhaynee/001.mp3",
   "2": "https://download.quranicaudio.com/quran/abdullaah_3awwaad_al-juhaynee/002.mp3",

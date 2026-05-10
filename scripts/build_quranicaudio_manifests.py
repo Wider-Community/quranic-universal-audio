@@ -123,7 +123,7 @@ def build_manifest(rec: dict, slug: str, style: str, riwayah: str,
     meta = {
         "reciter": slug,
         "name_en": name_en,
-        "name_ar": "",
+        "name_ar": "unknown",
         "riwayah": riwayah,
         "style": style,
         "audio_category": "by_surah",

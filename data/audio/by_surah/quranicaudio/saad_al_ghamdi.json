@@ -2,7 +2,7 @@
   "_meta": {
     "reciter": "saad_al_ghamdi",
     "name_en": "Saad al-Ghamdi",
-    "name_ar": "",
+    "name_ar": "unknown",
     "riwayah": "hafs_an_asim",
     "style": "murattal",
     "audio_category": "by_surah",
@@ -12,7 +12,7 @@
     "source_id": 13,
     "source_section": "default",
     "country": "unknown",
-    "fetched": "2026-05-10T17:04:20Z"
+    "fetched": "2026-05-10T17:19:56Z"
   },
   "1": "https://download.quranicaudio.com/quran/sa3d_al-ghaamidi/complete/001.mp3",
   "2": "https://download.quranicaudio.com/quran/sa3d_al-ghaamidi/complete/002.mp3",

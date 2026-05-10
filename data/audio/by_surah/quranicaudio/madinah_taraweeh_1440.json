@@ -2,7 +2,7 @@
   "_meta": {
     "reciter": "madinah_taraweeh_1440",
     "name_en": "Madinah Taraweeh 1440",
-    "name_ar": "",
+    "name_ar": "unknown",
     "riwayah": "hafs_an_asim",
     "style": "taraweeh",
     "audio_category": "by_surah",
@@ -12,7 +12,7 @@
     "source_id": 147,
     "source_section": "taraweeh",
     "country": "unknown",
-    "fetched": "2026-05-10T17:04:21Z",
+    "fetched": "2026-05-10T17:19:56Z",
     "year_hijri": 1440,
     "source_description": "This is the Live Recitation from Masjid al-Nabawi, 1440 H./2019 A.D. Recited by 7 Imams: <a href=\"https://quranicaudio.com/quran/113\">Ahmed al-Huthaify, AbdulMuhsin al-Qasim, Salah al-Budair, Ahmed ibn Talib Hameed, Abdullah Buayjan, Sudais, and Khalid Muhanna. Special thanks to the team at haramain.info for this recitation.",
     "source_credits": [
