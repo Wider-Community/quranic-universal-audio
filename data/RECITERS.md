@@ -10,10 +10,10 @@
 
 | Riwayah | Count | Hours | Style | Count | Hours | Source | Count | Hours |
 |---------|:-----:|:-----:|-------|:-----:|:-----:|--------|:-----:|:-----:|
-| Hafs A'n Assem | 326 | 6,596.2 | Murattal | 365 | 7,270.8 | [MP3Quran](https://mp3quran.net/) | 281 | 6,290.7 |
+| Hafs A'n Assem | 326 | 6,596.4 | Murattal | 365 | 7,271.0 | [MP3Quran](https://mp3quran.net/) | 281 | 6,290.9 |
 | Sho'bah A'n Asim | 3 | 79.5 | Mujawwad | 10 | 430.9 | [EveryAyah](https://everyayah.com/) | 45 | 1,357.0 |
 | Warsh A'n Nafi' | 15 | 406.1 | Muallim | 6 | 151.0 | [Surah-Quran](https://surahquran.com/quran-mp3-english.html) | 42 | 1,121.5 |
-| Qalon A'n Nafi' | 12 | 317.0 |  |  |  | [QUL](https://qul.tarteel.ai/resources/recitation) | 13 | 359.7 |
+| Qalon A'n Nafi' | 12 | 317.0 |  |  |  | [QUL](https://qul.tarteel.ai/resources/recitation) | 13 | 359.9 |
 | Aldori A'n Abi Amr | 5 | 139.1 |  |  |  |  |  |  |
 | Assosi A'n Abi Amr | 2 | 23.6 |  |  |  |  |  |  |
 | Albizi A'n Ibn Katheer | 2 | 49.7 |  |  |  |  |  |  |
@@ -129,8 +129,8 @@ All reciters with audio manifests in `data/audio/`. Not yet aligned — [submit 
 | 60 | Abdur-Razaq bin Abtan al-Dulaimi | Murattal | QUL | Surah | 114/114 | 52.5 |
 | 61 | Adel Al-Khalbany | Murattal | MP3Quran | Surah | 114/114 | 21.6 |
 | 62 | Adel Ryyan | Murattal | MP3Quran | Surah + Ayah timings | 114/114 | 25.1 |
-| 63 | Ahmad Al Nufais | Murattal | MP3Quran | Surah + Ayah timings | 114/114 | 30.8 |
-| 64 | Ahmad Al Nufais | Murattal | QUL | Ayah | 6236/6236 | 30.8 |
+| 63 | Ahmad Al Nufais | Murattal | MP3Quran | Surah + Ayah timings | 114/114 | 31.0 |
+| 64 | Ahmad Al Nufais | Murattal | QUL | Ayah | 6236/6236 | 31.0 |
 | 65 | Ahmad Al-Ajmy | Murattal | MP3Quran | Surah + Ayah timings | 114/114 | 26.4 |
 | 66 | Ahmad Al-Ajmy | Murattal | EveryAyah | Ayah | 6236/6236 | 26.4 |
 | 67 | Ahmad Al-Hawashi | Murattal | MP3Quran | Surah + Ayah timings | 114/114 | 22.7 |
