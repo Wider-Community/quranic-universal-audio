@@ -5,3 +5,12 @@ pydantic>=2.10
 # v2 uses the bucket API (batch_bucket_files, list_bucket_tree,
 # download_bucket_files, hffs); these landed in huggingface_hub 1.8.0.
 huggingface_hub>=1.10
+# Production WSGI server. Gunicorn must be -w 1 (single worker) — every
+# in-memory structure (state_store, per-slug mutex, signed-cookie verification,
+# role cache) assumes single-process. Multi-worker requires a shared
+# coordinator that v2 does not include. See app.py startup assertion.
+gunicorn>=22.0
+# OAuth + signed-cookie session for Phase 3. Bundled now to avoid a second
+# image rebuild between Phase 2 and Phase 3.
+authlib>=1.3
+itsdangerous>=2.2

@@ -62,9 +62,16 @@ FROM python:3.11-alpine AS runtime
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    INSPECTOR_DATA_DIR=/data \
-    INSPECTOR_QUA_DATA_PATH=/data \
-    INSPECTOR_TS_SOURCE=huggingface \
+    INSPECTOR_DATA_DIR=/app/data \
+    INSPECTOR_QUA_DATA_PATH=/app/data \
+    INSPECTOR_TS_SOURCE=bucket \
+    INSPECTOR_AUDIO_PROXY_ENABLED=0 \
+    INSPECTOR_TS_VALIDATE_ENABLED=0 \
+    INSPECTOR_CACHE_DIR=/tmp/inspector-cache \
+    INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket \
+    INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev \
+    INSPECTOR_PARSED_CACHE_BYTES=134217728 \
+    GUNICORN_WORKERS=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -75,7 +82,15 @@ COPY --from=ffmpeg-build /ff/bin/ffmpeg /ff/bin/ffprobe /usr/local/bin/
 # only imports it inside the optional show_table() method, which inspector
 # never calls. Skipping pandas (76MB) + numpy (73MB) saves ~150MB of nothing.
 # pip/setuptools/wheel are purged — not needed at runtime.
-RUN pip install --no-cache-dir flask "PyYAML>=6.0" orjson && \
+RUN pip install --no-cache-dir \
+        flask \
+        "PyYAML>=6.0" \
+        orjson \
+        "pydantic>=2.10" \
+        "huggingface_hub>=1.10" \
+        "gunicorn>=22.0" \
+        "authlib>=1.3" \
+        "itsdangerous>=2.2" && \
     pip install --no-cache-dir --no-deps "quranic-phonemizer>=2.2" && \
     pip uninstall -y pip setuptools wheel && \
     find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
@@ -97,11 +112,14 @@ COPY validators/ ./validators/
 # CLIs we don't need at runtime — only lib/ ships.
 COPY scripts/__init__.py ./scripts/__init__.py
 COPY scripts/lib/ ./scripts/lib/
-# Linguistic data read by services/data_loader.py via config.py's _QUA_DATA.
-# These live in data/ (tracked by git) so the Docker build context has them.
-# INSPECTOR_QUA_DATA_PATH=/data tells config.py to look there instead of the
-# default quranic_universal_aligner/data/ sibling path.
-COPY data/qpc_hafs.json \
+# Linguistic data read by services/data_loader.py via config.py's _QUA_DATA,
+# plus surah_info.json read by services/data_loader.py at startup. These four
+# files are the entire on-disk data surface in deployed mode — everything else
+# (state, catalog, audit, per-reciter wip/published) lives in the bucket
+# mounted at /data/inspector-bucket. INSPECTOR_QUA_DATA_PATH=/app/data tells
+# config.py to look here instead of the default sibling-project path.
+COPY data/surah_info.json \
+     data/qpc_hafs.json \
      data/digital_khatt_v2_script.json \
      data/phoneme_sub_costs.json \
      ./data/
@@ -117,6 +135,23 @@ RUN addgroup -g 1000 -S inspector && \
     chown -R inspector:inspector /app
 USER inspector
 
-EXPOSE 5000
+EXPOSE 7860
 
-CMD ["python3", "inspector/app.py"]
+# Production WSGI server. -w 1 is load-bearing — every in-memory structure
+# (state_store, per-slug mutex, signed-cookie session, role cache) assumes
+# single-process. The app asserts GUNICORN_WORKERS == 1 at startup and refuses
+# to boot if -w 2+ is set. Multi-worker scale-out is deferred until a shared
+# coordinator (Redis or bucket-CAS) is added — see inspector-data-storage.md §11.
+#
+# --threads 16: thread pool sized for CPU-basic. Plenty of headroom for the
+# parsed-cache + bucket-read workload, which is mostly I/O-bound.
+# --max-requests + jitter: rolling worker recycle, defeats slow memory leaks.
+# --timeout 60: peaks computation can take ~30 s on cold cache; keep generous.
+# --graceful-timeout 30: allows in-flight saves to finish on SIGTERM.
+CMD ["gunicorn", "-k", "gthread", "-w", "1", "--threads", "16", \
+     "--max-requests", "5000", "--max-requests-jitter", "500", \
+     "--timeout", "60", "--graceful-timeout", "30", \
+     "--bind", "0.0.0.0:7860", \
+     "--access-logfile", "-", "--error-logfile", "-", \
+     "--chdir", "/app/inspector", \
+     "app:app"]

@@ -171,6 +171,7 @@ _state_file: ReciterStateFile = ReciterStateFile()
 _state_lock = threading.Lock()  # guards _state_file replacement
 _slug_locks: dict[str, threading.Lock] = {}
 _slug_locks_lock = threading.Lock()  # guards _slug_locks dict mutation
+_hydrated = False  # flips True on first successful hydrate(); /healthz reads this
 
 
 def _get_slug_lock(slug: str) -> threading.Lock:
@@ -184,7 +185,7 @@ def _get_slug_lock(slug: str) -> threading.Lock:
 
 def hydrate() -> None:
     """Load or initialize the state file from the bucket. Idempotent."""
-    global _state_file
+    global _state_file, _hydrated
     backend = get_backend()
     try:
         raw = backend.read_json(storage_paths.state_path())
@@ -200,6 +201,13 @@ def hydrate() -> None:
         raise InvalidTransition(str(e)) from e
     with _state_lock:
         _state_file = loaded
+        _hydrated = True
+
+
+def is_hydrated() -> bool:
+    """Return True if the state file was loaded from (or initialized against) the bucket."""
+    with _state_lock:
+        return _hydrated
 
 
 def snapshot() -> ReciterStateFile:

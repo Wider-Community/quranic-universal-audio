@@ -73,6 +73,38 @@ logger = logging.getLogger("inspector")
 _HERE = Path(__file__).parent.resolve()
 FRONTEND_DIST = _HERE / "frontend" / "dist"
 
+
+# ---------------------------------------------------------------------------
+# Worker-count assertion (load-bearing single-process invariant)
+# ---------------------------------------------------------------------------
+#
+# Every in-memory structure in v2 (state_store, per-slug threading.Lock,
+# signed-cookie session verification, role cache) assumes one process. Multi-
+# worker scale-out is deferred until a shared coordinator (Redis or bucket
+# CAS) lands — see inspector-data-storage.md §11. Boot fails loudly if the
+# Dockerfile / runner is configured with -w 2+.
+def _assert_single_worker() -> None:
+    requested = os.environ.get("GUNICORN_WORKERS", "1").strip() or "1"
+    try:
+        n = int(requested)
+    except ValueError:
+        raise RuntimeError(
+            f"GUNICORN_WORKERS must be an integer; got {requested!r}"
+        ) from None
+    if n != 1:
+        raise RuntimeError(
+            f"Inspector requires GUNICORN_WORKERS=1 (got {n}). "
+            "Multi-worker scale-out is deferred until a shared coordinator is added; "
+            "see docs/planning/inspector-deploy/v2/inspector-data-storage.md §11."
+        )
+
+
+_assert_single_worker()
+
+# Ensure the cache dir exists at import time so gunicorn workers don't race
+# on first peaks request. Local dev hits the same code path via __main__.
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 # Flask's built-in static handler serves everything under FRONTEND_DIST at
 # the site root (`/assets/<hash>.js`, `/fonts/DigitalKhattV2.otf`, …). The
 # `/` route below handles index.html explicitly.
