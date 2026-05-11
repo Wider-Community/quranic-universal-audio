@@ -15,9 +15,15 @@ re-runnability (e.g. after a bucket reset during testing).
 python -m scripts.inspector_v2_seed.bootstrap_access \
     --hf-user-id <your_hf_user_id> --login <your_hf_login>
 
-# 2. Seed <bucket>/catalog/reciter_catalog.json with vocab-only stub
-#    (real reciters/deliveries land later when bulk audio probe finishes)
+# 2a. Seed <bucket>/catalog/reciter_catalog.json with vocab-only stub
+#     (run only when the dedup pipeline output isn't ready yet)
 python -m scripts.inspector_v2_seed.seed_catalog_stub
+
+# 2b. Promote the real catalog + 864 sidecars from .local/dedup/
+#     (preferred — supersedes the vocab-only stub once the dedup artifacts
+#     are available in the worktree). Validates through pydantic before
+#     uploading; raw-bytes upload preserves the artifact exactly.
+python -m scripts.inspector_v2_seed.promote_catalog
 
 # 3. Seed <bucket>/state/reciter_state.json with the 14 existing reciters
 #    (6 completed → state="completed", 8 wip → state="awaiting_review")

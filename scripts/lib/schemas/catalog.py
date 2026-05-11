@@ -203,7 +203,8 @@ class Derived(BaseModel):
 class ReciterCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = 1
+    schema_version: int = 2
+    generated_at: datetime | None = None  # stamped by the dedup build pipeline
     vocab: Vocab = Field(default_factory=Vocab)
     reciters: list[ReciterEntry] = Field(default_factory=list)
     deliveries: list[Delivery] = Field(default_factory=list)
@@ -273,3 +274,51 @@ class ReciterCatalog(BaseModel):
             if r.reciter_id == reciter_id:
                 return r
         return None
+
+
+# ---------------------------------------------------------------------------
+# Sidecar: per-delivery audio_manifest/<slug>.json
+# ---------------------------------------------------------------------------
+
+
+class SidecarMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checksum: str = Field(..., min_length=1)
+    source_meta_reciter: str | None = None
+    source_manifest_path: str | None = None
+    chapter_count: int = Field(..., ge=0)
+    category: AudioCategory
+
+
+class ChapterEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(..., min_length=1)
+    size_bytes: int | None = Field(default=None, ge=0)
+    duration_sec: int | None = Field(default=None, ge=0)
+    bitrate_kbps: int | None = Field(default=None, ge=0)
+
+
+class AudioManifestSidecar(BaseModel):
+    """Schema for ``<bucket>/catalog/audio_manifest/<slug>.json``.
+
+    One file per delivery. Carries the per-chapter URL map + (size, duration,
+    bitrate) when probed. Keys in ``chapters`` are stringified surah numbers
+    (``"1"``–``"114"``) for ``by_surah``, or ``"<surah>:<ayah>"`` for
+    ``by_ayah``.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_version: int = 1
+    slug: str
+    meta: SidecarMeta = Field(alias="_meta")
+    chapters: dict[str, ChapterEntry] = Field(default_factory=dict)
+
+    @field_validator("slug")
+    @classmethod
+    def _validate_slug(cls, v: str) -> str:
+        if not SLUG_RE.match(v):
+            raise ValueError(f"invalid slug: {v!r}")
+        return v
