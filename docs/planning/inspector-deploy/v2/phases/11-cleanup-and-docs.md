@@ -23,7 +23,7 @@ The repo no longer carries per-reciter data files, vocab JSON sidecars, or audio
 - [ ] Pre-deletion safety snapshot: tag `pre-v2-cutover` at the commit before the data deletion so the git history of segments edits stays reachable for forensic queries
 - [ ] Dead workflows deleted (also referenced in Phase 5): `bot-create-pr.yml`, `bot-comment.yml`, `issue-commands.yml`, `pr-assignee-sync.yml`, `validate-segments-pr.yml`, `segments-pr-merged.yml`, `forward-to-inspector.yml`
 - [ ] `.github/scripts/find_segments_pr.py` deleted
-- [ ] Legacy bucket layout cleanup decision (D20) — `<bucket>/manifest.json.gz`, `<bucket>/segments/<slug>/`, `<bucket>/timestamps/<slug>/` — drop or rebuild depending on the chosen timestamps-tab read path
+- [ ] Legacy bucket layout decommission (D20 Option B): drop `<bucket>/manifest.json.gz`, `<bucket>/segments/<slug>/`, `<bucket>/timestamps/<slug>/`. Gated on D20 Track A (aligner Preload migrated) AND Track B (Inspector TS-tab frontend migrated). Delete the shard builders: `scripts/lib/segments_shards.py`, `scripts/lib/timestamps_shards.py`. Delete `inspector/services/ts_local.py` (local-mode manifest builder; replaced by v2 path reads). Drop `INSPECTOR_TS_HF_DATASET_BASE_URL` env from `inspector/config.py`.
 - [ ] `inspector/CLAUDE.md`, `CONTRIBUTING.md`, top-level `CLAUDE.md` updated: website is the primary contribution surface; local Docker is the maintainer offline / debug fallback
 - [ ] `data/README.md` rewritten or removed — describes the bucket layout link instead of the gone `data/recitation_segments/`
 
