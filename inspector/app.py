@@ -27,6 +27,10 @@ from werkzeug.exceptions import HTTPException
 from config import (AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR, DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
+from services import access as access_service
+from services import audit as audit_service
+from services import catalog as catalog_service
+from services import state as state_service
 from services.data_loader import load_surah_info_lite
 from services.phonemizer_service import get_phonemizer, has_phonemizer
 
@@ -74,6 +78,37 @@ FRONTEND_DIST = _HERE / "frontend" / "dist"
 # `/` route below handles index.html explicitly.
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
 register_blueprints(app)
+
+
+# ---------------------------------------------------------------------------
+# Bucket-resident stores: hydrate on import so both `python3 inspector/app.py`
+# and `gunicorn inspector.app:app` follow the same path. Errors degrade to
+# empty in-memory stores + a warning — the app still boots so contributors
+# get a clear "no reciters yet" page rather than a hard 500.
+# ---------------------------------------------------------------------------
+
+def _hydrate_bucket_stores() -> None:
+    for label, fn in (
+        ("access", access_service.hydrate),
+        ("state", state_service.hydrate),
+        ("catalog", catalog_service.hydrate),
+    ):
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001 — log and continue
+            logger.warning(
+                "%s store hydrate failed (%s); continuing with empty in-memory model",
+                label,
+                e,
+            )
+
+    try:
+        audit_service.ensure_meta_initialized()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("audit ensure_meta_initialized failed: %s", e)
+
+
+_hydrate_bucket_stores()
 
 
 # ---------------------------------------------------------------------------
