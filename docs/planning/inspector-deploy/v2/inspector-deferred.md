@@ -279,7 +279,7 @@ Built by `scripts/lib/segments_shards.py` + `scripts/lib/timestamps_shards.py` a
 
 **Active consumers (verified):**
 
-- Inspector's deployed timestamps tab when `INSPECTOR_TS_SOURCE=huggingface` (default in deployed image). Reads `manifest_url` + `shard_url_template` from `INSPECTOR_TS_HF_DATASET_BASE_URL` — by default the public dataset (`hetchyy/quranic-universal-ayahs`), but pointable at the bucket via env.
+- ~~Inspector's deployed timestamps tab when `INSPECTOR_TS_SOURCE=huggingface`.~~ **Removed in Phase 2.** Inspector reads timestamps from `<bucket>/published/<slug>/timestamps/<chapter>.json` via its own backend now (`INSPECTOR_TS_SOURCE=bucket`). Legal `INSPECTOR_TS_SOURCE` values are `local | bucket`; `huggingface` raises at config load.
 - **Universal aligner Space (`.local/spaces/quranic_universal_aligner/`) Preload mode** — reads directly from this bucket via `PRELOAD_BUCKET_ID` (defaults to `hetchyy/quranic-inspector-bucket-dev`). `src/preload/manifest_client.py` opens `manifest.json.gz` + shards via `huggingface_hub.hffs`; `repo_loader.py::build_segment_infos` slices the per-chapter segments shard into UI cards. The Preload reciter dropdown, the per-chapter segment cards, and the chapter-audio prewarm all flow from this bucket.
 
 ### Schema diff: aligner shards vs v2 `published/<slug>/segments.json`

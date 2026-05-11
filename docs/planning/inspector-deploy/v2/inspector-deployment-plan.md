@@ -446,7 +446,7 @@ Detailed per-phase scope, acceptance criteria, and risks live in [`inspector-dat
    - **Free-tier prerequisites:** swap `app.run()` → gunicorn-gthread; add `Cache-Control: immutable` to peaks routes; `Cache-Control: max-age=86400` on inspector segment shards.
    - Backend serves both `wip/<slug>/...` and `published/<slug>/...` reads through `/api/seg/data/...` from the mounted bucket.
    - Image build: `.dockerignore` + extended COPY list. (No `audio_catalog.json.gz` build step — catalog lives in the bucket.)
-   - Dockerfile env defaults flipped: `INSPECTOR_DATA_DIR=/app/data`, `INSPECTOR_QUA_DATA_PATH=/app/data`, `INSPECTOR_TS_SOURCE=huggingface`, `INSPECTOR_AUDIO_PROXY_ENABLED=0`, `INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket`, `INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket{,-dev}`.
+   - Dockerfile env defaults flipped: `INSPECTOR_DATA_DIR=/app/data`, `INSPECTOR_QUA_DATA_PATH=/app/data`, `INSPECTOR_TS_SOURCE=bucket`, `INSPECTOR_AUDIO_PROXY_ENABLED=0`, `INSPECTOR_TS_VALIDATE_ENABLED=0`, `INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket`, `INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket{,-dev}`, `GUNICORN_WORKERS=1`. Legacy `INSPECTOR_TS_SOURCE=huggingface` (frontend → HF dataset CDN) was removed in Phase 2 implementation — Inspector serves TS shards from the bucket.
    - Deploy to dev Space first; bucket mounted; production cutover after dev validation.
    - `/api/reciter-task/<slug>` endpoint live; UI shows reciter status pills (state read from bucket).
 

@@ -218,7 +218,7 @@ Multi-replica Space scaling (when needed): the in-process lock moves to bucket-s
 
 | Env var | Default (deployed) | Default (local) | Purpose |
 |---|---|---|---|
-| `INSPECTOR_TS_SOURCE` | `huggingface` | `local` | Picks `services/ts_local.py` (off in deployed) vs HF CDN |
+| `INSPECTOR_TS_SOURCE` | `bucket` | `local` | Bucket reads `<bucket>/published/<slug>/timestamps/...` via backend; local serves shards from `data/timestamps/` on disk. The legacy `huggingface` value (frontend → HF dataset CDN direct) was removed in Phase 2 — Inspector reads timestamps through its own backend in v2. |
 | `INSPECTOR_DATA_DIR` | `/app/data` | `/data` (via bind mount) | Static reference data location |
 | `INSPECTOR_QUA_DATA_PATH` | `/app/data` | `/data` | Linguistic data location read by `services/data_loader.py` |
 | `INSPECTOR_BUCKET_MOUNT` | `/data/inspector-bucket` | unused | Single private bucket mount for state, catalog, audit, wip, published |
@@ -263,7 +263,7 @@ The repo's `inspector/Dockerfile` is built with **repo root as context**. The Sp
 ```dockerfile
 ENV INSPECTOR_DATA_DIR=/app/data \
     INSPECTOR_QUA_DATA_PATH=/app/data \
-    INSPECTOR_TS_SOURCE=huggingface \
+    INSPECTOR_TS_SOURCE=bucket \
     INSPECTOR_AUDIO_PROXY_ENABLED=0 \
     INSPECTOR_CACHE_DIR=/tmp/inspector-cache \
     INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket \

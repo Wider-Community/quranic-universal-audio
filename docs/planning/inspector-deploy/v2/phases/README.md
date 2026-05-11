@@ -17,7 +17,7 @@ For the *why* of any decision, jump to the detailed v2 docs in the parent folder
 | # | Phase | Status | Blocks |
 |---|---|---|---|
 | 1 | [Foundation](01-foundation.md) | done (Phase 5 carries: repo `data/` cleanup; D19 carries: 14 legacy tests; D20 carries: legacy bucket shards) | 2 |
-| 2 | [Deployable image + read-only deploy](02-deployable-image.md) | not started | 3, 4 |
+| 2 | [Deployable image + read-only deploy](02-deployable-image.md) | in progress | 3, 4 |
 | 3 | [Auth + claim flow](03-auth-and-claims.md) | not started | 4, 5 |
 | 4 | [Save migration](04-save-migration.md) | not started | 5 |
 | 5 | [Publish pipeline](05-publish-pipeline.md) | not started | 6 |
@@ -66,6 +66,10 @@ Exact commands / smoke tests / file checks that prove acceptance.
 
 ## Reference
 - Detailed-doc cross-links for the *why*.
+
+## Outcomes 
+- After phase completion.
+- Keep concise, don't mention every single detail and function - it is just a high level overview reference for future phases.
 ```
 
 Anti-patterns:
@@ -103,7 +107,7 @@ Approach the detailed-plan stage like the [doc-coauthoring](../../../../.claude/
 
    When you propose a refinement/deferral/reordering/merge/split, **update this folder first** (the contract), then write the plan against the updated contract. Don't let the plan and the contract drift apart.
 
-4. **Re-read the relevant detailed docs first.** Before the plan starts, the writer should read the parts of `inspector-deployment-plan.md`, `inspector-data-storage.md`, etc. that the phase touches. Doc agents may have edited them; cached mental models go stale. The phase docs cross-link the right sections.
+4. **Re-read the relevant detailed docs first.** Before the plan starts, the writer should read the relevant parts under `v2/` that the phase touches. Doc agents may have edited them; cached mental models go stale. The phase docs cross-link the right sections.
 
 5. **Test the plan against a fresh reader.** Once the detailed plan is written, sanity-check it the way doc-coauthoring suggests: spawn a fresh agent with **only the plan + the phase contract** (no conversation context) and ask "what would you build first? what's unclear? what would you ask before starting?" — then patch the gaps.
 
