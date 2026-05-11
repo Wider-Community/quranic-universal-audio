@@ -37,14 +37,20 @@ TIMESTAMPS_PATH = DATA_DIR / "timestamps"
 CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))).resolve()
 
 # Timestamps tab read-path source.
-#   "local"       — Flask serves manifest + per-chapter shards from on-disk timestamps
-#   "huggingface" — frontend fetches directly from the HF dataset CDN, no backend round-trip
+#   "local"  — Flask serves manifest + per-chapter shards from on-disk timestamps
+#              (data/timestamps/by_*/...). Used by docker-compose / offline maintainer.
+#   "bucket" — Flask serves manifest + shards from the bucket-mounted layout
+#              (<INSPECTOR_BUCKET_MOUNT>/published/<slug>/timestamps/<chapter>.json).
+#              Default in deployed Spaces.
+# The legacy "huggingface" mode (frontend → HF dataset CDN direct) is removed:
+# the public dataset still exists for downstream consumers but Inspector reads
+# timestamps through its own backend in v2.
 TS_SOURCE = os.environ.get("INSPECTOR_TS_SOURCE", "local")
-# Base URL for the HF dataset that publishes timestamp shards (huggingface mode only).
-TS_HF_DATASET_BASE_URL = os.environ.get(
-    "INSPECTOR_TS_HF_DATASET_BASE_URL",
-    "https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs/resolve/main",
-)
+if TS_SOURCE not in ("local", "bucket"):
+    raise RuntimeError(
+        f"INSPECTOR_TS_SOURCE must be 'local' or 'bucket' (got {TS_SOURCE!r}). "
+        "The legacy 'huggingface' value was removed in Phase 2."
+    )
 
 # Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).
 # Each consumer in services/ gracefully degrades to an empty set/dict if the file is

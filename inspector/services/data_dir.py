@@ -122,3 +122,46 @@ def iter_edit_history(slug: str) -> Iterator[dict]:
 
 def iter_peaks_history(slug: str) -> Iterator[dict]:
     yield from get_backend().iter_jsonl(edit_history_peaks_path(slug))
+
+
+# ---- timestamps (published-only — wip reciters have no TS yet) ----
+
+
+def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
+    """Return raw ``timestamps/<chapter>.json`` bytes, or ``None`` if absent.
+
+    Reads from ``<bucket>/published/<slug>/timestamps/<chapter>.json``. Per
+    the data-storage doc, timestamps live only under ``published/`` — wip
+    reciters get TS via the Phase 6 HF Job after publish.
+    """
+    try:
+        return get_backend().read_bytes(
+            storage_paths.published_timestamps_path(slug, chapter)
+        )
+    except StorageNotFound:
+        return None
+
+
+def list_published_timestamps_chapters(slug: str) -> list[int]:
+    """Return sorted list of chapters that have a timestamps file in the bucket.
+
+    Returns ``[]`` if the reciter has no published timestamps directory.
+    Used by the bucket-mode timestamps manifest builder.
+    """
+    backend = get_backend()
+    parent = f"published/{slug}/timestamps"
+    try:
+        names = backend.list_dir(parent)
+    except StorageNotFound:
+        return []
+    out: list[int] = []
+    for name in names:
+        # Names come back as the leaf filename, e.g. "1.json".
+        if not name.endswith(".json"):
+            continue
+        stem = name[:-len(".json")]
+        try:
+            out.append(int(stem))
+        except ValueError:
+            continue
+    return sorted(out)

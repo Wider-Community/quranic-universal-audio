@@ -175,10 +175,34 @@ export function _ensureWaveformObserver(): IntersectionObserver {
 // Peaks loading + polling
 // ---------------------------------------------------------------------------
 
+// Tiny stable hash (FNV-1a 32-bit, 8-char hex) over arbitrary string input.
+// Lets us append ?h=<hash> to peaks URLs so the backend can serve immutable
+// caches: when audio sources change, the hash changes, and CDN/browser see
+// a fresh URL. Backend ignores the value (purely a cache-key buster).
+function _stableHash(input: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+        h ^= input.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, '0').slice(0, 8);
+}
+
 export function _fetchPeaks(reciter: string, chapters: Array<number | string>): void {
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
     if (!chapters || chapters.length === 0) return;
-    const url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
+    // Hash over the audio URLs the response will key on — those identify the
+    // underlying source bytes; peaks per (audio URL) are deterministic. When
+    // the catalog flips a delivery's audio_source, the URLs change and the
+    // hash changes, so stale caches are bypassed cleanly.
+    const allData = get(segAllData);
+    const audioByChapter = allData?.audio_by_chapter || {};
+    const audioForReq = chapters
+        .map(c => `${c}=${audioByChapter[String(c)] || ''}`)
+        .sort()
+        .join('|');
+    const h = _stableHash(audioForReq);
+    const url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}&h=${h}`;
     fetchJson<SegPeaksResponse>(url).then(data => {
         if (!get(segAllData) || get(selectedReciter) !== reciter) return;
         for (const [audioUrl, pe] of Object.entries(data.peaks || {})) {

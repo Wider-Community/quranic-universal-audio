@@ -101,12 +101,23 @@ def seg_chapters(reciter):
 
 @seg_data_bp.route("/data/<reciter>/<int:chapter>")
 def seg_data(reciter, chapter):
-    """Return segments, audio URL, summary, and issues for a chapter."""
+    """Return segments, audio URL, summary, and issues for a chapter.
+
+    Sets ``Cache-Control: public, max-age=86400`` so a CDN (or browser cache)
+    can hold this for a day. Not ``immutable``: shards mutate on re-edit, and
+    edits do not currently cache-bust this URL. Cache life mirrors a typical
+    review cycle — a contributor's claim usually lasts a day or two; the shard
+    rarely changes mid-session, and the small staleness window is acceptable.
+    """
     verse_filter = request.args.get("verse")
     result = get_chapter_data(reciter, chapter, verse_filter)
     if result is None:
         return jsonify({"error": "Chapter not found"}), 404
-    return jsonify(result)
+    response = jsonify(result)
+    # When verse_filter is set the response is a slice — still safe for a CDN
+    # because the URL key includes ?verse=… and the shape stays identical.
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
 
 
 @seg_data_bp.route("/all/<reciter>")

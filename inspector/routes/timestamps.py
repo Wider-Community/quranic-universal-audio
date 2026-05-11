@@ -1,15 +1,18 @@
 """Timestamps tab routes (/api/ts/*).
 
 Two read paths share the same shard-fetch model on the frontend:
-  - **local** mode: this blueprint's `/manifest`, `/shard/<reciter>/<int:chapter>`,
+  - **local**  mode: this blueprint's `/manifest`, `/shard/<reciter>/<int:chapter>`,
     and `/resource/<name>` endpoints serve gzipped bodies sliced from the
     on-disk timestamps tree (`services/ts_local.py`).
-  - **huggingface** mode: the frontend reads directly from the HF dataset
-    CDN — Flask is only consulted for `/config` and `/validate/<reciter>`.
+  - **bucket** mode: same URL surface, but `/manifest` and `/shard` read from
+    `<INSPECTOR_BUCKET_MOUNT>/published/<slug>/timestamps/...` (composed in
+    `services/ts_local.py`'s bucket variant).
 
 `/config` advertises the active mode + manifest/shard URL templates so the
 frontend can pick the right base without needing its own env knob.
 """
+import os
+
 from flask import Blueprint, Response, jsonify
 
 from config import (
@@ -22,7 +25,6 @@ from config import (
     TIMESTAMPS_PATH,
     TS_BOUNDARY_TOLERANCE_MS,
     TS_SOURCE,
-    TS_HF_DATASET_BASE_URL,
     MISSING_WORD_DIFF_MS_WEIGHT,
 )
 from constants import TS_AUDIO_CATEGORIES
@@ -37,27 +39,17 @@ def ts_config():
     """Return display configuration + read-path URLs for Timestamps tab.
 
     `mode`, `manifest_url`, and `shard_url_template` drive the frontend's
-    shard-fetch model (parameterised by mode):
-      local       — Flask serves manifest + sliced shards from on-disk data.
-      huggingface — frontend fetches directly from the HF dataset CDN.
+    shard-fetch model. URLs are identical in local and bucket modes — only
+    the backend's data source differs.
     """
-    if TS_SOURCE == "huggingface":
-        base = TS_HF_DATASET_BASE_URL.rstrip("/")
-        manifest_url = f"{base}/manifest.json.gz"
-        shard_url_template = f"{base}/timestamps/{{reciter}}/{{chapter}}.json.gz"
-    else:
-        manifest_url = "/api/ts/manifest"
-        shard_url_template = "/api/ts/shard/{reciter}/{chapter}"
-
     return jsonify({
         "mode": TS_SOURCE,
-        "manifest_url": manifest_url,
-        "shard_url_template": shard_url_template,
+        "manifest_url": "/api/ts/manifest",
+        "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
         # D20 Track B: reciter dropdown migrates off ``manifest.json.gz`` to the
         # v2 catalog served by the Inspector backend. Frontend prefers this
-        # when present; ``manifest_url`` stays as fallback so ts_chapters /
-        # vbr_chapters / validation / resources keep flowing through the
-        # legacy shard model until later phases (per-chapter timestamps, etc.).
+        # when present; ``manifest_url`` stays as the fallback feeding
+        # ts_chapters / vbr_chapters / validation / resources.
         "catalog_url": "/api/static/catalog.json",
         "unified_display_max_height": UNIFIED_DISPLAY_MAX_HEIGHT,
         "anim_highlight_color": ANIM_HIGHLIGHT_COLOR,
@@ -74,13 +66,15 @@ def ts_config():
 
 # Bodies are pre-gzipped (`mtime=0`, deterministic). Sent without a
 # `Content-Encoding: gzip` header — the frontend decompresses with
-# `DecompressionStream('gzip')` so the same code path handles HF + local.
-_GZIP_HEADERS = {"Cache-Control": "no-cache"}
+# `DecompressionStream('gzip')` so the same code path handles bucket + local.
+# Manifest/shard mutate when reciters are published; 1-day cache keeps perf
+# good while bounding staleness to a publish-cycle window.
+_GZIP_HEADERS = {"Cache-Control": "public, max-age=86400"}
 
 
 @ts_bp.route("/manifest")
 def ts_manifest():
-    """Local-mode: serve the pre-built gzipped manifest."""
+    """Serve the pre-built gzipped manifest (local or bucket source)."""
     return Response(
         ts_local.manifest_bytes(),
         mimetype="application/octet-stream",
@@ -90,7 +84,7 @@ def ts_manifest():
 
 @ts_bp.route("/shard/<reciter>/<int:chapter>")
 def ts_shard(reciter, chapter):
-    """Local-mode: serve a per-chapter gzipped shard sliced from `timestamps_full.json`."""
+    """Serve a per-chapter gzipped shard (local or bucket source)."""
     body = ts_local.shard_bytes(reciter, chapter)
     if body is None:
         return jsonify({"error": "Shard not found"}), 404
@@ -99,7 +93,7 @@ def ts_shard(reciter, chapter):
 
 @ts_bp.route("/resource/<name>")
 def ts_resource(name):
-    """Local-mode: serve gzipped reference data referenced by the manifest's `resources` block."""
+    """Serve gzipped reference data referenced by the manifest's `resources` block."""
     body = ts_local.resource_bytes(name)
     if body is None:
         return jsonify({"error": "Resource not found"}), 404
@@ -114,7 +108,20 @@ def ts_vbr(reciter):
 
 @ts_bp.route("/validate/<reciter>")
 def ts_validate(reciter):
-    """Validate timestamp data via the timestamps validator."""
+    """Validate timestamp data via the timestamps validator.
+
+    Gated behind ``INSPECTOR_TS_VALIDATE_ENABLED`` (default ``1`` for local).
+    Deployed Spaces flip it to ``0`` because (a) validators-as-libraries are
+    Phase 5 work and (b) the cross-file dependency on the on-disk timestamps
+    tree (which doesn't exist in the bucket layout) makes the route incoherent
+    in deployed mode. Local maintainers keep the route for offline review.
+    """
+    if os.environ.get("INSPECTOR_TS_VALIDATE_ENABLED", "1") != "1":
+        return jsonify({
+            "error": "ts_validate is disabled in deployed mode "
+                     "(see INSPECTOR_TS_VALIDATE_ENABLED)"
+        }), 410
+
     from validators.validate_timestamps import validate_reciter as _validate_ts
     from validators.validate_timestamps import load_word_counts as _load_ts_wc
 

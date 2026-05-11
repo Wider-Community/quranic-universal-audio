@@ -1,4 +1,16 @@
-"""Waveform peaks routes (/api/seg/peaks)."""
+"""Waveform peaks routes (/api/seg/peaks).
+
+Cache-Control strategy: peaks are deterministic for a given (reciter, chapter,
+segment-range) but the response body changes when a reviewer edits segment
+boundaries. The frontend appends ``?h=<hash>`` to peaks URLs computed from
+the source content (segment boundaries, audio URL). When the source changes,
+the hash changes, which is a fresh cache key.
+
+- ``?h=<sha>`` present → ``public, max-age=31536000, immutable`` (1 year).
+- ``?h=`` absent → ``public, max-age=86400`` (1 day fallback for ad-hoc/dev).
+
+The backend ignores the value of ``h``; it's purely a cache-buster.
+"""
 import threading
 
 from flask import Blueprint, jsonify, request
@@ -10,6 +22,13 @@ from services.peaks_history import append_peaks_records, load_peaks_records
 from utils.references import chapter_from_ref
 
 peaks_bp = Blueprint("peaks", __name__, url_prefix="/api/seg")
+
+
+def _peaks_cache_headers() -> dict[str, str]:
+    """Return Cache-Control header dict based on ``?h=`` presence."""
+    if request.args.get("h"):
+        return {"Cache-Control": "public, max-age=31536000, immutable"}
+    return {"Cache-Control": "public, max-age=86400"}
 
 
 @peaks_bp.route("/peaks/<reciter>")
@@ -56,7 +75,17 @@ def seg_peaks(reciter):
 
         threading.Thread(target=_bg, daemon=True).start()
 
-    return jsonify({"peaks": result, "complete": complete})
+    response = jsonify({"peaks": result, "complete": complete})
+    # Only set immutable when `complete` AND a hash was supplied — partial
+    # responses must not be cached forever (the missing peaks would be
+    # permanently absent for that hash). Backend simply trusts the FE-supplied
+    # hash, so the FE only appends ?h= when it knows the source is stable.
+    if complete:
+        for k, v in _peaks_cache_headers().items():
+            response.headers[k] = v
+    else:
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @peaks_bp.route("/segment-peaks/<reciter>", methods=["POST"])
@@ -94,8 +123,12 @@ def seg_history_peaks_get(reciter):
     Returns ``{"records": [...]}`` — empty list if the reciter has no
     edit_history_peaks.jsonl yet. The frontend pushes each record into the
     covering-range cache so history rows render without re-computing.
+
+    Mutates on every save; ``no-store`` to keep the History panel honest.
     """
-    return jsonify({"records": load_peaks_records(reciter)})
+    response = jsonify({"records": load_peaks_records(reciter)})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @peaks_bp.route("/history-peaks/<reciter>", methods=["POST"])
