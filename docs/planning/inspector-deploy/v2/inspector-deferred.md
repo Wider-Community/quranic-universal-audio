@@ -267,31 +267,48 @@ None of these block v2.
 
 ---
 
-## D20 — Legacy timestamps-tab CDN shards on the dev bucket
+## D20 — Legacy CDN shards on the dev bucket (timestamps tab + universal aligner Preload)
 
 **What.** The dev bucket `hetchyy/quranic-inspector-bucket-dev` carries a pre-v2 layout at the root:
 
-- `manifest.json.gz` — timestamps-tab manifest (~60 KB) with `dataset_base_url`, `shard_url_template`, `segments_shard_url_template`, `resources`, `reciters`, `_build`
-- `segments/<slug>/<chapter>.json.gz` — per-chapter gzipped segments shards (6 reciters × 114 chapters)
-- `timestamps/<slug>/<chapter>.json.gz` — per-chapter gzipped timestamps shards (same dimensions)
+- `manifest.json.gz` — top-level manifest (~60 KB): `dataset_base_url`, `shard_url_template`, `segments_shard_url_template`, `resources`, `reciters[<slug>] = {audio_category, url_template, riwayah, name_en, name_ar, …}`, `_build`
+- `segments/<slug>/<chapter>.json.gz` — per-chapter gzipped segments shards
+- `timestamps/<slug>/<chapter>.json.gz` — per-chapter gzipped timestamps shards
 
-Built by `scripts/lib/segments_shards.py` + `scripts/lib/timestamps_shards.py` as a *CDN-format projection* of `data/recitation_segments/<slug>/segments.json` + `data/timestamps/<slug>/timestamps.json`. The deployed Inspector's timestamps tab (`INSPECTOR_TS_SOURCE=huggingface`) reads `manifest.json.gz` + per-chapter shards directly from a URL base — by default `https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs/resolve/main`, but any deployed Space (or sibling tool like the universal aligner) can be pointed at the bucket via `INSPECTOR_TS_HF_DATASET_BASE_URL`.
+Built by `scripts/lib/segments_shards.py` + `scripts/lib/timestamps_shards.py` as a *CDN-format projection* of `data/recitation_segments/<slug>/{segments,detailed}.json` + `data/timestamps/<slug>/timestamps.json`.
 
-Coexists with v2's `<bucket>/published/<slug>/segments.json` — **same underlying data, different shape**: legacy = per-chapter gzipped shards (fast CDN-flavored access for karaoke playback); v2 = whole-file JSON (Inspector backend reads). Not derivable from the catalog (catalog has metadata, not segment timings).
+**Active consumers (verified):**
 
-**Why deferred.** Removing the legacy shards requires deciding the timestamps tab's bucket-native read path going forward:
+- Inspector's deployed timestamps tab when `INSPECTOR_TS_SOURCE=huggingface` (default in deployed image). Reads `manifest_url` + `shard_url_template` from `INSPECTOR_TS_HF_DATASET_BASE_URL` — by default the public dataset (`hetchyy/quranic-universal-ayahs`), but pointable at the bucket via env.
+- **Universal aligner Space (`.local/spaces/quranic_universal_aligner/`) Preload mode** — reads directly from this bucket via `PRELOAD_BUCKET_ID` (defaults to `hetchyy/quranic-inspector-bucket-dev`). `src/preload/manifest_client.py` opens `manifest.json.gz` + shards via `huggingface_hub.hffs`; `repo_loader.py::build_segment_infos` slices the per-chapter segments shard into UI cards. The Preload reciter dropdown, the per-chapter segment cards, and the chapter-audio prewarm all flow from this bucket.
 
-- *Option A — keep the legacy shards forever.* Rebuild on every publish (Phase 5+). Maintenance burden but no frontend rewrite.
-- *Option B — rewrite the timestamps tab to read v2 paths.* `published/<slug>/segments.json` (whole file) + the Phase 6 `published/<slug>/timestamps/<chapter>.json` (per-chapter, not gzipped). Frontend rewrite + perf measurement against the karaoke playback path.
-- *Option C — Inspector backend builds shards on demand.* `/api/ts/shard/<slug>/<chapter>` slices from `published/<slug>/...` and gzips on the fly. Adds CPU to the deployed backend.
+### Schema diff: aligner shards vs v2 `published/<slug>/segments.json`
 
-None of these block Phase 1 acceptance — Inspector v2 reads its own data through `services/data_dir`, the timestamps tab is independent.
+The aligner shards are **not a slice of `segments.json`** — they're a different shape that the v2 layout doesn't expose:
 
-**Trigger to revisit.** Phase 6 (publish pipeline) lands `published/<slug>/timestamps/<chapter>.json` via the HF Job, at which point the read-path question for the timestamps tab becomes concrete. **Open question for the user**: does the universal aligner Space (`.local/spaces/quranic_universal_aligner/`) read from `hetchyy/quranic-inspector-bucket-dev/manifest.json.gz`? If yes, its migration is part of this decision; if no, the legacy bucket layout is purely Inspector-internal and Option B (frontend rewrite) is the lowest-cost path.
+| Field | Aligner segments shard (`segments/<slug>/<chapter>.json.gz`) | v2 `published/<slug>/segments.json` |
+|---|---|---|
+| Granularity | One shard **per chapter** | Whole file per reciter |
+| Body | `segments[] = [{matched_ref, time_start, time_end, confidence}, …]` (per-segment list) | `{<verse_ref>: [[start_word, end_word, t_from, t_to], …]}` (verse-aggregated tuples) |
+| `_meta.audio_url` | Chapter-level URL (by_surah) | Reciter-level only |
+| `_meta.audio_urls` | Per-ayah URL map (by_ayah) | Absent — sidecar carries it |
+| `_meta.{schema_version, reciter, chapter, audio_category}` | Present | Absent |
 
-**Affected if never done.** Two parallel layouts on the same bucket = ~33 MB sustained + every cleanup pass needs to inspect both. Functionally fine; tax on operational mental model.
+The per-segment list with `matched_ref` matches `published/<slug>/detailed.json` entries filtered by chapter, not `segments.json`. Phase 6's `published/<slug>/timestamps/<chapter>.json` *does* land per-chapter and would replace the timestamps shard, but **no v2 path replaces the segments shard** without a per-chapter slice of `detailed.json` (5 MB whole file today). Same conclusion for the per-ayah audio URL map: today it lives in the legacy shard `_meta`, in v2 it lives in `<bucket>/catalog/audio_manifest/<slug>.json` (per-delivery sidecar, populated when bulk probe completes).
 
-**Cross-refs.** [`phases/01-foundation.md`](phases/01-foundation.md) Outcomes log (Deferred section); `inspector/routes/timestamps.py`; `inspector/config.py:42-46` (`TS_SOURCE`, `TS_HF_DATASET_BASE_URL`); `scripts/lib/segments_shards.py`, `scripts/lib/timestamps_shards.py`.
+**Why deferred.** Three viable paths once Phase 6 publish pipeline lands:
+
+- *Option A — keep the shards; rewire the builder.* `scripts/lib/{segments,timestamps}_shards.py` reads from v2 `<bucket>/published/<slug>/{detailed,segments,timestamps/<chapter>}.json` instead of repo `data/`. Rebuild on every publish (Phase 5 hook). Aligner Space and Inspector timestamps tab both stay as-is. **Lowest-friction option** given Phase 5 is already rebuilding shards as part of the publish move.
+- *Option B — drop the shard format; clients fetch v2 paths directly.* Aligner Preload needs to switch from per-chapter shard fetch (~5–200 KB) to whole-file `detailed.json` fetch (~5 MB) + client-side slice. Loses the LRU model + bandwidth on cold cache. Inspector timestamps tab same trade. Not recommended.
+- *Option C — Inspector backend serves on-demand shards.* `/api/ts/shard/<slug>/<chapter>` slices + gzips from v2 paths on request. Works for Inspector's own timestamps tab; the aligner Space is a standalone HF Space that wouldn't gain from this (it can hit the bucket directly today). Half-measure.
+
+**Recommendation: Option A.** Migrate the shard builders to read from v2 paths in Phase 5 alongside the publish pipeline; aligner + timestamps tab continue to consume the same bucket layout transparently. The legacy bucket layout stays — not as dead weight, but as the actively-served format for the Preload + timestamps-tab read paths. Drop the v1 source dependency (`data/recitation_segments/`, `data/timestamps/`) only after the builder rewires.
+
+**Trigger to revisit.** Phase 5 publish-pipeline implementation: the shard rebuild step must read from v2 bucket paths so Phase 11's `data/` deletion is safe.
+
+**Affected if never done.** Aligner Preload + Inspector timestamps tab break when Phase 11 deletes `data/recitation_segments/` and `data/timestamps/`. So Phase 5 MUST land the builder rewire.
+
+**Cross-refs.** [`phases/01-foundation.md`](phases/01-foundation.md) Outcomes (Deferred); [`phases/05-publish-pipeline.md`](phases/05-publish-pipeline.md) (Phase 5 needs a deliverable for shard-builder rewire); [`phases/11-cleanup-and-docs.md`](phases/11-cleanup-and-docs.md) (data/ deletion gated on Phase 5 builder rewire); `inspector/routes/timestamps.py`; `inspector/config.py:42-46`; `scripts/lib/{segments,timestamps}_shards.py`; aligner consumer at `.local/spaces/quranic_universal_aligner/src/preload/{manifest_client,repo_loader}.py` (with `PRELOAD_BUCKET_ID` env override).
 
 ---
 
