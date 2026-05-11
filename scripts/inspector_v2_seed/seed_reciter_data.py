@@ -40,6 +40,7 @@ from scripts.lib.schemas import ReciterState
 from inspector.services import state as state_service
 from inspector.services import storage_paths
 from inspector.services.hf_bucket import get_backend
+from scripts.inspector_v2_seed.seed_state import CUTOVER_CANONICAL_MAP
 
 PER_RECITER_FILES = (
     "segments.json",
@@ -51,27 +52,38 @@ PER_RECITER_FILES = (
 
 
 def _collect_files(root: Path) -> list[tuple[str, str]]:
-    """Build the [(local_abs_path, bucket_path), ...] upload manifest."""
+    """Build the [(local_abs_path, bucket_path), ...] upload manifest.
+
+    The bucket key is the canonical delivery slug (post-dedup). For each
+    state row we read from the freshly-hydrated state file (which itself
+    was seeded with canonical slugs by ``seed_state.py``), then resolve the
+    on-disk source dir via the inverse of ``CUTOVER_CANONICAL_MAP``.
+    """
     state_service.hydrate()
     rows = state_service.snapshot().reciters
+
+    # Reverse the canonical map so we can find the on-disk v1 dir for each
+    # canonical slug in the state file.
+    canonical_to_v1 = {v: k for k, v in CUTOVER_CANONICAL_MAP.items()}
 
     repo_data = root / "data"
     pairs: list[tuple[str, str]] = []
     for row in rows:
-        slug = row.slug
+        canonical_slug = row.slug
+        v1_dir_name = canonical_to_v1.get(canonical_slug, canonical_slug)
         kind = (
             "published" if row.state == ReciterState.COMPLETED else "wip"
         )
-        src_dir = repo_data / "recitation_segments" / slug
+        src_dir = repo_data / "recitation_segments" / v1_dir_name
         if not src_dir.is_dir():
-            print(f"skip {slug}: {src_dir} missing")
+            print(f"skip {canonical_slug}: {src_dir} missing")
             continue
         for name in PER_RECITER_FILES:
             sp = src_dir / name
             if sp.exists():
                 pairs.append(
                     (str(sp.resolve()),
-                     storage_paths.reciter_file(slug, kind, name))
+                     storage_paths.reciter_file(canonical_slug, kind, name))
                 )
     return pairs
 
