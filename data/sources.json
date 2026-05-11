@@ -32,13 +32,13 @@
     "slug": "quranicaudio",
     "url": "https://quranicaudio.com/",
     "audio_categories": ["by_surah"],
-    "description": "QuranicAudio.com surah-level recordings; serves named-slug full mushafs from download.quranicaudio.com, includes year-tagged Makkah/Madinah Taraweeh compilations and non-Hafs qira'at"
+    "description": "QuranicAudio.com surah-level recordings"
   },
   {
-    "name": "TvQuran",
+    "name": "tvQuran",
     "slug": "tvquran",
     "url": "https://www.tvquran.com/",
     "audio_categories": ["by_surah"],
-    "description": "TvQuran.com authors catalogue; multi-mushaf per reciter with bilingual EN/AR labels; serves named (tvQuran.com__Slug) and numeric (recitations/<sid>/<mid>) full-mushaf bases from download.tvquran.com, covers Bazzi, Ibn Dhakwan, Ruways, Rawh and other rare riwayat"
+    "description": "TvQuran.com authors catalogue, multi-mushaf per reciter with bilingual EN/AR labels"
   }
 ]
