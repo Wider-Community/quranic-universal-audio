@@ -1,25 +1,33 @@
-"""Save flow: atomic write, backup, history, rebuild_segments_json.
+"""Save flow: write through storage backend, history append, rebuild segments.
 
 No Flask imports -- all functions accept parameters and return plain dicts.
+
+Writes go through ``services.data_dir`` which routes to ``BucketBackend`` or
+``FilesystemBackend`` based on ``INSPECTOR_BACKEND``. Per-save
+``huggingface_hub.upload_file()`` is wired into ``BucketBackend`` itself
+(force_flush_on_write), so the save path doesn't need to think about
+durability — it just calls the backend.
+
+Local-write gating: when ``INSPECTOR_LOCAL_WRITES=0`` (default in local
+mode), the save flow rejects mutations to protect the shared dev bucket
+from cross-contributor stomping. See deployment plan §Local writes.
 """
 
-import json
+import os
 from collections import defaultdict
 from datetime import datetime, timezone
 
 from adapters.save_payload import build_seg_lookups as _adapter_build_seg_lookups
 from adapters.save_payload import make_seg as _adapter_make_seg
-from adapters.segments_json import rebuild as _adapter_rebuild_segments
-from config import RECITATION_SEGMENTS_PATH
+from adapters.segments_json import build_segments_doc as _adapter_build_segments_doc
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
-from services import cache
+from services import cache, data_dir
 from services.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.peaks_history import append_peaks_records
 from services.validation import chapter_validation_counts
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
-from utils.io import atomic_json_write, backup_file, file_sha256
 from utils.references import chapter_from_ref, normalize_ref
 from utils.uuid7 import uuid7
 
@@ -187,25 +195,50 @@ def _attach_classified_issues(operations: list,
     return out
 
 
-def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> str:
-    """Write detailed.json atomically, rebuild segments.json, return file hash.
+class LocalWritesDisabled(RuntimeError):
+    """Raised when local mode tries to write but INSPECTOR_LOCAL_WRITES=0.
+
+    The default in local mode — prevents two contributors running Inspector
+    locally against the shared dev bucket from stomping on each other.
+    """
+
+
+def _check_writes_enabled() -> None:
+    """Hard gate: refuses to mutate the bucket from local mode unless opted in.
+
+    Deployed mode (``INSPECTOR_BACKEND=bucket`` with OAuth + assignee checks)
+    surfaces its own 403/401 paths in front of save endpoints in later phases;
+    this guard catches the local-mode-no-auth case where there's no other gate.
+    """
+    if os.environ.get("INSPECTOR_LOCAL_WRITES", "0") == "1":
+        return
+    if os.environ.get("INSPECTOR_BACKEND") == "filesystem":
+        # Tests + true-offline mode are OK to write.
+        return
+    raise LocalWritesDisabled(
+        "Refusing to write: local mode reads the shared dev bucket but does "
+        "not write to it by default. Set INSPECTOR_LOCAL_WRITES=1 to opt in."
+    )
+
+
+def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> None:
+    """Write detailed.json atomically; rebuild segments.json.
 
     Shared helper consumed by both undo.py and (internally) save_seg_data.
     Does NOT append history — callers are responsible for that.
+
+    v2: writes go through ``data_dir`` (storage backend). No ``.bak`` files
+    (audit log + edit_history.jsonl are the recovery surface). No file
+    hash returned — the file-hash chain is removed in v2.
     """
-    detailed_path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
-    segments_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
-    backup_file(detailed_path)
-    backup_file(segments_path)
+    _check_writes_enabled()
     # Strip transient ``_resolved_by_edit`` (set, injected by validate route)
     # — concurrent validate may have left it on cached segs mid-flight.
     for entry in entries:
         for seg in entry.get("segments", []):
             seg.pop("_resolved_by_edit", None)
-    atomic_json_write(detailed_path, {"_meta": meta, "entries": entries})
-    file_hash = file_sha256(detailed_path)
+    data_dir.write_detailed_doc(reciter, {"_meta": meta, "entries": entries})
     rebuild_segments_json(reciter, entries)
-    return file_hash
 
 
 def normalize_ref_with_wc(ref: str) -> str:
@@ -216,13 +249,14 @@ def normalize_ref_with_wc(ref: str) -> str:
 def rebuild_segments_json(reciter: str, entries: list[dict]) -> None:
     """Regenerate segments.json from detailed entries (verse-aggregated format).
 
-    Thin wrapper over ``adapters.segments_json.rebuild`` — preserves the
-    ``(reciter, entries)`` calling convention used internally and by
-    ``services.undo``.  The adapter accepts a ``Path`` so the reciter→path
-    resolution lives here at the route boundary.
+    Reads the existing ``_meta`` block from the on-bucket ``segments.json``
+    so the freshly-built doc preserves the meta block intact, then writes the
+    rebuilt doc via the storage backend.
     """
-    reciter_dir = RECITATION_SEGMENTS_PATH / reciter
-    _adapter_rebuild_segments(reciter_dir, entries)
+    existing = data_dir.read_segments_doc(reciter)
+    existing_meta = (existing or {}).get("_meta", {})
+    seg_doc = _adapter_build_segments_doc(entries, existing_meta)
+    data_dir.write_segments_doc(reciter, seg_doc)
 
 
 # ---------------------------------------------------------------------------
@@ -341,8 +375,8 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     if patch_err:
         return {"error": patch_err}, 400
 
-    # Backup, write detailed.json atomically, rebuild segments.json
-    file_hash = persist_detailed(reciter, meta, entries)
+    # Write detailed.json + rebuild segments.json via storage backend.
+    persist_detailed(reciter, meta, entries)
 
     # Snapshot validation counts after mutation and write batch record.
     # Each operation's snapshots gain a ``classified_issues`` field so the
@@ -356,6 +390,9 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     operations = _attach_classified_issues(
         _ensure_patch_on_ops(raw_ops), probe_failed_uids=probe_failed_uids,
     )
+    # v2: no ``file_hash_after`` (file-hash chain removed; tamper detection
+    # via offsite versioned snapshots). Phase 5 adds ``actor`` block per batch
+    # once the auth flow lands and the route knows who the saver is.
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
@@ -363,15 +400,11 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
         "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "save_mode": "full_replace" if updates.get("full_replace") else "patch",
-        "file_hash_after": file_hash,
         "validation_summary_before": val_before,
         "validation_summary_after": val_after,
         "operations": operations,
     }
-    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
-    backup_file(history_path)
-    with open(history_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(batch, ensure_ascii=False) + "\n")
+    data_dir.append_edit_history(reciter, batch)
 
     # Persist any op-level peaks the client gathered from its in-memory cache
     # so cross-session History viewing works without re-computing. Best-effort:

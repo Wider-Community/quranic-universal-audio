@@ -5,11 +5,9 @@ Undo logic for reverse-applying history entries lives in ``services/undo.py``;
 this module is read-only.
 """
 
-import json
 from collections import Counter
-from pathlib import Path
 
-from config import RECITATION_SEGMENTS_PATH
+from services import data_dir
 
 
 # Categories that disappear from the validation accordion once the user
@@ -25,23 +23,14 @@ RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset({
 })
 
 
-def parse_history_file(history_path: Path) -> list[dict]:
-    """Parse an edit_history.jsonl file into a list of records.
+def parse_history_for_reciter(reciter: str) -> list[dict]:
+    """Read every batch record from a reciter's edit_history.jsonl.
 
     Shared by undo.py (which needs raw records for batch lookup) and
     load_edit_history (which applies further filtering for the UI).
-    Silently skips blank lines and malformed JSON.
+    Returns an empty list when the file is absent.
     """
-    records = []
-    for line in history_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return records
+    return list(data_dir.iter_edit_history(reciter))
 
 
 def _merge_batches_sharing_batch_id(batches: list[dict]) -> list[dict]:
@@ -93,11 +82,9 @@ def load_edit_history(reciter: str) -> dict:
     summary statistics. Returns ``{"batches": [], "summary": None}`` when the
     reciter has no edit history file yet.
     """
-    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
-    if not history_path.exists():
+    raw_records = parse_history_for_reciter(reciter)
+    if not raw_records:
         return {"batches": [], "summary": None}
-
-    raw_records = parse_history_file(history_path)
     all_records = []
     fully_reverted_ids: set[str] = set()
     per_op_reverted: dict[str, set[str]] = {}
@@ -191,11 +178,9 @@ def build_resolved_by_edit_index(reciter: str) -> dict[str, set[str]]:
 
     Returns an empty dict when the reciter has no edit history file.
     """
-    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
-    if not history_path.exists():
-        return {}
-
     history = load_edit_history(reciter)
+    if not history.get("batches"):
+        return {}
     out: dict[str, set[str]] = {}
     for batch in history.get("batches", []):
         for op in batch.get("operations", []):

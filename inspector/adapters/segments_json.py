@@ -15,14 +15,13 @@ from pathlib import Path
 from utils.references import seg_sort_key
 
 
-def rebuild(reciter_dir: Path, entries: list[dict]) -> None:
-    """Regenerate ``segments.json`` in *reciter_dir* from *entries*.
+def build_segments_doc(entries: list[dict], existing_meta: dict | None = None) -> dict:
+    """Pure function: build the verse-aggregated segments.json doc from entries.
 
-    Reads the existing ``_meta`` block from the current ``segments.json`` (if
-    present) and writes a fresh document with the verse-aggregated segment
-    tuples sorted by ``seg_sort_key``.
+    Returns ``{"_meta": existing_meta, "<verse_ref>": [[start_word, end_word,
+    t_from, t_to], ...], ...}`` sorted by ``seg_sort_key``. The ``_meta`` block
+    is preserved from the existing file when supplied; otherwise empty.
     """
-    segments_path = reciter_dir / "segments.json"
     verse_data: dict[str, list] = defaultdict(list)
 
     for entry in entries:
@@ -58,6 +57,21 @@ def rebuild(reciter_dir: Path, entries: list[dict]) -> None:
                     [start_word, end_word, t_from, t_to]
                 )
 
+    seg_doc: dict = {"_meta": existing_meta or {}}
+    for key in sorted(verse_data.keys(), key=seg_sort_key):
+        seg_doc[key] = verse_data[key]
+    return seg_doc
+
+
+def rebuild(reciter_dir: Path, entries: list[dict]) -> None:
+    """Regenerate ``segments.json`` in *reciter_dir* from *entries*.
+
+    Local-filesystem convenience wrapper around ``build_segments_doc``;
+    consumed by tests and the local-mode save path. The deployed save path
+    in ``services/save.py`` uses ``build_segments_doc`` + the storage
+    backend instead.
+    """
+    segments_path = reciter_dir / "segments.json"
     existing_meta: dict = {}
     if segments_path.exists():
         try:
@@ -67,9 +81,7 @@ def rebuild(reciter_dir: Path, entries: list[dict]) -> None:
         except Exception:
             pass
 
-    seg_doc: dict = {"_meta": existing_meta}
-    for key in sorted(verse_data.keys(), key=seg_sort_key):
-        seg_doc[key] = verse_data[key]
+    seg_doc = build_segments_doc(entries, existing_meta)
 
     import orjson
     with open(segments_path, "wb") as f:

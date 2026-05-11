@@ -19,13 +19,21 @@ from domain.identity import backfill_entries_uids
 def load_entries(path: Path) -> tuple[dict, list[dict]]:
     """Load *path* (detailed.json), backfill missing UIDs, return ``(meta, entries)``.
 
+    Local-filesystem convenience wrapper around ``load_entries_from_bytes``.
+    """
+    return load_entries_from_bytes(path.read_bytes())
+
+
+def load_entries_from_bytes(raw: bytes) -> tuple[dict, list[dict]]:
+    """Parse raw detailed.json bytes; backfill missing UIDs; return ``(meta, entries)``.
+
     The returned *entries* list is mutated in place with any newly derived
-    ``segment_uid`` values.  The caller is responsible for persisting the
-    mutated entries to disk (on the next save) so that UIDs are stable across
-    reload cycles (MUST-4).
+    ``segment_uid`` values. The caller is responsible for persisting the
+    mutated entries on the next save so that UIDs are stable across reload
+    cycles (MUST-4).
     """
     import orjson
-    doc = orjson.loads(path.read_bytes())
+    doc = orjson.loads(raw)
     meta: dict = doc.get("_meta", {})
     entries: list[dict] = doc.get("entries", [])
     backfill_entries_uids(entries)

@@ -1,46 +1,55 @@
-"""Read VBR detection results from data/.audio_meta.json.
+"""Read VBR detection results from ``<bucket>/catalog/audio_meta.json``.
 
-The artifact is generated offline by scripts/probe_audio_meta.py and committed
-to the repo. The file maps reciter slug -> {manifest_hash, by_chapter}, where
-each by_chapter entry is present only when the chapter is VBR (missing key
-implies CBR, the safe default).
+The artifact is generated offline by ``scripts/probe_audio_meta.py``. The file
+maps reciter slug -> {manifest_hash, by_chapter}, where each by_chapter entry
+is present only when the chapter is VBR (missing key implies CBR, the safe
+default).
 
 The inspector reads this at chapter-load to decide whether to route segment
 playback through the server clip endpoint (VBR) or keep the existing direct
-<audio>.currentTime path (CBR). Loaded once and cached; reloaded automatically
-when the file mtime changes.
+``<audio>.currentTime`` path (CBR).
+
+v2: moved from the repo-tracked ``data/.audio_meta.json`` to the bucket. The
+Phase 1 stub catalog promotion has NOT yet uploaded this file, so all
+lookups return the CBR-default empty result. Phase 6 catalog promotion
+populates it from the bulk probe output.
 
 No Flask imports — pure data access.
 """
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 
-from config import AUDIO_META_PATH
 from services import cache
+from services import storage_paths
+from services.hf_bucket import StorageNotFound, get_backend
 
 logger = logging.getLogger(__name__)
 
 
 def _load_doc() -> dict | None:
-    """Return the parsed audio_meta document, refreshing the cache on mtime change."""
-    try:
-        st = AUDIO_META_PATH.stat()
-    except FileNotFoundError:
-        return None
+    """Return the parsed audio_meta document from the bucket. Caches the result
+    once at first call; ``services.catalog.hydrate()`` does not refresh this
+    cache today (the file is rarely written; Inspector boot will drop the
+    cache via container restart).
+    """
     cached = cache.get_audio_meta_doc()
-    if cached is not None and cached[0] == st.st_mtime_ns:
+    if cached is not None:
         return cached[1]
     try:
-        with open(AUDIO_META_PATH, encoding="utf-8") as f:
-            doc = json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning("audio_meta: failed to parse %s: %s", AUDIO_META_PATH, e)
+        doc = get_backend().read_json(storage_paths.audio_meta_path())
+        if not isinstance(doc, dict):
+            return None
+        # ``cache.set_audio_meta_doc(mtime_ns, doc)`` retained — mtime carrying
+        # the cache key is irrelevant for the bucket case; pass 0 to satisfy
+        # the existing signature.
+        cache.set_audio_meta_doc(0, doc)
+        return doc
+    except StorageNotFound:
         return None
-    cache.set_audio_meta_doc(st.st_mtime_ns, doc)
-    return doc
+    except Exception as e:  # noqa: BLE001
+        logger.warning("audio_meta: failed to read from bucket: %s", e)
+        return None
 
 
 def is_vbr(reciter: str, chapter: int | str) -> bool:

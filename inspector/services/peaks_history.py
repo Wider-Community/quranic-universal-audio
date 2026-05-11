@@ -1,9 +1,9 @@
 """Persistence for waveform peaks tied to history ops.
 
-Per-op JSONL at ``data/recitation_segments/<reciter>/edit_history_peaks.jsonl``,
-append-only. Lets the History panel render waveforms across sessions without
-re-computing — and survives full-audio download/delete switching since this
-file lives in the data tree, not the audio cache.
+Per-op JSONL at ``<bucket>/<kind>/<reciter>/edit_history_peaks.jsonl``,
+append-only. Lets the History panel render waveforms across sessions
+without re-computing — and survives full-audio download/delete switching
+since this file lives in the data tree, not the audio cache.
 
 Schema (one record per line)::
 
@@ -24,13 +24,11 @@ Consumers index by ``url`` and use covering-range matching, so duplicates are
 benign.
 """
 
-import json
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import unquote
 
-from config import RECITATION_SEGMENTS_PATH
+from services import data_dir
 
 _PROXY_RE = re.compile(r"/api/seg/audio-proxy/[^?]+\?url=(.+)")
 
@@ -44,10 +42,6 @@ def normalize_audio_url(url: str) -> str:
         return url
     m = _PROXY_RE.search(url)
     return unquote(m.group(1)) if m else url
-
-
-def peaks_history_path(reciter: str) -> Path:
-    return RECITATION_SEGMENTS_PATH / reciter / "edit_history_peaks.jsonl"
 
 
 def _validate_record(rec: dict) -> str | None:
@@ -85,32 +79,29 @@ def append_peaks_records(
     """
     if not records:
         return 0
-    path = peaks_history_path(reciter)
-    path.parent.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat(
         timespec="milliseconds"
     ).replace("+00:00", "Z")
 
     written = 0
-    with open(path, "a", encoding="utf-8") as f:
-        for rec in records:
-            if not isinstance(rec, dict):
-                continue
-            line = {
-                "op_id": rec.get("op_id"),
-                "batch_id": batch_id if rec.get("batch_id") is None else rec.get("batch_id"),
-                "url": normalize_audio_url(rec.get("url", "")),
-                "start_ms": rec.get("start_ms"),
-                "end_ms": rec.get("end_ms"),
-                "peaks": rec.get("peaks"),
-                "duration_ms": rec.get("duration_ms"),
-                "saved_at_utc": now,
-            }
-            err = _validate_record(line)
-            if err:
-                continue
-            f.write(json.dumps(line, ensure_ascii=False, separators=(",", ":")) + "\n")
-            written += 1
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        line = {
+            "op_id": rec.get("op_id"),
+            "batch_id": batch_id if rec.get("batch_id") is None else rec.get("batch_id"),
+            "url": normalize_audio_url(rec.get("url", "")),
+            "start_ms": rec.get("start_ms"),
+            "end_ms": rec.get("end_ms"),
+            "peaks": rec.get("peaks"),
+            "duration_ms": rec.get("duration_ms"),
+            "saved_at_utc": now,
+        }
+        err = _validate_record(line)
+        if err:
+            continue
+        data_dir.append_peaks_history(reciter, line)
+        written += 1
     return written
 
 
@@ -120,22 +111,12 @@ def load_peaks_records(
 ) -> list[dict]:
     """Read the peaks JSONL for *reciter*. Returns ``[]`` if missing.
 
-    Silently skips blank lines and malformed JSON, mirroring
+    Silently skips malformed records, mirroring
     ``services.history_query.parse_history_file``.
     """
-    path = peaks_history_path(reciter)
-    if not path.exists():
-        return []
-    out: list[dict] = []
     excluded = exclude_op_ids or set()
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    out: list[dict] = []
+    for rec in data_dir.iter_peaks_history(reciter):
         if not isinstance(rec, dict):
             continue
         if rec.get("op_id") in excluded:

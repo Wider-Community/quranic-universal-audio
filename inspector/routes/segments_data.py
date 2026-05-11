@@ -1,10 +1,8 @@
 """Segments tab data routes (/api/seg/ — read-only data endpoints)."""
-import json
 
 from flask import Blueprint, jsonify, request
 
 from config import (
-    RECITATION_SEGMENTS_PATH,
     SEG_FONT_SIZE, SEG_WORD_SPACING,
     SEG_SCROLL_ANIM_MODE,
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
@@ -19,7 +17,8 @@ from constants import (
     STANDALONE_WORDS as _STANDALONE_WORDS,
 )
 from services.validation.registry import ALL_CATEGORIES
-from services import cache
+from services import cache, data_dir
+from services import state as state_service
 from services.data_loader import (
     get_dk_words_flat,
     get_word_counts,
@@ -58,28 +57,34 @@ def seg_config():
 
 @seg_data_bp.route("/reciters")
 def seg_reciters():
-    """List reciters that have segment extraction results."""
+    """List reciters tracked in the state file.
+
+    Reads from ``state_service.all_rows()`` instead of walking
+    ``data/recitation_segments/`` so the segments tab surfaces every
+    lifecycle phase (catalogued / awaiting_alignment / awaiting_review /
+    under_review / awaiting_timestamps / released / completed). The
+    bucket-resident ``segments.json`` is fetched per-row to populate
+    ``audio_source`` (matches the v1 response shape).
+    """
     cached = cache.get_seg_reciters_cache()
     if cached is not None:
         return jsonify(cached)
-    if not RECITATION_SEGMENTS_PATH.exists():
-        return jsonify([])
     result = []
-    for d in sorted(RECITATION_SEGMENTS_PATH.iterdir(), key=lambda p: p.name):
-        if not d.is_dir() or not (d / "detailed.json").exists():
-            continue
-        slug = d.name
-        name = slug_to_name(slug)
+    for row in sorted(state_service.all_rows(), key=lambda r: r.slug):
+        slug = row.slug
         audio_source = ""
-        seg_path = d / "segments.json"
-        if seg_path.exists():
-            with open(seg_path, encoding="utf-8") as f:
-                try:
-                    seg_doc = json.load(f)
-                    audio_source = seg_doc.get("_meta", {}).get("audio_source", "")
-                except json.JSONDecodeError:
-                    pass
-        result.append({"slug": slug, "name": name, "audio_source": audio_source})
+        seg_doc = data_dir.read_segments_doc(slug)
+        if seg_doc is not None:
+            audio_source = seg_doc.get("_meta", {}).get("audio_source", "")
+        result.append(
+            {
+                "slug": slug,
+                "name": slug_to_name(slug),
+                "audio_source": audio_source,
+                "state": row.state.value,
+                "visibility": row.visibility.value,
+            }
+        )
     cache.set_seg_reciters_cache(result)
     return jsonify(result)
 

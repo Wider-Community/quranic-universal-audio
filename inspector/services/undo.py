@@ -3,18 +3,15 @@
 No Flask imports -- all functions accept parameters and return plain dicts.
 """
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 
-from config import RECITATION_SEGMENTS_PATH
 from constants import HISTORY_SCHEMA_VERSION, VALIDATION_CATEGORIES
 from domain.command import apply_inverse_patch
-from services import cache
+from services import cache, data_dir
 from services.data_loader import load_detailed, load_probe_v2
 from services.save import persist_detailed
 from services.validation import chapter_validation_counts
-from services.history_query import parse_history_file
+from services.history_query import parse_history_for_reciter
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
@@ -286,13 +283,11 @@ def _get_affected_chapters(batch: dict) -> set[int]:
     return affected
 
 
-def _append_revert_record(history_path: Path, target_batch_id: str, reciter: str,
-                          chapter, chapters, file_hash: str,
+def _append_revert_record(reciter: str, target_batch_id: str,
+                          chapter, chapters,
                           val_before: dict, val_after: dict,
                           reverts_op_ids: list[str] | None = None) -> None:
-    """Append a revert record to edit_history.jsonl."""
-    from utils.io import backup_file
-    backup_file(history_path)
+    """Append a revert record to edit_history.jsonl via the storage backend."""
     revert = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
@@ -300,7 +295,6 @@ def _append_revert_record(history_path: Path, target_batch_id: str, reciter: str
         "reciter": reciter,
         "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-        "file_hash_after": file_hash,
         "validation_summary_before": val_before,
         "validation_summary_after": val_after,
         "operations": [],
@@ -309,8 +303,7 @@ def _append_revert_record(history_path: Path, target_batch_id: str, reciter: str
         revert["reverts_op_ids"] = reverts_op_ids
     if chapters:
         revert["chapters"] = chapters
-    with open(history_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(revert, ensure_ascii=False) + "\n")
+    data_dir.append_edit_history(reciter, revert)
 
 
 def _merge_val_summaries(val_map: dict[int, dict]) -> dict:
@@ -327,11 +320,9 @@ def _merge_val_summaries(val_map: dict[int, dict]) -> dict:
 
 def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
     """Undo a specific saved batch.  Returns result dict or (error_dict, status)."""
-    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
-    if not history_path.exists():
+    all_records = parse_history_for_reciter(reciter)
+    if not all_records:
         return {"error": "No edit history found"}, 404
-
-    all_records = parse_history_file(history_path)
 
     matching = [
         rec for rec in all_records
@@ -387,7 +378,7 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
     except ValueError as e:
         return {"error": str(e)}, 409
 
-    file_hash = persist_detailed(reciter, meta, entries)
+    persist_detailed(reciter, meta, entries)
 
     val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
     val_before = _merge_val_summaries(val_before_all)
@@ -395,10 +386,10 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(
-        history_path, target_batch_id, reciter,
+        reciter, target_batch_id,
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
-        file_hash, val_before, val_after,
+        val_before, val_after,
     )
 
     cache.invalidate_seg_caches(reciter)
@@ -410,11 +401,9 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
 
     Returns result dict or ``(error_dict, status)``.
     """
-    history_path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
-    if not history_path.exists():
+    all_records = parse_history_for_reciter(reciter)
+    if not all_records:
         return {"error": "No edit history found"}, 404
-
-    all_records = parse_history_file(history_path)
 
     matching = [
         rec for rec in all_records
@@ -473,7 +462,7 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
     except ValueError as e:
         return {"error": str(e)}, 409
 
-    file_hash = persist_detailed(reciter, meta, entries)
+    persist_detailed(reciter, meta, entries)
 
     val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
     val_before = _merge_val_summaries(val_before_all)
@@ -481,10 +470,10 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(
-        history_path, target_batch_id, reciter,
+        reciter, target_batch_id,
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
-        file_hash, val_before, val_after,
+        val_before, val_after,
         reverts_op_ids=list(requested_op_ids),
     )
 

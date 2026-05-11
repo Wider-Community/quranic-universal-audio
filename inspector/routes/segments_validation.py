@@ -1,25 +1,28 @@
 """Segments tab validation, stats, and edit-history routes (/api/seg/)."""
-import threading
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
-from config import RECITATION_SEGMENTS_PATH
 from services.history_query import load_edit_history
-from utils.io import safe_filename
 from services.stats import compute_stats
-from services.validation import run_validation_log, validate_reciter_segments
+from services.validation import validate_reciter_segments
 
 seg_val_bp = Blueprint("seg_val", __name__, url_prefix="/api/seg")
 
 
+# v2: `seg_trigger_validation` deprecated — validators run as libraries
+# called from `inspector/services/save.py` on every relevant write (Phase 5
+# wiring). The route returns 410 Gone until the validator library split
+# lands (Phase 6). The frontend's "trigger validation" button is hidden in
+# deployed mode anyway.
 @seg_val_bp.route("/trigger-validation/<reciter>", methods=["POST"])
 def seg_trigger_validation(reciter):
-    """Kick off validation.log generation in background."""
-    threading.Thread(
-        target=lambda: run_validation_log(RECITATION_SEGMENTS_PATH / reciter),
-        daemon=True,
-    ).start()
-    return jsonify({"ok": True})
+    """Deprecated in v2 — validators are libraries called from the save flow."""
+    return jsonify({
+        "error": (
+            "trigger-validation is deprecated in v2. Validators run as "
+            "libraries from inspector/services/save.py on every save."
+        )
+    }), 410
 
 
 @seg_val_bp.route("/validate/<reciter>")
@@ -40,21 +43,8 @@ def seg_stats(reciter):
     return jsonify(result)
 
 
-@seg_val_bp.route("/stats/<reciter>/save-chart", methods=["POST"])
-def seg_save_chart(reciter):
-    """Save a chart PNG to data/recitation_segments/<reciter>/analysis/."""
-    seg_dir = RECITATION_SEGMENTS_PATH / reciter
-    if not seg_dir.exists():
-        return jsonify({"error": "Reciter not found"}), 404
-    name = safe_filename(request.form.get("name", "chart"), fallback="chart")
-    f = request.files.get("image")
-    if not f:
-        return jsonify({"error": "No image provided"}), 400
-    out_dir = seg_dir / "analysis"
-    out_dir.mkdir(exist_ok=True)
-    out_path = out_dir / f"{name}.png"
-    f.save(str(out_path))
-    return jsonify({"ok": True, "path": str(out_path)})
+# v2: `seg_save_chart` removed — debug-only route with no UI surface.
+# See inspector-cleanup-registry.md §2.
 
 
 @seg_val_bp.route("/edit-history/<reciter>")

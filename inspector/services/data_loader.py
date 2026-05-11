@@ -1,23 +1,25 @@
 """Data loading functions for timestamps, segments, audio URLs, and reference data.
 
-All data is loaded once and cached via ``services.cache``.  Functions here never
+All data is loaded once and cached via ``services.cache``. Functions here never
 import Flask -- they return plain dicts/lists.
+
+Per-reciter reads (``load_seg_verses``, ``load_detailed``, ``load_probe_v2``)
+go through the storage backend via ``services.data_dir`` — no direct
+filesystem access to ``RECITATION_SEGMENTS_PATH``. Static reference data
+(qpc_hafs, surah_info, digital_khatt) still lives in the image at
+``INSPECTOR_DATA_DIR`` and is read directly.
 """
 
-import json
-from pathlib import Path
-
 from config import (
-    AUDIO_METADATA_PATH,
     DK_SCRIPT_PATH,
     QPC_HAFS_PATH,
-    RECITATION_SEGMENTS_PATH,
     SURAH_INFO_PATH,
 )
-from adapters.detailed_json import load_entries as _load_detailed_entries
-from constants import AUDIO_META_CATEGORIES, STOP_SIGNS
-from services import cache
-from utils.formatting import slug_to_name
+from adapters.detailed_json import (
+    load_entries_from_bytes as _load_detailed_entries_from_bytes,
+)
+from constants import STOP_SIGNS
+from services import cache, data_dir
 
 
 # ---------------------------------------------------------------------------
@@ -105,11 +107,9 @@ def load_seg_verses(reciter: str) -> tuple[dict, int, int, int]:
     cached = cache.get_seg_verses_cache(reciter)
     if cached is not None:
         return cached
-    seg_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
-    if not seg_path.exists():
+    doc = data_dir.read_segments_doc(reciter)
+    if doc is None:
         return {}, 0, 0, 0
-    import orjson
-    doc = orjson.loads(seg_path.read_bytes())
     meta = doc.get("_meta", {})
     pad_left, pad_right, floor = resolve_pad(meta)
     verses = {k: v for k, v in doc.items() if k != "_meta"}
@@ -123,24 +123,18 @@ def load_detailed(reciter: str) -> list[dict]:
     cached = cache.get_seg_cache(reciter)
     if cached is not None:
         return cached
-    path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
-    if not path.exists():
+    raw = data_dir.read_detailed_bytes(reciter)
+    if raw is None:
         return []
-    meta, entries = _load_detailed_entries(path)
+    meta, entries = _load_detailed_entries_from_bytes(raw)
     if meta:
         cache.set_seg_meta(reciter, meta)
     cache.set_seg_cache(reciter, entries)
     # Fallback: if detailed.json had no _meta, try segments.json
     if not cache.get_seg_meta(reciter):
-        seg_path = path.parent / "segments.json"
-        if seg_path.exists():
-            try:
-                import orjson
-                seg_doc = orjson.loads(seg_path.read_bytes())
-                if "_meta" in seg_doc:
-                    cache.set_seg_meta(reciter, seg_doc["_meta"])
-            except Exception:
-                pass
+        seg_doc = data_dir.read_segments_doc(reciter)
+        if seg_doc and "_meta" in seg_doc:
+            cache.set_seg_meta(reciter, seg_doc["_meta"])
     return entries
 
 
@@ -157,16 +151,9 @@ def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
     cached = cache.get_seg_probe_v2(reciter)
     if cached is not None:
         return cached
-    path = RECITATION_SEGMENTS_PATH / reciter / "low_confidence_v2.json"
-    if not path.exists():
+    doc = data_dir.read_low_confidence_doc(reciter)
+    if doc is None:
         result: tuple[set[str], dict | None] = (set(), None)
-        cache.set_seg_probe_v2(reciter, result)
-        return result
-    try:
-        import orjson
-        doc = orjson.loads(path.read_bytes())
-    except Exception:
-        result = (set(), None)
         cache.set_seg_probe_v2(reciter, result)
         return result
     failures = doc.get("failures") or []
@@ -193,12 +180,9 @@ def get_word_counts() -> dict[tuple[int, int], int]:
     if cached is not None:
         return cached
     wc: dict[tuple[int, int], int] = {}
-    sip = SURAH_INFO_PATH
-    if not sip.exists():
-        sip = RECITATION_SEGMENTS_PATH.parent / "surah_info.json"
-    if sip.exists():
+    if SURAH_INFO_PATH.exists():
         import orjson
-        si = orjson.loads(sip.read_bytes())
+        si = orjson.loads(SURAH_INFO_PATH.read_bytes())
         for surah_str, data in si.items():
             for v in data["verses"]:
                 wc[(int(surah_str), v["verse"])] = v["num_words"]
@@ -238,33 +222,32 @@ def word_has_stop(surah: int, ayah: int, word_num: int) -> bool:
 # ---------------------------------------------------------------------------
 
 def load_audio_sources() -> dict:
-    """Walk ``data/audio/by_surah/<source>/`` and ``by_ayah/<source>/`` to build
-    a hierarchical reciter index.
+    """Build the Audio-tab hierarchy ``{category: {source: [{slug, name}, ...]}}``.
+
+    Phase 1: reads the catalog's deliveries (``vocab.sources`` × per-delivery
+    ``audio_category``). With the vocab-only stub catalog, ``deliveries[]`` is
+    empty and this returns ``{}`` — the Audio tab renders empty and a banner
+    surfaces "catalog not yet promoted". Phase 6 catalog promotion populates
+    this from the real delivery list.
     """
+    from services import catalog as catalog_service
+    from utils.formatting import slug_to_name
+
     cached = cache.get_audio_sources_cache()
     if cached is not None:
         return cached
+
     result: dict[str, dict[str, list[dict]]] = {}
-    if not AUDIO_METADATA_PATH.exists():
-        cache.set_audio_sources_cache(result)
-        return result
-    for category in AUDIO_META_CATEGORIES:
-        cat_dir = AUDIO_METADATA_PATH / category
-        if not cat_dir.exists():
-            continue
-        cat_data: dict[str, list[dict]] = {}
-        for source_dir in sorted(cat_dir.iterdir()):
-            if not source_dir.is_dir():
-                continue
-            source = source_dir.name
-            reciters = []
-            for p in sorted(source_dir.glob("*.json")):
-                slug = p.stem
-                name = slug_to_name(slug)
-                reciters.append({"slug": slug, "name": name})
-            if reciters:
-                cat_data[source] = reciters
-        if cat_data:
-            result[category] = cat_data
+    snapshot = catalog_service.snapshot()
+    for delivery in snapshot.deliveries:
+        category = delivery.audio_category.value
+        source = delivery.source
+        result.setdefault(category, {}).setdefault(source, []).append(
+            {"slug": delivery.slug, "name": slug_to_name(delivery.slug)}
+        )
+    # Stable order for both layers.
+    for cat in result.values():
+        for entries in cat.values():
+            entries.sort(key=lambda e: e["slug"])
     cache.set_audio_sources_cache(result)
     return result
