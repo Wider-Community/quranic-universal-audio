@@ -26,6 +26,8 @@ For the *why* of any decision, jump to the detailed v2 docs in the parent folder
 
 Phases land sequentially. Phase 2 unblocks 3 and 4 in parallel only if you have someone to split work across — solo, run sequentially. Phase 6 depends on the reciter taxonomy / catalog schema refactor landing out-of-band — the doc is intentionally taxonomy-agnostic and will be refined against the concrete schema before implementation starts.
 
+For a visual reference of the reciter lifecycle (public + admin views, transitions, state-preserving actions), see [`state-machine.md`](state-machine.md).
+
 **Already complete (out of phase scope):**
 - HF dev bucket created and mount tested.
 
