@@ -26,7 +26,6 @@ locking lives consistently in one place. Multi-worker scale-out is deferred
 
 from __future__ import annotations
 
-import io
 import json
 import logging
 import os
@@ -34,7 +33,7 @@ import shutil
 import tempfile
 import threading
 from pathlib import Path, PurePosixPath
-from typing import IO, Iterator, Protocol, runtime_checkable
+from typing import Iterator, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +78,11 @@ class StorageBackend(Protocol):
 # ----------------------------------------------------------------------
 
 
-def _ensure_posix(path: str) -> str:
-    if not path or path.startswith("/") or "\\" in path:
+def _ensure_posix(path: str, *, allow_empty: bool = False) -> str:
+    if path.startswith("/") or "\\" in path:
         raise ValueError(f"path must be relative POSIX: {path!r}")
+    if not path and not allow_empty:
+        raise ValueError("path must not be empty")
     return path
 
 
@@ -175,7 +176,10 @@ class FilesystemBackend:
         return self._resolve(path).exists()
 
     def list_dir(self, path: str) -> list[str]:
-        p = self._resolve(path)
+        if path == "":
+            p = self._root
+        else:
+            p = self._resolve(path)
         if not p.is_dir():
             return []
         return sorted(child.name for child in p.iterdir())
@@ -213,72 +217,82 @@ class FilesystemBackend:
 
 
 class BucketBackend:
-    """HF storage bucket backend. Mount + direct-upload hybrid.
+    """HF storage bucket backend.
 
-    Operations on the same conceptual file always go through the **mount**
-    when a mount is configured (deployed Spaces) so the local NFS cache
-    handles repeat reads. Writes additionally call
-    ``huggingface_hub.upload_file()`` for durability beyond the mount's
-    flush window — this is the per-write upload pattern documented in
-    data-storage §3.
+    Uses the bucket-specific API (``batch_bucket_files``, ``list_bucket_tree``,
+    ``hffs.cat_file``, ``get_bucket_file_metadata``) — distinct from the repo
+    API (``upload_file`` / ``hf_hub_download``). Bucket IDs are
+    ``owner/name`` strings; the ``hf://buckets/`` URI form is for fsspec only.
 
-    Without a mount (local mode), reads route through ``hf_hub_download``
-    backed by a local cache directory. Writes call ``upload_file()``
-    directly.
+    Mount + direct-upload hybrid:
+
+    - With a mount (deployed Spaces via ``hf-mount``): reads go through the
+      mount, falling back to the bucket API on cache miss. Writes go to the
+      mount + an additional direct upload for durability beyond the mount's
+      2–30 s flush window.
+    - Without a mount (local mode): reads go through ``hffs.cat_file()``;
+      writes go through ``batch_bucket_files(add=...)``.
+
+    Spec: docs/planning/inspector-deploy/v2/inspector-data-storage.md §3.
     """
 
     def __init__(
         self,
-        repo_id: str,
+        bucket_id: str,
         *,
-        repo_type: str = "dataset",
         token: str | None = None,
         mount: str | Path | None = None,
-        cache_dir: str | Path | None = None,
         force_flush_on_write: bool = True,
     ) -> None:
-        self._repo_id = repo_id
-        self._repo_type = repo_type
-        self._token = token or os.environ.get("INSPECTOR_HF_TOKEN") or os.environ.get(
-            "HF_TOKEN"
+        self._bucket_id = bucket_id
+        self._token = (
+            token
+            or os.environ.get("INSPECTOR_HF_TOKEN")
+            or os.environ.get("HF_TOKEN")
         )
         self._mount: Path | None = Path(mount).resolve() if mount else None
-        self._cache_dir = Path(
-            cache_dir or os.path.expanduser("~/.cache/inspector/bucket")
-        )
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._force_flush_on_write = force_flush_on_write
         self._write_lock = threading.Lock()
 
-        # Lazy huggingface_hub import — keeps tests fast and lets the
-        # module load without HF deps when only FilesystemBackend is used.
-        self._hf = None  # type: ignore[assignment]
+        # Bucket writes go through Xet storage, which requires the token to
+        # be registered via login() (per-call token= doesn't establish Xet
+        # auth). Idempotent; safe to call repeatedly across replicas.
+        if self._token:
+            try:
+                from huggingface_hub import (  # type: ignore[import-not-found]
+                    login as _hf_login,
+                )
 
-        # If mount is configured, validate it exists at construction time.
+                _hf_login(token=self._token, add_to_git_credential=False)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("huggingface_hub.login() failed: %s", e)
+
         if self._mount is not None and not self._mount.exists():
             logger.warning(
-                "BucketBackend mount %s does not exist yet; falling back to "
-                "direct upload/download.",
+                "BucketBackend mount %s does not exist; falling back to bucket "
+                "API for all reads + writes.",
                 self._mount,
             )
             self._mount = None
 
-    # ---- lazy hf client ----
+    # ---- helpers ----
 
-    def _hf_api(self):
-        if self._hf is None:
-            from huggingface_hub import HfApi  # type: ignore[import-not-found]
+    def _bucket_uri(self, path: str) -> str:
+        """Return the ``buckets/<id>/<path>`` form used by ``hffs``."""
+        return f"buckets/{self._bucket_id}/{path}"
 
-            self._hf = HfApi(token=self._token)
-        return self._hf
-
-    # ---- path resolution ----
-
-    def _mount_path(self, path: str) -> Path | None:
-        _ensure_posix(path)
-        if self._mount is None:
-            return None
-        return self._mount / PurePosixPath(path)
+    def _is_not_found(self, exc: Exception) -> bool:
+        """Heuristic: HF API doesn't expose a single bucket-NotFound error;
+        404s surface as ``HfHubHTTPError`` with a 404 status, ``KeyError`` on
+        missing tree entries, or fsspec's ``FileNotFoundError``.
+        """
+        if isinstance(exc, FileNotFoundError):
+            return True
+        # HfHubHTTPError carries a response with status_code
+        response = getattr(exc, "response", None)
+        if response is not None and getattr(response, "status_code", None) == 404:
+            return True
+        return False
 
     # ---- reads ----
 
@@ -288,22 +302,15 @@ class BucketBackend:
             mp = self._mount / PurePosixPath(path)
             if mp.exists():
                 return mp.read_bytes()
-            # fall through to HF download — file may not be in the mount
-            # cache yet on first access
-        from huggingface_hub import hf_hub_download  # type: ignore[import-not-found]
-        from huggingface_hub.errors import EntryNotFoundError  # type: ignore[import-not-found]
+
+        from huggingface_hub import hffs  # type: ignore[import-not-found]
 
         try:
-            local = hf_hub_download(
-                repo_id=self._repo_id,
-                filename=path,
-                repo_type=self._repo_type,
-                token=self._token,
-                cache_dir=str(self._cache_dir),
-            )
-        except EntryNotFoundError as e:
-            raise StorageNotFound(path) from e
-        return Path(local).read_bytes()
+            return hffs.cat_file(self._bucket_uri(path))
+        except Exception as e:
+            if self._is_not_found(e):
+                raise StorageNotFound(path) from e
+            raise
 
     def read_json(self, path: str) -> dict | list:
         return json.loads(self.read_bytes(path).decode("utf-8"))
@@ -321,18 +328,22 @@ class BucketBackend:
 
     # ---- writes ----
 
-    def _upload(self, path: str, data: bytes, commit_message: str | None = None) -> None:
-        from huggingface_hub import upload_file  # type: ignore[import-not-found]
-
-        buf = io.BytesIO(data)
-        upload_file(
-            path_or_fileobj=buf,
-            path_in_repo=path,
-            repo_id=self._repo_id,
-            repo_type=self._repo_type,
-            token=self._token,
-            commit_message=commit_message or f"update {path}",
+    def _bucket_upload(self, path: str, data: bytes) -> None:
+        from huggingface_hub import (  # type: ignore[import-not-found]
+            batch_bucket_files,
+            hffs,
         )
+
+        batch_bucket_files(self._bucket_id, add=[(data, path)], token=self._token)
+        # fsspec caches directory listings + read content; without this,
+        # read-after-write inside the same process returns the pre-upload state.
+        try:
+            hffs.invalidate_cache(self._bucket_uri(path))
+        except Exception:
+            try:
+                hffs.invalidate_cache()
+            except Exception:
+                pass
 
     def write_bytes_atomic(self, path: str, data: bytes) -> None:
         _ensure_posix(path)
@@ -354,24 +365,21 @@ class BucketBackend:
                         pass
                     raise
                 if self._force_flush_on_write:
-                    self._upload(path, data)
+                    self._bucket_upload(path, data)
                 return
 
-            # No mount: direct upload only.
-            self._upload(path, data)
+            self._bucket_upload(path, data)
 
     def write_json_atomic(self, path: str, obj: dict | list) -> None:
         self.write_bytes_atomic(path, _dump_json(obj))
 
     def append_jsonl(self, path: str, record: dict) -> None:
-        """Append-one-line. Since HF buckets don't expose a streaming append,
-        we read the current file, append the line in memory, and re-upload.
+        """Append-one-line. Buckets don't expose a streaming append; we
+        read-modify-write. With a mount, append happens in-place locally and
+        a refresh-upload follows when ``force_flush_on_write`` is on.
 
-        For high-frequency append paths (``edit_history.jsonl`` under active
-        editing), this is acceptable at our write rate (≤1 save / 10 s per
-        active reviewer × ≤25 concurrent reviewers per replica). If it becomes
-        a hotspot, the mount-write + lazy flush path bypasses the read-modify-
-        write cycle.
+        Acceptable at our write rate (≤1 save / 10 s per active reviewer ×
+        ≤25 concurrent reviewers per replica).
         """
         _ensure_posix(path)
         line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
@@ -382,17 +390,14 @@ class BucketBackend:
                 with mp.open("ab") as fh:
                     fh.write(line)
                 if self._force_flush_on_write:
-                    # Re-read the mount file and upload; the mount may have
-                    # buffered earlier writes that need durability.
-                    self._upload(path, mp.read_bytes())
+                    self._bucket_upload(path, mp.read_bytes())
                 return
 
-            # No mount: read-modify-write via HF.
             try:
                 current = self.read_bytes(path)
             except StorageNotFound:
                 current = b""
-            self._upload(path, current + line)
+            self._bucket_upload(path, current + line)
 
     # ---- introspection / moves ----
 
@@ -402,50 +407,78 @@ class BucketBackend:
             mp = self._mount / PurePosixPath(path)
             if mp.exists():
                 return True
-        # Probe via HfApi.
+        from huggingface_hub import (  # type: ignore[import-not-found]
+            get_bucket_file_metadata,
+        )
+
         try:
-            api = self._hf_api()
-            files = api.list_repo_files(
-                repo_id=self._repo_id, repo_type=self._repo_type
-            )
+            get_bucket_file_metadata(self._bucket_id, path, token=self._token)
+            return True
         except Exception as e:
-            logger.warning("BucketBackend.exists: list_repo_files failed: %s", e)
+            if self._is_not_found(e):
+                return False
+            logger.warning("BucketBackend.exists(%s) errored: %s", path, e)
             return False
-        return path in files
 
     def list_dir(self, path: str) -> list[str]:
-        _ensure_posix(path)
+        _ensure_posix(path, allow_empty=True)
         if self._mount is not None:
-            mp = self._mount / PurePosixPath(path)
+            mp = self._mount if path == "" else self._mount / PurePosixPath(path)
             if mp.is_dir():
                 return sorted(child.name for child in mp.iterdir())
 
-        # Without a mount: enumerate via list_repo_files and synthesize a
-        # one-level listing.
+        from huggingface_hub import list_bucket_tree  # type: ignore[import-not-found]
+
         try:
-            api = self._hf_api()
-            files = api.list_repo_files(
-                repo_id=self._repo_id, repo_type=self._repo_type
-            )
+            kwargs = {"recursive": False, "token": self._token}
+            if path:
+                kwargs["prefix"] = path.rstrip("/")
+            items = list_bucket_tree(self._bucket_id, **kwargs)
         except Exception as e:
-            logger.warning("BucketBackend.list_dir: list_repo_files failed: %s", e)
+            if self._is_not_found(e):
+                return []
+            logger.warning("BucketBackend.list_dir(%s) errored: %s", path, e)
             return []
-        prefix = path.rstrip("/") + "/"
+
+        prefix = (path.rstrip("/") + "/") if path else ""
         names: set[str] = set()
-        for f in files:
-            if not f.startswith(prefix):
+        for it in items:
+            p = it.path
+            if prefix and not p.startswith(prefix):
                 continue
-            tail = f[len(prefix) :]
+            tail = p[len(prefix):] if prefix else p
             if not tail:
                 continue
             names.add(tail.split("/", 1)[0])
         return sorted(names)
 
     def copy(self, src: str, dst: str) -> None:
-        # Without server-side copy via HfApi, the supported path is
-        # read-then-upload. For directory copies, callers iterate.
+        """Server-side copy by Xet hash when possible; falls back to
+        read-then-upload for files without a Xet hash (small JSON, etc.)."""
+        _ensure_posix(src)
+        _ensure_posix(dst)
+        from huggingface_hub import (  # type: ignore[import-not-found]
+            batch_bucket_files,
+            get_bucket_file_metadata,
+        )
+
+        try:
+            meta = get_bucket_file_metadata(self._bucket_id, src, token=self._token)
+        except Exception as e:
+            if self._is_not_found(e):
+                raise StorageNotFound(src) from e
+            raise
+
+        xet_hash = getattr(meta, "xet_hash", None)
+        if xet_hash:
+            batch_bucket_files(
+                self._bucket_id,
+                copy=[("bucket", self._bucket_id, xet_hash, dst)],
+                token=self._token,
+            )
+            return
         data = self.read_bytes(src)
-        self.write_bytes_atomic(dst, data)
+        self._bucket_upload(dst, data)
 
     def move(self, src: str, dst: str) -> None:
         self.copy(src, dst)
@@ -460,19 +493,19 @@ class BucketBackend:
             elif mp.exists():
                 mp.unlink()
         try:
-            from huggingface_hub import HfApi  # type: ignore[import-not-found]
-
-            api = self._hf_api()
-            api.delete_file(
-                path_in_repo=path,
-                repo_id=self._repo_id,
-                repo_type=self._repo_type,
-                token=self._token,
-                commit_message=f"delete {path}",
+            from huggingface_hub import (  # type: ignore[import-not-found]
+                batch_bucket_files,
+                hffs,
             )
+
+            batch_bucket_files(self._bucket_id, delete=[path], token=self._token)
+            try:
+                hffs.invalidate_cache(self._bucket_uri(path))
+            except Exception:
+                pass
         except Exception as e:
-            # delete_file errors on non-existent paths — log and continue
-            logger.debug("BucketBackend.delete %s: %s", path, e)
+            if not self._is_not_found(e):
+                logger.warning("BucketBackend.delete(%s) errored: %s", path, e)
 
 
 # ----------------------------------------------------------------------
@@ -516,13 +549,13 @@ def get_backend() -> StorageBackend:
                 )
             backend: StorageBackend = FilesystemBackend(root)
         elif kind == "bucket":
-            repo_id = os.environ.get(
+            bucket_id = os.environ.get(
                 "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
             )
             mount = os.environ.get("INSPECTOR_BUCKET_MOUNT") or None
             force_flush = os.environ.get("INSPECTOR_FORCE_FLUSH_ON_SAVE", "1") == "1"
             backend = BucketBackend(
-                repo_id=repo_id,
+                bucket_id=bucket_id,
                 mount=mount,
                 force_flush_on_write=force_flush,
             )

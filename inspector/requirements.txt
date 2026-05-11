@@ -2,4 +2,6 @@ flask
 quranic-phonemizer>=2.2
 orjson
 pydantic>=2.10
-huggingface_hub>=0.26
+# v2 uses the bucket API (batch_bucket_files, list_bucket_tree,
+# download_bucket_files, hffs); these landed in huggingface_hub 1.8.0.
+huggingface_hub>=1.10
