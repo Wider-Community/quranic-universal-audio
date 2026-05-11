@@ -323,13 +323,15 @@ The per-segment list with `matched_ref` matches `published/<slug>/detailed.json`
 - `.local/spaces/quranic_universal_aligner/src/preload/repo_loader.py::build_segment_infos` — slice the whole-reciter `segments.json` by chapter (filter verse keys), derive `matched_ref` from key + word indices, drop `match_score` from `SegmentInfo`.
 - Aligner UI — drop the confidence badge from the card.
 - `PRELOAD_BUCKET_ID` env stays; the bucket is the same, only the layout it reads changes.
+- **Three cascading dropdowns:** Reciter → Mushaf → Source. Reciter dropdown is always shown (`catalog.reciters[]`, 422 entries, typeahead on `name_en + name_ar`). Mushaf dropdown appears only when group-by `(riwayah, style, recording_year, variant_label)` over the reciter's deliveries gives >1 row; label built from the dimensions that vary inside that reciter ("Hafs Murattal", "Hafs Mujawwad", "Warsh Murattal"). Source dropdown appears only when the selected Mushaf has >1 delivery; user picks the source/channel/bitrate. **No top-level riwayah filter** — the riwayah surfaces inside Mushaf labels. **No auto-pick** — when there's only 1 source, the Source dropdown hides; when there's >1, the user always chooses.
 
-**Track B — Inspector deployed timestamps-tab frontend migration** (Inspector phases):
+**Track B — Inspector deployed timestamps-tab data layer** (minimal scope — keep current UX):
 
-- `inspector/frontend/src/tabs/timestamps/services/ts_client.ts` — replace `loadManifest()` + `loadChapterShard()` with `loadCatalog()` + `loadSegmentsWholeFile(slug)` + `loadTimestampsChapter(slug, chapter)`. Drop `_fetchGzipJson` if the v2 paths ship uncompressed (or keep it for `Content-Encoding: gzip` if Inspector serves them gzipped).
-- `inspector/routes/timestamps.py` — drop `ts_manifest`, `ts_shard`, `ts_resource` routes (they served the local-mode manifest model). Replace `ts_config` `manifest_url` + `shard_url_template` fields with `catalog_url` + `segments_url_template` + `timestamps_url_template`.
-- `inspector/services/ts_local.py` — drop entirely (the local-mode shard builder); local mode reads through the same v2 paths as deployed mode.
-- Track B is gated on **Phase 6 publish pipeline** (needs `published/<slug>/timestamps/<chapter>.json` to exist) + the **catalog promotion** landing real reciters / sidecars.
+- Replace the manifest.json.gz fetch with a catalog read served by Inspector backend at `/api/static/catalog.json` (in-memory catalog snapshot via `services/catalog.snapshot()`).
+- Frontend `inspector/frontend/src/tabs/timestamps/services/ts_client.ts` — replace `loadManifest()` with `loadCatalog()`. Keep `loadChapterShard()` for now (shards still fetch from the public dataset; their migration to v2 paths is Phase 6 work).
+- `routes/timestamps.py::ts_config` — add `catalog_url: "/api/static/catalog.json"` alongside existing `manifest_url` for a soft transition.
+- **No cascading dropdowns in the TS tab.** Same flat reciter list the tab has today, just sourced from the catalog instead of the manifest. The Mushaf/Source UX from Track A is aligner-only.
+- Track B unblocks the legacy `<bucket>/manifest.json.gz` deletion (since the TS tab no longer reads from there).
 
 **Decommission (Phase 11 cleanup):**
 
