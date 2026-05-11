@@ -42,7 +42,7 @@ Save flow points at `<bucket>/wip/<slug>/...` via the resolver. Atomic write + p
 ## Out of scope
 
 - Publish endpoint + bucket move + GH dispatch + timestamps job — Phase 5.
-- `/admin` route + dashboard panels — Phase 6.
+- `/admin` route + dashboard panels — Phase 7.
 - All deferred admin events: force-claim, force-clear-assignee, force-unmark-ready, archive/unarchive, pipeline-trigger, job-rerun (see admin §11 deferred list).
 - HF dataset publishing — gone for good per D4.
 

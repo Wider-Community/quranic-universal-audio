@@ -36,7 +36,7 @@ Identity is HF OAuth, sessions are self-contained signed cookies (no server-side
 
 - Save endpoint (`/api/seg/save`) — Phase 4.
 - Any admin override actions (force-release, reassign, force-set-state, send-back) — Phase 4.
-- `/admin` route + dashboard panels — Phase 6.
+- `/admin` route + dashboard panels — Phase 7.
 - Publish endpoint — Phase 5.
 - Force-claim mechanism — deferred entirely (per D15).
 - Server-Sent Events for cross-tab state sync — deferred (D8).

@@ -34,7 +34,7 @@ First public surface. Image is slim and production-grade (gunicorn-gthread, `-w 
 
 - HF OAuth flow / signed-cookie session (Phase 3).
 - Any `/api/claim`, `/api/release`, `/api/save` endpoints (Phase 3, Phase 4).
-- `/admin` route (Phase 6).
+- `/admin` route (Phase 7).
 - prod Space cutover — only dev in Phase 2.
 - CDN front (deferred — D12).
 - HF dataset reads from frontend (gone for good per D4).
