@@ -1,0 +1,23 @@
+{
+  "_meta": {
+    "reciter": "mohammed_al_hafez",
+    "name_en": "Mohammed Al-Hafez",
+    "name_ar": "محمد الحافظ",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 289,
+    "source_page_en": "https://www.tvquran.com/en/scholar/289/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/289/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/289/211",
+    "source_riwayah_label_ar": "حفص عن عاصم",
+    "source_riwayah_label_en": "Hafs",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "1": "https://download.tvquran.com/download/recitations/289/211/001.mp3",
+  "19": "https://download.tvquran.com/download/recitations/289/211/019.mp3",
+  "31": "https://download.tvquran.com/download/recitations/289/211/031.mp3"
+}

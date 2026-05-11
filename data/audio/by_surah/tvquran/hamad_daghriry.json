@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "reciter": "hamad_daghriry",
+    "name_en": "Hamad Daghriry",
+    "name_ar": "حمد دغريري",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 110,
+    "source_page_en": "https://www.tvquran.com/en/scholar/110/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/110/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/110/175",
+    "source_riwayah_label_ar": "حفص عن عاصم",
+    "source_riwayah_label_en": "Hafs",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "1": "https://download.tvquran.com/download/recitations/110/175/001.mp3",
+  "12": "https://download.tvquran.com/download/recitations/110/175/012.mp3",
+  "13": "https://download.tvquran.com/download/recitations/110/175/013.mp3",
+  "43": "https://download.tvquran.com/download/recitations/110/175/043.mp3",
+  "44": "https://download.tvquran.com/download/recitations/110/175/044.mp3"
+}
