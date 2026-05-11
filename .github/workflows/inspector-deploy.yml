@@ -1,0 +1,73 @@
+name: Deploy Inspector
+
+# Phase 2: dev branch only. Prod cutover (push to main → prod Space) is
+# gated on Phase 3 sign-off; the trigger lives below in commented form so
+# the wiring is one PR away when ready.
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "inspector/**"
+      - "validators/**"
+      - "scripts/lib/**"
+      - "scripts/upload_inspector.py"
+      - "scripts/inspector_v2_seed/**"
+      - "data/surah_info.json"
+      - "data/qpc_hafs.json"
+      - "data/digital_khatt_v2_script.json"
+      - "data/phoneme_sub_costs.json"
+      - ".dockerignore"
+      - ".github/workflows/inspector-deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  # Avoid two pushes deploying simultaneously — the Hub upload is idempotent
+  # but parallel rebuilds on the Space waste container time.
+  group: inspector-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: inspector/frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps
+        run: pip install "huggingface_hub>=1.10"
+
+      - name: Resolve target environment
+        id: env
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev)  echo "env=dev"  >> "$GITHUB_OUTPUT" ;;
+            main) echo "env=prod" >> "$GITHUB_OUTPUT" ;;
+            *)    echo "env=dev"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Upload to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python scripts/upload_inspector.py "${{ steps.env.outputs.env }}"
+
+# --- Prod trigger (gated on Phase 3 sign-off) ---
+# Uncomment when prod cutover is approved. Until then, prod deploys are
+# manual: run `python scripts/upload_inspector.py prod` from a maintainer
+# laptop with HF_TOKEN exported.
+#
+# on:
+#   push:
+#     branches: [main]
+#     paths: [...same as above...]
