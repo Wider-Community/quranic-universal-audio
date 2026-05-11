@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
 """Validate edit_history.jsonl integrity for PRs touching recitation_segments.
 
-Runs 7 checks per reciter:
-  1. Genesis record presence
-  2. History chain integrity (no missing/duplicate batch_ids)
-  3. File hash verification (last record matches detailed.json)
-  4. _meta tampering detection
-  5. Diff-vs-history cross-reference (all changes explained by operations)
-  6. History-only change detection (history changed but data didn't)
-  7. Peaks file integrity (edit_history_peaks.jsonl shape — when present)
+v2: file-hash chain checks (genesis presence, per-record file_hash_after,
+detailed.json hash match) are **removed**. The chain didn't survive the
+single-writer-Inspector model where every write goes through the bucket
+backend — tamper detection now relies on offsite versioned snapshots of
+the bucket, not in-record cryptographic linkage. Old on-disk records that
+still carry ``file_hash_after`` and a genesis stanza parse fine
+(``EditHistoryBatch`` tolerates the extra fields).
+
+Runs 5 checks per reciter (post-v2):
+  1. History chain integrity (no duplicate batch_ids)
+  2. _meta tampering detection
+  3. Diff-vs-history cross-reference (all changes explained by operations)
+  4. History-only change detection (history changed but data didn't)
+  5. Peaks file integrity (edit_history_peaks.jsonl shape — when present)
 
 Usage:
     python validators/validate_edit_history.py --base-sha <SHA> --reciters slug1 [slug2 ...]
+
+Library / CLI split: ``validate_reciter`` is the pure-Python entry point
+that Inspector services call. ``main()`` only handles arg parsing + stdout
+reporting; it is the only function that writes ``.validation.log`` or
+exits the process.
 """
 
 import argparse
@@ -420,10 +431,12 @@ def validate_reciter(reciter: str, base_sha: str) -> tuple[bool, list[str]]:
         messages.append(f"  SKIP: {reciter} (deleted or missing detailed.json)")
         return True, messages
 
+    # v2: ``check_genesis_record`` + ``check_file_hash`` dropped — the
+    # file-hash chain is no longer the integrity primitive (D13 / cleanup
+    # registry §2). The functions still exist as legacy helpers for ad-hoc
+    # inspection of pre-v2 history files but are not part of the pass set.
     checks = [
-        ("Genesis record", check_genesis_record(reciter)),
         ("History chain", check_history_chain(reciter)),
-        ("File hash", check_file_hash(reciter)),
         ("Meta tampering", check_meta_tampering(reciter, base_sha)),
         ("Diff vs history", check_diff_vs_history(reciter, base_sha)),
         ("History-only change", check_history_only_change(reciter, base_sha)),
