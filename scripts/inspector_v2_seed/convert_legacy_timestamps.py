@@ -26,7 +26,7 @@ load_repo_env()
 
 import time
 
-from huggingface_hub import HfApi, batch_bucket_files, list_bucket_tree
+from huggingface_hub import batch_bucket_files, hffs, list_bucket_tree
 
 from inspector.services import state as state_service
 from inspector.services import storage_paths
@@ -65,7 +65,6 @@ def main() -> int:
     )
     get_backend()  # forces login() once
     state_service.hydrate()
-    api = HfApi(token=os.environ.get("INSPECTOR_HF_TOKEN") or os.environ.get("HF_TOKEN"))
 
     completed = [
         r.slug
@@ -101,17 +100,16 @@ def main() -> int:
             chapter = Path(path).name.removesuffix(".json.gz")
             local_path = local_dir / f"{chapter}.json"
             if not local_path.exists():
-                # Download via HfApi.hf_hub_download — manages its own client.
-                downloaded = _retry(
-                    lambda p=path: api.hf_hub_download(
-                        repo_id=bucket,
-                        repo_type="bucket",
-                        filename=p,
-                        local_dir=str(tmp_root / "_dl_cache"),
-                    ),
-                    label=f"download({path})",
+                # hffs.cat_file is the read primitive for HF buckets (there
+                # is no hf_hub_download for repo_type=bucket). The httpx
+                # lifecycle issue we saw earlier was alternating reads with
+                # writes; here we read all then write all, so reads stay
+                # batched and the retry wrapper catches any stray closure.
+                gz_body = _retry(
+                    lambda p=path: hffs.cat_file(f"buckets/{bucket}/{p}"),
+                    label=f"read({path})",
                 )
-                body = gzip.decompress(Path(downloaded).read_bytes())
+                body = gzip.decompress(gz_body)
                 local_path.write_bytes(body)
             plan.append(
                 (slug, local_path, storage_paths.published_timestamps_path(slug, chapter))
