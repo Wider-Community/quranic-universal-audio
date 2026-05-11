@@ -108,20 +108,6 @@ def flask_client():
     return app.test_client()
 
 
-def _modules_holding_seg_path() -> list[str]:
-    """Modules that import ``RECITATION_SEGMENTS_PATH`` and need re-pointing."""
-    return [
-        "config",
-        "routes.segments_data",
-        "routes.segments_edit",
-        "routes.segments_validation",
-        "services.data_loader",
-        "services.history_query",
-        "services.save",
-        "services.undo",
-    ]
-
-
 _SEG_CACHE_NAMES = (
     "_seg",
     "_seg_meta",
@@ -146,75 +132,106 @@ def _invalidate_seg_caches(reciter: str | None = None):
 
 @pytest.fixture
 def tmp_reciter_dir(tmp_path, monkeypatch):
-    """Per-test writable reciter directory rooted under ``tmp_path``.
+    """Per-test writable bucket-shape directory rooted under ``tmp_path``.
 
-    Repoints the captured ``RECITATION_SEGMENTS_PATH`` constant in every
-    importing module so that routes, services, and data loaders read/write
-    under ``tmp_path`` instead of the real data directory.
+    Installs a ``FilesystemBackend`` against ``tmp_path`` (v2 backend
+    abstraction), so routes/services/loaders read + write under the temp
+    dir instead of the real bucket. The on-disk layout matches the bucket
+    layout (``wip/<slug>/segments.json``, etc.); the ``install`` helper
+    drops fixtures there and seeds the state file so ``data_dir.kind_for``
+    returns ``"wip"`` for installed reciters.
     """
-    reciter_root = tmp_path / "recitation_segments"
-    reciter_root.mkdir(parents=True, exist_ok=True)
+    from datetime import datetime, timezone
+
+    from scripts.lib.schemas import ReciterRow, ReciterState, ReciterStateFile
+
+    from services import hf_bucket as _hf_bucket
+    from services import state as _state_service
+    from services import access as _access_service
+    from services import catalog as _catalog_service
+    from services import storage_paths as _storage_paths
 
     monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
+    # Local-write gate stays open in tests — fixtures need to exercise the
+    # save flow without touching INSPECTOR_LOCAL_WRITES.
+    monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
+    monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
 
-    # Force-refresh module-level path bindings.
-    for name in _modules_holding_seg_path():
-        if name in sys.modules:
-            mod = sys.modules[name]
-            if hasattr(mod, "RECITATION_SEGMENTS_PATH"):
-                monkeypatch.setattr(mod, "RECITATION_SEGMENTS_PATH", reciter_root, raising=False)
-            if hasattr(mod, "DATA_DIR"):
-                monkeypatch.setattr(mod, "DATA_DIR", tmp_path, raising=False)
+    backend = _hf_bucket.FilesystemBackend(tmp_path)
+    _hf_bucket.set_backend(backend)
+
+    # Rehydrate the in-memory services against the fresh empty backend so
+    # the previous test's state doesn't leak across.
+    _state_service.hydrate()
+    _catalog_service.hydrate()
+    _access_service.hydrate()
 
     _invalidate_seg_caches()
 
     def _install(reciter: str, fixture_name: str) -> Path:
+        # Seed a state row so data_dir.kind_for(reciter) returns "wip".
+        rows = list(_state_service.snapshot().reciters)
+        if not any(r.slug == reciter for r in rows):
+            rows.append(
+                ReciterRow(
+                    slug=reciter,
+                    state=ReciterState.AWAITING_REVIEW,
+                    state_since=datetime.now(timezone.utc),
+                )
+            )
+            backend.write_json_atomic(
+                _storage_paths.state_path(),
+                ReciterStateFile(reciters=rows).model_dump(mode="json"),
+            )
+            _state_service.hydrate()
+
+        # Install fixture file at wip/<reciter>/detailed.json
         src = FIXTURES_DIR / f"{fixture_name}.detailed.json"
-        dst_dir = reciter_root / reciter
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        dst_path = dst_dir / "detailed.json"
-        shutil.copy(str(src), str(dst_path))
+        detailed_rel = _storage_paths.detailed_path(reciter, "wip")
+        with open(src, "rb") as f:
+            backend.write_bytes_atomic(detailed_rel, f.read())
+        dst_path = (tmp_path / detailed_rel).resolve()
 
         history_src = FIXTURES_DIR / f"{fixture_name}.edit_history.jsonl"
         if history_src.exists():
-            shutil.copy(str(history_src), str(dst_dir / "edit_history.jsonl"))
+            with open(history_src, "rb") as f:
+                backend.write_bytes_atomic(
+                    _storage_paths.edit_history_path(reciter, "wip"),
+                    f.read(),
+                )
 
         # Build a matching segments.json so consumers that read both files
-        # (the CLI, ``services.save.rebuild_segments_json``-driven flows)
         # see a consistent on-disk state for the fixture.
         try:
             from services.save import rebuild_segments_json  # type: ignore
         except ImportError:
-            # rebuild_segments_json not yet available (pre-phase); skip
-            # segments.json generation without masking other errors.
             rebuild_segments_json = None  # type: ignore[assignment]
         if rebuild_segments_json is not None:
-            with open(dst_path, "r", encoding="utf-8") as f:
-                doc = json.load(f)
+            doc = json.loads((tmp_path / detailed_rel).read_bytes())
             entries = doc.get("entries", [])
             meta = doc.get("_meta", {})
-            seg_path = dst_dir / "segments.json"
-            if not seg_path.exists():
-                with open(seg_path, "w", encoding="utf-8") as g:
-                    json.dump({"_meta": meta}, g, ensure_ascii=False)
+            seg_rel = _storage_paths.segments_path(reciter, "wip")
+            if not backend.exists(seg_rel):
+                backend.write_json_atomic(seg_rel, {"_meta": meta})
             rebuild_segments_json(reciter, entries)
-            # Re-stamp the segments.json _meta block from detailed-side meta
-            # so CLI's ``parse_segments`` sees a complete header.
-            with open(seg_path, "r", encoding="utf-8") as g:
-                seg_doc = json.load(g)
-            if "_meta" not in seg_doc or not seg_doc["_meta"]:
+            # Re-stamp meta if rebuild dropped it.
+            seg_doc = backend.read_json(seg_rel)
+            if not seg_doc.get("_meta"):
                 seg_doc["_meta"] = meta
-                with open(seg_path, "w", encoding="utf-8") as g:
-                    json.dump(seg_doc, g, ensure_ascii=False)
+                backend.write_json_atomic(seg_rel, seg_doc)
 
         _invalidate_seg_caches()
         return dst_path
 
-    return type("TmpReciter", (), {
-        "root": reciter_root,
+    yield type("TmpReciter", (), {
+        "root": tmp_path / "wip",
         "install": staticmethod(_install),
         "data_dir": tmp_path,
+        "backend": backend,
     })
+
+    # Drop the backend singleton at teardown so the next test re-installs fresh.
+    _hf_bucket.reset_backend()
 
 
 def assert_keys_superset(
