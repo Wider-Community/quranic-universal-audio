@@ -4128,11 +4128,11 @@
     "has_timing": false
   },
   {
-    "slug": "al_hussayni_al_azazy_with_children",
-    "name_en": "Al-Hussayni Al-'Azazy (with Children)",
+    "slug": "al_hussayni_al_azazy_children_repeat",
+    "name_en": "Al-Hussayni Al-'Azazy",
     "name_ar": "unknown",
     "source": "quranicaudio",
-    "style": "murattal",
+    "style": "children_repeat",
     "riwayah": "hafs_an_asim",
     "country": "unknown",
     "audio_cat": "by_surah",
@@ -5400,6 +5400,18 @@
     "has_timing": false
   },
   {
+    "slug": "abbadi_houssem_eddine",
+    "name_en": "Abbadi Houssem Eddine",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 48,
+    "has_timing": false
+  },
+  {
     "slug": "abdel_rahman_benmoussa",
     "name_en": "Abdel Rahman Benmoussa",
     "name_ar": "عبد الرحمن بن موسى",
@@ -5409,6 +5421,30 @@
     "country": "Morocco",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdelaziz_algaraani",
+    "name_en": "Abdelaziz AlGaraani",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 85,
+    "has_timing": false
+  },
+  {
+    "slug": "abdelaziz_sheim",
+    "name_en": "Abdelaziz Sheim",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 26,
     "has_timing": false
   },
   {
@@ -5460,6 +5496,30 @@
     "has_timing": false
   },
   {
+    "slug": "abdul_wali_al_arkani",
+    "name_en": "Abdul Wali Al Arkani",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 81,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulaziz_asiri",
+    "name_en": "AbdulAziz Asiri",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 55,
+    "has_timing": false
+  },
+  {
     "slug": "abdulkabeer_alhadidi",
     "name_en": "Abdulkabeer Al-Hadidi",
     "name_ar": "عبد الكبير الحديدي",
@@ -5472,6 +5532,102 @@
     "has_timing": false
   },
   {
+    "slug": "abdullah_al_juhani",
+    "name_en": "Abdullah Al-Juhani",
+    "name_ar": "عبدالله الجهني",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_khalaf",
+    "name_en": "Abdullah Al-Khalaf",
+    "name_ar": "عبد الله الخلف",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_khulaifi",
+    "name_en": "Abdullah Al-Khulaifi",
+    "name_ar": "عبد الله الخليفي",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdullah_al_mousa",
+    "name_en": "Abdullah Al-Mousa",
+    "name_ar": "عبد الله الموسى",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "abdulrhman_mosad",
+    "name_en": "Abdulrhman Mosad",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 12,
+    "has_timing": false
+  },
+  {
+    "slug": "abdurrazzaq_al_dulaimi",
+    "name_en": "AbdurRazzaq al-Dulaimi",
+    "name_ar": "عبد الرزاق الدليمي",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Iraq",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "adham_nabulsi",
+    "name_en": "Adham Nabulsi",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 7,
+    "has_timing": false
+  },
+  {
+    "slug": "afif_taj",
+    "name_en": "Afif Taj",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 22,
+    "has_timing": false
+  },
+  {
     "slug": "ahmed_allahdan",
     "name_en": "Ahmed Allahdan",
     "name_ar": "أحمد اللحدان",
@@ -5481,6 +5637,54 @@
     "country": "Bahrain",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_alsaed_mndur",
+    "name_en": "Ahmed Alsaed Mndur",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 56,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_alshafey",
+    "name_en": "Ahmed Alshafey",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 61,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_diban",
+    "name_en": "Ahmed Diban",
+    "name_ar": "أحمد ديبان",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ahmed_khedr",
+    "name_en": "Ahmed Khedr",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 53,
     "has_timing": false
   },
   {
@@ -5517,6 +5721,54 @@
     "country": "Lebanon",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "al_hosary_children_repeat",
+    "name_en": "Al-Hosary with Children",
+    "name_ar": "الحصري المعلم للاطفال",
+    "source": "surah-quran",
+    "style": "children_repeat",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "al_husary_qalon",
+    "name_en": "Al-Husary Qalon",
+    "name_ar": "الحصري برواية قالون",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "qalon_an_nafi",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "alaa_aqel",
+    "name_en": "Alaa Aqel",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 60,
+    "has_timing": false
+  },
+  {
+    "slug": "ali_abdulsalam_al_youssef",
+    "name_en": "Ali Abdulsalam Al-Youssef",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 52,
     "has_timing": false
   },
   {
@@ -5568,6 +5820,18 @@
     "has_timing": false
   },
   {
+    "slug": "anas_bourak",
+    "name_en": "Anas Bourak",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 26,
+    "has_timing": false
+  },
+  {
     "slug": "anas_jalhoum",
     "name_en": "Anas Jalhoum",
     "name_ar": "أنس جلهوم",
@@ -5577,6 +5841,54 @@
     "country": "Egypt",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "anas_mohamed",
+    "name_en": "Anas Mohamed",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 12,
+    "has_timing": false
+  },
+  {
+    "slug": "ayman_sweid",
+    "name_en": "Ayman Sweid",
+    "name_ar": "أيمن سويد",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Syria",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "daoud_hamza",
+    "name_en": "Daoud Hamza",
+    "name_ar": "داود حمزة",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Libya",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ezzedine_alawami",
+    "name_en": "Ezzedine Alawami",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 18,
     "has_timing": false
   },
   {
@@ -5616,6 +5928,30 @@
     "has_timing": false
   },
   {
+    "slug": "hadi_toure",
+    "name_en": "Hadi Toure",
+    "name_ar": "محمد الهادي توري",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Senegal",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hafiz_khalil_ismail",
+    "name_en": "Hafiz Khalil Ismail",
+    "name_ar": "الحافظ خليل اسماعيل",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Iraq",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
     "slug": "hajjaj_al_hindawi",
     "name_en": "Hajjaj Al-Hindawi",
     "name_ar": "حجاج الهنداوي",
@@ -5637,6 +5973,18 @@
     "country": "Algeria",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hamza_boudib",
+    "name_en": "Hamza Boudib",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 16,
     "has_timing": false
   },
   {
@@ -5664,6 +6012,90 @@
     "has_timing": false
   },
   {
+    "slug": "hassan_saleh",
+    "name_en": "Hassan Saleh",
+    "name_ar": "حسن صالح",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hassan_saleh_warsh",
+    "name_en": "Hassan Saleh Warsh",
+    "name_ar": "حسن صالح ورش",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "warsh_an_nafi",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "hazaa_balushi",
+    "name_en": "Hazaa Balushi",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 80,
+    "has_timing": false
+  },
+  {
+    "slug": "hazem_seif",
+    "name_en": "Hazem Seif",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 38,
+    "has_timing": false
+  },
+  {
+    "slug": "husseini_azazi",
+    "name_en": "Husseini Azazi",
+    "name_ar": "الحسيني العزازي",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ilhan_tok",
+    "name_en": "Ilhan Tok",
+    "name_ar": "إلهان توك",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Turkey",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "ilyas_hajri",
+    "name_en": "Ilyas hajri",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 44,
+    "has_timing": false
+  },
+  {
     "slug": "imad_almansri",
     "name_en": "Imad Al-Mansri",
     "name_ar": "عماد المنصري",
@@ -5671,6 +6103,18 @@
     "style": "murattal",
     "riwayah": "hafs_an_asim",
     "country": "Saudi Arabia",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "imams_of_alharam_mosque",
+    "name_en": "Imams of alharam Mosque",
+    "name_ar": "أئمة الحرم المكي",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -5685,6 +6129,18 @@
     "country": "Turkey",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "islam_sobhi",
+    "name_en": "Islam Sobhi",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 100,
     "has_timing": false
   },
   {
@@ -5736,6 +6192,54 @@
     "has_timing": false
   },
   {
+    "slug": "mahmoud_abdelhakam",
+    "name_en": "Mahmoud AbdelHakam",
+    "name_ar": "محمود عبد الحكم",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_el_banna",
+    "name_en": "Mahmoud El-Banna",
+    "name_ar": "محمود علي البنا",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mahmoud_el_shahat_anwar",
+    "name_en": "Mahmoud El Shahat Anwar",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 49,
+    "has_timing": false
+  },
+  {
+    "slug": "mamdouh_amer",
+    "name_en": "Mamdouh Amer",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 61,
+    "has_timing": false
+  },
+  {
     "slug": "maytham_altammar",
     "name_en": "Maytham Al-Tammar",
     "name_ar": "ميثم التمار",
@@ -5748,6 +6252,30 @@
     "has_timing": false
   },
   {
+    "slug": "minshawi_children_repeat",
+    "name_en": "Minshawi with kids",
+    "name_ar": "المنشاوي مع ترديد الاطفال",
+    "source": "surah-quran",
+    "style": "children_repeat",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mishari_al_baghli",
+    "name_en": "Mishari Al Baghli",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 47,
+    "has_timing": false
+  },
+  {
     "slug": "mohammed_alghazali",
     "name_en": "Mohammed Al-Ghazali",
     "name_ar": "محمد الغزالي",
@@ -5755,6 +6283,90 @@
     "style": "murattal",
     "riwayah": "hafs_an_asim",
     "country": "Saudi Arabia",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohammed_hassan",
+    "name_en": "Mohammed Hassan",
+    "name_ar": "محمد حسان",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mohmed_hesham",
+    "name_en": "Mohmed Hesham",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 23,
+    "has_timing": false
+  },
+  {
+    "slug": "mouad_douik",
+    "name_en": "Mouad Douik",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 81,
+    "has_timing": false
+  },
+  {
+    "slug": "muftah_al_sultani",
+    "name_en": "Muftah Al-Sultani",
+    "name_ar": "مفتاح السلطني",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Libya",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_al_barrak",
+    "name_en": "Muhammad Al-Barrak",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 63,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_al_faqih",
+    "name_en": "Muhammad Al Faqih",
+    "name_ar": "محمد الفقيه",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Yemen",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_al_hudayri",
+    "name_en": "Muhammad Al-Hudayri",
+    "name_ar": "محمد الحضيري",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Libya",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -5784,6 +6396,42 @@
     "has_timing": false
   },
   {
+    "slug": "muhammad_dibirov",
+    "name_en": "Muhammad Dibirov",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 10,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_rashad_al_sharif",
+    "name_en": "Muhammad Rashad Al-Sharif",
+    "name_ar": "محمد رشاد الشريف",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Palestine",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "muhammad_taha_al_junaid",
+    "name_en": "Muhammad Taha Al-Junaid",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 68,
+    "has_timing": false
+  },
+  {
     "slug": "muhammed_husayn_amer",
     "name_en": "Muhammed Husayn Amer",
     "name_ar": "محمد حسين عامر",
@@ -5793,6 +6441,18 @@
     "country": "Yemen",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "mustafa_al_ferjani",
+    "name_en": "Mustafa Al-Ferjani",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 62,
     "has_timing": false
   },
   {
@@ -5808,6 +6468,30 @@
     "has_timing": false
   },
   {
+    "slug": "mustafa_ismail_mujawwad",
+    "name_en": "Mustafa Ismail Tajweed",
+    "name_ar": "مصطفى اسماعيل تجويد",
+    "source": "surah-quran",
+    "style": "mujawwad",
+    "riwayah": "hafs_an_asim",
+    "country": "Egypt",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "noureddine_salim_nouri",
+    "name_en": "Noureddine Salim Nouri",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 49,
+    "has_timing": false
+  },
+  {
     "slug": "obaida_muafaq",
     "name_en": "Obaida Muafaq",
     "name_ar": "عبيدة موفق",
@@ -5820,6 +6504,54 @@
     "has_timing": false
   },
   {
+    "slug": "okasha_kameny_bazzi",
+    "name_en": "Okasha Kameny",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "bazzi_ibn_kathir",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "omar_bin_abdulaziz",
+    "name_en": "Omar Bin Abdulaziz",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 10,
+    "has_timing": false
+  },
+  {
+    "slug": "omar_hisham",
+    "name_en": "Omar Hisham",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 71,
+    "has_timing": false
+  },
+  {
+    "slug": "raad_al_kurdi",
+    "name_en": "Raad Al-Kurdi",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 98,
+    "has_timing": false
+  },
+  {
     "slug": "rachid_belachia",
     "name_en": "Rachid Belachia",
     "name_ar": "رشيد بلعشية",
@@ -5827,6 +6559,18 @@
     "style": "murattal",
     "riwayah": "hafs_an_asim",
     "country": "Morocco",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "rachid_belalia",
+    "name_en": "Rachid Belalia",
+    "name_ar": "رشيد بلعالية",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Algeria",
     "audio_cat": "by_surah",
     "coverage": 114,
     "has_timing": false
@@ -5844,6 +6588,30 @@
     "has_timing": false
   },
   {
+    "slug": "rizgar_kurdy",
+    "name_en": "Rizgar Kurdy",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 55,
+    "has_timing": false
+  },
+  {
+    "slug": "sadaqat_ali",
+    "name_en": "Sadaqat Ali",
+    "name_ar": "صدقات علي",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Pakistan",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
     "slug": "saeed_alkhatib",
     "name_en": "Saeed Al-Khatib",
     "name_ar": "سعيد الخطيب",
@@ -5853,6 +6621,30 @@
     "country": "Saudi Arabia",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "sahl_yassin",
+    "name_en": "Sahl Yassin",
+    "name_ar": "سهل ياسين",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "salah_al_baji",
+    "name_en": "Salah Al-Baji",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 34,
     "has_timing": false
   },
   {
@@ -5880,6 +6672,30 @@
     "has_timing": false
   },
   {
+    "slug": "saleh_al_ansari",
+    "name_en": "Saleh Al Ansari",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 41,
+    "has_timing": false
+  },
+  {
+    "slug": "salem_al_ruwaili",
+    "name_en": "Salem Al Ruwaili",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 24,
+    "has_timing": false
+  },
+  {
     "slug": "salih_ahmed_salih",
     "name_en": "Salih Ahmed Salih",
     "name_ar": "صالح أحمد صالح",
@@ -5889,6 +6705,198 @@
     "country": "Sudan",
     "audio_cat": "by_surah",
     "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "salman_al_otaibi",
+    "name_en": "Salman Al-Otaibi",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 68,
+    "has_timing": false
+  },
+  {
+    "slug": "sayid_mutauli",
+    "name_en": "Sayid Mutauli",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 36,
+    "has_timing": false
+  },
+  {
+    "slug": "sherif_mostafa",
+    "name_en": "Sherif Mostafa",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 23,
+    "has_timing": false
+  },
+  {
+    "slug": "syed_saeed",
+    "name_en": "Syed Saeed",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 38,
+    "has_timing": false
+  },
+  {
+    "slug": "tamim_al_rimi",
+    "name_en": "Tamim Al-Rimi",
+    "name_ar": "تميم الريمي",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "tareq_mohammad",
+    "name_en": "Tareq Mohammad",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 46,
+    "has_timing": false
+  },
+  {
+    "slug": "waleed_al_shamsan",
+    "name_en": "Waleed Al Shamsan",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 24,
+    "has_timing": false
+  },
+  {
+    "slug": "walid_mehsas",
+    "name_en": "Walid Mehsas",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 78,
+    "has_timing": false
+  },
+  {
+    "slug": "yaseer_alzailaie",
+    "name_en": "Yaseer Alzailaie",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 43,
+    "has_timing": false
+  },
+  {
+    "slug": "yasser_al_dosari",
+    "name_en": "Yasser Al-Dosari",
+    "name_ar": "ياسر الدوسري",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Saudi",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "yassin_al_jazaery",
+    "name_en": "Yassin Al-Jazaery",
+    "name_ar": "ياسين الجزائري",
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "Algeria",
+    "audio_cat": "by_surah",
+    "coverage": 114,
+    "has_timing": false
+  },
+  {
+    "slug": "younes_aswelis",
+    "name_en": "Younes Aswelis",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 30,
+    "has_timing": false
+  },
+  {
+    "slug": "yousef_kalo",
+    "name_en": "Yousef Kalo",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 62,
+    "has_timing": false
+  },
+  {
+    "slug": "youssef_al_suqair",
+    "name_en": "Youssef Al Suqair",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 44,
+    "has_timing": false
+  },
+  {
+    "slug": "youssef_maaty",
+    "name_en": "Youssef Maaty",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 47,
+    "has_timing": false
+  },
+  {
+    "slug": "yusuf_al_aidroos",
+    "name_en": "Yusuf Al-Aidroos",
+    "name_ar": null,
+    "source": "surah-quran",
+    "style": "murattal",
+    "riwayah": "hafs_an_asim",
+    "country": "unknown",
+    "audio_cat": "by_surah",
+    "coverage": 88,
     "has_timing": false
   },
   {
