@@ -2,6 +2,7 @@
     import { createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import { IssueRegistry } from '../../domain/registry';
@@ -273,6 +274,7 @@
                 title={isDirtySegment
                     ? 'Cannot ignore \u2014 this segment already has unsaved edits'
                     : 'Dismiss this issue for this category'}
+                use:editGate
                 on:click={handleIgnore}
             >{isAlreadyIgnored ? 'Ignored' : 'Ignore'}</button>
         {/if}

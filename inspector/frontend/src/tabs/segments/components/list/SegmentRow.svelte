@@ -24,6 +24,7 @@
     import { onDestroy,onMount } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import type { Segment } from '../../../../lib/types/domain';
     import {
         getAdjacentSegments,
@@ -653,18 +654,20 @@
 
                 {#if !isContext}
                     <div class="seg-actions">
-                        <button class="btn btn-sm btn-adjust" on:click={onAdjustClick}>Adjust</button>
+                        <button class="btn btn-sm btn-adjust" use:editGate on:click={onAdjustClick}>Adjust</button>
                         <button class="btn btn-sm btn-merge-prev"
                             disabled={mergePrevDisabled}
                             title={mergePrevTitle}
+                            use:editGate
                             on:click={onMergePrevClick}>Merge &uarr;</button>
-                        <button class="btn btn-sm btn-delete" on:click={onDeleteClick}>Delete</button>
-                        <button class="btn btn-sm btn-split" on:click={onSplitClick}>Split</button>
+                        <button class="btn btn-sm btn-delete" use:editGate on:click={onDeleteClick}>Delete</button>
+                        <button class="btn btn-sm btn-split" use:editGate on:click={onSplitClick}>Split</button>
                         <button class="btn btn-sm btn-merge-next"
                             disabled={mergeNextDisabled}
                             title={mergeNextTitle}
+                            use:editGate
                             on:click={onMergeNextClick}>Merge &darr;</button>
-                        <button class="btn btn-sm btn-edit-ref" on:click={onEditRefClick}>Edit Ref</button>
+                        <button class="btn btn-sm btn-edit-ref" use:editGate on:click={onEditRefClick}>Edit Ref</button>
                     </div>
                 {/if}
             </div>

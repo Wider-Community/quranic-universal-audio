@@ -41,8 +41,11 @@ export type SurahInfoResponse = SurahInfoMap;
 
 /** GET /api/ts/config — display constants + read-path URLs. */
 export interface TsConfigResponse {
-    /** "local" (Flask serves shards) or "huggingface" (frontend reads from CDN). */
-    mode: 'local' | 'huggingface';
+    /** "local" — Flask serves shards from on-disk timestamps tree.
+     *  "bucket" — Flask serves shards from <bucket>/published/<slug>/timestamps/.
+     *  The legacy "huggingface" mode (frontend → HF dataset CDN) was removed
+     *  in Phase 2; Inspector reads timestamps through its own backend in v2. */
+    mode: 'local' | 'bucket';
     /** Full URL the frontend fetches once to populate the in-memory manifest. */
     manifest_url: string;
     /** URL template with `{reciter}` + `{chapter}` placeholders. */

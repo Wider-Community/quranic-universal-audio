@@ -31,6 +31,8 @@
         onOpUndoClick,
         onPendingOpsDiscard,
     } from '../../utils/save/undo';
+
+    import { editGate } from '../../../../lib/actions/editGate';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
     import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryOp from './HistoryOp.svelte';
@@ -136,11 +138,13 @@
         {#if item.isPending}
             <button
                 class="btn btn-sm seg-history-undo-btn"
+                use:editGate
                 on:click|stopPropagation={handleDiscardClick}
             >Discard</button>
         {:else if mode === 'history' && item.batchId && !item.isRevert}
             <button
                 class="btn btn-sm seg-history-undo-btn"
+                use:editGate
                 on:click|stopPropagation={handleUndoClick}
             >Undo</button>
         {/if}

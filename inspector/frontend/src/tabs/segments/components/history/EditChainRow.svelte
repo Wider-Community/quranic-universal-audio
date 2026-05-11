@@ -26,6 +26,8 @@
     import type { SplitHighlight, TrimHighlight } from '../../types/segments-waveform';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
+
+    import { editGate } from '../../../../lib/actions/editGate';
     import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
     import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryArrows from './HistoryArrows.svelte';
@@ -181,12 +183,14 @@
         {#if mode === 'history' && chainBatchIds.length > 0}
             <button
                 class="btn btn-sm seg-history-undo-btn"
+                use:editGate
                 on:click|stopPropagation={handleChainUndoClick}
             >Undo</button>
         {/if}
         {#if pendingOpIds.length > 0 && chapter != null}
             <button
                 class="btn btn-sm seg-history-undo-btn"
+                use:editGate
                 on:click|stopPropagation={handleChainDiscardClick}
             >Discard</button>
         {/if}

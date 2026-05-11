@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
 
+    import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import AudioTab from './tabs/audio/AudioTab.svelte';
@@ -59,3 +60,7 @@
     </div>
 
 </div>
+
+<!-- Single global popover surfaced by `editGate` for non-editor clicks
+     on edit affordances. Phase 2: only the unauthenticated reason fires. -->
+<EditAffordancePopover />

@@ -200,30 +200,15 @@
             console.error('Error reading manifest for reciter:', e);
         }
 
-        // Validation: HF mode can serve pre-computed boundary mismatches from
-        // the manifest. Local mode (which carries an empty array) and any
-        // in-review reciter (also empty) fall through to /api/ts/validate.
+        // Validation falls through to /api/ts/validate which is gated off in
+        // deployed mode (returns 410). Local maintainers keep the route for
+        // offline review. The legacy huggingface-mode pre-computed boundary
+        // mismatch path is gone in v2 — see Phase 2 / inspector-deferred.md.
         try {
-            const m = await loadManifest();
-            const cfg = await loadConfig();
-            const block = m.reciters[reciter];
-            const pre = block?.validation?.boundary_mismatches ?? [];
-            if (cfg.mode === 'huggingface' && pre.length > 0) {
-                validationData.set({
-                    mfa_failures: [],
-                    missing_verses: [],
-                    missing_words: [],
-                    verse_overlaps: [],
-                    boundary_mismatches: pre,
-                    large_gaps: [],
-                    meta: { has_segments: true, tolerance_ms: 0 },
-                });
-            } else {
-                const valResult = await fetchJson<TsValidateResponse>(
-                    `/api/ts/validate/${encodeURIComponent(reciter)}`,
-                );
-                if (!valResult.error) validationData.set(valResult);
-            }
+            const valResult = await fetchJson<TsValidateResponse>(
+                `/api/ts/validate/${encodeURIComponent(reciter)}`,
+            );
+            if (!valResult.error) validationData.set(valResult);
         } catch (e) {
             console.error('Error loading validation:', e);
         }

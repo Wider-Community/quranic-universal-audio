@@ -1,6 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import type { SegValAutoFix,SegValMissingWordsItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import {
@@ -183,17 +184,20 @@
             <button
                 class="val-action-btn"
                 title="Extend segment ref to cover the missing word"
+                use:editGate
                 on:click={() => handleAutoFix(item.auto_fix)}
             >Auto Fill</button>
         {:else if item.auto_fix_up && item.auto_fix_down}
             <button
                 class="val-action-btn"
                 title="Extend previous segment to cover the missing word"
+                use:editGate
                 on:click={() => handleAutoFix(item.auto_fix_up)}
             >Auto Fill Up</button>
             <button
                 class="val-action-btn"
                 title="Extend next segment to cover the missing word"
+                use:editGate
                 on:click={() => handleAutoFix(item.auto_fix_down)}
             >Auto Fill Down</button>
         {/if}
