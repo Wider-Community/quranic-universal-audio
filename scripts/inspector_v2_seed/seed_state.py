@@ -47,12 +47,26 @@ from inspector.services.hf_bucket import get_backend
 # Future v1 dirs (wip side) fall through unchanged because they don't yet
 # correspond to a canonical published delivery slug.
 CUTOVER_CANONICAL_MAP: dict[str, str] = {
+    # 6 completed (mp3quran, by_surah, Hafs Murattal)
     "maher_al_meaqli": "maher_al_muaiqly_mp3quran",
     "mishary_alafasi": "mishary_rashid_al_afasy_mp3quran",
     "mohammed_siddiq_al_minshawi": "mohammed_siddiq_al_minshawi_mp3quran",
     "nasser_alqatami": "nasser_al_qatami_mp3quran",
     "saad_al_ghamdi": "saad_al_ghamdi_mp3quran",
     "yasser_al_dosari": "yasser_al_dosari_mp3quran",
+    # 8 wip reciters — slug determined by the audio_source in their v1
+    # segments.json _meta + the catalog's canonical delivery slug.
+    # Dedup naming corrections renamed Ahmad→Ahmed for 2; Bandar Balilah →
+    # Baleela for 1. Abdullah Ali Jabir's v1 alignment used the qul-served
+    # Taraweeh recording (the only by_surah/qul delivery in catalog).
+    "abdullah_ali_jabir": "abdullah_ali_jabir_taraweeh_qdc",
+    "abdulwadood_haneef": "abdulwadood_haneef_mp3quran",
+    "ahmad_saud": "ahmed_saud_mp3quran",
+    "ahmad_talib_bin_humaid": "ahmed_talib_bin_humaid_mp3quran",
+    "bandar_balilah": "bandar_baleela_mp3quran",
+    "mohammed_alghazali": "mohammed_alghazali_archive",
+    "mohammed_ayyub": "mohammed_ayyub_mp3quran",
+    "raad_al_kurdi": "raad_al_kurdi_mp3quran",
 }
 
 

@@ -48,29 +48,11 @@ from inspector.services.hf_bucket import get_backend
 from scripts.lib.schemas import ReciterStateFile
 
 
-# Map of "current bucket slug" → "canonical post-dedup delivery slug".
-# An earlier buggy reconcile run moved the original v1-keyed dirs to
-# <v1_name>_mp3quran/, which is wrong for 3 reciters whose canonical
-# reciter_id was renamed by the dedup naming-style pass. The right side
-# must match a ``deliveries[].slug`` in the catalog.
-V1_TO_CANONICAL_DELIVERY: dict[str, str] = {
-    # current → canonical (post-dedup rename + _mp3quran suffix)
-    "maher_al_meaqli_mp3quran": "maher_al_muaiqly_mp3quran",
-    "mishary_alafasi_mp3quran": "mishary_rashid_al_afasy_mp3quran",
-    "nasser_alqatami_mp3quran": "nasser_al_qatami_mp3quran",
-    # already canonical — kept here as no-ops so the state-file scan still
-    # validates the slug is in catalog
-    "mohammed_siddiq_al_minshawi_mp3quran": "mohammed_siddiq_al_minshawi_mp3quran",
-    "saad_al_ghamdi_mp3quran": "saad_al_ghamdi_mp3quran",
-    "yasser_al_dosari_mp3quran": "yasser_al_dosari_mp3quran",
-    # also handle still-v1-keyed dirs if any survived
-    "maher_al_meaqli": "maher_al_muaiqly_mp3quran",
-    "mishary_alafasi": "mishary_rashid_al_afasy_mp3quran",
-    "mohammed_siddiq_al_minshawi": "mohammed_siddiq_al_minshawi_mp3quran",
-    "nasser_alqatami": "nasser_al_qatami_mp3quran",
-    "saad_al_ghamdi": "saad_al_ghamdi_mp3quran",
-    "yasser_al_dosari": "yasser_al_dosari_mp3quran",
-}
+# Pulled from seed_state.py so the two stay in sync. Covers all 14 cutover
+# reciters (6 completed + 8 wip). For each on-disk v1 slug we know the
+# canonical delivery slug; the reconcile moves bucket bytes + state slugs
+# to match.
+from scripts.inspector_v2_seed.seed_state import CUTOVER_CANONICAL_MAP as V1_TO_CANONICAL_DELIVERY
 
 
 def main() -> int:
@@ -101,42 +83,63 @@ def main() -> int:
         f"({len(catalog_delivery_slugs)} total deliveries)"
     )
 
-    # ---- 1. Move bucket dirs ----
+    # ---- 1. Move bucket dirs (covers both wip/ and published/ subtrees) ----
     copy_ops: list[tuple[bytes, str]] = []
     delete_ops: list[str] = []
-    for v1_name, canonical in V1_TO_CANONICAL_DELIVERY.items():
-        if v1_name == canonical:
-            print(f"  {v1_name:35s} already canonical; skip")
-            continue
-        old_prefix = f"published/{v1_name}"
-        new_prefix = f"published/{canonical}"
+    # Process exact-prefix matches first so the "skip if already-moved" check
+    # is correctly seeded by the canonical-target listing before we look at
+    # broader prefixes that could shadow them.
+    new_targets: set[str] = set()
 
-        if backend.exists(f"{new_prefix}/segments.json"):
-            print(f"  {v1_name:35s} already moved -> {new_prefix}/; skip")
-            continue
+    for kind in ("published", "wip"):
+        for v1_name, canonical in V1_TO_CANONICAL_DELIVERY.items():
+            if v1_name == canonical:
+                continue
+            old_prefix = f"{kind}/{v1_name}"
+            new_prefix = f"{kind}/{canonical}"
 
-        try:
-            old_entries = [
-                it.path
-                for it in list_bucket_tree(bucket, prefix=old_prefix, recursive=True)
-                if it.type == "file"
-            ]
-        except Exception as e:  # noqa: BLE001
-            print(f"  {v1_name}: list failed: {e}", file=sys.stderr)
-            continue
-        if not old_entries:
-            print(f"  {v1_name}: nothing to move at {old_prefix}/")
-            continue
+            # Don't re-process if we already queued ops or files already exist at canonical.
+            if new_prefix in new_targets:
+                continue
+            if backend.exists(f"{new_prefix}/segments.json"):
+                continue
 
-        for p in old_entries:
-            tail = p[len(old_prefix) + 1 :]
-            new_path = f"{new_prefix}/{tail}"
-            body = hffs.cat_file(f"buckets/{bucket}/{p}")
-            copy_ops.append((body, new_path))
-            delete_ops.append(p)
-        print(
-            f"  {v1_name:35s} queued {len(old_entries):3d} files -> {canonical}/"
-        )
+            try:
+                old_entries = [
+                    it.path
+                    for it in list_bucket_tree(bucket, prefix=old_prefix, recursive=True)
+                    if it.type == "file"
+                ]
+            except Exception as e:  # noqa: BLE001
+                print(f"  {old_prefix}: list failed: {e}", file=sys.stderr)
+                continue
+            if not old_entries:
+                continue
+
+            # Filter out files that already match a different new_target prefix —
+            # avoids the nested-mp3quran bug where a fuzzy prefix match returns
+            # files that should belong to a more specific iteration.
+            filtered: list[str] = []
+            for p in old_entries:
+                # Reject if this path is actually a child of some already-queued
+                # new_target dir (i.e. a more-specific canonical we've already
+                # processed in this same outer iteration).
+                if any(p.startswith(t + "/") for t in new_targets):
+                    continue
+                filtered.append(p)
+            if not filtered:
+                continue
+
+            for p in filtered:
+                tail = p[len(old_prefix) + 1 :]
+                new_path = f"{new_prefix}/{tail}"
+                body = hffs.cat_file(f"buckets/{bucket}/{p}")
+                copy_ops.append((body, new_path))
+                delete_ops.append(p)
+            new_targets.add(new_prefix)
+            print(
+                f"  {old_prefix:50s} queued {len(filtered):3d} files -> {new_prefix}/"
+            )
 
     if copy_ops:
         chunk = 100
