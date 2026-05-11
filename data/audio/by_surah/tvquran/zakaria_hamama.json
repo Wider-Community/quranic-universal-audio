@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "reciter": "zakaria_hamama",
+    "name_en": "Zakaria Hamama",
+    "name_ar": "زكرياء حمامة",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 285,
+    "source_page_en": "https://www.tvquran.com/en/scholar/285/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/285/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/285/206",
+    "source_riwayah_label_ar": "حفص عن عاصم",
+    "source_riwayah_label_en": "Hafs",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "32": "https://download.tvquran.com/download/recitations/285/206/032.mp3",
+  "36": "https://download.tvquran.com/download/recitations/285/206/036.mp3",
+  "44": "https://download.tvquran.com/download/recitations/285/206/044.mp3",
+  "56": "https://download.tvquran.com/download/recitations/285/206/056.mp3",
+  "67": "https://download.tvquran.com/download/recitations/285/206/067.mp3",
+  "76": "https://download.tvquran.com/download/recitations/285/206/076.mp3",
+  "85": "https://download.tvquran.com/download/recitations/285/206/085.mp3"
+}

@@ -44,6 +44,9 @@ export const tsPort: AudioPort = new AudioPort();
  *  segments-tab `segPortReady` shape. */
 export const tsPortReady = writable<boolean>(false);
 
+/** Chapters of the selected timestamp reciter whose audio is known VBR. */
+export const tsVbrChapters = writable<Set<number>>(new Set());
+
 /**
  * Looped element. While non-null, playback repeats `[startSec, endSec)` on
  * every rAF frame (see TimestampsAudio._tick) and the region is permanently

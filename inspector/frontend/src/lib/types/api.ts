@@ -74,6 +74,8 @@ export interface TsManifestReciter {
     url_template: string;
     /** Sorted list of chapter numbers the reciter has shards for. */
     ts_chapters: number[];
+    /** Sorted list of chapters whose audio is known VBR. Optional for older HF manifests. */
+    vbr_chapters?: number[];
     validation: { boundary_mismatches: TsBoundaryMismatch[] };
     /** Build-internal payload — not relied on by the read path. */
     _build?: { shard_hashes?: Record<string, string> };
@@ -128,6 +130,12 @@ export interface TsShardResponse {
 /** Verse payload assembled by the frontend ts_client — same shape as the legacy
  *  ``/api/ts/data`` response so consumer components stay unchanged. */
 export type TsDataResponse = TsVerseData;
+
+/** GET /api/ts/vbr/:reciter — fallback for older HF manifests. */
+export interface TsVbrResponse {
+    vbr_chapters: number[];
+    error?: string;
+}
 
 /** @deprecated Reciter list now read from {@link TsManifestResponse.reciters}. */
 export type TsRecitersResponse = TsReciter[];
@@ -453,7 +461,7 @@ export interface SegPeaksResponse {
 
 /** POST /api/seg/segment-peaks/:reciter */
 export interface SegSegmentPeaksRequest {
-    segments: Array<{ url: string; start_ms: number; end_ms: number }>;
+    segments: Array<{ url: string; start_ms: number; end_ms: number; chapter?: number }>;
     cached_only?: boolean;
 }
 

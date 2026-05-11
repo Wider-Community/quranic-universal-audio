@@ -11,7 +11,7 @@
  */
 
 import { fetchJson } from '../api';
-import type { SegSegmentPeaksResponse } from '../types/api';
+import type { SegSegmentPeaksRequest, SegSegmentPeaksResponse } from '../types/api';
 import type { SegmentPeaks } from '../types/domain';
 
 export interface FetchSegmentPeaksOptions {
@@ -28,18 +28,20 @@ export async function fetchSegmentPeaks(
     url: string,
     startMs: number,
     endMs: number,
+    chapter?: number,
     opts: FetchSegmentPeaksOptions = {},
 ): Promise<SegmentPeaks | null> {
     if (!reciter || !url || endMs <= startMs) return null;
+    const body: SegSegmentPeaksRequest = {
+        segments: [{ url, start_ms: startMs, end_ms: endMs, chapter }],
+        cached_only: opts.cachedOnly ?? false,
+    };
     const data = await fetchJson<SegSegmentPeaksResponse>(
         `/api/seg/segment-peaks/${reciter}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                segments: [{ url, start_ms: startMs, end_ms: endMs }],
-                cached_only: opts.cachedOnly ?? false,
-            }),
+            body: JSON.stringify(body),
         },
     );
     const key = `${url}:${startMs}:${endMs}`;

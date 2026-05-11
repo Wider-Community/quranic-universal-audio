@@ -41,6 +41,7 @@
         loadDk,
         loadManifest,
         loadQpc,
+        loadVbrChapters,
     } from './services/ts_client';
     import {
         granularity,
@@ -55,6 +56,7 @@
         autoAdvancing,
         loopTarget,
         tsPort,
+        tsVbrChapters,
     } from './stores/playback';
     import {
         chapters,
@@ -162,6 +164,7 @@
         selectedVerse.set('');
         clearDisplay();
         validationData.set(null);
+        tsVbrChapters.set(new Set());
         if (!reciter) return;
 
         try {
@@ -267,6 +270,7 @@
                 loadQpc(),
                 loadDk(),
             ]);
+            tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
             const data = assembleVerseFromShard(shard, verseRef, qpc, dk);
             if (!data) {
                 alert('Error: verse not found in shard');
@@ -300,6 +304,7 @@
                 loadQpc(),
                 loadDk(),
             ]);
+            tsVbrChapters.set(new Set(await loadVbrChapters(target.reciter)));
             const data = assembleVerseFromShard(shard, target.verseRef, qpc, dk);
             if (!data) {
                 console.error('Random target verse missing from shard:', target);
@@ -389,6 +394,12 @@
             && !data.audio_url.startsWith('/api/'))
             ? `/api/seg/audio-proxy/${data.reciter}?url=${encodeURIComponent(data.audio_url)}`
             : data.audio_url;
+        tsPort.setSource({
+            audioUrl: data.audio_url,
+            cbrSrc: playUrl,
+            reciter: data.reciter,
+            vbr: get(tsVbrChapters).has(data.chapter),
+        });
         // Auto-next reaches here right after AudioRange.`_pauseAndFlush` ramped
         // the gain to 0. The eventual `setRange→_uncut` lifting it back to 1
         // runs in a microtask AFTER `audioComp.load` synchronously kicks off

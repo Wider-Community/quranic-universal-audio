@@ -43,6 +43,11 @@ TOTAL_VERSES = 6236
 DEFAULT_URL_TIMEOUT = 10
 DEFAULT_MAX_WORKERS = 16
 DEFAULT_FFPROBE_TIMEOUT = 5
+MIN_AUDIO_BYTES = 50 * 1024  # placeholder/truncated file floor
+AUDIO_CT_PREFIX = "audio/"
+# A 200 status with these MIMEs almost always means an HTML error page or
+# generic placeholder rather than the requested audio asset.
+SUSPECT_CT_PREFIXES = ("text/", "application/json", "application/xml")
 
 
 # ── Input parsing (duplicated from extract_segments.py — cannot import
@@ -211,7 +216,28 @@ def validate_meta(path: Path) -> Tuple[List[dict], List[dict]]:
     if audio_cat and audio_cat not in VALID_AUDIO_CATEGORIES:
         errors.append({"msg": f"_meta.audio_category must be one of {VALID_AUDIO_CATEGORIES}, got \"{audio_cat}\""})
 
+    # Identity sanity: filename stem must match _meta.reciter
+    reciter = str(meta.get("reciter", "")).strip()
+    if reciter and reciter != path.stem:
+        errors.append({
+            "msg": f"_meta.reciter \"{reciter}\" does not match filename stem \"{path.stem}\""
+        })
+
     return errors, warnings
+
+
+def validate_format_identity(meta: Optional[dict], fmt: str) -> List[dict]:
+    """Cross-check _meta.audio_category against the detected input format."""
+    errors: List[dict] = []
+    if not meta:
+        return errors
+    cat = str(meta.get("audio_category", "")).strip()
+    expected = "by_ayah" if fmt in ("verse_json", "verse_dir") else "by_surah"
+    if cat and cat != expected:
+        errors.append({
+            "msg": f"_meta.audio_category=\"{cat}\" but detected format is {fmt} (expected \"{expected}\")"
+        })
+    return errors
 
 
 # ── Coverage analysis ────────────────────────────────────────────────────
@@ -330,40 +356,84 @@ def _check_via_ytdlp(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
                 "error": str(e), "content_type": None}
 
 
+def _audit_response(url: str, status: int, ct: Optional[str],
+                    cl: Optional[int]) -> Tuple[bool, Optional[str]]:
+    """Validate Content-Type/Length post-fetch. Returns (ok, error)."""
+    ct_lower = (ct or "").split(";")[0].strip().lower()
+    if ct_lower:
+        if any(ct_lower.startswith(p) for p in SUSPECT_CT_PREFIXES):
+            return False, f"non-audio Content-Type: {ct_lower}"
+        if not ct_lower.startswith(AUDIO_CT_PREFIX):
+            # unknown but not obviously-bad type → warn-only by treating as ok
+            pass
+    if cl is not None and cl < MIN_AUDIO_BYTES:
+        return False, f"Content-Length {cl} < floor {MIN_AUDIO_BYTES}"
+    return True, None
+
+
 def check_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
     """Check a single URL with HTTP HEAD (fallback to ranged GET).
+
+    Captures status, Content-Type, Content-Length, and wall-clock latency.
+    Validates Content-Type is audio/* and Content-Length above placeholder
+    floor when those headers are present.
 
     Non-direct-audio URLs are validated via yt-dlp --simulate instead.
     """
     if _needs_ytdlp(url):
         return _check_via_ytdlp(url, timeout=30)
     headers = {"User-Agent": "Mozilla/5.0"}
+    import time as _t
     for method in ("HEAD", "GET"):
         try:
             req = urllib.request.Request(url, headers=headers, method=method)
             if method == "GET":
                 req.add_header("Range", "bytes=0-0")
+            t0 = _t.perf_counter()
             with urllib.request.urlopen(req, timeout=timeout) as resp:
+                latency_ms = int((_t.perf_counter() - t0) * 1000)
+                ct = resp.headers.get("Content-Type")
+                cl_header = resp.headers.get("Content-Length")
+                # On a Range response, prefer Content-Range full size.
+                cr = resp.headers.get("Content-Range")
+                cl: Optional[int] = None
+                if cr and "/" in cr:
+                    try:
+                        cl = int(cr.rsplit("/", 1)[1])
+                    except ValueError:
+                        cl = None
+                if cl is None and cl_header is not None:
+                    try:
+                        cl = int(cl_header)
+                    except ValueError:
+                        cl = None
+                ok, err = _audit_response(url, resp.status, ct, cl)
                 return {
                     "url": url,
-                    "ok": True,
+                    "ok": ok,
                     "status": resp.status,
-                    "error": None,
-                    "content_type": resp.headers.get("Content-Type"),
+                    "error": err,
+                    "content_type": ct,
+                    "content_length": cl,
+                    "latency_ms": latency_ms,
                 }
         except urllib.error.HTTPError as e:
             if method == "HEAD" and e.code == 405:
                 continue  # try GET fallback
             return {"url": url, "ok": False, "status": e.code,
-                    "error": f"HTTP {e.code}", "content_type": None}
+                    "error": f"HTTP {e.code}", "content_type": None,
+                    "content_length": None, "latency_ms": None}
         except urllib.error.URLError as e:
             return {"url": url, "ok": False, "status": None,
-                    "error": str(e.reason), "content_type": None}
+                    "error": str(e.reason), "content_type": None,
+                    "content_length": None, "latency_ms": None}
         except Exception as e:
             return {"url": url, "ok": False, "status": None,
-                    "error": str(e), "content_type": None}
+                    "error": str(e), "content_type": None,
+                    "content_length": None, "latency_ms": None}
     return {"url": url, "ok": False, "status": None,
-            "error": "All methods failed", "content_type": None}
+            "error": "All methods failed", "content_type": None,
+            "content_length": None, "latency_ms": None}
 
 
 def check_urls_parallel(
@@ -473,6 +543,12 @@ def validate_audio(
 
     # Metadata validation (JSON files only)
     meta_errors, meta_warnings = validate_meta(path)
+    meta_block: Optional[dict] = None
+    if path.is_file() and path.suffix == ".json":
+        try:
+            meta_block = _load_json_or_jsonl(path).get("_meta")
+        except Exception:
+            meta_block = None
 
     if is_verse:
         coverage = analyze_verse_coverage(grouped, surah_info)
@@ -539,6 +615,9 @@ def validate_audio(
     # Metadata issues
     errors.extend(meta_errors)
     warnings.extend(meta_warnings)
+    # Audio-category vs detected-format identity
+    if meta_block:
+        errors.extend(validate_format_identity(meta_block, fmt))
 
     # Missing coverage as warnings
     if level == "sura":
@@ -558,12 +637,6 @@ def validate_audio(
             "key": dup["key"],
             "sources": dup["sources"],
         })
-
-    # Load _meta for display if available
-    meta_block = None
-    if path.is_file() and path.suffix == ".json":
-        raw = _load_json_or_jsonl(path)
-        meta_block = raw.get("_meta")
 
     return {
         "path": str(path),
@@ -688,6 +761,22 @@ def _print_verbose(results: dict, surah_info: dict, top_n: int) -> None:
         print(f"\n--- Source Validation (URLs) ---")
         print(f"  Reachable:      {ok_count} / {len(url_results)}")
         print(f"  Unreachable:    {fail_count}")
+        lats = sorted(r["latency_ms"] for r in url_results
+                      if r.get("latency_ms") is not None)
+        if lats:
+            p50 = lats[len(lats) // 2]
+            p95 = lats[min(len(lats) - 1, int(len(lats) * 0.95))]
+            print(f"  Latency (HEAD): p50={p50}ms  p95={p95}ms  min={lats[0]}ms  max={lats[-1]}ms")
+        sizes = [r["content_length"] for r in url_results
+                 if r.get("content_length")]
+        if sizes:
+            avg_kb = sum(sizes) // len(sizes) // 1024
+            print(f"  Size:           avg={avg_kb} KB  min={min(sizes)//1024} KB  max={max(sizes)//1024} KB")
+        cts = {(r.get("content_type") or "").split(";")[0].strip().lower()
+               for r in url_results if r.get("ok")}
+        cts.discard("")
+        if cts:
+            print(f"  Content-Type:   {sorted(cts)}")
 
         if fail_count:
             failed = [r for r in url_results if not r["ok"]]
@@ -768,6 +857,7 @@ def _tee_to_file(path: Path):
 
 
 def main():
+    global MIN_AUDIO_BYTES
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -806,12 +896,20 @@ def main():
         help=f"Timeout per URL check in seconds (default: {DEFAULT_URL_TIMEOUT}).",
     )
     parser.add_argument(
+        "--min-audio-bytes",
+        type=int,
+        default=MIN_AUDIO_BYTES,
+        help=f"Reject 200 responses with Content-Length below this floor "
+             f"(default: {MIN_AUDIO_BYTES}). Lower for low-bitrate sources.",
+    )
+    parser.add_argument(
         "--top", "-n",
         type=int,
         default=30,
         help="Max items to show per category (default: 30).",
     )
     args = parser.parse_args()
+    MIN_AUDIO_BYTES = args.min_audio_bytes
 
     target = args.path.resolve()
     if not target.exists():

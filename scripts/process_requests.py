@@ -1100,11 +1100,15 @@ def _rewrite_sweep_pbs_block(pbs_text: str, reciter: str, source: str,
         f'MODEL="Large"\n'
         f'RUN_PROBE={1 if run_probe else 0}\n'
     )
-    return re.sub(
-        r"RECITER=\"[^\"]*\"\nSOURCE=\"[^\"]*\"\nMIN_SILENCE_VALUES=\([^)]*\)\n"
-        r"PAD_LEFT=\d+\nPAD_RIGHT=\d+\nMIN_SILENCE_FLOOR=\d+\nMODEL=\"[^\"]*\"\nRUN_PROBE=\d+\n",
+    new_text, n = re.subn(
+        r"RECITER=\"[^\"]*\"[^\n]*\nSOURCE=\"[^\"]*\"[^\n]*\nMIN_SILENCE_VALUES=\([^)]*\)[^\n]*\n"
+        r"PAD_LEFT=\d+[^\n]*\nPAD_RIGHT=\d+[^\n]*\nMIN_SILENCE_FLOOR=\d+[^\n]*\n"
+        r"MODEL=\"[^\"]*\"[^\n]*\nRUN_PROBE=\d+[^\n]*\n",
         sub, pbs_text, count=1,
     )
+    if n != 1:
+        sys.exit("sweep PBS rewrite failed: config block regex did not match")
+    return new_text
 
 
 def cmd_generate_sweep_pbs(args):
@@ -1151,8 +1155,33 @@ def cmd_promote_sweep(args):
     )
     subprocess.run(["ssh", "katana", cmd], check=True)
 
+    local_dir = REPO_ROOT / "data/recitation_segments" / slug
+    local_dir.mkdir(parents=True, exist_ok=True)
     print("Fetching canonical to local...")
-    subprocess.run(["bash", str(REPO_ROOT / ".local/extraction/fetch_results.sh"), slug], check=True)
+    subprocess.run(
+        ["rsync", "-az",
+         f"katana:{canonical_remote}/", f"{local_dir}/"],
+        check=True,
+    )
+
+    print("Cleaning sweep artifacts (local + remote)...")
+    for p in list(local_dir.glob("segments__sil*.json")) + \
+             list(local_dir.glob("detailed__sil*.json")) + \
+             list(local_dir.glob("edit_history__sil*.jsonl")) + \
+             list(local_dir.glob("sweep_report.txt")):
+        p.unlink()
+    subprocess.run(
+        ["ssh", "katana",
+         f"rm -f {remote}/segments__sil*.json {remote}/detailed__sil*.json "
+         f"{remote}/edit_history__sil*.jsonl {remote}/sweep_report.txt"],
+        check=True,
+    )
+
+    print("Validating...")
+    subprocess.run(
+        ["python3", str(REPO_ROOT / "validators/validate_segments.py"), str(local_dir)],
+        check=False,
+    )
 
     if not args.no_probe:
         print(f"Submitting probe_mfa.pbs for {slug}...")

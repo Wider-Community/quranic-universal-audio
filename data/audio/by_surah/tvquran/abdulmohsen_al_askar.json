@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "reciter": "abdulmohsen_al_askar",
+    "name_en": "Abdulmohsen Al-Askar",
+    "name_ar": "عبد المحسن العسكر",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 229,
+    "source_page_en": "https://www.tvquran.com/en/scholar/229/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/229/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/229/166",
+    "source_riwayah_label_ar": "حفص عن عاصم",
+    "source_riwayah_label_en": "Hafs",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "1": "https://download.tvquran.com/download/recitations/229/166/001.mp3",
+  "2": "https://download.tvquran.com/download/recitations/229/166/002.mp3",
+  "7": "https://download.tvquran.com/download/recitations/229/166/007.mp3",
+  "55": "https://download.tvquran.com/download/recitations/229/166/055.mp3"
+}

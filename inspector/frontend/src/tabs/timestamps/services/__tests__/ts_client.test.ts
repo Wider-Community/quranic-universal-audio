@@ -1,7 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { fetchJson } from '../../../../lib/api';
 import type { TsShardResponse, TsShardWord } from '../../../../lib/types/api';
-import { assembleVerseFromShard, audioUrlFor, chapterVerseRefs } from '../ts_client';
+import {
+    assembleVerseFromShard,
+    audioUrlFor,
+    chapterVerseRefs,
+    resolveVbrChaptersForReciter,
+    vbrChaptersFromManifest,
+} from '../ts_client';
+
+vi.mock('../../../../lib/api', () => ({
+    fetchArrayBuffer: vi.fn(),
+    fetchJson: vi.fn(),
+}));
+
+beforeEach(() => {
+    vi.mocked(fetchJson).mockReset();
+});
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -256,5 +272,27 @@ describe('chapterVerseRefs', () => {
             '1:3': { words: [] },
         };
         expect(chapterVerseRefs(shard)).toEqual(['1:1', '1:2', '1:3']);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// VBR chapter metadata
+// ---------------------------------------------------------------------------
+
+describe('VBR chapter metadata', () => {
+    it('reads sorted vbr_chapters from the manifest when present', () => {
+        const manifest = {
+            reciters: { r: { vbr_chapters: [7, 2] } },
+        } as any;
+
+        expect(vbrChaptersFromManifest(manifest, 'r')).toEqual([2, 7]);
+    });
+
+    it('falls back to /api/ts/vbr when the manifest predates vbr_chapters', async () => {
+        vi.mocked(fetchJson).mockResolvedValue({ vbr_chapters: [4, 1] });
+        const manifest = { reciters: { r: {} } } as any;
+
+        await expect(resolveVbrChaptersForReciter('r', manifest)).resolves.toEqual([1, 4]);
+        expect(fetchJson).toHaveBeenCalledWith('/api/ts/vbr/r');
     });
 });

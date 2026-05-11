@@ -851,6 +851,25 @@ def _find_audio_manifest_meta(slug):
     return data.get("_meta", {}) if data else None
 
 
+def _vbr_chapters_for_manifest(slug):
+    """Return sorted VBR chapter numbers from data/.audio_meta.json."""
+    path = ROOT / "data" / ".audio_meta.json"
+    try:
+        doc = json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return []
+    by_chapter = (doc.get(slug) or {}).get("by_chapter") or {}
+    out = []
+    for chapter, entry in by_chapter.items():
+        if not isinstance(entry, dict) or not entry.get("vbr"):
+            continue
+        try:
+            out.append(int(chapter))
+        except (TypeError, ValueError):
+            continue
+    return sorted(out)
+
+
 def _build_reciter_info(eligible):
     """Build a list of info dicts for eligible reciters, grouped by riwayah."""
     from collections import defaultdict
@@ -1669,6 +1688,7 @@ def build_manifest(*, dry_run: bool = False) -> None:
             "audio_category": audio_cat,
             "url_template": url_template,
             "ts_chapters": chapters,
+            "vbr_chapters": _vbr_chapters_for_manifest(slug),
             # `seg_chapters` mirrors `ts_chapters` once the segments build has
             # caught up — the aligner Space's preload UI reads it as the
             # surah-dropdown source of truth. Build invariant: a chapter is

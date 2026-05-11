@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "reciter": "ustaz_zamri",
+    "name_en": "Ustaz Zamri",
+    "name_ar": "أستاذ زامري",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 245,
+    "source_page_en": "https://www.tvquran.com/en/scholar/245/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/245/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/245/185",
+    "source_riwayah_label_ar": "حفص عن عاصم",
+    "source_riwayah_label_en": "Hafs",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "32": "https://download.tvquran.com/download/recitations/245/185/032.mp3",
+  "44": "https://download.tvquran.com/download/recitations/245/185/044.mp3",
+  "55": "https://download.tvquran.com/download/recitations/245/185/055.mp3",
+  "56": "https://download.tvquran.com/download/recitations/245/185/056.mp3",
+  "61": "https://download.tvquran.com/download/recitations/245/185/061.mp3",
+  "67": "https://download.tvquran.com/download/recitations/245/185/067.mp3",
+  "76": "https://download.tvquran.com/download/recitations/245/185/076.mp3"
+}

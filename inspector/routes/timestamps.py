@@ -26,6 +26,7 @@ from config import (
     MISSING_WORD_DIFF_MS_WEIGHT,
 )
 from constants import TS_AUDIO_CATEGORIES
+from services.audio_meta import vbr_chapters_for_reciter
 from services import ts_local
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
@@ -97,6 +98,12 @@ def ts_resource(name):
     if body is None:
         return jsonify({"error": "Resource not found"}), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
+
+
+@ts_bp.route("/vbr/<reciter>")
+def ts_vbr(reciter):
+    """Return VBR chapters for timestamp clients reading older HF manifests."""
+    return jsonify({"vbr_chapters": vbr_chapters_for_reciter(reciter)})
 
 
 @ts_bp.route("/validate/<reciter>")

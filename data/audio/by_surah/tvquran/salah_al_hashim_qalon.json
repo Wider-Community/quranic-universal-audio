@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "reciter": "salah_al_hashim_qalon",
+    "name_en": "Salah Al-Hashim",
+    "name_ar": "صلاح الهاشم",
+    "riwayah": "qalon_an_nafi",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 36,
+    "source_page_en": "https://www.tvquran.com/en/scholar/36/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/36/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/36/198",
+    "source_riwayah_label_ar": "قالون عن نافع",
+    "source_riwayah_label_en": "Qaaloon",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "1": "https://download.tvquran.com/download/recitations/36/198/001.mp3",
+  "12": "https://download.tvquran.com/download/recitations/36/198/012.mp3",
+  "40": "https://download.tvquran.com/download/recitations/36/198/040.mp3",
+  "50": "https://download.tvquran.com/download/recitations/36/198/050.mp3",
+  "53": "https://download.tvquran.com/download/recitations/36/198/053.mp3",
+  "75": "https://download.tvquran.com/download/recitations/36/198/075.mp3",
+  "76": "https://download.tvquran.com/download/recitations/36/198/076.mp3"
+}

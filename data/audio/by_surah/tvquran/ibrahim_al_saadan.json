@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "reciter": "ibrahim_al_saadan",
+    "name_en": "Ibrahim Al-Saadan",
+    "name_ar": "إبراهيم السعدان",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 236,
+    "source_page_en": "https://www.tvquran.com/en/scholar/236/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/236/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/236/177",
+    "source_riwayah_label_ar": "حفص عن عاصم",
+    "source_riwayah_label_en": "Hafs",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "1": "https://download.tvquran.com/download/recitations/236/177/001.mp3",
+  "6": "https://download.tvquran.com/download/recitations/236/177/006.mp3",
+  "19": "https://download.tvquran.com/download/recitations/236/177/019.mp3",
+  "20": "https://download.tvquran.com/download/recitations/236/177/020.mp3"
+}

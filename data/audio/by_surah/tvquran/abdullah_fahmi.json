@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "reciter": "abdullah_fahmi",
+    "name_en": "Abdullah Fahmi",
+    "name_ar": "عبدالله فهمي",
+    "riwayah": "hafs_an_asim",
+    "style": "murattal",
+    "audio_category": "by_surah",
+    "source": "https://www.tvquran.com/",
+    "source_id": 226,
+    "source_page_en": "https://www.tvquran.com/en/scholar/226/profile",
+    "source_page_ar": "https://www.tvquran.com/ar/scholar/226/profile",
+    "source_panel_index": 0,
+    "source_cdn_base": "download.tvquran.com/download/recitations/226/163",
+    "source_riwayah_label_ar": "حفص عن عاصم",
+    "source_riwayah_label_en": "Hafs",
+    "country": "unknown",
+    "fetched": "2026-05-11T07:33:21Z"
+  },
+  "1": "https://download.tvquran.com/download/recitations/226/163/001.mp3",
+  "36": "https://download.tvquran.com/download/recitations/226/163/036.mp3",
+  "53": "https://download.tvquran.com/download/recitations/226/163/053.mp3",
+  "75": "https://download.tvquran.com/download/recitations/226/163/075.mp3"
+}

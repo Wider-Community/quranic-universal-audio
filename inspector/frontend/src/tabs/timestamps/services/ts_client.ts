@@ -23,6 +23,7 @@ import type {
     TsManifestResponse,
     TsShardResponse,
     TsShardWord,
+    TsVbrResponse,
 } from '../../../lib/types/api';
 import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../../../lib/types/domain';
 
@@ -38,6 +39,7 @@ let _dk: Promise<Record<string, { text?: string }>> | null = null;
 /** Bounded LRU for chapter shards — covers current + adjacent + two pre-rolls. */
 const SHARD_CACHE_SIZE = 4;
 const _shards: Map<string, Promise<TsShardResponse>> = new Map();
+const _vbrChapters: Map<string, Promise<number[]>> = new Map();
 
 function _shardKey(reciter: string, chapter: number): string {
     return `${reciter}:${chapter}`;
@@ -174,6 +176,48 @@ function _resourceUrl(manifest: TsManifestResponse, key: string): string {
     const base = (manifest.dataset_base_url || '').replace(/\/$/, '');
     if (!base) return filename; // local mode — filename is already an absolute path.
     return `${base}/${filename.replace(/^\//, '')}`;
+}
+
+/** Read VBR chapter metadata from a manifest, or null when the manifest predates it. */
+export function vbrChaptersFromManifest(
+    manifest: TsManifestResponse,
+    reciter: string,
+): number[] | null {
+    const raw = manifest.reciters?.[reciter]?.vbr_chapters;
+    return Array.isArray(raw)
+        ? raw.filter((n): n is number => Number.isInteger(n)).sort((a, b) => a - b)
+        : null;
+}
+
+/** Resolve VBR chapters, preferring manifest metadata and falling back to Flask. */
+export async function resolveVbrChaptersForReciter(
+    reciter: string,
+    manifest: TsManifestResponse,
+): Promise<number[]> {
+    const fromManifest = vbrChaptersFromManifest(manifest, reciter);
+    if (fromManifest !== null) return fromManifest;
+    const data = await fetchJson<TsVbrResponse>(`/api/ts/vbr/${encodeURIComponent(reciter)}`);
+    return Array.isArray(data.vbr_chapters)
+        ? data.vbr_chapters.filter((n): n is number => Number.isInteger(n)).sort((a, b) => a - b)
+        : [];
+}
+
+/** Fetch/cache the per-reciter VBR chapter map for timestamp playback + peaks. */
+export async function loadVbrChapters(reciter: string): Promise<number[]> {
+    if (!reciter) return [];
+    const existing = _vbrChapters.get(reciter);
+    if (existing) return existing;
+    const promise = (async () => {
+        try {
+            const manifest = await loadManifest();
+            return await resolveVbrChaptersForReciter(reciter, manifest);
+        } catch (e) {
+            console.warn('Failed to load TS VBR metadata:', reciter, e);
+            return [];
+        }
+    })();
+    _vbrChapters.set(reciter, promise);
+    return promise;
 }
 
 /**
@@ -426,4 +470,5 @@ export function _resetForTests(): void {
     _qpc = null;
     _dk = null;
     _shards.clear();
+    _vbrChapters.clear();
 }
