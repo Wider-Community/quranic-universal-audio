@@ -170,8 +170,8 @@ The row's `recording_context` field is **nullable** — `null` means "not yet id
 | `container` | string | `mp3` (for now). |
 | `sample_rate_hz` | int \| null | Probed; null for unprobed by_ayah. |
 | `channels` | int \| null | 1 (mono) or 2 (stereo). |
-| `bitrate_mode` | string | `cbr` \| `vbr` \| `mixed` \| `unknown`. |
-| `bitrate_kbps_nominal` | int \| null | CBR exact; VBR average. **`null` when `bitrate_mode == "mixed"`** (no single value can represent the row — open the sidecar for per-chapter truth). |
+| `bitrate_mode` | string | `cbr` \| `vbr` \| `abr` \| `mixed` \| `unknown`. |
+| `bitrate_kbps_nominal` | int \| null | CBR exact; VBR average; ABR target rate. **`null` when `bitrate_mode == "mixed"`** (no single value can represent the row — open the sidecar for per-chapter truth). |
 | `total_duration_sec` | int \| null | Whole-mushaf duration, rounded seconds. Derived from sidecar sum first; falls back to `.audio_durations.json` cache. |
 | `added_at` | datetime | ISO-8601 UTC. |
 | `added_by_hf_id` | string | HF user id of the maintainer who added the row. |
@@ -232,13 +232,14 @@ Empty in seed. Reserved for future slug/reciter_id renames. Shape:
 
 ### CBR vs VBR
 
-Row-level `bitrate_mode` is a four-value enum derived from per-chapter probe data:
+Row-level `bitrate_mode` is a five-value enum derived from per-chapter probe data:
 
 | Row value | Meaning |
 |---|---|
 | `cbr` | All probed chapters CBR, all with the same rate. `bitrate_kbps_nominal` = exact bitrate. |
 | `vbr` | All probed chapters VBR. `bitrate_kbps_nominal` = encoder target / observed average. |
-| `mixed` | Chapters disagree — either some CBR and some VBR, or all CBR with different rates. Use the sidecar for the per-chapter truth. |
+| `abr` | All probed chapters ABR (variable per-frame, encoder-targeted average). `bitrate_kbps_nominal` = the ABR target rate; meaningful encoder constraint, kept populated. |
+| `mixed` | Chapters disagree (e.g. some CBR + some VBR/ABR, or all CBR at different rates). Use the sidecar for per-chapter truth. **`bitrate_kbps_nominal` is null** — no single value can represent the row. |
 | `unknown` | No chapters probed yet (default for by_ayah deliveries). |
 
 Detection: `mutagen.mp3.MP3.info.bitrate_mode` (Xing/Info/VBRI/LAME header) → authoritative when present. Frame-by-frame scan over the first 256 KB → fallback. Both are run; see `scripts/probe_audio_meta.py::classify`. Per-chapter results live in the sidecar; `build_catalog.py::rollup_bitrate_mode` collapses them to the row.
