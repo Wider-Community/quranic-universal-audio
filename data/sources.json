@@ -26,5 +26,19 @@
     "url": "https://surahquran.com/quran-mp3-english.html",
     "audio_categories": ["by_surah"],
     "description": "Community-sourced surah-level recordings from diverse reciters"
+  },
+  {
+    "name": "QuranicAudio",
+    "slug": "quranicaudio",
+    "url": "https://quranicaudio.com/",
+    "audio_categories": ["by_surah"],
+    "description": "QuranicAudio.com surah-level recordings; serves named-slug full mushafs from download.quranicaudio.com, includes year-tagged Makkah/Madinah Taraweeh compilations and non-Hafs qira'at"
+  },
+  {
+    "name": "TvQuran",
+    "slug": "tvquran",
+    "url": "https://www.tvquran.com/",
+    "audio_categories": ["by_surah"],
+    "description": "TvQuran.com authors catalogue; multi-mushaf per reciter with bilingual EN/AR labels; serves named (tvQuran.com__Slug) and numeric (recitations/<sid>/<mid>) full-mushaf bases from download.tvquran.com, covers Bazzi, Ibn Dhakwan, Ruways, Rawh and other rare riwayat"
   }
 ]
