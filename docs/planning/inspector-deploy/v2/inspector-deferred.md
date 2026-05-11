@@ -246,6 +246,55 @@ None of these block v2.
 
 ---
 
+## D19 — 14 legacy-pattern test failures from Phase 1 fixture migration
+
+**What.** Phase 1's call-site migration moved per-reciter IO behind `services/data_dir` + the storage backend, and the conftest fixture was rewritten to install a `FilesystemBackend` rooted at `tmp_path`. That brought 138/152 inspector tests green, but 14 tests still fail because they bypass the conftest fixture and bake in legacy patterns:
+
+- `tests/classifier/test_resolved_by_edit.py` (6) — directly `monkeypatch.setattr("services.history_query.RECITATION_SEGMENTS_PATH", tmp_path)` on a module-level constant that no longer exists in `history_query.py`
+- `tests/classifier/test_classify_parity.py` (3) — spawn subprocesses that hand-build classifier inputs; need `INSPECTOR_BACKEND=filesystem` + `INSPECTOR_FILESYSTEM_ROOT` env wired into the subprocess and a fixture written under the bucket-shape layout
+- `tests/test_audio_meta.py` (4) — write directly to `AUDIO_META_PATH` on the local filesystem (now moved to `<bucket>/catalog/audio_meta.json`)
+- `tests/persistence/test_uid_backfill.py::test_uid_deterministic_across_processes` (1) — subprocess hand-builds `<INSPECTOR_DATA_DIR>/recitation_segments/<slug>/detailed.json` and calls `load_detailed`; needs the bucket-shape layout + backend env
+
+**Why deferred.** Each is a small individual rewrite (5–15 min) but compounding to a focused test-cleanup pass. The 138 passing tests cover all critical Phase 1 paths (state machine, storage backend, route smokes, save flow gates). Phase 2 deploy is not blocked — these are unit tests that happen to encode the v1 storage layout in their setup code, not regression tests of the deployed behavior.
+
+**Trigger to revisit.** Either:
+- Before Phase 2 deploy if CI gating on a 100% green inspector suite is required for the upload pipeline (pre-push hook from `inspector-deploy.yml`)
+- Or opportunistically when the surrounding code area is next touched (e.g. `test_resolved_by_edit.py` gets rewritten when the resolved-by-edit classifier is next modified)
+
+**Affected if never done.** 14 tests stay red. Each remaining failure has a clear "expected behavior under v1 layout" annotation in the test name; ignoring them is low-risk for as long as no one regresses the underlying behavior elsewhere.
+
+**Cross-refs.** [`phases/01-foundation.md`](phases/01-foundation.md) Outcomes log (Tests — partial migration); the commit that left them red is `7dca3422` on `dev`.
+
+---
+
+## D20 — Legacy timestamps-tab CDN shards on the dev bucket
+
+**What.** The dev bucket `hetchyy/quranic-inspector-bucket-dev` carries a pre-v2 layout at the root:
+
+- `manifest.json.gz` — timestamps-tab manifest (~60 KB) with `dataset_base_url`, `shard_url_template`, `segments_shard_url_template`, `resources`, `reciters`, `_build`
+- `segments/<slug>/<chapter>.json.gz` — per-chapter gzipped segments shards (6 reciters × 114 chapters)
+- `timestamps/<slug>/<chapter>.json.gz` — per-chapter gzipped timestamps shards (same dimensions)
+
+Built by `scripts/lib/segments_shards.py` + `scripts/lib/timestamps_shards.py` as a *CDN-format projection* of `data/recitation_segments/<slug>/segments.json` + `data/timestamps/<slug>/timestamps.json`. The deployed Inspector's timestamps tab (`INSPECTOR_TS_SOURCE=huggingface`) reads `manifest.json.gz` + per-chapter shards directly from a URL base — by default `https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs/resolve/main`, but any deployed Space (or sibling tool like the universal aligner) can be pointed at the bucket via `INSPECTOR_TS_HF_DATASET_BASE_URL`.
+
+Coexists with v2's `<bucket>/published/<slug>/segments.json` — **same underlying data, different shape**: legacy = per-chapter gzipped shards (fast CDN-flavored access for karaoke playback); v2 = whole-file JSON (Inspector backend reads). Not derivable from the catalog (catalog has metadata, not segment timings).
+
+**Why deferred.** Removing the legacy shards requires deciding the timestamps tab's bucket-native read path going forward:
+
+- *Option A — keep the legacy shards forever.* Rebuild on every publish (Phase 5+). Maintenance burden but no frontend rewrite.
+- *Option B — rewrite the timestamps tab to read v2 paths.* `published/<slug>/segments.json` (whole file) + the Phase 6 `published/<slug>/timestamps/<chapter>.json` (per-chapter, not gzipped). Frontend rewrite + perf measurement against the karaoke playback path.
+- *Option C — Inspector backend builds shards on demand.* `/api/ts/shard/<slug>/<chapter>` slices from `published/<slug>/...` and gzips on the fly. Adds CPU to the deployed backend.
+
+None of these block Phase 1 acceptance — Inspector v2 reads its own data through `services/data_dir`, the timestamps tab is independent.
+
+**Trigger to revisit.** Phase 6 (publish pipeline) lands `published/<slug>/timestamps/<chapter>.json` via the HF Job, at which point the read-path question for the timestamps tab becomes concrete. **Open question for the user**: does the universal aligner Space (`.local/spaces/quranic_universal_aligner/`) read from `hetchyy/quranic-inspector-bucket-dev/manifest.json.gz`? If yes, its migration is part of this decision; if no, the legacy bucket layout is purely Inspector-internal and Option B (frontend rewrite) is the lowest-cost path.
+
+**Affected if never done.** Two parallel layouts on the same bucket = ~33 MB sustained + every cleanup pass needs to inspect both. Functionally fine; tax on operational mental model.
+
+**Cross-refs.** [`phases/01-foundation.md`](phases/01-foundation.md) Outcomes log (Deferred section); `inspector/routes/timestamps.py`; `inspector/config.py:42-46` (`TS_SOURCE`, `TS_HF_DATASET_BASE_URL`); `scripts/lib/segments_shards.py`, `scripts/lib/timestamps_shards.py`.
+
+---
+
 ## How to add an item to this list
 
 1. Add a new `## D<N> — <title>` section using the template (what / why deferred / trigger to revisit / affected if never done / cross-refs).

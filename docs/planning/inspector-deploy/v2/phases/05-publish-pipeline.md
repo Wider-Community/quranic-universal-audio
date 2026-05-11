@@ -46,7 +46,7 @@
 - `/admin` route + dashboard panels — Phase 7.
 - `bucket-data-hygiene.yml` scheduled workflow — Phase 7.
 - `forward-to-inspector.yml` deletion — Phase 7 (alongside Reciter Requests Space decommission).
-- `data/{riwayat,sources,styles}.json` and `data/audio/` repo deletion — Phase 7 (after consumer audit confirms no readers).
+- `data/{riwayat,sources,styles,reciters_index,.audio_meta,.audio_durations}.json`, `data/audio/`, `data/recitation_segments/` repo deletion — Phase 11 (carried from Phase 1; safe to land only after the workflow rewrites in this phase point `update-reciters.yml` / `release.yml` / `sync-dataset.yml` / `build_reciter.py` / `package_release.py` / `list_reciters.py` at the bucket via `huggingface_hub`).
 - Per-job sub-status (D1) — deferred.
 - Auto-retry / polling backstop for the timestamps job — deferred.
 

@@ -2,7 +2,7 @@
 
 > All non-deploy groundwork lands. Nothing is shipped to a public Space yet, but every refactor v2 needs is in code and the JSON state store + bucket helpers work end-to-end against the dev bucket.
 
-**Status:** not started
+**Status:** done (with deferred items — see Outcomes log)
 **Depends on:** dev bucket already created (done)
 **Blocks:** Phase 2
 
@@ -162,18 +162,59 @@ Most of the schema, catalog, and naming work usually slotted in Phase 1 was fron
 - `build_catalog.py` + `finalize.py` + `apply_corrections.py` (catalog assembly pipeline)
 - `catalog_design_critique.md`
 
-### Still pending (Phase 1 execution)
+### Execution: code + cutover — landed
 
-The code-level deliverables in the **Deliverables** list above are not yet started:
+8 commits on `dev` (sharp-curie worktree); ~5,000 LoC of new code with smoke tests against the dev bucket green throughout.
 
-- `scripts/lib/schemas/` pydantic models for state, catalog, audit, edit_history (cross-consumer location)
-- `inspector/services/{state,catalog,audit,access,hf_bucket,data_dir}.py`
-- Validator refactor to libraries with thin CLI wrappers
-- Test fixture monkey-patching of the resolver instead of `RECITATION_SEGMENTS_PATH`
-- Repo `data/` cleanup (drop `reciters_index.json`, `riwayat/sources/styles.json`, `audio/`, `.audio_meta.json`, `.audio_durations.json`)
-- Promotion of `.local/dedup/reciter_catalog.json` + sidecars to `<bucket>/catalog/...` via `huggingface_hub.upload_file()`
-- Hand-seed of `<bucket>/access/inspector_roles.json` (first owner)
-- `<bucket>/state/reciter_state.json` initial state seed
-- Bulk probe completion (~78k chapters; still running) → catalog re-bake with full audio metadata → sidecars filled in
+**Schemas — `scripts/lib/schemas/`** (cross-consumer):
+- `state.py`, `catalog.py`, `audit.py`, `access.py`, `edit_history.py` + smoke
+- Slug regex validation, per-state invariants (e.g. `assignee_*` forbidden outside `under_review`, `marked_ready` requires `under_review`+assignee), FK validation in `ReciterCatalog`, soft-delete in `RolesFile`, v1-tolerant `parse_edit_history_line`
+
+**Storage abstraction — `inspector/services/`**:
+- `hf_bucket.py`: `StorageBackend` protocol + `BucketBackend` (HF buckets API: `batch_bucket_files`, `list_bucket_tree`, `hffs.cat_file`, `get_bucket_file_metadata`) + `FilesystemBackend` (POSIX, tests + opt-in offline). Singleton via `get_backend()`/`set_backend()`/`reset_backend()`
+- `BucketBackend.__init__` calls `huggingface_hub.login(token)` once so Xet uploads work (per-call `token=` alone leaves Xet writes 401)
+- `hffs.invalidate_cache()` after every write so read-after-write within a process is fresh
+- `storage_paths.py`: pure path-string helpers for the v2 layout
+- `data_dir.py`: `kind_for(slug)`, `list_slugs(kind)`, high-level helpers (`read_segments_doc`, `read_detailed_bytes`, `write_detailed_doc`, `append_edit_history`, `iter_peaks_history`, …)
+
+**Stateful services — full state machine + audit + catalog + access**:
+- `state.py`: dispatcher implementing the full §4 transition matrix (21 slug-bound events) per-slug `threading.Lock`; `_replace()` validates via pydantic on every mutation; `has_other_active_claim()` predicate for one-claim-per-user
+- `catalog.py`: hydrate/snapshot/add_reciter/edit_reciter/add_delivery/add_audio_source with maintainer-only authorization
+- `audit.py`: append-only monthly partitions via direct upload (bypasses mount flush); `ensure_meta_initialized()` writes `audit/_meta.json` once
+- `access.py`: roles file with owner/maintainer gates (maintainers cannot grant/revoke owners); soft-delete via `removed_at`; `bootstrap()` CLI for the first owner
+- `app.py`: hydrates state/catalog/access stores at module import; degrades to empty in-memory model + warning on bucket-unreachable
+
+**Cutover seeds — `scripts/inspector_v2_seed/`** (ran end-to-end against `hetchyy/quranic-inspector-bucket-dev`):
+- `bootstrap_access`: first OWNER seeded (`hetchyy`, hf_user_id `684abe5b6327ae8863d106d2`)
+- `seed_catalog_stub`: vocab-only stub from on-disk `data/{riwayat,sources,styles}.json` + canonical 6 channels + 5 recording_contexts; legacy `taraweeh` style dropped (migrated to `style=murattal + recording_context=taraweeh`)
+- `seed_state`: 14 rows from filesystem signals (6 completed via `reciter_eligibility`, 8 `awaiting_review`)
+- `seed_reciter_data`: 70 per-reciter files uploaded under `wip/<slug>/` (8 reciters) and `published/<slug>/` (6 reciters); timestamps intentionally not uploaded (live on public HF dataset until Phase 6 HF Job)
+
+**Call-site migration — every per-reciter IO now flows through the backend**:
+- `services/data_loader.py`, `services/save.py`, `services/undo.py`, `services/history_query.py`, `services/peaks_history.py`, `services/audio_meta.py`, `routes/segments_data.py`, `routes/segments_validation.py`, `routes/segments_edit.py`, `routes/audio_metadata.py` all migrated
+- `adapters/detailed_json.py` + `adapters/segments_json.py` split into pure-data + filesystem-wrapper variants (`load_entries_from_bytes`, `build_segments_doc`)
+- Save flow drops `backup_file()`, `file_sha256()`, `file_hash_after`, genesis records — file-hash chain entirely gone in v2 writes
+- `LocalWritesDisabled` exception + `@_gate_local_writes` route decorator: local mode reads the shared dev bucket but refuses to write by default (`INSPECTOR_LOCAL_WRITES=1` to opt in); deployed mode (Phase 3+) is OAuth-gated separately
+- `seg_reciters` route returns 14 reciters from `state_service.all_rows()` with `state` + `visibility`
+- `seg_trigger_validation` returns 410 (deprecated; validators-as-libraries in Phase 5); `seg_save_chart` removed entirely (debug-only)
+
+**Validators** — `validate_edit_history` file-hash chain checks dropped (`check_genesis_record` + `check_file_hash` retired from the active pass set per cleanup-registry §2 / D13). Per-reciter check count 7→5. Library/CLI split documented; deeper integration with `services/save.py` is Phase 5 work.
+
+**Tests — partial migration** — `tmp_reciter_dir` fixture now installs a `FilesystemBackend` rooted at `tmp_path`, writes fixtures under `wip/<slug>/` (v2 layout), and seeds a state row so `data_dir.kind_for(slug)` returns `"wip"`. `inspector/pyproject.toml` adds repo root to `pythonpath` so `scripts.lib.schemas` resolves in tests + subprocesses. **138 of 152 tests pass.** 14 legacy-pattern tests deferred — see [`../inspector-deferred.md`](../inspector-deferred.md) D19.
+
+**Verified end-to-end against the dev bucket**:
+- Inspector boots clean; state/catalog/access hydrate from bucket
+- `GET /api/seg/reciters` → 14 rows with state + visibility
+- `GET /api/seg/chapters/saad_al_ghamdi` → 114 chapters
+- `GET /api/seg/data/saad_al_ghamdi/1` → full chapter payload
+- `GET /api/seg/edit-history/saad_al_ghamdi` → 533 batches with summary
+- `POST /api/seg/save/...` → 403 with `LocalWritesDisabled` message
+
+### Deferred (carried forward)
+
+- **Repo `data/` cleanup** (`data/recitation_segments/`, `data/audio/`, `data/{reciters_index,riwayat,sources,styles,.audio_meta,.audio_durations}.json`) — grep audit found 10+ CI consumers (`list_reciters.py`, `build_reciter.py`, `package_release.py`, `update-reciters.yml`, `sync-dataset.yml`, …) that still read these. Deleting now breaks the main-branch CI on next push. **Bundled into Phase 5** alongside the workflow rewrite that points those consumers at the bucket via `huggingface_hub`.
+- **Catalog promotion** — bulk audio probe in `.local/dedup/` still running (~78k chapters). When it finishes, extend `scripts/inspector_v2_seed/seed_catalog_stub.py` to write the full `reciters[]` + `deliveries[]` + per-delivery `audio_manifest/<slug>.json` sidecars. The catalog file in the bucket today is vocab-only — sufficient for Phase 1 acceptance.
+- **Legacy bucket layout cleanup** (`<bucket>/manifest.json.gz`, `<bucket>/segments/<slug>/<chapter>.json.gz`, `<bucket>/timestamps/<slug>/<chapter>.json.gz`) — this is the timestamps-tab CDN delivery format built by `scripts/lib/{segments,timestamps}_shards.py`, predating v2. Coexists with the v2 layout (`published/<slug>/segments.json`) — not a duplicate, but a different *shape* (per-chapter gzipped shards vs whole-file). Drop only after deciding the timestamps tab's bucket-native read path; tracked as D20 in [`../inspector-deferred.md`](../inspector-deferred.md).
+- **14 legacy-pattern test failures** — see D19 in [`../inspector-deferred.md`](../inspector-deferred.md).
 
 The catalog seed pipeline in `.local/dedup/` is fully exercised and reproducible; promotion is a matter of running `build_catalog.py` once the probe completes and uploading the result.
