@@ -1,16 +1,41 @@
-# Phase 6 — Admin dashboard + cleanup
+# Phase 7 — Admin dashboard + cleanup
 
-> The `/admin` route lights up with all dashboard panels (system health, reciters, stalled, recent events, contributor activity, active timestamps refresh). Bucket data hygiene runs weekly. Reciter Requests Space is decommissioned. Contributor docs migrate to "the website is the primary path." Final v2 cleanup ships.
+> The `/admin` route lights up with all dashboard panels (system health, reciters, stalled, recent events, contributor activity, active timestamps refresh) — extending Phase 6's table, activity-feed, detail-page, and `ReciterPicker` widgets with admin-only columns / events / actions. Bucket data hygiene runs weekly. Reciter Requests Space is decommissioned. Contributor docs migrate to "the website is the primary path." Final v2 cleanup ships.
 
 **Status:** not started
-**Depends on:** Phase 5 (Publish pipeline) complete
+**Depends on:** Phase 6 (Public dashboard) complete
 **Blocks:** —
 
 ## Goal
 
-Maintainers get a single coherent admin surface at `/admin` with all the read-only views (sourced from bucket state + audit log + in-memory caches) plus the four admin override actions (force-release, reassign, force-set-state, send-back) wired into UI affordances. Discard/undiscard ships. The `bucket-data-hygiene.yml` workflow runs weekly, surfacing CRITICAL findings as GitHub issues. Repo `data/` slims to just static reference + roles file. Reciter Requests Space and `forward-to-inspector.yml` go away. Contributor onboarding now points at the website.
+Maintainers get a single coherent admin surface at `/admin` that **extends** the Phase 6 dashboard widgets — the all-reciters table gains assignee + `marked_ready` + days-in-state columns + quick-action buttons, the activity feed unredacts internal/admin events, the reciter detail page gains assignee history + inline admin action panels — plus admin-only panels (system health, active sessions, active timestamps refresh, contributor activity). The four admin override actions (force-release, reassign, force-set-state, send-back) from Phase 4 are wired into UI affordances. Discard/undiscard ships. The `bucket-data-hygiene.yml` workflow runs weekly, surfacing CRITICAL findings as GitHub issues. Repo `data/` slims to just static reference + roles file. Reciter Requests Space and `forward-to-inspector.yml` go away. Contributor onboarding now points at the website.
 
 ## Deliverables
+
+### Phase 6 widget reuse
+
+- [ ] All-reciters table extends Phase 6's table widget — adds `assignee` (login + HF id), `marked_ready`, `days-in-state`, dataset-membership pill, and quick-action buttons columns; same filter / sort / pagination behavior
+- [ ] Activity feed extends Phase 6's feed widget — `event_filter='all'` (no public redaction); surfaces every audit event including admin overrides + lifecycle (`claim.force_released`, `claim.reassigned`, `admin.force_set_state`, `reciter.merge_rejected`, `admin.unlocked_for_revision`, `published.edited`, `admin.batch_timestamps_refresh`, `reciter.removed_from_dataset`, `reciter.unpublished`, `reciter.discarded`)
+- [ ] Reciter detail page extends Phase 6's `/reciter/<slug>` — adds assignee history strip, **full** internal state timeline (all transitions incl. `awaiting_timestamps` and `released`, not just public-collapsed), dataset-membership badge, inline admin action buttons
+- [ ] `ReciterPicker` reused for bulk-action target picker (multi-select mode) — powers batch dataset-publish, batch refresh-timestamps, bulk discard
+- [ ] Public state buckets used as filter chip groupings on admin views; admin-only sub-pills distinguish `(under_review, marked_ready=1)` vs `awaiting_timestamps`, and `released` (files+ts ready) vs `completed` (in dataset)
+
+### Admin lifecycle actions (post-publish)
+
+- [ ] `POST /api/admin/publish-to-dataset/<slug>` — `released → completed`; fires `repository_dispatch reciter.dataset_published`; emits `reciter.dataset_published` audit event. Single-reciter and batch (`POST /api/admin/publish-to-dataset` with `{slugs: [...]}`).
+- [ ] "Released, pending dataset" panel — lists all `released` reciters; checkbox multi-select + bulk "Add to dataset" toolbar; row-level "Add to dataset" button. Both paths reuse the same endpoint above.
+- [ ] `POST /api/admin/unlock/<slug>` — `released | completed → awaiting_review`; **copies** `<bucket>/published/<slug>/` → `<bucket>/wip/<slug>/` (published files retained so public continues seeing the current version); persists `revision_in_progress = {unlocked_from_state, unlocked_at, unlocked_by_hf_id, original_assignee_hf_id}` on the state row; emits `admin.unlocked_for_revision` audit event with reason ≥ 10 chars
+- [ ] Public state pill stays `published` while an unlocked reciter is being re-reviewed (the new review work is invisible publicly until next publish); admin views show a "Revision in progress" sub-pill
+- [ ] On the next publish of an unlocked reciter, the publish flow reads `revision_in_progress.unlocked_from_state`: if `"completed"`, after `released` the row auto-transitions to `completed` + fires `reciter.dataset_published` (no re-gating); if `"released"`, stays at `released`. `revision_in_progress` is cleared on re-publish.
+- [ ] **Direct admin edit on published reciters** — segments-tab save endpoint accepts maintainer+ writes when state ∈ {`released`, `completed`}; writes target `<bucket>/published/<slug>/`; edit-history batch records `actor.role = "maintainer"`; emits `published.edited` audit event per save batch; banner: "You're editing a published reciter — changes apply immediately. Click 'Refresh timestamps' when done."
+- [ ] Direct admin edit is **disallowed** during `awaiting_timestamps` (MFA job running); save returns 409 with a clear message
+- [ ] `POST /api/admin/refresh-timestamps/<slug>` — re-enqueues the MFA timestamps job for a single reciter; appends the new job id to the state row's `timestamps_job_ids` list; no state change; emits `admin.batch_timestamps_refresh` audit event (single-slug batch)
+- [ ] `POST /api/admin/refresh-timestamps` (batch) — accepts `{slugs: [...]}` or filter criteria (e.g. `{riwayah: "hafs"}`); enqueues N HF Jobs; single audit line summarizing the batch (slug list + reason — e.g. "new MFA model v2.1")
+- [ ] `POST /api/admin/remove-from-dataset/<slug>` — `completed → released`; dispatches `sync-dataset.yml` rebuild dropping the slug; bucket files retained; emits `reciter.removed_from_dataset` audit event with reason ≥ 10 chars
+- [ ] `POST /api/admin/unpublish/<slug>` — full unpublish: `released | completed → awaiting_review`; moves `<bucket>/published/<slug>/` → `<bucket>/wip/<slug>/`; if the slug was in dataset, also dispatches dataset rebuild; emits `reciter.unpublished` audit event; reason-required ≥ 10 chars + typed `unpublish <slug>` confirmation
+- [ ] All lifecycle actions surface as inline buttons on the admin reciter detail page + as quick-actions on the all-reciters table; reason modals reuse `ConfirmWithReason.svelte`
+
+### Admin route + panels
 
 - [ ] `/admin` route — gated by maintainer+ role; 404 for everyone else (does not flash)
 - [ ] Admin dashboard panels per admin-perms §6:

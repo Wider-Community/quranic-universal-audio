@@ -254,7 +254,7 @@ All mutating endpoints are gated by the API lock (§5).
 | CSRF on mutating endpoints | Same-site cookie + origin/referer check + per-session `csrf` token in the cookie. OAuth `state` parameter prevents auth CSRF (stored in a short-lived Flask-Session tmpfs entry between authorize and callback only). |
 | Malicious reviewer destructive edits | Edit lock enforces one writer per reciter, keyed on `assignee_hf_id`. Append-only `audit/<YYYY>-<MM>.jsonl` per-state and `edit_history.jsonl` per-edit. State writes are server-side only; client cannot forge transitions. |
 | `INSPECTOR_HF_TOKEN` leak | Stored as Space secret (encrypted at rest). Rotation = generate new HF token, update Space secret, restart. ~5 min operation. Revokes the old token. |
-| Maintainer impersonation | Roles resolved against `data/inspector_roles.json` (cached from GitHub raw, baked snapshot fallback). Backend never trusts user-supplied claims; `hf_user_id` is the canonical key. |
+| Maintainer impersonation | Roles resolved against `<bucket>/access/inspector_roles.json` (in-memory cache hydrated at startup + replaced on Inspector writes; Inspector is sole writer). Backend never trusts user-supplied claims; `hf_user_id` is the canonical key. |
 
 ## 5. Locking model
 
@@ -435,12 +435,12 @@ Detailed per-phase scope, acceptance criteria, and risks live in [`inspector-dat
    - Adopt the slug-rules-only identity convention (drop branch/PR conventions).
    - Land `scripts/lib/reciter_task.py` (slug resolver against catalog + state).
    - Create the single private HF bucket per env (`hetchyy/quranic-inspector-bucket-dev`, `hetchyy/quranic-inspector-bucket`).
-   - Land `inspector/schemas/` (pydantic models for state, catalog, audit, edit_history v2).
+   - Land `scripts/lib/schemas/` (pydantic models for state, catalog, audit, edit_history v2; cross-consumer location).
    - Land `inspector/services/state.py` (state machine + bucket persistence; per-slug `threading.Lock`; `huggingface_hub.upload_file()` per write).
    - Land `inspector/services/catalog.py` (mirrors `state.py` write pattern; vocab + reciters + aliases in one file).
    - Land `inspector/services/hf_bucket.py` (mount path resolver + write helpers).
    - **Manually seed** at v2 cutover (~15 reciters): hand-author `<bucket>/state/reciter_state.json` and `<bucket>/catalog/reciter_catalog.json` per [`inspector-state-management.md`](inspector-state-management.md) §3 mapping rules. No migration script — too few rows to justify.
-   - Land `data/inspector_roles.json` (consolidated owners + maintainers; GitHub source of truth, baked snapshot fallback).
+   - Hand-seed `<bucket>/access/inspector_roles.json` (consolidated owners + maintainers; bucket-resident, Inspector sole writer; see [`inspector-state-management.md`](inspector-state-management.md) §9 bootstrap).
 
 2. **Phase 1 — Read-only deploy (anonymous, all reciters via bucket)**
    - **Free-tier prerequisites:** swap `app.run()` → gunicorn-gthread; add `Cache-Control: immutable` to peaks routes; `Cache-Control: max-age=86400` on inspector segment shards.
@@ -466,7 +466,7 @@ Detailed per-phase scope, acceptance criteria, and risks live in [`inspector-dat
 
 5. **Phase 4 — Read-only admin dashboard + role resolution**
    - `/admin` route gated by maintainer+ role; 404 for everyone else (does not flash).
-   - `services/role.py` resolves role from `data/inspector_roles.json` on GitHub raw with 60 s cache + baked snapshot fallback for offline boot.
+   - `services/access.py` resolves role from `<bucket>/access/inspector_roles.json`; in-memory cache hydrated at startup and replaced on every Inspector write (sole-writer pattern → no refresh needed).
    - Read-only sections: System health, all reciters, stalled reciters, recent events log, contributor activity. **No override actions yet.**
    - Audit-log reader UI; `<bucket>/audit/<YYYY>-<MM>.jsonl` populated by Phase 3 already.
    - **No save endpoint yet** — Phase 5 work.

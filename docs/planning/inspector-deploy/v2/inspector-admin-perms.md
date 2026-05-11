@@ -6,7 +6,7 @@ The parent doc's three roles (anonymous, contributor, claim-holder) are the happ
 
 ## 1. Model in one paragraph
 
-Authorization is layered on top of authentication. Authentication answers "who is this user" (HF OAuth → `hf_user_id` canonical, `login` display-only). Authorization answers "what can they do" — derived from a single source: `data/inspector_roles.json` on GitHub (consolidated owners + maintainers — see §3). Anonymous users see public completed reciters. Logged-in contributors can claim one reciter at a time. Maintainers get a named, audited set of override actions — each one a discrete admin endpoint, **no `state.manual_override` wildcard**. Owners (small subset) can additionally rotate the Space's HF token, edit the roles file itself, and approve irrecoverable destructive actions. v2 ships only the admin operations enumerated in §5; deferred operations are explicitly flagged in §11. Every elevated action is named, audited to `<bucket>/audit/<YYYY>-<MM>.jsonl`, and confined to the smallest blast radius that solves a real recurring problem.
+Authorization is layered on top of authentication. Authentication answers "who is this user" (HF OAuth → `hf_user_id` canonical, `login` display-only). Authorization answers "what can they do" — derived from a single source: `<bucket>/access/inspector_roles.json` on GitHub (consolidated owners + maintainers — see §3). Anonymous users see public completed reciters. Logged-in contributors can claim one reciter at a time. Maintainers get a named, audited set of override actions — each one a discrete admin endpoint, **no `state.manual_override` wildcard**. Owners (small subset) can additionally rotate the Space's HF token, edit the roles file itself, and approve irrecoverable destructive actions. v2 ships only the admin operations enumerated in §5; deferred operations are explicitly flagged in §11. Every elevated action is named, audited to `<bucket>/audit/<YYYY>-<MM>.jsonl`, and confined to the smallest blast radius that solves a real recurring problem.
 
 ## 2. Roles
 
@@ -28,19 +28,19 @@ A contributor becomes a **claim-holder** while a claim is active. The claim-hold
 
 ### `maintainer`
 
-Authenticated HF user with `role: maintainer` in `data/inspector_roles.json`. Adds: force-release, reassign, force-set-state on the narrow allowed pairs, catalog edit (direct to bucket), publish, send-back from `marked_ready=1`, discard/undiscard, internal data views.
+Authenticated HF user with `role: maintainer` in `<bucket>/access/inspector_roles.json`. Adds: force-release, reassign, force-set-state on the narrow allowed pairs, catalog edit (direct to bucket), publish, send-back from `marked_ready=1`, discard/undiscard, internal data views.
 
 Cannot: rotate the Space's HF token, edit the roles file, approve owner-only destructive actions.
 
 ### `owner`
 
-Authenticated HF user with `role: owner` in `data/inspector_roles.json`. Superset of maintainer. Adds: edit `data/inspector_roles.json` (CODEOWNERS-gated PR), rotate the Space's HF token, accept irrecoverable destructive actions (e.g. mass discard).
+Authenticated HF user with `role: owner` in `<bucket>/access/inspector_roles.json`. Superset of maintainer. Adds: edit `<bucket>/access/inspector_roles.json` via §5.7 access endpoints, rotate the Space's HF token, accept irrecoverable destructive actions (e.g. mass discard).
 
 Owners count: recommend 2–3 minimum for bus-factor, ≤5 maximum to keep responsibility concentrated.
 
-## 3. Role identity — single consolidated file
+## 3. Role identity — single consolidated file on the bucket
 
-**Sole source of role truth: `data/inspector_roles.json` on GitHub** (per D9; was two separate files in earlier drafts).
+**Sole source of role truth: `<bucket>/access/inspector_roles.json`** (was two separate files in earlier drafts; previously on GitHub raw — moved to the bucket).
 
 Schema:
 
@@ -61,33 +61,35 @@ Schema:
 }
 ```
 
-PR-reviewed (CODEOWNERS gates to existing owners). Adding/removing/promoting is a deliberate audited action.
+Mutations via Inspector admin endpoints (§5.7); Inspector is the sole writer (same sole-writer pattern as state + catalog). Every mutation appends an `access.*` event to `<bucket>/audit/<YYYY>-<MM>.jsonl`. The first owner is hand-seeded at Phase 0 setup (see [`inspector-state-management.md`](inspector-state-management.md) §9 bootstrap).
 
 ### Why one file, why `hf_user_id` canonical, why soft-delete
 
 - **One file** instead of two (`inspector_owners.json` + `inspector_maintainers.json`): collapses the failure mode where one file exists and the other doesn't, makes "promote to owner" a single-row edit instead of cross-file move.
 - **`hf_user_id` canonical:** if a maintainer renames themselves on HF, login-keyed lookup silently revokes their role. The lookup is `member.hf_user_id == user.hf_user_id`, never `login`.
-- **Soft-delete via `removed_at`:** historical role membership stays queryable. "Who was an owner when X bad action happened?" is a JSON scan, not a `git blame`.
+- **Soft-delete via `removed_at`:** historical role membership stays queryable. "Who was an owner when X bad action happened?" is a JSON scan + an `access.*` audit tail-grep, not a `git blame`.
 
 ### Backend resolution
 
 ```python
 def resolve_role(user: AuthenticatedUser) -> Role:
     member = next(
-        (m for m in MEMBERS_CACHE
+        (m for m in ACCESS_STORE.values()
          if m.hf_user_id == user.hf_user_id and m.removed_at is None),
         None,
     )
     return member.role if member else Role.CONTRIBUTOR
 ```
 
-Cache: 60 s. Source: GitHub raw URL (no auth, public repo). Refreshed via simple HTTP fetch. Owner-only `POST /api/admin/refresh-roles` forces immediate refresh for emergency revocation.
+`ACCESS_STORE` is an in-memory dict, hydrated from the bucket at startup, replaced atomically on every Inspector write (sole-writer pattern → no external refresh needed). No GitHub-raw fetch, no per-request HTTP, no force-refresh endpoint.
 
-If the live file is unreachable on Inspector startup, fall back to a stale snapshot baked into the Space image (`data/inspector_roles.json` is in the COPY list of the Dockerfile). Live wins on next refresh.
+### Why the bucket (not GitHub)
 
-### Why GitHub for the roles file (not the bucket)
-
-Roles govern *who can edit*, not *what's edited*. CODEOWNERS-gated PR review is the right gate for security-critical role changes (existing owners must approve). The bucket is the right place for *content* (catalog, state); GitHub is the right place for *permissions*.
+Earlier drafts kept this on GitHub for CODEOWNERS-gated PR review. Moved to the bucket because:
+- GitHub repo is public → maintainer HF IDs become a target list + privacy disclosure.
+- Roles reference HF identifiers; everything else Inspector touches is HF-resident (state, catalog, audit). Keeping one file on GitHub adds an external availability dependency.
+- Blast radius of a compromised Inspector is contained (audit log + reversibility); the "privilege-escalation" worst case doesn't match the actual editing-tool threat model.
+- The bucket's audit log provides equivalent forensics to git history, in the same place as all other audit data.
 
 ## 4. Permission matrix
 
@@ -112,7 +114,7 @@ Roles govern *who can edit*, not *what's edited*. CODEOWNERS-gated PR review is 
 | **Discard / undiscard** (visibility flag, not a state) | — | — | ✓ | ✓ |
 | View admin dashboard | — | — | ✓ | ✓ |
 | View audit log | — | — | ✓ | ✓ |
-| Edit `data/inspector_roles.json` | — | — | — | ✓ |
+| Edit `<bucket>/access/inspector_roles.json` | — | — | — | ✓ |
 | Rotate the Space's `INSPECTOR_HF_TOKEN` | — | — | — | ✓ |
 | Mass discard / bulk destructive | — | — | — | ✓ ² |
 
@@ -227,7 +229,7 @@ In v2 only `visibility ∈ {'public', 'discarded'}` ships. `'archived'` is defer
 
 **Why direct, not PR:** v2's whole architectural shift is "no per-reciter PRs." Keeping catalog on PRs would require a catalog-auto-merge workflow, a separate PR-create PAT, and a PR review queue — only for the one remaining PR surface. Catalog has the same write characteristics as state (low cadence, maintainer+ gated, schema-validated, audit-trailed) — so it belongs in the same operational model.
 
-**What stays PR-reviewed:** `data/inspector_roles.json` — that governs *who can edit*, and CODEOWNERS-gated PR review is the right gate for changes to the role list.
+**Role mutations** (`<bucket>/access/inspector_roles.json`) flow through admin endpoints §5.7 below — Inspector is the sole writer; PR-review path is dropped.
 
 ### 5.6 Send back from `marked_ready=1`
 
@@ -245,6 +247,100 @@ In v2 only `visibility ∈ {'public', 'discarded'}` ships. `'archived'` is defer
 | Confirmation | Modal with required reason field (≥10 chars) |
 
 The reason text is appended to the reciter's history entry in the state file; surfaced in the reviewer's dashboard banner.
+
+### 5.7 Access grant / revoke / update (role-mutation endpoints)
+
+**Use case:** maintainer-or-owner promotes/demotes/removes users in `<bucket>/access/inspector_roles.json`.
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/access/grant` · `POST /api/admin/access/revoke` · `POST /api/admin/access/update` |
+| Body (grant) | `{ "hf_user_id": "...", "login": "...", "role": "owner|maintainer", "reason": "..." }` |
+| Body (revoke) | `{ "hf_user_id": "...", "reason": "..." }` (soft-delete) |
+| Body (update) | `{ "hf_user_id": "...", "login": "...", "role": "..." }` (login refresh OR tier change) |
+| Preconditions | Owner-only to grant `owner`; maintainer+ to grant/revoke `maintainer`. Reason ≥10 chars on grant/revoke. |
+| Audit event | `access.role_granted` / `access.role_revoked` / `access.role_updated` |
+| Reversibility | Revoke is soft-delete (sets `removed_at`); grant re-issue restores. |
+
+### 5.8 Unlock for revision
+
+**Use case:** maintainer wants to re-edit a `released` or `completed` reciter (typo fix, audio replacement, schema migration).
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/unlock/<slug>` |
+| Body | `{ "reason": "..." }` (≥10 chars) |
+| Preconditions | reciter state ∈ {`released`, `completed`}; caller is maintainer+ |
+| State transition | `released | completed → awaiting_review`; sets `revision_in_progress = {unlocked_from_state, unlocked_at, unlocked_by_hf_id, original_assignee_hf_id}`; clears assignee_*; `marked_ready=0` |
+| Side effects | Copies `<bucket>/published/<slug>/` → `<bucket>/wip/<slug>/` (published files retained so the public continues seeing the current version). |
+| Audit event | `admin.unlocked_for_revision { slug, actor, unlocked_from_state, original_assignee_hf_id, reason }` |
+| Re-publish behavior | When the row next reaches `released`, if `revision_in_progress.unlocked_from_state == "completed"` the row auto-transitions to `completed` + fires `reciter.dataset_published`. If it was `released`, it stays at `released`. `revision_in_progress` is cleared on re-publish. |
+
+### 5.9 Publish to dataset
+
+**Use case:** maintainer promotes a `released` reciter to the public HF dataset.
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/publish-to-dataset/<slug>` · batch via `POST /api/admin/publish-to-dataset` body `{"slugs": [...]}` |
+| Preconditions | reciter state == `released`; caller is maintainer+ |
+| State transition | `released → completed` |
+| Side effects | Dispatches `repository_dispatch sync-dataset.yml` to add the slug to the HF dataset |
+| Audit event | `reciter.dataset_published { slug, actor }` |
+
+### 5.10 Remove from dataset
+
+**Use case:** maintainer pulls a `completed` reciter back out of the dataset without unpublishing (keep files on bucket, drop from dataset).
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/remove-from-dataset/<slug>` |
+| Body | `{ "reason": "..." }` (≥10 chars) |
+| Preconditions | reciter state == `completed`; caller is maintainer+ |
+| State transition | `completed → released` |
+| Side effects | Dispatches dataset rebuild dropping the slug; bucket files retained |
+| Audit event | `reciter.removed_from_dataset { slug, actor, reason }` |
+
+### 5.11 Unpublish
+
+**Use case:** full unpublish — remove from public + dataset; reciter goes back to `awaiting_review` for a fresh re-review.
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/unpublish/<slug>` |
+| Body | `{ "reason": "...", "confirmation_phrase": "unpublish <slug>" }` |
+| Preconditions | reciter state ∈ {`released`, `completed`}; caller is maintainer+; reason ≥10 chars; typed confirmation matches exactly. |
+| State transition | `released | completed → awaiting_review` |
+| Side effects | Moves `<bucket>/published/<slug>/` → `<bucket>/wip/<slug>/`. If was `completed`, also dispatches dataset rebuild dropping slug. |
+| Audit event | `reciter.unpublished { slug, actor, original_state, reason }` |
+| Reversibility | Re-edit + re-publish (or `admin.force_set_state` if maintainer wants to skip review) |
+
+### 5.12 Refresh timestamps
+
+**Use case:** new MFA model version; maintainer wants fresh timestamps for one or many published reciters.
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/admin/refresh-timestamps/<slug>` · batch via `POST /api/admin/refresh-timestamps` body `{"slugs": [...]}` or filter `{"riwayah": "hafs"}` |
+| Body | `{ "reason": "..." }` (optional for single, encouraged for batch) |
+| Preconditions | reciter state ∈ {`released`, `completed`} for target slugs; caller is maintainer+ |
+| State transition | None (state stays); appends new job_id(s) to `timestamps_job_ids` on each row |
+| Side effects | Enqueues HF Job(s); upon completion, `reciter.timestamps_completed` fires per slug (state stays the same since it's already `released`/`completed`); job-completion webhook updates the row. |
+| Audit event | `admin.batch_timestamps_refresh { slugs, actor, reason }` — single audit line for the whole batch |
+
+### 5.13 Direct admin edit on published reciters
+
+**Use case:** maintainer needs to fix a small issue (typo, mis-segmented ayah) without going through the unlock + re-review flow.
+
+| Field | Value |
+|---|---|
+| HTTP | `POST /api/seg/save/<slug>/<chapter>` (same endpoint as contributor saves; gated to maintainer+ when state ∈ {`released`, `completed`}) |
+| Preconditions | reciter state ∈ {`released`, `completed`}; caller is maintainer+; state ≠ `awaiting_timestamps` (saves return 409 during MFA job) |
+| Target | Saves write to `<bucket>/published/<slug>/` directly |
+| Edit history | Batch records `actor.role = "maintainer"` |
+| Audit event | `published.edited { slug, chapter, actor, batch_id }` per save batch |
+| UI | Banner: "You're editing a published reciter — changes apply immediately. Click 'Refresh timestamps' when done." |
+| Note | Use the unlock-for-revision flow (§5.8) for substantial changes that need a re-review; this surface is for trivial fixes. |
 
 ## 6. Admin dashboard
 
@@ -418,7 +514,7 @@ Three rules, hard:
 
 1. **Default flow handles 95% of cases.** Every override action must document the recurring problem it solves. No speculative admin features.
 2. **No "edit anything" admin role.** Each override is a specific named action with a specific audit entry. No generic escape hatch.
-3. **Maintainer count stays small.** Recommend 3–10. Reviewed via PR for `data/inspector_roles.json`. Onboarding doc explains expected response times.
+3. **Maintainer count stays small.** Recommend 3–10. Mutations via §5.7 access endpoints; every change audited. Onboarding doc explains expected response times.
 
 Soft conventions:
 
@@ -439,7 +535,7 @@ Web admin and CLI tools complement; they don't replace.
 | Discard | ✓ | ✓ | Same |
 | Catalog edit / add | ✓ (web → bucket direct) | ✓ (maintainer scripts that write via `huggingface_hub`) |
 | Validators against bucket | — | ✓ | `validators/*.py` keep CLI wrappers for ad-hoc checks against the bucket; auto-runs are inside Inspector services + the scheduled `bucket-data-hygiene.yml` |
-| Edit `data/inspector_roles.json` | — | PR | Single canonical workflow (consolidated owners + maintainers) |
+| Grant / revoke / update access roles | ✓ | ✓ | Web for normal use; CLI (writes via `huggingface_hub`) is the bootstrap path for the first owner before the admin UI is reachable |
 | Rotate Space `INSPECTOR_HF_TOKEN` | ✓ (owner-instructions) | ✓ | Web shows the runbook step; the actual rotation is in HF Space settings UI |
 
 The CLI surfaces stay documented in `inspector/CLAUDE.md`.
@@ -461,7 +557,16 @@ All event names use canonical `<noun>.<verb>` namespacing. Full vocabulary lives
 | `reciter.undiscarded` | admin endpoint | `slug` | `visibility = 'public'` (from `'discarded'`) |
 | `catalog.added` | admin endpoint | `slug, row, reason` | New reciter row in `reciter_catalog.json` |
 | `catalog.edited` | admin endpoint | `slug, patch, reason` | Mutated mutable fields on existing reciter row |
-| `catalog.vocab_added` | admin endpoint (rare) | `kind, value, reason` | New entry under `vocab.riwayat` / `vocab.styles` / `vocab.audio_sources` |
+| `catalog.vocab_added` | admin endpoint (rare) | `kind, value, reason` | New entry under `vocab.riwayat` / `vocab.styles` / `vocab.audio_sources` / `vocab.channels` / `vocab.recording_contexts` |
+| `reciter.dataset_published` | admin endpoint | `slug` | `released → completed`; dispatches dataset rebuild adding slug. (§5.9) |
+| `reciter.removed_from_dataset` | admin endpoint | `slug, reason` | `completed → released`; dispatches dataset rebuild dropping slug. (§5.10) |
+| `reciter.unpublished` | admin endpoint | `slug, original_state, reason` | `released | completed → awaiting_review`; moves published/ → wip/. (§5.11) |
+| `admin.unlocked_for_revision` | admin endpoint | `slug, unlocked_from_state, original_assignee_hf_id, reason` | `released | completed → awaiting_review`; sets `revision_in_progress`. (§5.8) |
+| `admin.batch_timestamps_refresh` | admin endpoint | `slugs[], reason` | Re-enqueues MFA timestamps job(s); appends to `timestamps_job_ids`. (§5.12) |
+| `published.edited` | save endpoint | `slug, chapter, batch_id` | Maintainer direct edit on a `released` / `completed` reciter. (§5.13) |
+| `access.role_granted` | admin endpoint | `target_hf_user_id, role, reason` | New entry in `<bucket>/access/inspector_roles.json`. (§5.7) |
+| `access.role_revoked` | admin endpoint | `target_hf_user_id, reason` | Soft-delete via `removed_at`. (§5.7) |
+| `access.role_updated` | admin endpoint | `target_hf_user_id, patch` | Login refresh or tier change. (§5.7) |
 
 **Deferred from v2** (no events shipped, no endpoints, no audit-log entries until they're added):
 - `claim.force_acquired` / `claim.force_released_auto` — force-claim is deferred entirely (no `force_assignee_*` columns, no 30-min lease, no auto-clear timer).
@@ -483,7 +588,7 @@ Maps onto the parent doc's phases.
 
 ### Phase 4 — Read-only admin dashboard (was misslotted as Phase 1 in earlier drafts; needs OAuth from Phase 3)
 
-- `/admin` route gated by maintainer role (resolved against `data/inspector_roles.json`).
+- `/admin` route gated by maintainer role (resolved against `<bucket>/access/inspector_roles.json`).
 - System health, all-reciters, stalled-reciters, recent-events sections wired up (read-only).
 - No override actions yet.
 - Audit log file readable in dashboard, but no writers yet (the bucket has the file pre-seeded by the migration script with an initial entry).
@@ -517,7 +622,7 @@ Maps onto the parent doc's phases.
 
 ## 13. Risks and open questions
 
-### `data/inspector_roles.json` cache stale during emergency
+### `<bucket>/access/inspector_roles.json` cache stale during emergency
 
 Owner needs to revoke a role urgently. The 60 s cache means the change takes up to 60 s to propagate. Acceptable. Owner can additionally call `POST /api/admin/refresh-roles` (owner-only) to force-refresh.
 

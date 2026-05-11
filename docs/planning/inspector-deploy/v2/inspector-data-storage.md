@@ -20,7 +20,7 @@ Two tiers: **server-image** (baked into the Docker image, slim static set) and *
 | `data/qpc_hafs.json` | static | server-image | n/a | ~11 MB; also published to HF `_resources/` for TS-tab browser fetches in local mode |
 | `data/digital_khatt_v2_script.json` | static | server-image | n/a | ~9.5 MB; same dual-publishing |
 | `data/phoneme_sub_costs.json` | static | server-image | n/a | Boundary check input |
-| `data/inspector_roles.json` | role mgmt | **GitHub raw**; cached in-memory (60s); baked snapshot fallback | manual PRs to GitHub (CODEOWNERS-gated) | Single consolidated file. `hf_user_id` canonical. Schema in [`inspector-state-management.md`](inspector-state-management.md) §9. |
+| `<bucket>/access/inspector_roles.json` | role mgmt | bucket mount; in-memory cache hydrated at startup + replaced on every write | Inspector backend (sole writer; via `services/access.py`) | Single consolidated file. `hf_user_id` canonical. Bootstrap via hand-seed at Phase 0. Schema in [`inspector-state-management.md`](inspector-state-management.md) §9. |
 | `<bucket>/catalog/reciter_catalog.json` | curated metadata (single file: vocab + reciters + aliases + audio source templates) | bucket mount (parsed via pydantic) | Inspector backend (sole writer; via `services/catalog.py`) | Plain JSON. Replaces `data/{riwayat,sources,styles}.json` + `data/audio/<cat>/<src>/<slug>.json` (381 manifests) + `data/reciter_catalog.json`. Schema in [`inspector-state-management.md`](inspector-state-management.md) §3. |
 | `<bucket>/catalog/audio_meta.json` | VBR + ffprobe cache | bucket mount | Inspector backend / maintainer scripts | Was `data/.audio_meta.json` |
 | `<bucket>/catalog/audio_durations.json` | duration cache | bucket mount | Inspector backend / maintainer scripts | Was `data/.audio_durations.json` |
@@ -322,7 +322,7 @@ data/surah_info.json
 data/qpc_hafs.json
 data/digital_khatt_v2_script.json
 data/phoneme_sub_costs.json
-data/inspector_roles.json     # baked snapshot fallback for offline boot; live copy fetched from GitHub raw at runtime
+                              # (no inspector_roles.json in image — bucket-resident, see state-management §9)
 ```
 
 ### No audio catalog build step
@@ -456,13 +456,13 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 
 **In scope:**
 - Create the dev + prod single private HF buckets (one per env).
-- Implement `inspector/schemas/` (pydantic models for state, catalog, audit, edit_history v2).
+- Implement `scripts/lib/schemas/` (pydantic models for state, catalog, audit, edit_history v2; cross-consumer location).
 - Implement `inspector/services/hf_bucket.py` (mount path resolver, write helpers, direct-upload wrapper).
 - Implement `inspector/services/state.py` (state machine + JSON persistence + audit append; per-slug `threading.Lock`).
 - Implement `inspector/services/catalog.py` (mirrors `state.py` — same write pattern, validation, audit; merges riwayat/styles/audio_sources/reciters/aliases).
 - Implement `inspector/services/data_dir.py::resolve(slug)` per-mode data dir resolver.
 - **Manually seed** at v2 cutover (~15 reciters): hand-author `<bucket>/state/reciter_state.json` and `<bucket>/catalog/reciter_catalog.json` per [`inspector-state-management.md`](inspector-state-management.md) §3 mapping rules. No script — too few rows.
-- Land `data/inspector_roles.json` (consolidated owners + maintainers).
+- Hand-seed `<bucket>/access/inspector_roles.json` (consolidated owners + maintainers; one-shot bootstrap at Phase 0 — see [`inspector-state-management.md`](inspector-state-management.md) §9 bootstrap section).
 
 **Acceptance:**
 - Dev bucket mounts successfully into a one-off test Space.

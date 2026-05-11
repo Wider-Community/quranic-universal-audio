@@ -23,18 +23,20 @@ First public surface. Image is slim and production-grade (gunicorn-gthread, `-w 
 - [ ] Backend serves `/api/seg/data/<slug>/...` from `<bucket>/{wip,published}/<slug>/` via the resolver from Phase 1
 - [ ] Backend serves `/api/static/catalog.json` from the in-memory parsed catalog (browser fetch on app load)
 - [ ] Frontend segments tab dual-mode: same client code; URL templating against the backend catalog response
-- [ ] Frontend `editingDisabled` derived store consumed by every edit-affordance component (buttons hidden globally)
+- [ ] Frontend `editingDisabled` derived store consumed by every edit-affordance component (buttons still shown, but clicking any edit button gives popup 1. login to edit if not logged in , followed by 2. reciter completed / reciter already claimed / claim reciter to edit if alr logged in)
 - [ ] `routes/timestamps.py::ts_validate` and `routes/audio_proxy.py` excluded from the deployed image
 - [ ] `.github/workflows/inspector-deploy.yml` — selective rsync to dev Space on push to `dev` branch (and prod Space on push to `main`, but prod cutover gated on Phase 3 sign-off)
 - [ ] `scripts/upload_inspector.sh` selective-push script
-- [ ] dev Space configured: `hf_oauth: true` frontmatter (auth wired in Phase 3 but env vars must inject), Storage Bucket attached at `/data/inspector-bucket`
+- [ ] dev Space configured: `hf_oauth: true` frontmatter (auth wired in Phase 3 but env vars must inject), Storage Bucket attached
 - [ ] dev Space secrets: `INSPECTOR_HF_TOKEN`, `INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev`, `INSPECTOR_SESSION_SECRET` (Phase 3 wires it), `INSPECTOR_GITHUB_DISPATCH_TOKEN` (stub; only used in Phase 5)
+
+I don't understand the last 2 secrets explain. 
 
 ## Out of scope
 
 - HF OAuth flow / signed-cookie session (Phase 3).
 - Any `/api/claim`, `/api/release`, `/api/save` endpoints (Phase 3, Phase 4).
-- `/admin` route (Phase 6).
+- `/admin` route (Phase 7).
 - prod Space cutover — only dev in Phase 2.
 - CDN front (deferred — D12).
 - HF dataset reads from frontend (gone for good per D4).

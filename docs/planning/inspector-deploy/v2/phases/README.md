@@ -21,9 +21,12 @@ For the *why* of any decision, jump to the detailed v2 docs in the parent folder
 | 3 | [Auth + claim flow](03-auth-and-claims.md) | not started | 4, 5 |
 | 4 | [Save migration](04-save-migration.md) | not started | 5 |
 | 5 | [Publish pipeline](05-publish-pipeline.md) | not started | 6 |
-| 6 | [Admin dashboard + cleanup](06-admin-dashboard.md) | not started | — |
+| 6 | [Public dashboard + reusable picker](06-public-dashboard.md) | not started | 7 |
+| 7 | [Admin dashboard + cleanup](07-admin-dashboard.md) | not started | — |
 
-Phases land sequentially. Phase 2 unblocks 3 and 4 in parallel only if you have someone to split work across — solo, run sequentially.
+Phases land sequentially. Phase 2 unblocks 3 and 4 in parallel only if you have someone to split work across — solo, run sequentially. Phase 6 depends on the reciter taxonomy / catalog schema refactor landing out-of-band — the doc is intentionally taxonomy-agnostic and will be refined against the concrete schema before implementation starts.
+
+For a visual reference of the reciter lifecycle (public + admin views, transitions, state-preserving actions), see [`state-machine.md`](state-machine.md).
 
 **Already complete (out of phase scope):**
 - HF dev bucket created and mount tested.

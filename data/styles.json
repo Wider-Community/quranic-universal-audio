@@ -23,5 +23,10 @@
     "name": "Taraweeh",
     "slug": "taraweeh",
     "description": "Live recordings from Taraweeh night prayers during Ramadan"
+  },
+  {
+    "name": "Hadr",
+    "slug": "hadr",
+    "description": "Fast-paced recitation, less ornamented than murattal"
   }
 ]

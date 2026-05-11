@@ -8,12 +8,12 @@
 
 ## Goal
 
-Identity is HF OAuth, sessions are self-contained signed cookies (no server-side session record). Claim transitions are synchronous, write the bucket JSON via `huggingface_hub.upload_file()`, and append to `<bucket>/audit/<YYYY>-<MM>.jsonl`. Lock ownership is keyed on `assignee_hf_id` everywhere — login renames don't break locks. Role resolution uses `data/inspector_roles.json` (60 s cache + baked-snapshot fallback). At the end of this phase a contributor can claim, mark-ready, unmark, and release through the website end-to-end.
+Identity is HF OAuth, sessions are self-contained signed cookies (no server-side session record). Claim transitions are synchronous, write the bucket JSON via `huggingface_hub.upload_file()`, and append to `<bucket>/audit/<YYYY>-<MM>.jsonl`. Lock ownership is keyed on `assignee_hf_id` everywhere — login renames don't break locks. Role resolution uses `<bucket>/access/inspector_roles.json` via `services/access.py` (in-memory cache hydrated at startup; Inspector is sole writer so the cache is correct by construction — no force-refresh endpoint needed). At the end of this phase a contributor can claim, mark-ready, unmark, and release through the website end-to-end.
 
 ## Deliverables
 
 - [ ] `inspector/services/auth.py` — Authlib + Flask `itsdangerous` signed-cookie session carrying `{login, hf_user_id, role, expires_at, csrf}`
-- [ ] `inspector/services/role.py` — resolve role from `data/inspector_roles.json` (GitHub raw, 60 s cache, baked snapshot fallback); `POST /api/admin/refresh-roles` (owner-only, force refresh)
+- [ ] `inspector/services/access.py` — sole-writer for `<bucket>/access/inspector_roles.json`; in-memory cache hydrated at startup + replaced on every Inspector write; grant/revoke/update admin endpoints land here
 - [ ] OAuth endpoints: `GET /api/auth/login`, `GET /api/auth/callback`, `POST /api/auth/logout`
 - [ ] `GET /api/me` — returns `{ login, hf_user_id, role, active_claim }`
 - [ ] Authlib OAuth-state store on Flask-Session (tmpfs, ~30 s lifetime, `/tmp/inspector-flask-sessions/`)
@@ -36,7 +36,7 @@ Identity is HF OAuth, sessions are self-contained signed cookies (no server-side
 
 - Save endpoint (`/api/seg/save`) — Phase 4.
 - Any admin override actions (force-release, reassign, force-set-state, send-back) — Phase 4.
-- `/admin` route + dashboard panels — Phase 6.
+- `/admin` route + dashboard panels — Phase 7.
 - Publish endpoint — Phase 5.
 - Force-claim mechanism — deferred entirely (per D15).
 - Server-Sent Events for cross-tab state sync — deferred (D8).
@@ -54,7 +54,7 @@ Identity is HF OAuth, sessions are self-contained signed cookies (no server-side
 - [ ] Lock decorator returns 403 if a non-assignee POSTs to a claim endpoint with someone else's slug.
 - [ ] Session cookie survives container restart (signed; not server-side).
 - [ ] Logout clears the cookie; the user's claim is NOT released by logout (deliberate — release is a separate action).
-- [ ] Role resolution fetches `data/inspector_roles.json` from GitHub raw; falls back to baked snapshot if unreachable; force-refresh endpoint works for owner.
+- [ ] Role resolution reads `<bucket>/access/inspector_roles.json` at startup into in-memory cache; subsequent writes from `services/access.py` keep the cache fresh (sole-writer pattern → no external refresh).
 - [ ] `assignee_hf_id` is the only field used for ownership comparison anywhere in the request path (grep verifies no `assignee_login == user.login` patterns).
 
 ## Verification

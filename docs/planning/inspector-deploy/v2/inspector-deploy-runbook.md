@@ -371,7 +371,6 @@ rsync -av --delete \
   --include='scripts/__init__.py' --include='scripts/lib/***' \
   --include='data/surah_info.json' --include='data/qpc_hafs.json' \
   --include='data/digital_khatt_v2_script.json' --include='data/phoneme_sub_costs.json' \
-  --include='data/inspector_roles.json' \
   --include='inspector/Dockerfile' --include='.dockerignore' --include='README.md' \
   --include='*/' --exclude='*' \
   ./ "$SPACE_REPO_DIR/"
@@ -730,7 +729,7 @@ Same image as the auto-fired Job, just invoked directly via CLI.
 
 ## 10. Phase-by-phase checklist
 
-- [ ] **Phase 0** — One bucket per env created (dev + prod, both private); state file + audit + catalog seeded as JSON; `services/state.py` + `services/catalog.py` + `services/hf_bucket.py` landed; `data/inspector_roles.json` created.
+- [ ] **Phase 0** — One bucket per env created (dev + prod, both private); state file + audit + catalog seeded as JSON; `services/state.py` + `services/catalog.py` + `services/hf_bucket.py` + `services/access.py` landed; `<bucket>/access/inspector_roles.json` hand-seeded (first owner).
 - [ ] **Phase 1** — Dev Space deployed; gunicorn (not werkzeug); slim `data/` baked (no `audio_catalog.json.gz`, no `reciters_index.json`); browser → backend → bucket path verified for completed reciters; smoke tests pass.
 - [ ] **Phase 2** — Bucket mount working; in-flight reciter renders via bucket; concurrent reads don't degrade.
 - [ ] **Phase 3** — HF OAuth + signed-cookie session live; ≤ 3 clicks for new contributors, 1 for returning; state writes synchronous; audit log appended.

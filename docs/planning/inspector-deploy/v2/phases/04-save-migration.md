@@ -42,7 +42,7 @@ Save flow points at `<bucket>/wip/<slug>/...` via the resolver. Atomic write + p
 ## Out of scope
 
 - Publish endpoint + bucket move + GH dispatch + timestamps job — Phase 5.
-- `/admin` route + dashboard panels — Phase 6.
+- `/admin` route + dashboard panels — Phase 7.
 - All deferred admin events: force-claim, force-clear-assignee, force-unmark-ready, archive/unarchive, pipeline-trigger, job-rerun (see admin §11 deferred list).
 - HF dataset publishing — gone for good per D4.
 
@@ -57,7 +57,7 @@ Save flow points at `<bucket>/wip/<slug>/...` via the resolver. Atomic write + p
 - [ ] Validator findings appear inline in the save response; `bucket-data-hygiene.yml` is NOT yet running (lands in Phase 6).
 - [ ] Force-release: maintainer force-releases another user's `under_review` claim; row transitions `under_review → awaiting_review`; assignee cleared; audit entry has `actor.role == "maintainer"` and `original_assignee_hf_id == <former assignee>`.
 - [ ] Reassign: maintainer reassigns to a different HF login; backend resolves `to_login → hf_user_id` via the HF API; row's `assignee_hf_id` is updated; audit captures both old and new assignee.
-- [ ] Force-set-state: maintainer transitions `awaiting_alignment ↔ awaiting_review` and `awaiting_timestamps ↔ completed` and `catalogued ↔ awaiting_alignment` and `under_review → awaiting_review`. Other pairs return 400.
+- [ ] Force-set-state: maintainer transitions `awaiting_alignment ↔ awaiting_review` and `awaiting_timestamps ↔ released` and `catalogued ↔ awaiting_alignment` and `under_review → awaiting_review`. Other pairs return 400. (`released ↔ completed` has its own dedicated endpoints — `publish-to-dataset` / `remove-from-dataset` in Phase 7 — so it is not a force-set pair.)
 - [ ] Send-back: `under_review` with `marked_ready=1` → maintainer fires send-back → `marked_ready=0`, lifecycle stays `under_review`, assignee retained; reviewer banner shows the maintainer's reason.
 - [ ] All four admin endpoints write to the audit log with `actor.hf_user_id`, `actor.login_at_time`, `actor.role`, and a `reason` ≥ 10 chars.
 
@@ -93,9 +93,9 @@ hf buckets cp \
 # 4. Force-set-state allowed-pair check
 curl -fsS -X POST -b "session=$MAINT_COOKIE" \
   -H "Content-Type: application/json" \
-  -d '{"to_state": "completed", "reason": "TS job recovery — manually verified output."}' \
+  -d '{"to_state": "released", "reason": "TS job recovery — manually verified output."}' \
   $SPACE/api/admin/state/force-set/_test_stuck
-# Expect 400 — (awaiting_review, completed) is NOT in the allowed-pairs list
+# Expect 400 — (awaiting_review, released) is NOT in the allowed-pairs list
 
 # 5. Frozen save
 curl -fsS -X POST -b "session=$REVIEWER_COOKIE" \
