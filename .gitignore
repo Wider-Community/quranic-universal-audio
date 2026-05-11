@@ -33,7 +33,3 @@ data/timestamps/**/beam_review.json
 data/timestamps/**/timestamps.beam_*.json
 data/timestamps/**/timestamps_full.beam_*.json
 data/timestamps/**/beam_diff_report.txt
-
-# QuranicAudio scrape intermediates (regenerable)
-data/audio/quranicaudio_raw.json
-data/audio/quranicaudio_coverage_cache.json
