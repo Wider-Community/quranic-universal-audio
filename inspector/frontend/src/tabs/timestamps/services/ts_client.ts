@@ -18,6 +18,7 @@
 
 import { fetchArrayBuffer, fetchJson } from '../../../lib/api';
 import type {
+    TsCatalogResponse,
     TsConfigResponse,
     TsDataResponse,
     TsManifestResponse,
@@ -32,6 +33,7 @@ import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../../../lib/
 // ---------------------------------------------------------------------------
 
 let _config: Promise<TsConfigResponse> | null = null;
+let _catalog: Promise<TsCatalogResponse> | null = null;
 let _manifest: Promise<TsManifestResponse> | null = null;
 let _qpc: Promise<Record<string, { text?: string }>> | null = null;
 let _dk: Promise<Record<string, { text?: string }>> | null = null;
@@ -92,6 +94,70 @@ export function loadConfig(): Promise<TsConfigResponse> {
         _config = fetchJson<TsConfigResponse>('/api/ts/config');
     }
     return _config;
+}
+
+/**
+ * Fetch the v2 reciter catalog once. Resolves with the parsed body — schema
+ * matches {@link TsCatalogResponse}. Cached forever client-side; the backend
+ * already serves a short ``Cache-Control: max-age=300`` so cross-tab catalog
+ * edits propagate within a few minutes anyway.
+ *
+ * URL comes from ``tsConfig.catalog_url`` (set on every Inspector build that
+ * has D20 Track B). The legacy ``loadManifest()`` path still feeds chapter
+ * lists / VBR / validation / resources — this only displaces the reciter
+ * dropdown source.
+ */
+export async function loadCatalog(): Promise<TsCatalogResponse> {
+    if (!_catalog) {
+        _catalog = (async () => {
+            const cfg = await loadConfig();
+            const url = cfg.catalog_url;
+            if (!url) {
+                throw new Error('TS config missing catalog_url — backend predates D20 Track B.');
+            }
+            return fetchJson<TsCatalogResponse>(url);
+        })();
+    }
+    return _catalog;
+}
+
+/** Per-delivery dropdown entry derived from a catalog snapshot.
+ *
+ * Joins ``catalog.reciters[]`` (display name) against ``catalog.deliveries[]``
+ * (slug, riwayah, style, audio_category) so every row carries the labels the
+ * existing UI renders without forcing consumers to walk both arrays
+ * themselves. One row per delivery — current Timestamps UX is a flat list,
+ * not the Reciter→Mushaf→Source three-tier UX Track A introduces. */
+export interface TsCatalogReciterRow {
+    slug: string;
+    reciter_id: string;
+    name_en: string;
+    name_ar: string | null;
+    riwayah: string;
+    style: string;
+    source: string;
+    audio_category: 'by_surah' | 'by_ayah';
+}
+
+/** Build the flat reciter-dropdown list from a catalog snapshot. */
+export function catalogReciterRows(catalog: TsCatalogResponse): TsCatalogReciterRow[] {
+    const byId = new Map(catalog.reciters.map((r) => [r.reciter_id, r]));
+    const rows: TsCatalogReciterRow[] = [];
+    for (const d of catalog.deliveries) {
+        const r = byId.get(d.reciter_id);
+        if (!r) continue; // FK invariant guaranteed by the pydantic model; skip defensively.
+        rows.push({
+            slug: d.slug,
+            reciter_id: d.reciter_id,
+            name_en: r.name_en,
+            name_ar: r.name_ar ?? null,
+            riwayah: d.riwayah,
+            style: d.style,
+            source: d.source,
+            audio_category: d.audio_category,
+        });
+    }
+    return rows;
 }
 
 /**
@@ -466,6 +532,7 @@ export async function getRandomTarget(opts: { reciter?: string } = {}): Promise<
 
 export function _resetForTests(): void {
     _config = null;
+    _catalog = null;
     _manifest = null;
     _qpc = null;
     _dk = null;

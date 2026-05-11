@@ -34,8 +34,10 @@
     import {
         assembleVerseFromShard,
         audioUrlFor,
+        catalogReciterRows,
         chapterVerseRefs,
         getRandomTarget,
+        loadCatalog,
         loadChapterShard,
         loadConfig,
         loadDk,
@@ -137,6 +139,27 @@
     }
 
     async function loadReciters(): Promise<void> {
+        // D20 Track B: prefer the v2 catalog endpoint when the backend
+        // advertises it (`tsConfig.catalog_url`). Falls back to the legacy
+        // gzipped manifest's `reciters[]` block in development / against
+        // older backends.
+        try {
+            const cfg = await loadConfig();
+            if (cfg.catalog_url) {
+                const catalog = await loadCatalog();
+                const rs: TsReciter[] = catalogReciterRows(catalog).map((row) => ({
+                    slug: row.slug,
+                    name: row.name_en,
+                    audio_source: row.source,
+                }));
+                rs.sort((a, b) => a.name.localeCompare(b.name));
+                reciters.set(rs);
+                return;
+            }
+        } catch (e) {
+            console.warn('Catalog load failed; falling back to manifest:', e);
+        }
+
         try {
             const m = await loadManifest();
             const rs: TsReciter[] = Object.entries(m.reciters).map(([slug, b]) => ({

@@ -47,6 +47,9 @@ export interface TsConfigResponse {
     manifest_url: string;
     /** URL template with `{reciter}` + `{chapter}` placeholders. */
     shard_url_template: string;
+    /** D20 Track B: optional URL of the v2 catalog JSON. When present, the
+     *  frontend prefers this over `manifest.reciters[]` for the dropdown. */
+    catalog_url?: string;
     unified_display_max_height: number;
     anim_highlight_color: string;
     anim_word_transition_duration: number;
@@ -79,6 +82,39 @@ export interface TsManifestReciter {
     validation: { boundary_mismatches: TsBoundaryMismatch[] };
     /** Build-internal payload — not relied on by the read path. */
     _build?: { shard_hashes?: Record<string, string> };
+}
+
+/** Reciter entry in the v2 catalog (`<bucket>/catalog/reciter_catalog.json`).
+ *  Mirrors `scripts.lib.schemas.ReciterEntry` — fields the Timestamps tab
+ *  dropdown uses; full schema carries optional `country`, `notes`. */
+export interface TsCatalogReciter {
+    reciter_id: string;
+    name_en: string;
+    name_ar?: string | null;
+    country?: string | null;
+    notes?: string | null;
+}
+
+/** Delivery entry in the v2 catalog. Slug uniquely identifies a delivery
+ *  (= what the legacy manifest called a "reciter slug"). Mirrors
+ *  `scripts.lib.schemas.Delivery` — only the fields the Timestamps tab
+ *  needs are typed here; pass-through fields ignored. */
+export interface TsCatalogDelivery {
+    slug: string;
+    reciter_id: string;
+    riwayah: string;
+    style: string;
+    source: string;
+    audio_category: 'by_surah' | 'by_ayah';
+}
+
+/** GET /api/static/catalog.json — slim projection of `ReciterCatalog` carrying
+ *  the fields the Timestamps tab uses. The route serves the full catalog; we
+ *  only model what's read here. */
+export interface TsCatalogResponse {
+    schema_version: number;
+    reciters: TsCatalogReciter[];
+    deliveries: TsCatalogDelivery[];
 }
 
 /** Body of `manifest.json.gz` (decompressed). */

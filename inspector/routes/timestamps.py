@@ -53,6 +53,12 @@ def ts_config():
         "mode": TS_SOURCE,
         "manifest_url": manifest_url,
         "shard_url_template": shard_url_template,
+        # D20 Track B: reciter dropdown migrates off ``manifest.json.gz`` to the
+        # v2 catalog served by the Inspector backend. Frontend prefers this
+        # when present; ``manifest_url`` stays as fallback so ts_chapters /
+        # vbr_chapters / validation / resources keep flowing through the
+        # legacy shard model until later phases (per-chapter timestamps, etc.).
+        "catalog_url": "/api/static/catalog.json",
         "unified_display_max_height": UNIFIED_DISPLAY_MAX_HEIGHT,
         "anim_highlight_color": ANIM_HIGHLIGHT_COLOR,
         "anim_word_transition_duration": ANIM_WORD_TRANSITION_DURATION,
