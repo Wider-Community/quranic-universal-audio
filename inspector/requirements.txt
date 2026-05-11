@@ -1,3 +1,5 @@
 flask
 quranic-phonemizer>=2.2
 orjson
+pydantic>=2.10
+huggingface_hub>=0.26
