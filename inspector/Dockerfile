@@ -7,9 +7,9 @@
 # Stage 3 is a lean python:3.11-alpine runtime that ships the Flask app.
 # Reviewers run `docker compose up` and visit :5000.
 #
-# Build context is the REPO ROOT (one level above inspector/).
-# `validators/` lives at repo root as a sibling of `inspector/`; both are
-# copied into the image so `from validators.X import Y` resolves correctly.
+# Build context is the REPO ROOT (one level above inspector/). `scripts/lib/`
+# ships alongside `inspector/` so the in-process imports of
+# `scripts.lib.boundary_check` (timestamps validator) and similar resolve.
 #
 # Build:    docker build -t inspector:dev -f inspector/Dockerfile .   # from repo root
 # Run dev:  docker run --rm -p 5000:5000 -v "$PWD/data:/data" inspector:dev
@@ -100,14 +100,13 @@ RUN pip install --no-cache-dir \
 # App code. Selective COPY — inspector/frontend/{src,public,node config} and
 # tests/ aren't needed at runtime (only the built dist/ from stage 1 is).
 # app.py inserts /app (repo root) onto sys.path[0] at startup so that
-# `from validators.X import Y` resolves.
+# `from scripts.lib.X import Y` resolves.
 COPY inspector/app.py inspector/config.py inspector/constants.py ./inspector/
 COPY inspector/adapters/ ./inspector/adapters/
 COPY inspector/domain/ ./inspector/domain/
 COPY inspector/routes/ ./inspector/routes/
 COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
-COPY validators/ ./validators/
 # scripts/lib/ is shared with the CI build pipeline (e.g. timestamps_shards
 # keeps local-mode docker shards bytewise identical to HF-mode shards via
 # deterministic gzip + same split logic). Top-level scripts/ contains local

@@ -12,7 +12,6 @@ Build steps:
 2. Stage the Space-shaped tree in a temp dir:
      - ``Dockerfile``               (copied from ``inspector/Dockerfile``)
      - ``inspector/...``            (code + frontend ``dist/``)
-     - ``validators/...``
      - ``scripts/__init__.py`` + ``scripts/lib/...``
      - ``data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs}.json``
      - ``.dockerignore``
@@ -97,7 +96,7 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     shutil.copy2(repo / ".dockerignore", stage_root / ".dockerignore")
 
     # Code trees.
-    for src_rel in ("inspector", "validators"):
+    for src_rel in ("inspector",):
         src = repo / src_rel
         dst = stage_root / src_rel
         shutil.copytree(

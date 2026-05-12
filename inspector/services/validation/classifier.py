@@ -6,7 +6,6 @@ trigger?" — consumed by:
 - ``services.validation.detail._build_detail_lists`` (response building).
 - ``services.validation.chapter_validation_counts`` (count rollups).
 - ``services.validation.snapshot_classifier`` (history snapshots).
-- ``validators.validate_segments`` (the CLI report).
 
 Public surface
 --------------
