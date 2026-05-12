@@ -36,6 +36,9 @@ class AudioCategory(str, Enum):
 class BitrateMode(str, Enum):
     CBR = "cbr"
     VBR = "vbr"
+    ABR = "abr"
+    MOSTLY_CBR = "mostly_cbr"
+    MOSTLY_VBR = "mostly_vbr"
     MIXED = "mixed"
     UNKNOWN = "unknown"
 
