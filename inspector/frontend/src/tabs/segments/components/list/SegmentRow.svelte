@@ -495,20 +495,24 @@
         enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId, rowChapter);
     }
 
-    /** Cross-verse accordion swaps `Split` for `Auto Split`: ask MFA for the
-     *  verse-boundary ms, then open the split panel with the cursor pre-placed.
-     *  Any backend failure returns split_ms=null and we fall through to the
-     *  normal midpoint flow — no user-facing error, matching the silent
-     *  fallback decision on this feature. */
-    $: isAutoSplit = validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref);
+    /** Cross-verse + repetitions accordions swap `Split` for `Auto Split`:
+     *  ask MFA for the cursor positions (and per-section refs), then open
+     *  the split panel with cursors pre-placed and ref-edit chain seeded.
+     *  Any backend miss falls through silently to the normal midpoint flow. */
+    $: isAutoSplit = (validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref))
+        || (validationCategory === 'repetitions' && !!(seg as any).wrap_word_ranges);
 
     async function onSplitClick(e: MouseEvent): Promise<void> {
         e.stopPropagation();
-        let initialSplitMs: number | null = null;
+        let initialSplits: number[] | null = null;
+        let initialRefs: string[] | null = null;
         if (isAutoSplit) {
             const reciter = get(selectedReciter);
             if (reciter) {
-                const resp = await fetchJsonOrNull<{ split_ms: number | null }>(
+                const resp = await fetchJsonOrNull<{
+                    cursors: number[] | null;
+                    refs: string[] | null;
+                }>(
                     `/api/seg/auto-split/${encodeURIComponent(reciter)}`,
                     {
                         method: 'POST',
@@ -519,12 +523,13 @@
                         }),
                     },
                 );
-                initialSplitMs = resp?.split_ms ?? null;
+                initialSplits = resp?.cursors ?? null;
+                initialRefs = resp?.refs ?? null;
             }
         }
         enterEditWithBuffer(
             seg, rowEl, 'split', validationCategory, _mountId, rowChapter,
-            initialSplitMs,
+            initialSplits, initialRefs,
         );
     }
 

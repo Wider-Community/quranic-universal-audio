@@ -27,7 +27,7 @@ import {
 } from '../../stores/dirty';
 import {
     clearEdit,
-    pendingChainTarget,
+    pendingChainTargets,
     setEdit,
     setEditingSegIndex,
 } from '../../stores/edit';
@@ -296,10 +296,13 @@ function _pickHandoffMountId(entries: Iterable<RowEntry>): symbol | null {
     return null;
 }
 
-/** Read-and-clear `pendingChainTarget`; if set, synchronously enter ref-edit
- *  mode on the chained segment. Called after `clearEdit()` so `setEdit` in
- *  `beginRefEdit` transitions from a clean `null` edit state rather than
- *  overlapping with the just-committed one.
+/** Shift one entry off `pendingChainTargets`; if non-empty, synchronously
+ *  enter ref-edit mode on the next chained segment. Called after
+ *  `clearEdit()` so `setEdit` in `beginRefEdit` transitions from a clean
+ *  `null` edit state rather than overlapping with the just-committed one.
+ *  For N>2 splits (repetition auto-split) this gets called once per piece
+ *  and steps through every remaining piece in order; for binary splits the
+ *  queue holds one entry and behaviour matches today.
  *
  *  Resolves the target mount via the row registry. If no row is currently
  *  mounted for (chapter, chain.seg.index) — user navigated away, the row was
@@ -310,9 +313,10 @@ function _pickHandoffMountId(entries: Iterable<RowEntry>): symbol | null {
  *  Split/Adjust/Edit Ref clicks (the `enterEditWithBuffer` + other guards
  *  bail early on any non-null editMode). */
 async function _handoffPendingChain(): Promise<void> {
-    const chain = get(pendingChainTarget);
-    pendingChainTarget.set(null);
-    if (!chain) return;
+    const queue = get(pendingChainTargets);
+    if (!queue.length) return;
+    const chain = queue[0];
+    pendingChainTargets.set(queue.slice(1));
 
     // Flush Svelte's pending DOM updates so that newly-inserted rows (e.g. the
     // second half after a split) are mounted and registered in the row registry

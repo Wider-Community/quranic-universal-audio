@@ -58,13 +58,24 @@ export interface TrimCommand extends CommandBase {
 export interface SplitCommand extends CommandBase {
     type: 'split';
     segmentUid: string;
-    splitMs: number;
-    /** Resolved at the dispatcher edge. Unused if absent. */
+    /** Cursor times. ``number`` = today's single-cursor split (one cut, two
+     *  pieces). ``number[]`` = repetitions auto-split (N cuts in ascending
+     *  order, N+1 pieces). Single-value form is preserved so existing
+     *  callers don't have to wrap. */
+    splitMs: number | number[];
+    /** Pre-allocated UIDs for the produced pieces *after* the first.
+     *  Length = (cursors.length) for the array form. The first piece reuses
+     *  the parent's UID. Falls back to UID generation when absent. */
+    newUids?: string[];
+    /** Per-section ref + text. Length = pieces.length when set; pieces with
+     *  ``undefined`` entries inherit the parent's matched_ref/text. */
+    refs?: (string | undefined)[];
+    texts?: (string | undefined)[];
+    // ---- Legacy single-cursor convenience fields (still accepted) --------
     firstRef?: string;
     secondRef?: string;
     firstText?: string;
     secondText?: string;
-    /** Pre-allocated UID for the second half so the dispatcher can wire row registry. */
     secondHalfUid?: string;
 }
 

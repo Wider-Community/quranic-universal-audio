@@ -21,7 +21,7 @@
     import { setPendingOp } from '../../stores/dirty';
     import {
         clearEdit,
-        pendingChainTarget,
+        pendingChainTargets,
     } from '../../stores/edit';
     import {
         _normalizeRef,
@@ -95,7 +95,10 @@
         if (committed) return;
         committed = true;
         setPendingOp(null);
-        pendingChainTarget.set(null);
+        // Cancelling one ref edit aborts the full split-chain — user can
+        // Edit Ref manually on the remaining pieces. Clearing the whole
+        // queue prevents a stale handoff fire when the next clearEdit lands.
+        pendingChainTargets.set([]);
         clearEdit();
         dispatch('preview', null);
     }

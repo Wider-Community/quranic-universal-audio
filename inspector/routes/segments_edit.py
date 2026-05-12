@@ -14,7 +14,7 @@ from flask import Blueprint, g, jsonify, request
 
 from scripts.lib.schemas import Actor
 
-from services.auto_split import compute_auto_split_ms as _compute_auto_split_ms
+from services.auto_split import compute_auto_split as _compute_auto_split
 from services.save import save_seg_data as _save_seg_data
 from services.undo import undo_batch as _undo_batch, undo_ops as _undo_ops
 
@@ -66,24 +66,27 @@ def seg_undo_batch(reciter):
 @require_same_origin
 @require_edit_lock(reciter_param="reciter", admin_bypass=True)
 def seg_auto_split(reciter):
-    """Compute the verse-boundary split time for a cross-verse segment.
+    """Compute auto-split cursors + per-section refs for a segment.
 
-    Returns ``{"split_ms": <int>, "source": "mfa"}`` on success or
-    ``{"split_ms": null, "source": "fallback"}`` whenever MFA can't supply
-    a usable answer (timeout, malformed segment, ffmpeg failure). The
-    frontend treats ``null`` as "open split panel at midpoint" with no
-    user-facing error.
+    Response shape:
+
+      ``{"cursors": list[int] | None,   # N-1 absolute ms cuts
+         "refs":    list[str] | None,   # N per-section refs
+         "kind":    "cross_verse" | "repetition" | null,
+         "source":  "mfa" | "fallback"}``
+
+    On a total miss (segment not found, no audio, malformed ref) all
+    fields are null and the FE opens normal split at the midpoint. On MFA
+    failure the response is still populated with the fallback shape (even
+    cuts for repetitions, midpoint for cross-verse + suggested refs) so
+    the user gets a workable cursor layout without a visible error.
     """
     body = request.get_json(silent=True) or {}
     segment_uid = body.get("segment_uid")
     chapter = body.get("chapter")
     if not segment_uid or not isinstance(chapter, int):
         return jsonify({"error": "segment_uid and chapter required"}), 400
-    split_ms = _compute_auto_split_ms(reciter, chapter, segment_uid)
-    return jsonify({
-        "split_ms": split_ms,
-        "source": "mfa" if split_ms is not None else "fallback",
-    })
+    return jsonify(_compute_auto_split(reciter, chapter, segment_uid))
 
 
 @seg_edit_bp.route("/undo-ops/<reciter>", methods=["POST"])

@@ -220,48 +220,100 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     const target = _findSeg(state, cmd.segmentUid);
     if (!target) throw new Error(`applyCommand[split]: segment '${cmd.segmentUid}' not found`);
     const chapter = _chapterFor(target, state);
-    const splitMs = cmd.splitMs;
-    if (splitMs <= target.time_start || splitMs >= target.time_end) {
-        throw new Error(`applyCommand[split]: splitMs=${splitMs} out of range [${target.time_start}, ${target.time_end}]`);
+
+    // Normalize cursors → ascending list of cuts strictly inside the seg.
+    const cursors = (Array.isArray(cmd.splitMs) ? cmd.splitMs.slice() : [cmd.splitMs])
+        .sort((a, b) => a - b);
+    for (let i = 0; i < cursors.length; i++) {
+        if (cursors[i] <= target.time_start || cursors[i] >= target.time_end) {
+            throw new Error(
+                `applyCommand[split]: splitMs=${cursors[i]} out of range `
+                + `[${target.time_start}, ${target.time_end}]`,
+            );
+        }
+        if (i > 0 && cursors[i] <= cursors[i - 1]) {
+            throw new Error(
+                `applyCommand[split]: cursors must be strictly ascending (got ${cursors})`,
+            );
+        }
     }
 
-    const firstHalf: Segment = {
-        ..._cloneSeg(target),
-        time_end: splitMs,
-    };
-    const secondHalf: Segment = {
-        ..._cloneSeg(target),
-        segment_uid: cmd.secondHalfUid ?? _newUid(ctx),
-        index: target.index + 1,
-        time_start: splitMs,
-    };
-    if (cmd.firstRef !== undefined) firstHalf.matched_ref = cmd.firstRef;
-    if (cmd.firstText !== undefined) firstHalf.matched_text = cmd.firstText;
-    if (cmd.secondRef !== undefined) secondHalf.matched_ref = cmd.secondRef;
-    if (cmd.secondText !== undefined) secondHalf.matched_text = cmd.secondText;
+    // Per-piece ref + text resolution. The array form `cmd.refs`/`cmd.texts`
+    // wins (length must equal pieces.length); otherwise the legacy
+    // `first*`/`second*` fields apply for the N=2 case.
+    const nPieces = cursors.length + 1;
+    const refs: (string | undefined)[] = new Array(nPieces).fill(undefined);
+    const texts: (string | undefined)[] = new Array(nPieces).fill(undefined);
+    if (cmd.refs && cmd.refs.length === nPieces) {
+        for (let i = 0; i < nPieces; i++) refs[i] = cmd.refs[i];
+    } else if (nPieces === 2) {
+        refs[0] = cmd.firstRef;
+        refs[1] = cmd.secondRef;
+    }
+    if (cmd.texts && cmd.texts.length === nPieces) {
+        for (let i = 0; i < nPieces; i++) texts[i] = cmd.texts[i];
+    } else if (nPieces === 2) {
+        texts[0] = cmd.firstText;
+        texts[1] = cmd.secondText;
+    }
+
+    // Build N+1 pieces. First piece reuses parent UID; the rest take from
+    // `cmd.newUids` (or fall back to fresh UIDs). `cmd.secondHalfUid` is a
+    // single-cursor convenience kept for older callers.
+    const pieces: Segment[] = [];
+    for (let i = 0; i < nPieces; i++) {
+        const start = i === 0 ? target.time_start : cursors[i - 1];
+        const end = i === nPieces - 1 ? target.time_end : cursors[i];
+        const piece: Segment = {
+            ..._cloneSeg(target),
+            time_start: start,
+            time_end: end,
+        };
+        if (i === 0) {
+            // Keep parent uid + index for piece 0.
+        } else {
+            piece.segment_uid = cmd.newUids?.[i - 1]
+                ?? (i === 1 ? cmd.secondHalfUid : undefined)
+                ?? _newUid(ctx);
+            piece.index = target.index + i;
+        }
+        if (refs[i] !== undefined) piece.matched_ref = refs[i]!;
+        if (texts[i] !== undefined) piece.matched_text = texts[i]!;
+        pieces.push(piece);
+    }
 
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
     const resolved = new Set<string>(_resolvedFromContext(ctxCat));
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     op.snapshots.before = [_snapshot(target)];
-    op.snapshots.after = [_snapshot(firstHalf), _snapshot(secondHalf)];
+    op.snapshots.after = pieces.map(_snapshot);
     op.targets_before = op.snapshots.before;
     op.targets_after = op.snapshots.after;
     op.affected_chapters = [chapter];
 
-    const firstUid = firstHalf.segment_uid ?? cmd.segmentUid;
-    const secondUid = secondHalf.segment_uid!;
+    const insertedUids = pieces.slice(1).map((p) => p.segment_uid!);
+    const byId: Record<string, Segment> = {};
+    for (const p of pieces) {
+        const u = p.segment_uid ?? cmd.segmentUid;
+        byId[u] = p;
+    }
+    const firstUid = pieces[0].segment_uid ?? cmd.segmentUid;
     const nextState: CommandNextState = {
-        byId: { [firstUid]: firstHalf, [secondUid]: secondHalf },
+        byId,
         affectedChapter: chapter,
-        insertedSegmentUids: [secondUid],
+        insertedSegmentUids: insertedUids,
     };
     const ids = state.idsByChapter[chapter];
     if (ids) {
         const ix = ids.indexOf(cmd.segmentUid);
         if (ix !== -1) {
-            const nextIds = [...ids.slice(0, ix), firstUid, secondUid, ...ids.slice(ix + 1)];
+            const nextIds = [
+                ...ids.slice(0, ix),
+                firstUid,
+                ...insertedUids,
+                ...ids.slice(ix + 1),
+            ];
             nextState.idsByChapter = { ...state.idsByChapter, [chapter]: nextIds };
         }
     }
@@ -272,9 +324,9 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
         validationDelta: { resolved: [...resolved], introduced: [] },
         patch: _buildPatch(
             [_snapshot(target)],
-            [_snapshot(firstHalf), _snapshot(secondHalf)],
+            pieces.map(_snapshot),
             [],
-            [secondUid],
+            insertedUids,
             [chapter],
         ),
     };

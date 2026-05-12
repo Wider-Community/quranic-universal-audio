@@ -22,6 +22,29 @@ _REPO_ROOT = Path(__file__).parent.parent.resolve()
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# Local dev: hydrate process env from `<repo>/.env` if present. Production
+# (HF Space) gets its secrets from Space settings and the file is absent.
+# Keys already in the process env win (shell `export` beats the file).
+def _load_dotenv_for_local_dev() -> None:
+    env_path = _REPO_ROOT / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+    except OSError:
+        pass
+
+
+_load_dotenv_for_local_dev()
+
 from flask import Flask, jsonify, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix

@@ -16,7 +16,7 @@ import {
     recomputeDirtyEntryFromOps,
     setChapterOps,
 } from '../../stores/dirty';
-import { pendingChainTarget } from '../../stores/edit';
+import { pendingChainTargets } from '../../stores/edit';
 import {
     buildEditChains,
     type EditChain,
@@ -33,7 +33,7 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 // ---------------------------------------------------------------------------
 
 export async function _afterUndoSuccess(reciter: string, _opsReversed: number): Promise<void> {
-    pendingChainTarget.set(null);
+    pendingChainTargets.set([]);
 
     try {
         const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
@@ -219,7 +219,7 @@ export function onPendingOpsDiscard(
     const noun = opIds.length === 1 ? 'edit' : 'edits';
     if (!confirm(`Discard ${opIds.length} ${noun}${chLabel}?`)) return;
 
-    pendingChainTarget.set(null);
+    pendingChainTargets.set([]);
 
     const opIdSet = new Set(opIds);
     const all = getChapterOps(chapter);
