@@ -12,6 +12,7 @@ midpoint cursor without surfacing the error.
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 import subprocess
 import sys
@@ -203,6 +204,12 @@ def compute_auto_split_ms(reciter: str, chapter: int,
     # routes/segment_clip.py — drops the ffmpeg HTTP fetch when warm.
     local = cache.audio_cache_path(reciter, audio_url)
     source = str(local) if local.exists() else audio_url
+
+    # mfa_upload_and_submit reads HF_TOKEN from env. The deployed inspector
+    # Space configures its bucket token as INSPECTOR_HF_TOKEN, so mirror the
+    # hf_bucket.py fallback here so the dev MFA Space (private) authenticates.
+    if not os.environ.get("HF_TOKEN") and os.environ.get("INSPECTOR_HF_TOKEN"):
+        os.environ["HF_TOKEN"] = os.environ["INSPECTOR_HF_TOKEN"]
 
     try:
         with tempfile.TemporaryDirectory(prefix="auto_split_") as tmp:
