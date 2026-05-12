@@ -10,6 +10,7 @@
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import AudioTab from './tabs/audio/AudioTab.svelte';
     import { audPort } from './tabs/audio/stores/audio';
+    import DashboardTab from './tabs/dashboard/DashboardTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import { segPort } from './tabs/segments/stores/playback';
     import { tsPort } from './tabs/timestamps/stores/playback';
@@ -38,9 +39,17 @@
 
     onMount(() => {
         const savedTab = localStorage.getItem(LS_KEYS.ACTIVE_TAB);
-        const validTabs: string[] = [TAB_NAMES.TIMESTAMPS, TAB_NAMES.SEGMENTS, TAB_NAMES.AUDIO];
+        const validTabs: string[] = [
+            TAB_NAMES.DASHBOARD,
+            TAB_NAMES.TIMESTAMPS,
+            TAB_NAMES.SEGMENTS,
+            TAB_NAMES.AUDIO,
+        ];
         if (savedTab && validTabs.includes(savedTab)) {
             switchTab(savedTab);
+        } else {
+            // First-time visitors land on Dashboard.
+            switchTab(TAB_NAMES.DASHBOARD);
         }
         void loadCurrentUser();
     });
@@ -68,11 +77,17 @@
         </div>
         <p class="header-links">Want to add a reciter? <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests" target="_blank" rel="noopener">Submit a request</a></p>
         <div class="tab-bar">
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => switchTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => switchTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => switchTab(TAB_NAMES.SEGMENTS)}>Segments</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.AUDIO} data-tab={TAB_NAMES.AUDIO} on:click={() => switchTab(TAB_NAMES.AUDIO)}>Audio</button>
         </div>
     </header>
+
+    <!-- ============ Dashboard Tab ============ -->
+    <div hidden={activeTab !== TAB_NAMES.DASHBOARD}>
+        <DashboardTab />
+    </div>
 
     <!-- ============ Timestamps Tab ============ -->
     <div hidden={activeTab !== TAB_NAMES.TIMESTAMPS}>

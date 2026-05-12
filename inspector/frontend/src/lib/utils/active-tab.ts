@@ -5,7 +5,7 @@
  * `main.ts → {timestamps,segments}/index → {timestamps,segments}/keyboard`.
  */
 
-let _activeTab = 'timestamps';
+let _activeTab = 'dashboard';
 
 export function getActiveTab(): string {
     return _activeTab;
