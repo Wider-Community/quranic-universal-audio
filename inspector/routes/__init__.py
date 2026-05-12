@@ -19,6 +19,7 @@ def register_blueprints(app):
     from routes.admin_actions import admin_actions_bp
     from routes.auth import auth_bp
     from routes.claims import claims_bp
+    from routes.public import public_bp
     from routes.timestamps import ts_bp
     from routes.segments_data import seg_data_bp
     from routes.segments_edit import seg_edit_bp
@@ -33,6 +34,7 @@ def register_blueprints(app):
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(claims_bp)
+    app.register_blueprint(public_bp)
     app.register_blueprint(access_admin_bp)
     app.register_blueprint(admin_actions_bp)
     app.register_blueprint(ts_bp)
