@@ -16,6 +16,7 @@
     import FilterPill from '../../../lib/components/FilterPill.svelte';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
     import { match } from '../../../lib/utils/fuzzy-match';
+    import { playerContext } from '../../../lib/stores/player-context';
     import StatePill from '../../../lib/components/StatePill.svelte';
     import type { PublicBucket, PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
     import ActivityRail from '../components/ActivityRail.svelte';
@@ -100,13 +101,27 @@
     }
 
     function onPlay(reciter: PublicReciter): void {
-        // BottomPlayer wiring in Slice I; for now no-op.
-        void reciter;
+        const delivery = reciter.deliveries[0];
+        if (!delivery) return;
+        playerContext.update((s) => ({
+            ...s,
+            reciter,
+            delivery,
+            surahNum: s.surahNum ?? 1,
+            positionMs: 0,
+            isPlaying: true,
+        }));
     }
 
     function onPlayDelivery(detail: { reciter: PublicReciter; delivery: PublicDelivery }): void {
-        // BottomPlayer wiring in Slice I; for now no-op.
-        void detail;
+        playerContext.update((s) => ({
+            ...s,
+            reciter: detail.reciter,
+            delivery: detail.delivery,
+            surahNum: s.surahNum ?? 1,
+            positionMs: 0,
+            isPlaying: true,
+        }));
     }
 </script>
 

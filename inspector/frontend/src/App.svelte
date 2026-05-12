@@ -7,9 +7,8 @@
     import ToastHost from './lib/components/ToastHost.svelte';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
+    import { dashPort } from './lib/playback/dash-port';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
-    import AudioTab from './tabs/audio/AudioTab.svelte';
-    import { audPort } from './tabs/audio/stores/audio';
     import DashboardTab from './tabs/dashboard/DashboardTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import { segPort } from './tabs/segments/stores/playback';
@@ -34,21 +33,31 @@
         // its element + transport; pause is no-op when nothing's playing.
         if (tab !== TAB_NAMES.TIMESTAMPS) tsPort.pause();
         if (tab !== TAB_NAMES.SEGMENTS) segPort.pause();
-        if (tab !== TAB_NAMES.AUDIO) audPort.pause();
+        if (tab !== TAB_NAMES.DASHBOARD) dashPort.pause();
+    }
+
+    function cleanupLegacyAudioKeys(): void {
+        // Phase 6 removes the Audio tab. Sweep any legacy insp_aud_* keys
+        // so they don't linger and confuse future feature work.
+        for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('insp_aud_')) localStorage.removeItem(k);
+        }
     }
 
     onMount(() => {
+        cleanupLegacyAudioKeys();
         const savedTab = localStorage.getItem(LS_KEYS.ACTIVE_TAB);
         const validTabs: string[] = [
             TAB_NAMES.DASHBOARD,
             TAB_NAMES.TIMESTAMPS,
             TAB_NAMES.SEGMENTS,
-            TAB_NAMES.AUDIO,
         ];
         if (savedTab && validTabs.includes(savedTab)) {
             switchTab(savedTab);
         } else {
-            // First-time visitors land on Dashboard.
+            // First-time visitors and legacy `insp_active_tab='audio'`
+            // users land on Dashboard.
             switchTab(TAB_NAMES.DASHBOARD);
         }
         void loadCurrentUser();
@@ -80,7 +89,6 @@
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => switchTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => switchTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => switchTab(TAB_NAMES.SEGMENTS)}>Segments</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.AUDIO} data-tab={TAB_NAMES.AUDIO} on:click={() => switchTab(TAB_NAMES.AUDIO)}>Audio</button>
         </div>
     </header>
 
@@ -99,10 +107,6 @@
         <SegmentsTab />
     </div>
 
-    <!-- ============ Audio Tab ============ -->
-    <div hidden={activeTab !== TAB_NAMES.AUDIO}>
-        <AudioTab />
-    </div>
 
 </div>
 

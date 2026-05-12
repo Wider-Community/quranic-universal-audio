@@ -16,7 +16,6 @@ export const LS_KEYS = {
     SEG_AUTOSCROLL:  'insp_seg_autoscroll',
     SEG_AUTOSAVE:    'insp_seg_autosave',
     SEG_PREFETCH:    'insp_seg_prefetch',
-    AUD_RECITER:     'insp_aud_reciter',
     DASH_RECITER:    'insp_dash_reciter',
 } as const;
 
@@ -45,7 +44,6 @@ export const TAB_NAMES = {
     DASHBOARD: 'dashboard',
     TIMESTAMPS: 'timestamps',
     SEGMENTS: 'segments',
-    AUDIO: 'audio',
 } as const;
 export type TabName = typeof TAB_NAMES[keyof typeof TAB_NAMES];
 

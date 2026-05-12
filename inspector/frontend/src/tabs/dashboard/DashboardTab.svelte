@@ -10,6 +10,7 @@
      * Detail view (Slice G) ships as a placeholder until ReciterDetail
      * lands; for now the "open detail" event just no-ops.
      */
+    import BottomPlayer from '../../lib/components/player/BottomPlayer.svelte';
     import CatalogList from './views/CatalogList.svelte';
     import ReciterDetail from './views/ReciterDetail.svelte';
     import { dashboardView } from './stores/dashboard-state';
@@ -24,9 +25,14 @@
             <ReciterDetail />
         {/if}
     </div>
+
+    <BottomPlayer />
 </div>
 
 <style>
-    .dash { min-height: 60vh; }
+    .dash {
+        min-height: 60vh;
+        padding-bottom: var(--player-h, 72px);
+    }
     .view[hidden] { display: none; }
 </style>
