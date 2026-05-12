@@ -1,7 +1,8 @@
 <script lang="ts">
     /**
-     * Magazine-style intro sentence with six clickable bucket counts.
-     * Clicking a count scopes the catalog via dashboard-state.
+     * Bucket count strip — six centered boxes, one per public bucket.
+     * Clicking a box scopes the catalog via dashboard-state.
+     * Disabled boxes (count === 0) don't dispatch.
      */
     import { createEventDispatcher } from 'svelte';
 
@@ -11,59 +12,100 @@
 
     const dispatch = createEventDispatcher<{ select: PublicBucket }>();
 
-    function n(bucket: PublicBucket): number {
-        return stats?.[bucket] ?? 0;
+    const ITEMS: { bucket: PublicBucket; label: string }[] = [
+        { bucket: 'published',             label: 'Published' },
+        { bucket: 'publishing',            label: 'Publishing' },
+        { bucket: 'under_review',          label: 'Under review' },
+        { bucket: 'available_for_review',  label: 'Available to claim' },
+        { bucket: 'requested',             label: 'Requested' },
+        { bucket: 'available_for_request', label: 'Available for request' },
+    ];
+
+    function n(b: PublicBucket): number {
+        return stats?.[b] ?? 0;
     }
 
-    function click(bucket: PublicBucket): void {
-        if (n(bucket) > 0) dispatch('select', bucket);
+    function click(b: PublicBucket): void {
+        if (n(b) > 0) dispatch('select', b);
+    }
+
+    function bucketClass(b: PublicBucket): string {
+        return `card card-${b.replace(/_/g, '-')}`;
     }
 </script>
 
-<p class="standfirst">
-    <strong>{stats ? Object.values(stats).reduce((a, b) => a + b, 0) : 0}</strong> reciters tracked.
-    <button class="count" disabled={n('published') === 0} on:click={() => click('published')}>{n('published')} published</button>,
-    <button class="count" disabled={n('publishing') === 0} on:click={() => click('publishing')}>{n('publishing')} publishing</button>,
-    <button class="count" disabled={n('under_review') === 0} on:click={() => click('under_review')}>{n('under_review')} under review</button>.
-    <button class="count" disabled={n('available_for_review') === 0} on:click={() => click('available_for_review')}>{n('available_for_review')} available to claim</button>,
-    <button class="count" disabled={n('requested') === 0} on:click={() => click('requested')}>{n('requested')} requested</button>,
-    <button class="count" disabled={n('available_for_request') === 0} on:click={() => click('available_for_request')}>{n('available_for_request')} available for request</button>.
-</p>
+<section class="strip">
+    {#each ITEMS as item (item.bucket)}
+        {@const count = n(item.bucket)}
+        <button
+            type="button"
+            class={bucketClass(item.bucket)}
+            class:empty={count === 0}
+            disabled={count === 0}
+            on:click={() => click(item.bucket)}
+        >
+            <div class="count">{count}</div>
+            <div class="label">{item.label}</div>
+        </button>
+    {/each}
+</section>
 
 <style>
-    .standfirst {
-        max-width: 880px;
-        margin: var(--s-8) 0 var(--s-6);
-        padding: 0 var(--gutter);
-        font-size: var(--fs-h2);
-        line-height: var(--lh-tight);
-        color: var(--text-secondary);
-        font-weight: 400;
-        letter-spacing: -0.005em;
+    .strip {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: var(--s-3);
+        padding: var(--s-8) var(--gutter) var(--s-6);
     }
-    .standfirst :global(strong) {
+    @media (max-width: 1100px) {
+        .strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+        .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--s-1);
+        padding: var(--s-5) var(--s-3);
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-3);
         color: var(--text-primary);
-        font-weight: 500;
+        cursor: pointer;
+        transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
+        min-height: 100px;
+    }
+    .card:hover:not(:disabled) {
+        border-color: var(--accent);
+        background: var(--panel-2);
+    }
+    .card:disabled,
+    .card.empty {
+        cursor: default;
+        opacity: 0.4;
     }
     .count {
-        color: var(--text-primary);
+        font-size: 2rem;
         font-weight: 500;
         font-variant-numeric: tabular-nums;
-        border: 0;
-        background: transparent;
-        border-bottom: 1px dotted var(--border-default);
-        padding: 0 0 1px;
-        cursor: pointer;
-        font: inherit;
-        transition: color var(--t-fast), border-color var(--t-fast);
+        letter-spacing: -0.015em;
+        line-height: 1;
     }
-    .count:hover:not(:disabled) {
-        color: var(--accent);
-        border-bottom-color: var(--accent);
+    .label {
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+        text-align: center;
     }
-    .count:disabled {
-        color: var(--text-faint);
-        cursor: default;
-        border-bottom-color: transparent;
-    }
+    .card:hover:not(:disabled) .label { color: var(--text-secondary); }
+
+    /* Per-bucket accent on the count number */
+    .card-published .count        { color: var(--state-published-fg); }
+    .card-publishing .count       { color: var(--state-publishing-fg); }
+    .card-under-review .count     { color: var(--state-under-review-fg); }
+    .card-available-for-review .count { color: var(--state-available-fg); }
+    .card-requested .count        { color: var(--state-requested-fg); }
+    .card-available-for-request .count { color: var(--state-available-request-fg); }
 </style>

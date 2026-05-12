@@ -68,8 +68,8 @@ def activity():
         limit = int(request.args.get("limit") or 50)
     except ValueError:
         return jsonify({"error": "limit must be an integer"}), 400
-    if limit < 1 or limit > 200:
-        return jsonify({"error": "limit must be between 1 and 200"}), 400
+    if limit < 1 or limit > 500:
+        return jsonify({"error": "limit must be between 1 and 500"}), 400
 
     payload = public_activity_service.feed(cursor=cursor, limit=limit)
     resp = jsonify(payload)
@@ -127,8 +127,8 @@ def reciters():
         limit = int(request.args.get("limit") or 50)
     except ValueError:
         return jsonify({"error": "limit must be an integer"}), 400
-    if limit < 1 or limit > 200:
-        return jsonify({"error": "limit must be between 1 and 200"}), 400
+    if limit < 1 or limit > 500:
+        return jsonify({"error": "limit must be between 1 and 500"}), 400
 
     rows = public_state_service.all_public_reciters()
 

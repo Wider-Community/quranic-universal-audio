@@ -248,7 +248,7 @@ def test_reciters_invalid_sort_returns_400(flask_client, monkeypatch):
 def test_reciters_limit_out_of_range_returns_400(flask_client, monkeypatch):
     _install(monkeypatch, reciters=[], deliveries=[], rows=[])
     assert flask_client.get("/api/public/reciters?limit=0").status_code == 400
-    assert flask_client.get("/api/public/reciters?limit=999").status_code == 400
+    assert flask_client.get("/api/public/reciters?limit=9999").status_code == 400
 
 
 def test_reciter_detail_returns_payload(flask_client, monkeypatch):
