@@ -78,6 +78,23 @@ Anti-patterns:
 - Don't put commit-by-commit task lists — those go in PR descriptions.
 - If a phase needs detailed plumbing notes, write a separate `phase-N-notes.md` next to it; don't bloat the contract.
 
+## Global rule — no forward-looking comments in code
+
+**Code comments describe what IS, not what WILL BE.** Future-action notes ("Phase 3 will wire this", "deferred until Phase 5", "follow-up: add ESLint rule", "will revisit when…") are noise in source files — they rot, they distract during code review, and they encode roadmap state that belongs in a roadmap doc.
+
+Anywhere you'd be tempted to write that comment, route it instead:
+
+| Kind of note | Goes in |
+|---|---|
+| "Phase N will use this" / "deferred to Phase N" | the relevant [phase doc](.) under Deliverables, Out of scope, or Outcomes |
+| "Will swap X for Y once Z lands" / one-off cleanup | [`inspector-cleanup-registry.md`](../inspector-cleanup-registry.md) |
+| "Punted; revisit if condition" | [`inspector-deferred.md`](../inspector-deferred.md) |
+| Caveat about a bug that future code must avoid | a focused unit test that fails when the assumption breaks |
+
+A comment IS welcome when it captures a non-obvious *current* invariant — "this lock is acquired around X and Y because Z" or "the partial response must not be cached because empty-complete would mask later compute." The test: would removing the comment confuse a future reader of the *current* code? If the comment only makes sense as a roadmap note, it doesn't belong in the file.
+
+Same rule for code module docstrings: describe the module's current job, not its planned trajectory.
+
 ## At plan time — write the detailed plan with help
 
 These phase docs are **contracts**, not detailed implementation plans. When it's time to actually build a phase, the detailed plan lives elsewhere (a working doc, a PR description, a tracking issue) and gets written collaboratively. Treat the phase doc as input to that process, not the output.

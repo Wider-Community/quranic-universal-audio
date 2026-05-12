@@ -200,10 +200,8 @@
             console.error('Error reading manifest for reciter:', e);
         }
 
-        // Validation falls through to /api/ts/validate which is gated off in
-        // deployed mode (returns 410). Local maintainers keep the route for
-        // offline review. The legacy huggingface-mode pre-computed boundary
-        // mismatch path is gone in v2 — see Phase 2 / inspector-deferred.md.
+        // /api/ts/validate is gated off in deployed mode (returns 410); local
+        // maintainers keep the route for offline review.
         try {
             const valResult = await fetchJson<TsValidateResponse>(
                 `/api/ts/validate/${encodeURIComponent(reciter)}`,

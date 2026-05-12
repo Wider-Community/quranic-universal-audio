@@ -62,5 +62,5 @@
 </div>
 
 <!-- Single global popover surfaced by `editGate` for non-editor clicks
-     on edit affordances. Phase 2: only the unauthenticated reason fires. -->
+     on edit affordances. -->
 <EditAffordancePopover />

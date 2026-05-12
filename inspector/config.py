@@ -42,14 +42,10 @@ CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))
 #   "bucket" — Flask serves manifest + shards from the bucket-mounted layout
 #              (<INSPECTOR_BUCKET_MOUNT>/published/<slug>/timestamps/<chapter>.json).
 #              Default in deployed Spaces.
-# The legacy "huggingface" mode (frontend → HF dataset CDN direct) is removed:
-# the public dataset still exists for downstream consumers but Inspector reads
-# timestamps through its own backend in v2.
 TS_SOURCE = os.environ.get("INSPECTOR_TS_SOURCE", "local")
 if TS_SOURCE not in ("local", "bucket"):
     raise RuntimeError(
-        f"INSPECTOR_TS_SOURCE must be 'local' or 'bucket' (got {TS_SOURCE!r}). "
-        "The legacy 'huggingface' value was removed in Phase 2."
+        f"INSPECTOR_TS_SOURCE must be 'local' or 'bucket' (got {TS_SOURCE!r})."
     )
 
 # Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).

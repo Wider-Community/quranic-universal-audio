@@ -131,9 +131,8 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
 def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
     """Return raw ``timestamps/<chapter>.json`` bytes, or ``None`` if absent.
 
-    Reads from ``<bucket>/published/<slug>/timestamps/<chapter>.json``. Per
-    the data-storage doc, timestamps live only under ``published/`` — wip
-    reciters get TS via the Phase 6 HF Job after publish.
+    Reads from ``<bucket>/published/<slug>/timestamps/<chapter>.json``.
+    Timestamps live only under ``published/`` — wip reciters have none.
     """
     try:
         return get_backend().read_bytes(

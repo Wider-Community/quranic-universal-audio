@@ -1,14 +1,10 @@
 /**
- * Regression net for the load-bearing single-mechanism Phase-2 invariant:
+ * Asserts the gate's contract:
  *
- *   - `view` mode: edit-affordance clicks are swallowed and the popover store
- *     is populated.
+ *   - `view` mode: edit-affordance clicks are swallowed and the popover
+ *     store is populated.
  *   - `editor` / `maintainer` / `owner` modes: clicks pass through.
  *   - `require: 'admin'`: contributor's editor mode does NOT pass through.
- *
- * If a future component adds a new edit affordance and wires `use:editGate`,
- * these stay green. If someone forgets to wire it, that's caught by the
- * deferred ESLint rule (see plan), not this test.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -242,8 +242,7 @@ def _ensure_built_local() -> None:
 # per-chapter timestamps in ``<bucket>/published/<slug>/timestamps/``, and
 # composes a manifest with the same wire shape as local mode. Shard bytes
 # are read on demand and held in a per-process LRU (~256 entries ≈ 1–4 MB
-# of gzipped JSON) — full eager prebuild was rejected because cold boot on
-# free CPU-basic shouldn't pay 600+ bucket reads up front.
+# of gzipped JSON) so cold boot doesn't pay 600+ bucket reads up front.
 # ----------------------------------------------------------------------
 
 _SHARD_LRU_CAP = 256
@@ -324,9 +323,8 @@ def _bucket_reciter_block(slug: str, ts_chapters: list[int]) -> dict | None:
     """Compose a manifest reciter block for a bucket-mode reciter.
 
     Joins the catalog (display + delivery metadata) with the audio_manifest
-    sidecar (URL template) and the precomputed VBR chapter list. Returns
-    ``None`` when the catalog has no delivery for ``slug`` (defensive — every
-    state row should have a catalog entry once cutover seeding is finished).
+    sidecar (URL template) and the precomputed VBR chapter list. Falls back
+    to slug-derived defaults when the catalog has no delivery for ``slug``.
     """
     catalog = catalog_service.snapshot()
     delivery = next((d for d in catalog.deliveries if d.slug == slug), None)

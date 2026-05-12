@@ -347,6 +347,90 @@ The per-segment list with `matched_ref` matches `published/<slug>/detailed.json`
 
 ---
 
+## D21 — Peaks hash must fold in segment boundaries if per-segment peaks ever surface on `/api/seg/peaks/`
+
+**What.** Today `/api/seg/peaks/<reciter>` returns whole-file peaks per audio URL only; segment-range peaks live on `POST /api/seg/segment-peaks` and aren't covered by the cache layer. The frontend appends `?h=<8-char-FNV-1a>` over `audio_by_chapter` to bust the immutable cache when the catalog flips an audio source. If a future schema ever extends `/api/seg/peaks/` to include per-segment peaks, the hash MUST also fold in segment boundaries, otherwise reviewer edits would silently serve stale waveform shapes for a year (`immutable, max-age=31536000`).
+
+**Why deferred.** No work to do until the schema changes; ship-time correctness is fine for the current whole-file response.
+
+**Trigger to revisit.** Anyone proposing to surface per-segment peaks (or any segment-boundary-derived data) on the `/api/seg/peaks/<reciter>` GET endpoint.
+
+**Affected if never done.** Self-healing — adding the new payload without updating the hash is the regression; the existing whole-file flow stays correct.
+
+**Cross-refs.** `inspector/frontend/src/tabs/segments/utils/waveform/utils.ts` (`_fetchPeaks`), `inspector/routes/peaks.py::seg_peaks`.
+
+---
+
+## D22 — Multi-worker scale-out (gunicorn `-w >1`)
+
+**What.** Inspector hard-asserts a single worker at import time (`inspector/app.py::_assert_single_worker`). Every in-memory structure — `state_store`, per-slug `threading.Lock`, signed-cookie session verification, role cache — assumes one process. Multi-worker scale-out is unsupported.
+
+**Why deferred.** Phase 2 perf budget is met by one gthread worker on free CPU-basic. Multi-worker would require a shared coordinator (Redis or bucket-side optimistic concurrency) for the per-slug lock and a shared cache for parsed state — a separate work item that doesn't pay off until measured saturation.
+
+**Trigger to revisit.** Sustained CPU saturation on the Space (>70% over a 15-minute window during peak browse), OR a third concurrent reviewer reporting save-flow contention (Phase 4+).
+
+**Affected if never done.** Single-Space replica caps at ~50 concurrent reviewers per the data-storage perf budget. Beyond that, the in-process lock becomes a bottleneck.
+
+**Cross-refs.** [`inspector-data-storage.md`](inspector-data-storage.md) §11 (scale triggers), `inspector/app.py::_assert_single_worker`, `inspector/Dockerfile` CMD.
+
+---
+
+## D23 — Replace personal HF token with a `hetchyy-bot` org token
+
+**What.** `setup_space.py` seeds `INSPECTOR_HF_TOKEN` from the operator's local `.env`. That's a personal user token with the operator's full permissions on every HF resource they own. Mint a dedicated `hetchyy-bot` org token scoped to the bucket repo only and update the Space secret.
+
+**Why deferred.** The dev Space is private and not a high-value target; the operator's token is already in their `.env` so reusing it had zero ceremony. Need to coordinate creating the bot account / fine-grained token before prod cutover, which is itself gated on Phase 3 sign-off.
+
+**Trigger to revisit.** Before prod Space cutover (Phase 3 sign-off).
+
+**Affected if never done.** Single Space compromise = full operator HF account compromise. Acceptable risk on a private dev Space; not acceptable on public prod.
+
+**Cross-refs.** `scripts/inspector_v2_seed/setup_space.py:198`, [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md) §2.
+
+---
+
+## D24 — Replace `INSPECTOR_GITHUB_DISPATCH_TOKEN` placeholder before publish flow ships
+
+**What.** `setup_space.py` seeds `INSPECTOR_GITHUB_DISPATCH_TOKEN` with the literal `PLACEHOLDER_REPLACE_BEFORE_PHASE_5` so the Space-secret slot exists. Replace with a fine-grained PAT (`actions: write` on `Wider-Community/quranic-universal-audio`) before the publish flow attempts to fire `repository_dispatch reciter.completed`. `services/secrets_guard.py::get_dispatch_token` raises if the placeholder is still in place, so the failure mode is loud.
+
+**Why deferred.** The token isn't read at runtime in Phase 2; the slot ships now so Phase 5 deploys don't need a Space-secret edit step.
+
+**Trigger to revisit.** Before Phase 5 publish-pipeline work lands.
+
+**Affected if never done.** `POST /api/admin/publish/<slug>` raises `MissingSecret` instead of firing the GitHub workflows that regenerate `RECITERS.md` (`update-reciters.yml`) and per-reciter Release zips (`release.yml`).
+
+**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md), [`inspector-data-storage.md`](inspector-data-storage.md) §6 (env table), `inspector/services/secrets_guard.py::get_dispatch_token`, `scripts/inspector_v2_seed/setup_space.py`.
+
+---
+
+## D25 — Writable `HOME` for the inspector container user
+
+**What.** The inspector user in the Docker image is created with `adduser -H` (no home dir), so `huggingface_hub.login()` raises `Permission denied: '/home/inspector'` on boot. Reads work fine because `BucketBackend` falls through to per-call `token=` auth, but Xet *writes* fail because the Xet client requires the local huggingface token cache. Phase 2 is read-only so this doesn't bite; Phase 4 saves do.
+
+**Why deferred.** Read-only Phase 2 + Phase 3 don't exercise the write path. Fix is a one-line Dockerfile change (drop `-H` or set `HOME=/tmp`) but bundling with the Phase 4 save migration keeps the deploy churn focused.
+
+**Trigger to revisit.** First Phase 4 save attempt against the deployed Space.
+
+**Affected if never done.** Save flow returns 503 at the Xet upload step. Phase 4 deploy hard-blocks on it.
+
+**Cross-refs.** `inspector/Dockerfile` (`RUN addgroup … adduser -H`), `inspector/services/hf_bucket.py::BucketBackend.__init__` (the `huggingface_hub.login()` call that fails).
+
+---
+
+## D26 — ESLint rule for `use:editGate` coverage
+
+**What.** Add an ESLint rule that flags any `<button on:click={fn}>` (or analogous element) where `fn` is a state-mutating handler and the element has no sibling `use:editGate` action. Catches the failure mode where a contributor adds a new edit affordance and forgets to wire the gate.
+
+**Why deferred.** The 7-case Vitest unit (`inspector/frontend/src/lib/actions/__tests__/editGate.test.ts`) catches the per-button regressions we have today; coverage at the new-component-introduction time is what's missing. Designing the rule needs an "is this handler a mutator?" heuristic — likely an allow/deny list of handler suffixes (`onApply`, `onSave`, `onDelete`, etc.) — non-trivial to get right, easy to make noisy.
+
+**Trigger to revisit.** First PR landing a new edit affordance without `use:editGate` (review catches it; second time, write the rule).
+
+**Affected if never done.** Frontend reviewers carry the cognitive load of "is this a state-mutating button? does it need the gate?" on every PR.
+
+**Cross-refs.** `inspector/frontend/src/lib/actions/editGate.ts`, `inspector/frontend/src/lib/actions/__tests__/editGate.test.ts`.
+
+---
+
 ## How to add an item to this list
 
 1. Add a new `## D<N> — <title>` section using the template (what / why deferred / trigger to revisit / affected if never done / cross-refs).

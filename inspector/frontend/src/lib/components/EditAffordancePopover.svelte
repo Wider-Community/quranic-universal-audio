@@ -2,10 +2,6 @@
     Single popover surfaced by the `editGate` action when a non-editor
     clicks an edit affordance. Mounted once at app root so multiple
     affordances share one element + one set of dismissal handlers.
-
-    Phase 2: only the `unauthenticated` reason ever fires (no auth state to
-    discriminate). All four variants are wired so Phase 3 can flip on the
-    others without touching this component.
 -->
 <script lang="ts">
     import { onDestroy, onMount, tick } from 'svelte';
@@ -88,8 +84,6 @@
     }
 
     function _onSignIn() {
-        // Stub link until Phase 3 wires `/api/auth/login` for real.
-        // Currently 404s; the click is harmless and the popover closes.
         const next = encodeURIComponent(window.location.pathname + window.location.search);
         window.location.href = `/api/auth/login?return=${next}`;
     }

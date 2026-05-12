@@ -74,31 +74,21 @@ _HERE = Path(__file__).parent.resolve()
 FRONTEND_DIST = _HERE / "frontend" / "dist"
 
 
-# ---------------------------------------------------------------------------
-# Worker-count assertion (load-bearing single-process invariant)
-# ---------------------------------------------------------------------------
-#
-# Every in-memory structure in v2 (state_store, per-slug threading.Lock,
-# signed-cookie session verification, role cache) assumes one process. Multi-
-# worker scale-out is deferred until a shared coordinator (Redis or bucket
-# CAS) lands — see inspector-data-storage.md §11. Boot fails loudly if the
-# Dockerfile / runner is configured with -w 2+.
+# Single-process invariant: state_store, per-slug threading.Lock, signed-
+# cookie session verification, and the role cache all assume one worker.
+# Boot fails if any multi-worker signal is set.
 def _assert_single_worker() -> None:
     """Refuse to boot under any multi-worker config.
 
-    Three sources are checked because gunicorn's `-w` flag isn't reflected in
-    the imported app's environment until after fork:
+    Three independent signals are sniffed at import time because gunicorn's
+    `-w` flag isn't on the env at fork time:
 
     1. ``GUNICORN_CMD_ARGS`` / ``GUNICORN_WORKERS`` / ``WEB_CONCURRENCY`` env
-       vars — the standard gunicorn-recognised env knobs. Whichever path the
-       operator uses, one of these surfaces ``-w`` at app-import time.
-    2. ``sys.argv`` of the loader process — when the parent is gunicorn the
-       launcher's args end up here. Catches `gunicorn -w 2 inspector.app:app`.
-    3. A post-fork hook (see `_post_fork_assert_worker_count`) — runs inside
-       gunicorn and inspects the live arbiter, catching anything the env
-       sniff misses.
+       vars — the standard gunicorn-recognised env knobs.
+    2. ``sys.argv`` of the loader process — catches `gunicorn -w 2 ...`.
+    3. (Future) a post-fork hook inside gunicorn — not currently wired.
 
-    Any signal of >1 worker → loud RuntimeError. Conservative on purpose.
+    Any signal of >1 worker → loud RuntimeError.
     """
     suspects = [
         os.environ.get("GUNICORN_WORKERS"),
@@ -111,11 +101,8 @@ def _assert_single_worker() -> None:
         for token in raw.replace("=", " ").split():
             if token.isdigit() and int(token) > 1:
                 raise RuntimeError(
-                    f"Inspector requires a single worker (saw {token!r} via env); "
-                    "multi-worker scale-out is deferred until a shared coordinator "
-                    "exists. See inspector-data-storage.md §11."
+                    f"Inspector requires a single worker (saw {token!r} via env)."
                 )
-    # sys.argv inspection — only meaningful when launched by gunicorn.
     argv = list(sys.argv)
     for i, a in enumerate(argv):
         if a in ("-w", "--workers") and i + 1 < len(argv):
@@ -125,8 +112,7 @@ def _assert_single_worker() -> None:
                 continue
             if n > 1:
                 raise RuntimeError(
-                    f"Inspector requires -w 1 (got -w {n}); see "
-                    "inspector-data-storage.md §11."
+                    f"Inspector requires -w 1 (got -w {n})."
                 )
         elif a.startswith("--workers="):
             try:
@@ -135,8 +121,7 @@ def _assert_single_worker() -> None:
                 continue
             if n > 1:
                 raise RuntimeError(
-                    f"Inspector requires --workers=1 (got {a}); see "
-                    "inspector-data-storage.md §11."
+                    f"Inspector requires --workers=1 (got {a})."
                 )
 
 

@@ -3,12 +3,11 @@
 Two routes share one blueprint:
 
 - ``GET /healthz`` — readiness signal. Reports bucket mount + state hydration
-  status. Returns HTTP 200 always (so the Space stays "running" even if the
-  bucket is briefly unreachable); the body's ``status`` field is the truth.
-  This is the endpoint the deploy-runbook §6 smoke tests poll.
+  status. Returns 200 in local mode (where there's no mount to check) and
+  503 in deployed mode when bucket/state are degraded so probes fail loud.
 
-- ``GET /livez``  — liveness signal. Always 200 with a tiny body. Use this if
-  a future load-balancer wants a probe that doesn't touch the bucket.
+- ``GET /livez``  — liveness signal. Always 200 with a tiny body; use it when
+  a probe should not touch the bucket.
 """
 
 from __future__ import annotations
@@ -54,10 +53,8 @@ def healthz():
         "reciters_count": len(rows),
         "commit": os.environ.get("INSPECTOR_COMMIT_SHA", "unknown"),
     }
-    # Return 503 (not 200) when degraded so probe-based monitors flag the
-    # Space without parsing the body. Local-mode runs don't have a mount and
-    # would always 503 here — only flip the status code when we're in
-    # deployed mode (i.e. INSPECTOR_BUCKET_MOUNT is set).
+    # Return 503 in deployed mode (mount configured) so probes fail loud.
+    # Local mode has no mount and would always 503 — keep it 200 there.
     if not healthy and os.environ.get("INSPECTOR_BUCKET_MOUNT"):
         return jsonify(payload), 503
     return jsonify(payload)

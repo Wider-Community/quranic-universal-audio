@@ -1,13 +1,9 @@
 /**
  * Single global gate for every edit affordance in the SPA.
  *
- * The `kind` enum mirrors the v2 role schema (anonymous /
+ * The `kind` enum mirrors the role schema (anonymous /
  * contributor-with-claim / maintainer / owner). `view` is the union of
  * "anonymous" and "logged-in but no claim on this reciter".
- *
- * Phase 2 always emits `{kind: 'view', viewReason: 'unauthenticated'}`.
- * Phase 3 wires session state and starts emitting `editor`/`maintainer`/
- * `owner` per the active reciter's claim + the user's role.
  *
  * Components don't read this directly; they apply the `editGate` Svelte
  * action to any element that triggers an edit. The action consumes this
@@ -23,7 +19,7 @@ export type ViewReason =
     | 'unauthenticated'   // not logged in
     | 'wrong-assignee'    // logged in, but another contributor holds the claim
     | 'completed'         // reciter is in published terminal state
-    | 'discarded';        // reciter is admin-soft-deleted (Phase 7)
+    | 'discarded';        // reciter is admin-soft-deleted
 
 export interface EditingMode {
     kind: EditingKind;
@@ -46,7 +42,7 @@ export const isAdmin = derived(
     (m) => m.kind === 'maintainer' || m.kind === 'owner',
 );
 
-/** Helper for tests / Phase 3 callers — replace the whole mode in one call. */
+/** Replace the whole mode in one call. */
 export function setEditingMode(mode: EditingMode): void {
     editingMode.set(mode);
 }

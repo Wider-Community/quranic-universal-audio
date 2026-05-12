@@ -152,8 +152,10 @@ Landed across 8 commits on `dev` (sharp-curie worktree). Live at `https://hetchy
 
 ### Carried forward
 
-- **Personal HF token** seeded as `INSPECTOR_HF_TOKEN`. Mint a dedicated `hetchyy-bot` org token before prod cutover.
-- **`INSPECTOR_GITHUB_DISPATCH_TOKEN` placeholder** still in Space secrets. Replace with a real fine-grained PAT (`actions: write` on the project repo) before Phase 5 `repository_dispatch reciter.completed` ships. `get_dispatch_token()` refuses the placeholder.
-- **ESLint rule for `use:editGate` coverage** — the editGate test catches single-button regressions but a class-level "any state-mutating handler must have a sibling action" rule would catch missed gates on new components. Plan-level follow-up.
-- **`huggingface_hub.login()` failure** at boot (`Permission denied: '/home/inspector'` because the inspector user has `-H` no-home). Doesn't break reads but blocks Xet writes — Phase 4 will need a writable HOME dir for the user.
-- **CDN front for cold-fetch latency** (D12) — defer until measured server-side. The 132 ms 10-parallel result suggests the Space-side CDN is already absorbing the burst pattern; whether single cold reads need their own CDN tier is a Phase-3 measurement question.
+All forward-looking items live in [`inspector-deferred.md`](../inspector-deferred.md):
+- D21 — Peaks hash must fold in segment boundaries if per-segment peaks ever surface on `/api/seg/peaks/`.
+- D22 — Multi-worker scale-out (`-w >1`) — needs a shared coordinator.
+- D23 — Replace personal HF token with a `hetchyy-bot` org token.
+- D24 — Replace `INSPECTOR_GITHUB_DISPATCH_TOKEN` placeholder with a real PAT.
+- D25 — Writable `HOME` for the inspector container user (blocks Xet writes).
+- D26 — ESLint rule for `use:editGate` coverage.

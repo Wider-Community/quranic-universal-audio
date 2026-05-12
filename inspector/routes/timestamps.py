@@ -111,10 +111,8 @@ def ts_validate(reciter):
     """Validate timestamp data via the timestamps validator.
 
     Gated behind ``INSPECTOR_TS_VALIDATE_ENABLED`` (default ``1`` for local).
-    Deployed Spaces flip it to ``0`` because (a) validators-as-libraries are
-    Phase 5 work and (b) the cross-file dependency on the on-disk timestamps
-    tree (which doesn't exist in the bucket layout) makes the route incoherent
-    in deployed mode. Local maintainers keep the route for offline review.
+    Deployed Spaces flip it to ``0``; the route depends on the on-disk
+    timestamps tree which doesn't exist in the bucket layout.
     """
     if os.environ.get("INSPECTOR_TS_VALIDATE_ENABLED", "1") != "1":
         return jsonify({

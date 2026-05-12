@@ -137,16 +137,15 @@ USER inspector
 
 EXPOSE 7860
 
-# Production WSGI server. -w 1 is load-bearing — every in-memory structure
-# (state_store, per-slug mutex, signed-cookie session, role cache) assumes
-# single-process. The app asserts GUNICORN_WORKERS == 1 at startup and refuses
-# to boot if -w 2+ is set. Multi-worker scale-out is deferred until a shared
-# coordinator (Redis or bucket-CAS) is added — see inspector-data-storage.md §11.
+# Production WSGI server. -w 1 is load-bearing — state_store, per-slug
+# mutex, signed-cookie session, and the role cache all assume one process.
+# The app asserts at import time and refuses to boot on any multi-worker
+# signal.
 #
-# --threads 16: thread pool sized for CPU-basic. Plenty of headroom for the
-# parsed-cache + bucket-read workload, which is mostly I/O-bound.
-# --max-requests + jitter: rolling worker recycle, defeats slow memory leaks.
-# --timeout 60: peaks computation can take ~30 s on cold cache; keep generous.
+# --threads 16: thread pool sized for CPU-basic. The parsed-cache + bucket-
+#   read workload is mostly I/O-bound.
+# --max-requests + jitter: rolling worker recycle bounds slow memory leaks.
+# --timeout 60: peaks computation can take ~30 s on cold cache.
 # --graceful-timeout 30: allows in-flight saves to finish on SIGTERM.
 CMD ["gunicorn", "-k", "gthread", "-w", "1", "--threads", "16", \
      "--max-requests", "5000", "--max-requests-jitter", "500", \

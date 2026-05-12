@@ -4,7 +4,7 @@
  *
  *     <button use:editGate on:click={doTrim}>Trim</button>
  *
- * For admin-only actions (Phase 7):
+ * For admin-only actions:
  *
  *     <button use:editGate={{ require: 'admin' }} on:click={forceRelease}>
  *         Force release
@@ -19,7 +19,7 @@
  *
  * The button itself stays full-opacity — the popover does the explaining.
  *
- * Captures phase is used so the gate runs before any other handler the
+ * Capture phase is used so the gate runs before any other handler the
  * component bound to the same element.
  */
 
