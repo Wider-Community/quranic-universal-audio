@@ -178,7 +178,6 @@ def main(argv: list[str] | None = None) -> int:
         "INSPECTOR_BUCKET_REPO": bucket_repo,
         "INSPECTOR_BUCKET_MOUNT": MOUNT_PATH,
         "INSPECTOR_TS_SOURCE": "bucket",
-        "INSPECTOR_AUDIO_PROXY_ENABLED": "0",
         "INSPECTOR_TS_VALIDATE_ENABLED": "0",
         "INSPECTOR_PARSED_CACHE_BYTES": "134217728",
         "GUNICORN_WORKERS": "1",

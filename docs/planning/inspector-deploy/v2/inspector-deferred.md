@@ -417,7 +417,21 @@ The per-segment list with `matched_ref` matches `published/<slug>/detailed.json`
 
 ---
 
-## D26 — ESLint rule for `use:editGate` coverage
+## D26 — TS audio leak on transition (next / random plays past end before swap)
+
+**What.** When the Timestamps tab transitions to the next or a random verse via the autoNext / next / random buttons, the previous audio plays for an extra fraction of a second past its `time_end` before the new track's `canplay` fires and `_swapTo` lands the new src. Audible as a blip of the wrong audio at every transition.
+
+**Why deferred.** Race lives in the `audio-port.ts` `loadCovering → _swapTo → ready` path — `inspector/frontend/src/lib/playback/`. Phase 2 didn't touch any file under `lib/playback/`; the regression predates v2 (likely visible since the AudioPort migration commits — see `git log inspector/frontend/src/lib/playback/audio-port.ts`). Fixing requires either (a) pausing the element synchronously before swapping `el.src`, or (b) gating the new `play()` on the new element's `canplay`. Either is a focused Phase-3-or-later cleanup, not a Phase 2 deliverable.
+
+**Trigger to revisit.** Any TS-tab UX work, or before Phase 6 catalog-published reciters land (the more reciters become playable, the more the user notices).
+
+**Affected if never done.** Audible artifact on every TS-tab transition. Cosmetic — playback resumes correctly on the new track within a few hundred ms.
+
+**Cross-refs.** `inspector/frontend/src/lib/playback/audio-port.ts` (`_swapTo`, `loadCovering`), `inspector/frontend/src/tabs/timestamps/components/TimestampsAudio.svelte` (transition triggers), `inspector/frontend/src/tabs/timestamps/TimestampsTab.svelte` (autoNext dispatcher).
+
+---
+
+## D27 — ESLint rule for `use:editGate` coverage
 
 **What.** Add an ESLint rule that flags any `<button on:click={fn}>` (or analogous element) where `fn` is a state-mutating handler and the element has no sibling `use:editGate` action. Catches the failure mode where a contributor adds a new edit affordance and forgets to wire the gate.
 

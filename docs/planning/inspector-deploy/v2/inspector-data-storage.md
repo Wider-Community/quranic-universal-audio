@@ -229,7 +229,7 @@ Multi-replica Space scaling (when needed): the in-process lock moves to bucket-s
 | `INSPECTOR_PARSED_CACHE_BYTES` | `134217728` (128 MB) | unused | Parsed seg cache cap |
 | `INSPECTOR_SESSION_SECRET` | secret | unset | Signing key for the self-contained signed-cookie session (Flask `itsdangerous`) |
 | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` | auto-injected by `hf_oauth: true` | unset | HF OAuth client credentials |
-| `INSPECTOR_AUDIO_PROXY_ENABLED` | `0` | `1` | Local mode keeps audio proxy |
+| ~~`INSPECTOR_AUDIO_PROXY_ENABLED`~~ | retired | retired | The audio proxy blueprint stays registered in every mode because `source.ts` routes by_surah audio through `/api/seg/audio-proxy/<reciter>?url=...`. The route degrades to a 302 redirect when no cache file exists; background download workers run only on explicit `POST /prepare-audio`. |
 | `INSPECTOR_GITHUB_OWNER`, `INSPECTOR_GITHUB_REPO` | repo coords | unused | For GitHub raw fetches of `inspector_roles.json` |
 | `INSPECTOR_GITHUB_DISPATCH_TOKEN` | secret (bot account) | unset | Tiny GitHub PAT used to fire `repository_dispatch reciter.completed`. Minted from `hetchyy-bot` GitHub account, fine-grained PAT scoped to the project repo with `actions: write` only |
 | `INSPECTOR_JOB_CALLBACK_SECRET` | secret | unset | Bearer token (constant-time compare) for `/api/internal/job-completed` (HF Job callback). Single secret — no `_PREV` rotation slot |

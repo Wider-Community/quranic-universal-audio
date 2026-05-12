@@ -139,19 +139,25 @@
     }
 
     async function loadReciters(): Promise<void> {
-        // D20 Track B: prefer the v2 catalog endpoint when the backend
-        // advertises it (`tsConfig.catalog_url`). Falls back to the legacy
-        // gzipped manifest's `reciters[]` block in development / against
-        // older backends.
+        // D20 Track B: the catalog endpoint enriches names; the manifest is
+        // the source of truth for which reciters actually have published
+        // timestamps in the bucket. Intersect against manifest reciter keys
+        // so the dropdown only lists reciters the user can actually play.
         try {
             const cfg = await loadConfig();
             if (cfg.catalog_url) {
-                const catalog = await loadCatalog();
-                const rs: TsReciter[] = catalogReciterRows(catalog).map((row) => ({
-                    slug: row.slug,
-                    name: row.name_en,
-                    audio_source: row.source,
-                }));
+                const [catalog, manifest] = await Promise.all([
+                    loadCatalog(),
+                    loadManifest(),
+                ]);
+                const ready = new Set(Object.keys(manifest.reciters));
+                const rs: TsReciter[] = catalogReciterRows(catalog)
+                    .filter((row) => ready.has(row.slug))
+                    .map((row) => ({
+                        slug: row.slug,
+                        name: row.name_en,
+                        audio_source: row.source,
+                    }));
                 rs.sort((a, b) => a.name.localeCompare(b.name));
                 reciters.set(rs);
                 return;
