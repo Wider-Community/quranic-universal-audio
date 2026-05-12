@@ -19,6 +19,7 @@ from services import cache
 from services.data_loader import load_detailed
 from services.peaks import get_peaks_for_reciter, compute_segment_peaks
 from services.peaks_history import append_peaks_records, load_peaks_records
+from utils.decorators import require_edit_lock, require_same_origin
 from utils.references import chapter_from_ref
 
 peaks_bp = Blueprint("peaks", __name__, url_prefix="/api/seg")
@@ -133,6 +134,8 @@ def seg_history_peaks_get(reciter):
 
 
 @peaks_bp.route("/history-peaks/<reciter>", methods=["POST"])
+@require_same_origin
+@require_edit_lock(reciter_param="reciter", admin_bypass=True)
 def seg_history_peaks_post(reciter):
     """Append peak records computed lazily during History playback.
 
@@ -140,6 +143,10 @@ def seg_history_peaks_post(reciter):
     batch_id?}, ...]}``. Used when a History canvas computes peaks on play —
     persisting them here makes future sessions render the same row without a
     Range fetch.
+
+    Gated by ``require_edit_lock`` because this writes
+    ``edit_history_peaks.jsonl`` in the bucket — same writer-policy as
+    save/undo.
     """
     body = request.get_json(silent=True) or {}
     records = body.get("records", [])

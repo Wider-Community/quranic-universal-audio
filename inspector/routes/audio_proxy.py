@@ -1,13 +1,24 @@
-"""Audio proxy/cache routes (/api/seg/audio-proxy, audio-cache, etc.)."""
+"""Audio proxy/cache routes (/api/seg/audio-proxy, audio-cache, etc.).
+
+Authentication policy (Phase 3): the *mutating* routes here
+(``POST /prepare-audio``, ``DELETE /delete-audio-cache``) require a
+signed-in user + ``require_same_origin`` because they consume disk/CPU
+and shouldn't be triggerable anonymously. They do NOT require an edit
+lock — they mutate server-side cache, not the bucket, and serve a
+read-only purpose (warming peaks computation). Cache-status + the
+streaming proxy GET stay public so anonymous browsing still works.
+"""
 import concurrent.futures
 import threading
 
 from flask import Blueprint, jsonify, redirect, request, send_file
 
 from config import AUDIO_CACHE_MAX_AGE, AUDIO_DL_WORKER_COUNT, AUDIO_MIME_TYPES
+from services import auth as auth_service
 from services import cache
 from services.audio_proxy import delete_audio_cache, download_audio, scan_audio_cache
 from services.data_loader import load_detailed
+from utils.decorators import require_same_origin
 from utils.references import chapter_from_ref
 
 audio_proxy_bp = Blueprint("audio_proxy", __name__, url_prefix="/api/seg")
@@ -43,8 +54,11 @@ def seg_audio_cache_status(reciter):
 
 
 @audio_proxy_bp.route("/prepare-audio/<reciter>", methods=["POST"])
+@require_same_origin
 def seg_prepare_audio(reciter):
     """Start background download of all audio for a reciter."""
+    if auth_service.current_user() is None:
+        return jsonify({"error": "authentication required"}), 401
     entries = load_detailed(reciter)
     if not entries:
         return jsonify({"error": "Reciter not found"}), 404
@@ -86,7 +100,10 @@ def seg_prepare_audio(reciter):
 
 
 @audio_proxy_bp.route("/delete-audio-cache/<reciter>", methods=["DELETE"])
+@require_same_origin
 def seg_delete_audio_cache(reciter):
     """Delete all cached data (audio + peaks) for a reciter."""
+    if auth_service.current_user() is None:
+        return jsonify({"error": "authentication required"}), 401
     result = delete_audio_cache(reciter)
     return jsonify(result)

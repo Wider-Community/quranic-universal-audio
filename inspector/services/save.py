@@ -22,6 +22,7 @@ from adapters.save_payload import make_seg as _adapter_make_seg
 from adapters.segments_json import build_segments_doc as _adapter_build_segments_doc
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
+from scripts.lib.schemas import Actor
 from services import cache, data_dir
 from services.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.peaks_history import append_peaks_records
@@ -367,7 +368,7 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
 
 
 def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,
-                        val_before: dict, updates: dict) -> dict:
+                        val_before: dict, updates: dict, *, actor: Actor) -> dict:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
     # Validate patch envelopes before writing anything.
     raw_ops = updates.get("operations", [])
@@ -390,9 +391,10 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     operations = _attach_classified_issues(
         _ensure_patch_on_ops(raw_ops), probe_failed_uids=probe_failed_uids,
     )
-    # v2: no ``file_hash_after`` (file-hash chain removed; tamper detection
-    # via offsite versioned snapshots). Phase 5 adds ``actor`` block per batch
-    # once the auth flow lands and the route knows who the saver is.
+    # v2: no ``file_hash_after`` (chain removed in Phase 1). ``actor`` block
+    # carries the per-edit attribution that replaces the v1 per-edit GitHub
+    # commit Co-authored-by surface; surfaced in the History panel and feeds
+    # the future contributor-recognition page.
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
@@ -403,6 +405,7 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
         "validation_summary_before": val_before,
         "validation_summary_after": val_after,
         "operations": operations,
+        "actor": actor.model_dump(mode="json"),
     }
     data_dir.append_edit_history(reciter, batch)
 
@@ -419,9 +422,13 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     return {"ok": True}
 
 
-def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
+def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) -> dict:
     """Save edited segments.  Returns ``{"ok": True}`` or ``{"error": ...}``
     with an HTTP status code as a second element in a tuple.
+
+    ``actor`` (kw-only) carries the per-edit attribution stamped on every
+    new edit_history.jsonl batch. The route layer builds it from the
+    authenticated user (see ``inspector/routes/segments_edit.py``).
     """
     # Validate command envelopes on every op before any work is done.  Each
     # op declaring a discriminated ``type`` must carry a matching ``command``
@@ -463,4 +470,6 @@ def save_seg_data(reciter: str, chapter: int, updates: dict) -> dict:
     # ``ignored_categories``: that contract is reserved for explicit Ignore.
     # Card dismissal for soft-rule categories is purely a frontend
     # session-state concern.
-    return _persist_and_record(reciter, chapter, entries, meta, val_before, updates)
+    return _persist_and_record(
+        reciter, chapter, entries, meta, val_before, updates, actor=actor,
+    )

@@ -2,8 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_SAVE_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 
 def test_history_response_shape(flask_client, tmp_reciter_dir, load_expected):
@@ -24,15 +29,18 @@ def test_history_response_shape(flask_client, tmp_reciter_dir, load_expected):
             assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/edit-history")
 
 
-def test_history_record_includes_classified_issues_on_snapshots(flask_client, tmp_reciter_dir):
+def test_history_record_includes_classified_issues_on_snapshots(
+    signed_in_client, tmp_reciter_dir,
+):
     """Phase 2: history record snapshots persist classified_issues."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
-    save = flask_client.post(
+    save = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps({"full_replace": True, "segments": [], "operations": [{"op_id": "op-1", "type": "edit_reference", "command": {"type": "edit_reference", "segmentUid": "x"}, "snapshots": {"before": {}, "after": {}}}]}),
-        content_type="application/json",
+        headers=_SAVE_HEADERS,
     )
     assert save.status_code == 200
 

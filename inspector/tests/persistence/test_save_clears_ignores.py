@@ -4,6 +4,13 @@ from __future__ import annotations
 import json
 
 
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 def _segments_with_uid(detailed: dict, uid: str) -> list[dict]:
     return [
         s for e in detailed["entries"] for s in e["segments"]
@@ -26,10 +33,11 @@ def _seg_payload_from_fixture(fixture: dict, uid: str, **overrides) -> dict:
     return base
 
 
-def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_reciter_dir, flask_client):
+def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_reciter_dir, signed_in_client):
     """Segment had ['low_confidence']; save with []; reload; field is absent or []."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -39,10 +47,10 @@ def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_rec
         seg_payload.append(_seg_payload_from_fixture(fixture, s["segment_uid"]))
     seg_payload[0]["ignored_categories"] = ["low_confidence"]
 
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -50,10 +58,10 @@ def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_rec
     assert target.get("ignored_categories") == ["low_confidence"]
 
     seg_payload[0]["ignored_categories"] = []
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved2 = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -64,10 +72,11 @@ def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_rec
     )
 
 
-def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter_dir, flask_client):
+def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter_dir, signed_in_client):
     """Segment had ['low_confidence']; save without the key (patch mode); reload; field still present."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -77,17 +86,17 @@ def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter
         for s in fixture["entries"][0]["segments"]
     ]
     seg_payload[0]["ignored_categories"] = ["low_confidence"]
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     patch_payload = {"segments": [{"index": 0, "matched_ref": fixture["entries"][0]["segments"][0]["matched_ref"], "matched_text": fixture["entries"][0]["segments"][0]["matched_text"]}], "operations": []}
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(patch_payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -97,10 +106,11 @@ def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter
     )
 
 
-def test_all_marker_preserved(load_fixture, tmp_reciter_dir, flask_client):
+def test_all_marker_preserved(load_fixture, tmp_reciter_dir, signed_in_client):
     """A segment with ['_all'] survives a save/reload unchanged."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -110,10 +120,10 @@ def test_all_marker_preserved(load_fixture, tmp_reciter_dir, flask_client):
         for s in fixture["entries"][0]["segments"]
     ]
     seg_payload[0]["ignored_categories"] = ["_all"]
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -121,7 +131,7 @@ def test_all_marker_preserved(load_fixture, tmp_reciter_dir, flask_client):
     assert target.get("ignored_categories") == ["_all"]
 
 
-def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, flask_client):
+def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_client):
     """A segment with ignored=true (no ignored_categories) becomes ['_all'] on save."""
     reciter = "fixture_reciter"
     legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
@@ -146,6 +156,8 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, flask_client):
         ],
     }
     legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
     payload = {
         "full_replace": True,
@@ -159,10 +171,10 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, flask_client):
         ],
         "operations": [],
     }
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))

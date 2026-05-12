@@ -1,9 +1,11 @@
 """Cross-cutting Flask route decorators.
 
 - ``require_same_origin`` — CSRF defense via Origin/Referer check on POST/PUT/DELETE.
+- ``require_edit_lock`` — gate save/undo routes on (signed in + active claim
+  + row is editable). Supports ``admin_bypass=True`` for maintainer/owner
+  override on under_review rows.
 
-Future drops in Phase 3 add ``require_edit_lock`` (save/undo gating) and
-``require_role`` (admin endpoints) alongside this one.
+Phase 3 Drop D will add ``require_role`` for the access-admin endpoints.
 """
 
 from __future__ import annotations
@@ -11,7 +13,12 @@ from __future__ import annotations
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import abort, request
+from flask import abort, g, request
+
+from scripts.lib.schemas import ReciterState, Role, Visibility
+
+from services import auth as auth_service
+from services import state as state_service
 
 
 def require_same_origin(fn):
@@ -46,3 +53,50 @@ def require_same_origin(fn):
         abort(403, description="missing Origin/Referer header on mutating request")
 
     return wrapper
+
+
+_ADMIN_ROLES = {Role.MAINTAINER, Role.OWNER}
+
+
+def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = False):
+    """Gate a route on (signed in + state.under_review + not marked_ready
+    + visibility.public + assignee match).
+
+    With ``admin_bypass=True``, maintainer/owner roles bypass the
+    assignee match — they can edit any row that's structurally editable.
+    Marked-ready rows are NEVER editable by anyone via this gate; the
+    reviewer's "Continue editing" flips ``marked_ready=False`` first.
+
+    On success: ``g.current_user`` and ``g.current_row`` are set so the
+    route can build an ``Actor`` from them without re-resolving.
+    """
+
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            user = auth_service.current_user()
+            if user is None:
+                abort(401, description="authentication required")
+            slug = kwargs.get(reciter_param)
+            if not slug:
+                abort(400, description=f"missing {reciter_param!r} in route")
+            row = state_service.get_row(slug)
+            if row is None:
+                abort(404, description="unknown reciter")
+            if row.state != ReciterState.UNDER_REVIEW:
+                abort(403, description="reciter is not in an editable state")
+            if row.marked_ready:
+                abort(403, description="reciter is marked ready for publish and frozen")
+            if row.visibility != Visibility.PUBLIC:
+                abort(403, description="reciter visibility blocks edits")
+            is_assignee = row.assignee_hf_id == user.hf_user_id
+            is_admin = admin_bypass and Role(user.role) in _ADMIN_ROLES
+            if not (is_assignee or is_admin):
+                abort(403, description="reciter is not editable by this user")
+            g.current_user = user
+            g.current_row = row
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return deco

@@ -9,6 +9,13 @@ import textwrap
 import pytest
 
 
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 def _segments(detailed: dict) -> list[dict]:
     out: list[dict] = []
     for entry in detailed.get("entries", []):
@@ -27,7 +34,7 @@ def test_uid_matches_typescript_implementation():
     assert derive_uid(1, 0, 0) == "418dc3a4-5e80-5d8e-9a3f-209a6403206e"
 
 
-def test_save_round_trips_through_adapters(tmp_reciter_dir, flask_client, load_fixture):
+def test_save_round_trips_through_adapters(tmp_reciter_dir, signed_in_client, load_fixture):
     """Adapter consolidation regression: save -> reload -> normalized result.
 
     Exercises ``services.save.save_seg_data`` (which now delegates ``_make_seg``
@@ -37,7 +44,8 @@ def test_save_round_trips_through_adapters(tmp_reciter_dir, flask_client, load_f
     regenerated with the verse-aggregated tuple format.
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     pre_uids = [s["segment_uid"] for s in fixture["entries"][0]["segments"]]
@@ -55,10 +63,10 @@ def test_save_round_trips_through_adapters(tmp_reciter_dir, flask_client, load_f
         for s in fixture["entries"][0]["segments"]
     ]
 
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 200
 
@@ -118,7 +126,7 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
         assert uid, "loader must backfill segment_uid for legacy fixtures"
 
 
-def test_uid_stable_across_load_save_load(tmp_reciter_dir, flask_client, load_fixture):
+def test_uid_stable_across_load_save_load(tmp_reciter_dir, signed_in_client, load_fixture):
     """Load → save (without UIDs in payload) → load: UIDs persist (MUST-4).
 
     When a save payload omits ``segment_uid`` on segments, the backend
@@ -127,7 +135,8 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, flask_client, load_fi
     on-disk UID must equal the pre-save UID after every round-trip.
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
     fixture = load_fixture("112-ikhlas")
     chapter = 112
@@ -147,10 +156,10 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, flask_client, load_fi
         for s in fixture["entries"][0]["segments"]
     ]
 
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload_no_uids, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 200
 
@@ -161,7 +170,7 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, flask_client, load_fi
     )
 
 
-def test_uid_persisted_on_next_save(tmp_reciter_dir, flask_client):
+def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
     """Load legacy fixture → save → reload from disk: UIDs are now present in the disk file."""
     reciter = "legacy_reciter"
     legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
@@ -179,13 +188,15 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, flask_client):
         ],
     }
     legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps({"full_replace": True, "segments": [
             {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "matched_text": "x", "confidence": 1.0, "phonemes_asr": ""},
         ], "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 200
 

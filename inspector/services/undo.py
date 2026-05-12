@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from constants import HISTORY_SCHEMA_VERSION, VALIDATION_CATEGORIES
 from domain.command import apply_inverse_patch
+from scripts.lib.schemas import Actor
 from services import cache, data_dir
 from services.data_loader import load_detailed, load_probe_v2
 from services.save import persist_detailed
@@ -286,6 +287,7 @@ def _get_affected_chapters(batch: dict) -> set[int]:
 def _append_revert_record(reciter: str, target_batch_id: str,
                           chapter, chapters,
                           val_before: dict, val_after: dict,
+                          *, actor: Actor,
                           reverts_op_ids: list[str] | None = None) -> None:
     """Append a revert record to edit_history.jsonl via the storage backend."""
     revert = {
@@ -298,6 +300,7 @@ def _append_revert_record(reciter: str, target_batch_id: str,
         "validation_summary_before": val_before,
         "validation_summary_after": val_after,
         "operations": [],
+        "actor": actor.model_dump(mode="json"),
     }
     if reverts_op_ids:
         revert["reverts_op_ids"] = reverts_op_ids
@@ -318,8 +321,13 @@ def _merge_val_summaries(val_map: dict[int, dict]) -> dict:
 # Public undo entry points
 # ---------------------------------------------------------------------------
 
-def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
-    """Undo a specific saved batch.  Returns result dict or (error_dict, status)."""
+def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tuple:
+    """Undo a specific saved batch.  Returns result dict or (error_dict, status).
+
+    ``actor`` (kw-only) is stamped on the revert record so the History
+    panel can attribute who undid the batch (separate from who originally
+    saved it).
+    """
     all_records = parse_history_for_reciter(reciter)
     if not all_records:
         return {"error": "No edit history found"}, 404
@@ -390,13 +398,20 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
         val_before, val_after,
+        actor=actor,
     )
 
     cache.invalidate_seg_caches(reciter)
     return {"ok": True, "operations_reversed": len(operations)}
 
 
-def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> dict | tuple:
+def undo_ops(
+    reciter: str,
+    target_batch_id: str,
+    requested_op_ids: set[str],
+    *,
+    actor: Actor,
+) -> dict | tuple:
     """Undo specific operations within a saved batch.
 
     Returns result dict or ``(error_dict, status)``.
@@ -474,6 +489,7 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
         val_before, val_after,
+        actor=actor,
         reverts_op_ids=list(requested_op_ids),
     )
 

@@ -16,6 +16,8 @@
      * badges, "Reverted" badge, chapter name, formatted date, Undo/Discard.
      */
 
+    import { editGate } from '../../../../lib/actions/editGate';
+    import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { EditOp } from '../../../../lib/types/domain';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
     import {
@@ -31,8 +33,6 @@
         onOpUndoClick,
         onPendingOpsDiscard,
     } from '../../utils/save/undo';
-
-    import { editGate } from '../../../../lib/actions/editGate';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
     import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryOp from './HistoryOp.svelte';
@@ -135,18 +135,20 @@
 
         <span class="seg-history-batch-time">{formatHistDate(item.date || null)}</span>
 
-        {#if item.isPending}
-            <button
-                class="btn btn-sm seg-history-undo-btn"
-                use:editGate
-                on:click|stopPropagation={handleDiscardClick}
-            >Discard</button>
-        {:else if mode === 'history' && item.batchId && !item.isRevert}
-            <button
-                class="btn btn-sm seg-history-undo-btn"
-                use:editGate
-                on:click|stopPropagation={handleUndoClick}
-            >Undo</button>
+        {#if $editingMode.kind !== 'view'}
+            {#if item.isPending}
+                <button
+                    class="btn btn-sm seg-history-undo-btn"
+                    use:editGate
+                    on:click|stopPropagation={handleDiscardClick}
+                >Discard</button>
+            {:else if mode === 'history' && item.batchId && !item.isRevert}
+                <button
+                    class="btn btn-sm seg-history-undo-btn"
+                    use:editGate
+                    on:click|stopPropagation={handleUndoClick}
+                >Undo</button>
+            {/if}
         {/if}
     </div>
 

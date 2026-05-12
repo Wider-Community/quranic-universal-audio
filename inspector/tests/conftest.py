@@ -246,17 +246,39 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
 
     _invalidate_seg_caches()
 
-    def _install(reciter: str, fixture_name: str) -> Path:
+    def _install(
+        reciter: str,
+        fixture_name: str,
+        *,
+        under_review_for: str | None = None,
+    ) -> Path:
+        """Install a fixture under ``wip/<reciter>/`` and seed a state row.
+
+        When ``under_review_for`` is given, the row is seeded as
+        ``UNDER_REVIEW`` with that user as the active assignee — required
+        for tests that POST to lock-gated routes (save/undo). Default
+        ``AWAITING_REVIEW`` keeps existing tests unchanged.
+        """
         # Seed a state row so data_dir.kind_for(reciter) returns "wip".
         rows = list(_state_service.snapshot().reciters)
         if not any(r.slug == reciter for r in rows):
-            rows.append(
-                ReciterRow(
+            now = datetime.now(timezone.utc)
+            if under_review_for is None:
+                row = ReciterRow(
                     slug=reciter,
                     state=ReciterState.AWAITING_REVIEW,
-                    state_since=datetime.now(timezone.utc),
+                    state_since=now,
                 )
-            )
+            else:
+                row = ReciterRow(
+                    slug=reciter,
+                    state=ReciterState.UNDER_REVIEW,
+                    state_since=now,
+                    assignee_hf_id=under_review_for,
+                    assignee_login="test_user",
+                    assignee_since=now,
+                )
+            rows.append(row)
             backend.write_json_atomic(
                 _storage_paths.state_path(),
                 ReciterStateFile(reciters=rows).model_dump(mode="json"),
@@ -301,9 +323,36 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         _invalidate_seg_caches()
         return dst_path
 
+    def _seed_under_review(reciter: str, hf_user_id: str) -> None:
+        """Seed an UNDER_REVIEW state row for ``reciter`` with ``hf_user_id``
+        as the assignee, without copying a fixture. Used by tests that
+        hand-author their own ``detailed.json`` and just need the lock
+        decorator to pass."""
+        now = datetime.now(timezone.utc)
+        rows = [
+            r for r in _state_service.snapshot().reciters
+            if r.slug != reciter
+        ]
+        rows.append(
+            ReciterRow(
+                slug=reciter,
+                state=ReciterState.UNDER_REVIEW,
+                state_since=now,
+                assignee_hf_id=hf_user_id,
+                assignee_login="test_user",
+                assignee_since=now,
+            )
+        )
+        backend.write_json_atomic(
+            _storage_paths.state_path(),
+            ReciterStateFile(reciters=rows).model_dump(mode="json"),
+        )
+        _state_service.hydrate()
+
     yield type("TmpReciter", (), {
         "root": tmp_path / "wip",
         "install": staticmethod(_install),
+        "seed_under_review": staticmethod(_seed_under_review),
         "data_dir": tmp_path,
         "backend": backend,
     })

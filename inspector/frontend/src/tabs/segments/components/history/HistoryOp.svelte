@@ -12,6 +12,7 @@
     import { afterUpdate } from 'svelte';
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { EditOp } from '../../../../lib/types/domain';
     import {
         type HistorySnapshot,
@@ -155,7 +156,7 @@
             {#each fixKinds as fk}
                 <span class="seg-history-op-fix-kind">{fk}</span>
             {/each}
-            {#if batchId}
+            {#if batchId && $editingMode.kind !== 'view'}
                 <button
                     class="btn btn-sm seg-history-op-undo-btn"
                     use:editGate
