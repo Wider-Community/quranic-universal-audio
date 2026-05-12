@@ -158,6 +158,18 @@ except MissingSecret as e:
     # an OAuth route gets a 503 from auth_service.is_oauth_configured().
     logger.warning("INSPECTOR_SESSION_SECRET unavailable: %s", e)
 
+# HF Spaces renders the app inside an iframe under huggingface.co. The
+# OAuth round-trip (authorize → callback) is iframe-scoped, so the Flask
+# session cookie carrying the OAuth state must use SameSite=None;Secure
+# to survive the cross-site iframe navigation. Without these, Authlib
+# raises MismatchingStateError on the callback because the cookie never
+# came back. Locally the app runs over plain HTTP where SameSite=None
+# requires Secure (browsers reject otherwise), so fall back to Lax there.
+_behind_proxy = os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+app.config["SESSION_COOKIE_SAMESITE"] = "None" if _behind_proxy else "Lax"
+app.config["SESSION_COOKIE_SECURE"] = _behind_proxy
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+
 # Register the HF OAuth provider with Authlib so the auth routes can
 # resolve oauth.huggingface at request time.
 auth_service.init_oauth(app)

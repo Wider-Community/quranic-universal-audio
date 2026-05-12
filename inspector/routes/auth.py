@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api")
 
+# Behind HF Spaces' TLS proxy the app sees ``request.scheme == https`` and
+# can set Secure cookies. Locally the inspector runs over plain HTTP, where
+# Secure-tagged cookies are rejected — fall back to non-Secure + Lax.
+_BEHIND_PROXY = os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+
 
 def _safe_return_path(raw: str | None) -> str:
     """Restrict the post-callback redirect to same-origin paths.
@@ -130,8 +135,14 @@ def auth_callback():
         cookie,
         max_age=auth_service.SESSION_COOKIE_MAX_AGE,
         httponly=True,
-        secure=os.environ.get("INSPECTOR_BEHIND_PROXY") == "1",
-        samesite="Lax",
+        # HF Spaces serves the app inside an iframe under huggingface.co;
+        # Lax cookies aren't reliably sent on the iframe's outgoing fetches.
+        # Use None+Secure on the deployed Space to flow in cross-site
+        # iframe contexts. Fall back to Lax on plain-HTTP local dev (where
+        # SameSite=None requires Secure=true, which browsers reject without
+        # HTTPS — including over localhost in some browsers).
+        secure=_BEHIND_PROXY,
+        samesite="None" if _BEHIND_PROXY else "Lax",
         path="/",
     )
     return resp
@@ -145,8 +156,14 @@ def auth_logout():
         "",
         max_age=0,
         httponly=True,
-        secure=os.environ.get("INSPECTOR_BEHIND_PROXY") == "1",
-        samesite="Lax",
+        # HF Spaces serves the app inside an iframe under huggingface.co;
+        # Lax cookies aren't reliably sent on the iframe's outgoing fetches.
+        # Use None+Secure on the deployed Space to flow in cross-site
+        # iframe contexts. Fall back to Lax on plain-HTTP local dev (where
+        # SameSite=None requires Secure=true, which browsers reject without
+        # HTTPS — including over localhost in some browsers).
+        secure=_BEHIND_PROXY,
+        samesite="None" if _BEHIND_PROXY else "Lax",
         path="/",
     )
     return resp
