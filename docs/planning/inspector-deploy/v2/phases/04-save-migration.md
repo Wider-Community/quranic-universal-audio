@@ -89,3 +89,29 @@ curl -fsS -X POST -b "$MAINT_COOKIE" -H "Origin: $SPACE" \
 - [`inspector-state-management.md`](../inspector-state-management.md) §4 (transition matrix incl. force-set allowed pairs)
 - [`inspector-deploy-runbook.md`](../inspector-deploy-runbook.md) §6 Phase 5 smoke tests
 - [`inspector-cleanup-registry.md`](../inspector-cleanup-registry.md) §2 (deletions), §3 (modifications)
+
+## Outcomes
+
+Landed in two commits on `dev`.
+
+### `f6bd17e7` — admin override endpoints
+
+Four maintainer+ state-mutating endpoints (`/api/admin/claim/{force-release,reassign}`, `/api/admin/state/force-set`, `/api/admin/send-back`) + one HF API proxy (`/api/admin/users/lookup`) for free-text login → `hf_user_id` resolution. All four state-mutating routes require reason ≥ 10 chars; the state machine + audit log already enforced + recorded reasons since Phase 1, so only the route surface + RBAC gate + body validation were new code.
+
+Route helpers consolidated into `inspector/routes/_admin_helpers.py` (shared `require_signed_in_or_401`, `require_role_or_403`, `actor_for`, `validate_reason`, `row_to_dict`). New `inspector/services/hf_users.py` proxies HF `/api/users/<login>/overview` with 5 s timeout, returning `None` on 404 and raising `HfUserLookupError` on transport failure (mapped to 502 at the route layer).
+
+35 new tests; full suite 242 passed (no regressions vs Phase 3 baseline; D19 pre-existing fails unchanged). Frontend deferred.
+
+### `a264f8a3` — authorization predicates refactor
+
+Follow-up cleanup. New `inspector/services/permissions.py` exposes pure predicates (`is_owner`, `is_maintainer`, `is_claim_holder`, `has_role`, …) + `normalize_reason`. Both layers call into it — state-handler `_require_*` wrappers and route `require_role_or_403` now share predicate calls; new `_require_reason(reason, event)` helper in `state.py` replaces 7 inline reason-length blocks. Collapsed 9 `Role(...).role` membership sites + 7 `len(reason) < 10` checks across state/access/catalog/predicates/decorators/routes; two local `_ADMIN_ROLES` constants deleted.
+
+A central event → role registry was considered and rejected — would replace grep-able inline checks with runtime string lookups and force Phase 5's non-user-action events (Bearer-auth webhooks, background sweepers) through a shape they don't fit. The predicate-extraction path keeps the same correctness guarantees without those antipatterns.
+
+17 new unit tests; full suite 259 passed (Phase 4 baseline +17).
+
+### Deferred to Phase 7 (admin dashboard)
+
+- AdminReasonModal + frontend wiring of the four admin actions.
+- History-panel surfacing of the `reason` field on admin-event batches.
+- Reviewer-banner copy for `reciter.merge_rejected` reasons.
