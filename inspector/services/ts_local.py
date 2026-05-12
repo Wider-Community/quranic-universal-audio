@@ -270,9 +270,20 @@ def _bucket_completed_reciters() -> list[str]:
 def _bucket_url_template(slug: str, audio_category: str) -> str:
     """Resolve the audio URL template from the bucket audio_manifest sidecar.
 
-    Returns ``""`` if the sidecar is absent or the template can't be derived;
-    callers tolerate empty templates (audio playback simply won't have a URL
-    pattern, but the rest of the TS UI works).
+    The v2 sidecar shape is::
+
+        {
+          "schema_version": 1,
+          "slug": "...",
+          "_meta": {...},
+          "chapters": {"1": {"url": "...", ...}, "2": {...}, ...},
+        }
+
+    The legacy ``derive_url_template`` expects a flat ``{chapter: url}`` dict,
+    so flatten before calling. Returns ``""`` if the sidecar is absent, the
+    chapters block is missing, or the template can't be derived (e.g. URL
+    pattern doesn't match the surah-pad heuristic). Callers tolerate empty
+    templates — the TS UI degrades gracefully (no audio playback URL pattern).
     """
     try:
         raw = get_backend().read_json(storage_paths.audio_manifest_path(slug))
@@ -280,7 +291,16 @@ def _bucket_url_template(slug: str, audio_category: str) -> str:
         return ""
     if not isinstance(raw, dict):
         return ""
-    return derive_url_template(raw, audio_category) or ""
+    chapters = raw.get("chapters")
+    if not isinstance(chapters, dict):
+        return ""
+    flat: dict[str, str] = {}
+    for k, v in chapters.items():
+        if isinstance(v, dict) and isinstance(v.get("url"), str):
+            flat[str(k)] = v["url"]
+    if not flat:
+        return ""
+    return derive_url_template(flat, audio_category) or ""
 
 
 def _bucket_reciter_block(slug: str, ts_chapters: list[int]) -> dict | None:

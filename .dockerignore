@@ -49,7 +49,9 @@ docs/
 # --- Inspector internals not needed at runtime ---
 inspector/CLAUDE.md
 inspector/tests/
-inspector/frontend/src/
+# inspector/frontend/src/ is needed by the frontend-build stage; the runtime
+# stage explicitly COPYs dist/ from that stage and not src/, so excluding it
+# globally would only break the build.
 inspector/frontend/node_modules/
 inspector/frontend/.vite/
 inspector/frontend/dist/
