@@ -150,6 +150,8 @@ curl -fsSI $SPACE/api/public/reciter/saad_al_ghamdi | grep -i cache-control  # p
 
 ## Reference
 
+- [`phase-6-implementation-notes.md`](phase-6-implementation-notes.md) — slice-by-slice implementation plan, reuse map, token migration strategy, testing strategy
+- Mockups (high-fi, design exploration) — [`inspector/frontend/design/`](../../../../inspector/frontend/design/) (5 HTML files + shared tokens + components)
 - [`inspector-state-management.md`](../inspector-state-management.md) §4 — internal state machine + events feeding the public mapping
 - [`inspector-admin-perms.md`](../inspector-admin-perms.md) §6 — admin dashboard panel shapes (Phase 7 extends Phase 6 widgets)
 - [`inspector-deployment-plan.md`](../inspector-deployment-plan.md) §4 — auth surface (signed-in claim CTA behavior)

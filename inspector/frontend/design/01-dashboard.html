@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inspector — Dashboard</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="components.css" />
+    <style>
+        /* page layout — desktop-first; collapses on narrow */
+        .page {
+            max-width: var(--page-max);
+            margin: 0 auto;
+            padding-bottom: var(--player-h);
+        }
+        .page-grid {
+            display: grid;
+            grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--activity-w);
+            gap: 0;
+            min-height: calc(100vh - 160px);
+        }
+        .catalog-section {
+            padding: var(--s-3) var(--s-6) var(--s-12);
+            min-width: 0;
+        }
+        @media (max-width: 1180px) {
+            .page-grid { grid-template-columns: var(--rail-w) 1fr; }
+            .activity { display: none; }
+        }
+        @media (max-width: 820px) {
+            .page-grid { grid-template-columns: 1fr; }
+            .rail { position: static; border-right: none; border-bottom: 1px solid var(--border-quiet); max-height: none; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ==================== TAB BAR ==================== -->
+<nav class="tabs" aria-label="Primary">
+    <button class="tab active">Dashboard <span class="badge num">23</span></button>
+    <button class="tab">Segments</button>
+    <button class="tab">Timestamps</button>
+    <div class="tab-spacer"></div>
+    <button class="auth-chip anon" aria-label="Sign in">
+        <span class="dot"></span>
+        Sign in with Hugging Face
+    </button>
+</nav>
+
+<main class="page">
+
+    <!-- ==================== STANDFIRST ==================== -->
+    <header class="standfirst">
+        <strong>422 reciters</strong>, <strong class="num">864</strong> recorded mushafs across <strong>6&nbsp;channels</strong>.
+        <span class="count" data-filter-shortcut="published">6 published</span>,
+        <span class="count" data-filter-shortcut="under-review">3 under review</span>,
+        <span class="count" data-filter-shortcut="available-review">3 available to claim</span>,
+        <span class="count" data-filter-shortcut="requested">2 requested</span>.
+    </header>
+
+    <div class="page-grid">
+
+        <!-- ==================== FILTER RAIL ==================== -->
+        <aside class="rail" aria-label="Filters">
+
+            <div class="facet" data-facet="status">
+                <span class="facet-label">Status</span>
+                <div class="pills">
+                    <button class="pill" data-key="published">Published <span class="pill-count num">6</span></button>
+                    <button class="pill" data-key="publishing">Publishing <span class="pill-count num">1</span></button>
+                    <button class="pill" data-key="under-review">Under review <span class="pill-count num">2</span></button>
+                    <button class="pill" data-key="available-review">Available to claim <span class="pill-count num">3</span></button>
+                    <button class="pill" data-key="requested">Requested <span class="pill-count num">2</span></button>
+                    <button class="pill" data-key="available-request">Available for request <span class="pill-count num">2</span></button>
+                </div>
+            </div>
+
+            <div class="facet" data-facet="riwayah">
+                <span class="facet-label">Riwayah</span>
+                <div class="pills">
+                    <button class="pill" data-key="hafs">Hafs <span class="pill-count num">14</span></button>
+                    <button class="pill empty" data-key="warsh">Warsh <span class="pill-count num">0</span></button>
+                    <button class="pill empty" data-key="qaloon">Qaloon <span class="pill-count num">0</span></button>
+                    <button class="pill empty" data-key="al_duri">Al-Duri <span class="pill-count num">0</span></button>
+                </div>
+            </div>
+
+            <div class="facet" data-facet="style">
+                <span class="facet-label">Style</span>
+                <div class="pills">
+                    <button class="pill" data-key="murattal">Murattal <span class="pill-count num">12</span></button>
+                    <button class="pill" data-key="mujawwad">Mujawwad <span class="pill-count num">2</span></button>
+                    <button class="pill empty" data-key="muallim">Mu‘allim <span class="pill-count num">0</span></button>
+                    <button class="pill empty" data-key="hadr">Hadr <span class="pill-count num">0</span></button>
+                </div>
+            </div>
+
+            <div class="facet" data-facet="mushaf">
+                <span class="facet-label">Mushaf coverage</span>
+                <div class="pills">
+                    <button class="pill" data-key="full">Full mushaf <span class="pill-count num">13</span></button>
+                    <button class="pill" data-key="partial">Partial <span class="pill-count num">1</span></button>
+                </div>
+            </div>
+
+            <div class="facet" data-facet="source">
+                <span class="facet-label">Source</span>
+                <div class="pills">
+                    <button class="pill" data-key="mp3quran">mp3quran <span class="pill-count num">13</span></button>
+                    <button class="pill" data-key="qul">qul <span class="pill-count num">7</span></button>
+                    <button class="pill" data-key="quranicaudio">quranicaudio <span class="pill-count num">5</span></button>
+                    <button class="pill" data-key="surah-quran">surah-quran <span class="pill-count num">2</span></button>
+                    <button class="pill" data-key="tvquran">tvquran <span class="pill-count num">1</span></button>
+                    <button class="pill empty" data-key="everyayah">everyayah <span class="pill-count num">0</span></button>
+                </div>
+            </div>
+
+            <div class="facet" data-facet="context">
+                <span class="facet-label">Recording context</span>
+                <div class="pills">
+                    <button class="pill" data-key="studio">Studio <span class="pill-count num">8</span></button>
+                    <button class="pill" data-key="broadcast">Broadcast <span class="pill-count num">2</span></button>
+                    <button class="pill" data-key="prayer">Prayer <span class="pill-count num">1</span></button>
+                    <button class="pill" data-key="taraweeh">Taraweeh <span class="pill-count num">1</span></button>
+                </div>
+            </div>
+
+            <div class="facet" data-facet="sort">
+                <span class="facet-label">Sort</span>
+                <div class="pills">
+                    <button class="pill sort active" data-key="recent">Recently updated</button>
+                    <button class="pill sort" data-key="alphabetical">A → Z</button>
+                    <button class="pill sort" data-key="deliveries">Most deliveries</button>
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- ==================== CATALOG ==================== -->
+        <section class="catalog-section">
+
+            <!-- ACTIVE FILTER CHIPS BAR -->
+            <div class="chips-bar" id="chips-bar">
+                <span class="chips-bar-label">Filters</span>
+                <span class="muted" id="chips-empty">None active. Click any pill on the left to scope the catalog.</span>
+                <button class="chips-bar-clear" id="chips-clear" style="display:none">Clear all</button>
+            </div>
+
+            <!-- AVAILABLE TO CLAIM STRIP -->
+            <section class="claim-strip" id="claim-strip">
+                <header class="claim-strip-head">
+                    <h2 class="claim-strip-title">Available to claim</h2>
+                    <span class="claim-strip-sub">3 reciters ready for a reviewer.</span>
+                </header>
+                <div class="claim-strip-list">
+
+                    <article class="claim-card">
+                        <button class="claim-card-play" aria-label="Listen to a sample">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
+                        <div class="claim-card-body">
+                            <div class="claim-card-name">Ahmed Al-Ajami</div>
+                            <div class="claim-card-meta">
+                                <span>Hafs</span>
+                                <span class="dot-sep">·</span>
+                                <span>Murattal</span>
+                                <span class="dot-sep">·</span>
+                                <span>Studio</span>
+                                <span class="dot-sep">·</span>
+                                <span class="coverage-pill mono">114</span>
+                            </div>
+                        </div>
+                        <div class="claim-card-action">
+                            <button class="btn btn-primary btn-sm">Claim</button>
+                        </div>
+                    </article>
+
+                    <article class="claim-card">
+                        <button class="claim-card-play" aria-label="Listen to a sample">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
+                        <div class="claim-card-body">
+                            <div class="claim-card-name">Mohamed Jibreel</div>
+                            <div class="claim-card-meta">
+                                <span>Hafs</span>
+                                <span class="dot-sep">·</span>
+                                <span>Murattal</span>
+                                <span class="dot-sep">·</span>
+                                <span class="coverage-pill mono">114</span>
+                            </div>
+                        </div>
+                        <div class="claim-card-action">
+                            <button class="btn btn-primary btn-sm">Claim</button>
+                        </div>
+                    </article>
+
+                    <article class="claim-card">
+                        <button class="claim-card-play" aria-label="Listen to a sample">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
+                        <div class="claim-card-body">
+                            <div class="claim-card-name">Yasser Al-Dosari</div>
+                            <div class="claim-card-meta">
+                                <span>Hafs</span>
+                                <span class="dot-sep">·</span>
+                                <span>Murattal</span>
+                                <span class="dot-sep">·</span>
+                                <span>Studio</span>
+                                <span class="dot-sep">·</span>
+                                <span class="coverage-pill mono">114</span>
+                            </div>
+                        </div>
+                        <div class="claim-card-action">
+                            <button class="btn btn-primary btn-sm">Claim</button>
+                        </div>
+                    </article>
+
+                </div>
+            </section>
+
+            <!-- ALL RECITERS TABLE -->
+            <section class="catalog" id="catalog" aria-label="All reciters">
+
+                <!-- Row template — repeat per reciter. data-* attrs drive faceted filtering. -->
+
+                <div class="catalog-row"
+                     data-status="published"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full" data-context="studio"
+                     data-sources="mp3quran qul quranicaudio surah-quran"
+                     data-deliveries="4">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Mishary Rashid Al-Afasy</div>
+                    <span class="state state-published">Published</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span class="catalog-row-meta dim">Studio</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>4 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>53h 14m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>qul</td><td>quranicaudio</td><td>192 kbps cbr</td><td>114</td><td>53h 14m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>qul</td><td>tarteel</td><td>128 kbps cbr</td><td>114</td><td>53h 14m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>surah-quran</td><td>archive_org</td><td>96 kbps vbr</td><td>114</td><td>53h 04m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="published"
+                     data-riwayah="hafs" data-style="mujawwad"
+                     data-mushaf="full" data-context="broadcast"
+                     data-sources="mp3quran qul tvquran"
+                     data-deliveries="3">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Mahmoud Khalil Al-Husary</div>
+                    <span class="state state-published">Published</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Mujawwad</span>
+                    <span class="catalog-row-meta dim">Broadcast</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>3 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>mp3quran</td><td>mp3quran</td><td>64 kbps cbr</td><td>114</td><td>78h 22m</td></tr>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>qul</td><td>quranicaudio</td><td>128 kbps cbr</td><td>114</td><td>78h 22m</td></tr>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>tvquran</td><td>tvquran</td><td>96 kbps vbr</td><td>114</td><td>78h 18m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="published"
+                     data-riwayah="hafs" data-style="mujawwad"
+                     data-mushaf="full" data-context="broadcast"
+                     data-sources="mp3quran qul quranicaudio surah-quran"
+                     data-deliveries="5">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Abdulbasit Abdulsamad</div>
+                    <span class="state state-published">Published</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Mujawwad</span>
+                    <span class="catalog-row-meta dim">Broadcast</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>5 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>mp3quran</td><td>mp3quran</td><td>64 kbps cbr</td><td>114</td><td>84h 08m</td></tr>
+                            <tr><td class="name">Hafs · Murattal</td><td>qul</td><td>quranicaudio</td><td>128 kbps cbr</td><td>114</td><td>52h 41m</td></tr>
+                            <tr><td class="name">Hafs · Murattal</td><td>qul</td><td>tarteel</td><td>128 kbps cbr</td><td>114</td><td>52h 41m</td></tr>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>qul</td><td>quranicaudio</td><td>192 kbps cbr</td><td>114</td><td>84h 11m</td></tr>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>surah-quran</td><td>archive_org</td><td>96 kbps vbr</td><td>114</td><td>84h 03m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="published"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full" data-context="prayer"
+                     data-sources="mp3quran quranicaudio"
+                     data-deliveries="2">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Maher Al-Muaiqly</div>
+                    <span class="state state-published">Published</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span class="catalog-row-meta dim">Prayer</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>2 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal · Prayer</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>57h 18m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Prayer</td><td>qul</td><td>quranicaudio</td><td>128 kbps cbr</td><td>114</td><td>57h 18m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="published"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full" data-context="studio"
+                     data-sources="mp3quran qul"
+                     data-deliveries="2">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Abdulrahman Al-Sudais</div>
+                    <span class="state state-published">Published</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span class="catalog-row-meta dim">Studio</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>2 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>49h 52m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>qul</td><td>quranicaudio</td><td>192 kbps cbr</td><td>114</td><td>49h 52m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="publishing"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full" data-context="studio"
+                     data-sources="mp3quran qul"
+                     data-deliveries="2">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Saad Al-Ghamdi</div>
+                    <span class="state state-publishing">Publishing</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span class="catalog-row-meta dim">Studio</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>2 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>62h 17m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>qul</td><td>quranicaudio</td><td>128 kbps cbr</td><td>114</td><td>62h 17m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="under-review"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full" data-context="prayer"
+                     data-sources="mp3quran qul"
+                     data-deliveries="2">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Saud Al-Shuraim</div>
+                    <span class="state state-under-review">Under review</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span class="catalog-row-meta dim">Prayer</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>2 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal · Prayer</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>55h 41m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Prayer</td><td>qul</td><td>quranicaudio</td><td>128 kbps cbr</td><td>114</td><td>55h 41m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="under-review"
+                     data-riwayah="hafs" data-style="mujawwad"
+                     data-mushaf="partial" data-context="broadcast"
+                     data-sources="mp3quran qul"
+                     data-deliveries="2">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Mohammed Siddiq Al-Minshawi</div>
+                    <span class="state state-under-review">Under review</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Mujawwad</span>
+                    <span class="catalog-row-meta dim">Broadcast</span>
+                    <span class="coverage-pill partial mono">110</span>
+                    <button class="delivery-chip" data-deliveries-toggle>2 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>mp3quran</td><td>mp3quran</td><td>64 kbps cbr</td><td>110</td><td>71h 22m</td></tr>
+                            <tr><td class="name">Hafs · Mujawwad</td><td>qul</td><td>quranicaudio</td><td>128 kbps cbr</td><td>110</td><td>71h 22m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="available-review"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full" data-context="studio"
+                     data-sources="mp3quran"
+                     data-deliveries="1">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Ahmed Al-Ajami</div>
+                    <span class="state state-available-review">Available to claim</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span class="catalog-row-meta dim">Studio</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>1 delivery</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>54h 03m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="available-review"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full"
+                     data-sources="mp3quran"
+                     data-deliveries="1">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Mohamed Jibreel</div>
+                    <span class="state state-available-review">Available to claim</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span></span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>1 delivery</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>58h 02m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="available-review"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-mushaf="full" data-context="studio"
+                     data-sources="mp3quran qul"
+                     data-deliveries="2">
+                    <button class="catalog-row-play" aria-label="Listen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="catalog-row-name">Yasser Al-Dosari</div>
+                    <span class="state state-available-review">Available to claim</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span class="catalog-row-meta dim">Studio</span>
+                    <span class="coverage-pill mono">114</span>
+                    <button class="delivery-chip" data-deliveries-toggle>2 deliveries</button>
+                </div>
+                <div class="catalog-deliveries">
+                    <table class="deliveries-table">
+                        <thead><tr><th>Mushaf</th><th>Source</th><th>Channel</th><th>Bitrate</th><th>Chapters</th><th>Duration</th></tr></thead>
+                        <tbody>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>mp3quran</td><td>mp3quran</td><td>128 kbps cbr</td><td>114</td><td>51h 32m</td></tr>
+                            <tr><td class="name">Hafs · Murattal · Studio</td><td>qul</td><td>quranicaudio</td><td>192 kbps cbr</td><td>114</td><td>51h 32m</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="requested"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-sources=""
+                     data-deliveries="0">
+                    <span></span>
+                    <div class="catalog-row-name">Hani Ar-Rifai</div>
+                    <span class="state state-requested">Requested</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span></span>
+                    <span></span>
+                    <span class="catalog-row-meta dim">queued for alignment</span>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="requested"
+                     data-riwayah="hafs" data-style="murattal"
+                     data-sources=""
+                     data-deliveries="0">
+                    <span></span>
+                    <div class="catalog-row-name">Idris Abkar</div>
+                    <span class="state state-requested">Requested</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span class="catalog-row-meta">Murattal</span>
+                    <span></span>
+                    <span></span>
+                    <span class="catalog-row-meta dim">queued for alignment</span>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="available-request"
+                     data-riwayah="hafs"
+                     data-sources=""
+                     data-deliveries="0">
+                    <span></span>
+                    <div class="catalog-row-name">Khalid Al-Jaleel</div>
+                    <span class="state state-available-request">Available for request</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+                <div class="catalog-row"
+                     data-status="available-request"
+                     data-riwayah="hafs"
+                     data-sources=""
+                     data-deliveries="0">
+                    <span></span>
+                    <div class="catalog-row-name">Bandar Balila</div>
+                    <span class="state state-available-request">Available for request</span>
+                    <span class="catalog-row-meta">Hafs</span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+            </section>
+
+            <div id="empty-result" style="display:none; padding: var(--s-12) var(--s-6); text-align:center; color: var(--text-muted);">
+                <p style="margin: 0 0 var(--s-3);">No reciters match this filter combination.</p>
+                <button class="btn btn-sm" onclick="clearAll()">Clear filters</button>
+            </div>
+
+        </section>
+
+        <!-- ==================== ACTIVITY RAIL ==================== -->
+        <aside class="activity" aria-label="Recent activity">
+            <header class="activity-head">
+                <h2 class="activity-head-title">Recent activity</h2>
+                <span class="activity-head-sub">last 7 days</span>
+            </header>
+            <div class="activity-list">
+
+                <div class="activity-item publishing">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Saad Al-Ghamdi</strong> is being published.
+                        </div>
+                        <span class="activity-time">2 hours ago</span>
+                    </div>
+                </div>
+
+                <div class="activity-item published">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Maher Al-Muaiqly</strong> is now published.
+                        </div>
+                        <span class="activity-time">yesterday</span>
+                    </div>
+                </div>
+
+                <div class="activity-item added">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Khalid Al-Jaleel</strong> open to suggest.
+                        </div>
+                        <span class="activity-time">2 days ago</span>
+                    </div>
+                </div>
+
+                <div class="activity-item available-review">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Mohamed Jibreel</strong> is available for review.
+                        </div>
+                        <span class="activity-time">3 days ago</span>
+                    </div>
+                </div>
+
+                <div class="activity-item added">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Bandar Balila</strong> open to suggest.
+                        </div>
+                        <span class="activity-time">4 days ago</span>
+                    </div>
+                </div>
+
+                <div class="activity-item under-review">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Saud Al-Shuraim</strong> is under review.
+                        </div>
+                        <span class="activity-time">5 days ago</span>
+                    </div>
+                </div>
+
+                <div class="activity-item available-review">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Yasser Al-Dosari</strong> is available for review.
+                        </div>
+                        <span class="activity-time">1 week ago</span>
+                    </div>
+                </div>
+
+                <div class="activity-item published">
+                    <span class="marker"></span>
+                    <div>
+                        <div class="activity-text">
+                            <strong>Abdulrahman Al-Sudais</strong> is now published.
+                        </div>
+                        <span class="activity-time">2 weeks ago</span>
+                    </div>
+                </div>
+
+            </div>
+        </aside>
+
+    </div>
+
+</main>
+
+<!-- ==================== BOTTOM PLAYER (dashboard-only) ==================== -->
+<footer class="player" role="region" aria-label="Audio player">
+    <button class="player-meta" aria-label="Switch reciter or delivery">
+        <div class="player-meta-text">
+            <div class="player-meta-name">Mishary Rashid Al-Afasy</div>
+            <div class="player-meta-sub">
+                <span>Hafs</span>
+                <span class="dot-sep">·</span>
+                <span>Murattal</span>
+                <span class="dot-sep">·</span>
+                <span>mp3quran</span>
+            </div>
+        </div>
+        <span class="player-meta-switch">⌃</span>
+    </button>
+
+    <div class="player-controls">
+        <button class="player-btn" aria-label="Previous surah">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button class="player-btn" aria-label="Back 15 seconds">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg>
+        </button>
+        <button class="player-btn primary" aria-label="Play">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="player-btn" aria-label="Forward 15 seconds">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg>
+        </button>
+        <button class="player-btn" aria-label="Next surah">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+        </button>
+    </div>
+
+    <div class="player-right">
+        <div class="player-progress" style="width: 220px">
+            <div class="player-progress-bar"><div class="player-progress-fill"></div></div>
+            <div class="player-progress-times">
+                <span>0:46</span>
+                <span>2:09</span>
+            </div>
+        </div>
+        <button class="player-surah-trigger" aria-label="Surah picker">
+            <span class="surah-num">1</span>
+            <span>Al-Fatiha</span>
+        </button>
+        <button class="player-speed">1.0×</button>
+    </div>
+</footer>
+
+<script>
+// ============================================================
+// Faceted filter logic — same semantics as HistoryFilters.svelte:
+// counts for facet F are computed against rows that pass all
+// OTHER facet filters. Empty pills dim but stay in DOM.
+// ============================================================
+
+const FACETS = ['status', 'riwayah', 'style', 'mushaf', 'source', 'context'];
+const active = { status: new Set(), riwayah: new Set(), style: new Set(),
+                 mushaf: new Set(), source: new Set(), context: new Set() };
+
+const rows = Array.from(document.querySelectorAll('.catalog-row'));
+
+function rowFacetValues(row, facet) {
+    if (facet === 'source') {
+        return (row.dataset.sources || '').split(/\s+/).filter(Boolean);
+    }
+    const v = row.dataset[facet];
+    return v ? [v] : [];
+}
+
+function rowPassesFacet(row, facet) {
+    const sel = active[facet];
+    if (sel.size === 0) return true;
+    const vals = rowFacetValues(row, facet);
+    return vals.some(v => sel.has(v));
+}
+
+function rowPassesAll(row, except = null) {
+    return FACETS.every(f => f === except || rowPassesFacet(row, f));
+}
+
+function recompute() {
+    // 1. Row visibility (must pass every facet)
+    let visibleCount = 0;
+    rows.forEach(row => {
+        const pass = rowPassesAll(row);
+        row.style.display = pass ? '' : 'none';
+        // Collapse expansion if hidden
+        if (!pass && row.classList.contains('expanded')) {
+            row.classList.remove('expanded');
+        }
+        if (pass) visibleCount++;
+    });
+
+    // 2. Empty-result state
+    document.getElementById('empty-result').style.display = visibleCount === 0 ? 'block' : 'none';
+
+    // 3. Per-facet count recompute (faceted — exclude self)
+    FACETS.forEach(facet => {
+        const counts = {};
+        rows.forEach(row => {
+            if (!rowPassesAll(row, facet)) return;
+            rowFacetValues(row, facet).forEach(v => { counts[v] = (counts[v] || 0) + 1; });
+        });
+        document.querySelectorAll(`[data-facet="${facet}"] .pill`).forEach(pill => {
+            const key = pill.dataset.key;
+            const n = counts[key] || 0;
+            pill.querySelector('.pill-count').textContent = n;
+            pill.classList.toggle('empty', n === 0 && !pill.classList.contains('active'));
+            pill.classList.toggle('active', active[facet].has(key));
+        });
+    });
+
+    // 4. Active filter chips bar
+    renderChips();
+
+    // 5. Available-to-claim strip — hide if status filter active and doesn't include available-review
+    const showClaim = active.status.size === 0 || active.status.has('available-review');
+    document.getElementById('claim-strip').style.display = showClaim ? '' : 'none';
+}
+
+function renderChips() {
+    const bar = document.getElementById('chips-bar');
+    bar.querySelectorAll('.chip').forEach(c => c.remove());
+    let anyActive = false;
+    FACETS.forEach(facet => {
+        active[facet].forEach(key => {
+            anyActive = true;
+            const pill = document.querySelector(`[data-facet="${facet}"] .pill[data-key="${key}"]`);
+            const label = pill ? pill.firstChild.textContent.trim() : key;
+            const chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.innerHTML = `${label}<button class="chip-close" data-remove-facet="${facet}" data-remove-key="${key}" aria-label="Remove filter">×</button>`;
+            bar.insertBefore(chip, document.getElementById('chips-clear'));
+        });
+    });
+    document.getElementById('chips-empty').style.display = anyActive ? 'none' : '';
+    document.getElementById('chips-clear').style.display = anyActive ? '' : 'none';
+}
+
+function toggleFilter(facet, key) {
+    if (active[facet].has(key)) active[facet].delete(key);
+    else active[facet].add(key);
+    recompute();
+}
+
+function clearAll() {
+    FACETS.forEach(f => active[f].clear());
+    recompute();
+}
+
+// Wiring
+document.querySelectorAll('[data-facet] .pill:not(.sort)').forEach(pill => {
+    const facet = pill.closest('[data-facet]').dataset.facet;
+    const key = pill.dataset.key;
+    pill.addEventListener('click', () => toggleFilter(facet, key));
+});
+
+// Sort pills — visual only in mockup
+document.querySelectorAll('[data-facet="sort"] .pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('[data-facet="sort"] .pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+    });
+});
+
+// Standfirst count shortcuts
+document.querySelectorAll('[data-filter-shortcut]').forEach(el => {
+    el.addEventListener('click', () => {
+        clearAll();
+        active.status.add(el.dataset.filterShortcut);
+        recompute();
+        window.scrollTo({ top: 240, behavior: 'smooth' });
+    });
+});
+
+// Chip-close (event delegation since chips are dynamic)
+document.getElementById('chips-bar').addEventListener('click', e => {
+    const btn = e.target.closest('[data-remove-facet]');
+    if (!btn) return;
+    toggleFilter(btn.dataset.removeFacet, btn.dataset.removeKey);
+});
+
+// Clear all
+document.getElementById('chips-clear').addEventListener('click', clearAll);
+
+// Delivery chip expansion
+document.querySelectorAll('[data-deliveries-toggle]').forEach(btn => {
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        btn.closest('.catalog-row').classList.toggle('expanded');
+    });
+});
+
+// Initial render
+recompute();
+</script>
+
+</body>
+</html>

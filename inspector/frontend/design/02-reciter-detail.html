@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inspector — Mishary Rashid Al-Afasy</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="components.css" />
+    <style>
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 var(--gutter) var(--player-h);
+        }
+    </style>
+</head>
+<body>
+
+<!-- ==================== TAB BAR ==================== -->
+<nav class="tabs" aria-label="Primary">
+    <button class="tab active">Dashboard</button>
+    <button class="tab">Segments</button>
+    <button class="tab">Timestamps</button>
+    <div class="tab-spacer"></div>
+    <button class="auth-chip">
+        <span class="dot"></span>
+        hetchyy
+    </button>
+</nav>
+
+<main class="page">
+
+    <a href="01-dashboard.html" class="detail-back">Back to catalog</a>
+
+    <!-- ==================== HEADER ==================== -->
+    <header class="detail-header">
+        <h1 class="detail-name">Mishary Rashid Al-Afasy</h1>
+        <div class="detail-meta-strip">
+            <span class="state state-published lg">Published</span>
+            <span>Saudi Arabia</span>
+            <span class="dot-sep">·</span>
+            <span class="num">4 deliveries</span>
+            <span class="dot-sep">·</span>
+            <span>Full mushaf across all deliveries</span>
+        </div>
+    </header>
+
+    <!-- ==================== BODY GRID ==================== -->
+    <div class="detail-grid">
+
+        <!-- LEFT: data -->
+        <div>
+
+            <section class="detail-section">
+                <header class="detail-section-head">
+                    <h2 class="detail-section-title">Deliveries</h2>
+                </header>
+                <table class="deliveries-detail" aria-label="Deliveries">
+                    <thead>
+                        <tr>
+                            <th>Mushaf</th>
+                            <th>Source</th>
+                            <th class="mono">Channel</th>
+                            <th class="mono">Bitrate</th>
+                            <th class="mono">Chapters</th>
+                            <th class="mono">Duration</th>
+                            <th class="mono">Year</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="mushaf">Hafs · Murattal · Studio</td>
+                            <td>mp3quran</td>
+                            <td class="mono">mp3quran</td>
+                            <td class="mono">128 cbr</td>
+                            <td class="mono num">114</td>
+                            <td class="mono num">53h 14m</td>
+                            <td class="mono num"></td>
+                            <td class="action">
+                                <button class="player-btn" aria-label="Listen">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mushaf">Hafs · Murattal · Studio</td>
+                            <td>qul</td>
+                            <td class="mono">quranicaudio</td>
+                            <td class="mono">192 cbr</td>
+                            <td class="mono num">114</td>
+                            <td class="mono num">53h 14m</td>
+                            <td class="mono num"></td>
+                            <td class="action">
+                                <button class="player-btn" aria-label="Listen">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mushaf">Hafs · Murattal · Studio</td>
+                            <td>qul</td>
+                            <td class="mono">tarteel</td>
+                            <td class="mono">128 cbr</td>
+                            <td class="mono num">114</td>
+                            <td class="mono num">53h 14m</td>
+                            <td class="mono num"></td>
+                            <td class="action">
+                                <button class="player-btn" aria-label="Listen">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mushaf">Hafs · Murattal · Studio</td>
+                            <td>surah-quran</td>
+                            <td class="mono">archive_org</td>
+                            <td class="mono">96 vbr</td>
+                            <td class="mono num">114</td>
+                            <td class="mono num">53h 04m</td>
+                            <td class="mono num"></td>
+                            <td class="action">
+                                <button class="player-btn" aria-label="Listen">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="detail-section">
+                <header class="detail-section-head">
+                    <h2 class="detail-section-title">Timeline</h2>
+                    <span class="detail-section-count">5 events</span>
+                </header>
+                <div class="timeline">
+
+                    <div class="timeline-item added">
+                        <span class="timeline-dot"></span>
+                        <span class="timeline-label">Added to catalog</span>
+                        <span class="timeline-date">Sep 12, 2024</span>
+                    </div>
+
+                    <div class="timeline-item available-review">
+                        <span class="timeline-dot"></span>
+                        <span class="timeline-label">Alignment complete · available for review</span>
+                        <span class="timeline-date">Sep 13, 2024</span>
+                    </div>
+
+                    <div class="timeline-item under-review">
+                        <span class="timeline-dot"></span>
+                        <span class="timeline-label">Under review</span>
+                        <span class="timeline-date">Sep 15, 2024</span>
+                    </div>
+
+                    <div class="timeline-item publishing">
+                        <span class="timeline-dot"></span>
+                        <span class="timeline-label">Publishing</span>
+                        <span class="timeline-date">Sep 22, 2024</span>
+                    </div>
+
+                    <div class="timeline-item published current">
+                        <span class="timeline-dot"></span>
+                        <span class="timeline-label">Published</span>
+                        <span class="timeline-date">Sep 22, 2024</span>
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+
+        <!-- RIGHT: actions + facts -->
+        <aside class="detail-side">
+
+            <div class="cta-group">
+                <button class="btn btn-primary">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    Listen
+                    <span class="cta-hint">Surah 1, mp3quran</span>
+                </button>
+                <button class="btn btn-disabled" disabled>
+                    Review
+                    <span class="cta-hint">published</span>
+                </button>
+                <button class="btn btn-disabled" disabled>
+                    Subscribe
+                    <span class="cta-hint">coming soon</span>
+                </button>
+            </div>
+
+            <div class="facts">
+                <div class="facts-head">Facts</div>
+                <div class="facts-row">
+                    <span class="facts-key">Country</span>
+                    <span class="facts-val">Saudi Arabia</span>
+                </div>
+                <div class="facts-row">
+                    <span class="facts-key">Riwayah(s)</span>
+                    <span class="facts-val">Hafs an Asim</span>
+                </div>
+                <div class="facts-row">
+                    <span class="facts-key">Style(s)</span>
+                    <span class="facts-val">Murattal</span>
+                </div>
+                <div class="facts-row">
+                    <span class="facts-key">Channels</span>
+                    <span class="facts-val mono">mp3quran · quranicaudio · tarteel · archive_org</span>
+                </div>
+                <div class="facts-row">
+                    <span class="facts-key">First added</span>
+                    <span class="facts-val mono">Sep 12, 2024</span>
+                </div>
+                <div class="facts-row">
+                    <span class="facts-key">Published</span>
+                    <span class="facts-val mono">Sep 22, 2024</span>
+                </div>
+            </div>
+
+        </aside>
+
+    </div>
+
+</main>
+
+<!-- ==================== BOTTOM PLAYER ==================== -->
+<footer class="player" role="region" aria-label="Audio player">
+    <button class="player-meta" aria-label="Switch reciter or delivery">
+        <div class="player-meta-text">
+            <div class="player-meta-name">Mishary Rashid Al-Afasy</div>
+            <div class="player-meta-sub">
+                <span>Hafs</span>
+                <span class="dot-sep">·</span>
+                <span>Murattal</span>
+                <span class="dot-sep">·</span>
+                <span>mp3quran</span>
+            </div>
+        </div>
+        <span class="player-meta-switch">⌃</span>
+    </button>
+
+    <div class="player-controls">
+        <button class="player-btn" aria-label="Previous surah">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button class="player-btn" aria-label="Back 15 seconds">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg>
+        </button>
+        <button class="player-btn primary" aria-label="Play">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="player-btn" aria-label="Forward 15 seconds">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg>
+        </button>
+        <button class="player-btn" aria-label="Next surah">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+        </button>
+    </div>
+
+    <div class="player-right">
+        <div class="player-progress" style="width: 220px">
+            <div class="player-progress-bar"><div class="player-progress-fill"></div></div>
+            <div class="player-progress-times">
+                <span>0:46</span>
+                <span>2:09</span>
+            </div>
+        </div>
+        <button class="player-surah-trigger" aria-label="Surah picker">
+            <span class="surah-num">1</span>
+            <span>Al-Fatiha</span>
+        </button>
+        <button class="player-speed">1.0×</button>
+    </div>
+</footer>
+
+</body>
+</html>

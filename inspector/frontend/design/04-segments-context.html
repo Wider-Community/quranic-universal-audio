@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inspector — Segments tab</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="components.css" />
+    <style>
+        .page { max-width: var(--page-max); margin: 0 auto; padding-bottom: var(--s-12); }
+    </style>
+</head>
+<body>
+
+<!-- ==================== TAB BAR ==================== -->
+<nav class="tabs" aria-label="Primary">
+    <button class="tab">Dashboard</button>
+    <button class="tab active">Segments</button>
+    <button class="tab">Timestamps</button>
+    <div class="tab-spacer"></div>
+    <button class="auth-chip">
+        <span class="dot"></span>
+        hetchyy
+    </button>
+</nav>
+
+<main class="page">
+
+    <!-- ==================== RECITER CONTEXT CHIP ==================== -->
+    <div class="seg-context-wrap">
+        <div class="seg-context-label">Reviewing</div>
+        <button class="seg-context-chip" aria-label="Switch reciter">
+            <div class="seg-context-chip-body">
+                <div class="seg-context-chip-name">Saud Al-Shuraim</div>
+                <div class="seg-context-chip-meta">
+                    <span class="state state-under-review">Under review</span>
+                    <span>Hafs</span>
+                    <span class="dot-sep">·</span>
+                    <span>Murattal</span>
+                    <span class="dot-sep">·</span>
+                    <span>Prayer</span>
+                    <span class="dot-sep">·</span>
+                    <span>mp3quran</span>
+                    <span class="dot-sep">·</span>
+                    <span class="coverage-pill mono">114</span>
+                </div>
+            </div>
+            <span class="seg-context-chip-switch">
+                Switch reciter
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 7h10v3l5-4-5-4v3H5v8h2zm10 10H7v-3l-5 4 5 4v-3h12v-8h-2z"/>
+                </svg>
+            </span>
+        </button>
+    </div>
+
+    <!-- ==================== BROWSE-BY-STATE STRIP ==================== -->
+    <div class="seg-browse-strip" role="tablist" aria-label="Browse by state">
+        <span class="seg-browse-label">Browse</span>
+        <button class="seg-browse-pill active" data-state="my-claim">
+            Your active claim <span class="pill-count num">1</span>
+        </button>
+        <button class="seg-browse-pill" data-state="available-review">
+            Available to claim <span class="pill-count num">3</span>
+        </button>
+        <button class="seg-browse-pill" data-state="under-review">
+            Under review <span class="pill-count num">2</span>
+        </button>
+        <button class="seg-browse-pill" data-state="published">
+            Published <span class="pill-count num">6</span>
+        </button>
+        <span style="flex:1"></span>
+        <span class="muted" style="font-size: var(--fs-meta)">
+            Clicks open the picker, pre-filtered to that bucket.
+        </span>
+    </div>
+
+    <!-- ==================== SEGMENTS EDITOR PLACEHOLDER ==================== -->
+    <div class="seg-placeholder">
+        Segments editor renders here — chapter picker, waveform, segment list, validation panel, history panel.
+        <br />
+        Existing surface preserved; only the reciter context strip above is new.
+    </div>
+
+</main>
+
+<script>
+document.querySelectorAll('.seg-browse-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.seg-browse-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        // In the real impl this opens 03-picker-modal.html with the state-tab pre-selected.
+    });
+});
+</script>
+
+</body>
+</html>
