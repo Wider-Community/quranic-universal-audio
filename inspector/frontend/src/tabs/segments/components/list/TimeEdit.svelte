@@ -33,6 +33,7 @@
 
     import { tick } from 'svelte';
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import { composeHmsMs, splitHmsMs } from '../../utils/data/references';
 
     export let value: number;                     // ms
@@ -337,7 +338,7 @@
 
 {#if !editing}
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-    <span class="seg-text-time clickable" on:click={onWholeClick}
+    <span class="seg-text-time clickable" use:editGate on:click={onWholeClick}
         bind:this={spanEl}
         title="Click to adjust boundaries">{#each GROUPS as g, i}<span class="seg-time-group" data-group={g}>{groupDisplay[g]}</span>{#if i < GROUPS.length - 1}<span class="seg-time-sep">{i === 2 ? '.' : ':'}</span>{/if}{/each}</span>
 {:else}

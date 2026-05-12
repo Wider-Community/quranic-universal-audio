@@ -683,7 +683,7 @@
                     <ReferenceEditor {seg} on:preview={(e) => previewState = e.detail} />
                 {:else}
                     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-                    <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
+                    <span class="seg-text-ref" class:seg-history-changed={changedRef} use:editGate on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
                 {/if}
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>

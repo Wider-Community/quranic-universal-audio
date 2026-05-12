@@ -76,13 +76,12 @@ and rebuilds on every push via the `inspector-deploy.yml` GitHub workflow.
 """
 
 
-def _existing_secrets(api: HfApi, repo_id: str) -> set[str]:
-    """Names only — values are write-only."""
-    try:
-        runtime = api.get_space_runtime(repo_id=repo_id)
-        return {s.key for s in (runtime.secrets or [])}
-    except Exception:
-        return set()
+# Marker variable name. Presence (with value "1") is the signal that the
+# auto-generated secrets have been seeded once before; on re-runs we leave
+# them alone instead of rotating. Plain Space variables are readable via the
+# Hub API, secrets are write-only — so we can't introspect the secret slots
+# directly and need a side-channel.
+_SEEDED_MARKER = "INSPECTOR_SECRETS_SEEDED"
 
 
 def _existing_variables(api: HfApi, repo_id: str) -> dict[str, str]:
@@ -90,6 +89,10 @@ def _existing_variables(api: HfApi, repo_id: str) -> dict[str, str]:
         return {k: v.value for k, v in api.get_space_variables(repo_id=repo_id).items()}
     except Exception:
         return {}
+
+
+def _secrets_already_seeded(existing_vars: dict[str, str]) -> bool:
+    return existing_vars.get(_SEEDED_MARKER) == "1"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -170,8 +173,8 @@ def main(argv: list[str] | None = None) -> int:
     # --- 4. Secrets + variables ---
     print("\n[4/4] Set secrets + variables (idempotent; auto-gen if absent)...")
 
-    existing_secrets = _existing_secrets(api, repo_id) if apply else set()
     existing_vars = _existing_variables(api, repo_id) if apply else {}
+    secrets_seeded = _secrets_already_seeded(existing_vars)
 
     # variables (non-secret, set every run so changes propagate)
     variables = {
@@ -211,21 +214,34 @@ def main(argv: list[str] | None = None) -> int:
             "Fine-grained PAT (actions:write); placeholder until Phase 5",
         ),
     ]
+    rotated_any = False
     for key, value, note in secret_plan:
-        if apply and key in existing_secrets and value is None:
-            print(f"  secret   {key:38s}  preserved ({note})")
+        # Auto-gen secrets (value is None): only seed on first run. The marker
+        # variable prevents accidental rotation on every re-apply (which would
+        # invalidate every signed cookie / break every in-flight Job webhook).
+        if value is None and secrets_seeded:
+            if apply:
+                print(f"  secret   {key:38s}  preserved (already seeded)")
+            else:
+                print(f"  (dry-run) secret {key}=<auto-gen> preserved (already seeded)")
             continue
+
         v = value if value is not None else _secrets.token_hex(32)
         if apply:
             api.add_space_secret(repo_id=repo_id, key=key, value=v)
-            preview = "<auto-gen>" if value is None else "<copied>"
-            print(f"  secret   {key:38s}  set ({preview}; {note})")
-            if value is None and key not in existing_secrets:
+            label = "<auto-gen>" if value is None else "<copied>"
+            print(f"  secret   {key:38s}  set ({label}; {note})")
+            if value is None:
                 # Print auto-gen value once for the operator to record.
                 print(f"           -> first-run value for {key}: {v}")
+                rotated_any = True
         else:
-            preview = "<auto-gen>" if value is None else "<set>"
-            print(f"  (dry-run) secret {key}={preview} ({note})")
+            label = "<auto-gen>" if value is None else "<set>"
+            print(f"  (dry-run) secret {key}={label} ({note})")
+
+    if apply and rotated_any and not secrets_seeded:
+        api.add_space_variable(repo_id=repo_id, key=_SEEDED_MARKER, value="1")
+        print(f"  marker   {_SEEDED_MARKER:38s}  set (=1)")
 
     if apply:
         print("\n==> Restarting Space (factory reboot to pick up volume + env)...")

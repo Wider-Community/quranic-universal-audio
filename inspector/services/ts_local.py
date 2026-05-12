@@ -389,10 +389,19 @@ def _ensure_built_bucket() -> None:
 
 
 def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
-    """Read + gzip a single per-chapter timestamps file from the bucket.
+    """Read + normalize + gzip a per-chapter timestamps file from the bucket.
 
-    LRU-cached so chapter scrubbing within one reciter doesn't repeatedly
-    pay the bucket fetch + gzip cost.
+    The on-disk shard's ``_meta.reciter`` carries whatever slug was stamped
+    when the upstream ``timestamps_full.json`` was first written — often the
+    pre-cutover legacy form (e.g. ``"maher_al_meaqli"``) rather than the v2
+    bucket slug (e.g. ``"maher_al_muaiqly_mp3quran"``). The frontend reads
+    that field as the canonical reciter ID and re-keys store state by it,
+    which then breaks every manifest lookup (the manifest is keyed by the
+    v2 slug). Rewrite ``_meta.reciter`` to match the slug we're serving
+    from so frontend stores stay consistent.
+
+    LRU-cached so chapter scrubbing within one reciter doesn't pay the
+    bucket fetch + JSON parse + gzip cost on every shard hit.
     """
     key = (reciter, chapter)
     cached = _shard_lru.get(key)
@@ -402,7 +411,23 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     raw = data_dir.read_timestamps_chapter(reciter, chapter)
     if raw is None:
         return None
-    body = gzip.compress(raw, compresslevel=6, mtime=0)
+    try:
+        doc = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        log.warning(
+            "ts_local: bucket timestamps for %s/%d is not valid JSON; serving as-is",
+            reciter, chapter,
+        )
+        body = gzip.compress(raw, compresslevel=6, mtime=0)
+    else:
+        meta = doc.get("_meta") if isinstance(doc, dict) else None
+        if isinstance(meta, dict) and meta.get("reciter") != reciter:
+            meta["reciter"] = reciter
+        body = gzip.compress(
+            json.dumps(doc, ensure_ascii=False).encode("utf-8"),
+            compresslevel=6,
+            mtime=0,
+        )
     _shard_lru[key] = body
     _shard_lru.move_to_end(key)
     while len(_shard_lru) > _SHARD_LRU_CAP:
