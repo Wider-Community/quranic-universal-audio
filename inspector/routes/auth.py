@@ -68,7 +68,10 @@ def auth_login():
     session["post_login_return"] = return_to
     oauth = auth_service.get_oauth()
     redirect_uri = _callback_url()
-    logger.info("auth.login redirect_uri=%s return=%s", redirect_uri, return_to)
+    logger.info(
+        "auth.login url_root=%s host=%s scheme=%s redirect_uri=%s return=%s",
+        request.url_root, request.host, request.scheme, redirect_uri, return_to,
+    )
     return oauth.huggingface.authorize_redirect(redirect_uri)
 
 
@@ -76,21 +79,43 @@ def auth_login():
 def auth_callback():
     if not auth_service.is_oauth_configured():
         return jsonify({"error": "OAuth not configured on this deploy"}), 503
+    # Surface HF's error response if present (e.g. ``?error=access_denied``)
+    # before we burn the code on a token exchange that's going to fail.
+    hf_error = request.args.get("error")
+    if hf_error:
+        hf_error_desc = request.args.get("error_description", "")
+        logger.warning(
+            "auth.callback HF returned error=%s description=%s",
+            hf_error, hf_error_desc,
+        )
+        return jsonify({
+            "error": "OAuth provider returned an error",
+            "hf_error": hf_error,
+            "hf_error_description": hf_error_desc,
+        }), 400
+
     return_to = _safe_return_path(session.pop("post_login_return", "/"))
     oauth = auth_service.get_oauth()
     try:
         token = oauth.huggingface.authorize_access_token()
     except Exception as e:  # noqa: BLE001 — Authlib raises various; treat all as failure
-        logger.warning("auth.callback authorize_access_token failed: %s", e)
-        return jsonify({"error": "OAuth callback failed"}), 400
+        # Log the full exception so the Space's stderr surfaces the cause.
+        logger.exception("auth.callback authorize_access_token failed")
+        return jsonify({
+            "error": "OAuth callback failed",
+            "detail": f"{type(e).__name__}: {e}",
+        }), 400
 
     userinfo = token.get("userinfo")
     if userinfo is None:
         try:
             userinfo = oauth.huggingface.userinfo(token=token)
         except Exception as e:  # noqa: BLE001
-            logger.warning("auth.callback userinfo fetch failed: %s", e)
-            return jsonify({"error": "OAuth userinfo fetch failed"}), 400
+            logger.exception("auth.callback userinfo fetch failed")
+            return jsonify({
+                "error": "OAuth userinfo fetch failed",
+                "detail": f"{type(e).__name__}: {e}",
+            }), 400
 
     sub = userinfo.get("sub")
     login = userinfo.get("preferred_username") or userinfo.get("name")
