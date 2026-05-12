@@ -478,6 +478,34 @@ After both syncs land, re-run `python -m scripts.inspector_v2_seed.migrate_bucke
 
 ---
 
+## D30 — Bucket-data-hygiene replay-style edit-history validator
+
+**What.** The Phase-6 `bucket-data-hygiene.yml` workflow was originally going to call into `validators/validate_edit_history.py` for its replay-style chain check. That file has been deleted. Its five checks (genesis row, file-hash chain, _meta tampering, diff-vs-history cross-ref, history-only changes) are all either obsolete (Phase 1 dropped the `file_hash_after` chain so the chain check has no premise) or now hold by construction (`batch_id` uniqueness comes from `uuid7`; peaks-file integrity is already tolerated by `services/peaks_history.load_peaks_records`).
+
+**Why deferred.** No live consumer today. If Phase 6 hygiene wants a replay-style check (verify that the segment state at `time T` matches what the patch stream from genesis says it should be), it's a fresh implementation against `inspector/domain/command.apply_inverse_patch` — not a port of the old file-hash chain code.
+
+**Trigger to revisit.** Phase 6 `bucket-data-hygiene.yml` design lands a concrete check spec.
+
+**Affected if never done.** No mechanical hygiene check on `edit_history.jsonl`. Inspector reads + replays it correctly at runtime; corruption would surface there. Acceptable until Phase 6.
+
+**Cross-refs.** `phases/04-save-migration.md` (Out of scope), Phase 6 design doc TBD.
+
+---
+
+## D31 — Audio manifest validation as an Inspector admin tab
+
+**What.** `scripts/lib/audio_manifest.validate_audio()` is now a pure library. The CI workflow (`validate-audio-pr.yml`) that consumed it for PR-time manifest diff comments was deleted. There is no live UI surface for triggering manifest validation today.
+
+**Why deferred.** Audio manifest validation runs at *new reciter intake* time. The Reciter Requests Space + GitHub PR flow handle intake; once we wire an Inspector "New reciter" admin tab (Phase 7 admin dashboard, or later) it can call `scripts.lib.audio_manifest.validate_audio()` directly and render the same coverage report the deleted CI workflow used to post on PRs.
+
+**Trigger to revisit.** A maintainer hits a case where manual PR review missed a manifest issue and asks for the automation back, OR Phase 7 admin dashboard explicitly scopes a "New reciter intake" panel.
+
+**Affected if never done.** Maintainers eyeball incoming reciter manifests manually. The library is preserved at `scripts/lib/audio_manifest.py` so this is a 1-day UI/route job whenever it's wanted.
+
+**Cross-refs.** `scripts/lib/audio_manifest.py`, `phases/07-admin-dashboard.md`.
+
+---
+
 ## How to add an item to this list
 
 1. Add a new `## D<N> — <title>` section using the template (what / why deferred / trigger to revisit / affected if never done / cross-refs).

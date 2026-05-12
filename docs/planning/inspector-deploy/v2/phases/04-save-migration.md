@@ -1,6 +1,6 @@
-# Phase 4 — Admin overrides + remaining validator splits
+# Phase 4 — Admin overrides
 
-> Maintainers get the four v2 admin override actions (force-release, reassign, force-set-state, send-back). Validators `validate_audio` and `validate_timestamps` get the library/CLI split. Save migration was pulled into Phase 3; this phase no longer touches `services/save.py`.
+> Maintainers get the four v2 admin override actions (force-release, reassign, force-set-state, send-back). Save migration was pulled into Phase 3. Validator library splits are obsolete — `validators/` was deleted; segments + timestamps validation live inside `inspector/services/validation/`, and the audio-manifest library lives at `scripts/lib/audio_manifest.py`.
 
 **Status:** not started
 **Depends on:** Phase 3 (Auth + claim + save) complete
@@ -8,7 +8,7 @@
 
 ## Goal
 
-The four admin events ship with reason-required modal UX: `claim.force_released`, `claim.reassigned`, `admin.force_set_state` (narrow allowed pairs only), `reciter.merge_rejected`. Reasons are surfaced in the audit log and visible in the History panel banner. `validate_audio` and `validate_timestamps` move to library entry points + thin CLI wrappers so `bucket-data-hygiene.yml` (Phase 6) can call them directly. No publish endpoint yet, no admin dashboard UI yet — Phase 7 wires those.
+The four admin events ship with reason-required modal UX: `claim.force_released`, `claim.reassigned`, `admin.force_set_state` (narrow allowed pairs only), `reciter.merge_rejected`. Reasons are surfaced in the audit log and visible in the History panel banner. No publish endpoint yet, no admin dashboard UI yet — Phase 7 wires those. Validator library work landed early as a dedicated cleanup (see `inspector-deferred.md` D30).
 
 > **History note.** Phase 3 (originally "Auth + claim") was extended to include the save migration that this phase previously owned. Edit-history schema cleanup (drop `file_hash_after`, drop genesis, add `actor`), the `@require_edit_lock` decorator, the route audit (peaks, audio_proxy), and the `signed_in_client` test fixture all landed in Phase 3. See `phases/03-auth-and-claims.md`.
 
@@ -31,11 +31,6 @@ The four admin events ship with reason-required modal UX: `claim.force_released`
 - [ ] All four admin actions trigger this modal before POST.
 - [ ] Audit log "reason" field surfaced in the History panel batch row.
 
-### Validator library splits
-- [ ] `validators/validate_audio.py` — library entry point `validate(catalog_row) -> ValidationResult`; thin CLI wrapper kept for ad-hoc use.
-- [ ] `validators/validate_timestamps.py` — library entry point `validate(segments_doc, timestamps_doc) -> ValidationResult`; thin CLI wrapper kept.
-- [ ] Neither is called inline from `services/save.py` — `validate_audio` runs at catalog mutation; `validate_timestamps` runs at TS job completion (Phase 5).
-
 ## Out of scope
 
 - Publish endpoint + bucket move + GH dispatch + timestamps job — **Phase 5**.
@@ -43,7 +38,8 @@ The four admin events ship with reason-required modal UX: `claim.force_released`
 - All deferred admin events: force-claim, force-clear-assignee, force-unmark-ready, archive/unarchive, pipeline-trigger, job-rerun (see admin §11 deferred list).
 - Maintainer edits on `released` / `completed` (`published.edited` flow) — **Phase 7**.
 - Save migration + `actor` plumbing — landed in **Phase 3**.
-- `validate_edit_history` inline-from-save — deferred; replay-style check lives in Phase 6 `bucket-data-hygiene.yml`.
+- `validate_edit_history` — deleted entirely (Phase-1 schema change invalidated its core checks); Phase 6 bucket-hygiene starts from scratch if needed.
+- `validators/` library split — obsolete; `validators/` was deleted, segments + timestamps validators are in-process in `inspector/services/validation/`, audio-manifest validation moved to `scripts/lib/audio_manifest.py`.
 
 ## Acceptance criteria
 
@@ -53,7 +49,6 @@ The four admin events ship with reason-required modal UX: `claim.force_released`
 - [ ] **Send-back:** `under_review` with `marked_ready=1` → maintainer fires send-back → `marked_ready=0`, lifecycle stays `under_review`, assignee retained; reviewer banner shows the maintainer's reason.
 - [ ] All four admin endpoints write to the audit log with `actor.hf_user_id`, `actor.login_at_time`, `actor.role`, and `reason ≥ 10 chars`.
 - [ ] Reason-modal: empty reason or <10 chars cannot submit (client-side); backend also validates.
-- [ ] Validator library splits: `validate_audio` and `validate_timestamps` import-and-call paths work from a Python REPL against bucket data; CLI wrappers still run end-to-end.
 
 ## Verification
 
