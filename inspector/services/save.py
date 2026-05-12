@@ -8,12 +8,12 @@ Writes go through ``services.data_dir`` which routes to ``BucketBackend`` or
 (force_flush_on_write), so the save path doesn't need to think about
 durability — it just calls the backend.
 
-Local-write gating: when ``INSPECTOR_LOCAL_WRITES=0`` (default in local
-mode), the save flow rejects mutations to protect the shared dev bucket
-from cross-contributor stomping. See deployment plan §Local writes.
+Phase 3 made ``@require_edit_lock`` (signed-in + claim + state checks) the
+sole authoritative writer gate. The earlier ``INSPECTOR_LOCAL_WRITES`` env
+guard is gone — both local and deployed modes route every mutation through
+the same OAuth + claim check on the route layer.
 """
 
-import os
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -196,32 +196,6 @@ def _attach_classified_issues(operations: list,
     return out
 
 
-class LocalWritesDisabled(RuntimeError):
-    """Raised when local mode tries to write but INSPECTOR_LOCAL_WRITES=0.
-
-    The default in local mode — prevents two contributors running Inspector
-    locally against the shared dev bucket from stomping on each other.
-    """
-
-
-def _check_writes_enabled() -> None:
-    """Hard gate: refuses to mutate the bucket from local mode unless opted in.
-
-    Deployed mode (``INSPECTOR_BACKEND=bucket`` with OAuth + assignee checks)
-    surfaces its own 403/401 paths in front of save endpoints in later phases;
-    this guard catches the local-mode-no-auth case where there's no other gate.
-    """
-    if os.environ.get("INSPECTOR_LOCAL_WRITES", "0") == "1":
-        return
-    if os.environ.get("INSPECTOR_BACKEND") == "filesystem":
-        # Tests + true-offline mode are OK to write.
-        return
-    raise LocalWritesDisabled(
-        "Refusing to write: local mode reads the shared dev bucket but does "
-        "not write to it by default. Set INSPECTOR_LOCAL_WRITES=1 to opt in."
-    )
-
-
 def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> None:
     """Write detailed.json atomically; rebuild segments.json.
 
@@ -232,7 +206,6 @@ def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> None:
     (audit log + edit_history.jsonl are the recovery surface). No file
     hash returned — the file-hash chain is removed in v2.
     """
-    _check_writes_enabled()
     # Strip transient ``_resolved_by_edit`` (set, injected by validate route)
     # — concurrent validate may have left it on cached segs mid-flight.
     for entry in entries:

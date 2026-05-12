@@ -1,7 +1,7 @@
 """POST /api/seg/save tests (MUST-1, MUST-7).
 
 Phase 3 wired ``require_same_origin`` + ``require_edit_lock(admin_bypass=True)``
-+ ``_gate_local_writes`` on every save/undo route. These tests assert:
+on every save/undo route. These tests assert:
 
 - Anonymous requests are rejected (401 via the lock decorator).
 - Cross-origin POSTs are rejected (403 via the same-origin guard).

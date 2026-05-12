@@ -2,45 +2,24 @@
 
 Decorator chain on every mutating route:
 
-  ``@require_same_origin`` → ``@require_edit_lock(admin_bypass=True)`` → ``@_gate_local_writes``
+  ``@require_same_origin`` → ``@require_edit_lock(admin_bypass=True)``
 
 - ``require_same_origin`` rejects cross-origin POSTs (CSRF defense).
 - ``require_edit_lock`` rejects unauthenticated requests (401) or
   non-(assignee | maintainer | owner) attempts on a non-under_review row
   (403). On success it sets ``g.current_user`` and ``g.current_row`` so the
   handler can build an ``Actor`` from the live user identity.
-- ``_gate_local_writes`` catches the local-mode write-guard exception.
 """
-from functools import wraps
-
 from flask import Blueprint, g, jsonify, request
 
 from scripts.lib.schemas import Actor
 
-from services.save import LocalWritesDisabled, save_seg_data as _save_seg_data
+from services.save import save_seg_data as _save_seg_data
 from services.undo import undo_batch as _undo_batch, undo_ops as _undo_ops
 
 from utils.decorators import require_edit_lock, require_same_origin
 
 seg_edit_bp = Blueprint("seg_edit", __name__, url_prefix="/api/seg")
-
-
-def _gate_local_writes(fn):
-    """Convert ``LocalWritesDisabled`` into a 403 JSON envelope.
-
-    Local mode reads the shared dev bucket but refuses to write to it by
-    default (deployment plan §Local writes). Set ``INSPECTOR_LOCAL_WRITES=1``
-    to opt in.
-    """
-
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except LocalWritesDisabled as e:
-            return jsonify({"error": str(e)}), 403
-
-    return wrapped
 
 
 def _actor_from_g() -> Actor:
@@ -57,7 +36,6 @@ def _actor_from_g() -> Actor:
 @seg_edit_bp.route("/save/<reciter>/<int:chapter>", methods=["POST"])
 @require_same_origin
 @require_edit_lock(reciter_param="reciter", admin_bypass=True)
-@_gate_local_writes
 def seg_save(reciter, chapter):
     """Save edited segments back to detailed.json and segments.json."""
     updates = request.get_json()
@@ -72,7 +50,6 @@ def seg_save(reciter, chapter):
 @seg_edit_bp.route("/undo-batch/<reciter>", methods=["POST"])
 @require_same_origin
 @require_edit_lock(reciter_param="reciter", admin_bypass=True)
-@_gate_local_writes
 def seg_undo_batch(reciter):
     """Undo a specific saved batch by reversing its operations."""
     body = request.get_json()
@@ -87,7 +64,6 @@ def seg_undo_batch(reciter):
 @seg_edit_bp.route("/undo-ops/<reciter>", methods=["POST"])
 @require_same_origin
 @require_edit_lock(reciter_param="reciter", admin_bypass=True)
-@_gate_local_writes
 def seg_undo_ops(reciter):
     """Undo specific operations within a saved batch."""
     body = request.get_json()

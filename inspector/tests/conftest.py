@@ -230,8 +230,6 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
     from services import storage_paths as _storage_paths
 
     monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
-    # Local-write gate stays open in tests — fixtures need to exercise the
-    # save flow without touching INSPECTOR_LOCAL_WRITES.
     monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
     monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
 
