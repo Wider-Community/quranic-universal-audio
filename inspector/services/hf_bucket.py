@@ -26,7 +26,6 @@ locking lives consistently in one place. Multi-worker scale-out is deferred
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shutil
@@ -87,9 +86,9 @@ def _ensure_posix(path: str, *, allow_empty: bool = False) -> str:
 
 
 def _dump_json(obj: dict | list) -> bytes:
-    return json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=False).encode(
-        "utf-8"
-    )
+    import orjson
+
+    return orjson.dumps(obj, option=orjson.OPT_INDENT_2)
 
 
 # ----------------------------------------------------------------------
@@ -127,18 +126,22 @@ class FilesystemBackend:
         return p.read_bytes()
 
     def read_json(self, path: str) -> dict | list:
-        return json.loads(self.read_bytes(path).decode("utf-8"))
+        import orjson
+
+        return orjson.loads(self.read_bytes(path))
 
     def iter_jsonl(self, path: str) -> Iterator[dict]:
         p = self._resolve(path)
         if not p.exists():
             return
+        import orjson
+
         with p.open("rb") as fh:
             for raw in fh:
                 line = raw.strip()
                 if not line:
                     continue
-                yield json.loads(line.decode("utf-8"))
+                yield orjson.loads(line)
 
     # ---- writes ----
 
@@ -166,9 +169,11 @@ class FilesystemBackend:
     def append_jsonl(self, path: str, record: dict) -> None:
         p = self._resolve(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(record, ensure_ascii=False) + "\n"
+        import orjson
+
+        line = orjson.dumps(record) + b"\n"
         with self._write_lock, p.open("ab") as fh:
-            fh.write(line.encode("utf-8"))
+            fh.write(line)
 
     # ---- introspection / moves ----
 
@@ -313,18 +318,22 @@ class BucketBackend:
             raise
 
     def read_json(self, path: str) -> dict | list:
-        return json.loads(self.read_bytes(path).decode("utf-8"))
+        import orjson
+
+        return orjson.loads(self.read_bytes(path))
 
     def iter_jsonl(self, path: str) -> Iterator[dict]:
         try:
             raw = self.read_bytes(path)
         except StorageNotFound:
             return
+        import orjson
+
         for line in raw.splitlines():
             stripped = line.strip()
             if not stripped:
                 continue
-            yield json.loads(stripped.decode("utf-8"))
+            yield orjson.loads(stripped)
 
     # ---- writes ----
 
@@ -382,7 +391,9 @@ class BucketBackend:
         ≤25 concurrent reviewers per replica).
         """
         _ensure_posix(path)
-        line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
+        import orjson
+
+        line = orjson.dumps(record) + b"\n"
         with self._write_lock:
             if self._mount is not None:
                 mp = self._mount / PurePosixPath(path)
