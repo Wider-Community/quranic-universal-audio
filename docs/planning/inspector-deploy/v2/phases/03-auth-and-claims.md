@@ -2,7 +2,7 @@
 
 > HF OAuth + claim/release/mark/unmark + save migration land together. Contributors can claim and edit end-to-end against the bucket. Admin overrides stay in Phase 4.
 
-**Status:** not started
+**Status:** code complete (local tests green); dev Space cutover pending push
 **Depends on:** Phase 2 (Deployable image) complete
 **Blocks:** Phase 4
 
@@ -179,3 +179,67 @@ curl -fsS -b "$COOKIE" $SPACE/api/seg/edit-history/saad_al_ghamdi | jq '.batches
 - [`inspector-admin-perms.md`](../inspector-admin-perms.md) §3 (single roles file)
 - [`inspector-data-storage.md`](../inspector-data-storage.md) §5 (save flow), §6 (env vars)
 - [`inspector-cleanup-registry.md`](../inspector-cleanup-registry.md) §2 (deletions), §3 (modifications)
+
+## Outcomes
+
+Phase 3 landed on the `dev` branch (sharp-curie worktree) across **8 commits** as four feature-pair drops + a docs prelude. End-to-end browser smoke against the dev Space is pending — the code is staged but not yet pushed; the dev-deploy GH Action fires on `dev` push.
+
+### Commits
+
+| # | Commit | Summary |
+|---|---|---|
+| 1 | `83249914` | docs: merge save migration into phase 3; bump oauth expiry to 1 week |
+| 2 | `f6b7475f` | feat(inspector): hf oauth + signed-cookie session (Drop A1) |
+| 3 | `4c145b0b` | feat(inspector-frontend): auth boot + sign-in modal + toast host (Drop A2) |
+| 4 | `e828df0c` | feat(inspector): claim/release/mark-ready endpoints + reciter-task predicates (Drop B1) |
+| 5 | `53628a38` | feat(inspector-frontend): claim button + reviewer banner + reciter-task polling (Drop B2) |
+| 6 | `8f2fb873` | feat(inspector): wire edit-lock + actor plumbing into save/undo (Drop C) |
+| 7 | `349137e1` | feat(inspector): access admin endpoints + revoke-force-release (Drop D) |
+| 8 | (this commit) | docs(inspector): phase 3 outcomes — code complete |
+
+### What shipped
+
+- **Auth backend (Drop A1):** `services/auth.py` with Authlib OAuth + itsdangerous signed-cookie session; `routes/auth.py` with `/api/auth/{login,callback,logout}` + `/api/me`; `utils/decorators.py::require_same_origin`; ProxyFix middleware gated on `INSPECTOR_BEHIND_PROXY=1` (Dockerfile sets it); errorhandlers map `InvalidTransition`→400 / `NotAuthorizedForTransition`→403 / `UnknownReciter`→404; `/healthz` reports `oauth_configured`. **No `role` or `csrf` in the cookie** — both are derived per request (role via `access.resolve_role`; csrf via Origin/Referer check). Cookie max-age: 1 week (`hf_oauth_expiration_minutes: 10080`).
+- **Sign-in UI (Drop A2):** `currentUser` / `signInModal` / `toast` stores; `signIn`/`signOut` clients; SignInModal + ToastHost components mounted at app root; header shows login + Sign out for signed-in users, "Sign in with HF" CTA for anonymous.
+- **Claim endpoints (Drop B1):** `routes/claims.py` with `/api/{claim,release,mark-ready,unmark-ready}/<slug>` dispatching through `state.transition` (no decorator duplicate of state.py gating); one-claim-per-user 409; `/api/reciter-task/<slug>` returns the row + 6 server-side predicates including the new `can_edit_as_admin`.
+- **Claim UI (Drop B2):** `getReciterTaskStore(slug)` with 30s polling tied to subscriber count; `claims-client.ts` maps 401→sign-in modal + toast, 409→"release X first" toast, others→error toast; `ClaimButton` (visible only when claimable; hint-mode when user holds another claim); `ReviewerBanner` for active reviewers (Mark ready / Continue editing / Release); `editing-mode.ts::syncEditingMode(user, task)` with new ViewReasons `'released'` + `'marked_ready'` + `'not-claimable'` and matching popover copy.
+- **Save migration (Drop C):** `require_edit_lock(reciter_param, admin_bypass=True)` chained with `require_same_origin` + `_gate_local_writes` on `seg_save`/`seg_undo_batch`/`seg_undo_ops` + `POST /api/seg/history-peaks/<reciter>`; `services/save.py::save_seg_data` + `services/undo.py::undo_batch/undo_ops/_append_revert_record` all take kw-only `actor: Actor`; every new history batch + revert record carries `actor: {hf_user_id, login_at_time, role}`; `inspector/utils/io.py::{file_sha256,backup_file}` deleted (zero remaining callers); `routes/audio_proxy.py` POST/DELETE now require signed-in + Origin; **History panel undo + Save button hidden when `$editingMode.kind === 'view'`** (in addition to the `editGate` popover surface).
+- **Access admin (Drop D):** `routes/access_admin.py` with `POST /api/admin/access/{grant,revoke,update}`; role-gated (owner-only for OWNER role, maintainer+ for MAINTAINER); reason ≥10 chars; **revoke side effect:** force-releases every UNDER_REVIEW claim held by the revoked user via `state.transition(slug, "reciter.released", actor=revoking_actor)`, surfaced in the response as `auto_released_slugs`.
+- **`signed_in_client` test fixture:** Phase 3's load-bearing addition to `tests/conftest.py` — mints a session cookie + seeds `access.ACCESS_STORE` with the requested role; pairs with `tmp_reciter_dir.install(slug, fixture, under_review_for=<hf_user_id>)` and the new `tmp_reciter_dir.seed_under_review(slug, hf_user_id)` helper.
+
+### Test outcomes
+
+| Surface | Result |
+|---|---|
+| Backend pytest | **191 passed**, 14 failed (all D19 — pre-existing subprocess/scripts.lib failures unchanged from Phase 1), 4 errors (D19 audio_meta) |
+| Frontend vitest | **403 passed**, 15 todo |
+| Frontend tsc | clean |
+| Frontend `vite build` | clean (393 KB JS gzipped 123 KB, 40 KB CSS gzipped 8 KB) |
+| App boot smoke | `/api/auth/{login,callback,logout}`, `/api/me`, `/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready`, `/api/reciter-task/<slug>`, `/api/admin/access/{grant,revoke,update}` all registered; `/healthz` reports `oauth_configured` |
+
+New test files: `test_route_auth.py` (8 cases), `test_route_claims.py` (17 cases), `test_route_access_admin.py` (13 cases), `test_route_history_peaks_lock.py` (5 cases), `editing-mode.test.ts` (13 cases on `syncEditingMode`).
+
+Migrated test files (`signed_in_client` + Origin header + `under_review_for=...`): `test_route_save.py`, `test_route_undo.py`, `test_route_history.py`, `test_patch_undo.py`, `test_apply_command.py`, `test_auto_suppress.py`, `test_command_per_op.py`, `test_detailed_schema.py`, `test_save_clears_ignores.py`, `test_segments_json.py`, `test_uid_backfill.py`.
+
+### Drift from contract (accepted)
+
+- **`/api/reciter-task/<slug>` response shape.** Plan said "row + predicates"; landed as `{row, predicates}` (two top-level keys). Cleaner client-side parse than flattening.
+- **`audio_proxy.py` cache-utility auth.** Plan said "require_same_origin + signed-in". Landed with both, inline check instead of a `require_signed_in` decorator — kept consistent with the route's existing one-off style.
+- **`save-chart` route deletion.** Plan listed it for deletion; turns out it was already removed in Phase 1 cleanup.
+- **`validate_edit_history` inline integration in `save.py`.** Plan deferred this. Confirmed not in the save path.
+
+### Carried forward to follow-up phases / deferred
+
+- **Browser smoke against dev Space.** Code is staged on the local worktree; `.github/workflows/inspector-deploy.yml` fires on `dev` push and rebuilds the Space. Pending: push, verify `/healthz` shows `oauth_configured: true`, sign in as `hetchyy`, claim a `_test_*` reciter, save end-to-end, verify audit log carries `actor`.
+- **D19 deferred subprocess tests.** Unchanged from Phase 1 outcomes — still fail with `ModuleNotFoundError: scripts.lib` because subprocess Python doesn't add the repo root to `sys.path`. Not in Phase 3 scope.
+- **D29 maintainer-edit-on-released/completed.** Documented as a new deferred item. `_h_published_edited` state-machine handler exists; no route surface yet. Phase 7 admin dashboard wires it.
+- **Phase 4 admin overrides.** Four endpoints (force-release, reassign, force-set-state, send-back) + AdminReasonModal UX + validator-library splits for `validate_audio` / `validate_timestamps`.
+- **Authlib OAuth callback exchange in tests.** The callback is integration-shaped (network round-trip to HF). Test coverage of that exact flow is deferred to manual browser smoke; unit tests cover the session encode/decode + identity surface.
+- **SSE for cross-tab state sync (D8).** 30s polling is sufficient at current scale.
+
+### Risks observed during local testing
+
+- **Backend log noise.** `_hydrate_bucket_stores()` warns "state file missing on bucket" during tests that don't seed it. Harmless (degrades to empty in-memory model) but verbose in pytest output. Future cleanup could quiet this with a TESTING env check.
+- **Test fixture coupling.** `signed_in_client` and `tmp_reciter_dir` both mutate `access` / `state` module-level singletons. The teardown order matters; if a test mutates after the fixture's setup it must work *with* the seeded state, not replace it. Documented inline in the access-admin tests.
+- **`role` cookie staleness.** Resolved by design: `current_user()` always re-resolves role. Verified by `test_me_role_reflects_live_access_revoke`.
+
