@@ -30,11 +30,10 @@ from scripts.lib.schemas import (
     Delivery,
     ReciterCatalog,
     ReciterEntry,
-    Role,
     Source,
 )
 
-from . import audit, storage_paths
+from . import audit, permissions, storage_paths
 from .hf_bucket import StorageNotFound, get_backend
 
 logger = logging.getLogger(__name__)
@@ -103,7 +102,7 @@ def find_reciter(reciter_id: str) -> ReciterEntry | None:
 
 
 def _require_maintainer(actor: Actor) -> None:
-    if Role(actor.role) not in (Role.MAINTAINER, Role.OWNER):
+    if not permissions.is_maintainer(actor):
         raise NotAuthorizedForCatalog(
             f"actor role {actor.role!r} cannot mutate catalog; "
             "requires MAINTAINER or OWNER"

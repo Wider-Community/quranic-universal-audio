@@ -23,6 +23,8 @@ from flask import Blueprint, jsonify, request
 
 from scripts.lib.schemas import Actor, ReciterState, Role
 
+from services import permissions
+
 from routes._admin_helpers import (
     MIN_REASON_CHARS as _MIN_REASON_CHARS,
     actor_for as _actor_for,
@@ -184,11 +186,15 @@ def access_update():
 
     # Reason is optional for update (login refresh doesn't need a paper
     # trail beyond the actor) but if it's set, enforce min length.
-    reason = (body.get("reason") or "").strip() or None
-    if reason is not None and len(reason) < _MIN_REASON_CHARS:
-        return jsonify({
-            "error": f"reason must be at least {_MIN_REASON_CHARS} characters",
-        }), 400
+    raw_reason = body.get("reason")
+    if raw_reason is not None and (raw_reason or "").strip():
+        reason = permissions.normalize_reason(raw_reason)
+        if reason is None:
+            return jsonify({
+                "error": f"reason must be at least {_MIN_REASON_CHARS} characters",
+            }), 400
+    else:
+        reason = None
 
     try:
         member = access_service.update(

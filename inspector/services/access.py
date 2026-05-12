@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from scripts.lib.schemas import Actor, Member, Role, RolesFile
 
-from . import audit, storage_paths
+from . import audit, permissions, storage_paths
 from .hf_bucket import StorageNotFound, get_backend
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ def _persist(new_store: RolesFile) -> None:
 
 
 def _require_role(actor: Actor, *allowed: Role) -> None:
-    if Role(actor.role) not in allowed:
+    if not permissions.has_role(actor, *allowed):
         raise NotAuthorized(
             f"actor role {actor.role!r} cannot perform this action; "
             f"requires {[r.value for r in allowed]}"
@@ -172,7 +172,7 @@ def revoke(
         if target is None:
             raise MemberNotFound(hf_user_id)
         # Maintainers cannot revoke owners.
-        if Role(target.role) == Role.OWNER and Role(actor.role) != Role.OWNER:
+        if permissions.is_owner(target) and not permissions.is_owner(actor):
             raise NotAuthorized("only OWNER can revoke an OWNER member")
 
         now = datetime.now(timezone.utc)
@@ -217,7 +217,7 @@ def update(
         target = _store.find(hf_user_id)
         if target is None:
             raise MemberNotFound(hf_user_id)
-        if Role(target.role) == Role.OWNER and Role(actor.role) != Role.OWNER:
+        if permissions.is_owner(target) and not permissions.is_owner(actor):
             raise NotAuthorized("only OWNER can edit an OWNER member")
 
         new_store = _store.model_copy(deep=True)

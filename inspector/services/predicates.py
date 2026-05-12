@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from scripts.lib.schemas import ReciterState, Role, Visibility
+from scripts.lib.schemas import ReciterState, Visibility
+
+from . import permissions
 
 if TYPE_CHECKING:  # pragma: no cover
     from scripts.lib.schemas import ReciterRow
@@ -21,14 +23,10 @@ if TYPE_CHECKING:  # pragma: no cover
     from .auth import User
 
 
-_ADMIN_ROLES = {Role.MAINTAINER, Role.OWNER}
-
-
 def _is_admin(user) -> bool:
-    if user is None:
+    if user is None or getattr(user, "role", None) is None:
         return False
-    role = user.role
-    return Role(role) in _ADMIN_ROLES if role is not None else False
+    return permissions.is_maintainer(user)
 
 
 def can_claim(row, user, *, has_other_active_claim: bool = False) -> bool:
@@ -50,7 +48,7 @@ def can_edit(row, user) -> bool:
         row.state == ReciterState.UNDER_REVIEW
         and not row.marked_ready
         and row.visibility == Visibility.PUBLIC
-        and row.assignee_hf_id == user.hf_user_id
+        and permissions.is_claim_holder(user, row)
     )
 
 
@@ -79,7 +77,7 @@ def can_unmark_ready(row, user) -> bool:
     return (
         row.state == ReciterState.UNDER_REVIEW
         and row.marked_ready
-        and row.assignee_hf_id == user.hf_user_id
+        and permissions.is_claim_holder(user, row)
     )
 
 
@@ -89,7 +87,7 @@ def can_release(row, user) -> bool:
         return False
     return (
         row.state == ReciterState.UNDER_REVIEW
-        and row.assignee_hf_id == user.hf_user_id
+        and permissions.is_claim_holder(user, row)
     )
 
 

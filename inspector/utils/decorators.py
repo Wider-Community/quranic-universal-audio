@@ -15,9 +15,10 @@ from urllib.parse import urlparse
 
 from flask import abort, g, request
 
-from scripts.lib.schemas import ReciterState, Role, Visibility
+from scripts.lib.schemas import ReciterState, Visibility
 
 from services import auth as auth_service
+from services import permissions
 from services import state as state_service
 
 
@@ -55,9 +56,6 @@ def require_same_origin(fn):
     return wrapper
 
 
-_ADMIN_ROLES = {Role.MAINTAINER, Role.OWNER}
-
-
 def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = False):
     """Gate a route on (signed in + state.under_review + not marked_ready
     + visibility.public + assignee match).
@@ -89,8 +87,8 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
                 abort(403, description="reciter is marked ready for publish and frozen")
             if row.visibility != Visibility.PUBLIC:
                 abort(403, description="reciter visibility blocks edits")
-            is_assignee = row.assignee_hf_id == user.hf_user_id
-            is_admin = admin_bypass and Role(user.role) in _ADMIN_ROLES
+            is_assignee = permissions.is_claim_holder(user, row)
+            is_admin = admin_bypass and permissions.is_maintainer(user)
             if not (is_assignee or is_admin):
                 abort(403, description="reciter is not editable by this user")
             g.current_user = user

@@ -31,11 +31,10 @@ from scripts.lib.schemas import (
     ReciterState,
     ReciterStateFile,
     RevisionContext,
-    Role,
     Visibility,
 )
 
-from . import audit, storage_paths
+from . import audit, permissions, storage_paths
 from .hf_bucket import StorageNotFound, get_backend
 
 logger = logging.getLogger(__name__)
@@ -248,41 +247,53 @@ def all_rows() -> list[ReciterRow]:
 
 
 def _is_maintainer(actor: Actor) -> bool:
-    return Role(actor.role) in (Role.MAINTAINER, Role.OWNER)
+    return permissions.is_maintainer(actor)
 
 
 def _is_owner(actor: Actor) -> bool:
-    return Role(actor.role) == Role.OWNER
+    return permissions.is_owner(actor)
 
 
 def _require_maintainer(actor: Actor) -> None:
-    if not _is_maintainer(actor):
+    if not permissions.is_maintainer(actor):
         raise NotAuthorizedForTransition(
             f"actor role {actor.role!r} requires MAINTAINER or OWNER"
         )
 
 
 def _require_contributor_or_higher(actor: Actor) -> None:
-    if Role(actor.role) not in (Role.CONTRIBUTOR, Role.MAINTAINER, Role.OWNER):
+    if not permissions.is_contributor_or_higher(actor):
         raise NotAuthorizedForTransition(
             f"actor role {actor.role!r} is not a recognized role"
         )
 
 
 def _require_claim_holder_or_maintainer(actor: Actor, row: ReciterRow) -> None:
-    if _is_maintainer(actor):
-        return
-    if row.assignee_hf_id != actor.hf_user_id:
+    if not permissions.is_claim_holder_or_maintainer(actor, row):
         raise NotAuthorizedForTransition(
             "only the current assignee or a maintainer may release this reciter"
         )
 
 
 def _require_claim_holder(actor: Actor, row: ReciterRow) -> None:
-    if row.assignee_hf_id != actor.hf_user_id:
+    if not permissions.is_claim_holder(actor, row):
         raise NotAuthorizedForTransition(
             "only the current assignee may perform this action"
         )
+
+
+def _require_reason(reason: str | None, event: str) -> str:
+    """Coerce ``reason`` to a non-empty trimmed string or raise.
+
+    Used by handlers whose audit-log entry must carry a human-readable
+    justification (force-release, reassign, force-set, send-back, etc.).
+    """
+    norm = permissions.normalize_reason(reason)
+    if norm is None:
+        raise InvalidTransition(
+            f"{event} requires reason ≥ {permissions.MIN_REASON_CHARS} chars"
+        )
+    return norm
 
 
 # ----------------------------------------------------------------------
@@ -478,8 +489,7 @@ def _h_merge_rejected(slug, before, actor, payload, reason):
             "merge_rejected requires UNDER_REVIEW + marked_ready=true"
         )
     _require_maintainer(actor)
-    if not reason or len(reason) < 10:
-        raise InvalidTransition("merge_rejected requires reason ≥ 10 chars")
+    _require_reason(reason, "merge_rejected")
     return _replace(before, marked_ready=False)
 
 
@@ -544,8 +554,7 @@ def _h_removed_from_dataset(slug, before, actor, payload, reason):
             f"removed_from_dataset requires COMPLETED, got {before.state.value}"
         )
     _require_maintainer(actor)
-    if not reason or len(reason) < 10:
-        raise InvalidTransition("removed_from_dataset requires reason ≥ 10 chars")
+    _require_reason(reason, "removed_from_dataset")
     return _replace(before, state=ReciterState.RELEASED, state_since=_now())
 
 
@@ -557,8 +566,7 @@ def _h_unpublished(slug, before, actor, payload, reason):
             f"unpublished requires RELEASED or COMPLETED, got {before.state.value}"
         )
     _require_maintainer(actor)
-    if not reason or len(reason) < 10:
-        raise InvalidTransition("unpublished requires reason ≥ 10 chars")
+    _require_reason(reason, "unpublished")
     return _replace(
         before,
         state=ReciterState.AWAITING_REVIEW,
@@ -622,8 +630,7 @@ def _h_discarded(slug, before, actor, payload, reason):
     _require_maintainer(actor)
     if before.visibility == Visibility.DISCARDED:
         raise InvalidTransition("already discarded")
-    if not reason or len(reason) < 10:
-        raise InvalidTransition("discarded requires reason ≥ 10 chars")
+    reason = _require_reason(reason, "discarded")
     return _replace(before, visibility=Visibility.DISCARDED, visibility_reason=reason)
 
 
@@ -644,8 +651,7 @@ def _h_force_released(slug, before, actor, payload, reason):
             f"claim.force_released requires UNDER_REVIEW, got {before.state.value}"
         )
     _require_maintainer(actor)
-    if not reason or len(reason) < 10:
-        raise InvalidTransition("claim.force_released requires reason ≥ 10 chars")
+    _require_reason(reason, "claim.force_released")
     return _replace(
         before,
         state=ReciterState.AWAITING_REVIEW,
@@ -672,8 +678,7 @@ def _h_reassigned(slug, before, actor, payload, reason):
             "claim.reassigned requires payload "
             "{new_assignee_hf_id, new_assignee_login}"
         )
-    if not reason or len(reason) < 10:
-        raise InvalidTransition("claim.reassigned requires reason ≥ 10 chars")
+    _require_reason(reason, "claim.reassigned")
     return _replace(
         before,
         assignee_hf_id=new_hf,
@@ -695,8 +700,7 @@ def _h_force_set_state(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"force_set_state pair {pair} not in allowed set"
         )
-    if not reason or len(reason) < 10:
-        raise InvalidTransition("force_set_state requires reason ≥ 10 chars")
+    _require_reason(reason, "force_set_state")
     return _replace(
         before,
         state=ReciterState(target),
