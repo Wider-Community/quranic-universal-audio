@@ -6,6 +6,8 @@
 import { get as storeGet } from 'svelte/store';
 
 import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
+import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
+import { pushToast } from '../../../../lib/stores/toast';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../../../../lib/types/api';
 import type { EditOp, Segment } from '../../../../lib/types/domain';
 import {
@@ -205,18 +207,68 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             pendingSaves.push({ chapter: ch, payload, ops: chOps });
         }
 
-        // Execute network requests for captured snapshots
+        // Execute network requests for captured snapshots.
+        // We use raw `fetch` so non-2xx responses surface a visible toast —
+        // `fetchJson` swallows the HTTP status and the UI was failing silently
+        // (Saving... stuck because dirty state never cleared on a 403/500).
         for (const { chapter: ch, payload, ops } of pendingSaves) {
-            const result = await fetchJson<SegSaveResponse & { error?: string }>(
-                `/api/seg/save/${reciter}/${ch}`,
-                {
+            let res: Response;
+            try {
+                res = await fetch(`/api/seg/save/${reciter}/${ch}`, {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
-                },
-            );
+                });
+            } catch (e) {
+                console.error(`Save network error (ch ${ch}):`, e);
+                pushToast({
+                    kind: 'error',
+                    text: `Save failed (network). Check your connection and try again.`,
+                    ttl: 6000,
+                });
+                allOk = false;
+                break;
+            }
+            if (!res.ok) {
+                let errMsg = `Save failed (${res.status})`;
+                try {
+                    const body = await res.json() as { error?: string };
+                    if (body?.error) errMsg = `Save failed: ${body.error}`;
+                } catch { /* non-JSON body */ }
+                console.error(`Save error (ch ${ch}, ${res.status}):`, errMsg);
+                if (res.status === 401) {
+                    pushToast({
+                        kind: 'info',
+                        text: 'Sign in with Hugging Face to save changes.',
+                        ttl: 5000,
+                    });
+                    openSignInModal();
+                } else {
+                    pushToast({ kind: 'error', text: errMsg, ttl: 6000 });
+                }
+                allOk = false;
+                break;
+            }
+            let result: SegSaveResponse & { error?: string };
+            try {
+                result = await res.json() as SegSaveResponse & { error?: string };
+            } catch {
+                pushToast({
+                    kind: 'error',
+                    text: 'Save returned a malformed response.',
+                    ttl: 6000,
+                });
+                allOk = false;
+                break;
+            }
             if (!result.ok) {
                 console.error(`Save error (ch ${ch}):`, result.error);
+                pushToast({
+                    kind: 'error',
+                    text: result.error || 'Save failed (unknown error).',
+                    ttl: 6000,
+                });
                 allOk = false;
                 break;
             }

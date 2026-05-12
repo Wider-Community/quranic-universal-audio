@@ -55,7 +55,7 @@
         if (hintMode) {
             pushToast({
                 kind: 'warn',
-                text: `Release ${$currentUser.active_claim} first to claim ${slug}.`,
+                text: `Unclaim ${$currentUser.active_claim} first to claim ${slug}.`,
                 ttl: 5000,
             });
             return;
@@ -86,7 +86,7 @@
         type="button"
         class="claim-btn claim-btn--hint"
         on:click={_onClick}
-        title="You already hold another active claim. Release it first."
+        title="You already hold another active claim. Unclaim it first."
     >
         Already claiming another reciter
     </button>

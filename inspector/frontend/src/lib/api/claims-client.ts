@@ -5,7 +5,7 @@
  *   - 200 → resolves with the new row.
  *   - 401 → toast "Sign in to claim" + open SignInModal; rejects.
  *   - 403 → toast with the error body; rejects.
- *   - 409 → toast "Release {other} first" (or generic conflict); rejects.
+ *   - 409 → toast "Unclaim {other} first" (or generic conflict); rejects.
  *   - other → generic error toast; rejects.
  *
  * Callers can ``await`` and react on success; failure cases have already
@@ -50,7 +50,7 @@ async function _post(route: RouteName, slug: string): Promise<ReciterRow> {
     } else if (res.status === 409 && body.existing_claim) {
         pushToast({
             kind: 'warn',
-            text: `Release ${body.existing_claim} first to claim ${slug}.`,
+            text: `Unclaim ${body.existing_claim} first to claim ${slug}.`,
             ttl: 6000,
         });
     } else {

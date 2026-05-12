@@ -2,10 +2,13 @@
     Reviewer banner. Surfaces when the current user is the assignee of an
     under_review row. Two states:
 
-      - !marked_ready → "You're reviewing X. [Mark ready] [Release]"
-      - marked_ready  → "Awaiting publish. [Continue editing] [Release]"
+      - !marked_ready → "You're reviewing X. [Mark ready] [Unclaim]"
+      - marked_ready  → "Awaiting publish. [Continue editing] [Unclaim]"
 
     Anonymous, non-assignee, or non-under_review states render nothing.
+
+    "Unclaim" is the user-facing label; the underlying API event remains
+    `reciter.released` for historical continuity with the state machine.
 -->
 <script lang="ts">
     import { markReady, release, unmarkReady } from '../api/claims-client';
@@ -64,7 +67,7 @@
                     disabled={busy === 'release'}
                     on:click={() => _do('release', row.slug)}
                 >
-                    Release
+                    Unclaim
                 </button>
             </span>
         {:else}
@@ -86,7 +89,7 @@
                     disabled={busy === 'release'}
                     on:click={() => _do('release', row.slug)}
                 >
-                    Release
+                    Unclaim
                 </button>
             </span>
         {/if}
