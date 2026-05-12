@@ -253,25 +253,25 @@ def _missing_words_for_entries(entries: list[dict], word_counts: dict[tuple[int,
 
 
 def test_missing_words_includes_forward_jump_even_when_words_are_covered_later():
-    """A local forward jump is missing_words even when a later backtrack covers the words."""
+    """A forward continuation after backtrack must not skip words."""
     entries = [{
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:4", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:8-1:1:10", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:10", "matched_text": "x", "confidence": 1.0},
             {"matched_ref": "1:1:5-1:1:7", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:11-1:1:15", "matched_text": "x", "confidence": 1.0},
         ],
     }]
 
-    missing = _missing_words_for_entries(entries, {(1, 1): 10})
+    missing = _missing_words_for_entries(entries, {(1, 1): 15})
 
     assert missing == [{
         "verse_key": "1:1",
         "chapter": 1,
         "segment_uid": None,
-        "msg": "missing words in sequence: [5, 6, 7]",
-        "missing_words": [5, 6, 7],
-        "seg_indices": [0, 1],
+        "msg": "missing words in sequence: [8, 9, 10]",
+        "missing_words": [8, 9, 10],
+        "seg_indices": [1, 2],
         "sequence_gap": True,
     }]
 
@@ -325,3 +325,50 @@ def test_missing_words_dedupes_coverage_and_sequence_gap_for_same_range():
     assert missing[0]["msg"] == "missing words: [2, 3, 4]"
     assert missing[0]["missing_words"] == [2, 3, 4]
     assert "sequence_gap" not in missing[0]
+
+
+def test_missing_words_splits_cross_verse_partial_forward_jump():
+    """Cross-verse order gaps are split into per-verse missing-word cards."""
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:2", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:3:3-1:3:4", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:3-1:1:4", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:2:1-1:2:3", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:3:1-1:3:2", "matched_text": "x", "confidence": 1.0},
+        ],
+    }]
+
+    missing = _missing_words_for_entries(entries, {(1, 1): 4, (1, 2): 3, (1, 3): 4})
+
+    sequence = [item for item in missing if item.get("sequence_gap")]
+    assert sequence == [
+        {
+            "verse_key": "1:1",
+            "chapter": 1,
+            "segment_uid": None,
+            "msg": "missing words in sequence: [3, 4]",
+            "missing_words": [3, 4],
+            "seg_indices": [0, 1],
+            "sequence_gap": True,
+        },
+        {
+            "verse_key": "1:2",
+            "chapter": 1,
+            "segment_uid": None,
+            "msg": "missing words in sequence: [1, 2, 3]",
+            "missing_words": [1, 2, 3],
+            "seg_indices": [0, 1],
+            "sequence_gap": True,
+        },
+        {
+            "verse_key": "1:3",
+            "chapter": 1,
+            "segment_uid": None,
+            "msg": "missing words in sequence: [1, 2]",
+            "missing_words": [1, 2],
+            "seg_indices": [0, 1],
+            "sequence_gap": True,
+        },
+    ]

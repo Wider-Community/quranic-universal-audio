@@ -120,8 +120,8 @@ def _build_detail_lists(
     for entry in entries:
         chapter = chapter_from_ref(entry["ref"])
         entry_ref = entry.get("ref", "")
-        frontier_by_surah: dict[int, int] = {}
-        frontier_seg_idx_by_surah: dict[int, int] = {}
+        prev_end_by_surah: dict[int, int] = {}
+        prev_seg_idx_by_surah: dict[int, int] = {}
         for seg in entry.get("segments", []):
             i = chapter_seg_idx.get(chapter, 0)
             chapter_seg_idx[chapter] = i + 1
@@ -202,12 +202,12 @@ def _build_detail_lists(
             start_ord = _word_ord(surah, s_ayah, s_word, word_counts)
             end_ord = _word_ord(surah, e_ayah, e_word, word_counts)
             if start_ord is not None and end_ord is not None:
-                frontier = frontier_by_surah.get(surah)
-                if frontier is not None and start_ord > frontier + 1:
-                    prev_idx = frontier_seg_idx_by_surah.get(surah)
+                prev_end = prev_end_by_surah.get(surah)
+                if prev_end is not None and start_ord > prev_end + 1:
+                    prev_idx = prev_seg_idx_by_surah.get(surah)
                     indices = [idx for idx in (prev_idx, i) if idx is not None]
                     for ayah, missing in _words_by_verse_for_ord_gap(
-                        surah, frontier + 1, start_ord - 1, word_counts
+                        surah, prev_end + 1, start_ord - 1, word_counts
                     ):
                         sequence_gaps.append({
                             "verse_key": f"{surah}:{ayah}",
@@ -215,9 +215,8 @@ def _build_detail_lists(
                             "missing_words": missing,
                             "seg_indices": indices,
                         })
-                if end_ord >= frontier_by_surah.get(surah, 0):
-                    frontier_by_surah[surah] = end_ord
-                    frontier_seg_idx_by_surah[surah] = i
+                prev_end_by_surah[surah] = end_ord
+                prev_seg_idx_by_surah[surah] = i
 
             flags = classify_flags(
                 seg, entry_ref, is_by_ayah,
