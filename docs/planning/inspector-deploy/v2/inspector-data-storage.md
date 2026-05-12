@@ -515,7 +515,7 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 **In scope:**
 - HF OAuth via `hf_oauth: true` Space frontmatter.
 - `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`.
-- Self-contained signed-cookie session (Flask `itsdangerous`) carrying `{login, hf_user_id, role, expires_at, csrf}`. No server-side session store.
+- Self-contained signed-cookie session (Flask `itsdangerous`) carrying `{login, hf_user_id, iat}`. No `role` (resolved fresh per request via `access.resolve_role`), no `csrf` (Origin/Referer check + SameSite=Lax). No server-side session store.
 - `/api/me` endpoint.
 - `/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` write directly to bucket state file (synchronous, no dispatch).
 - Per-slug `threading.Lock` (single lock per slug; no `(slug, login)` sub-mutex).

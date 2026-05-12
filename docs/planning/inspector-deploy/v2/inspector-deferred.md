@@ -464,6 +464,20 @@ After both syncs land, re-run `python -m scripts.inspector_v2_seed.migrate_bucke
 
 ---
 
+## D29 — Maintainer edit on `released`/`completed` (`published.edited` route surface)
+
+**What.** State machine handler `_h_published_edited` already exists in `inspector/services/state.py` for the `published.edited` event — fires when an admin edits a reciter that has moved past `under_review`. Phase 3's `require_edit_lock` decorator rejects every save where `row.state != UNDER_REVIEW`, which means there is **no route surface** for maintainers to perform this edit. The handler is reachable only via direct service-layer call.
+
+**Why deferred.** Phase 3 ships the contributor flow + maintainer-on-active-claim override. Adding a separate `/api/admin/published/edit/<slug>/<chapter>` route surface needs UI to drive it (a "Re-open for revision" affordance in the admin dashboard, plus a corresponding banner), which is squarely Phase 7 admin-dashboard work. Trying to wire it now means landing a route with no caller and no UI affordance — pure dead weight until Phase 7.
+
+**Trigger to revisit.** Phase 7 (admin dashboard). The dashboard's "completed reciters" panel grows a "Re-open for revision" button → POST `/api/admin/state/unlock-for-revision/<slug>` (transitions via `admin.unlocked_for_revision`) → opens an admin-only edit session → POST `/api/admin/published/edit/<slug>/<chapter>` for save → "Re-publish" closes the loop. State machine already supports the lifecycle (`revision_in_progress` sub-struct on the row).
+
+**Affected if never done.** Maintainers cannot edit completed reciters via the UI. Manual workaround: edit the bucket file directly via `huggingface_hub`, or `force_set_state` the row back to `under_review` (allowed pair in Phase 4), edit, mark-ready, publish.
+
+**Cross-refs.** `inspector/services/state.py::_h_published_edited`, `phases/03-auth-and-claims.md` (Out of scope), `phases/07-admin-dashboard.md`.
+
+---
+
 ## How to add an item to this list
 
 1. Add a new `## D<N> — <title>` section using the template (what / why deferred / trigger to revisit / affected if never done / cross-refs).

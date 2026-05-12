@@ -140,7 +140,7 @@ short_description: Inspect & edit Quran recitation alignment results
 
 # HF OAuth — auto-creates the OAuth client and injects credentials as env vars
 hf_oauth: true
-hf_oauth_expiration_minutes: 480
+hf_oauth_expiration_minutes: 10080  # 1 week
 # hf_oauth_authorized_org: hetchyy   # uncomment if restricting login to org members
 ---
 ```
@@ -239,7 +239,7 @@ Inspector routes:
 - `POST /api/auth/logout` — clears the session cookie. **Does not** revoke the HF grant (HF has no revocation endpoint; users revoke at https://huggingface.co/settings/connected-applications)
 - `GET /api/me` — returns the parsed session payload
 
-**Session backing.** The signed cookie IS the session — there is no server-side session record (per D11). With `-w 1` this matters only for restart resilience: the cookie keeps working across container rebuilds. Cookie max-age = `hf_oauth_expiration_minutes` (default 480). On expiry, force re-auth (no refresh-token storage in Inspector — smaller blast radius if compromised).
+**Session backing.** The signed cookie IS the session — there is no server-side session record (per D11). With `-w 1` this matters only for restart resilience: the cookie keeps working across container rebuilds. Cookie max-age = `hf_oauth_expiration_minutes` (default 10080 = 1 week). On expiry, force re-auth (no refresh-token storage in Inspector — smaller blast radius if compromised).
 
 **Authlib's OAuth state store** (used between authorize redirect and callback) does need short-lived server-side persistence for the CSRF state value — Flask-Session with a tmpfs filesystem backend at `/tmp/inspector-flask-sessions/`, ~30 s lifetime, survives within one container life which is enough.
 

@@ -160,13 +160,13 @@ The deploy is **blocked** on two changes before exposing to the public on free C
 
 ### HF OAuth (Sign in with Hugging Face)
 
-Auto-managed via `hf_oauth: true` in the Space `README.md` frontmatter. Adding it injects `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OPENID_PROVIDER_URL` as runtime env vars; no separate OAuth client registration. Default scopes (`openid profile`) cover user identity. Token lifetime configurable via `hf_oauth_expiration_minutes` (default 8 h, max 30 days).
+Auto-managed via `hf_oauth: true` in the Space `README.md` frontmatter. Adding it injects `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OPENID_PROVIDER_URL` as runtime env vars; no separate OAuth client registration. Default scopes (`openid profile`) cover user identity. Token lifetime configurable via `hf_oauth_expiration_minutes` (we use 1 week; HF max 30 days).
 
 Frontmatter:
 
 ```yaml
 hf_oauth: true
-hf_oauth_expiration_minutes: 480
+hf_oauth_expiration_minutes: 10080  # 1 week
 # scopes default to openid profile; explicit scope add not needed for our flow
 ```
 
@@ -178,7 +178,7 @@ No login required. All three tabs render in view-only mode. The "Claim" button i
 
 ### Logged-in contributor
 
-HF OAuth login establishes a **self-contained signed-cookie session** carrying `{login, hf_user_id, role, expires_at, csrf}` — no server-side session table. (Authlib's OAuth-state store between authorize and callback uses Flask-Session on tmpfs; cleared on container restart but only needed for ~30 s during the OAuth round-trip.) After sign-in, identity comes from the verified cookie. The user's HF token is not stored or used by the backend — bucket writes use the Space's token. Cookie max-age = `hf_oauth_expiration_minutes` (default 8 h); on expiry, force re-auth (no refresh-token storage in Inspector).
+HF OAuth login establishes a **self-contained signed-cookie session** carrying `{login, hf_user_id, iat}` — no `role` (resolved fresh on every request via `access.resolve_role`), no `csrf` (defense is `SameSite=Lax` + Origin/Referer check on mutating routes). No server-side session table. (Authlib's OAuth-state store between authorize and callback uses Flask-Session on tmpfs; cleared on container restart but only needed for ~30 s during the OAuth round-trip.) After sign-in, identity comes from the verified cookie. The user's HF token is not stored or used by the backend — bucket writes use the Space's token. Cookie max-age = `hf_oauth_expiration_minutes` (we use 10080 = 1 week); on expiry, force re-auth (no refresh-token storage in Inspector).
 
 `hf_user_id` is sourced from the OIDC `sub` field returned by `https://huggingface.co/oauth/userinfo` — stable across HF username renames. The `login` field can change; lock-ownership checks compare `hf_user_id`, not `login`. See [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md) §3 for the full OAuth flow.
 
@@ -250,7 +250,7 @@ All mutating endpoints are gated by the API lock (§5).
 
 | Threat | Mitigation |
 |---|---|
-| Session theft | HttpOnly + Secure + SameSite=Lax signed cookie. The cookie IS the session — `{login, hf_user_id, role, expires_at, csrf}` signed via Flask `itsdangerous`. No server-side session record. Logout simply clears the cookie. |
+| Session theft | HttpOnly + Secure + SameSite=Lax signed cookie. The cookie IS the session — `{login, hf_user_id, iat}` (role resolved fresh; csrf via Origin check) signed via Flask `itsdangerous`. No server-side session record. Logout simply clears the cookie. |
 | CSRF on mutating endpoints | Same-site cookie + origin/referer check + per-session `csrf` token in the cookie. OAuth `state` parameter prevents auth CSRF (stored in a short-lived Flask-Session tmpfs entry between authorize and callback only). |
 | Malicious reviewer destructive edits | Edit lock enforces one writer per reciter, keyed on `assignee_hf_id`. Append-only `audit/<YYYY>-<MM>.jsonl` per-state and `edit_history.jsonl` per-edit. State writes are server-side only; client cannot forge transitions. |
 | `INSPECTOR_HF_TOKEN` leak | Stored as Space secret (encrypted at rest). Rotation = generate new HF token, update Space secret, restart. ~5 min operation. Revokes the old token. |
@@ -458,7 +458,7 @@ Detailed per-phase scope, acceptance criteria, and risks live in [`inspector-dat
 
 4. **Phase 3 — Auth + claim flow**
    - HF OAuth via `hf_oauth: true` frontmatter.
-   - Self-contained signed-cookie session (Flask `itsdangerous`) carrying `{login, hf_user_id, role, expires_at, csrf}`. No server-side session record. Authlib's OAuth-state store between authorize and callback uses Flask-Session on tmpfs (~30 s lifetime).
+   - Self-contained signed-cookie session (Flask `itsdangerous`) carrying `{login, hf_user_id, iat}` (role resolved fresh; csrf via Origin check). No server-side session record. Authlib's OAuth-state store between authorize and callback uses Flask-Session on tmpfs (~30 s lifetime).
    - `/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` write directly to the bucket state file.
    - Per-slug `threading.Lock` (single lock per slug).
    - One-claim-per-user enforcement (maintainer/owner bypass with audit).
