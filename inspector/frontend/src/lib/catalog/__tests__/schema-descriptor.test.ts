@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSchemaDescriptor } from '../schema-descriptor';
 import type { PublicReciter } from '../../types/public-state';
+import { buildSchemaDescriptor } from '../schema-descriptor';
 
 function reciter(overrides: Partial<PublicReciter> = {}): PublicReciter {
     return {

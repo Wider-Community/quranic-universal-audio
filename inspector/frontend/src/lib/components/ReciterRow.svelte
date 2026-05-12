@@ -10,10 +10,10 @@
      */
     import { createEventDispatcher } from 'svelte';
 
+    import type { PublicDelivery, PublicReciter } from '../types/public-state';
     import CoveragePill from './CoveragePill.svelte';
     import DeliveriesTable from './DeliveriesTable.svelte';
     import StatePill from './StatePill.svelte';
-    import type { PublicDelivery, PublicReciter } from '../types/public-state';
 
     export let reciter: PublicReciter;
     export let mode: 'compact' | 'expanded' = 'compact';

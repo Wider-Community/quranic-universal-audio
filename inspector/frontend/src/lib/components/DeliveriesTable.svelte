@@ -10,6 +10,7 @@
      * Slug is internal — never rendered in the DOM.
      */
     import { createEventDispatcher } from 'svelte';
+
     import type { PublicDelivery } from '../types/public-state';
 
     export let deliveries: PublicDelivery[];
