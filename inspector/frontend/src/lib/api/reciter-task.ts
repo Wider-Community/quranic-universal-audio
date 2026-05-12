@@ -29,6 +29,13 @@ export type Visibility = 'public' | 'discarded';
 
 export interface ReciterRow {
     slug: string;
+    /**
+     * Display name resolved server-side from the catalog
+     * (`services/catalog.display_name`). Null when the slug isn't yet in the
+     * catalog; user-facing surfaces fall back to slug only as a last resort.
+     * Never expose slug directly to users — see `inspector/CLAUDE.md`.
+     */
+    name: string | null;
     state: ReciterTaskState;
     state_since: string;
     assignee_hf_id: string | null;

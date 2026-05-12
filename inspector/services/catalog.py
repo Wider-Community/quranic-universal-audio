@@ -98,6 +98,22 @@ def find_reciter(reciter_id: str) -> ReciterEntry | None:
         return _store.find_reciter(reciter_id)
 
 
+def display_name(slug: str) -> str | None:
+    """Resolve a delivery slug to its reciter's ``name_en``.
+
+    Returns ``None`` when the slug is unknown to the catalog (e.g. before
+    catalog promotion, or after a delivery was removed). Callers must
+    tolerate the fallback gracefully — surfacing a raw slug to the user is
+    never acceptable in user-facing copy.
+    """
+    with _store_lock:
+        delivery = _store.find_delivery(slug)
+        if delivery is None:
+            return None
+        reciter = _store.find_reciter(delivery.reciter_id)
+        return reciter.name_en if reciter is not None else None
+
+
 # ---- Authorization ----
 
 

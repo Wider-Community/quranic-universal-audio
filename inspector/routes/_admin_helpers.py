@@ -15,6 +15,7 @@ from flask import jsonify
 from scripts.lib.schemas import Actor, Role
 
 from services import auth as auth_service
+from services import catalog as catalog_service
 from services import permissions
 
 
@@ -66,4 +67,12 @@ def validate_reason(body: dict, *, required: bool = True):
 
 
 def row_to_dict(row) -> dict:
-    return row.model_dump(mode="json")
+    """Serialize a ``ReciterRow`` for API responses.
+
+    Enriches with ``name`` resolved from the catalog (delivery slug → reciter
+    ``name_en``). ``name`` is ``None`` when the slug isn't yet in the catalog;
+    user-facing surfaces fall back to slug only as a last resort.
+    """
+    payload = row.model_dump(mode="json")
+    payload["name"] = catalog_service.display_name(row.slug)
+    return payload

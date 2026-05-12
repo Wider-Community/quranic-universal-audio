@@ -26,6 +26,7 @@ from routes._admin_helpers import (
 )
 
 from services import auth as auth_service
+from services import catalog as catalog_service
 from services import predicates as predicates_service
 from services import state as state_service
 
@@ -54,9 +55,13 @@ def claim(slug: str):
         None,
     )
     if other is not None:
+        other_name = catalog_service.display_name(other)
+        target_name = catalog_service.display_name(slug)
         return jsonify({
             "error": f"already holding a claim on {other}",
             "existing_claim": other,
+            "existing_claim_name": other_name,
+            "target_name": target_name,
         }), 409
 
     new_row = state_service.transition(

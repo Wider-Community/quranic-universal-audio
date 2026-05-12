@@ -72,7 +72,7 @@
             </span>
         {:else}
             <span class="reviewer-banner__text">
-                <strong>You're reviewing {row.slug}.</strong> When you're done, mark it ready for a maintainer to publish.
+                <strong>You're reviewing {row.name ?? row.slug}.</strong> When you're done, mark it ready for a maintainer to publish.
             </span>
             <span class="reviewer-banner__actions">
                 <button

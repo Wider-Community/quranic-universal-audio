@@ -30,6 +30,7 @@ function _task(overrides: {
     return {
         row: {
             slug: 'test_slug',
+            name: 'Test Reciter',
             state: overrides.state ?? 'awaiting_review',
             state_since: '2026-05-12T00:00:00Z',
             assignee_hf_id: overrides.assignee_hf_id ?? null,

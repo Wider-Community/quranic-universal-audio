@@ -22,6 +22,12 @@ type RouteName = 'claim' | 'release' | 'mark-ready' | 'unmark-ready';
 interface ErrorBody {
     error?: string;
     existing_claim?: string;
+    /** Display name for the existing claim's reciter; falls back to slug only
+     * as a last resort (e.g. catalog hasn't loaded server-side). Server-side
+     * source: `services/catalog.display_name`. */
+    existing_claim_name?: string | null;
+    /** Display name for the reciter the user was trying to claim. */
+    target_name?: string | null;
 }
 
 async function _post(route: RouteName, slug: string): Promise<ReciterRow> {
@@ -48,9 +54,11 @@ async function _post(route: RouteName, slug: string): Promise<ReciterRow> {
         pushToast({ kind: 'info', text: 'Sign in with Hugging Face to continue.' });
         openSignInModal();
     } else if (res.status === 409 && body.existing_claim) {
+        const existing = body.existing_claim_name || body.existing_claim;
+        const target = body.target_name || slug;
         pushToast({
             kind: 'warn',
-            text: `Unclaim ${body.existing_claim} first to claim ${slug}.`,
+            text: `Unclaim ${existing} first to claim ${target}.`,
             ttl: 6000,
         });
     } else {
