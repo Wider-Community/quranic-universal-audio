@@ -35,15 +35,15 @@
 
     import { fetchPublicReciters, fetchPublicStats } from '../../api/public-reciters';
     import {
-        buildSchemaDescriptor,
         type Axis,
+        buildSchemaDescriptor,
         type SchemaDescriptor,
     } from '../../catalog/schema-descriptor';
-    import StatePill from '../StatePill.svelte';
-    import Modal from '../Modal.svelte';
+    import type { BucketCounts } from '../../types/public-state';
     import { type FacetSpec, recomputeFacets } from '../../utils/facets';
     import { match } from '../../utils/fuzzy-match';
-    import type { BucketCounts } from '../../types/public-state';
+    import Modal from '../Modal.svelte';
+    import StatePill from '../StatePill.svelte';
     import DeliveryPicker from './DeliveryPicker.svelte';
     import PickerFilterRail from './PickerFilterRail.svelte';
     import PickerFooter from './PickerFooter.svelte';

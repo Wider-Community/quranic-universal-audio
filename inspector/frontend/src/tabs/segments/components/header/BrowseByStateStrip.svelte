@@ -5,6 +5,7 @@
      * bucket. Counts pull from /api/public/stats.
      */
     import { onMount } from 'svelte';
+    import { createEventDispatcher } from 'svelte';
 
     import { fetchPublicStats } from '../../../../lib/api/public-reciters';
     import FilterPill from '../../../../lib/components/FilterPill.svelte';
@@ -12,7 +13,6 @@
         type PickerSelection,
     } from '../../../../lib/components/picker/ReciterPicker.svelte';
     import type { BucketCounts, PublicBucket } from '../../../../lib/types/public-state';
-    import { createEventDispatcher } from 'svelte';
 
     const dispatch = createEventDispatcher<{
         change: { slug: string; name: string; bucket: PublicBucket };

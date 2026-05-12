@@ -7,8 +7,8 @@
      * Slice G (that's slice H). Each item shows a colored dot plus a
      * state label and the most-recent activity date when known.
      */
-    import { relativeTime } from '../../../lib/utils/relative-time';
     import type { PublicBucket, PublicReciter } from '../../../lib/types/public-state';
+    import { relativeTime } from '../../../lib/utils/relative-time';
 
     export let reciter: PublicReciter;
 

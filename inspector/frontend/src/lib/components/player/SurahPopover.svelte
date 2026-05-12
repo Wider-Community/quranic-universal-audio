@@ -7,9 +7,9 @@
      */
     import { createEventDispatcher, onMount } from 'svelte';
 
-    import SearchableSelect from '../SearchableSelect.svelte';
     import type { SelectOption } from '../../types/ui';
     import { getSurahInfo, surahInfoReady, surahOptionText } from '../../utils/surah-info';
+    import SearchableSelect from '../SearchableSelect.svelte';
 
     export let surahNums: number[] = [];
     export let value: number | null = null;

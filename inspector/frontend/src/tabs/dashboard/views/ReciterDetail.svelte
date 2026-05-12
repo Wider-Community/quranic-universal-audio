@@ -14,10 +14,10 @@
     import { fetchPublicReciter } from '../../../lib/api/public-reciter-detail';
     import DeliveriesTable from '../../../lib/components/DeliveriesTable.svelte';
     import type { PublicReciter } from '../../../lib/types/public-state';
-    import { backToList, dashboardState } from '../stores/dashboard-state';
     import DetailHeader from '../components/DetailHeader.svelte';
     import FactsList from '../components/FactsList.svelte';
     import Timeline from '../components/Timeline.svelte';
+    import { backToList, dashboardState } from '../stores/dashboard-state';
 
     let reciter: PublicReciter | null = null;
     let loading = false;

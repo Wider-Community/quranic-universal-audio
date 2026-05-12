@@ -25,12 +25,12 @@
     import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
     import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
-    import BrowseByStateStrip from './components/header/BrowseByStateStrip.svelte';
-    import ReciterContextChip from './components/header/ReciterContextChip.svelte';
     import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
     import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
+    import BrowseByStateStrip from './components/header/BrowseByStateStrip.svelte';
+    import ReciterContextChip from './components/header/ReciterContextChip.svelte';
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
     import SavePreview from './components/save/SavePreview.svelte';

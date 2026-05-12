@@ -8,17 +8,17 @@
      */
     import { onMount } from 'svelte';
 
-    import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
     import {
         buildSchemaDescriptor,
         type SchemaDescriptor,
     } from '../../../lib/catalog/schema-descriptor';
     import FilterPill from '../../../lib/components/FilterPill.svelte';
+    import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
+    import StatePill from '../../../lib/components/StatePill.svelte';
+    import { playerContext } from '../../../lib/stores/player-context';
+    import type { PublicBucket, PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
     import { match } from '../../../lib/utils/fuzzy-match';
-    import { playerContext } from '../../../lib/stores/player-context';
-    import StatePill from '../../../lib/components/StatePill.svelte';
-    import type { PublicBucket, PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
     import ActivityRail from '../components/ActivityRail.svelte';
     import AvailableToClaimStrip from '../components/AvailableToClaimStrip.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';

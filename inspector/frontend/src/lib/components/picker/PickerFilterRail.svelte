@@ -7,8 +7,8 @@
      */
     import { createEventDispatcher } from 'svelte';
 
-    import FilterPill from '../FilterPill.svelte';
     import type { Axis } from '../../catalog/schema-descriptor';
+    import FilterPill from '../FilterPill.svelte';
 
     export let axes: Axis[];
     export let activeFilters: Record<string, Set<string>>;

@@ -6,8 +6,8 @@
      */
     import { createEventDispatcher } from 'svelte';
 
-    import StatePill from '../StatePill.svelte';
     import type { PublicDelivery, PublicReciter } from '../../types/public-state';
+    import StatePill from '../StatePill.svelte';
 
     export let reciter: PublicReciter | null;
     export let delivery: PublicDelivery | null;

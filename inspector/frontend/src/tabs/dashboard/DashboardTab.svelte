@@ -11,9 +11,9 @@
      * lands; for now the "open detail" event just no-ops.
      */
     import BottomPlayer from '../../lib/components/player/BottomPlayer.svelte';
+    import { dashboardView } from './stores/dashboard-state';
     import CatalogList from './views/CatalogList.svelte';
     import ReciterDetail from './views/ReciterDetail.svelte';
-    import { dashboardView } from './stores/dashboard-state';
 </script>
 
 <div class="dash">

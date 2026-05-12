@@ -6,9 +6,10 @@
      * the per-reciter detail view (Slice G). Inline delivery expansion
      * is wired but the BottomPlayer hook lands in Slice I.
      */
+    import { createEventDispatcher } from 'svelte';
+
     import ReciterRow from '../../../lib/components/ReciterRow.svelte';
     import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
-    import { createEventDispatcher } from 'svelte';
 
     export let reciters: PublicReciter[];
 

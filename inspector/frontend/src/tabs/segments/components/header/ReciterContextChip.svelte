@@ -9,10 +9,10 @@
      */
     import { createEventDispatcher } from 'svelte';
 
-    import StatePill from '../../../../lib/components/StatePill.svelte';
     import ReciterPicker, {
         type PickerSelection,
     } from '../../../../lib/components/picker/ReciterPicker.svelte';
+    import StatePill from '../../../../lib/components/StatePill.svelte';
     import type { PublicBucket } from '../../../../lib/types/public-state';
 
     export let currentSlug: string | null = null;

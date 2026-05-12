@@ -5,9 +5,9 @@
      */
     import { createEventDispatcher } from 'svelte';
 
-    import FilterPill from '../FilterPill.svelte';
-    import type { BucketCounts, PublicBucket } from '../../types/public-state';
     import { PICKER_BUCKETS } from '../../catalog/schema-descriptor';
+    import type { BucketCounts, PublicBucket } from '../../types/public-state';
+    import FilterPill from '../FilterPill.svelte';
 
     export let activeBucket: PublicBucket | null = null;
     export let totalCount = 0;
