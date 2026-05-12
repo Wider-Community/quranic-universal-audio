@@ -431,7 +431,26 @@ The per-segment list with `matched_ref` matches `published/<slug>/detailed.json`
 
 ---
 
-## D27 — ESLint rule for `use:editGate` coverage
+## D27 — Re-sync bucket from upstream before re-running `migrate_bucket_meta.py`
+
+**What.** The current dev-bucket snapshot was seeded from the repo `data/` tree at the time of the Phase 1 cutover. Two sources have drifted since then and should be reconciled before the next data-hygiene pass:
+
+1. **wip reciters** — each wip slug had its own per-reciter PR branch in `Wider-Community/quranic-universal-audio` with the latest reviewer edits (segments + detailed + edit_history) as of pre-cutover. The bucket's `wip/<slug>/...` files came from a snapshot of `main` at seed time, not from those PR branches. Sync each wip slug's bucket subtree from its PR branch head so the bucket carries the reviewer's actual in-review state, not the stale main-branch copy. Open a small reconciliation PR per slug (or one PR with per-slug commits) so the diff is auditable before upload.
+2. **catalog + audio_manifest sidecars** — `catalog/reciter_catalog.json` and the 864 `catalog/audio_manifest/<slug>.json` sidecars were promoted from `.local/dedup/` in Phase 1. The `.local/dedup/` build pipeline has had follow-up runs (corrections, additional audio probing for `by_ayah` deliveries, channel inference fixes) — those need to land on the bucket too via a fresh `scripts/inspector_v2_seed/promote_catalog.py` run.
+
+After both syncs land, re-run `python -m scripts.inspector_v2_seed.migrate_bucket_meta --apply` so the canonical-slug fix is applied to the freshly-synced data. The migration script is idempotent; running it on already-canonical files is a no-op, so this step is safe to re-run as often as needed.
+
+**Why deferred.** The current bucket data is good enough for Phase 2's read-only surface to function — the catalog displays 422 reciters, the timestamps tab serves 6 published reciters with canonical `_meta.reciter`, and editing-bound writes don't ship until later phases. The sync is a hygiene pass that pays off when the first reviewer claims a wip slug and finds their in-progress edits are missing (Phase 4) or when a maintainer notices a stale catalog entry. Not user-visible until then.
+
+**Trigger to revisit.** First Phase-3 reviewer claim against a wip slug whose PR branch carried newer edits than the bucket; or a catalog-correction request from a maintainer.
+
+**Affected if never done.** wip reviewers lose the deltas between Phase-1-seed-time and cutover. Catalog stays at the Phase-1 stub state. Both are recoverable later via the same sync + migration workflow — nothing is destroyed.
+
+**Cross-refs.** `scripts/inspector_v2_seed/seed_reciter_data.py` (original wip seed), `scripts/inspector_v2_seed/promote_catalog.py` (catalog promotion), `scripts/inspector_v2_seed/migrate_bucket_meta.py` (slug-canonicalisation pass), `.local/dedup/` (catalog source pipeline).
+
+---
+
+## D28 — ESLint rule for `use:editGate` coverage
 
 **What.** Add an ESLint rule that flags any `<button on:click={fn}>` (or analogous element) where `fn` is a state-mutating handler and the element has no sibling `use:editGate` action. Catches the failure mode where a contributor adds a new edit affordance and forgets to wire the gate.
 
