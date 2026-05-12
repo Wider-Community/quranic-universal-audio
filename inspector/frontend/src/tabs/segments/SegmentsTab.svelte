@@ -25,6 +25,8 @@
     import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
     import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
+    import BrowseByStateStrip from './components/header/BrowseByStateStrip.svelte';
+    import ReciterContextChip from './components/header/ReciterContextChip.svelte';
     import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
     import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
     import EditOverlay from './components/edit/EditOverlay.svelte';
@@ -128,14 +130,44 @@
                 selectedReciter.set(saved);
                 _bindTask(saved);
                 await onReciterChange(saved);
+                void resolveContextFromSlug(saved);
             }
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }
+
+    async function resolveContextFromSlug(slug: string): Promise<void> {
+        try {
+            const { fetchPublicReciters } = await import('../../lib/api/public-reciters');
+            const page = await fetchPublicReciters({ limit: 500 });
+            for (const r of page.reciters) {
+                const d = r.deliveries.find((x) => x.slug === slug);
+                if (d) {
+                    contextName = r.name;
+                    contextBucket = r.primary_bucket;
+                    return;
+                }
+            }
+        } catch {
+            // Silent fail; chip falls back to slug-less placeholder.
+        }
+    }
+
+    let contextName: string | null = null;
+    let contextBucket: import('../../lib/types/public-state').PublicBucket | null = null;
 
     function onReciterSelectChange(v: string): void {
         selectedReciter.set(v);
         _bindTask(v || null);
         onReciterChange(v);
+    }
+
+    function onPickerChange(
+        ev: CustomEvent<{ slug: string; name: string; bucket: import('../../lib/types/public-state').PublicBucket }>,
+    ): void {
+        const { slug, name, bucket } = ev.detail;
+        contextName = name;
+        contextBucket = bucket;
+        onReciterSelectChange(slug);
     }
     async function onReciterChange(reciter: string): Promise<void> {
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
@@ -215,17 +247,17 @@
 
     <ReviewerBanner task={reciterTask} onChanged={_refreshTask} />
 
+    <div class="seg-context-block">
+        <ReciterContextChip
+            currentSlug={$selectedReciter || null}
+            currentName={contextName}
+            currentBucket={contextBucket}
+            on:change={onPickerChange}
+        />
+        <BrowseByStateStrip on:change={onPickerChange} />
+    </div>
+
     <div class="info-bar seg-selector-bar">
-        <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>Reciter:
-            <SearchableSelect
-                options={reciterSelectOptions}
-                value={$selectedReciter}
-                placeholder={$segAllReciters.length ? PLACEHOLDER_SELECT : 'Loading...'}
-                className="reciter-select"
-                on:change={(e) => onReciterSelectChange(e.detail)}
-            />
-        </label>
         {#if $selectedReciter}
             <ClaimButton
                 slug={$selectedReciter}
