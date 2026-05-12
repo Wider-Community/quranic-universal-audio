@@ -228,7 +228,7 @@ def _ensure_built_local() -> None:
     _resource_bytes.update(_build_resource_bytes())
     _built = True
     log.info(
-        "ts_local: built local-mode manifest (%d reciters, %d shards, %d resources)",
+        "timestamps: built local-mode manifest (%d reciters, %d shards, %d resources)",
         len(reciters_block),
         len(_shard_bytes),
         len(_resource_bytes),
@@ -287,18 +287,18 @@ def _bucket_url_template(slug: str, audio_category: str) -> str:
     try:
         raw = get_backend().read_json(storage_paths.audio_manifest_path(slug))
     except StorageNotFound:
-        log.warning("ts_local: audio_manifest sidecar missing for %s", slug)
+        log.warning("timestamps: audio_manifest sidecar missing for %s", slug)
         return ""
     if not isinstance(raw, dict):
         log.warning(
-            "ts_local: audio_manifest sidecar for %s is not a dict (got %s)",
+            "timestamps: audio_manifest sidecar for %s is not a dict (got %s)",
             slug, type(raw).__name__,
         )
         return ""
     chapters = raw.get("chapters")
     if not isinstance(chapters, dict):
         log.warning(
-            "ts_local: audio_manifest sidecar for %s missing 'chapters' map "
+            "timestamps: audio_manifest sidecar for %s missing 'chapters' map "
             "(top-level keys: %s)",
             slug, list(raw.keys())[:8],
         )
@@ -308,12 +308,12 @@ def _bucket_url_template(slug: str, audio_category: str) -> str:
         if isinstance(v, dict) and isinstance(v.get("url"), str):
             flat[str(k)] = v["url"]
     if not flat:
-        log.warning("ts_local: no chapter URLs derivable from sidecar for %s", slug)
+        log.warning("timestamps: no chapter URLs derivable from sidecar for %s", slug)
         return ""
     template = derive_url_template(flat, audio_category) or ""
     if not template:
         log.warning(
-            "ts_local: derive_url_template returned empty for %s (audio_cat=%s, "
+            "timestamps: derive_url_template returned empty for %s (audio_cat=%s, "
             "chapter_count=%d)", slug, audio_category, len(flat),
         )
     return template
@@ -382,26 +382,22 @@ def _ensure_built_bucket() -> None:
     _resource_bytes.update(_build_resource_bytes())
     _built = True
     log.info(
-        "ts_local: built bucket-mode manifest (%d reciters, %d resources)",
+        "timestamps: built bucket-mode manifest (%d reciters, %d resources)",
         len(reciters_block),
         len(_resource_bytes),
     )
 
 
 def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
-    """Read + normalize + gzip a per-chapter timestamps file from the bucket.
-
-    The on-disk shard's ``_meta.reciter`` carries whatever slug was stamped
-    when the upstream ``timestamps_full.json`` was first written — often the
-    pre-cutover legacy form (e.g. ``"maher_al_meaqli"``) rather than the v2
-    bucket slug (e.g. ``"maher_al_muaiqly_mp3quran"``). The frontend reads
-    that field as the canonical reciter ID and re-keys store state by it,
-    which then breaks every manifest lookup (the manifest is keyed by the
-    v2 slug). Rewrite ``_meta.reciter`` to match the slug we're serving
-    from so frontend stores stay consistent.
+    """Read + gzip a per-chapter timestamps file from the bucket.
 
     LRU-cached so chapter scrubbing within one reciter doesn't pay the
-    bucket fetch + JSON parse + gzip cost on every shard hit.
+    bucket fetch + gzip cost on every shard hit.
+
+    The frontend treats the bucket path as the canonical reciter ID and
+    ignores ``_meta.reciter`` (which can drift across legacy seeds — see
+    ``scripts/inspector_v2_seed/migrate_bucket_meta.py``). No runtime
+    rewrite is needed here.
     """
     key = (reciter, chapter)
     cached = _shard_lru.get(key)
@@ -411,23 +407,7 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     raw = data_dir.read_timestamps_chapter(reciter, chapter)
     if raw is None:
         return None
-    try:
-        doc = json.loads(raw)
-    except (TypeError, json.JSONDecodeError):
-        log.warning(
-            "ts_local: bucket timestamps for %s/%d is not valid JSON; serving as-is",
-            reciter, chapter,
-        )
-        body = gzip.compress(raw, compresslevel=6, mtime=0)
-    else:
-        meta = doc.get("_meta") if isinstance(doc, dict) else None
-        if isinstance(meta, dict) and meta.get("reciter") != reciter:
-            meta["reciter"] = reciter
-        body = gzip.compress(
-            json.dumps(doc, ensure_ascii=False).encode("utf-8"),
-            compresslevel=6,
-            mtime=0,
-        )
+    body = gzip.compress(raw, compresslevel=6, mtime=0)
     _shard_lru[key] = body
     _shard_lru.move_to_end(key)
     while len(_shard_lru) > _SHARD_LRU_CAP:

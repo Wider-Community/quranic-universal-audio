@@ -283,7 +283,7 @@
                 loadDk(),
             ]);
             tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
-            const data = assembleVerseFromShard(shard, verseRef, qpc, dk);
+            const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
             if (!data) {
                 alert('Error: verse not found in shard');
                 return;
@@ -317,7 +317,7 @@
                 loadDk(),
             ]);
             tsVbrChapters.set(new Set(await loadVbrChapters(target.reciter)));
-            const data = assembleVerseFromShard(shard, target.verseRef, qpc, dk);
+            const data = assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk);
             if (!data) {
                 console.error('Random target verse missing from shard:', target);
                 return;

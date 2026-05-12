@@ -325,7 +325,16 @@ export function audioUrlFor(
  * the `by_surah_audio` offset adjustment that subtracts the verse's
  * start time so the audio element starts at zero.
  */
+/**
+ * Identity flows top-down. The caller already knows which slug it fetched
+ * `shard` for (it's in the URL), so we take `reciter` as a param and return
+ * it on the result. The shard's `_meta.reciter` is ignored for identity —
+ * it can drift from the bucket folder slug (pre-cutover legacy slugs are
+ * still embedded in some `timestamps_full.json` sources) and trusting it
+ * silently breaks every manifest-lookup downstream.
+ */
 export function assembleVerseFromShard(
+    reciter: string,
     shard: TsShardResponse,
     verseRef: string,
     qpc: Record<string, { text?: string }>,
@@ -469,7 +478,7 @@ export function assembleVerseFromShard(
     }
 
     return {
-        reciter: meta.reciter,
+        reciter,
         chapter,
         verse_ref: verseRef,
         audio_url: audioUrl,

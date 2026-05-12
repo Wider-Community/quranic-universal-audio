@@ -3,10 +3,10 @@
 Two read paths share the same shard-fetch model on the frontend:
   - **local**  mode: this blueprint's `/manifest`, `/shard/<reciter>/<int:chapter>`,
     and `/resource/<name>` endpoints serve gzipped bodies sliced from the
-    on-disk timestamps tree (`services/ts_local.py`).
+    on-disk timestamps tree (`services/timestamps.py` local branch).
   - **bucket** mode: same URL surface, but `/manifest` and `/shard` read from
     `<INSPECTOR_BUCKET_MOUNT>/published/<slug>/timestamps/...` (composed in
-    `services/ts_local.py`'s bucket variant).
+    the `services/timestamps.py` bucket branch).
 
 `/config` advertises the active mode + manifest/shard URL templates so the
 frontend can pick the right base without needing its own env knob.
@@ -29,7 +29,7 @@ from config import (
 )
 from constants import TS_AUDIO_CATEGORIES
 from services.audio_meta import vbr_chapters_for_reciter
-from services import ts_local
+from services import timestamps as ts_serve
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 
@@ -76,7 +76,7 @@ _GZIP_HEADERS = {"Cache-Control": "public, max-age=86400"}
 def ts_manifest():
     """Serve the pre-built gzipped manifest (local or bucket source)."""
     return Response(
-        ts_local.manifest_bytes(),
+        ts_serve.manifest_bytes(),
         mimetype="application/octet-stream",
         headers=_GZIP_HEADERS,
     )
@@ -85,7 +85,7 @@ def ts_manifest():
 @ts_bp.route("/shard/<reciter>/<int:chapter>")
 def ts_shard(reciter, chapter):
     """Serve a per-chapter gzipped shard (local or bucket source)."""
-    body = ts_local.shard_bytes(reciter, chapter)
+    body = ts_serve.shard_bytes(reciter, chapter)
     if body is None:
         return jsonify({"error": "Shard not found"}), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
@@ -94,7 +94,7 @@ def ts_shard(reciter, chapter):
 @ts_bp.route("/resource/<name>")
 def ts_resource(name):
     """Serve gzipped reference data referenced by the manifest's `resources` block."""
-    body = ts_local.resource_bytes(name)
+    body = ts_serve.resource_bytes(name)
     if body is None:
         return jsonify({"error": "Resource not found"}), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)

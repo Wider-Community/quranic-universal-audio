@@ -198,7 +198,7 @@ def derive_url_template(manifest_data: dict, audio_cat: str) -> str:
     Used by:
       - ``.github/scripts/build_reciter.py`` — inlined into shard ``_meta``
         and the manifest's per-reciter block.
-      - ``inspector/services/ts_local.py`` — same template, served from
+      - ``inspector/services/timestamps.py`` — same template, served from
         the local-mode manifest endpoint.
     """
     entries = {k: v for k, v in manifest_data.items() if k != "_meta"}

@@ -52,7 +52,7 @@ class _KeyedCache(Generic[_T]):
         return self._data
 
 
-# Timestamps tab — local-mode shard cache lives in `services/ts_local.py`
+# Timestamps tab — local-mode shard cache lives in `services/timestamps.py`
 # (manifest + per-chapter gzipped bytes, lazy-built). Nothing for this tab
 # is registered here: the legacy `_ts` / `_ts_reciters` slots that pinned
 # full ``timestamps_full.json`` docs in memory are gone.

@@ -73,7 +73,7 @@ def get_dk_words_flat() -> dict[str, str]:
     return flat
 
 
-# Timestamps tab read path now lives in `services/ts_local.py` — see that
+# Timestamps tab read path now lives in `services/timestamps.py` — see that
 # module for the manifest + per-chapter shard cache that replaced the
 # eager `discover_ts_reciters` / `load_timestamps` loaders.
 
@@ -166,7 +166,7 @@ def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
 # Audio URL maps remain cached via `cache._audio_url`, but the only
 # remaining caller is `routes/audio_metadata.py` (Audio tab), which now
 # loads them inline. The Timestamps tab's old `load_audio_urls` flow is
-# gone — `services/ts_local.py` inlines the per-chapter URL slice into
+# gone — `services/timestamps.py` inlines the per-chapter URL slice into
 # each shard's `_meta` instead.
 
 
