@@ -8,6 +8,7 @@ only for tests on ``FilesystemBackend``).
 The ``kind`` (``wip`` vs ``published``) is consulted from the state
 service for any caller that doesn't already know — most don't, because
 the lifecycle decision belongs to the state machine, not to data IO.
+
 """
 
 from __future__ import annotations

@@ -17,7 +17,7 @@ First public surface. Image is slim and production-grade (gunicorn-gthread, `-w 
 - [ ] `inspector/Dockerfile` — slim COPY list: only `data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs,inspector_roles}.json`
 - [ ] `inspector/Dockerfile` — runtime deps added: `gunicorn`, `huggingface_hub`, `authlib`, `itsdangerous`
 - [ ] Root `.dockerignore` covering excluded paths from data-storage §7
-- [ ] `inspector/app.py::create_app()` factory + `GUNICORN_WORKERS == 1` startup assertion
+- [ ] Worker assertion in `inspector/app.py` rejects multi-worker config (`-w 2+`, `--workers=2`, `WEB_CONCURRENCY>1`, `GUNICORN_WORKERS>1`, `GUNICORN_CMD_ARGS` containing those, or `sys.argv` of the loader). **`create_app()` factory dropped from the deliverable** — module-level `app` works for `gunicorn inspector.app:app` and adds zero value at the cost of breaking the existing import surface; reintroduce in Phase 3 if the OAuth blueprint needs test isolation.
 - [ ] `Cache-Control: public, max-age=86400` on inspector segment-shard responses (`/api/seg/data/...`)
 - [ ] Hash-gated peaks cache: frontend appends `?h=<8-char-fnv1a>` to `/api/seg/peaks/<reciter>` (hash is over `audio_by_chapter` for the requested chapters). Backend ignores the value and emits `Cache-Control: public, max-age=31536000, immutable` when `?h=` is present AND the response is `complete`; `no-store` for partial responses; `max-age=86400` fallback when `?h=` is absent. `/api/seg/history-peaks/<reciter>` GET is `no-store` (mutates on every save).
 - [ ] Backend serves `/api/seg/data/<slug>/...` from `<bucket>/{wip,published}/<slug>/` via the resolver from Phase 1
@@ -41,7 +41,7 @@ First public surface. Image is slim and production-grade (gunicorn-gthread, `-w 
 
 ## Acceptance criteria
 
-- [ ] Anonymous user lands on `https://hetchyy-quranic-inspector-dev.hf.space` and sees the segments tab with the reciter list rendered.
+- [ ] **dev Space is private** (operator preference; not anonymously accessible). Any HF account with read access to the Space can land on `https://hetchyy-quranic-inspector-dev.hf.space` and see the segments tab with the reciter list rendered. The "anonymous user" Phase-2 acceptance shifts to **prod** on Phase 3 sign-off when the prod Space ships public.
 - [ ] p99 cold page load for a completed reciter ≤ 800 ms.
 - [ ] p99 warm page load ≤ 50 ms.
 - [ ] Image size ≤ 400 MB.

@@ -84,19 +84,60 @@ FRONTEND_DIST = _HERE / "frontend" / "dist"
 # CAS) lands — see inspector-data-storage.md §11. Boot fails loudly if the
 # Dockerfile / runner is configured with -w 2+.
 def _assert_single_worker() -> None:
-    requested = os.environ.get("GUNICORN_WORKERS", "1").strip() or "1"
-    try:
-        n = int(requested)
-    except ValueError:
-        raise RuntimeError(
-            f"GUNICORN_WORKERS must be an integer; got {requested!r}"
-        ) from None
-    if n != 1:
-        raise RuntimeError(
-            f"Inspector requires GUNICORN_WORKERS=1 (got {n}). "
-            "Multi-worker scale-out is deferred until a shared coordinator is added; "
-            "see docs/planning/inspector-deploy/v2/inspector-data-storage.md §11."
-        )
+    """Refuse to boot under any multi-worker config.
+
+    Three sources are checked because gunicorn's `-w` flag isn't reflected in
+    the imported app's environment until after fork:
+
+    1. ``GUNICORN_CMD_ARGS`` / ``GUNICORN_WORKERS`` / ``WEB_CONCURRENCY`` env
+       vars — the standard gunicorn-recognised env knobs. Whichever path the
+       operator uses, one of these surfaces ``-w`` at app-import time.
+    2. ``sys.argv`` of the loader process — when the parent is gunicorn the
+       launcher's args end up here. Catches `gunicorn -w 2 inspector.app:app`.
+    3. A post-fork hook (see `_post_fork_assert_worker_count`) — runs inside
+       gunicorn and inspects the live arbiter, catching anything the env
+       sniff misses.
+
+    Any signal of >1 worker → loud RuntimeError. Conservative on purpose.
+    """
+    suspects = [
+        os.environ.get("GUNICORN_WORKERS"),
+        os.environ.get("WEB_CONCURRENCY"),
+        os.environ.get("GUNICORN_CMD_ARGS"),
+    ]
+    for raw in suspects:
+        if not raw:
+            continue
+        for token in raw.replace("=", " ").split():
+            if token.isdigit() and int(token) > 1:
+                raise RuntimeError(
+                    f"Inspector requires a single worker (saw {token!r} via env); "
+                    "multi-worker scale-out is deferred until a shared coordinator "
+                    "exists. See inspector-data-storage.md §11."
+                )
+    # sys.argv inspection — only meaningful when launched by gunicorn.
+    argv = list(sys.argv)
+    for i, a in enumerate(argv):
+        if a in ("-w", "--workers") and i + 1 < len(argv):
+            try:
+                n = int(argv[i + 1])
+            except ValueError:
+                continue
+            if n > 1:
+                raise RuntimeError(
+                    f"Inspector requires -w 1 (got -w {n}); see "
+                    "inspector-data-storage.md §11."
+                )
+        elif a.startswith("--workers="):
+            try:
+                n = int(a.split("=", 1)[1])
+            except ValueError:
+                continue
+            if n > 1:
+                raise RuntimeError(
+                    f"Inspector requires --workers=1 (got {a}); see "
+                    "inspector-data-storage.md §11."
+                )
 
 
 _assert_single_worker()

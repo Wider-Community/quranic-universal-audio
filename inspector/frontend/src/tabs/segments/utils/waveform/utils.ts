@@ -192,9 +192,17 @@ export function _fetchPeaks(reciter: string, chapters: Array<number | string>): 
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
     if (!chapters || chapters.length === 0) return;
     // Hash over the audio URLs the response will key on — those identify the
-    // underlying source bytes; peaks per (audio URL) are deterministic. When
-    // the catalog flips a delivery's audio_source, the URLs change and the
-    // hash changes, so stale caches are bypassed cleanly.
+    // underlying source bytes; peaks per (audio URL) are deterministic.
+    // Catalog flips of a delivery's audio_source change the URLs and bust
+    // the cache cleanly.
+    //
+    // **Phase 4 caveat**: this endpoint returns whole-file peaks per audio
+    // URL, NOT per-segment peaks (those go through /api/seg/segment-peaks
+    // POST and aren't cached at this layer). Segment edits in Phase 4 don't
+    // change audio bytes, so the hash is sufficient for /peaks/. If a future
+    // schema ever surfaces per-segment peaks here, the hash MUST also fold
+    // in segment boundaries — otherwise edits would silently serve stale
+    // shapes for a year (immutable, max-age=31536000).
     const allData = get(segAllData);
     const audioByChapter = allData?.audio_by_chapter || {};
     const audioForReq = chapters

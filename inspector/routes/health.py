@@ -45,14 +45,21 @@ def healthz():
     bucket_ok = _bucket_mounted()
     state_loaded = state_service.is_hydrated()
     rows = state_service.all_rows()
+    healthy = state_loaded and bucket_ok
     payload = {
-        "status": "ok" if (state_loaded and bucket_ok) else "degraded",
+        "status": "ok" if healthy else "degraded",
         "mode": "deployed" if os.environ.get("INSPECTOR_BUCKET_MOUNT") else "local",
         "bucket_mounted": bucket_ok,
         "state_loaded": state_loaded,
         "reciters_count": len(rows),
         "commit": os.environ.get("INSPECTOR_COMMIT_SHA", "unknown"),
     }
+    # Return 503 (not 200) when degraded so probe-based monitors flag the
+    # Space without parsing the body. Local-mode runs don't have a mount and
+    # would always 503 here — only flip the status code when we're in
+    # deployed mode (i.e. INSPECTOR_BUCKET_MOUNT is set).
+    if not healthy and os.environ.get("INSPECTOR_BUCKET_MOUNT"):
+        return jsonify(payload), 503
     return jsonify(payload)
 
 

@@ -288,19 +288,36 @@ def _bucket_url_template(slug: str, audio_category: str) -> str:
     try:
         raw = get_backend().read_json(storage_paths.audio_manifest_path(slug))
     except StorageNotFound:
+        log.warning("ts_local: audio_manifest sidecar missing for %s", slug)
         return ""
     if not isinstance(raw, dict):
+        log.warning(
+            "ts_local: audio_manifest sidecar for %s is not a dict (got %s)",
+            slug, type(raw).__name__,
+        )
         return ""
     chapters = raw.get("chapters")
     if not isinstance(chapters, dict):
+        log.warning(
+            "ts_local: audio_manifest sidecar for %s missing 'chapters' map "
+            "(top-level keys: %s)",
+            slug, list(raw.keys())[:8],
+        )
         return ""
     flat: dict[str, str] = {}
     for k, v in chapters.items():
         if isinstance(v, dict) and isinstance(v.get("url"), str):
             flat[str(k)] = v["url"]
     if not flat:
+        log.warning("ts_local: no chapter URLs derivable from sidecar for %s", slug)
         return ""
-    return derive_url_template(flat, audio_category) or ""
+    template = derive_url_template(flat, audio_category) or ""
+    if not template:
+        log.warning(
+            "ts_local: derive_url_template returned empty for %s (audio_cat=%s, "
+            "chapter_count=%d)", slug, audio_category, len(flat),
+        )
+    return template
 
 
 def _bucket_reciter_block(slug: str, ts_chapters: list[int]) -> dict | None:

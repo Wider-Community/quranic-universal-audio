@@ -76,11 +76,12 @@ def seg_peaks(reciter):
         threading.Thread(target=_bg, daemon=True).start()
 
     response = jsonify({"peaks": result, "complete": complete})
-    # Only set immutable when `complete` AND a hash was supplied — partial
-    # responses must not be cached forever (the missing peaks would be
-    # permanently absent for that hash). Backend simply trusts the FE-supplied
-    # hash, so the FE only appends ?h= when it knows the source is stable.
-    if complete:
+    # Only emit `immutable, max-age=…` when the response is BOTH complete AND
+    # non-empty. An empty `complete=true` response (e.g. reciter has no audio
+    # URLs at all) under `immutable` would forever poison the cache: peaks
+    # that compute later in the background would be invisible. Falling back
+    # to `no-store` for the empty-complete case keeps clients honest.
+    if complete and result:
         for k, v in _peaks_cache_headers().items():
             response.headers[k] = v
     else:
