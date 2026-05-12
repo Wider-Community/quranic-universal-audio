@@ -4,6 +4,11 @@
 
 // Stylesheets — Vite injects these into <head> during dev and extracts them to
 // a bundled CSS file in production builds.
+//
+// tokens.css MUST stay first: it defines :root custom properties consumed by
+// every subsequent stylesheet. tokens.css has no selectors, so this position
+// can never override base.css.
+import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
 import './styles/filters.css';
