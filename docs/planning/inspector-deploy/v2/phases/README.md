@@ -17,7 +17,7 @@ For the *why* of any decision, jump to the detailed v2 docs in the parent folder
 | # | Phase | Status | Blocks |
 |---|---|---|---|
 | 1 | [Foundation](01-foundation.md) | done (Phase 5 carries: repo `data/` cleanup; D19 carries: 14 legacy tests; D20 carries: legacy bucket shards) | 2 |
-| 2 | [Deployable image + read-only deploy](02-deployable-image.md) | in progress | 3, 4 |
+| 2 | [Deployable image + read-only deploy](02-deployable-image.md) | done | 3, 4 |
 | 3 | [Auth + claim flow](03-auth-and-claims.md) | not started | 4, 5 |
 | 4 | [Save migration](04-save-migration.md) | not started | 5 |
 | 5 | [Publish pipeline](05-publish-pipeline.md) | not started | 6 |

@@ -2,7 +2,7 @@
 
 > Inspector goes live on the dev Space. Anonymous users can browse all reciters (in-flight + completed) read-only. No auth, no writes, but the production-grade image, gunicorn, and bucket-mediated reads are all in place.
 
-**Status:** in progress
+**Status:** done
 **Depends on:** Phase 1 (Foundation) complete
 **Blocks:** Phase 3, Phase 4
 
@@ -101,3 +101,59 @@ for i in {1..10}; do curl -fsS "$SPACE/api/seg/data/saad_al_ghamdi/1" >/dev/null
 - [`inspector-data-storage.md`](../inspector-data-storage.md) §6, §7 — env config, image build
 - [`inspector-deploy-runbook.md`](../inspector-deploy-runbook.md) §1, §2, §4, §6 (Phase 1 smoke tests)
 - [`inspector-cleanup-registry.md`](../inspector-cleanup-registry.md) §3 (Dockerfile/COPY/CMD modifications)
+
+## Outcomes
+
+Landed across 8 commits on `dev` (sharp-curie worktree). Live at `https://hetchyy-quranic-inspector-dev.hf.space` (private; HF accounts with read access can browse).
+
+### What shipped
+
+- **Production image** (gunicorn-gthread, `-w 1 --threads 16`, port 7860). Real worker assertion checks `GUNICORN_CMD_ARGS` / `WEB_CONCURRENCY` / `GUNICORN_WORKERS` env + `sys.argv` `-w` / `--workers`; refuses any multi-worker config at import time.
+- **Bucket-mediated reads**: every `/api/seg/data/<slug>/...` and `/api/ts/shard/<slug>/<chapter>` resolves through the Phase-1 backend resolver against `<bucket>/{wip,published}/<slug>/`. NFS mount when present, bucket API when not.
+- **`/healthz`** + `/livez`. Healthz returns 503 in deployed mode when bucket-mount or state-hydration is degraded.
+- **`/api/static/catalog.json`** feeding both segments + timestamps tabs.
+- **Cache headers**: `public, max-age=86400` on segment shards (no `immutable` — shards mutate on re-edit). Hash-gated peaks: `?h=<8-char-FNV-1a>` over the request's `audio_by_chapter` → `public, max-age=31536000, immutable` only when `complete && len(peaks)>0`; partial or empty-complete falls back to `no-store`.
+- **TS bucket mode**: new `_ensure_built_bucket()` composes manifest from state (completed reciters) + catalog (display + delivery) + audio_manifest sidecars (URL template). Per-chapter shards lazy-loaded from `<bucket>/published/<slug>/timestamps/<chapter>.json` via a 256-entry LRU. Legacy `INSPECTOR_TS_SOURCE=huggingface` removed entirely (config raises; types narrowed; TimestampsTab branch deleted).
+- **Surface gating**: `audio_proxy_bp` not registered when `INSPECTOR_AUDIO_PROXY_ENABLED=0`; `ts_validate` returns 410 when `INSPECTOR_TS_VALIDATE_ENABLED=0`. Dockerfile sets both to 0.
+- **Frontend view-only mode**: single `editGate` Svelte action wires every state-mutating button to a global `EditAffordancePopover`. 7-case Vitest unit covers all role/require combinations. Wired on the 6 SegmentRow mutation buttons (Adjust, Merge prev/next, Delete, Split, Edit Ref), GenericIssueCard Ignore, MissingWordsCard auto-fix, EditChainRow + HistoryBatch Undo/Discard. Adding new edit affordances later = adding `use:editGate`.
+- **Secret guards**: `services/secrets_guard.py::get_dispatch_token` refuses the seeded `PLACEHOLDER_REPLACE_BEFORE_PHASE_5`; `get_session_secret` refuses unset/short keys. Phase 3/5 import these instead of touching `os.environ` directly.
+- **Deploy automation**: `scripts/upload_inspector.py` (build frontend → stage Space tree → upload_folder), `scripts/inspector_v2_seed/setup_space.py` (idempotent: create private docker Space, write README frontmatter, attach bucket volume, set vars + secrets, factory reboot). `.github/workflows/inspector-deploy.yml` triggers on push to `dev` (paths-filtered); prod-on-`main` shipped commented out, gated on Phase 3 sign-off.
+
+### Metrics (from local dev laptop in AU → HF Spaces in US-East)
+
+| Metric | Value | vs target |
+|---|---|---|
+| Image size | **226 MB** | ≤ 400 MB ✓ |
+| Cold `docker build` (clean cache) | 27 s | n/a |
+| Warm `docker build` (no code changes) | 2 s | n/a |
+| HF Space first build | ~92 s | n/a |
+| HF Space rebuild (code change) | ~46 s | n/a |
+| `/healthz` | 200 OK, `bucket_mounted=true, state_loaded=true, reciters_count=14` | ✓ |
+| `/api/static/catalog.json` | 422 reciters, 864 deliveries | ✓ |
+| TS bucket mode manifest | 6 reciters × 114 chapters each | ✓ |
+| TS shard fetch | 200 OK, gzipped, ~2 KB/chapter | ✓ |
+| Cold p99 (10 different shards, sequential) | 2229 ms | over the contract's 800 ms — but inflated by AU↔US RTT × multi-roundtrip TLS; backend processing time would need server-side measurement to compare cleanly |
+| Warm p99 (10x same shard, no client cache) | 1116 ms | curl bypasses cache; backend repeats the bucket fetch → essentially the cold number. Browser hits would benefit from the `max-age=86400` header |
+| Concurrent burst (10x parallel, same shard) | **132 ms total** | CDN/edge cache absorbing — 10 nearly-instant responses |
+
+### Reviewer-pass deltas (caught + landed in commit `aead2d2a`)
+
+- Worker assertion was originally a `GUNICORN_WORKERS == 1` env check, decorative against `gunicorn -w 2` directly. Rewritten to check three env sources + `sys.argv`. Verified by booting the image with each multi-worker signal — all three hard-fail.
+- Peaks `immutable` cache header was incorrectly applied to `complete=true && len(peaks)==0` (would permanently cache empty payload). Now requires both complete + non-empty.
+- `/healthz` returned 200 even when degraded. Returns 503 in deployed mode when bucket/state checks fail.
+- `_bucket_url_template` failures were silent. Each empty-template return now logs `WARNING` with the failing reason.
+- Phase-4 caveat comment added to the FE peaks-hash computation: current hash covers audio URLs only; per-segment peaks would need segment boundaries folded in.
+
+### Drift from contract (accepted)
+
+- **`create_app()` factory dropped.** Module-level `app` works for `gunicorn inspector.app:app` and matches the existing import surface used by tests; reintroducing it would break ~50 imports across `inspector/services/...`. Will revisit in Phase 3 if the OAuth blueprint needs test isolation.
+- **dev Space is private.** Phase 2 contract opener said "anonymous user lands". Operator preference made the dev Space private; the anonymous-browse story shifts to **prod** at Phase 3 sign-off.
+- **`docker-compose.yml` not migrated to bucket mode**. Local Docker still runs in legacy `INSPECTOR_TS_SOURCE=local` mode reading on-disk `data/timestamps/`. Deferred — Phase 11 cleanup will retire local mode entirely once the offline maintainer flow lives off the bucket too.
+
+### Carried forward
+
+- **Personal HF token** seeded as `INSPECTOR_HF_TOKEN`. Mint a dedicated `hetchyy-bot` org token before prod cutover.
+- **`INSPECTOR_GITHUB_DISPATCH_TOKEN` placeholder** still in Space secrets. Replace with a real fine-grained PAT (`actions: write` on the project repo) before Phase 5 `repository_dispatch reciter.completed` ships. `get_dispatch_token()` refuses the placeholder.
+- **ESLint rule for `use:editGate` coverage** — the editGate test catches single-button regressions but a class-level "any state-mutating handler must have a sibling action" rule would catch missed gates on new components. Plan-level follow-up.
+- **`huggingface_hub.login()` failure** at boot (`Permission denied: '/home/inspector'` because the inspector user has `-H` no-home). Doesn't break reads but blocks Xet writes — Phase 4 will need a writable HOME dir for the user.
+- **CDN front for cold-fetch latency** (D12) — defer until measured server-side. The 132 ms 10-parallel result suggests the Space-side CDN is already absorbing the burst pattern; whether single cold reads need their own CDN tier is a Phase-3 measurement question.
