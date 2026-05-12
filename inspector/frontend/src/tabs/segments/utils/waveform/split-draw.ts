@@ -63,8 +63,8 @@ export function drawSplitWaveform(canvas: SegCanvas): void {
     ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
     for (let i = 0; i <= N; i++) {
         if (i % 2 === 0) continue;
-        const t0 = i === 0 ? sd.viewStart : cursors[i - 1];
-        const t1 = i === N ? sd.viewEnd : cursors[i];
+        const t0 = i === 0 ? sd.viewStart : cursors[i - 1]!;
+        const t1 = i === N ? sd.viewEnd : cursors[i]!;
         const x0 = Math.max(0, Math.min(width, ((t0 - sd.viewStart) / span) * width));
         const x1 = Math.max(0, Math.min(width, ((t1 - sd.viewStart) / span) * width));
         if (x1 > x0) ctx.fillRect(x0, 0, x1 - x0, height);
@@ -76,7 +76,7 @@ export function drawSplitWaveform(canvas: SegCanvas): void {
     ctx.strokeStyle = '#ffeb3b';
     ctx.lineWidth = 3;
     for (let i = 0; i < N; i++) {
-        const t = cursors[i];
+        const t = cursors[i]!;
         let x: number;
         if (N === 1) {
             const sxRaw = ((t - sd.viewStart) / span) * width;

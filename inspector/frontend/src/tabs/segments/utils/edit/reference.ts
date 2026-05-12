@@ -315,7 +315,7 @@ function _pickHandoffMountId(entries: Iterable<RowEntry>): symbol | null {
 async function _handoffPendingChain(): Promise<void> {
     const queue = get(pendingChainTargets);
     if (!queue.length) return;
-    const chain = queue[0];
+    const chain = queue[0]!;
     pendingChainTargets.set(queue.slice(1));
 
     // Flush Svelte's pending DOM updates so that newly-inserted rows (e.g. the

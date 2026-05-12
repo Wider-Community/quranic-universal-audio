@@ -225,13 +225,14 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     const cursors = (Array.isArray(cmd.splitMs) ? cmd.splitMs.slice() : [cmd.splitMs])
         .sort((a, b) => a - b);
     for (let i = 0; i < cursors.length; i++) {
-        if (cursors[i] <= target.time_start || cursors[i] >= target.time_end) {
+        const cur = cursors[i]!;
+        if (cur <= target.time_start || cur >= target.time_end) {
             throw new Error(
-                `applyCommand[split]: splitMs=${cursors[i]} out of range `
+                `applyCommand[split]: splitMs=${cur} out of range `
                 + `[${target.time_start}, ${target.time_end}]`,
             );
         }
-        if (i > 0 && cursors[i] <= cursors[i - 1]) {
+        if (i > 0 && cur <= cursors[i - 1]!) {
             throw new Error(
                 `applyCommand[split]: cursors must be strictly ascending (got ${cursors})`,
             );
@@ -262,8 +263,8 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     // single-cursor convenience kept for older callers.
     const pieces: Segment[] = [];
     for (let i = 0; i < nPieces; i++) {
-        const start = i === 0 ? target.time_start : cursors[i - 1];
-        const end = i === nPieces - 1 ? target.time_end : cursors[i];
+        const start = i === 0 ? target.time_start : cursors[i - 1]!;
+        const end = i === nPieces - 1 ? target.time_end : cursors[i]!;
         const piece: Segment = {
             ..._cloneSeg(target),
             time_start: start,
@@ -298,7 +299,7 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
         const u = p.segment_uid ?? cmd.segmentUid;
         byId[u] = p;
     }
-    const firstUid = pieces[0].segment_uid ?? cmd.segmentUid;
+    const firstUid = pieces[0]!.segment_uid ?? cmd.segmentUid;
     const nextState: CommandNextState = {
         byId,
         affectedChapter: chapter,

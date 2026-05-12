@@ -121,12 +121,12 @@ export function _playRange(startMs: number, endMs: number): void {
             loopStart = canvas._trimWindow.currentStart;
         } else if (loopMode === 'split-left' && canvas?._splitData
                    && canvas._splitData.currentSplits.length === 1) {
-            effectiveEnd = canvas._splitData.currentSplits[0];
+            effectiveEnd = canvas._splitData.currentSplits[0]!;
             loopStart = canvas._splitData.seg.time_start;
         } else if (loopMode === 'split-right' && canvas?._splitData
                    && canvas._splitData.currentSplits.length === 1) {
             effectiveEnd = canvas._splitData.seg.time_end;
-            loopStart = canvas._splitData.currentSplits[0];
+            loopStart = canvas._splitData.currentSplits[0]!;
         } else if (typeof loopMode === 'string'
                    && loopMode.startsWith('split-region-')
                    && canvas?._splitData) {
@@ -137,12 +137,12 @@ export function _playRange(startMs: number, endMs: number): void {
             const i = parseInt(loopMode.slice('split-region-'.length), 10);
             const n = sd.currentSplits.length;
             if (!Number.isNaN(i) && i >= 0 && i <= n) {
-                loopStart = i === 0 ? sd.seg.time_start : sd.currentSplits[i - 1];
-                effectiveEnd = i === n ? sd.seg.time_end : sd.currentSplits[i];
+                loopStart = i === 0 ? sd.seg.time_start : sd.currentSplits[i - 1]!;
+                effectiveEnd = i === n ? sd.seg.time_end : sd.currentSplits[i]!;
             }
         } else if (canvas?._splitData && endMs !== canvas._splitData.seg.time_end
                    && canvas._splitData.currentSplits.length === 1) {
-            effectiveEnd = canvas._splitData.currentSplits[0];
+            effectiveEnd = canvas._splitData.currentSplits[0]!;
         }
         if (_previewJustSeeked && curMs < effectiveEnd) {
             _previewJustSeeked = false;

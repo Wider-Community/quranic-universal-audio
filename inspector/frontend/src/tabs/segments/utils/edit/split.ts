@@ -161,7 +161,7 @@ export function enterSplitMode(
  *  neighbour clamp keeps it inside the seg span). */
 function _splitXFor(canvas: SegCanvas, idx: number): number {
     const sd = canvas._splitData!;
-    const t = sd.currentSplits[idx];
+    const t = sd.currentSplits[idx]!;
     const w = canvas.width;
     const span = sd.viewEnd - sd.viewStart;
     if (sd.currentSplits.length === 1
@@ -220,9 +220,9 @@ export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
         const timeAtX = sd.viewStart + (x / canvas.width) * (sd.viewEnd - sd.viewStart);
         const snapped = Math.round(timeAtX / EDIT_SNAP_MS) * EDIT_SNAP_MS;
         const minDur = EDIT_MIN_DURATION_MS;
-        const lo = (dragIdx > 0 ? sd.currentSplits[dragIdx - 1] : seg.time_start) + minDur;
+        const lo = (dragIdx > 0 ? sd.currentSplits[dragIdx - 1]! : seg.time_start) + minDur;
         const hi = (dragIdx < sd.currentSplits.length - 1
-                    ? sd.currentSplits[dragIdx + 1]
+                    ? sd.currentSplits[dragIdx + 1]!
                     : seg.time_end) - minDur;
         const next = Math.max(lo, Math.min(snapped, hi));
         sd.currentSplits[dragIdx] = next;
@@ -242,7 +242,7 @@ export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
                 const rect = canvas.getBoundingClientRect();
                 const x = (e.clientX - rect.left) * (canvas.width / rect.width);
                 const timeAtX = sd.viewStart + (x / canvas.width) * (sd.viewEnd - sd.viewStart);
-                const split = sd.currentSplits[0];
+                const split = sd.currentSplits[0]!;
                 if (timeAtX < split) _playRange(timeAtX, split);
                 else _playRange(timeAtX, seg.time_end);
             }
@@ -292,9 +292,9 @@ export function nudgeSplitBoundary(deltaMs: number): number | null {
     if (!canvas || !sd || sd.currentSplits.length !== 1) return null;
     const { seg } = sd;
     const minDur = EDIT_MIN_DURATION_MS;
-    const cur = sd.currentSplits[0];
+    const cur = sd.currentSplits[0]!;
     const onView = cur >= sd.viewStart && cur <= sd.viewEnd;
-    const anchor = onView ? cur : (sd.viewStart + sd.viewEnd) / 2;
+    const anchor: number = onView ? cur : (sd.viewStart + sd.viewEnd) / 2;
     const next = Math.max(
         seg.time_start + minDur,
         Math.min(anchor + deltaMs, seg.time_end - minDur),
@@ -324,8 +324,9 @@ export function confirmSplit(
     // Reject any cursor that crept outside the seg span. Should be impossible
     // given the drag clamp, but guard anyway.
     for (let i = 0; i < cursors.length; i++) {
-        if (cursors[i] <= seg.time_start || cursors[i] >= seg.time_end) return;
-        if (i > 0 && cursors[i] <= cursors[i - 1]) return;
+        const ci = cursors[i]!;
+        if (ci <= seg.time_start || ci >= seg.time_end) return;
+        if (i > 0 && ci <= cursors[i - 1]!) return;
     }
 
     const chStr = get(selectedChapter);
@@ -423,10 +424,10 @@ export function confirmSplit(
     const chainCat = ctxCat;
 
     if (initiatingEntry?.instanceRole !== 'accordion') {
-        targetSegmentIndex.set({ chapter, index: pieces[0].index });
+        targetSegmentIndex.set({ chapter, index: pieces[0]!.index });
     }
 
-    const resolvedMountId = mountId ?? pickProgrammaticMountId(chapter, pieces[0].index);
+    const resolvedMountId = mountId ?? pickProgrammaticMountId(chapter, pieces[0]!.index);
     if (!resolvedMountId) return;
 
     // Chain ref edits for every piece after the first. Each one shifts the
@@ -442,7 +443,7 @@ export function confirmSplit(
         seg: p, category: chainCat, originalEndRef,
     }));
     pendingChainTargets.set(queue);
-    beginRefEdit(pieces[0], chainCat, resolvedMountId);
+    beginRefEdit(pieces[0]!, chainCat, resolvedMountId);
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +455,7 @@ export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | n
     const sd = c?._splitData;
     if (!sd || !c || sd.currentSplits.length !== 1) return;
     setPreviewLooping(`split-${side}` as const);
-    const splitTime = sd.currentSplits[0];
+    const splitTime = sd.currentSplits[0]!;
     _playRange(
         side === 'left' ? sd.seg.time_start : splitTime,
         side === 'left' ? splitTime : sd.seg.time_end,
@@ -476,8 +477,8 @@ export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void
     if (!sd || !c) return;
     const n = sd.currentSplits.length;
     if (idx < 0 || idx > n) return;
-    const start = idx === 0 ? sd.seg.time_start : sd.currentSplits[idx - 1];
-    const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx];
+    const start = idx === 0 ? sd.seg.time_start : sd.currentSplits[idx - 1]!;
+    const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx]!;
     setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
     _playRange(start, end);
 }
