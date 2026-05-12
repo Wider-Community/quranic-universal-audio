@@ -40,7 +40,7 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
         } as any,
       );
       expect(result.operation).toBeTruthy();
-      expect(result.operation.op_context_category).toBe(cat);
+      expect(result.operation.op_context_category).toBe(cat === 'basmala_amin' ? null : cat);
       const updated = result.nextState.byId[`uid-${cat}`];
       expect(updated?.ignored_categories ?? []).not.toContain(cat);
     });

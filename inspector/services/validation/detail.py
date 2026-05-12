@@ -2,7 +2,7 @@
 
 Iterates entries and returns the detail lists (failed, low_confidence,
 boundary_adj, cross_verse, audio_bleeding, repetitions, muqattaat,
-qalqala) plus the verse_segments coverage map. Each detail item carries a
+qalqala, basmala_amin) plus the verse_segments coverage map. Each detail item carries a
 ``classified_issues`` field — the full category list the segment matches
 under the unified classifier (forward-compat for multi-category card
 indicators on the frontend).
@@ -25,6 +25,47 @@ from services.validation.classifier import (
     is_suppressed_for,
 )
 from services.validation.registry import PER_SEGMENT_CATEGORIES
+
+
+def _word_ord(
+    surah: int,
+    ayah: int,
+    word: int,
+    word_counts: dict[tuple[int, int], int],
+) -> int | None:
+    """Return 1-based word ordinal within a surah, or None if out of range."""
+    offset = 0
+    for verse in range(1, ayah):
+        wc = word_counts.get((surah, verse))
+        if wc is None:
+            return None
+        offset += wc
+    if word < 1 or word > word_counts.get((surah, ayah), 0):
+        return None
+    return offset + word
+
+
+def _words_by_verse_for_ord_gap(
+    surah: int,
+    start_ord: int,
+    end_ord: int,
+    word_counts: dict[tuple[int, int], int],
+) -> list[tuple[int, list[int]]]:
+    """Split a surah-local ordinal gap into ``[(ayah, [word, ...]), ...]``."""
+    out: list[tuple[int, list[int]]] = []
+    offset = 0
+    ayah = 1
+    while (surah, ayah) in word_counts and offset < end_ord:
+        wc = word_counts[(surah, ayah)]
+        verse_start = offset + 1
+        verse_end = offset + wc
+        lo = max(start_ord, verse_start)
+        hi = min(end_ord, verse_end)
+        if lo <= hi:
+            out.append((ayah, [ord_ - offset for ord_ in range(lo, hi + 1)]))
+        offset = verse_end
+        ayah += 1
+    return out
 
 
 def _classified_issues_from_flags(flags: dict, *, detail: bool) -> list[str]:
@@ -55,7 +96,7 @@ def _build_detail_lists(
     Returns a dict with keys:
       chapter_seg_idx, verse_segments,
       failed, low_confidence, low_confidence_v2, boundary_adj, cross_verse,
-      audio_bleeding, repetitions, muqattaat, qalqala.
+      audio_bleeding, repetitions, muqattaat, qalqala, basmala_amin.
 
     ``probe_failed_uids`` is the set of segment UIDs flagged by the
     extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
@@ -70,12 +111,17 @@ def _build_detail_lists(
     repetitions: list[dict] = []
     muqattaat: list[dict] = []
     qalqala: list[dict] = []
+    basmala_amin: list[dict] = []
+    basmala_amin_17: list[dict] = []
     chapter_seg_idx: dict[int, int] = {}
     verse_segments: dict[tuple[int, int], list] = defaultdict(list)
+    sequence_gaps: list[dict] = []
 
     for entry in entries:
         chapter = chapter_from_ref(entry["ref"])
         entry_ref = entry.get("ref", "")
+        prev_end_by_surah: dict[int, int] = {}
+        prev_seg_idx_by_surah: dict[int, int] = {}
         for seg in entry.get("segments", []):
             i = chapter_seg_idx.get(chapter, 0)
             chapter_seg_idx[chapter] = i + 1
@@ -152,6 +198,25 @@ def _build_detail_lists(
                 e_word = int(end_parts[2])
             except (ValueError, IndexError):
                 continue
+
+            start_ord = _word_ord(surah, s_ayah, s_word, word_counts)
+            end_ord = _word_ord(surah, e_ayah, e_word, word_counts)
+            if start_ord is not None and end_ord is not None:
+                prev_end = prev_end_by_surah.get(surah)
+                if prev_end is not None and start_ord > prev_end + 1:
+                    prev_idx = prev_seg_idx_by_surah.get(surah)
+                    indices = [idx for idx in (prev_idx, i) if idx is not None]
+                    for ayah, missing in _words_by_verse_for_ord_gap(
+                        surah, prev_end + 1, start_ord - 1, word_counts
+                    ):
+                        sequence_gaps.append({
+                            "verse_key": f"{surah}:{ayah}",
+                            "chapter": surah,
+                            "missing_words": missing,
+                            "seg_indices": indices,
+                        })
+                prev_end_by_surah[surah] = end_ord
+                prev_seg_idx_by_surah[surah] = i
 
             flags = classify_flags(
                 seg, entry_ref, is_by_ayah,
@@ -252,6 +317,17 @@ def _build_detail_lists(
                     "classified_issues": classified,
                 })
 
+            if surah == 1 and (s_ayah <= 1 <= e_ayah or s_ayah <= 7 <= e_ayah):
+                item = {
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
+                    "classified_issues": classified,
+                }
+                if s_ayah <= 1 <= e_ayah:
+                    basmala_amin.append(item)
+                if s_ayah <= 7 <= e_ayah:
+                    basmala_amin_17.append(item)
+
             # Accumulate verse coverage (3-tuple: word_from, word_to, seg_index)
             if s_ayah != e_ayah:
                 for ayah in range(s_ayah, e_ayah + 1):
@@ -266,9 +342,19 @@ def _build_detail_lists(
             else:
                 verse_segments[(surah, s_ayah)].append((s_word, e_word, i))
 
+    combined_basmala_amin: list[dict] = []
+    seen_basmala_amin: set[tuple[int, int, str | None]] = set()
+    for item in basmala_amin + basmala_amin_17[-1:]:
+        key = (item["chapter"], item["seg_index"], item.get("segment_uid"))
+        if key in seen_basmala_amin:
+            continue
+        seen_basmala_amin.add(key)
+        combined_basmala_amin.append(item)
+
     return {
         "chapter_seg_idx": chapter_seg_idx,
         "verse_segments": verse_segments,
+        "sequence_gaps": sequence_gaps,
         "failed": failed,
         "low_confidence": low_confidence,
         "low_confidence_v2": low_confidence_v2,
@@ -278,6 +364,7 @@ def _build_detail_lists(
         "repetitions": repetitions,
         "muqattaat": muqattaat,
         "qalqala": qalqala,
+        "basmala_amin": combined_basmala_amin,
     }
 
 

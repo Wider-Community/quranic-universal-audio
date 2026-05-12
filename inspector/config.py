@@ -110,6 +110,7 @@ SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on bounda
 # Values: "shown" (default open), "hidden" (default closed), "next_only" (open on nav)
 ACCORDION_CONTEXT = {
     "failed": "shown",
+    "missing_words": "shown",
     "low_confidence": "hidden",
     "boundary_adj": "hidden",
     "repetitions": "hidden",

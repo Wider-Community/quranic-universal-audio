@@ -152,3 +152,223 @@ def test_muqattaat_only_first_word_of_verse():
 
     assert "muqattaat" in r1
     assert "muqattaat" not in r2
+
+
+def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
+    """Basmala + Amin shows 1:1 plus only the latest card overlapping 1:7."""
+    from services.validation.detail import _build_detail_lists  # type: ignore
+
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {
+                "segment_uid": "one-one",
+                "matched_ref": "1:1:1-1:1:1",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": 0,
+                "time_end": 1000,
+            },
+            {
+                "segment_uid": "one-seven-a",
+                "matched_ref": "1:7:1-1:7:2",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": 1000,
+                "time_end": 2000,
+            },
+            {
+                "segment_uid": "one-seven-b",
+                "matched_ref": "1:7:3-1:7:4",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": 2000,
+                "time_end": 3000,
+            },
+        ],
+    }]
+
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts={(1, ayah): (1 if ayah < 7 else 4) for ayah in range(1, 8)},
+        canonical=None,
+        single_word_verses=set(),
+    )
+
+    assert [item["segment_uid"] for item in detail["basmala_amin"]] == [
+        "one-one",
+        "one-seven-b",
+    ]
+
+
+def test_basmala_amin_detail_omits_neighboring_fatiha_verses():
+    """The accordion includes 1:1 and 1:7 but not 1:2 through 1:6."""
+    from services.validation.detail import _build_detail_lists  # type: ignore
+
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {
+                "segment_uid": f"one-{ayah}",
+                "matched_ref": f"1:{ayah}:1-1:{ayah}:1",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": ayah * 1000,
+                "time_end": (ayah + 1) * 1000,
+            }
+            for ayah in range(1, 8)
+        ],
+    }]
+
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts={(1, ayah): 1 for ayah in range(1, 8)},
+        canonical=None,
+        single_word_verses=set(),
+    )
+
+    assert [item["segment_uid"] for item in detail["basmala_amin"]] == ["one-1", "one-7"]
+
+
+def _missing_words_for_entries(entries: list[dict], word_counts: dict[tuple[int, int], int]) -> list[dict]:
+    from services.validation.detail import _build_detail_lists  # type: ignore
+    from services.validation._missing import _build_missing_words  # type: ignore
+
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts=word_counts,
+        canonical=None,
+        single_word_verses=set(),
+    )
+    return _build_missing_words(
+        detail["verse_segments"], word_counts, detail["sequence_gaps"]
+    )
+
+
+def test_missing_words_includes_forward_jump_even_when_words_are_covered_later():
+    """A forward continuation after backtrack must not skip words."""
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:10", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:5-1:1:7", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:11-1:1:15", "matched_text": "x", "confidence": 1.0},
+        ],
+    }]
+
+    missing = _missing_words_for_entries(entries, {(1, 1): 15})
+
+    assert missing == [{
+        "verse_key": "1:1",
+        "chapter": 1,
+        "segment_uid": None,
+        "msg": "missing words in sequence: [8, 9, 10]",
+        "missing_words": [8, 9, 10],
+        "seg_indices": [1, 2],
+        "sequence_gap": True,
+    }]
+
+
+def test_missing_words_includes_whole_verse_forward_jump():
+    """Whole-verse skips still surface in missing_words at the jump boundary."""
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:4", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:3:1-1:3:4", "matched_text": "x", "confidence": 1.0},
+        ],
+    }]
+
+    missing = _missing_words_for_entries(entries, {(1, 1): 4, (1, 2): 3, (1, 3): 4})
+
+    assert len(missing) == 1
+    assert missing[0]["verse_key"] == "1:2"
+    assert missing[0]["missing_words"] == [1, 2, 3]
+    assert missing[0]["seg_indices"] == [0, 1]
+    assert missing[0]["sequence_gap"] is True
+
+
+def test_missing_words_allows_backward_repetition_without_forward_skip():
+    """Backtracking is valid unless a later segment jumps over unseen words."""
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:5", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:5", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:6-1:1:10", "matched_text": "x", "confidence": 1.0},
+        ],
+    }]
+
+    assert _missing_words_for_entries(entries, {(1, 1): 10}) == []
+
+
+def test_missing_words_dedupes_coverage_and_sequence_gap_for_same_range():
+    """Coverage missing words and order-gap missing words share one card when identical."""
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:1", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:5-1:1:7", "matched_text": "x", "confidence": 1.0},
+        ],
+    }]
+
+    missing = _missing_words_for_entries(entries, {(1, 1): 7})
+
+    assert len(missing) == 1
+    assert missing[0]["msg"] == "missing words: [2, 3, 4]"
+    assert missing[0]["missing_words"] == [2, 3, 4]
+    assert "sequence_gap" not in missing[0]
+
+
+def test_missing_words_splits_cross_verse_partial_forward_jump():
+    """Cross-verse order gaps are split into per-verse missing-word cards."""
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:2", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:3:3-1:3:4", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:3-1:1:4", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:2:1-1:2:3", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:3:1-1:3:2", "matched_text": "x", "confidence": 1.0},
+        ],
+    }]
+
+    missing = _missing_words_for_entries(entries, {(1, 1): 4, (1, 2): 3, (1, 3): 4})
+
+    sequence = [item for item in missing if item.get("sequence_gap")]
+    assert sequence == [
+        {
+            "verse_key": "1:1",
+            "chapter": 1,
+            "segment_uid": None,
+            "msg": "missing words in sequence: [3, 4]",
+            "missing_words": [3, 4],
+            "seg_indices": [0, 1],
+            "sequence_gap": True,
+        },
+        {
+            "verse_key": "1:2",
+            "chapter": 1,
+            "segment_uid": None,
+            "msg": "missing words in sequence: [1, 2, 3]",
+            "missing_words": [1, 2, 3],
+            "seg_indices": [0, 1],
+            "sequence_gap": True,
+        },
+        {
+            "verse_key": "1:3",
+            "chapter": 1,
+            "segment_uid": None,
+            "msg": "missing words in sequence: [1, 2]",
+            "missing_words": [1, 2],
+            "seg_indices": [0, 1],
+            "sequence_gap": True,
+        },
+    ]

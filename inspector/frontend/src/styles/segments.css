@@ -392,22 +392,6 @@
     text-align: center;
 }
 
-
-.seg-tag {
-    font-size: 0.65rem;
-    padding: 1px 6px;
-    border-radius: 4px;
-    margin-left: 6px;
-    font-weight: bold;
-    vertical-align: middle;
-}
-
-.seg-tag-missing {
-    background: rgba(244, 67, 54, 0.2);
-    color: #f44336;
-    border: 1px solid #f44336;
-}
-
 /* Loading overlay for segments */
 .seg-loading {
     text-align: center;

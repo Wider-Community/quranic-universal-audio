@@ -321,33 +321,6 @@
         }
     }
 
-    /** Missing-word seg-indices for the current chapter. Memoized: the Set is
-     *  expensive to pass-by-value — new identity marks every <SegmentRow>
-     *  dirty (O(N) reactive work per confirm at N≈1000 segs). Cache by
-     *  reference on ($segValidation, $selectedChapter); return the SAME Set
-     *  when neither dependency changed. */
-    let _missingCache: Set<number> = new Set();
-    let _missingCacheValRef: typeof $segValidation = null;
-    let _missingCacheChapter = '';
-    $: missingWordSegIndices = (() => {
-        if ($segValidation === _missingCacheValRef && $selectedChapter === _missingCacheChapter) {
-            return _missingCache;
-        }
-        _missingCacheValRef = $segValidation;
-        _missingCacheChapter = $selectedChapter;
-        const set = new Set<number>();
-        if (!$segValidation || !$segValidation.missing_words) { _missingCache = set; return set; }
-        const chapter = parseInt($selectedChapter) || 0;
-        if (!chapter) { _missingCache = set; return set; }
-        for (const mw of $segValidation.missing_words) {
-            if (mw.chapter === chapter && mw.seg_indices) {
-                for (const idx of mw.seg_indices) set.add(idx);
-            }
-        }
-        _missingCache = set;
-        return set;
-    })();
-
     /** Stable key for {#each} reconciliation. UID survives split-induced
      *  index reshuffles; fallback compound key is unique within a chapter. */
     function rowKey(s: Segment): string {
@@ -429,7 +402,6 @@
             <div class="seg-row-group" use:observeRowGroup={rowKey(seg)}>
                 <SegmentRow
                     {seg}
-                    {missingWordSegIndices}
                     isNeighbour={!!seg._isNeighbour}
                     instanceRole="main"
                 />

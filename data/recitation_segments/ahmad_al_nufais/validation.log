@@ -1,0 +1,582 @@
+Generated: 2026-05-10 01:29:17
+
+========================================================================
+  ahmad_al_nufais
+  data/recitation_segments/ahmad_al_nufais
+========================================================================
+
+--- VAD Settings ---
+  Min silence:   100 ms
+  Min speech:    0 ms
+  Padding L/R:   150/500 ms
+  Silence floor: 40 ms
+
+--- Coverage ---
+  Verses found:   6233 / 6236
+  Missing verses: 3
+  Word gaps:      13 verses
+
+--- Segments ---
+  Total:            11953
+  Single-seg:       2952
+  Multi-seg verses: 3202 (9001 segs)
+  Cross-verse keys: 97
+  Max segs/verse:   16
+
+--- Segment Duration ---
+  Min:    0.40s
+  Median: 8.59s
+  Mean:   9.14s
+  Max:    33.10s
+
+--- True Silence Duration (padding reversed) ---
+  Min:    0.69s
+  Median: 0.69s
+  Mean:   0.80s
+  Max:    37.21s
+
+--- Alignment Confidence ---
+  Min:       0.5600
+  Median:    1.0000
+  Mean:      0.9801
+  Max:       1.0000
+  Below 60%: 3
+  Below 80%: 19
+  Failed:    16 (no alignment)
+  Empty ASR: 0 (matched but no phonemes)
+
+--- Failed Alignments (16) ---
+  2:09:37.9 - 2:09:39.4  (1.41s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+    asr:   aˤ: h
+  23:43.8 - 23:44.5  (0.71s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/003.mp3
+    asr:   q Q t u f
+  21:19.5 - 21:22.3  (2.81s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/006.mp3
+    asr:   n
+  3:18.5 - 3:20.7  (2.17s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/009.mp3
+    asr:   n
+  38:39.2 - 38:40.5  (1.30s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/010.mp3
+  42:20.2 - 42:21.2  (1.01s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/010.mp3
+    asr:   m
+  3:20.1 - 3:22.3  (2.23s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/011.mp3
+    asr:   ñ i:
+  11:45.2 - 11:46.3  (1.05s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/014.mp3
+    asr:   rˤ aˤ h m a ʒ a n
+  19:18.2 - 19:18.9  (0.70s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/019.mp3
+  28:19.8 - 28:21.1  (1.38s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/022.mp3
+    asr:   rˤ
+  10:39.8 - 10:40.2  (0.42s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/024.mp3
+  10:59.8 - 11:01.4  (1.62s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+  23:59.8 - 24:03.7  (3.95s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/029.mp3
+    asr:   m
+  19:21.0 - 19:22.0  (1.07s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/030.mp3
+    asr:   w a l a: j a s rˤ
+  11:20.0 - 11:23.0  (3.09s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/058.mp3
+    asr:   n
+  6:40.1 - 6:41.0  (0.96s)
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/066.mp3
+
+--- Missing Verses (3) ---
+  MISS  1:1  (4 words)
+  MISS  44:1  (1 words)
+  MISS  110:1  (5 words)
+
+--- Missing Words (13) ---
+  2:68  @ 24:02.3 - 24:26.6
+    missing words: [8]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+  2:103  @ 41:04.2 - 41:17.5
+    missing words: [10, 11, 12]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+  2:271  @ 2:04:48.2 - 2:05:15.9
+    missing words: [5]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+  5:41  @ 23:52.5 - 25:10.3
+    missing words: [50]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/005.mp3
+  6:80  @ 29:43.5 - 30:22.4
+    missing words: [18]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/006.mp3
+  6:151  @ 1:03:06.9 - 1:03:50.9
+    missing words: [11]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/006.mp3
+  8:62  @ 22:45.2 - 23:05.8
+    missing words: [1]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/008.mp3
+  11:10  @ 3:08.9 - 3:28.3
+    missing words: [10]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/011.mp3
+  11:57  @ 20:48.4 - 21:14.2
+    missing words: [15]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/011.mp3
+  24:55  @ 25:03.4 - 25:48.7
+    missing words: [31]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/024.mp3
+  30:60  @ 19:15.1 - 19:20.9
+    missing words: [6, 7, 8, 9, 10]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/030.mp3
+  31:33  @ 10:38.0 - 11:32.2
+    missing words: [18]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/031.mp3
+  60:12  @ 7:32.2 - 8:39.7
+    missing words: [12]
+    audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/060.mp3
+
+--- Low Confidence <80% (19) ---
+  [0.5600]  110:2:5-110:2:7  @ 0:00.5 - 0:10.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/110.mp3
+           text:  دِينِ ٱللَّهِ أَفْوَاجًا
+  [0.5700]  14:24:5-14:24:6  @ 11:43.5 - 11:44.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/014.mp3
+           text:  ٱللَّهُ مَثَلًا
+  [0.5700]  26:227:19-26:227:19  @ 31:59.4 - 32:05.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  يَنقَلِبُونَ
+  [0.6300]  84:1:1-84:2:3  @ 0:00.8 - 0:15.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/084.mp3
+           text:  إِذَا ٱلسَّمَآءُ ٱنشَقَّتْ وَأَذِنَتْ لِرَبِّهَا وَحُقَّتْ
+  [0.7000]  2:1:1-2:1:1  @ 0:08.3 - 0:19.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  الٓمٓ
+  [0.7000]  3:1:1-3:1:1  @ 0:03.7 - 0:14.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  الٓمٓ
+  [0.7000]  24:35:10-24:35:12  @ 15:13.1 - 15:16.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/024.mp3
+           text:  ٱلْمِصْبَاحُ فِى زُجَاجَةٍ ۖ
+  [0.7000]  29:1:1-29:1:1  @ 0:08.9 - 0:17.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/029.mp3
+           text:  الٓمٓ
+  [0.7000]  30:1:1-30:1:1  @ 0:03.6 - 0:14.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/030.mp3
+           text:  الٓمٓ
+  [0.7100]  46:35:22-46:35:22  @ 15:37.2 - 15:41.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/046.mp3
+           text:  بَلَـٰغٌ ۚ
+  [0.7500]  60:7:11-60:7:12  @ 4:09.7 - 4:14.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/060.mp3
+           text:  وَٱللَّهُ قَدِيرٌ ۚ
+  [0.7500]  72:24:1-72:24:1  @ 4:19.7 - 4:20.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/072.mp3
+           text:  حَتَّىٰٓ
+  [0.7600]  19:10:1-19:10:5  @ 2:11.4 - 2:15.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/019.mp3
+           text:  قَالَ رَبِّ ٱجْعَل لِّىٓ ءَايَةً ۚ
+  [0.7700]  9:69:22-9:69:23  @ 30:59.7 - 31:03.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/009.mp3
+           text:  كَٱلَّذِى خَاضُوٓا۟ ۚ
+  [0.7700]  24:35:33-24:35:35  @ 15:54.4 - 15:59.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/024.mp3
+           text:  نُّورٌ عَلَىٰ نُورٍ ۗ
+  [0.7700]  24:35:33-24:35:35  @ 15:59.1 - 16:04.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/024.mp3
+           text:  نُّورٌ عَلَىٰ نُورٍ ۗ
+  [0.7700]  41:44:9-41:44:10  @ 12:36.4 - 12:40.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/041.mp3
+           text:  ءَا۬عْجَمِىٌّ وَعَرَبِىٌّ ۗ
+  [0.7800]  38:49:1-38:49:2  @ 10:33.9 - 10:35.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/038.mp3
+           text:  هَـٰذَا ذِكْرٌ ۚ
+  [0.7900]  5:3:29-5:3:30  @ 2:36.8 - 2:39.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/005.mp3
+           text:  ذَٰلِكُمْ فِسْقٌ ۗ
+
+--- Detected Repetitions (3) ---
+  [0.9500]  8:49:11-8:49:18  @ 18:32.0 - 18:53.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/008.mp3
+           text:  وَمَن يَتَوَكَّلْ عَلَى ٱللَّهِ فَإِنَّ ٱللَّهَ عَزِيزٌ حَكِيمٌ
+  [0.9100]  28:64:8-28:64:13  @ 24:36.7 - 24:53.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/028.mp3
+           text:  وَرَأَوُا۟ ٱلْعَذَابَ ۚ لَوْ أَنَّهُمْ كَانُوا۟ يَهْتَدُونَ
+  [0.5600]  110:2:5-110:2:7  @ 0:00.5 - 0:10.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/110.mp3
+           text:  دِينِ ٱللَّهِ أَفْوَاجًا
+
+--- May Require Boundary Adjustment (27) ---
+  [1.0000]  2:286:43-2:286:43  @ 2:15:36.6 - 2:15:38.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَٱرْحَمْنَآ ۚ
+  [0.8000]  3:125:1-3:125:1  @ 49:23.5 - 49:25.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  بَلَىٰٓ ۚ
+  [1.0000]  5:114:19-5:114:19  @ 1:01:55.1 - 1:01:57.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/005.mp3
+           text:  وَٱرْزُقْنَا
+  [1.0000]  10:19:7-10:19:7  @ 7:50.1 - 7:52.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/010.mp3
+           text:  فَٱخْتَلَفُوا۟ ۚ
+  [1.0000]  11:49:16-11:49:16  @ 18:14.4 - 18:15.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/011.mp3
+           text:  فَٱصْبِرْ ۖ
+  [0.8800]  16:40:10-16:40:10  @ 13:24.1 - 13:29.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/016.mp3
+           text:  فَيَكُونُ
+  [1.0000]  18:71:1-18:71:1  @ 22:28.6 - 22:32.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  18:74:1-18:74:1  @ 23:05.7 - 23:09.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  18:77:1-18:77:1  @ 23:52.6 - 23:56.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/018.mp3
+           text:  فَٱنطَلَقَا
+  [1.0000]  19:35:16-19:35:16  @ 7:53.6 - 7:57.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/019.mp3
+           text:  فَيَكُونُ
+  [0.9100]  25:20:17-25:20:17  @ 7:50.3 - 7:54.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/025.mp3
+           text:  أَتَصْبِرُونَ ۗ
+  [0.5700]  26:227:19-26:227:19  @ 31:59.4 - 32:05.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  يَنقَلِبُونَ
+  [0.8900]  33:61:1-33:61:1  @ 26:42.5 - 26:48.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/033.mp3
+           text:  مَّلْعُونِينَ ۖ
+  [1.0000]  36:81:11-36:81:11  @ 19:47.3 - 19:48.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/036.mp3
+           text:  بَلَىٰ
+  [1.0000]  36:82:10-36:82:10  @ 20:08.6 - 20:13.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/036.mp3
+           text:  فَيَكُونُ
+  [0.8800]  37:42:1-37:42:1  @ 5:13.7 - 5:15.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  فَوَٰكِهُ ۖ
+  [0.8900]  37:138:1-37:138:1  @ 15:56.9 - 16:00.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  وَبِٱلَّيْلِ ۗ
+  [1.0000]  38:55:1-38:55:1  @ 11:28.0 - 11:29.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/038.mp3
+           text:  هَـٰذَا ۚ
+  [1.0000]  38:57:1-38:57:1  @ 11:38.7 - 11:39.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/038.mp3
+           text:  هَـٰذَا
+  [1.0000]  39:59:1-39:59:1  @ 18:21.0 - 18:23.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/039.mp3
+           text:  بَلَىٰ
+  [1.0000]  39:73:18-39:73:18  @ 23:03.6 - 23:05.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/039.mp3
+           text:  طِبْتُمْ
+  [1.0000]  40:68:12-40:68:12  @ 20:58.9 - 21:02.5
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/040.mp3
+           text:  فَيَكُونُ
+  [0.8900]  44:45:1-44:45:1  @ 7:58.7 - 8:00.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/044.mp3
+           text:  كَٱلْمُهْلِ
+  [1.0000]  44:49:1-44:49:1  @ 8:28.8 - 8:29.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/044.mp3
+           text:  ذُقْ
+  [1.0000]  50:41:1-50:41:1  @ 8:11.2 - 8:12.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/050.mp3
+           text:  وَٱسْتَمِعْ
+  [1.0000]  54:10:5-54:10:5  @ 1:44.9 - 1:48.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/054.mp3
+           text:  فَٱنتَصِرْ
+  [0.7500]  72:24:1-72:24:1  @ 4:19.7 - 4:20.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/072.mp3
+           text:  حَتَّىٰٓ
+
+--- Cross-verse (97) ---
+  [0.9500]  12:47:8-12:48:13  @ 17:55.7 - 18:20.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/012.mp3
+           text:  فَذَرُوهُ فِى سُنبُلِهِۦٓ إِلَّا قَلِيلًا مِّمَّا تَأْكُلُونَ ثُمَّ يَأْتِى مِن بَعْدِ ذَٰلِكَ سَبْعٌ شِدَادٌ يَأْكُلْنَ مَا قَدَّمْتُمْ لَهُنَّ إِلَّا قَلِيلًا
+  [0.9700]  12:66:16-12:67:11  @ 24:48.5 - 25:13.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/012.mp3
+           text:  فَلَمَّآ ءَاتَوْهُ مَوْثِقَهُمْ قَالَ ٱللَّهُ عَلَىٰ مَا نَقُولُ وَكِيلٌ وَقَالَ يَـٰبَنِىَّ لَا تَدْخُلُوا۟ مِن بَابٍ وَٰحِدٍ وَٱدْخُلُوا۟ مِنْ أَبْوَٰبٍ مُّتَفَرِّقَةٍ ۖ
+  [1.0000]  12:104:6-12:105:11  @ 37:53.2 - 38:12.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/012.mp3
+           text:  إِنْ هُوَ إِلَّا ذِكْرٌ لِّلْعَـٰلَمِينَ وَكَأَيِّن مِّنْ ءَايَةٍ فِى ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضِ يَمُرُّونَ عَلَيْهَا وَهُمْ عَنْهَا مُعْرِضُونَ
+  [0.9800]  15:92:1-15:93:3  @ 15:46.3 - 15:59.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/015.mp3
+           text:  فَوَرَبِّكَ لَنَسْـَٔلَنَّهُمْ أَجْمَعِينَ عَمَّا كَانُوا۟ يَعْمَلُونَ
+  [1.0000]  20:25:1-20:26:3  @ 3:50.0 - 3:59.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/020.mp3
+           text:  قَالَ رَبِّ ٱشْرَحْ لِى صَدْرِى وَيَسِّرْ لِىٓ أَمْرِى
+  [0.9200]  20:33:1-20:34:2  @ 4:25.1 - 4:32.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/020.mp3
+           text:  كَىْ نُسَبِّحَكَ كَثِيرًا وَنَذْكُرَكَ كَثِيرًا
+  [0.9800]  20:92:1-20:93:2  @ 19:35.9 - 19:47.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/020.mp3
+           text:  قَالَ يَـٰهَـٰرُونُ مَا مَنَعَكَ إِذْ رَأَيْتَهُمْ ضَلُّوٓا۟ أَلَّا تَتَّبِعَنِ ۖ
+  [0.9600]  25:27:6-25:28:1  @ 9:55.6 - 10:06.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/025.mp3
+           text:  يَقُولُ يَـٰلَيْتَنِى ٱتَّخَذْتُ مَعَ ٱلرَّسُولِ سَبِيلًا يَـٰوَيْلَتَىٰ
+  [0.9600]  26:10:1-26:11:2  @ 1:25.3 - 1:34.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  وَإِذْ نَادَىٰ رَبُّكَ مُوسَىٰٓ أَنِ ٱئْتِ ٱلْقَوْمَ ٱلظَّـٰلِمِينَ قَوْمَ فِرْعَوْنَ ۚ
+  [0.9600]  26:58:1-26:59:4  @ 9:01.5 - 9:17.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  وَكُنُوزٍ وَمَقَامٍ كَرِيمٍ كَذَٰلِكَ وَأَوْرَثْنَـٰهَا بَنِىٓ إِسْرَٰٓءِيلَ
+  [0.9800]  26:96:1-26:97:6  @ 14:28.5 - 14:42.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  قَالُوا۟ وَهُمْ فِيهَا يَخْتَصِمُونَ تَٱللَّهِ إِن كُنَّا لَفِى ضَلَـٰلٍ مُّبِينٍ
+  [0.9700]  26:100:1-26:101:3  @ 14:54.8 - 15:05.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  فَمَا لَنَا مِن شَـٰفِعِينَ وَلَا صَدِيقٍ حَمِيمٍ
+  [0.9600]  26:121:5-26:122:5  @ 17:46.7 - 18:00.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  وَمَا كَانَ أَكْثَرُهُم مُّؤْمِنِينَ وَإِنَّ رَبَّكَ لَهُوَ ٱلْعَزِيزُ ٱلرَّحِيمُ
+  [0.9500]  26:125:1-26:126:3  @ 18:12.5 - 18:23.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  إِنِّى لَكُمْ رَسُولٌ أَمِينٌ فَٱتَّقُوا۟ ٱللَّهَ وَأَطِيعُونِ
+  [0.9800]  26:137:1-26:138:3  @ 19:55.1 - 20:05.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  إِنْ هَـٰذَآ إِلَّا خُلُقُ ٱلْأَوَّلِينَ وَمَا نَحْنُ بِمُعَذَّبِينَ
+  [0.9600]  26:139:7-26:140:5  @ 20:14.8 - 20:27.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  وَمَا كَانَ أَكْثَرُهُم مُّؤْمِنِينَ وَإِنَّ رَبَّكَ لَهُوَ ٱلْعَزِيزُ ٱلرَّحِيمُ
+  [0.9600]  26:158:7-26:159:5  @ 22:45.6 - 22:58.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  وَمَا كَانَ أَكْثَرُهُم مُّؤْمِنِينَ وَإِنَّ رَبَّكَ لَهُوَ ٱلْعَزِيزُ ٱلرَّحِيمُ
+  [0.9800]  26:160:1-26:161:7  @ 22:59.1 - 23:09.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  كَذَّبَتْ قَوْمُ لُوطٍ ٱلْمُرْسَلِينَ إِذْ قَالَ لَهُمْ أَخُوهُمْ لُوطٌ أَلَا تَتَّقُونَ
+  [0.9900]  26:163:1-26:164:11  @ 23:15.0 - 23:29.5
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  فَٱتَّقُوا۟ ٱللَّهَ وَأَطِيعُونِ وَمَآ أَسْـَٔلُكُمْ عَلَيْهِ مِنْ أَجْرٍ ۖ إِنْ أَجْرِىَ إِلَّا عَلَىٰ رَبِّ ٱلْعَـٰلَمِينَ
+  [0.9600]  26:170:1-26:171:4  @ 24:14.8 - 24:25.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  فَنَجَّيْنَـٰهُ وَأَهْلَهُۥٓ أَجْمَعِينَ إِلَّا عَجُوزًا فِى ٱلْغَـٰبِرِينَ
+  [0.9600]  26:210:1-26:211:5  @ 29:24.0 - 29:35.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  وَمَا تَنَزَّلَتْ بِهِ ٱلشَّيَـٰطِينُ وَمَا يَنبَغِى لَهُمْ وَمَا يَسْتَطِيعُونَ
+  [0.9400]  28:1:1-28:2:4  @ 0:09.6 - 0:23.5
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/028.mp3
+           text:  طسٓمٓ تِلْكَ ءَايَـٰتُ ٱلْكِتَـٰبِ ٱلْمُبِينِ
+  [0.9600]  30:4:10-30:5:5  @ 0:36.8 - 0:50.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/030.mp3
+           text:  وَيَوْمَئِذٍ يَفْرَحُ ٱلْمُؤْمِنُونَ بِنَصْرِ ٱللَّهِ ۚ يَنصُرُ مَن يَشَآءُ ۖ
+  [0.9700]  35:20:1-35:21:4  @ 7:54.1 - 8:02.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/035.mp3
+           text:  وَلَا ٱلظُّلُمَـٰتُ وَلَا ٱلنُّورُ وَلَا ٱلظِّلُّ وَلَا ٱلْحَرُورُ
+  [0.9700]  36:26:4-36:27:7  @ 5:59.9 - 6:11.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/036.mp3
+           text:  قَالَ يَـٰلَيْتَ قَوْمِى يَعْلَمُونَ بِمَا غَفَرَ لِى رَبِّى وَجَعَلَنِى مِنَ ٱلْمُكْرَمِينَ
+  [0.9300]  37:22:5-37:23:3  @ 2:39.9 - 2:47.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  وَمَا كَانُوا۟ يَعْبُدُونَ مِن دُونِ ٱللَّهِ
+  [0.9800]  37:58:1-37:59:6  @ 7:25.1 - 7:34.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  أَفَمَا نَحْنُ بِمَيِّتِينَ إِلَّا مَوْتَتَنَا ٱلْأُولَىٰ وَمَا نَحْنُ بِمُعَذَّبِينَ
+  [0.9700]  37:88:1-37:89:3  @ 10:39.6 - 10:48.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  فَنَظَرَ نَظْرَةً فِى ٱلنُّجُومِ فَقَالَ إِنِّى سَقِيمٌ
+  [0.9800]  37:108:1-37:109:3  @ 13:07.6 - 13:16.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  وَتَرَكْنَا عَلَيْهِ فِى ٱلْـَٔاخِرِينَ سَلَـٰمٌ عَلَىٰٓ إِبْرَٰهِيمَ
+  [0.9800]  37:119:1-37:120:4  @ 14:22.2 - 14:31.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/037.mp3
+           text:  وَتَرَكْنَا عَلَيْهِمَا فِى ٱلْـَٔاخِرِينَ سَلَـٰمٌ عَلَىٰ مُوسَىٰ وَهَـٰرُونَ
+  ... and 67 more
+
+--- Muqatta'at (29) ---
+  [0.7000]  2:1:1-2:1:1  @ 0:08.3 - 0:19.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  الٓمٓ
+  [0.7000]  3:1:1-3:1:1  @ 0:03.7 - 0:14.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/003.mp3
+           text:  الٓمٓ
+  [0.8600]  7:1:1-7:1:1  @ 0:09.6 - 0:21.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/007.mp3
+           text:  الٓمٓصٓ
+  [0.8000]  10:1:1-10:1:1  @ 0:09.3 - 0:16.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/010.mp3
+           text:  الٓر ۚ
+  [0.8000]  11:1:1-11:1:1  @ 0:10.0 - 0:16.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/011.mp3
+           text:  الٓر ۚ
+  [0.8000]  12:1:1-12:1:1  @ 0:04.1 - 0:10.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/012.mp3
+           text:  الٓر ۚ
+  [0.8300]  13:1:1-13:1:1  @ 0:00.1 - 0:11.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/013.mp3
+           text:  الٓمٓر ۚ
+  [0.8000]  14:1:1-14:1:1  @ 0:09.8 - 0:17.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/014.mp3
+           text:  الٓر ۚ
+  [0.8000]  15:1:1-15:1:1  @ 0:04.5 - 0:11.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/015.mp3
+           text:  الٓر ۚ
+  [0.8300]  19:1:1-19:1:1  @ 0:09.8 - 0:24.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/019.mp3
+           text:  كٓهيعٓصٓ
+  [1.0000]  20:1:1-20:1:1  @ 0:09.4 - 0:11.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/020.mp3
+           text:  طه
+  [0.8600]  26:1:1-26:1:1  @ 0:03.4 - 0:12.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/026.mp3
+           text:  طسٓمٓ
+  [1.0000]  27:1:1-27:1:1  @ 0:09.3 - 0:14.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/027.mp3
+           text:  طسٓ ۚ
+  [0.9400]  28:1:1-28:2:4  @ 0:09.6 - 0:23.5
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/028.mp3
+           text:  طسٓمٓ تِلْكَ ءَايَـٰتُ ٱلْكِتَـٰبِ ٱلْمُبِينِ
+  [0.7000]  29:1:1-29:1:1  @ 0:08.9 - 0:17.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/029.mp3
+           text:  الٓمٓ
+  [0.7000]  30:1:1-30:1:1  @ 0:03.6 - 0:14.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/030.mp3
+           text:  الٓمٓ
+  [0.8000]  31:1:1-31:1:1  @ 0:09.6 - 0:18.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/031.mp3
+           text:  الٓمٓ
+  [0.8000]  32:1:1-32:1:1  @ 0:04.0 - 0:12.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/032.mp3
+           text:  الٓمٓ
+  [1.0000]  36:1:1-36:1:1  @ 0:09.3 - 0:15.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/036.mp3
+           text:  يسٓ
+  [1.0000]  38:1:1-38:1:1  @ 0:07.3 - 0:11.5
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/038.mp3
+           text:  صٓ ۚ
+  [1.0000]  40:1:1-40:1:1  @ 0:03.8 - 0:08.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/040.mp3
+           text:  حمٓ
+  [1.0000]  41:1:1-41:1:1  @ 0:04.1 - 0:09.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/041.mp3
+           text:  حمٓ
+  [1.0000]  42:1:1-42:1:1  @ 0:14.1 - 0:20.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/042.mp3
+           text:  حمٓ
+  [0.8200]  42:2:1-42:2:1  @ 0:20.4 - 0:34.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/042.mp3
+           text:  عٓسٓقٓ
+  [1.0000]  43:1:1-43:1:1  @ 0:04.2 - 0:09.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/043.mp3
+           text:  حمٓ
+  [1.0000]  45:1:1-45:1:1  @ 0:20.0 - 0:25.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/045.mp3
+           text:  حمٓ
+  [1.0000]  46:1:1-46:1:1  @ 0:04.3 - 0:11.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/046.mp3
+           text:  حمٓ
+  [1.0000]  50:1:1-50:1:1  @ 0:00.1 - 0:05.5
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/050.mp3
+           text:  قٓ ۚ
+  [1.0000]  68:1:1-68:1:1  @ 0:09.6 - 0:14.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/068.mp3
+           text:  نٓ ۚ
+
+--- Qalqala (743) ---
+  [0.9800]  2:19:1-2:19:8  [ق]  @ 4:39.1 - 4:50.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  أَوْ كَصَيِّبٍ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌ وَرَعْدٌ وَبَرْقٌ
+  [0.9800]  2:44:1-2:44:8  [ب]  @ 15:23.9 - 15:37.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  ۞ أَتَأْمُرُونَ ٱلنَّاسَ بِٱلْبِرِّ وَتَنسَوْنَ أَنفُسَكُمْ وَأَنتُمْ تَتْلُونَ ٱلْكِتَـٰبَ ۚ
+  [0.9900]  2:61:45-2:61:54  [ق]  @ 21:51.9 - 22:03.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  ذَٰلِكَ بِأَنَّهُمْ كَانُوا۟ يَكْفُرُونَ بِـَٔايَـٰتِ ٱللَّهِ وَيَقْتُلُونَ ٱلنَّبِيِّـۧنَ بِغَيْرِ ٱلْحَقِّ ۗ
+  [0.9500]  2:71:17-2:71:20  [ق]  @ 25:24.8 - 25:28.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  قَالُوا۟ ٱلْـَٔـٰنَ جِئْتَ بِٱلْحَقِّ ۚ
+  [0.9800]  2:85:39-2:85:44  [ب]  @ 32:01.9 - 32:11.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَيَوْمَ ٱلْقِيَـٰمَةِ يُرَدُّونَ إِلَىٰٓ أَشَدِّ ٱلْعَذَابِ ۗ
+  [0.9600]  2:90:21-2:90:24  [ب]  @ 34:34.1 - 34:40.0
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  فَبَآءُو بِغَضَبٍ عَلَىٰ غَضَبٍ ۚ
+  [0.9800]  2:91:8-2:91:17  [ق]  @ 34:54.9 - 35:07.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  قَالُوا۟ نُؤْمِنُ بِمَآ أُنزِلَ عَلَيْنَا وَيَكْفُرُونَ بِمَا وَرَآءَهُۥ وَهُوَ ٱلْحَقُّ
+  [0.9900]  2:101:1-2:101:15  [ب]  @ 38:57.3 - 39:14.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلَمَّا جَآءَهُمْ رَسُولٌ مِّنْ عِندِ ٱللَّهِ مُصَدِّقٌ لِّمَا مَعَهُمْ نَبَذَ فَرِيقٌ مِّنَ ٱلَّذِينَ أُوتُوا۟ ٱلْكِتَـٰبَ
+  [0.9800]  2:102:57-2:102:66  [ق]  @ 40:41.9 - 40:52.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلَقَدْ عَلِمُوا۟ لَمَنِ ٱشْتَرَىٰهُ مَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ ۚ
+  [0.9600]  2:109:12-2:109:21  [ق]  @ 43:23.6 - 43:33.5
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  حَسَدًا مِّنْ عِندِ أَنفُسِهِم مِّن بَعْدِ مَا تَبَيَّنَ لَهُمُ ٱلْحَقُّ ۖ
+  [0.9900]  2:113:1-2:113:15  [ب]  @ 44:52.7 - 45:09.9
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَقَالَتِ ٱلْيَهُودُ لَيْسَتِ ٱلنَّصَـٰرَىٰ عَلَىٰ شَىْءٍ وَقَالَتِ ٱلنَّصَـٰرَىٰ لَيْسَتِ ٱلْيَهُودُ عَلَىٰ شَىْءٍ وَهُمْ يَتْلُونَ ٱلْكِتَـٰبَ ۗ
+  [0.9600]  2:115:1-2:115:3  [ب]  @ 45:58.6 - 46:02.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلِلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  [0.9900]  2:125:12-2:125:22  [د]  @ 49:44.8 - 50:03.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَعَهِدْنَآ إِلَىٰٓ إِبْرَٰهِـۧمَ وَإِسْمَـٰعِيلَ أَن طَهِّرَا بَيْتِىَ لِلطَّآئِفِينَ وَٱلْعَـٰكِفِينَ وَٱلرُّكَّعِ ٱلسُّجُودِ
+  [0.9100]  2:137:9-2:137:14  [ق]  @ 54:38.3 - 54:48.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَّإِن تَوَلَّوْا۟ فَإِنَّمَا هُمْ فِى شِقَاقٍ ۖ
+  [0.9600]  2:142:12-2:142:15  [ب]  @ 56:48.3 - 56:52.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  قُل لِّلَّهِ ٱلْمَشْرِقُ وَٱلْمَغْرِبُ ۚ
+  [0.9600]  2:163:1-2:163:3  [د]  @ 1:04:48.4 - 1:04:52.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَإِلَـٰهُكُمْ إِلَـٰهٌ وَٰحِدٌ ۖ
+  [1.0000]  2:165:17-2:165:31  [ب]  @ 1:06:17.9 - 1:06:34.8
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلَوْ يَرَى ٱلَّذِينَ ظَلَمُوٓا۟ إِذْ يَرَوْنَ ٱلْعَذَابَ أَنَّ ٱلْقُوَّةَ لِلَّهِ جَمِيعًا وَأَنَّ ٱللَّهَ شَدِيدُ ٱلْعَذَابِ
+  [1.0000]  2:166:1-2:166:12  [ب]  @ 1:06:34.8 - 1:06:45.7
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  إِذْ تَبَرَّأَ ٱلَّذِينَ ٱتُّبِعُوا۟ مِنَ ٱلَّذِينَ ٱتَّبَعُوا۟ وَرَأَوُا۟ ٱلْعَذَابَ وَتَقَطَّعَتْ بِهِمُ ٱلْأَسْبَابُ
+  [0.9700]  2:176:1-2:176:6  [ق]  @ 1:10:30.1 - 1:10:36.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  ذَٰلِكَ بِأَنَّ ٱللَّهَ نَزَّلَ ٱلْكِتَـٰبَ بِٱلْحَقِّ ۗ
+  [0.9800]  2:176:7-2:176:14  [د]  @ 1:10:36.3 - 1:10:47.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَإِنَّ ٱلَّذِينَ ٱخْتَلَفُوا۟ فِى ٱلْكِتَـٰبِ لَفِى شِقَاقٍ بَعِيدٍ
+  [0.9500]  2:186:1-2:186:6  [ب]  @ 1:15:38.3 - 1:15:49.4
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَإِذَا سَأَلَكَ عِبَادِى عَنِّى فَإِنِّى قَرِيبٌ ۖ
+  [0.9800]  2:187:48-2:187:53  [د]  @ 1:16:59.9 - 1:17:08.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلَا تُبَـٰشِرُوهُنَّ وَأَنتُمْ عَـٰكِفُونَ فِى ٱلْمَسَـٰجِدِ ۗ
+  [0.9600]  2:189:4-2:189:8  [ج]  @ 1:17:51.9 - 1:17:57.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  قُلْ هِىَ مَوَٰقِيتُ لِلنَّاسِ وَٱلْحَجِّ ۗ
+  [1.0000]  2:196:67-2:196:73  [ب]  @ 1:21:27.2 - 1:21:37.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَٱتَّقُوا۟ ٱللَّهَ وَٱعْلَمُوٓا۟ أَنَّ ٱللَّهَ شَدِيدُ ٱلْعِقَابِ
+  [0.9800]  2:197:4-2:197:15  [ج]  @ 1:21:43.9 - 1:21:54.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  فَمَن فَرَضَ فِيهِنَّ ٱلْحَجَّ فَلَا رَفَثَ وَلَا فُسُوقَ وَلَا جِدَالَ فِى ٱلْحَجِّ ۗ
+  [1.0000]  2:197:27-2:197:29  [ب]  @ 1:22:10.1 - 1:22:19.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَٱتَّقُونِ يَـٰٓأُو۟لِى ٱلْأَلْبَـٰبِ
+  [1.0000]  2:200:11-2:200:24  [ق]  @ 1:23:30.7 - 1:23:47.3
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  فَمِنَ ٱلنَّاسِ مَن يَقُولُ رَبَّنَآ ءَاتِنَا فِى ٱلدُّنْيَا وَمَا لَهُۥ فِى ٱلْـَٔاخِرَةِ مِنْ خَلَـٰقٍ
+  [1.0000]  2:202:6-2:202:8  [ب]  @ 1:24:18.7 - 1:24:26.2
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَٱللَّهُ سَرِيعُ ٱلْحِسَابِ
+  [1.0000]  2:205:11-2:205:14  [د]  @ 1:25:20.1 - 1:25:25.1
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَٱللَّهُ لَا يُحِبُّ ٱلْفَسَادَ
+  [1.0000]  2:206:11-2:206:12  [د]  @ 1:25:34.9 - 1:25:39.6
+           audio: https://server16.mp3quran.net/nufais/Rewayat-Hafs-A-n-Assem/002.mp3
+           text:  وَلَبِئْسَ ٱلْمِهَادُ
+  ... and 713 more
+
+--- Cross-file Consistency (detailed.json ↔ segments.json) ---
+  Mismatches: 0
+
+--- Category Counts (machine-readable) ---
+  failed 16
+  missing_verses 3
+  missing_words 13
+  structural_errors 0
+  low_confidence 19
+  repetitions 3
+  audio_bleeding 0
+  boundary_adj 27
+  cross_verse 97
+  qalqala 743
+  muqattaat 29
+

@@ -29,10 +29,8 @@
     let showContext = false;
 
     $: ctxMode = $segConfig.accordionContext?.['missing_words'] ?? 'hidden';
+    $: ctxDefaultOpen = ctxMode !== 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
-
-    // Missing-word segment tag set for SegmentRow display.
-    $: missingWordSegIndices = new Set<number>(item.seg_indices ?? []);
 
     // Segments in the gap range. Subscribes to segAllData so the list
     // re-derives after split/merge mutates indices in place. For each base
@@ -93,6 +91,12 @@
         }
     }
     $: segmentsInRange = _segRangeMemoResult;
+
+    let _didAutoOpen = false;
+    $: if (segmentsInRange.length > 0 && ctxDefaultOpen && !_didAutoOpen) {
+        showContext = true;
+        _didAutoOpen = true;
+    }
 
     // Context neighbours: prev of first / next of last. Guard against the
     // neighbour being itself a split-group member (already rendered inline).
@@ -164,7 +168,6 @@
             showGotoBtn={true}
             showPlayBtn={true}
             showChapter={true}
-            missingWordSegIndices={missingWordSegIndices}
             validationCategory="missing_words"
             accordionSiblings={siblings}
         />

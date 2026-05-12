@@ -89,7 +89,6 @@
     export let showGotoBtn: boolean = false;
     export let isContext: boolean = false;
     export let contextLabel: string = '';
-    export let missingWordSegIndices: Set<number> | null = null;
     export let isNeighbour: boolean = false;
     /** Provisioning slot — overlay applied in history mode. */
     export let splitHL: SplitHighlight | null = null;
@@ -225,7 +224,6 @@
         : (adj.next.audio_url && seg.audio_url && adj.next.audio_url !== seg.audio_url)
         ? 'Cannot merge segments from different audio files'
         : '';
-    $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
     // Live ref-edit preview ref. ReferenceEditor dispatches the normalized ref
     // on every keystroke; the body re-renders synchronously through the same
     // `dkTextForRef` lookup the persisted row uses. `null` = no preview /
@@ -687,9 +685,6 @@
                 {/if}
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
-                {#if showMissingTag}
-                    <span class="seg-tag seg-tag-missing">Missing words</span>
-                {/if}
             </div>
             <div class="seg-text-times" class:seg-history-changed={changedDur} title={durTitle}>
                 <TimeRange

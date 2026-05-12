@@ -111,8 +111,4 @@ def tail_phoneme_mismatch(phonemes_asr: str, matched_ref: str,
         and phonemes_match(canon_tail[0], asr_last, get_phoneme_sub_pairs())):
         return True
 
-    # Case 2: canonical last phoneme is Q (qalqala marker) but ASR doesn't end with Q
-    if canon_last == 'Q' and asr_last != 'Q':
-        return True
-
     return False

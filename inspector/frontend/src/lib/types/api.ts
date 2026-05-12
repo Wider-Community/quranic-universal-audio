@@ -354,6 +354,8 @@ export interface SegValMissingVerseItem extends SegValItemBase {
 export interface SegValMissingWordsItem extends SegValItemBase {
     verse_key: VerseRef;
     msg?: string;
+    missing_words?: number[];
+    sequence_gap?: boolean;
     /** Client mutates entries during index-fixup. */
     seg_indices?: number[];
     auto_fix?: SegValAutoFix;
@@ -424,6 +426,11 @@ export interface SegValQalqalaItem extends SegValItemBase {
     end_of_verse: boolean;
 }
 
+export interface SegValBasmalaAminItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+}
+
 /** Union of every validation item variant the panel renders. */
 export type SegValAnyItem =
     | SegValFailedItem
@@ -437,7 +444,8 @@ export type SegValAnyItem =
     | SegValAudioBleedingItem
     | SegValRepetitionItem
     | SegValMuqattaatItem
-    | SegValQalqalaItem;
+    | SegValQalqalaItem
+    | SegValBasmalaAminItem;
 
 /** GET /api/seg/validate/:reciter */
 export interface SegValidateResponse {
@@ -456,6 +464,7 @@ export interface SegValidateResponse {
     repetitions?: SegValRepetitionItem[];
     muqattaat?: SegValMuqattaatItem[];
     qalqala?: SegValQalqalaItem[];
+    basmala_amin?: SegValBasmalaAminItem[];
     [k: string]: unknown;
 }
 

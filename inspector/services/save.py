@@ -32,6 +32,17 @@ from services.validation.snapshot_classifier import classify_snapshot
 from utils.references import chapter_from_ref, normalize_ref
 from utils.uuid7 import uuid7
 
+# Categories that should not surface in the History panel's per-op
+# "classified_issues" deltas — ``basmala_amin`` is informational only
+# (the reciter started/ended a verse with the basmala / amin convention)
+# and would otherwise show up as a noisy +/- flag on every edit that
+# touches a verse boundary.
+HISTORY_NEUTRAL_CATEGORIES = frozenset({"basmala_amin"})
+
+
+def _history_visible_categories(categories: list[str]) -> list[str]:
+    return [cat for cat in categories if cat not in HISTORY_NEUTRAL_CATEGORIES]
+
 
 # Allowed ``command.type`` values.  Both wire-canonical (snake_case
 # ``edit_reference`` / ``ignore_issue`` / ``auto_fix_missing_word``) and
@@ -171,8 +182,8 @@ def _attach_classified_issues(operations: list,
             for snap in arr:
                 if isinstance(snap, dict):
                     enriched = dict(snap)
-                    enriched["classified_issues"] = classify_snapshot(
-                        enriched, probe_failed_uids=probe_failed_uids,
+                    enriched["classified_issues"] = _history_visible_categories(
+                        classify_snapshot(enriched, probe_failed_uids=probe_failed_uids)
                     )
                     new_arr.append(enriched)
                 else:
@@ -186,8 +197,8 @@ def _attach_classified_issues(operations: list,
                 snap = new_snapshots.get(which)
                 if isinstance(snap, dict):
                     enriched = dict(snap)
-                    enriched["classified_issues"] = classify_snapshot(
-                        enriched, probe_failed_uids=probe_failed_uids,
+                    enriched["classified_issues"] = _history_visible_categories(
+                        classify_snapshot(enriched, probe_failed_uids=probe_failed_uids)
                     )
                     new_snapshots[which] = enriched
             new_op["snapshots"] = new_snapshots

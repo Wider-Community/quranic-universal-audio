@@ -16,6 +16,7 @@ export const ALL_CATEGORIES = [
   'cross_verse',
   'qalqala',
   'muqattaat',
+  'basmala_amin',
 ] as const;
 
 export type CategoryName = typeof ALL_CATEGORIES[number];
@@ -30,6 +31,7 @@ export const PER_SEGMENT_CATEGORIES: CategoryName[] = [
   'cross_verse',
   'qalqala',
   'muqattaat',
+  'basmala_amin',
 ];
 
 export const CAN_IGNORE_CATEGORIES: CategoryName[] = [

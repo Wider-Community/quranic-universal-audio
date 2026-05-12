@@ -30,6 +30,10 @@
     import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
+    const HISTORY_NEUTRAL_CATEGORIES = new Set(['basmala_amin']);
+    const historyCategory = (cat: string | null | undefined): string | null =>
+        cat && !HISTORY_NEUTRAL_CATEGORIES.has(cat) ? cat : null;
+
     // Derived pill data ------------------------------------------------------
 
     $: unfilteredEntries = (() => {
@@ -65,7 +69,7 @@
             const delta = deriveOpIssueDelta(ops);
             const touched = new Set<string>([
                 ...delta.involved,
-                ...ops.map((op) => op.op_context_category).filter((c): c is string => !!c),
+                ...ops.map((op) => historyCategory(op.op_context_category)).filter((c): c is string => !!c),
             ]);
             for (const cat of touched) counts[cat] = (counts[cat] || 0) + 1;
         }
@@ -120,7 +124,7 @@
             const delta = deriveOpIssueDelta(ops);
             const touched = new Set<string>([
                 ...delta.involved,
-                ...ops.map((op) => op.op_context_category).filter((c): c is string => !!c),
+                ...ops.map((op) => historyCategory(op.op_context_category)).filter((c): c is string => !!c),
             ]);
             for (const cat of touched) counts[cat] = (counts[cat] || 0) + 1;
         }
