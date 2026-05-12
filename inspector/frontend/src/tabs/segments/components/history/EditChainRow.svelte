@@ -12,6 +12,7 @@
      * (passed through SegmentRow's reactive splitHL prop).
      */
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import type { Segment } from '../../../../lib/types/domain';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
     import {
@@ -26,8 +27,6 @@
     import type { SplitHighlight, TrimHighlight } from '../../types/segments-waveform';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
-
-    import { editGate } from '../../../../lib/actions/editGate';
     import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
     import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryArrows from './HistoryArrows.svelte';

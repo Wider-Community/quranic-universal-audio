@@ -15,7 +15,6 @@
 import { loadCurrentUser } from '../stores/current-user';
 import { openSignInModal } from '../stores/sign-in-modal';
 import { pushToast } from '../stores/toast';
-import { fetchJson } from './index';
 import type { ReciterRow } from './reciter-task';
 
 type RouteName = 'claim' | 'release' | 'mark-ready' | 'unmark-ready';

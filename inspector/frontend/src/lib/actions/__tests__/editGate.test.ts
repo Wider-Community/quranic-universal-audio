@@ -7,12 +7,12 @@
  *   - `require: 'admin'`: contributor's editor mode does NOT pass through.
  */
 
+import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { editGate } from '../editGate';
 import { editPopover } from '../../stores/edit-popover';
 import { editingMode, setEditingMode } from '../../stores/editing-mode';
-import { get } from 'svelte/store';
+import { editGate } from '../editGate';
 
 let button: HTMLButtonElement;
 let inner: HTMLSpanElement;
