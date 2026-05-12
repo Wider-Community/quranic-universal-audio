@@ -28,7 +28,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import unquote
 
-from services import data_dir
+from services import cache, data_dir
 
 _PROXY_RE = re.compile(r"/api/seg/audio-proxy/[^?]+\?url=(.+)")
 
@@ -101,6 +101,9 @@ def append_peaks_records(
         if err:
             continue
         data_dir.append_peaks_history(reciter, line)
+        cached = cache.get_seg_history_peaks(reciter)
+        if cached is not None:
+            cached.append(line)
         written += 1
     return written
 
@@ -116,10 +119,16 @@ def load_peaks_records(
     """
     excluded = exclude_op_ids or set()
     out: list[dict] = []
+    cached = cache.get_seg_history_peaks(reciter)
+    if cached is not None and not excluded:
+        return cached
+
     for rec in data_dir.iter_peaks_history(reciter):
         if not isinstance(rec, dict):
             continue
         if rec.get("op_id") in excluded:
             continue
         out.append(rec)
+    if not excluded:
+        cache.set_seg_history_peaks(reciter, out)
     return out

@@ -6,8 +6,10 @@ this module is read-only.
 """
 
 from collections import Counter
+import threading
 
-from services import data_dir
+from config import RECITATION_SEGMENTS_PATH as _DEFAULT_RECITATION_SEGMENTS_PATH
+from services import cache, data_dir
 
 
 # Categories that disappear from the validation accordion once the user
@@ -22,6 +24,23 @@ RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset({
     "repetitions",
 })
 
+# Legacy test seam: older unit tests monkeypatch this path directly. Production
+# reads through data_dir; parse_history_for_reciter only consults this when the
+# value has been monkeypatched away from the configured default.
+RECITATION_SEGMENTS_PATH = _DEFAULT_RECITATION_SEGMENTS_PATH
+
+_history_locks: dict[str, threading.Lock] = {}
+_history_locks_guard = threading.Lock()
+
+
+def _history_lock(reciter: str) -> threading.Lock:
+    with _history_locks_guard:
+        lock = _history_locks.get(reciter)
+        if lock is None:
+            lock = threading.Lock()
+            _history_locks[reciter] = lock
+        return lock
+
 
 def parse_history_for_reciter(reciter: str) -> list[dict]:
     """Read every batch record from a reciter's edit_history.jsonl.
@@ -30,6 +49,19 @@ def parse_history_for_reciter(reciter: str) -> list[dict]:
     load_edit_history (which applies further filtering for the UI).
     Returns an empty list when the file is absent.
     """
+    if RECITATION_SEGMENTS_PATH != _DEFAULT_RECITATION_SEGMENTS_PATH:
+        import orjson
+
+        path = RECITATION_SEGMENTS_PATH / reciter / "edit_history.jsonl"
+        if not path.exists():
+            return []
+        out: list[dict] = []
+        with path.open("rb") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if line:
+                    out.append(orjson.loads(line))
+        return out
     return list(data_dir.iter_edit_history(reciter))
 
 
@@ -82,9 +114,33 @@ def load_edit_history(reciter: str) -> dict:
     summary statistics. Returns ``{"batches": [], "summary": None}`` when the
     reciter has no edit history file yet.
     """
-    raw_records = parse_history_for_reciter(reciter)
+    use_cache = RECITATION_SEGMENTS_PATH == _DEFAULT_RECITATION_SEGMENTS_PATH
+    cached = cache.get_seg_edit_history(reciter) if use_cache else None
+    if cached is not None:
+        return cached
+
+    with _history_lock(reciter):
+        cached = cache.get_seg_edit_history(reciter) if use_cache else None
+        if cached is not None:
+            return cached
+
+        raw_records = parse_history_for_reciter(reciter)
+        return _load_edit_history_from_records(
+            reciter, raw_records, cache_result=use_cache,
+        )
+
+
+def _load_edit_history_from_records(
+    reciter: str,
+    raw_records: list[dict],
+    *,
+    cache_result: bool = True,
+) -> dict:
     if not raw_records:
-        return {"batches": [], "summary": None}
+        result = {"batches": [], "summary": None}
+        if cache_result:
+            cache.set_seg_edit_history(reciter, result)
+        return result
     all_records = []
     fully_reverted_ids: set[str] = set()
     per_op_reverted: dict[str, set[str]] = {}
@@ -163,7 +219,10 @@ def load_edit_history(reciter: str) -> dict:
         "fix_kind_counts": dict(fix_kind_counts),
     } if total_operations > 0 else None
 
-    return {"batches": batches, "summary": summary}
+    result = {"batches": batches, "summary": summary}
+    if cache_result:
+        cache.set_seg_edit_history(reciter, result)
+    return result
 
 
 def build_resolved_by_edit_index(reciter: str) -> dict[str, set[str]]:

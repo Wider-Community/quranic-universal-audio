@@ -49,7 +49,7 @@
     } from './stores/chapter';
     import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
-    import { historyData, historyVisible } from './stores/history';
+    import { historyLoadState, historyVisible } from './stores/history';
     import { savedFilterView } from './stores/navigation';
     import { segListElement, waveformContainer } from './stores/playback';
     import { saveButtonLabel,savePreviewVisible } from './stores/save';
@@ -115,7 +115,12 @@
             .map(ch => ({ value: String(ch), label: surahOptionText(ch) }))
         : [];
     $: filterBarHidden = $segAllData === null;
-    $: historyBtnHidden = !$historyData || !$historyData.batches || $historyData.batches.length === 0;
+    $: historyBtnHidden = !$selectedReciter;
+    $: historyBtnLabel = $historyVisible
+        ? '← Back'
+        : $historyLoadState === 'loading'
+            ? 'History...'
+            : 'History';
     $: saveBtnDisabled = !$isDirtyStore;
 
     let cssFontSize: string = '';
@@ -319,7 +324,7 @@
                 class="btn btn-history"
                 hidden={historyBtnHidden && !$historyVisible}
                 on:click={$historyVisible ? hideHistoryView : showHistoryView}
-            >{$historyVisible ? '← Back' : 'History'}</button>
+            >{historyBtnLabel}</button>
         </div>
     </div>
 

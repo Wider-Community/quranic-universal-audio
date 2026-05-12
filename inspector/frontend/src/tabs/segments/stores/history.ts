@@ -58,6 +58,9 @@ export {
 /** Raw edit-history response from `/api/seg/edit-history/<reciter>`. */
 export const historyData = writable<SegEditHistoryResponse | null>(null);
 
+/** Loading state for the lazy/background edit-history fetch. */
+export const historyLoadState = writable<'idle' | 'loading' | 'loaded' | 'empty' | 'error'>('idle');
+
 /** Map of edit-chain id (root op_id) → chain descriptor. */
 export const editChains = writable<Map<string, EditChain> | null>(null);
 

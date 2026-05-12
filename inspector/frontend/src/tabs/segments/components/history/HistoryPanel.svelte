@@ -41,6 +41,7 @@
         filterOpTypes,
         flatItems,
         historyData,
+        historyLoadState,
         historyVisible,
         sortMode,
     } from '../../stores/history';
@@ -284,7 +285,9 @@
         {/if}
     </div>
 
-    <HistoryFilters />
+    {#if $historyLoadState === 'loaded'}
+        <HistoryFilters />
+    {/if}
 
     <div
         id="seg-history-batches"
@@ -292,7 +295,13 @@
         bind:this={batchesEl}
         on:scroll={onScroll}
     >
-        {#if displayEntries.length === 0 && hasFilters}
+        {#if $historyLoadState === 'loading'}
+            <div class="seg-history-empty">Loading edit history...</div>
+        {:else if $historyLoadState === 'error'}
+            <div class="seg-history-empty">Could not load edit history.</div>
+        {:else if $historyLoadState === 'empty'}
+            <div class="seg-history-empty">No edit history yet.</div>
+        {:else if displayEntries.length === 0 && hasFilters}
             <div class="seg-history-empty">No edits match the active filters.</div>
         {:else}
             {#if topSpacerPx > 0}

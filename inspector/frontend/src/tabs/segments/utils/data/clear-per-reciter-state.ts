@@ -35,6 +35,7 @@ import {
 } from '../../stores/save';
 import { clearStats } from '../../stores/stats';
 import { clearValidation } from '../../stores/validation';
+import { resetHistoryLoader } from '../history/loader';
 import { clearAudioCachePollTimer } from '../playback/audio-cache-ui';
 import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { clearRowRegistry } from '../playback/row-registry';
@@ -58,6 +59,7 @@ export function clearPerReciterState(): void {
     savedChains.set(null);
     setHistoryVisible(false);
     setHistoryData(null);
+    resetHistoryLoader();
     hidePreview();
     clearSavePreviewData();
 

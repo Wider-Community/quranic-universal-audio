@@ -20,6 +20,19 @@ from adapters.detailed_json import (
 )
 from constants import STOP_SIGNS
 from services import cache, data_dir
+import threading
+
+_detailed_locks: dict[str, threading.Lock] = {}
+_detailed_locks_guard = threading.Lock()
+
+
+def _detailed_lock(reciter: str) -> threading.Lock:
+    with _detailed_locks_guard:
+        lock = _detailed_locks.get(reciter)
+        if lock is None:
+            lock = threading.Lock()
+            _detailed_locks[reciter] = lock
+        return lock
 
 
 # ---------------------------------------------------------------------------
@@ -123,19 +136,23 @@ def load_detailed(reciter: str) -> list[dict]:
     cached = cache.get_seg_cache(reciter)
     if cached is not None:
         return cached
-    raw = data_dir.read_detailed_bytes(reciter)
-    if raw is None:
-        return []
-    meta, entries = _load_detailed_entries_from_bytes(raw)
-    if meta:
-        cache.set_seg_meta(reciter, meta)
-    cache.set_seg_cache(reciter, entries)
-    # Fallback: if detailed.json had no _meta, try segments.json
-    if not cache.get_seg_meta(reciter):
-        seg_doc = data_dir.read_segments_doc(reciter)
-        if seg_doc and "_meta" in seg_doc:
-            cache.set_seg_meta(reciter, seg_doc["_meta"])
-    return entries
+    with _detailed_lock(reciter):
+        cached = cache.get_seg_cache(reciter)
+        if cached is not None:
+            return cached
+        raw = data_dir.read_detailed_bytes(reciter)
+        if raw is None:
+            return []
+        meta, entries = _load_detailed_entries_from_bytes(raw)
+        if meta:
+            cache.set_seg_meta(reciter, meta)
+        cache.set_seg_cache(reciter, entries)
+        # Fallback: if detailed.json had no _meta, try segments.json
+        if not cache.get_seg_meta(reciter):
+            seg_doc = data_dir.read_segments_doc(reciter)
+            if seg_doc and "_meta" in seg_doc:
+                cache.set_seg_meta(reciter, seg_doc["_meta"])
+        return entries
 
 
 def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:

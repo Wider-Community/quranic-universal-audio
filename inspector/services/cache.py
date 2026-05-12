@@ -66,6 +66,8 @@ _seg_verses: _KeyedCache[tuple] = _KeyedCache()
 _seg_resolved_by_edit: _KeyedCache[dict[str, set[str]]] = _KeyedCache()
 # Low-Confidence v2 sidecar — uid set + meta dict (or None when sidecar absent).
 _seg_probe_v2: _KeyedCache[tuple[set[str], dict | None]] = _KeyedCache()
+_seg_edit_history: _KeyedCache[dict] = _KeyedCache()
+_seg_history_peaks: _KeyedCache[list[dict]] = _KeyedCache()
 
 
 def get_seg_cache(reciter: str) -> list[dict] | None:
@@ -116,6 +118,22 @@ def set_seg_probe_v2(reciter: str, value: tuple[set[str], dict | None]) -> None:
     _seg_probe_v2.set(reciter, value)
 
 
+def get_seg_edit_history(reciter: str) -> dict | None:
+    return _seg_edit_history.get(reciter)
+
+
+def set_seg_edit_history(reciter: str, value: dict) -> None:
+    _seg_edit_history.set(reciter, value)
+
+
+def get_seg_history_peaks(reciter: str) -> list[dict] | None:
+    return _seg_history_peaks.get(reciter)
+
+
+def set_seg_history_peaks(reciter: str, value: list[dict]) -> None:
+    _seg_history_peaks.set(reciter, value)
+
+
 def invalidate_seg_caches(reciter: str) -> None:
     """Remove all segment-related caches for *reciter* and reset reciters list."""
     _seg.pop(reciter)
@@ -123,6 +141,8 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_verses.pop(reciter)
     _seg_resolved_by_edit.pop(reciter)
     _seg_probe_v2.pop(reciter)
+    _seg_edit_history.pop(reciter)
+    _seg_history_peaks.pop(reciter)
     _seg_reciters.clear()  # MUST be a full reset — not a per-reciter pop
 
 
