@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timezone
-from typing import Any, TypedDict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, TypedDict
 
 from pydantic import ValidationError
 
@@ -301,6 +301,26 @@ def _require_reason(reason: str | None, event: str) -> str:
 # ----------------------------------------------------------------------
 
 
+# Post-transition observer registry. Hooks fire AFTER the row is persisted
+# and the audit record is appended; they receive ``(before, after, event,
+# actor)``. Used by ``services.audio_prefetch`` to enqueue prefetch jobs and
+# similar lifecycle reactions. Failures in hooks are logged but never raised
+# back to the caller — the transition itself already committed.
+TransitionHook = Callable[[ReciterRow | None, ReciterRow, str, Actor], None]
+_TRANSITION_HOOKS: list[TransitionHook] = []
+
+
+def register_transition_hook(fn: TransitionHook) -> None:
+    """Register a post-transition observer. Idempotent on identity."""
+    if fn not in _TRANSITION_HOOKS:
+        _TRANSITION_HOOKS.append(fn)
+
+
+def clear_transition_hooks() -> None:
+    """Drop all registered hooks. For tests."""
+    _TRANSITION_HOOKS.clear()
+
+
 def transition(
     slug: str,
     event: str,
@@ -335,6 +355,18 @@ def transition(
         payload=payload,
         reason=reason,
     )
+
+    for hook in _TRANSITION_HOOKS:
+        try:
+            hook(before, new_row, event, actor)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "post-transition hook %r failed for slug=%s event=%s",
+                getattr(hook, "__name__", hook),
+                slug,
+                event,
+            )
+
     return new_row
 
 
@@ -406,7 +438,12 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"alignment_completed requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
-    return _replace(before, state=ReciterState.AWAITING_REVIEW, state_since=_now())
+    return _replace(
+        before,
+        state=ReciterState.AWAITING_REVIEW,
+        state_since=_now(),
+        prefetch_purge_at=None,
+    )
 
 
 def _h_claimed(slug, before, actor, payload, reason):
@@ -452,6 +489,7 @@ def _h_released(slug, before, actor, payload, reason):
         assignee_login=None,
         assignee_since=None,
         marked_ready=False,
+        prefetch_purge_at=None,
     )
 
 
@@ -532,6 +570,7 @@ def _h_timestamps_completed(slug, before, actor, payload, reason):
         state=ReciterState.RELEASED,
         state_since=_now(),
         timestamps_job_ids=job_ids,
+        prefetch_purge_at=_now() + timedelta(days=7),
     )
 
 
@@ -572,6 +611,7 @@ def _h_unpublished(slug, before, actor, payload, reason):
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
         revision_in_progress=None,
+        prefetch_purge_at=None,
     )
 
 
@@ -597,6 +637,7 @@ def _h_unlocked_for_revision(slug, before, actor, payload, reason):
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
         revision_in_progress=context,
+        prefetch_purge_at=None,
     )
 
 
@@ -737,6 +778,17 @@ def _h_batch_timestamps_refresh(slug, before, actor, payload, reason):
     return _replace(before, timestamps_job_ids=job_ids)
 
 
+def _h_clear_prefetch_purge_at(slug, before, actor, payload, reason):
+    """Sweeper-only event. Clears ``prefetch_purge_at`` after the audio +
+    peaks directories are deleted, so the same row doesn't re-trigger on the
+    next hourly tick. State-preserving."""
+    if before is None:
+        raise UnknownReciter(slug)
+    if before.prefetch_purge_at is None:
+        return before
+    return _replace(before, prefetch_purge_at=None)
+
+
 _HANDLERS: dict[str, Any] = {
     "catalog.added": _h_catalog_added,
     "catalog.edited": _h_catalog_edited,
@@ -760,6 +812,7 @@ _HANDLERS: dict[str, Any] = {
     "admin.force_set_state": _h_force_set_state,
     "admin.unlocked_for_revision": _h_unlocked_for_revision,
     "admin.batch_timestamps_refresh": _h_batch_timestamps_refresh,
+    "admin.clear_prefetch_purge_at": _h_clear_prefetch_purge_at,
 }
 
 

@@ -28,9 +28,7 @@ import { savedFilterView } from '../../stores/navigation';
 import { setStats } from '../../stores/stats';
 import { setValidation } from '../../stores/validation';
 import { startHistoryLoad } from '../history/loader';
-import { _fetchCacheStatus, _rewriteAudioUrls } from '../playback/audio-cache-ui';
 import { clearPerReciterState } from './clear-per-reciter-state';
-import { _isCurrentReciterBySurah } from './reciter';
 
 /**
  * Re-fetch data for the currently selected reciter. Used for the stale-data
@@ -56,9 +54,7 @@ export async function reloadCurrentReciter(): Promise<void> {
             }
             segAllData.set(all);
             reciterVbrChapters.set(new Set(all.reciter_vbr_chapters ?? []));
-            _rewriteAudioUrls();
             preconnectOrigins(Object.values(all.audio_by_chapter ?? {}));
-            if (_isCurrentReciterBySurah()) void _fetchCacheStatus(reciter);
         })
         .catch((e) => console.error('Error loading all segments:', e));
 

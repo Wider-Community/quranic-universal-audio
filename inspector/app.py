@@ -228,6 +228,32 @@ def _hydrate_bucket_stores() -> None:
     except Exception as e:  # noqa: BLE001
         logger.warning("audit ensure_meta_initialized failed: %s", e)
 
+    # Wire the audio prefetch lifecycle: post-transition hook fires the queue,
+    # the sweeper daemon enforces the 1-week post-RELEASED TTL, and the boot
+    # scan re-enqueues any AWAITING_REVIEW slug whose `_done.json` sentinel
+    # never landed (e.g. Space rebooted mid-job).
+    #
+    # Gated on the bucket backend so pytest's FilesystemBackend never spawns
+    # a worker that would HTTP-fetch real CDN URLs + ffmpeg-remux behind the
+    # test's back. Tests that exercise the prefetch lifecycle call the
+    # individual helpers directly (see ``tests/test_audio_prefetch.py``).
+    # Skip under pytest — fixtures install a FilesystemBackend per test, and
+    # a leaked daemon thread on the bucket backend would HTTP-fetch real URLs
+    # behind tests' backs.
+    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_BACKEND", "bucket") == "bucket":
+        try:
+            from services import audio_prefetch
+
+            state_service.register_transition_hook(audio_prefetch.on_state_transition)
+            audio_prefetch.start_cleanup_daemon()
+            resumed = audio_prefetch.resume_orphaned()
+            if resumed:
+                logger.info(
+                    "audio_prefetch: re-enqueued %d orphaned slug(s) at boot", resumed
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("audio_prefetch wiring failed: %s", e)
+
 
 _hydrate_bucket_stores()
 

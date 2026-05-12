@@ -133,3 +133,59 @@ def is_vbr_for_url(reciter: str, url: str) -> bool:
         if isinstance(entry, dict) and entry.get("url") == url:
             return bool(entry.get("vbr"))
     return False
+
+
+_SIDECAR_CACHE: dict[str, dict] = {}
+
+
+def _load_sidecar(slug: str) -> dict | None:
+    """Per-delivery audio manifest sidecar lookup, cached per-process.
+
+    Distinct from ``_load_doc()`` (which reads the rolled-up VBR-summary
+    artifact). The sidecar at ``catalog/audio_manifest/<slug>.json`` carries
+    the full chapter → URL map needed by the prefetch worker + audio-proxy
+    short-circuit.
+    """
+    cached = _SIDECAR_CACHE.get(slug)
+    if cached is not None:
+        return cached
+    try:
+        doc = get_backend().read_json(storage_paths.audio_manifest_path(slug))
+    except StorageNotFound:
+        return None
+    except Exception as e:  # noqa: BLE001
+        logger.warning("audio_meta: failed to read sidecar for %s: %s", slug, e)
+        return None
+    if not isinstance(doc, dict):
+        return None
+    _SIDECAR_CACHE[slug] = doc
+    return doc
+
+
+def chapter_for_url(reciter: str, url: str) -> str | None:
+    """Reverse-lookup the chapter key for a URL — used by the audio-proxy
+    short-circuit to find the prefetched MP3 path. Returns the raw sidecar
+    key (``"1"``..``"114"`` for by_surah, ``"<surah>:<ayah>"`` for by_ayah)
+    or None when the URL is unknown to this delivery.
+    """
+    doc = _load_sidecar(reciter)
+    if not doc:
+        return None
+    for k, entry in (doc.get("chapters") or {}).items():
+        if isinstance(entry, dict) and entry.get("url") == url:
+            return k
+    return None
+
+
+def chapter_urls(reciter: str) -> dict[str, str]:
+    """Full chapter-key → URL map for ``reciter``. Used by the prefetch
+    queue to enumerate work. Empty dict when the sidecar is missing.
+    """
+    doc = _load_sidecar(reciter)
+    if not doc:
+        return {}
+    out: dict[str, str] = {}
+    for k, entry in (doc.get("chapters") or {}).items():
+        if isinstance(entry, dict) and isinstance(entry.get("url"), str):
+            out[k] = entry["url"]
+    return out

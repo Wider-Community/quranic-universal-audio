@@ -82,6 +82,29 @@ def published_timestamps_path(slug: str, chapter: str | int) -> str:
     return f"published/{slug}/timestamps/{chapter}.json"
 
 
+def prefetched_audio_dir(slug: str) -> str:
+    return f"wip/{slug}/audio"
+
+
+def prefetched_audio_path(slug: str, chapter: str | int) -> str:
+    """MP3 written by the audio_prefetch worker for in-review reciters."""
+    return f"wip/{slug}/audio/{chapter}.mp3"
+
+
+def prefetched_peaks_dir(slug: str) -> str:
+    return f"wip/{slug}/peaks"
+
+
+def prefetched_peaks_path(slug: str, chapter: str | int) -> str:
+    """Peaks JSON paired with the prefetched audio for fast first paint."""
+    return f"wip/{slug}/peaks/{chapter}.json"
+
+
+def prefetch_done_marker_path(slug: str) -> str:
+    """Sentinel written atomically last; presence ⇒ prefetch fully completed."""
+    return f"wip/{slug}/audio/_done.json"
+
+
 PER_RECITER_FILES: tuple[str, ...] = (
     "segments.json",
     "detailed.json",

@@ -15,7 +15,7 @@ import threading
 
 from flask import Blueprint, jsonify, request
 
-from services import cache
+from services import audio_fetch, cache
 from services.data_loader import load_detailed
 from services.peaks import get_peaks_for_reciter, compute_segment_peaks
 from services.peaks_history import append_peaks_records, load_peaks_records
@@ -62,6 +62,17 @@ def seg_peaks(reciter):
     with lock:
         cached = cache.get_peaks_cache(reciter)
     result = {u: cached[u] for u in target_urls if u in cached}
+
+    # Short-circuit: if the prefetch worker already wrote peaks JSON to the
+    # bucket for any of the remaining URLs, hydrate from there. Misses fall
+    # through to the in-memory cache + background compute path below.
+    for url in target_urls - result.keys():
+        peaks = audio_fetch.read_prefetched_peaks(reciter, url)
+        if peaks is not None:
+            result[url] = peaks
+            with lock:
+                cache.set_peaks_for_url(reciter, url, peaks)
+
     complete = len(result) >= len(target_urls)
 
     cache_key = f"{reciter}:{chapters_param}"

@@ -517,39 +517,6 @@ export interface SegSegmentPeaksResponse {
 }
 
 // ===========================================================================
-// /api/seg/* — Audio proxy & cache
-// ===========================================================================
-
-/** GET /api/seg/audio-cache-status/:reciter.
- *  Server emits: {cached_count, total, cached_bytes, downloading, download_progress}.
- *  See `services/audio_proxy.py:50`. B20.
- */
-export interface SegAudioCacheStatusResponse {
-    total: number;
-    cached_count: number;
-    cached_bytes: number;
-    downloading: boolean;
-    download_progress: { total: number; downloaded: number; complete: boolean } | null;
-    [k: string]: unknown;
-}
-
-/** POST /api/seg/prepare-audio/:reciter */
-export interface SegPrepareAudioResponse {
-    status: 'started' | 'already_running';
-    total: number;
-    to_download?: number;
-    downloaded?: number;
-    complete?: boolean;
-    [k: string]: unknown;
-}
-
-/** DELETE /api/seg/delete-audio-cache/:reciter */
-export interface SegDeleteAudioCacheResponse {
-    ok?: boolean;
-    [k: string]: unknown;
-}
-
-// ===========================================================================
 // /api/audio/* — Audio tab
 // ===========================================================================
 

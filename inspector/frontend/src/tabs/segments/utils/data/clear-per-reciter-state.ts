@@ -8,7 +8,6 @@
  */
 
 import { clearWaveformCache } from '../../../../lib/utils/waveform-cache';
-import { cacheStatus } from '../../stores/audio-cache';
 import {
     reciterVbrChapters,
     segAllData,
@@ -36,7 +35,6 @@ import {
 import { clearStats } from '../../stores/stats';
 import { clearValidation } from '../../stores/validation';
 import { resetHistoryLoader } from '../history/loader';
-import { clearAudioCachePollTimer } from '../playback/audio-cache-ui';
 import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { clearRowRegistry } from '../playback/row-registry';
 import { resetWaveformState } from '../waveform/utils';
@@ -69,9 +67,6 @@ export function clearPerReciterState(): void {
     playEndMs.set(0);
     playingSegmentIndex.set(null);
     clearWaveformCache();
-
-    cacheStatus.set('hidden');
-    clearAudioCachePollTimer();
 
     disposeSegRange();
     stopSegAnimation();

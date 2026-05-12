@@ -25,7 +25,6 @@
     import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
     import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
-    import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
     import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
@@ -329,8 +328,6 @@
     </div>
 
     {#if !$historyVisible && !$savePreviewVisible}
-        <AudioCacheBar />
-
         <StatsPanel />
 
         <div id="seg-validation-global" class="seg-validation" use:waveformContainer>
