@@ -182,7 +182,9 @@ def validate_reciter_segments(reciter: str) -> dict:
         entries, is_by_ayah, word_counts, canonical, single_word_verses,
         probe_failed_uids=probe_failed_uids,
     )
-    missing_words = _build_missing_words(detail["verse_segments"], word_counts)
+    missing_words = _build_missing_words(
+        detail["verse_segments"], word_counts, detail["sequence_gaps"]
+    )
     errors, missing_verses, stats = _check_structural_errors(reciter, entries)
 
     # Aggregate counts in registry-declared accordion order. Additive on top

@@ -27,6 +27,47 @@ from services.validation.classifier import (
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 
 
+def _word_ord(
+    surah: int,
+    ayah: int,
+    word: int,
+    word_counts: dict[tuple[int, int], int],
+) -> int | None:
+    """Return 1-based word ordinal within a surah, or None if out of range."""
+    offset = 0
+    for verse in range(1, ayah):
+        wc = word_counts.get((surah, verse))
+        if wc is None:
+            return None
+        offset += wc
+    if word < 1 or word > word_counts.get((surah, ayah), 0):
+        return None
+    return offset + word
+
+
+def _words_by_verse_for_ord_gap(
+    surah: int,
+    start_ord: int,
+    end_ord: int,
+    word_counts: dict[tuple[int, int], int],
+) -> list[tuple[int, list[int]]]:
+    """Split a surah-local ordinal gap into ``[(ayah, [word, ...]), ...]``."""
+    out: list[tuple[int, list[int]]] = []
+    offset = 0
+    ayah = 1
+    while (surah, ayah) in word_counts and offset < end_ord:
+        wc = word_counts[(surah, ayah)]
+        verse_start = offset + 1
+        verse_end = offset + wc
+        lo = max(start_ord, verse_start)
+        hi = min(end_ord, verse_end)
+        if lo <= hi:
+            out.append((ayah, [ord_ - offset for ord_ in range(lo, hi + 1)]))
+        offset = verse_end
+        ayah += 1
+    return out
+
+
 def _classified_issues_from_flags(flags: dict, *, detail: bool) -> list[str]:
     """Translate a classifier flags dict to a category list (registry order).
 
@@ -74,10 +115,13 @@ def _build_detail_lists(
     basmala_amin_17: list[dict] = []
     chapter_seg_idx: dict[int, int] = {}
     verse_segments: dict[tuple[int, int], list] = defaultdict(list)
+    sequence_gaps: list[dict] = []
 
     for entry in entries:
         chapter = chapter_from_ref(entry["ref"])
         entry_ref = entry.get("ref", "")
+        frontier_by_surah: dict[int, int] = {}
+        frontier_seg_idx_by_surah: dict[int, int] = {}
         for seg in entry.get("segments", []):
             i = chapter_seg_idx.get(chapter, 0)
             chapter_seg_idx[chapter] = i + 1
@@ -154,6 +198,26 @@ def _build_detail_lists(
                 e_word = int(end_parts[2])
             except (ValueError, IndexError):
                 continue
+
+            start_ord = _word_ord(surah, s_ayah, s_word, word_counts)
+            end_ord = _word_ord(surah, e_ayah, e_word, word_counts)
+            if start_ord is not None and end_ord is not None:
+                frontier = frontier_by_surah.get(surah)
+                if frontier is not None and start_ord > frontier + 1:
+                    prev_idx = frontier_seg_idx_by_surah.get(surah)
+                    indices = [idx for idx in (prev_idx, i) if idx is not None]
+                    for ayah, missing in _words_by_verse_for_ord_gap(
+                        surah, frontier + 1, start_ord - 1, word_counts
+                    ):
+                        sequence_gaps.append({
+                            "verse_key": f"{surah}:{ayah}",
+                            "chapter": surah,
+                            "missing_words": missing,
+                            "seg_indices": indices,
+                        })
+                if end_ord >= frontier_by_surah.get(surah, 0):
+                    frontier_by_surah[surah] = end_ord
+                    frontier_seg_idx_by_surah[surah] = i
 
             flags = classify_flags(
                 seg, entry_ref, is_by_ayah,
@@ -291,6 +355,7 @@ def _build_detail_lists(
     return {
         "chapter_seg_idx": chapter_seg_idx,
         "verse_segments": verse_segments,
+        "sequence_gaps": sequence_gaps,
         "failed": failed,
         "low_confidence": low_confidence,
         "low_confidence_v2": low_confidence_v2,

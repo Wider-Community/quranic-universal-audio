@@ -12,13 +12,17 @@ from services.data_loader import word_has_stop
 def _build_missing_words(
     verse_segments: dict[tuple[int, int], list],
     word_counts: dict[tuple[int, int], int],
+    sequence_gaps: list[dict] | None = None,
 ) -> list[dict]:
     """Build a list of missing-word issue dicts from the verse coverage map.
 
     verse_segments maps (surah, ayah) → [(word_from, word_to, seg_index), ...].
     seg_index is the chapter-local segment index used for auto-fix targeting.
+    sequence_gaps carries local audio-order jumps whose skipped words may be
+    covered later by a valid backtrack/repetition.
     """
     missing_words = []
+    emitted_ranges: set[tuple[str, tuple[int, ...]]] = set()
     for (surah, ayah), seg_list in verse_segments.items():
         expected = word_counts.get((surah, ayah))
         if not expected:
@@ -97,8 +101,10 @@ def _build_missing_words(
             "chapter": surah,
             "segment_uid": None,
             "msg": f"missing words: {sorted(missing)}",
+            "missing_words": sorted(missing),
             "seg_indices": sorted(gap_indices),
         }
+        emitted_ranges.add((issue["verse_key"], tuple(issue["missing_words"])))
         if auto_fix:
             issue["auto_fix"] = auto_fix
         if "auto_fix_up" in locals():
@@ -107,6 +113,25 @@ def _build_missing_words(
         if "auto_fix_down" in locals():
             issue["auto_fix_down"] = auto_fix_down
             del auto_fix_down
+        missing_words.append(issue)
+
+    for gap in sequence_gaps or []:
+        words = sorted(gap.get("missing_words") or [])
+        if not words:
+            continue
+        key = (gap.get("verse_key"), tuple(words))
+        if key in emitted_ranges:
+            continue
+        issue = {
+            "verse_key": gap["verse_key"],
+            "chapter": gap["chapter"],
+            "segment_uid": None,
+            "msg": f"missing words in sequence: {words}",
+            "missing_words": words,
+            "seg_indices": sorted(set(gap.get("seg_indices") or [])),
+            "sequence_gap": True,
+        }
+        emitted_ranges.add(key)
         missing_words.append(issue)
 
     return missing_words

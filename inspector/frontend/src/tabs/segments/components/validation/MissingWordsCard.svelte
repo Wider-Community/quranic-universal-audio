@@ -28,6 +28,7 @@
     let showContext = false;
 
     $: ctxMode = $segConfig.accordionContext?.['missing_words'] ?? 'hidden';
+    $: ctxDefaultOpen = ctxMode !== 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
 
     // Missing-word segment tag set for SegmentRow display.
@@ -92,6 +93,12 @@
         }
     }
     $: segmentsInRange = _segRangeMemoResult;
+
+    let _didAutoOpen = false;
+    $: if (segmentsInRange.length > 0 && ctxDefaultOpen && !_didAutoOpen) {
+        showContext = true;
+        _didAutoOpen = true;
+    }
 
     // Context neighbours: prev of first / next of last. Guard against the
     // neighbour being itself a split-group member (already rendered inline).

@@ -317,6 +317,8 @@ export interface SegValMissingVerseItem extends SegValItemBase {
 export interface SegValMissingWordsItem extends SegValItemBase {
     verse_key: VerseRef;
     msg?: string;
+    missing_words?: number[];
+    sequence_gap?: boolean;
     /** Client mutates entries during index-fixup. */
     seg_indices?: number[];
     auto_fix?: SegValAutoFix;
