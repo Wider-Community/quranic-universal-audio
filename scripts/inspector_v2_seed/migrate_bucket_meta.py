@@ -1,16 +1,28 @@
-"""Rewrite ``_meta.reciter`` in every per-chapter timestamps file on the bucket
-to match the bucket folder slug (the canonical v2 slug from the catalog).
+"""Rewrite ``_meta.reciter`` in every per-reciter bucket file to match the
+bucket folder slug (the canonical v2 slug from the catalog).
 
-Background. The upstream ``timestamps_full.json`` from the alignment pipeline
-embeds a ``_meta.reciter`` field with whatever slug the aligner stamped at
-extraction time. For reciters cut over from a pre-v2 naming convention (e.g.
-``maher_al_meaqli`` → ``maher_al_muaiqly_mp3quran``) the embedded slug stays
-on the legacy form even after the bucket folder is created at the new slug.
-The frontend used to trust ``_meta.reciter`` for identity, so a mismatch
-broke every navigation that consulted the manifest by slug. The frontend
-now ignores ``_meta.reciter`` (see ``ts_client.ts::assembleVerseFromShard``)
-but the field is still authored into the file and should match the folder
-it lives in.
+Background. Per-reciter source files authored by the alignment + extraction
+pipelines embed a ``_meta.reciter`` field with whatever slug the upstream
+tool stamped at write time. For reciters cut over from a pre-v2 naming
+convention (e.g. ``maher_al_meaqli`` → ``maher_al_muaiqly_mp3quran``) the
+embedded slug stays on the legacy form even after the bucket folder is
+created at the new slug. Trusting ``_meta.reciter`` for identity broke
+manifest lookups; the canonical identity is the bucket path itself.
+
+Covered files (each scanned across both ``wip/<slug>/`` and ``published/
+<slug>/`` subtrees, where applicable):
+
+- ``published/<slug>/timestamps/<chapter>.json`` — per-chapter shard.
+- ``{wip,published}/<slug>/low_confidence_v2.json`` — alignment-side
+  low-confidence index; its ``_meta.reciter`` is the slug.
+
+Files deliberately NOT touched:
+
+- ``catalog/audio_manifest/<slug>.json::_meta.source_meta_reciter`` — that
+  field exists specifically to record the pre-cutover identity as
+  provenance. Keep it.
+- ``{wip,published}/<slug>/{segments,detailed}.json::_meta`` — no
+  ``reciter`` field; only ``audio_source`` (channel ref, not a slug).
 
 Usage::
 
@@ -18,9 +30,6 @@ Usage::
     python -m scripts.inspector_v2_seed.migrate_bucket_meta --apply   # mutate
     python -m scripts.inspector_v2_seed.migrate_bucket_meta --slug X  # one slug
 
-Iterates ``state.all_rows()`` (``state in {released, completed}``), lists
-``<bucket>/published/<slug>/timestamps/<chapter>.json`` for each, parses,
-fixes ``_meta.reciter``, and uploads via the storage backend if changed.
 Idempotent: re-running after the migration is a no-op (no writes issued).
 """
 
@@ -35,29 +44,49 @@ from ._env import load_repo_env
 
 
 def _iter_target_slugs(filter_slug: str | None):
+    """Yield every slug tracked in state — both wip and published.
+
+    Low-confidence files exist under both subtrees; the timestamps file is
+    published-only. The per-file helpers below filter by ``kind`` themselves.
+    """
     from services import state as state_service
 
     state_service.hydrate()
     for row in state_service.all_rows():
         if filter_slug and row.slug != filter_slug:
             continue
-        if row.state.value not in ("released", "completed"):
+        if row.state.value in ("catalogued", "awaiting_alignment"):
+            # No per-reciter files exist yet for these states.
             continue
         yield row.slug
 
 
-def _chapter_paths(slug: str) -> Iterable[tuple[int, str]]:
-    """Yield ``(chapter, bucket_path)`` for every TS file under the slug."""
+def _iter_paths(slug: str) -> Iterable[tuple[str, str]]:
+    """Yield ``(label, bucket_path)`` for every file the migration covers."""
     from services import data_dir
     from services import storage_paths
 
-    chapters = data_dir.list_published_timestamps_chapters(slug)
-    for chapter in chapters:
-        yield chapter, storage_paths.published_timestamps_path(slug, chapter)
+    kind = data_dir.kind_for(slug)
+    # Low-confidence lives in both wip/ and published/ subtrees.
+    yield (
+        f"low_confidence_v2[{kind}]",
+        storage_paths.low_confidence_path(slug, kind),
+    )
+    # Timestamps live only under published/.
+    if kind == "published":
+        for chapter in data_dir.list_published_timestamps_chapters(slug):
+            yield (
+                f"timestamps/{chapter:03d}",
+                storage_paths.published_timestamps_path(slug, chapter),
+            )
 
 
-def _fix_one(slug: str, chapter: int, path: str, *, apply: bool) -> tuple[str, str | None]:
-    """Return (status, prev_value). status ∈ {ok, fixed, missing, parse_fail}."""
+def _fix_one(slug: str, label: str, path: str, *, apply: bool) -> tuple[str, str | None]:
+    """Rewrite ``_meta.reciter`` to ``slug`` if drifted.
+
+    Return ``(status, prev_value)`` with status ∈ {ok, fixed, missing,
+    parse_fail, no_meta}.
+    """
     from services.hf_bucket import StorageNotFound, get_backend
 
     backend = get_backend()
@@ -76,7 +105,7 @@ def _fix_one(slug: str, chapter: int, path: str, *, apply: bool) -> tuple[str, s
 
     meta = doc.get("_meta")
     if not isinstance(meta, dict):
-        return "parse_fail", None
+        return "no_meta", None
 
     prev = meta.get("reciter")
     if prev == slug:
@@ -106,18 +135,18 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"==> Migration mode: {'APPLY' if args.apply else 'DRY-RUN'}")
 
-    totals = {"reciters": 0, "files": 0, "fixed": 0, "ok": 0, "missing": 0, "parse_fail": 0}
+    totals: dict[str, int] = {"reciters": 0, "files": 0}
     for slug in _iter_target_slugs(args.slug):
         totals["reciters"] += 1
-        per_slug = {"fixed": 0, "ok": 0, "missing": 0, "parse_fail": 0}
-        for chapter, path in _chapter_paths(slug):
+        per_slug: dict[str, int] = {}
+        for label, path in _iter_paths(slug):
             totals["files"] += 1
-            status, prev = _fix_one(slug, chapter, path, apply=args.apply)
+            status, prev = _fix_one(slug, label, path, apply=args.apply)
             per_slug[status] = per_slug.get(status, 0) + 1
             totals[status] = totals.get(status, 0) + 1
             if status == "fixed":
                 action = "fixed" if args.apply else "would fix"
-                print(f"  {slug}/{chapter:03d}: {action} ({prev!r} -> {slug!r})")
+                print(f"  {slug}/{label}: {action} ({prev!r} -> {slug!r})")
         print(f"  ── {slug}: {per_slug}")
 
     print(f"\n==> Totals: {totals}")
