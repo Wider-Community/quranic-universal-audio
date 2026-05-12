@@ -10,12 +10,10 @@ on:
       - 'v*'
     paths:
       - 'inspector/**'
-      - 'validators/**'
       - '.github/workflows/docker-publish.yml'
   pull_request:
     paths:
       - 'inspector/**'
-      - 'validators/**'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
     inputs:

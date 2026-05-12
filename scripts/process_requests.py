@@ -1177,11 +1177,8 @@ def cmd_promote_sweep(args):
         check=True,
     )
 
-    print("Validating...")
-    subprocess.run(
-        ["python3", str(REPO_ROOT / "validators/validate_segments.py"), str(local_dir)],
-        check=False,
-    )
+    # Segments validation now lives in the Inspector — open the reciter in
+    # the Inspector once extraction lands to review the 11-category accordion.
 
     if not args.no_probe:
         print(f"Submitting probe_mfa.pbs for {slug}...")

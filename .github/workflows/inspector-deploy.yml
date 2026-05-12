@@ -9,7 +9,6 @@ on:
     branches: [dev]
     paths:
       - "inspector/**"
-      - "validators/**"
       - "scripts/lib/**"
       - "scripts/upload_inspector.py"
       - "scripts/inspector_v2_seed/**"
