@@ -1,25 +1,22 @@
-"""Validation engine: 11-category segment validation, chapter validation counts,
-and validation log generation.
+"""Validation engine: 11-category segment validation + timestamp validation.
 
 No Flask imports -- all functions accept parameters and return plain dicts.
 
-Public API (routes use ``from inspector.services.validation import X``):
+Public API (routes use ``from services.validation import X``):
 - ``is_ignored_for``
 - ``classify_segment``, ``classify_segment_full``, ``classify_entry``
 - ``classify_snapshot``
 - ``chapter_validation_counts``
 - ``validate_reciter_segments``
-- ``run_validation_log``
+- ``validate_reciter_timestamps``
 - registry symbols (re-exported)
 """
 
 from __future__ import annotations
 
-import sys
 from collections import defaultdict
-from pathlib import Path
 
-from config import LOW_CONFIDENCE_THRESHOLD, SURAH_INFO_PATH
+from config import LOW_CONFIDENCE_THRESHOLD
 from constants import VALIDATION_CATEGORIES
 from services import cache
 from services.data_loader import get_word_counts, load_detailed, load_probe_v2
@@ -41,6 +38,7 @@ from services.validation.snapshot_classifier import classify_snapshot
 from services.validation.detail import _build_detail_lists
 from services.validation._missing import _build_missing_words
 from services.validation._structural import _check_structural_errors
+from services.validation.timestamps import validate_reciter_timestamps
 from services.validation.registry import (
     IssueDefinition,
     IssueRegistry,
@@ -231,27 +229,6 @@ def validate_reciter_segments(reciter: str) -> dict:
     return result
 
 
-def run_validation_log(reciter_dir: Path) -> None:
-    """Run segment validation and write validation.log without printing to console."""
-    import io as _io
-    from datetime import datetime as _dt
-    from validators.validate_segments import validate_reciter, load_word_counts
-
-    wc = load_word_counts(SURAH_INFO_PATH)
-    report_path = reciter_dir / "validation.log"
-
-    buf = _io.StringIO()
-    old_stdout = sys.stdout
-    sys.stdout = buf
-    try:
-        validate_reciter(reciter_dir, wc, verbose=True)
-    finally:
-        sys.stdout = old_stdout
-
-    content = f"Generated: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n" + buf.getvalue()
-    report_path.write_text(content, encoding="utf-8")
-
-
 __all__ = [
     "is_ignored_for",
     "is_resolved_by_edit",
@@ -263,7 +240,7 @@ __all__ = [
     "classify_snapshot",
     "chapter_validation_counts",
     "validate_reciter_segments",
-    "run_validation_log",
+    "validate_reciter_timestamps",
     "_build_detail_lists",
     "IssueDefinition",
     "IssueRegistry",
