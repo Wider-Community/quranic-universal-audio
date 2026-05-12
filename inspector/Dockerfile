@@ -90,7 +90,8 @@ RUN pip install --no-cache-dir \
         "huggingface_hub>=1.10" \
         "gunicorn>=22.0" \
         "authlib>=1.3" \
-        "itsdangerous>=2.2" && \
+        "itsdangerous>=2.2" \
+        "requests>=2.31" && \
     pip install --no-cache-dir --no-deps "quranic-phonemizer>=2.2" && \
     pip uninstall -y pip setuptools wheel && \
     find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
@@ -131,8 +132,8 @@ COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 # bind-mounted /data stays readable without chown gymnastics. The inspector
 # cache dir (see config.py) needs to be writable by this user.
 RUN addgroup -g 1000 -S inspector && \
-    adduser -u 1000 -S -G inspector -H -D inspector && \
-    chown -R inspector:inspector /app
+    adduser -u 1000 -S -G inspector -D inspector && \
+    chown -R inspector:inspector /app /home/inspector
 USER inspector
 
 EXPOSE 7860

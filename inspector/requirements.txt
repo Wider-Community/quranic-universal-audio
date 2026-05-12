@@ -14,3 +14,6 @@ gunicorn>=22.0
 # image rebuild between Phase 2 and Phase 3.
 authlib>=1.3
 itsdangerous>=2.2
+# Authlib's Flask integration imports requests_client which depends on
+# requests; not pulled transitively by `pip install authlib` so we list it.
+requests>=2.31
