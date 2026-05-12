@@ -9,7 +9,7 @@ const mod = await loadOptional<{ applyCommand: any }>('../../domain/apply-comman
 const applyCommand = mod?.applyCommand ?? null;
 
 const baseState = () => ({
-  byId: { 'uid-ig': makeSegment(0, 0, 1000, { segment_uid: 'uid-ig' }) },
+  byId: { 'uid-ig': makeSegment(0, 0, 1000, { segment_uid: 'uid-ig', confidence: 0.42 }) },
   idsByChapter: { 1: ['uid-ig'] },
   selectedChapter: 1 as number | null,
 });
@@ -19,11 +19,14 @@ describe.skipIf(!applyCommand)('command/ignore', () => {
     const r = applyCommand(baseState(), { type: 'ignoreIssue', segmentUid: 'uid-ig', category: 'low_confidence' } as any);
     const updated = r.nextState.byId?.['uid-ig'] ?? r.nextState['uid-ig'];
     expect(updated.ignored_categories).toContain('low_confidence');
+    expect(updated.confidence).toBe(1.0);
   });
 
   it('op records snapshots before / after', () => {
     const r = applyCommand(baseState(), { type: 'ignoreIssue', segmentUid: 'uid-ig', category: 'low_confidence' } as any);
     expect(r.operation.snapshots).toBeTruthy();
+    expect(r.operation.snapshots.before[0]?.confidence).toBe(0.42);
+    expect(r.operation.snapshots.after[0]?.confidence).toBe(1.0);
   });
 
   it('op marks dirty correctly (structural vs single-index)', () => {

@@ -1,4 +1,4 @@
-"""Validation engine: 11-category segment validation, chapter validation counts,
+"""Validation engine: registry-backed segment validation, chapter validation counts,
 and validation log generation.
 
 No Flask imports -- all functions accept parameters and return plain dicts.
@@ -201,6 +201,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "cross_verse": len(detail["cross_verse"]),
         "qalqala": len(detail["qalqala"]),
         "muqattaat": len(detail["muqattaat"]),
+        "basmala_amin": len(detail["basmala_amin"]),
     }
 
     result = {
@@ -217,6 +218,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "repetitions": detail["repetitions"],
         "muqattaat": detail["muqattaat"],
         "qalqala": detail["qalqala"],
+        "basmala_amin": detail["basmala_amin"],
         "category_counts": category_counts,
         "stats": stats,
     }

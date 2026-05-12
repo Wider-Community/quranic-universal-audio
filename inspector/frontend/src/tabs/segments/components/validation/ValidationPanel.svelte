@@ -1,15 +1,10 @@
 <script lang="ts">
     /**
-     * ValidationPanel — Svelte accordion panel for all 11 validation categories.
+     * ValidationPanel — Svelte accordion panel for registry-backed validation categories.
      *
      * Subscribes to `$segValidation`. Renders one <details> per non-empty
      * category using `{#each}` over a typed descriptor list.
      * Empty categories are hidden.
-     *
-     * Category order (per CLAUDE.md):
-     *   Failed Alignments, Missing Verses, Missing Words, Structural Errors,
-     *   Low Confidence, Detected Repetitions, May Require Boundary Adj,
-     *   Cross-verse, Audio Bleeding, Muqatta'at, Qalqala
      *
      * Open-state: component-local Record<string, boolean>. One-at-a-time
      * (collapseSiblingDetails semantics). Resets on chapter change.
@@ -219,6 +214,7 @@
         cross_verse: 'val-cross-count',
         muqattaat: 'val-cross-count',
         qalqala: 'val-cross-count',
+        basmala_amin: 'val-cross-count',
     };
     function _countClassFor(kind: string): string {
         const override = COUNT_CLASS_OVERRIDES[kind];
@@ -458,7 +454,7 @@
         }
         if (type === 'low_confidence_v2') return 'val-conf-mid';
         if (type === 'repetitions') return 'val-rep';
-        if (type === 'cross_verse' || type === 'muqattaat' || type === 'qalqala') return 'val-cross';
+        if (type === 'cross_verse' || type === 'muqattaat' || type === 'qalqala' || type === 'basmala_amin') return 'val-cross';
         if (type === 'audio_bleeding') return 'val-bleed';
         if (type === 'boundary_adj') return 'val-conf-mid';
         return 'val-error';
@@ -520,7 +516,8 @@
         };
         if (type === 'failed' || type === 'low_confidence' || type === 'low_confidence_v2' ||
             type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' ||
-            type === 'repetitions' || type === 'muqattaat' || type === 'qalqala') {
+            type === 'repetitions' || type === 'muqattaat' || type === 'qalqala' ||
+            type === 'basmala_amin') {
             if (any.seg_index != null) jumpToSegment(any.chapter, any.seg_index);
         } else if (type === 'missing_verses') {
             jumpToMissingVerseContext(any.chapter, any.verse_key ?? '');

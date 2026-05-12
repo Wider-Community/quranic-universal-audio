@@ -28,6 +28,7 @@ EXPECTED_MATRIX = {
     "cross_verse":       {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
     "qalqala":           {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "info"},
     "muqattaat":         {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "info"},
+    "basmala_amin":      {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "info"},
 }
 
 EXPECTED_CATEGORIES = set(EXPECTED_MATRIX.keys())

@@ -37,6 +37,17 @@ describe.skipIf(!applyCommand)('applyCommand', () => {
     expect('validationDelta' in r).toBe(true);
   });
 
+  it('does not record history context for Basmala + Amin edits', () => {
+    const r = applyCommand(baseState, {
+      type: 'trim',
+      segmentUid: 'uid-1',
+      delta: { time_start: 100 },
+      sourceCategory: 'basmala_amin',
+    } as any);
+    expect(r.operation.op_context_category).toBeNull();
+    expect(r.validationDelta?.resolved ?? []).toEqual([]);
+  });
+
   it('returns patch field (stub in Phase 3, populated in Phase 5)', () => {
     const r = applyCommand(baseState, { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } } as any);
     expect(r.patch).toBeTruthy();

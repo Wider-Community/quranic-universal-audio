@@ -49,6 +49,7 @@ export function ignoreIssueOnSegment(seg: Segment, category: string): boolean {
 
     const updated = result.nextState.byId[uid];
     if (updated) {
+        seg.confidence = updated.confidence;
         seg.ignored_categories = updated.ignored_categories
             ? [...updated.ignored_categories]
             : seg.ignored_categories;

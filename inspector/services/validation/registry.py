@@ -202,6 +202,18 @@ _REGISTRY: dict[str, IssueDefinition] = {
         display_title="Muqattaʼat",
         description="",
     ),
+    "basmala_amin": IssueDefinition(
+        kind="basmala_amin",
+        card_type="generic",
+        severity="info",
+        accordion_order=13,
+        can_ignore=False,
+        auto_suppress=False,
+        persists_ignore=False,
+        scope="per_segment",
+        display_title="Basmala + Amin",
+        description="",
+    ),
 }
 
 

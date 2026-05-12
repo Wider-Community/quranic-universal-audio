@@ -173,6 +173,18 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         displayTitle: 'Muqattaʼat',
         description: '',
     },
+    basmala_amin: {
+        kind: 'basmala_amin',
+        cardType: 'generic',
+        severity: 'info',
+        accordionOrder: 13,
+        canIgnore: false,
+        autoSuppress: false,
+        persistsIgnore: false,
+        scope: 'per_segment',
+        displayTitle: 'Basmala + Amin',
+        description: '',
+    },
 });
 
 const _entries = Object.entries(IssueRegistry) as [string, IssueDefinition][];

@@ -2,7 +2,7 @@
 
 Iterates entries and returns the detail lists (failed, low_confidence,
 boundary_adj, cross_verse, audio_bleeding, repetitions, muqattaat,
-qalqala) plus the verse_segments coverage map. Each detail item carries a
+qalqala, basmala_amin) plus the verse_segments coverage map. Each detail item carries a
 ``classified_issues`` field — the full category list the segment matches
 under the unified classifier (forward-compat for multi-category card
 indicators on the frontend).
@@ -55,7 +55,7 @@ def _build_detail_lists(
     Returns a dict with keys:
       chapter_seg_idx, verse_segments,
       failed, low_confidence, low_confidence_v2, boundary_adj, cross_verse,
-      audio_bleeding, repetitions, muqattaat, qalqala.
+      audio_bleeding, repetitions, muqattaat, qalqala, basmala_amin.
 
     ``probe_failed_uids`` is the set of segment UIDs flagged by the
     extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
@@ -70,6 +70,8 @@ def _build_detail_lists(
     repetitions: list[dict] = []
     muqattaat: list[dict] = []
     qalqala: list[dict] = []
+    basmala_amin: list[dict] = []
+    basmala_amin_17: list[dict] = []
     chapter_seg_idx: dict[int, int] = {}
     verse_segments: dict[tuple[int, int], list] = defaultdict(list)
 
@@ -252,6 +254,17 @@ def _build_detail_lists(
                     "classified_issues": classified,
                 })
 
+            if surah == 1 and (s_ayah <= 1 <= e_ayah or s_ayah <= 7 <= e_ayah):
+                item = {
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
+                    "classified_issues": classified,
+                }
+                if s_ayah <= 1 <= e_ayah:
+                    basmala_amin.append(item)
+                if s_ayah <= 7 <= e_ayah:
+                    basmala_amin_17.append(item)
+
             # Accumulate verse coverage (3-tuple: word_from, word_to, seg_index)
             if s_ayah != e_ayah:
                 for ayah in range(s_ayah, e_ayah + 1):
@@ -266,6 +279,15 @@ def _build_detail_lists(
             else:
                 verse_segments[(surah, s_ayah)].append((s_word, e_word, i))
 
+    combined_basmala_amin: list[dict] = []
+    seen_basmala_amin: set[tuple[int, int, str | None]] = set()
+    for item in basmala_amin + basmala_amin_17[-1:]:
+        key = (item["chapter"], item["seg_index"], item.get("segment_uid"))
+        if key in seen_basmala_amin:
+            continue
+        seen_basmala_amin.add(key)
+        combined_basmala_amin.append(item)
+
     return {
         "chapter_seg_idx": chapter_seg_idx,
         "verse_segments": verse_segments,
@@ -278,6 +300,7 @@ def _build_detail_lists(
         "repetitions": repetitions,
         "muqattaat": muqattaat,
         "qalqala": qalqala,
+        "basmala_amin": combined_basmala_amin,
     }
 
 

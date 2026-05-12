@@ -152,3 +152,85 @@ def test_muqattaat_only_first_word_of_verse():
 
     assert "muqattaat" in r1
     assert "muqattaat" not in r2
+
+
+def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
+    """Basmala + Amin shows 1:1 plus only the latest card overlapping 1:7."""
+    from services.validation.detail import _build_detail_lists  # type: ignore
+
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {
+                "segment_uid": "one-one",
+                "matched_ref": "1:1:1-1:1:1",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": 0,
+                "time_end": 1000,
+            },
+            {
+                "segment_uid": "one-seven-a",
+                "matched_ref": "1:7:1-1:7:2",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": 1000,
+                "time_end": 2000,
+            },
+            {
+                "segment_uid": "one-seven-b",
+                "matched_ref": "1:7:3-1:7:4",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": 2000,
+                "time_end": 3000,
+            },
+        ],
+    }]
+
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts={(1, 1): 1, (1, 7): 4},
+        canonical=None,
+        single_word_verses=set(),
+    )
+
+    assert [item["segment_uid"] for item in detail["basmala_amin"]] == [
+        "one-one",
+        "one-seven-b",
+    ]
+
+
+def test_basmala_amin_detail_omits_neighboring_fatiha_verses():
+    """The accordion includes 1:1 and 1:7 but not 1:2 through 1:6."""
+    from services.validation.detail import _build_detail_lists  # type: ignore
+
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {
+                "segment_uid": f"one-{ayah}",
+                "matched_ref": f"1:{ayah}:1-1:{ayah}:1",
+                "matched_text": "x",
+                "phonemes_asr": "",
+                "confidence": 1.0,
+                "time_start": ayah * 1000,
+                "time_end": (ayah + 1) * 1000,
+            }
+            for ayah in range(1, 8)
+        ],
+    }]
+
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts={(1, ayah): 1 for ayah in range(1, 8)},
+        canonical=None,
+        single_word_verses=set(),
+    )
+
+    assert [item["segment_uid"] for item in detail["basmala_amin"]] == ["one-1", "one-7"]

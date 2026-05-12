@@ -41,6 +41,13 @@ import type {
 } from './command';
 import { IssueRegistry } from './registry';
 
+const HISTORY_NEUTRAL_CONTEXT_CATEGORIES = new Set(['basmala_amin']);
+
+function _historyContextCategory(category: string | null | undefined): string | null {
+    if (!category || HISTORY_NEUTRAL_CONTEXT_CATEGORIES.has(category)) return null;
+    return category;
+}
+
 // ---------------------------------------------------------------------------
 // Op-type translation
 // ---------------------------------------------------------------------------
@@ -122,7 +129,7 @@ function _baseOperation(
     const op: CommandOperation = {
         op_id: _newUid(ctx),
         op_type: OP_TYPE_BY_COMMAND[cmd.type as Operation],
-        op_context_category: cmd.contextCategory ?? cmd.sourceCategory ?? null,
+        op_context_category: _historyContextCategory(cmd.contextCategory ?? cmd.sourceCategory ?? null),
         fix_kind: cmd.fixKind ?? (cmd.type === 'ignoreIssue' ? 'ignore'
             : cmd.type === 'autoFixMissingWord' ? 'auto_fix'
             : 'manual'),
@@ -151,6 +158,7 @@ function _baseOperation(
  */
 function _resolvedFromContext(category: string | null | undefined): string[] {
     if (!category) return [];
+    if (HISTORY_NEUTRAL_CONTEXT_CATEGORIES.has(category)) return [];
     const defn = IssueRegistry[category];
     if (!defn || defn.scope !== 'per_segment') return [];
     return [category];
@@ -454,6 +462,7 @@ function _reduceIgnoreIssue(
     if (!next.ignored_categories.includes(cmd.category)) {
         next.ignored_categories.push(cmd.category);
     }
+    next.confidence = 1.0;
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     op.op_context_category = cmd.category;
