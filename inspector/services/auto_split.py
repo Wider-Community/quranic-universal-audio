@@ -25,19 +25,47 @@ from config import (
     MFA_SPACE_URL,
 )
 
-# inspector/ is on sys.path (see pyproject.toml); the MFA HTTP client lives at
-# <repo>/scripts/lib/timestamps_pipeline.py. app.py inserts the repo root for
-# the live server, but tests import this module directly — mirror the
-# bootstrap here so the import works in either path.
+# The MFA HTTP client lives in scripts/lib/timestamps_pipeline.py, which
+# imports numpy at module load. The inspector deploy image doesn't ship numpy
+# (only the offline pipeline needs it) so we must NOT import it at startup —
+# do it lazily inside compute_auto_split_ms instead.
+#
+# Module-level placeholders keep `monkeypatch.setattr(auto_split, "...")` in
+# tests working: tests set the attrs before the lazy loader runs, and the
+# loader is a no-op when the names are already callable.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.lib.timestamps_pipeline import (  # noqa: E402
-    build_mfa_ref,
-    mfa_upload_and_submit,
-    mfa_wait_result,
-)
+build_mfa_ref = None
+mfa_upload_and_submit = None
+mfa_wait_result = None
+
+
+def _ensure_mfa_client() -> None:
+    """Import the MFA HTTP client on first use.
+
+    Kept out of module import so the deploy image (no numpy) can still load
+    inspector. Tests can pre-bind the three names via monkeypatch to bypass
+    the import entirely.
+    """
+    global build_mfa_ref, mfa_upload_and_submit, mfa_wait_result
+    if callable(build_mfa_ref) and callable(mfa_upload_and_submit) \
+            and callable(mfa_wait_result):
+        return
+    if str(_REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPO_ROOT))
+    from scripts.lib.timestamps_pipeline import (
+        build_mfa_ref as _b,
+        mfa_upload_and_submit as _u,
+        mfa_wait_result as _w,
+    )
+    # Fill only the still-empty names so test-time monkeypatches survive.
+    if not callable(build_mfa_ref):
+        build_mfa_ref = _b
+    if not callable(mfa_upload_and_submit):
+        mfa_upload_and_submit = _u
+    if not callable(mfa_wait_result):
+        mfa_wait_result = _w
+
 
 from services import cache
 from services.data_loader import load_detailed
@@ -159,6 +187,12 @@ def compute_auto_split_ms(reciter: str, chapter: int,
     time_start = int(seg.get("time_start", 0))
     time_end = int(seg.get("time_end", 0))
     if time_end <= time_start:
+        return None
+
+    try:
+        _ensure_mfa_client()
+    except Exception as exc:  # noqa: BLE001 — missing numpy etc.
+        logger.warning("auto_split MFA client unavailable: %s", exc)
         return None
 
     mfa_ref = build_mfa_ref(seg)
