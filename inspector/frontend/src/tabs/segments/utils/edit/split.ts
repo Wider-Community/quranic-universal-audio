@@ -64,6 +64,7 @@ export function enterSplitMode(
     row: HTMLElement,
     prePausePlayMs: number | null = null,
     mountId: symbol | null = null,
+    initialSplitMs: number | null = null,
 ): void {
     if (get(editMode)) {
         console.warn('[split] blocked: already in edit mode:', get(editMode));
@@ -77,9 +78,14 @@ export function enterSplitMode(
     if (!canvas) return;
 
     const mid = Math.round((seg.time_start + seg.time_end) / 2);
-    const defaultSplit = (prePausePlayMs !== null && prePausePlayMs > seg.time_start && prePausePlayMs < seg.time_end)
-        ? Math.round(prePausePlayMs)
-        : mid;
+    // initialSplitMs wins (auto-split MFA result) when inside the seg; falls
+    // back to the paused playhead, then to the midpoint.
+    const inSeg = (t: number): boolean => t > seg.time_start && t < seg.time_end;
+    const defaultSplit = (initialSplitMs !== null && inSeg(initialSplitMs))
+        ? Math.round(initialSplitMs)
+        : (prePausePlayMs !== null && inSeg(prePausePlayMs))
+            ? Math.round(prePausePlayMs)
+            : mid;
 
     canvas._wfCache = null;
 
@@ -116,6 +122,13 @@ export function enterSplitMode(
             canvas._splitBaseCache = null;
             drawSplitWaveform(canvas);
         });
+    }
+
+    // Auto-split: when MFA pre-placed the cursor, immediately start the
+    // right-half preview so the user hears whether the boundary lands well
+    // without having to click Play Right first.
+    if (initialSplitMs !== null && inSeg(initialSplitMs)) {
+        previewSplitAudio('right', canvas);
     }
 }
 

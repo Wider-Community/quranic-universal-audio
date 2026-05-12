@@ -187,6 +187,16 @@ CONF_HIST_BIN_SIZE = 5                 # bin width (percentage points) for confi
 # Boundary display: how many extra phonemes beyond BOUNDARY_TAIL_K to show in detail cards
 BOUNDARY_TAIL_DISPLAY_EXTRA = 2        # display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
 
+# Auto-split (services/auto_split.py): MFA Space + timeout. Cross-verse
+# accordion's "Auto Split" routes here to compute the verse-boundary split
+# time. Always the dev Space — interactive call volume is low. Override
+# via INSPECTOR_MFA_SPACE_URL. On any failure or timeout the FE silently
+# falls back to a midpoint cursor.
+MFA_SPACE_URL = os.environ.get(
+    "INSPECTOR_MFA_SPACE_URL", "https://hetchyy-quran-phoneme-mfa-dev.hf.space"
+)
+AUTO_SPLIT_MFA_TIMEOUT = 15
+
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",

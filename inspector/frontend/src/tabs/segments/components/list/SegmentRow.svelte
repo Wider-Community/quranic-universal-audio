@@ -25,11 +25,13 @@
     import { get } from 'svelte/store';
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { fetchJsonOrNull } from '../../../../lib/api';
     import type { Segment } from '../../../../lib/types/domain';
     import {
         getAdjacentSegments,
         segAllData,
         selectedChapter,
+        selectedReciter,
         selectedVerse,
     } from '../../stores/chapter';
     import { dirtyTick, isIndexDirty } from '../../stores/dirty';
@@ -65,6 +67,7 @@
         dkTextForRef,
         formatRef,
         formatTimeMs,
+        isCrossVerse,
     } from '../../utils/data/references';
     import { deleteSegment } from '../../utils/edit/delete';
     import { enterEditWithBuffer } from '../../utils/edit/enter';
@@ -492,9 +495,37 @@
         enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId, rowChapter);
     }
 
-    function onSplitClick(e: MouseEvent): void {
+    /** Cross-verse accordion swaps `Split` for `Auto Split`: ask MFA for the
+     *  verse-boundary ms, then open the split panel with the cursor pre-placed.
+     *  Any backend failure returns split_ms=null and we fall through to the
+     *  normal midpoint flow — no user-facing error, matching the silent
+     *  fallback decision on this feature. */
+    $: isAutoSplit = validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref);
+
+    async function onSplitClick(e: MouseEvent): Promise<void> {
         e.stopPropagation();
-        enterEditWithBuffer(seg, rowEl, 'split', validationCategory, _mountId, rowChapter);
+        let initialSplitMs: number | null = null;
+        if (isAutoSplit) {
+            const reciter = get(selectedReciter);
+            if (reciter) {
+                const resp = await fetchJsonOrNull<{ split_ms: number | null }>(
+                    `/api/seg/auto-split/${encodeURIComponent(reciter)}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            segment_uid: seg.segment_uid,
+                            chapter: rowChapter,
+                        }),
+                    },
+                );
+                initialSplitMs = resp?.split_ms ?? null;
+            }
+        }
+        enterEditWithBuffer(
+            seg, rowEl, 'split', validationCategory, _mountId, rowChapter,
+            initialSplitMs,
+        );
     }
 
     function onMergePrevClick(e: MouseEvent): void {
@@ -659,7 +690,7 @@
                             use:editGate
                             on:click={onMergePrevClick}>Merge &uarr;</button>
                         <button class="btn btn-sm btn-delete" use:editGate on:click={onDeleteClick}>Delete</button>
-                        <button class="btn btn-sm btn-split" use:editGate on:click={onSplitClick}>Split</button>
+                        <button class="btn btn-sm btn-split" use:editGate on:click={onSplitClick}>{isAutoSplit ? 'Auto Split' : 'Split'}</button>
                         <button class="btn btn-sm btn-merge-next"
                             disabled={mergeNextDisabled}
                             title={mergeNextTitle}

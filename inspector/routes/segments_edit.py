@@ -14,6 +14,7 @@ from flask import Blueprint, g, jsonify, request
 
 from scripts.lib.schemas import Actor
 
+from services.auto_split import compute_auto_split_ms as _compute_auto_split_ms
 from services.save import save_seg_data as _save_seg_data
 from services.undo import undo_batch as _undo_batch, undo_ops as _undo_ops
 
@@ -59,6 +60,30 @@ def seg_undo_batch(reciter):
     if isinstance(result, tuple):
         return jsonify(result[0]), result[1]
     return jsonify(result)
+
+
+@seg_edit_bp.route("/auto-split/<reciter>", methods=["POST"])
+@require_same_origin
+@require_edit_lock(reciter_param="reciter", admin_bypass=True)
+def seg_auto_split(reciter):
+    """Compute the verse-boundary split time for a cross-verse segment.
+
+    Returns ``{"split_ms": <int>, "source": "mfa"}`` on success or
+    ``{"split_ms": null, "source": "fallback"}`` whenever MFA can't supply
+    a usable answer (timeout, malformed segment, ffmpeg failure). The
+    frontend treats ``null`` as "open split panel at midpoint" with no
+    user-facing error.
+    """
+    body = request.get_json(silent=True) or {}
+    segment_uid = body.get("segment_uid")
+    chapter = body.get("chapter")
+    if not segment_uid or not isinstance(chapter, int):
+        return jsonify({"error": "segment_uid and chapter required"}), 400
+    split_ms = _compute_auto_split_ms(reciter, chapter, segment_uid)
+    return jsonify({
+        "split_ms": split_ms,
+        "source": "mfa" if split_ms is not None else "fallback",
+    })
 
 
 @seg_edit_bp.route("/undo-ops/<reciter>", methods=["POST"])

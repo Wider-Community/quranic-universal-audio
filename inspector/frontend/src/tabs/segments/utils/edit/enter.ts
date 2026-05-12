@@ -28,6 +28,7 @@ export function enterEditWithBuffer(
     contextCategory: string | null = null,
     mountId: symbol | null = null,
     chapterOverride: number | null = null,
+    initialSplitMs: number | null = null,
 ): void {
     if (get(editMode)) return;
 
@@ -62,7 +63,7 @@ export function enterEditWithBuffer(
 
     try {
         if (mode === 'trim') enterTrimMode(seg, row, mountId);
-        else enterSplitMode(seg, row, prePausePlayMs, mountId);
+        else enterSplitMode(seg, row, prePausePlayMs, mountId, initialSplitMs);
     } catch (e) {
         console.error(`[${mode}] error entering edit mode:`, e);
         setPendingOp(null);
