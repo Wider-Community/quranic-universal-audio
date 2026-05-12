@@ -17,6 +17,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify
 
+from services import auth as auth_service
 from services import state as state_service
 
 health_bp = Blueprint("health", __name__)
@@ -51,6 +52,7 @@ def healthz():
         "bucket_mounted": bucket_ok,
         "state_loaded": state_loaded,
         "reciters_count": len(rows),
+        "oauth_configured": auth_service.is_oauth_configured(),
         "commit": os.environ.get("INSPECTOR_COMMIT_SHA", "unknown"),
     }
     # Return 503 in deployed mode (mount configured) so probes fail loud.

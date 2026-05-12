@@ -23,16 +23,20 @@ if str(_REPO_ROOT) not in sys.path:
 
 from flask import Flask, jsonify, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import (AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR, DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
 from services import access as access_service
 from services import audit as audit_service
+from services import auth as auth_service
 from services import catalog as catalog_service
 from services import state as state_service
 from services.data_loader import load_surah_info_lite
 from services.phonemizer_service import get_phonemizer, has_phonemizer
+from services.secrets_guard import MissingSecret, get_session_secret
+from services.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +139,29 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # the site root (`/assets/<hash>.js`, `/fonts/DigitalKhattV2.otf`, …). The
 # `/` route below handles index.html explicitly.
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
+
+# Behind HF Spaces' TLS-terminating proxy the X-Forwarded-* headers carry
+# the real scheme/host/client; ProxyFix tells werkzeug to trust one hop so
+# request.url_root reflects the public https URL (load-bearing for the
+# OAuth redirect_uri). Gated by env so local dev / docker-compose runs
+# without proxy headers are unaffected.
+if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Flask's signed-cookie session is used by Authlib for the short-lived
+# OAuth state between /authorize and /callback. Our identity cookie is
+# separate (see services/auth.py). Both signed with the same secret.
+try:
+    app.secret_key = get_session_secret()
+except MissingSecret as e:
+    # Local dev / test paths may not have the secret seeded. Anyone hitting
+    # an OAuth route gets a 503 from auth_service.is_oauth_configured().
+    logger.warning("INSPECTOR_SESSION_SECRET unavailable: %s", e)
+
+# Register the HF OAuth provider with Authlib so the auth routes can
+# resolve oauth.huggingface at request time.
+auth_service.init_oauth(app)
+
 register_blueprints(app)
 
 
@@ -177,6 +204,21 @@ _hydrate_bucket_stores()
 def _handle_http_exception(e: HTTPException):
     """Return the canonical ``{error: <description>}`` envelope with the HTTP status."""
     return jsonify({"error": e.description}), e.code
+
+
+@app.errorhandler(UnknownReciter)
+def _handle_unknown_reciter(e: UnknownReciter):
+    return jsonify({"error": f"unknown reciter: {e}"}), 404
+
+
+@app.errorhandler(InvalidTransition)
+def _handle_invalid_transition(e: InvalidTransition):
+    return jsonify({"error": str(e)}), 400
+
+
+@app.errorhandler(NotAuthorizedForTransition)
+def _handle_not_authorized_transition(e: NotAuthorizedForTransition):
+    return jsonify({"error": str(e)}), 403
 
 
 @app.errorhandler(Exception)

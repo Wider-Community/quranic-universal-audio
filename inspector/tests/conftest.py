@@ -22,6 +22,7 @@ test suite:
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -106,6 +107,83 @@ def flask_client():
     from app import app
     app.config["TESTING"] = True
     return app.test_client()
+
+
+@pytest.fixture
+def signed_in_client(monkeypatch):
+    """Factory returning a Flask test client that carries a signed identity cookie.
+
+    Usage::
+
+        def test_x(signed_in_client):
+            client, user = signed_in_client(role="contributor")
+            resp = client.post("/api/claim/foo", headers={"Origin": "http://localhost"})
+
+    The fixture:
+    - Ensures ``INSPECTOR_SESSION_SECRET`` is set (auto-seeded if absent).
+    - Seeds the ``access`` store with the requested role for the user.
+    - Mints a signed cookie via ``auth_service.encode_session`` and attaches
+      it to the test client.
+    - Returns ``(client, user_dict)`` where ``user_dict`` carries
+      ``{hf_user_id, login, role}`` for assertions in the test.
+    """
+    import secrets
+
+    if not os.environ.get("INSPECTOR_SESSION_SECRET"):
+        monkeypatch.setenv("INSPECTOR_SESSION_SECRET", secrets.token_hex(32))
+
+    from datetime import datetime, timezone
+
+    from scripts.lib.schemas import Member, Role, RolesFile
+
+    from app import app
+    from services import access as access_service
+    from services import auth as auth_service
+
+    app.config["TESTING"] = True
+
+    def _make(
+        *,
+        hf_user_id: str = "test-user-1",
+        login: str = "test_user",
+        role: str = "contributor",
+    ):
+        # Seed the access store. CONTRIBUTOR is the implicit default — no
+        # member row needed; resolve_role returns CONTRIBUTOR for unknown ids.
+        if role != "contributor":
+            now = datetime.now(timezone.utc)
+            roles_file = RolesFile(
+                members=[
+                    Member(
+                        hf_user_id=hf_user_id,
+                        login=login,
+                        role=Role(role),
+                        added_at=now,
+                        added_by_hf_id="test-seed",
+                    )
+                ]
+            )
+            # Replace the in-memory store directly (bypasses the bucket).
+            with access_service._store_lock:  # type: ignore[attr-defined]
+                access_service._store = roles_file  # type: ignore[attr-defined]
+        else:
+            with access_service._store_lock:  # type: ignore[attr-defined]
+                access_service._store = RolesFile()  # type: ignore[attr-defined]
+
+        client = app.test_client()
+        cookie = auth_service.encode_session(login=login, hf_user_id=hf_user_id)
+        client.set_cookie(
+            auth_service.SESSION_COOKIE_NAME,
+            cookie,
+            path="/",
+        )
+        return client, {"hf_user_id": hf_user_id, "login": login, "role": role}
+
+    yield _make
+
+    # Teardown: clear the access store so subsequent tests start clean.
+    with access_service._store_lock:  # type: ignore[attr-defined]
+        access_service._store = RolesFile()  # type: ignore[attr-defined]
 
 
 _SEG_CACHE_NAMES = (
