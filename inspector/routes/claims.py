@@ -19,7 +19,11 @@ import logging
 
 from flask import Blueprint, jsonify
 
-from scripts.lib.schemas import Actor
+from routes._admin_helpers import (
+    actor_for as _actor_for,
+    require_signed_in_or_401 as _require_user_or_401,
+    row_to_dict as _row_to_dict,
+)
 
 from services import auth as auth_service
 from services import predicates as predicates_service
@@ -30,26 +34,6 @@ from utils.decorators import require_same_origin
 logger = logging.getLogger(__name__)
 
 claims_bp = Blueprint("claims", __name__, url_prefix="/api")
-
-
-def _require_user_or_401():
-    user = auth_service.current_user()
-    if user is None:
-        return None, (jsonify({"error": "authentication required"}), 401)
-    return user, None
-
-
-def _actor_for(user) -> Actor:
-    role_val = user.role.value if hasattr(user.role, "value") else user.role
-    return Actor(
-        hf_user_id=user.hf_user_id,
-        login_at_time=user.login,
-        role=role_val,
-    )
-
-
-def _row_to_dict(row) -> dict:
-    return row.model_dump(mode="json")
 
 
 @claims_bp.route("/claim/<slug>", methods=["POST"])

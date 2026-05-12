@@ -23,8 +23,15 @@ from flask import Blueprint, jsonify, request
 
 from scripts.lib.schemas import Actor, ReciterState, Role
 
+from routes._admin_helpers import (
+    MIN_REASON_CHARS as _MIN_REASON_CHARS,
+    actor_for as _actor_for,
+    require_role_or_403 as _require_role_or_403,
+    require_signed_in_or_401 as _require_signed_in_or_401,
+    validate_reason as _validate_reason,
+)
+
 from services import access as access_service
-from services import auth as auth_service
 from services import state as state_service
 
 from utils.decorators import require_same_origin
@@ -32,41 +39,6 @@ from utils.decorators import require_same_origin
 logger = logging.getLogger(__name__)
 
 access_admin_bp = Blueprint("access_admin", __name__, url_prefix="/api/admin/access")
-
-
-_MIN_REASON_CHARS = 10
-
-
-def _require_signed_in_or_401():
-    user = auth_service.current_user()
-    if user is None:
-        return None, (jsonify({"error": "authentication required"}), 401)
-    return user, None
-
-
-def _require_role_or_403(user, *allowed: Role):
-    if Role(user.role) not in allowed:
-        return jsonify({"error": "insufficient role for this action"}), 403
-    return None
-
-
-def _actor_for(user) -> Actor:
-    role_val = user.role.value if hasattr(user.role, "value") else user.role
-    return Actor(
-        hf_user_id=user.hf_user_id,
-        login_at_time=user.login,
-        role=role_val,
-    )
-
-
-def _validate_reason(body: dict, *, required: bool = True):
-    """Return reason str or an HTTP error tuple."""
-    reason = (body.get("reason") or "").strip() if body else ""
-    if required and len(reason) < _MIN_REASON_CHARS:
-        return None, (jsonify({
-            "error": f"reason must be at least {_MIN_REASON_CHARS} characters",
-        }), 400)
-    return reason, None
 
 
 def _force_release_active_claims(hf_user_id: str, *, revoking_actor: Actor, reason: str) -> list[str]:
