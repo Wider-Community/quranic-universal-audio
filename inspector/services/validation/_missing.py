@@ -134,4 +134,19 @@ def _build_missing_words(
         emitted_ranges.add(key)
         missing_words.append(issue)
 
-    return missing_words
+    def _sort_key(item: dict) -> tuple[int, int, int, int]:
+        verse_key = item.get("verse_key", "")
+        try:
+            surah_s, ayah_s = verse_key.split(":", 1)
+            surah = int(surah_s)
+            ayah = int(ayah_s)
+        except (ValueError, AttributeError):
+            surah = int(item.get("chapter") or 0)
+            ayah = 0
+        words = item.get("missing_words") or []
+        first_word = min(words) if words else 0
+        seg_indices = item.get("seg_indices") or []
+        first_seg = min(seg_indices) if seg_indices else 0
+        return surah, ayah, first_word, first_seg
+
+    return sorted(missing_words, key=_sort_key)
