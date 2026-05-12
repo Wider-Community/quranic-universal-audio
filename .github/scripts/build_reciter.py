@@ -1533,7 +1533,7 @@ def _local_reciter_state(slug: str) -> dict:
     poisoning the manifest.
     """
     sys.path.insert(0, str(ROOT))
-    from validators.boundary_check import compute_boundary_mismatches  # noqa: E402
+    from scripts.lib.boundary_check import compute_boundary_mismatches  # noqa: E402
 
     from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
     from segments_shards import (
