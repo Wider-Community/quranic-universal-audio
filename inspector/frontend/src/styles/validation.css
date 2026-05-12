@@ -40,6 +40,9 @@
 }
 
 .seg-validation summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 12px;
     cursor: pointer;
     font-size: 0.85rem;
@@ -67,6 +70,42 @@
 
 .seg-validation summary .val-count.has-errors { color: #f44336; }
 .seg-validation summary .val-count.has-warnings { color: #ff9800; }
+
+.val-summary-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+}
+
+.val-summary-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.val-guide-btn {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #384563;
+    border-radius: 50%;
+    background: #101a33;
+    color: #bfc9e5;
+    cursor: pointer;
+    font-size: 0.78rem;
+    line-height: 1;
+}
+
+.val-guide-btn:hover,
+.val-guide-btn:focus-visible {
+    background: #1c2b50;
+    color: #fff;
+    outline: none;
+}
 
 .lc-slider-row {
     display: flex;

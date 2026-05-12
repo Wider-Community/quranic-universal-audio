@@ -87,7 +87,8 @@ interface RowEntry {
     opId?: string;
 }
 
-export function createPreviewPlaybackContext(): PreviewPlaybackContext {
+export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = {}): PreviewPlaybackContext {
+    const persistPeaks = opts.persistPeaks ?? true;
     const rows = new Map<string, RowEntry>();
     const _activeSeg: Writable<PreviewActiveSeg | null> = writable(null);
     const _playingSeg: Writable<PreviewActiveSeg | null> = writable(null);
@@ -205,7 +206,7 @@ export function createPreviewPlaybackContext(): PreviewPlaybackContext {
         // History rows (opId set) — persist so future sessions hydrate
         // these peaks at panel open. Fire-and-forget; failures are silent
         // (next play computes again).
-        if (opId) {
+        if (persistPeaks && opId) {
             void fetch(`/api/seg/history-peaks/${reciter}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

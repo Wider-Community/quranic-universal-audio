@@ -39,6 +39,8 @@
      *  `'preview'` (set by SavePreview) suppresses Undo — that view is for
      *  reviewing pending edits, not reverting prior saves. */
     export let mode: 'preview' | 'history' = 'history';
+    /** Guide examples reuse the chain renderer without saved-date or edit controls. */
+    export let variant: 'default' | 'guide' = 'default';
 
     // Derived ----------------------------------------------------------------
 
@@ -168,7 +170,9 @@
 
 <div class="seg-history-batch seg-history-split-chain">
     <div class="seg-history-batch-header">
-        <span class="seg-history-batch-time">{formatHistDate(chain.latestDate)}</span>
+        {#if variant !== 'guide'}
+            <span class="seg-history-batch-time">{formatHistDate(chain.latestDate)}</span>
+        {/if}
         {#if chapter != null}
             <span class="seg-history-batch-chapter">{surahOptionText(chapter)}</span>
         {/if}
@@ -179,14 +183,14 @@
         {#each valDelta.regressed as cat}
             <span class="seg-history-val-delta regression">+{SHORT_LABELS[cat] || cat}</span>
         {/each}
-        {#if mode === 'history' && chainBatchIds.length > 0}
+        {#if variant !== 'guide' && mode === 'history' && chainBatchIds.length > 0}
             <button
                 class="btn btn-sm seg-history-undo-btn"
                 use:editGate
                 on:click|stopPropagation={handleChainUndoClick}
             >Undo</button>
         {/if}
-        {#if pendingOpIds.length > 0 && chapter != null}
+        {#if variant !== 'guide' && pendingOpIds.length > 0 && chapter != null}
             <button
                 class="btn btn-sm seg-history-undo-btn"
                 use:editGate

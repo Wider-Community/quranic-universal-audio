@@ -49,6 +49,7 @@
     } from '../../utils/data/navigation-actions';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { filterStaleIssues } from '../../utils/validation/stale';
+    import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
 
     // ---- Props ----
@@ -77,6 +78,8 @@
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
     let activeQalqalaLetter: string | null = null;
     let qalqalaEndOfVerse: boolean = false;
+    let guideCategory: string | null = null;
+    let guideOpener: HTMLElement | null = null;
 
     // ---- Virtualization constants ----
     /** Fallback card height (px) before real measurement. MissingVersesCard with
@@ -565,6 +568,17 @@
         openCategory = isOpen ? type : (openCategory === type ? null : openCategory);
     }
 
+    function openGuide(e: MouseEvent, type: string): void {
+        e.preventDefault();
+        e.stopPropagation();
+        guideCategory = type;
+        guideOpener = e.currentTarget as HTMLElement;
+    }
+
+    function closeGuide(): void {
+        guideCategory = null;
+    }
+
     // ---- Stable composite each-key for issue cards ----
     // Object-reference keying caused every ErrorCard to remount whenever
     // `$segValidation` republished (re-validate after save). A composite
@@ -579,7 +593,10 @@
         };
         if (any.segment_uid) return `${kind}:${any.segment_uid}`;
         if (any.seg_index != null) return `${kind}:${any.chapter}:${any.seg_index}`;
-        return `${kind}:${any.chapter}:${any.verse_key ?? ''}`;
+        const mw = it as { missing_words?: number[]; seg_indices?: number[] };
+        const words = mw.missing_words?.join(',') ?? '';
+        const indices = mw.seg_indices?.join(',') ?? '';
+        return `${kind}:${any.chapter}:${any.verse_key ?? ''}:${words}:${indices}`;
     }
 
     // ---- LC slider debounce ----
@@ -630,10 +647,19 @@
                 on:toggle={(e) => handleAccordionToggle(e, cat.type)}
             >
                 <summary class="val-summary">
-                    {cat.name}
-                    <span class="val-count {cat.countClass}" data-lc-count>
-                        {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
+                    <span class="val-summary-main">
+                        <span class="val-summary-title">{cat.name}</span>
+                        <span class="val-count {cat.countClass}" data-lc-count>
+                            {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
+                        </span>
                     </span>
+                    <button
+                        type="button"
+                        class="val-guide-btn"
+                        aria-label={`Open guide for ${cat.name}`}
+                        title={`Open guide for ${cat.name}`}
+                        on:click={(e) => openGuide(e, cat.type)}
+                    >?</button>
                 </summary>
 
                 <!-- LC slider (Low Confidence only) -->
@@ -726,5 +752,13 @@
                 {/if}
             </details>
         {/each}
+
+        {#if guideCategory}
+            <AccordionGuideModal
+                category={guideCategory}
+                opener={guideOpener}
+                on:close={closeGuide}
+            />
+        {/if}
     </div>
 {/if}
