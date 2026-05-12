@@ -11,6 +11,7 @@
 
     import { afterUpdate } from 'svelte';
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import type { EditOp } from '../../../../lib/types/domain';
     import {
         type HistorySnapshot,
@@ -157,6 +158,7 @@
             {#if batchId}
                 <button
                     class="btn btn-sm seg-history-op-undo-btn"
+                    use:editGate
                     on:click|stopPropagation={handleOpUndoClick}
                 >Undo</button>
             {/if}

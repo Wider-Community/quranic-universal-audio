@@ -11,13 +11,19 @@
  * `EditAffordancePopover` anchored to the element.
  */
 
-import { derived, writable } from 'svelte/store';
+import { derived, get, writable } from 'svelte/store';
+
+import type { ReciterTask } from '../api/reciter-task';
+import type { CurrentUser } from './current-user';
 
 export type EditingKind = 'view' | 'editor' | 'maintainer' | 'owner';
 
 export type ViewReason =
     | 'unauthenticated'   // not logged in
     | 'wrong-assignee'    // logged in, but another contributor holds the claim
+    | 'not-claimable'     // logged in, row is in a non-claim state (e.g. awaiting_alignment)
+    | 'released'          // post-publish, awaiting timestamp generation
+    | 'marked_ready'      // user marked-ready their own claim and the row is frozen
     | 'completed'         // reciter is in published terminal state
     | 'discarded';        // reciter is admin-soft-deleted
 
@@ -45,4 +51,67 @@ export const isAdmin = derived(
 /** Replace the whole mode in one call. */
 export function setEditingMode(mode: EditingMode): void {
     editingMode.set(mode);
+}
+
+/**
+ * Map `(currentUser, reciterTask)` → `EditingMode`. The function is pure
+ * so it can be unit-tested in isolation; callers (typically the segments
+ * tab on reciter/task updates) call `setEditingMode(syncEditingMode(...))`.
+ *
+ * Branches (first match wins):
+ *   1. user == null  → view / unauthenticated
+ *   2. task == null  → view / unauthenticated (route still loading)
+ *   3. row.visibility == discarded → view / discarded
+ *   4. row.state == completed → view / completed
+ *   5. row.state == released → view / released
+ *   6. row.state == under_review && marked_ready && user is assignee → view / marked_ready
+ *   7. row.state == under_review && user is assignee → editor
+ *   8. admin && row.state == under_review && !marked_ready → user.role
+ *   9. row.state in {catalogued, awaiting_alignment, awaiting_timestamps} → view / not-claimable
+ *   10. else → view / wrong-assignee
+ */
+export function syncEditingMode(
+    user: CurrentUser | null,
+    task: ReciterTask | null,
+): EditingMode {
+    if (user === null || user.hf_user_id === null) {
+        return { kind: 'view', viewReason: 'unauthenticated' };
+    }
+    if (task === null) {
+        return { kind: 'view', viewReason: 'unauthenticated' };
+    }
+    const row = task.row;
+    const isAssignee = row.assignee_hf_id === user.hf_user_id;
+    const isAdminRole = user.role === 'maintainer' || user.role === 'owner';
+
+    if (row.visibility === 'discarded') {
+        return { kind: 'view', viewReason: 'discarded' };
+    }
+    if (row.state === 'completed') {
+        return { kind: 'view', viewReason: 'completed' };
+    }
+    if (row.state === 'released') {
+        return { kind: 'view', viewReason: 'released' };
+    }
+    if (row.state === 'under_review') {
+        if (row.marked_ready && isAssignee) {
+            return { kind: 'view', viewReason: 'marked_ready' };
+        }
+        if (!row.marked_ready && isAssignee) {
+            return { kind: 'editor' };
+        }
+        if (!row.marked_ready && isAdminRole) {
+            return { kind: user.role as 'maintainer' | 'owner' };
+        }
+        return { kind: 'view', viewReason: 'wrong-assignee' };
+    }
+    // catalogued / awaiting_alignment / awaiting_timestamps — not claimable
+    // (or in transit). Use a distinct reason so the popover copy doesn't
+    // accidentally claim someone else is reviewing it.
+    return { kind: 'view', viewReason: 'not-claimable' };
+}
+
+/** Convenience: read current mode synchronously. */
+export function currentMode(): EditingMode {
+    return get(editingMode);
 }

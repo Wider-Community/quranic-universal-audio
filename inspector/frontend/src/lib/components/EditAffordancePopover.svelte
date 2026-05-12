@@ -25,8 +25,14 @@
         switch (reason) {
             case 'wrong-assignee':
                 return 'Reciter under review';
+            case 'marked_ready':
+                return 'Awaiting publish';
+            case 'released':
+                return 'Awaiting timestamps';
             case 'completed':
                 return 'Reciter completed';
+            case 'not-claimable':
+                return 'Not available for editing';
             case 'discarded':
                 return 'Reciter unavailable';
             case 'unauthenticated':
@@ -39,8 +45,14 @@
         switch (reason) {
             case 'wrong-assignee':
                 return 'This reciter is currently being reviewed by another contributor.';
+            case 'marked_ready':
+                return "You marked this reciter ready for publish. Click 'Continue editing' in the banner to make changes.";
+            case 'released':
+                return 'This reciter is awaiting timestamp generation; edits are locked.';
             case 'completed':
                 return 'This reciter is completed and view-only.';
+            case 'not-claimable':
+                return 'This reciter is in a pipeline state and cannot be claimed yet.';
             case 'discarded':
                 return 'This reciter is not available for editing.';
             case 'unauthenticated':

@@ -8,10 +8,19 @@
      */
 
     import { onMount, tick } from 'svelte';
-    import { get } from 'svelte/store';
+    import { get, type Readable } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
+    import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
+    import ClaimButton from '../../lib/components/ClaimButton.svelte';
+    import ReviewerBanner from '../../lib/components/ReviewerBanner.svelte';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
+    import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
+    import {
+        editingMode,
+        setEditingMode,
+        syncEditingMode,
+    } from '../../lib/stores/editing-mode';
     import type { SegReciter } from '../../lib/types/domain';
     import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
     import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
@@ -53,6 +62,46 @@
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
     let segAudioEl: HTMLAudioElement | null = null;
 
+    // Reciter-task subscription: bound to the selected reciter. The store
+    // self-polls every 30 s while subscribed; we replace the binding when
+    // the user switches reciter so only one task is polled at a time.
+    let reciterTaskStore: Readable<ReciterTask | null> | null = null;
+    let reciterTask: ReciterTask | null = null;
+    let _taskUnsubscribe: (() => void) | null = null;
+
+    function _bindTask(slug: string | null) {
+        if (_taskUnsubscribe) {
+            _taskUnsubscribe();
+            _taskUnsubscribe = null;
+        }
+        reciterTaskStore = slug ? getReciterTaskStore(slug) : null;
+        reciterTask = null;
+        if (reciterTaskStore) {
+            _taskUnsubscribe = reciterTaskStore.subscribe((v) => {
+                reciterTask = v;
+                setEditingMode(syncEditingMode($currentUser, v));
+            });
+        } else {
+            setEditingMode(syncEditingMode($currentUser, null));
+        }
+    }
+
+    // Refresh task immediately after a state-mutating action; the polling
+    // tick still fires every 30 s but acting users shouldn't wait for it.
+    async function _refreshTask() {
+        const slug = get(selectedReciter);
+        if (!slug) return;
+        const fresh = await refreshReciterTask(slug);
+        reciterTask = fresh;
+        setEditingMode(syncEditingMode($currentUser, fresh));
+        // /api/me's active_claim derives from state — pull a fresh copy too.
+        void loadCurrentUser();
+    }
+
+    // Re-sync editing mode whenever the currentUser store updates (e.g.
+    // after sign-in or after access revoke).
+    $: setEditingMode(syncEditingMode($currentUser, reciterTask));
+
     $: groupedReciters = buildGroupedReciters($segAllReciters);
     $: reciterSelectOptions = reciterGroupsToOptions(groupedReciters);
     $: verseSelectOptions = $verseOptions.map((v) => ({ value: String(v), label: String(v) }));
@@ -75,12 +124,17 @@
             const rs = await fetchJson<SegReciter[]>('/api/seg/reciters');
             segAllReciters.set(rs);
             const saved = localStorage.getItem(LS_KEYS.SEG_RECITER);
-            if (saved) { selectedReciter.set(saved); await onReciterChange(saved); }
+            if (saved) {
+                selectedReciter.set(saved);
+                _bindTask(saved);
+                await onReciterChange(saved);
+            }
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }
 
     function onReciterSelectChange(v: string): void {
         selectedReciter.set(v);
+        _bindTask(v || null);
         onReciterChange(v);
     }
     async function onReciterChange(reciter: string): Promise<void> {
@@ -159,6 +213,8 @@
 >
     <ShortcutsGuide />
 
+    <ReviewerBanner task={reciterTask} onChanged={_refreshTask} />
+
     <div class="info-bar seg-selector-bar">
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Reciter:
@@ -170,6 +226,13 @@
                 on:change={(e) => onReciterSelectChange(e.detail)}
             />
         </label>
+        {#if $selectedReciter}
+            <ClaimButton
+                slug={$selectedReciter}
+                task={reciterTask}
+                onClaimed={_refreshTask}
+            />
+        {/if}
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Surah:
             <SearchableSelect
@@ -192,7 +255,14 @@
             {#if $savePreviewVisible}
                 <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>Cancel</button>
                 <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
-            {:else}
+            {:else if $editingMode.kind !== 'view'}
+                <!--
+                    Save + Auto-Save only visible when the user has write
+                    rights on this reciter (active reviewer OR maintainer/
+                    owner admin-bypass). The backend lock decorator is
+                    authoritative; this is the UX layer hiding noise from
+                    users who can't act on it.
+                -->
                 <button
                     class="btn {$autoSaveEnabled ? 'btn-save' : 'btn-cancel'}"
                     on:click={() => toggleAutoSave(!$autoSaveEnabled)}

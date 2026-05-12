@@ -1,0 +1,145 @@
+<!--
+    Reviewer banner. Surfaces when the current user is the assignee of an
+    under_review row. Two states:
+
+      - !marked_ready → "You're reviewing X. [Mark ready] [Release]"
+      - marked_ready  → "Awaiting publish. [Continue editing] [Release]"
+
+    Anonymous, non-assignee, or non-under_review states render nothing.
+-->
+<script lang="ts">
+    import { markReady, release, unmarkReady } from '../api/claims-client';
+    import type { ReciterTask } from '../api/reciter-task';
+    import { currentUser } from '../stores/current-user';
+
+    export let task: ReciterTask | null;
+    export let onChanged: (() => void) | null = null;
+
+    let busy: '' | 'mark' | 'unmark' | 'release' = '';
+
+    $: row = task?.row ?? null;
+    $: isAssignee = (
+        row !== null
+        && row.state === 'under_review'
+        && $currentUser?.hf_user_id !== null
+        && row.assignee_hf_id === $currentUser?.hf_user_id
+    );
+    $: visible = isAssignee;
+    $: frozen = row !== null && row.marked_ready;
+
+    async function _do(action: 'mark' | 'unmark' | 'release', slug: string) {
+        if (busy) return;
+        busy = action;
+        try {
+            if (action === 'mark') await markReady(slug);
+            else if (action === 'unmark') await unmarkReady(slug);
+            else await release(slug);
+            onChanged?.();
+        } catch {
+            /* claims-client surfaced the toast */
+        } finally {
+            busy = '';
+        }
+    }
+</script>
+
+{#if visible && row}
+    <div class="reviewer-banner" class:reviewer-banner--frozen={frozen}>
+        {#if frozen}
+            <span class="reviewer-banner__text">
+                <strong>Awaiting publish.</strong> A maintainer will review and publish this reciter shortly.
+            </span>
+            <span class="reviewer-banner__actions">
+                <button
+                    type="button"
+                    class="reviewer-banner__btn"
+                    disabled={busy === 'unmark'}
+                    on:click={() => _do('unmark', row.slug)}
+                >
+                    Continue editing
+                </button>
+                <button
+                    type="button"
+                    class="reviewer-banner__btn reviewer-banner__btn--danger"
+                    disabled={busy === 'release'}
+                    on:click={() => _do('release', row.slug)}
+                >
+                    Release
+                </button>
+            </span>
+        {:else}
+            <span class="reviewer-banner__text">
+                <strong>You're reviewing {row.slug}.</strong> When you're done, mark it ready for a maintainer to publish.
+            </span>
+            <span class="reviewer-banner__actions">
+                <button
+                    type="button"
+                    class="reviewer-banner__btn"
+                    disabled={busy === 'mark'}
+                    on:click={() => _do('mark', row.slug)}
+                >
+                    Mark ready
+                </button>
+                <button
+                    type="button"
+                    class="reviewer-banner__btn reviewer-banner__btn--danger"
+                    disabled={busy === 'release'}
+                    on:click={() => _do('release', row.slug)}
+                >
+                    Release
+                </button>
+            </span>
+        {/if}
+    </div>
+{/if}
+
+<style>
+    .reviewer-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 0 0 10px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: #fff4d6;
+        border: 1px solid #f0c66a;
+        color: #432a00;
+        font-size: 0.95rem;
+        line-height: 1.4;
+    }
+    .reviewer-banner--frozen {
+        background: #e7eeff;
+        border-color: #8ea8f0;
+        color: #1c2c52;
+    }
+    .reviewer-banner__actions {
+        display: flex;
+        gap: 8px;
+    }
+    .reviewer-banner__btn {
+        border: 0;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        background: #1a1a1a;
+        color: #f5f7ff;
+    }
+    .reviewer-banner__btn:hover:not(:disabled) {
+        background: #2c3142;
+    }
+    .reviewer-banner__btn:disabled {
+        opacity: 0.5;
+        cursor: progress;
+    }
+    .reviewer-banner__btn--danger {
+        background: transparent;
+        color: #7a1f1f;
+        border: 1px solid #c25a5a;
+    }
+    .reviewer-banner__btn--danger:hover:not(:disabled) {
+        background: rgba(194, 90, 90, 0.12);
+    }
+</style>
