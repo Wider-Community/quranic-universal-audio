@@ -117,24 +117,28 @@
     }
     .auth-login {
         font-size: 0.92rem;
-        opacity: 0.85;
+        color: #ccc;
     }
     .auth-role {
         margin-left: 4px;
         font-weight: 600;
-        opacity: 0.75;
+        color: #8ab4f8;
         text-transform: capitalize;
     }
     .auth-btn {
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        background: transparent;
+        border: 1px solid #333;
+        background: #16213e;
+        color: #ccc;
         padding: 6px 12px;
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.9rem;
+        transition: background 0.2s, border-color 0.2s, color 0.2s;
     }
     .auth-btn:hover {
-        border-color: rgba(0, 0, 0, 0.35);
+        background: #1a2a4e;
+        border-color: #4cc9f0;
+        color: #4cc9f0;
     }
     .auth-btn--cta {
         background: #f0a500;
@@ -144,5 +148,7 @@
     }
     .auth-btn--cta:hover {
         background: #ffba2c;
+        border-color: transparent;
+        color: #1a1a1a;
     }
 </style>

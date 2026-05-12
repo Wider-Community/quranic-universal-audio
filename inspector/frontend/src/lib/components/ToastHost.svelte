@@ -37,16 +37,29 @@
         max-width: 360px;
         padding: 10px 14px;
         border-radius: 6px;
-        border: 0;
+        border: 1px solid transparent;
         font-size: 0.92rem;
         line-height: 1.35;
         color: #f5f7ff;
-        background: #2c3142;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        background: #16213e;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
         cursor: pointer;
     }
-    .toast--info { background: #2c3142; }
-    .toast--success { background: #15663b; }
-    .toast--warn { background: #8a5a00; }
-    .toast--error { background: #7a1f1f; }
+    /* Toast kinds: dark surfaces with a tinted left-edge accent via border. */
+    .toast--info {
+        background: #16213e;
+        border-color: #4cc9f0;
+    }
+    .toast--success {
+        background: #1b3d28;
+        border-color: #2e7d32;
+    }
+    .toast--warn {
+        background: #3a2a10;
+        border-color: #f0a500;
+    }
+    .toast--error {
+        background: #3a1414;
+        border-color: #b71c1c;
+    }
 </style>

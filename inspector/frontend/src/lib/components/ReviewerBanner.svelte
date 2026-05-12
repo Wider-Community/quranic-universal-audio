@@ -103,16 +103,21 @@
         margin: 0 0 10px;
         padding: 10px 14px;
         border-radius: 8px;
-        background: #fff4d6;
-        border: 1px solid #f0c66a;
-        color: #432a00;
+        /* In-review (warm): orange-tinted dark surface. */
+        background: #3a2a10;
+        border: 1px solid #8a5a00;
+        color: #f5e6c2;
         font-size: 0.95rem;
         line-height: 1.4;
     }
     .reviewer-banner--frozen {
-        background: #e7eeff;
-        border-color: #8ea8f0;
-        color: #1c2c52;
+        /* Marked-ready (cool): blue-tinted dark surface. */
+        background: #1a2a4e;
+        border-color: #4361ee;
+        color: #cfd9ff;
+    }
+    .reviewer-banner strong {
+        color: #fff;
     }
     .reviewer-banner__actions {
         display: flex;
@@ -124,11 +129,13 @@
         border-radius: 6px;
         font-weight: 600;
         cursor: pointer;
-        background: #1a1a1a;
-        color: #f5f7ff;
+        background: #4361ee;
+        color: #fff;
+        font-size: 0.9rem;
+        transition: background 0.2s;
     }
     .reviewer-banner__btn:hover:not(:disabled) {
-        background: #2c3142;
+        background: #3a56d4;
     }
     .reviewer-banner__btn:disabled {
         opacity: 0.5;
@@ -136,10 +143,11 @@
     }
     .reviewer-banner__btn--danger {
         background: transparent;
-        color: #7a1f1f;
-        border: 1px solid #c25a5a;
+        color: #ff9a9a;
+        border: 1px solid #b71c1c;
     }
     .reviewer-banner__btn--danger:hover:not(:disabled) {
-        background: rgba(194, 90, 90, 0.12);
+        background: rgba(183, 28, 28, 0.25);
+        color: #ffcccc;
     }
 </style>

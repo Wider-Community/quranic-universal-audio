@@ -102,9 +102,12 @@
         font-weight: 600;
         cursor: pointer;
         font-size: 0.95rem;
+        box-shadow: 0 2px 8px rgba(240, 165, 0, 0.25);
+        transition: background 0.2s, box-shadow 0.2s;
     }
     .claim-btn:hover:not(:disabled) {
         background: #ffba2c;
+        box-shadow: 0 4px 12px rgba(240, 165, 0, 0.4);
     }
     .claim-btn:disabled {
         opacity: 0.6;
@@ -112,11 +115,14 @@
     }
     .claim-btn--hint {
         background: transparent;
-        color: #b07000;
-        border: 1px dashed #d99a3a;
+        color: #d99a3a;
+        border: 1px dashed #8a5a00;
         font-weight: 500;
+        box-shadow: none;
     }
     .claim-btn--hint:hover {
-        background: rgba(240, 165, 0, 0.08);
+        background: rgba(240, 165, 0, 0.1);
+        color: #f0a500;
+        box-shadow: none;
     }
 </style>
