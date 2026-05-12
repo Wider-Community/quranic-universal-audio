@@ -189,13 +189,13 @@
 
             <AvailableToClaimStrip
                 reciters={availableToClaim}
-                on:open={(e) => openDetail(e.detail.name)}
+                on:open={(e) => openDetail(e.detail.reciter_id)}
                 on:play={(e) => onPlay(e.detail)}
             />
 
             <CatalogTable
                 reciters={sorted}
-                on:open={(e) => openDetail(e.detail.name)}
+                on:open={(e) => openDetail(e.detail.reciter_id)}
                 on:play={(e) => onPlay(e.detail)}
                 on:playDelivery={(e) => onPlayDelivery(e.detail)}
             />

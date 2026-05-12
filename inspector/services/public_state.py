@@ -269,6 +269,28 @@ def all_public_reciters() -> list[PublicReciter]:
     return out
 
 
+def detail(reciter_id: str) -> PublicReciter | None:
+    """Materialize a single reciter for the public detail page.
+
+    Returns ``None`` when the reciter_id isn't in the catalog, or when
+    the reciter has no public deliveries (all discarded).
+    """
+    catalog = catalog_service.snapshot()
+    reciter = next(
+        (r for r in catalog.reciters if r.reciter_id == reciter_id), None,
+    )
+    if reciter is None:
+        return None
+    deliveries = [d for d in catalog.deliveries if d.reciter_id == reciter_id]
+    if not deliveries:
+        return None
+    state_index = _build_state_index()
+    public = to_public_reciter(reciter, deliveries, state_index)
+    if not public["deliveries"]:
+        return None
+    return public
+
+
 def stats() -> dict[str, int]:
     """Counts of reciters per public bucket — primary_bucket only.
 

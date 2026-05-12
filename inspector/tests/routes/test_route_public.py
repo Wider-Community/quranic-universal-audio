@@ -251,6 +251,46 @@ def test_reciters_limit_out_of_range_returns_400(flask_client, monkeypatch):
     assert flask_client.get("/api/public/reciters?limit=999").status_code == 400
 
 
+def test_reciter_detail_returns_payload(flask_client, monkeypatch):
+    _install(
+        monkeypatch,
+        reciters=[_reciter("husary", "Husary")],
+        deliveries=[_delivery("husary_qdc", reciter_id="husary")],
+        rows=[_state_row("husary_qdc", state="released")],
+    )
+    resp = flask_client.get("/api/public/reciter/husary")
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    assert body["name"] == "Husary"
+    assert body["primary_bucket"] == "published"
+    assert "max-age=60" in resp.headers["Cache-Control"]
+
+
+def test_reciter_detail_404_on_unknown(flask_client, monkeypatch):
+    _install(monkeypatch, reciters=[], deliveries=[], rows=[])
+    resp = flask_client.get("/api/public/reciter/no-such-reciter")
+    assert resp.status_code == 404
+
+
+def test_reciter_detail_omits_assignee_fields(flask_client, monkeypatch):
+    _install(
+        monkeypatch,
+        reciters=[_reciter("husary", "Husary")],
+        deliveries=[_delivery("husary_qdc", reciter_id="husary")],
+        rows=[
+            _state_row(
+                "husary_qdc",
+                state="under_review",
+                assignee_hf_id="should-be-redacted",
+            ),
+        ],
+    )
+    resp = flask_client.get("/api/public/reciter/husary")
+    text = resp.data.decode()
+    assert "assignee_hf_id" not in text
+    assert "should-be-redacted" not in text
+
+
 def test_reciters_sort_alphabetical(flask_client, monkeypatch):
     _install(
         monkeypatch,

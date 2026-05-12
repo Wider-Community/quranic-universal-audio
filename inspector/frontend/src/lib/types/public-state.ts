@@ -37,10 +37,15 @@ export interface PublicDelivery {
     channel: string;
     audio_category: string;
     chapter_count: number;
+    coverage_kind: 'full' | 'partial';
+    state_since: string | null;
+    bitrate_kbps_nominal: number | null;
+    total_duration_sec: number | null;
     bucket: PublicBucket;
 }
 
 export interface PublicReciter {
+    reciter_id: string;                 // internal lookup key; never rendered
     name: string;
     country: string | null;
     primary_bucket: PublicBucket;

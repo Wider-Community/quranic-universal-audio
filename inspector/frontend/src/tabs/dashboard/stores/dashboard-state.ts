@@ -15,7 +15,7 @@ import type { PublicBucket } from '../../../lib/types/public-state';
 
 export type DashboardView =
     | { kind: 'list' }
-    | { kind: 'detail'; reciterName: string };
+    | { kind: 'detail'; reciterId: string };
 
 export type DashboardSort = 'recent' | 'alphabetical' | 'deliveries';
 
@@ -69,8 +69,8 @@ export function clearAllFilters(): void {
     }));
 }
 
-export function openDetail(reciterName: string): void {
-    dashboardState.update((s) => ({ ...s, view: { kind: 'detail', reciterName } }));
+export function openDetail(reciterId: string): void {
+    dashboardState.update((s) => ({ ...s, view: { kind: 'detail', reciterId } }));
 }
 
 export function backToList(): void {

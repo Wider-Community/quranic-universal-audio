@@ -5,6 +5,7 @@ import type { PublicReciter } from '../../types/public-state';
 
 function reciter(overrides: Partial<PublicReciter> = {}): PublicReciter {
     return {
+        reciter_id: 'test',
         name: 'Test',
         country: null,
         primary_bucket: 'published',

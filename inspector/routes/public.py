@@ -49,6 +49,19 @@ def stats():
     return _with_cache(public_state_service.stats(), _LIST_CACHE)
 
 
+@public_bp.route("/reciter/<reciter_id>")
+def reciter_detail(reciter_id: str):
+    """Single-reciter detail payload for the dashboard detail page.
+
+    404 when the reciter_id is unknown or every delivery has been
+    discarded (admin-only visibility).
+    """
+    public = public_state_service.detail(reciter_id)
+    if public is None:
+        return jsonify({"error": "reciter not found"}), 404
+    return _with_cache(public, "public, max-age=60")
+
+
 @public_bp.route("/reciters")
 def reciters():
     """Paginated reciter list.
