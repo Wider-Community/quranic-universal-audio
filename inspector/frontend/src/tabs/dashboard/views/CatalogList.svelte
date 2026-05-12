@@ -18,6 +18,7 @@
     import { match } from '../../../lib/utils/fuzzy-match';
     import StatePill from '../../../lib/components/StatePill.svelte';
     import type { PublicBucket, PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+    import ActivityRail from '../components/ActivityRail.svelte';
     import AvailableToClaimStrip from '../components/AvailableToClaimStrip.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
     import Standfirst from '../components/Standfirst.svelte';
@@ -201,14 +202,23 @@
             />
         {/if}
     </section>
+
+    <ActivityRail />
 </div>
 
 <style>
     .grid {
         display: grid;
-        grid-template-columns: 240px minmax(0, 1fr);
+        grid-template-columns: 240px minmax(0, 1fr) 320px;
         gap: var(--s-6);
         padding: 0 var(--gutter) var(--s-12);
+    }
+    @media (max-width: 1280px) {
+        .grid { grid-template-columns: 220px minmax(0, 1fr); }
+        .grid :global(.activity) { display: none; }
+    }
+    @media (max-width: 900px) {
+        .grid { grid-template-columns: 1fr; }
     }
     .rail {
         display: flex;

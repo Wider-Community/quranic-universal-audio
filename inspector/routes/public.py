@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, jsonify, request
 
+from services import public_activity as public_activity_service
 from services import public_state as public_state_service
 from services import search_normalize as search_normalize_service
 
@@ -47,6 +48,33 @@ def _with_cache(payload, cache: str):
 def stats():
     """Counts per public bucket. Mutually exclusive at the reciter level."""
     return _with_cache(public_state_service.stats(), _LIST_CACHE)
+
+
+@public_bp.route("/activity")
+def activity():
+    """Paginated public activity feed.
+
+    Six event kinds only — every other audit record is redacted at the
+    service layer. Cache-Control: no-store so 30s polling stays fresh.
+    """
+    try:
+        cursor = int(request.args.get("cursor") or 0)
+    except ValueError:
+        return jsonify({"error": "cursor must be an integer"}), 400
+    if cursor < 0:
+        return jsonify({"error": "cursor must be >= 0"}), 400
+
+    try:
+        limit = int(request.args.get("limit") or 50)
+    except ValueError:
+        return jsonify({"error": "limit must be an integer"}), 400
+    if limit < 1 or limit > 200:
+        return jsonify({"error": "limit must be between 1 and 200"}), 400
+
+    payload = public_activity_service.feed(cursor=cursor, limit=limit)
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @public_bp.route("/reciter/<reciter_id>")
