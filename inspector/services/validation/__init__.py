@@ -16,7 +16,6 @@ Public API (routes use ``from inspector.services.validation import X``):
 from __future__ import annotations
 
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 from config import LOW_CONFIDENCE_THRESHOLD, SURAH_INFO_PATH
@@ -66,12 +65,12 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
     is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
 
     counts = {cat: 0 for cat in VALIDATION_CATEGORIES}
-    verse_segments: dict[tuple, list] = defaultdict(list)
+    chapter_entries = [
+        entry for entry in entries
+        if chapter_from_ref(entry["ref"]) == chapter
+    ]
 
-    for entry in entries:
-        ch = chapter_from_ref(entry["ref"])
-        if ch != chapter:
-            continue
+    for entry in chapter_entries:
         entry_ref = entry.get("ref", "")
         for seg in entry.get("segments", []):
             matched_ref = seg.get("matched_ref", "")
@@ -113,29 +112,13 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 if flags[cat]:
                     counts[cat] += 1
 
-            if s_ayah != e_ayah:
-                for ayah in range(s_ayah, e_ayah + 1):
-                    if ayah == s_ayah:
-                        wc = word_counts.get((surah, ayah), s_word)
-                        verse_segments[(surah, ayah)].append((s_word, wc))
-                    elif ayah == e_ayah:
-                        verse_segments[(surah, ayah)].append((1, e_word))
-                    else:
-                        wc = word_counts.get((surah, ayah), 1)
-                        verse_segments[(surah, ayah)].append((1, wc))
-            else:
-                verse_segments[(surah, s_ayah)].append((s_word, e_word))
-
-    for (surah, ayah), seg_list in verse_segments.items():
-        expected = word_counts.get((surah, ayah))
-        if not expected:
-            continue
-        covered = set()
-        for wf, wt in seg_list:
-            covered.update(range(wf, wt + 1))
-        missing = set(range(1, expected + 1)) - covered
-        if missing:
-            counts["missing_words"] += len(missing)
+    detail = _build_detail_lists(
+        chapter_entries, is_by_ayah, word_counts, canonical, single_word_verses,
+        probe_failed_uids=probe_failed_uids,
+    )
+    counts["missing_words"] = len(_build_missing_words(
+        detail["verse_segments"], word_counts, detail["sequence_gaps"]
+    ))
 
     return counts
 

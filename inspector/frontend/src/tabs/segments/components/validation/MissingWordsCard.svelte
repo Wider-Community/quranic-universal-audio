@@ -31,9 +31,6 @@
     $: ctxDefaultOpen = ctxMode !== 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
 
-    // Missing-word segment tag set for SegmentRow display.
-    $: missingWordSegIndices = new Set<number>(item.seg_indices ?? []);
-
     // Segments in the gap range. Subscribes to segAllData so the list
     // re-derives after split/merge mutates indices in place. For each base
     // seg, include its full split-group (transitive descendants) so splits
@@ -170,7 +167,6 @@
             showGotoBtn={true}
             showPlayBtn={true}
             showChapter={true}
-            missingWordSegIndices={missingWordSegIndices}
             validationCategory="missing_words"
             accordionSiblings={siblings}
         />
