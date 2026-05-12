@@ -153,6 +153,11 @@ def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
         repo_type="space",
         commit_message=commit_msg,
     )
+    # Code-only pushes don't change the Dockerfile hash, so HF doesn't
+    # rebuild the container automatically — the new commit shows up in
+    # the Space repo but the running container still serves the previous
+    # bundle. Force a factory reboot so the new code actually runs.
+    api.restart_space(repo_id=repo_id, factory_reboot=True)
     return f"https://huggingface.co/spaces/{repo_id}"
 
 
