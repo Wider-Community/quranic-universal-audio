@@ -77,22 +77,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=ffmpeg-build /ff/bin/ffmpeg /ff/bin/ffprobe /usr/local/bin/
 
-# Python deps — inspector's requirements.txt lists flask + quranic-phonemizer.
-# Install phonemizer with --no-deps: it declares pandas>=1.5 as a hard dep but
-# only imports it inside the optional show_table() method, which inspector
-# never calls. Skipping pandas (76MB) + numpy (73MB) saves ~150MB of nothing.
+# Python deps — single source of truth in inspector/requirements.txt.
 # pip/setuptools/wheel are purged — not needed at runtime.
-RUN pip install --no-cache-dir \
-        flask \
-        "PyYAML>=6.0" \
-        orjson \
-        "pydantic>=2.10" \
-        "huggingface_hub>=1.10" \
-        "gunicorn>=22.0" \
-        "authlib>=1.3" \
-        "itsdangerous>=2.2" \
-        "requests>=2.31" && \
-    pip install --no-cache-dir --no-deps "quranic-phonemizer>=2.2" && \
+COPY inspector/requirements.txt ./inspector/requirements.txt
+RUN pip install --no-cache-dir -r ./inspector/requirements.txt && \
     pip uninstall -y pip setuptools wheel && \
     find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
