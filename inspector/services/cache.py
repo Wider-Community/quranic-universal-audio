@@ -204,20 +204,6 @@ def set_url_audio_meta(url: str, meta: dict) -> None:
     _url_audio_meta.set(url, meta)
 
 
-# data/.audio_meta.json document cache — VBR detection results from
-# scripts/probe_audio_meta.py. Tuple of (mtime_ns, parsed_doc) so the
-# loader can detect file changes without parsing on every request.
-_audio_meta_doc: _SingletonCache[tuple[int, dict]] = _SingletonCache()
-
-
-def get_audio_meta_doc() -> tuple[int, dict] | None:
-    return _audio_meta_doc.get()
-
-
-def set_audio_meta_doc(mtime_ns: int, doc: dict) -> None:
-    _audio_meta_doc.set((mtime_ns, doc))
-
-
 # Phonemizer singleton
 _phonemizer: _SingletonCache[Any] = _SingletonCache()
 

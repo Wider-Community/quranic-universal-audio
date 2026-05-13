@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import auto_split
+from services import audio_source, auto_split
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +71,16 @@ def _patch_seg(monkeypatch, seg):
     monkeypatch.setattr(auto_split, "_slice_to_wav", lambda *_a, **_k: True)
     monkeypatch.setattr(auto_split, "get_word_counts",
                         lambda: {(37, 151): 39, (37, 152): 26, (1, 1): 7})
+    # Pretend the chapter is prefetched on the bucket so _run_mfa proceeds
+    # past the local-bytes guard. Tests that want the no-audio path replace
+    # this stub themselves.
+    monkeypatch.setattr(
+        auto_split.audio_source, "resolve",
+        lambda *_a, **_k: audio_source.AudioSource(
+            cdn_url="http://a", data=b"\x00\x00", path=None,
+            vbr=False, bitrate_kbps=None, chapter_key="1",
+        ),
+    )
 
 
 def test_cross_verse_happy_path(monkeypatch):

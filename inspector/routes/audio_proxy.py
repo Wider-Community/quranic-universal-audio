@@ -18,42 +18,36 @@ The download-all + delete-cache + cache-status endpoints have been removed
 under ``/api/admin/prefetch-rerun/<slug>``.
 """
 
+from io import BytesIO
+
 from flask import Blueprint, jsonify, redirect, request, send_file
 
 from config import AUDIO_CACHE_MAX_AGE, AUDIO_MIME_TYPES
-from services import audio_fetch, cache
+from services import audio_source
 
 audio_proxy_bp = Blueprint("audio_proxy", __name__, url_prefix="/api/seg")
 
 
 @audio_proxy_bp.route("/audio-proxy/<reciter>")
 def seg_audio_proxy(reciter):
-    """Proxy/serve a chapter MP3 — bucket prefetch first, local cache second,
-    CDN redirect last."""
+    """Proxy/serve a chapter MP3 via the shared audio-source resolver:
+    bucket-prefetched bytes → local disk cache → 302 to CDN."""
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "No url provided"}), 400
 
-    # Tier 1 — bucket prefetch.
-    data = audio_fetch.read_prefetched_audio_bytes(reciter, url)
-    if data is not None:
-        from io import BytesIO
+    src = audio_source.resolve(reciter, url)
+    immutable = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
 
-        resp = send_file(BytesIO(data), mimetype="audio/mpeg")
-        resp.headers["Cache-Control"] = (
-            f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
-        )
+    if src.data is not None:
+        resp = send_file(BytesIO(src.data), mimetype="audio/mpeg")
+        resp.headers["Cache-Control"] = immutable
         return resp
 
-    # Tier 2 — legacy local disk cache (pre-prefetch deployments).
-    cache_path = cache.audio_cache_path(reciter, url)
-    if cache_path.exists():
-        mime = AUDIO_MIME_TYPES.get(cache_path.suffix.lower(), "audio/mpeg")
-        resp = send_file(cache_path, mimetype=mime)
-        resp.headers["Cache-Control"] = (
-            f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
-        )
+    if src.path is not None:
+        mime = AUDIO_MIME_TYPES.get(src.path.suffix.lower(), "audio/mpeg")
+        resp = send_file(src.path, mimetype=mime)
+        resp.headers["Cache-Control"] = immutable
         return resp
 
-    # Tier 3 — CDN fallback.
     return redirect(url, 302)

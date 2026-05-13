@@ -15,7 +15,7 @@ import threading
 
 from flask import Blueprint, jsonify, request
 
-from services import audio_fetch, cache
+from services import audio_fetch, audio_source, cache
 from services.data_loader import load_detailed
 from services.peaks import get_peaks_for_reciter, compute_segment_peaks
 from services.peaks_history import append_peaks_records, load_peaks_records
@@ -103,23 +103,45 @@ def seg_peaks(reciter):
 
 @peaks_bp.route("/segment-peaks/<reciter>", methods=["POST"])
 def seg_segment_peaks(reciter):
-    """Fetch peaks for individual segments via HTTP Range requests."""
+    """Fetch peaks for individual segments.
+
+    Three sources, in order:
+
+    1. Slice the prefetched chapter-peaks JSON if present — free, ~O(N) array
+       slice. Honours an optional per-segment ``pad_ms`` so split / auto-split
+       scrubbers can show neighbour samples beyond the segment boundary
+       (clamped to ``[0, duration_ms]``).
+    2. Compute via ffmpeg-on-local-bytes (resolver bucket/disk hit).
+    3. HTTP Range decode against the CDN URL (CBR-correct fallback).
+    """
     body = request.get_json(silent=True) or {}
     segments = body.get("segments", [])
     cached_only = body.get("cached_only", False)
     results = {}
+    chapter_peaks_cache: dict[str, dict | None] = {}
+
     for seg in segments:
         url = seg.get("url", "")
         start_ms = seg.get("start_ms", 0)
         end_ms = seg.get("end_ms", 0)
         chapter = seg.get("chapter")
+        pad_ms = int(seg.get("pad_ms", 0) or 0)
         if not url or end_ms <= start_ms:
             continue
-        key = f"{url}:{start_ms}:{end_ms}"
+        key = f"{url}:{start_ms}:{end_ms}:{pad_ms}" if pad_ms else f"{url}:{start_ms}:{end_ms}"
+
+        if url not in chapter_peaks_cache:
+            chapter_peaks_cache[url] = audio_source.resolve_chapter_peaks(reciter, url)
+        chapter_peaks = chapter_peaks_cache[url]
+        sliced = _slice_chapter_peaks(chapter_peaks, start_ms, end_ms, pad_ms)
+        if sliced is not None:
+            results[key] = sliced
+            continue
+
         data = compute_segment_peaks(
             url,
-            start_ms,
-            end_ms,
+            max(0, start_ms - pad_ms),
+            end_ms + pad_ms,
             reciter,
             cached_only=cached_only,
             chapter=chapter,
@@ -127,6 +149,42 @@ def seg_segment_peaks(reciter):
         if data:
             results[key] = data
     return jsonify({"peaks": results})
+
+
+def _slice_chapter_peaks(chapter_peaks: dict | None, start_ms: int, end_ms: int,
+                         pad_ms: int) -> dict | None:
+    """Slice a chapter-peaks dict into a segment window. None when unusable.
+
+    Pad expands on both sides and is clamped to ``[0, duration_ms]`` so the
+    scrubber gets context past the segment boundary without falling off the
+    end of the chapter.
+    """
+    if not isinstance(chapter_peaks, dict):
+        return None
+    peaks = chapter_peaks.get("peaks")
+    duration_ms = chapter_peaks.get("duration_ms")
+    if not isinstance(peaks, list) or not peaks:
+        return None
+    if not isinstance(duration_ms, int) or duration_ms <= 0:
+        return None
+
+    lo = max(0, start_ms - pad_ms)
+    hi = min(duration_ms, end_ms + pad_ms)
+    if hi <= lo:
+        return None
+
+    n = len(peaks)
+    start_idx = max(0, min(n, int(lo * n / duration_ms)))
+    end_idx = max(start_idx, min(n, int(round(hi * n / duration_ms))))
+    if end_idx == start_idx:
+        end_idx = min(n, start_idx + 1)
+
+    return {
+        "start_ms": lo,
+        "end_ms": hi,
+        "duration_ms": hi - lo,
+        "peaks": peaks[start_idx:end_idx],
+    }
 
 
 @peaks_bp.route("/history-peaks/<reciter>", methods=["GET"])

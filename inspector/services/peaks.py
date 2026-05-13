@@ -3,6 +3,8 @@
 No Flask imports -- all functions accept parameters and return plain dicts.
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 import hashlib
 import json
@@ -12,6 +14,7 @@ import subprocess
 import tempfile
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     MIN_FULL_PEAK_BUCKETS, MIN_SEG_PEAK_BUCKETS,
@@ -21,8 +24,10 @@ from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     ID3_PROBE_TIMEOUT, DEFAULT_BYTES_PER_SEC,
                     RANGE_DECODE_PAD_SEC, TEMP_AUDIO_SUFFIX)
 from services import cache
-from services.audio_meta import is_vbr, is_vbr_for_url
 from services.data_loader import load_detailed
+
+if TYPE_CHECKING:
+    from services.audio_source import AudioSource
 from utils.references import chapter_from_ref
 
 
@@ -215,25 +220,28 @@ def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
         Path(tmp_path).unlink(missing_ok=True)
 
 
-def _ffmpeg_decode_segment(source: str, start_sec: float, duration_sec: float) -> bytes | None:
-    """VBR-safe segment decode: ffmpeg seeks the source by time, not bytes.
+def _ffmpeg_decode_segment(src: AudioSource, start_sec: float,
+                           duration_sec: float) -> bytes | None:
+    """VBR-safe segment decode from a local source (bucket bytes or disk).
 
-    For VBR-without-Xing files the byte arithmetic in
-    :func:`_range_decode_segment` mis-estimates by tens of seconds for late
-    segments (Maher s76 produced 6.7 s of audio for an 8.7 s window in the
-    bench). ``ffmpeg -ss <t> -i <source>`` does frame-aware seeking using
-    HTTP Range internally — slower than the CBR fast path (~0.7 s vs 0.4 s)
-    but VBR-correct by construction. ``source`` is either a local cached
-    path or a CDN URL.
+    ffmpeg seeks by time (frame-aware) so this works for both VBR and CBR
+    without the byte-arithmetic mis-estimate of :func:`_range_decode_segment`.
+    Reads from stdin pipe when ``src.data`` is in memory, from disk when
+    ``src.path`` is set. Never from a URL — the inspector image's ffmpeg has
+    ``--disable-network``.
     """
+    if not src.has_local_bytes:
+        return None
+    input_arg = str(src.path) if src.path is not None else "pipe:0"
     try:
         result = subprocess.run(
-            ["ffmpeg", "-ss", str(start_sec), "-i", source,
+            ["ffmpeg", "-ss", str(start_sec), "-i", input_arg,
              "-t", str(duration_sec),
              "-f", "s16le", "-ac", "1",
              "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
              "-v", "quiet", "-"],
             capture_output=True, timeout=FFMPEG_TIMEOUT,
+            input=src.data if src.path is None else None,
         )
         if result.returncode != 0 or len(result.stdout) < 4:
             return None
@@ -264,22 +272,21 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     if cached_only:
         return None
 
-    # Not cached -- fetch via HTTP Range
+    # Not cached -- decode via resolver (local bytes/path) or fall back to
+    # HTTP Range arithmetic for CBR remote sources.
     start_sec = start_ms / 1000
     duration_sec = (end_ms - start_ms) / 1000
 
-    vbr = bool(reciter) and (
-        (chapter is not None and is_vbr(reciter, chapter))
-        or is_vbr_for_url(reciter, url)
-    )
-    if vbr:
-        # VBR source: skip byte-arith, let ffmpeg seek the source by time.
-        # Prefer the local cached file when present (audio_proxy populates it
-        # via /api/seg/prepare-audio) — drops latency from ~0.7 s to ~0.2 s.
-        local_path = cache.audio_cache_path(reciter, url)
-        source = str(local_path) if local_path.exists() else url
-        raw = _ffmpeg_decode_segment(source, start_sec, duration_sec)
+    from services import audio_source
+    src = audio_source.resolve(reciter, url) if reciter else None
+    if src and src.has_local_bytes:
+        raw = _ffmpeg_decode_segment(src, start_sec, duration_sec)
     else:
+        # No local bytes — ffmpeg can't fetch HTTPS in the stripped inspector
+        # image. Range-decode via urllib (CBR-correct, VBR-approximate) is the
+        # only remaining option. For VBR remote chapters this mis-estimates
+        # by seconds on late segments; acceptable degraded fallback until the
+        # prefetch worker has populated the bucket.
         meta = _get_audio_meta(url)
         raw = _range_decode_segment(url, start_sec, duration_sec, meta)
     if raw is None:

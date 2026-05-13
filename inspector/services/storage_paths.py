@@ -24,10 +24,6 @@ def catalog_path() -> str:
     return "catalog/reciter_catalog.json"
 
 
-def audio_meta_path() -> str:
-    return "catalog/audio_meta.json"
-
-
 def audio_durations_path() -> str:
     return "catalog/audio_durations.json"
 

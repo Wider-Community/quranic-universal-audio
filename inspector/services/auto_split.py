@@ -72,7 +72,7 @@ def _ensure_mfa_client() -> None:
         mfa_wait_result = _w
 
 
-from services import cache
+from services import audio_source
 from services.data_loader import get_word_counts, load_detailed
 from utils.references import chapter_from_ref
 from utils.repetitions import (
@@ -114,12 +114,22 @@ def _is_cross_verse(matched_ref: str) -> bool:
     return len(s) >= 2 and len(e) >= 2 and s[1] != e[1]
 
 
-def _slice_to_wav(source: str, start_ms: int, end_ms: int, out_path: Path) -> bool:
-    """ffmpeg-extract [start, end] from *source* into mono 16 kHz PCM WAV."""
+def _slice_to_wav(src: audio_source.AudioSource, start_ms: int, end_ms: int,
+                  out_path: Path) -> bool:
+    """ffmpeg-extract [start, end] from *src* into mono 16 kHz PCM WAV.
+
+    Reads from bytes (stdin pipe) or a local path. Never from a URL — the
+    inspector image's ffmpeg is built with ``--disable-network`` so handing
+    it ``https://...`` would always fail. Caller falls back when ``src``
+    lacks local bytes.
+    """
+    if not src.has_local_bytes:
+        return False
+    input_arg = str(src.path) if src.path is not None else "pipe:0"
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
         "-ss", f"{start_ms / 1000:.3f}",
-        "-i", source,
+        "-i", input_arg,
         "-t", f"{max(0, end_ms - start_ms) / 1000:.3f}",
         "-ac", "1",
         "-ar", str(_MFA_SAMPLE_RATE),
@@ -127,8 +137,11 @@ def _slice_to_wav(source: str, start_ms: int, end_ms: int, out_path: Path) -> bo
         str(out_path),
     ]
     try:
-        subprocess.run(cmd, check=True, timeout=FFMPEG_FULL_TIMEOUT,
-                       capture_output=True)
+        subprocess.run(
+            cmd, check=True, timeout=FFMPEG_FULL_TIMEOUT,
+            capture_output=True,
+            input=src.data if src.path is None else None,
+        )
     except (subprocess.SubprocessError, FileNotFoundError) as exc:
         logger.warning("auto_split ffmpeg failed: %s (cmd=%s)",
                        exc, shlex.join(cmd))
@@ -144,8 +157,15 @@ def _run_mfa(reciter: str, audio_url: str, time_start: int, time_end: int,
     except Exception as exc:  # noqa: BLE001
         logger.warning("auto_split MFA client unavailable: %s", exc)
         return None
-    local = cache.audio_cache_path(reciter, audio_url)
-    source = str(local) if local.exists() else audio_url
+    src = audio_source.resolve(reciter, audio_url)
+    if not src.has_local_bytes:
+        logger.warning(
+            "auto_split: no local audio for %s %s — bucket prefetch missing "
+            "and disk cache empty; ffmpeg cannot fetch over HTTPS in the "
+            "inspector image. Skipping MFA call.",
+            reciter, audio_url,
+        )
+        return None
 
     # Deployed inspector configures its bucket token as INSPECTOR_HF_TOKEN;
     # mfa_upload_and_submit reads HF_TOKEN. Mirror the hf_bucket.py fallback.
@@ -155,7 +175,7 @@ def _run_mfa(reciter: str, audio_url: str, time_start: int, time_end: int,
     try:
         with tempfile.TemporaryDirectory(prefix="auto_split_") as tmp:
             wav_path = Path(tmp) / "seg.wav"
-            if not _slice_to_wav(source, time_start, time_end, wav_path):
+            if not _slice_to_wav(src, time_start, time_end, wav_path):
                 return None
             event_id, headers, base_url = mfa_upload_and_submit(
                 [ref_or_seq], [wav_path], MFA_SPACE_URL,
