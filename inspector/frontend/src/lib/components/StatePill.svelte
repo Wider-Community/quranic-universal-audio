@@ -4,26 +4,17 @@
      * Mirrors the design `.state.state-*` classes from
      * `inspector/frontend/design/components.css`.
      */
-    import type { PublicBucket } from '../types/public-state';
+    import { PUBLIC_BUCKET_LABELS, type PublicBucket } from '../types/public-state';
 
     export let state: PublicBucket;
     export let size: 'sm' | 'md' | 'lg' = 'md';
-
-    const LABELS: Record<PublicBucket, string> = {
-        available_for_request: 'Available for request',
-        requested: 'Requested',
-        available_for_review: 'Available for review',
-        under_review: 'Under review',
-        publishing: 'Publishing',
-        published: 'Published',
-    };
 
     $: bucketClass = `bucket-${state.replace(/_/g, '-')}`;
 </script>
 
 <span class="pill {bucketClass}" class:sm={size === 'sm'} class:lg={size === 'lg'}>
     <span class="dot" aria-hidden="true"></span>
-    <span class="label">{LABELS[state]}</span>
+    <span class="label">{PUBLIC_BUCKET_LABELS[state]}</span>
 </span>
 
 <style>

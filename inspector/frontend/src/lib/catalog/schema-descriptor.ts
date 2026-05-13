@@ -14,7 +14,7 @@
  * lifecycle), independent of counts.
  */
 
-import type { PublicBucket, PublicDelivery } from '../types/public-state';
+import { PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../types/public-state';
 
 export interface AxisOption {
     key: string;
@@ -64,14 +64,7 @@ const STATUS_ORDER: readonly PublicBucket[] = [
     'available_for_request',
 ] as const;
 
-const STATUS_LABELS: Record<PublicBucket, string> = {
-    available_for_review: 'Available to claim',
-    under_review: 'Under review',
-    publishing: 'Publishing',
-    published: 'Published',
-    requested: 'Requested',
-    available_for_request: 'Available for request',
-};
+const STATUS_LABELS = PUBLIC_BUCKET_LABELS;
 
 function countBy(values: Iterable<string | null>): Map<string, number> {
     const out = new Map<string, number>();

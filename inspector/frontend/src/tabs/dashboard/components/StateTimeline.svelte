@@ -9,7 +9,7 @@
      * we take the most-recent state_since across deliveries currently in
      * that bucket. Buckets that no delivery is currently in get no date.
      */
-    import type { PublicBucket, PublicReciter } from '../../../lib/types/public-state';
+    import { PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicReciter } from '../../../lib/types/public-state';
 
     export let reciter: PublicReciter;
 
@@ -22,14 +22,7 @@
         'published',
     ];
 
-    const LABELS: Record<PublicBucket, string> = {
-        available_for_request: 'Available for request',
-        requested: 'Requested',
-        available_for_review: 'Available to claim',
-        under_review: 'Under review',
-        publishing: 'Publishing',
-        published: 'Published',
-    };
+    const LABELS = PUBLIC_BUCKET_LABELS;
 
     function fmtDate(iso: string | null): string {
         if (!iso) return '';
