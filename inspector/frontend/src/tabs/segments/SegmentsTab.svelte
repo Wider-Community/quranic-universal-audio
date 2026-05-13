@@ -130,11 +130,17 @@
             const rs = await fetchJson<SegReciter[]>('/api/seg/reciters');
             segAllReciters.set(rs);
             const saved = localStorage.getItem(LS_KEYS.SEG_RECITER);
-            if (saved) {
-                selectedReciter.set(saved);
-                _bindTask(saved);
-                await onReciterChange(saved);
-                void resolveContextFromSlug(saved);
+            const validSaved = saved && rs.some((r) => r.slug === saved) ? saved : null;
+            if (!validSaved && saved) {
+                // Drop the stale slug so we don't keep hammering 404 endpoints
+                // every reload. The user picks a fresh reciter from the list.
+                localStorage.removeItem(LS_KEYS.SEG_RECITER);
+            }
+            if (validSaved) {
+                selectedReciter.set(validSaved);
+                _bindTask(validSaved);
+                await onReciterChange(validSaved);
+                void resolveContextFromSlug(validSaved);
             }
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }
