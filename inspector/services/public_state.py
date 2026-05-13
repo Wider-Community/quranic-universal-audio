@@ -91,7 +91,7 @@ class PublicReciter(TypedDict, total=False):
     deliveries: list[PublicDelivery]
     riwayat: list[str]
     styles: list[str]
-    recording_contexts: list[str | None]  # null preserved — frontend omits gracefully
+    recording_contexts: list[str]  # null entries dropped at the producer
     sources: list[str]
     channels: list[str]
     chapter_count_total: int
@@ -223,7 +223,9 @@ def to_public_reciter(
         deliveries=public_dels,
         riwayat=_unique_ordered([d["riwayah"] for d in public_dels]),
         styles=_unique_ordered([d["style"] for d in public_dels]),
-        recording_contexts=_unique_ordered([d["recording_context"] for d in public_dels]),
+        recording_contexts=_unique_ordered(
+            [d["recording_context"] for d in public_dels if d["recording_context"]]
+        ),
         sources=_unique_ordered([d["source"] for d in public_dels]),
         channels=_unique_ordered([d["channel"] for d in public_dels]),
         chapter_count_total=sum(d["chapter_count"] for d in public_dels),

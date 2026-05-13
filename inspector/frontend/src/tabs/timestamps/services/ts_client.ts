@@ -16,7 +16,7 @@
  * legacy `/api/ts/data/<reciter>/<verse>` payload.
  */
 
-import { fetchArrayBuffer, fetchJson } from '../../../lib/api';
+import { ApiError, fetchArrayBuffer, fetchJson } from '../../../lib/api';
 import type {
     TsCatalogResponse,
     TsConfigResponse,
@@ -518,6 +518,8 @@ export interface TsRandomTarget {
  * shard so the verseRef list is known. The random target therefore
  * resolves only after the chosen shard is loaded.
  */
+const RANDOM_TARGET_MAX_TRIES = 5;
+
 export async function getRandomTarget(opts: { reciter?: string } = {}): Promise<TsRandomTarget | null> {
     const m = await loadManifest();
     const slugs = Object.keys(m.reciters);
@@ -527,12 +529,28 @@ export async function getRandomTarget(opts: { reciter?: string } = {}): Promise<
     const block = m.reciters[reciter];
     if (!block || block.ts_chapters.length === 0) return null;
 
-    const chapter = block.ts_chapters[Math.floor(Math.random() * block.ts_chapters.length)]!;
-    const shard = await loadChapterShard(reciter, chapter);
-    const refs = chapterVerseRefs(shard);
-    if (refs.length === 0) return null;
-    const verseRef = refs[Math.floor(Math.random() * refs.length)]!;
-    return { reciter, chapter, verseRef };
+    // Retry on shard 404 / empty-shard so a single stale manifest entry (e.g.
+    // a chapter listed in `ts_chapters` whose shard file vanished from the
+    // bucket between manifest build and this fetch) doesn't break the random
+    // button. Each retry picks a different unseen chapter.
+    const tried = new Set<number>();
+    for (let i = 0; i < RANDOM_TARGET_MAX_TRIES; i++) {
+        const remaining = block.ts_chapters.filter((c) => !tried.has(c));
+        if (remaining.length === 0) return null;
+        const chapter = remaining[Math.floor(Math.random() * remaining.length)]!;
+        tried.add(chapter);
+        try {
+            const shard = await loadChapterShard(reciter, chapter);
+            const refs = chapterVerseRefs(shard);
+            if (refs.length === 0) continue;
+            const verseRef = refs[Math.floor(Math.random() * refs.length)]!;
+            return { reciter, chapter, verseRef };
+        } catch (e) {
+            if (e instanceof ApiError && e.status === 404) continue;
+            throw e;
+        }
+    }
+    return null;
 }
 
 // ---------------------------------------------------------------------------

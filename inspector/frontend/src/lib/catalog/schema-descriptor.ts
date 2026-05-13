@@ -46,6 +46,7 @@ const TITLE_CASE_OVERRIDES: Record<string, string> = {
 };
 
 function titleCase(slug: string): string {
+    if (!slug) return '';
     const override = TITLE_CASE_OVERRIDES[slug];
     if (override) return override;
     return slug
@@ -67,7 +68,7 @@ export function buildSchemaDescriptor(reciters: readonly PublicReciter[]): Schem
         allRiwayat.push(...r.riwayat);
         allStyles.push(...r.styles);
         allSources.push(...r.sources);
-        allContexts.push(...r.recording_contexts);
+        allContexts.push(...r.recording_contexts.filter((c): c is string => !!c));
     }
 
     const optionFor = (slug: string): AxisOption => ({ key: slug, label: titleCase(slug) });
@@ -106,7 +107,7 @@ export function buildSchemaDescriptor(reciters: readonly PublicReciter[]): Schem
         axes.push({
             key: 'recording_context',
             label: 'Recording context',
-            tagsOf: (r) => r.recording_contexts,
+            tagsOf: (r) => r.recording_contexts.filter((c): c is string => !!c),
             options: uniqueSorted(allContexts).map(optionFor),
         });
     }
