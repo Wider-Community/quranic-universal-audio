@@ -149,12 +149,14 @@
                             {#each reciter.deliveries as d (d.slug)}
                                 <tr>
                                     <td class="col-play">
-                                        <button
-                                            type="button"
-                                            class="play"
-                                            aria-label="Play this combination"
-                                            on:click={() => playDelivery(d)}
-                                        >▶</button>
+                                        {#if d.audio_category !== 'by_ayah'}
+                                            <button
+                                                type="button"
+                                                class="play"
+                                                aria-label="Play this combination"
+                                                on:click={() => playDelivery(d)}
+                                            >▶</button>
+                                        {/if}
                                     </td>
                                     {#each visibleCols as col (col.key)}
                                         <td class={`cell cell-${col.key}`}>{col.value(d)}</td>

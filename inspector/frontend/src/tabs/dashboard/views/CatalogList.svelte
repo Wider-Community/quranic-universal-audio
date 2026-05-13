@@ -117,12 +117,17 @@
         setSort(value as DashboardSort);
     }
 
-    function onPlay(reciter: PublicReciter): void {
-        const delivery = defaultCombination(reciter.deliveries);
+    function onPlay(row: RowEntry): void {
+        // Only `by_surah` is playable — `by_ayah` sidecars key chapters as
+        // `"<surah>:<ayah>"`, which the BottomPlayer's `urls[String(surahNum)]`
+        // lookup misses. Prefer a visible by_surah delivery so the play button
+        // honors active facets; bail if there's none.
+        const playable = row.visibleDeliveries.filter((d) => d.audio_category !== 'by_ayah');
+        const delivery = defaultCombination(playable);
         if (!delivery) return;
         playerContext.update((s) => ({
             ...s,
-            reciter,
+            reciter: row.reciter,
             delivery,
             surahNum: s.surahNum ?? 1,
             positionMs: 0,
@@ -272,7 +277,7 @@
 
     .grid {
         display: grid;
-        grid-template-columns: 300px minmax(0, 1fr) 320px;
+        grid-template-columns: 320px minmax(0, 1fr) 320px;
         gap: var(--s-6);
         padding: 0 var(--gutter) var(--s-12);
     }

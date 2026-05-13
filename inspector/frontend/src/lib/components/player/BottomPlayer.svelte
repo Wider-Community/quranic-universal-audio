@@ -150,16 +150,14 @@
     function prevSurah(): void {
         const ctx = $playerContext;
         if (ctx.surahNum === null) return;
-        const all = Object.keys(urls).map(Number).sort((a, b) => a - b);
-        const idx = all.indexOf(ctx.surahNum);
-        if (idx > 0) setSurah(all[idx - 1]!);
+        const idx = surahNums.indexOf(ctx.surahNum);
+        if (idx > 0) setSurah(surahNums[idx - 1]!);
     }
     function nextSurah(): void {
         const ctx = $playerContext;
         if (ctx.surahNum === null) return;
-        const all = Object.keys(urls).map(Number).sort((a, b) => a - b);
-        const idx = all.indexOf(ctx.surahNum);
-        if (idx >= 0 && idx < all.length - 1) setSurah(all[idx + 1]!);
+        const idx = surahNums.indexOf(ctx.surahNum);
+        if (idx >= 0 && idx < surahNums.length - 1) setSurah(surahNums[idx + 1]!);
     }
 
     function onSurahChange(ev: CustomEvent<number>): void {
@@ -191,7 +189,10 @@
         }));
     }
 
-    $: surahNums = Object.keys(urls).map(Number).sort((a, b) => a - b);
+    // `by_ayah` sidecars key chapters as `"<surah>:<ayah>"`, so `Number("1:1")`
+    // → NaN. Filter to finite ints so the popover / prev / next controls never
+    // surface "Surah NaN" even if a stray by_ayah delivery slips through.
+    $: surahNums = Object.keys(urls).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
     $: canPrev = $playerContext.surahNum !== null && surahNums.indexOf($playerContext.surahNum) > 0;
     $: canNext = $playerContext.surahNum !== null
         && surahNums.indexOf($playerContext.surahNum) >= 0

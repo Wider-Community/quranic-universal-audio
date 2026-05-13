@@ -21,8 +21,12 @@
 
     const dispatch = createEventDispatcher<{
         open: PublicReciter;
-        play: PublicReciter;
+        play: RowEntry;
     }>();
+
+    function isPlayable(d: PublicDelivery): boolean {
+        return d.audio_category !== 'by_ayah';
+    }
 </script>
 
 {#if rows.length === 0}
@@ -35,8 +39,9 @@
             <ReciterRow
                 reciter={row.reciter}
                 visibleDeliveries={row.visibleDeliveries}
+                showPlay={row.visibleDeliveries.some(isPlayable)}
                 on:click={() => dispatch('open', row.reciter)}
-                on:play={() => dispatch('play', row.reciter)}
+                on:play={() => dispatch('play', row)}
             />
         {/each}
     </div>
