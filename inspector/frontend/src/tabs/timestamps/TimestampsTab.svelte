@@ -130,9 +130,18 @@
         // reciter-change path auto-load a random verse from it. Otherwise
         // load a random verse from any reciter.
         const savedReciter = localStorage.getItem(LS_KEYS.TS_RECITER);
-        if (savedReciter) {
-            selectedReciter.set(savedReciter);
-            await onReciterChange(savedReciter, autoplay);
+        const rs = get(reciters);
+        const validSaved = savedReciter && rs.some((r) => r.slug === savedReciter)
+            ? savedReciter
+            : null;
+        if (!validSaved && savedReciter) {
+            // Drop the stale slug so we don't keep hammering 404 endpoints
+            // every reload. The user picks a fresh reciter from the list.
+            localStorage.removeItem(LS_KEYS.TS_RECITER);
+        }
+        if (validSaved) {
+            selectedReciter.set(validSaved);
+            await onReciterChange(validSaved, autoplay);
         } else {
             await loadRandomTimestamp(null, autoplay);
         }
