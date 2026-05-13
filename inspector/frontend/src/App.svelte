@@ -67,7 +67,6 @@
 <div class="container">
     <header>
         <div class="header-row">
-            <h1>Alignment Inspector</h1>
             <div class="auth-controls">
                 {#if isSignedIn($currentUser)}
                     <span class="auth-login" title="Signed in as {$currentUser.login}">
@@ -124,9 +123,6 @@
         justify-content: space-between;
         gap: 12px;
         flex-wrap: wrap;
-    }
-    .header-row h1 {
-        margin: 0;
     }
     .auth-controls {
         display: flex;

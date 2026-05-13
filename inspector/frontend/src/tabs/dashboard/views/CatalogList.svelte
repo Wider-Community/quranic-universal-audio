@@ -17,8 +17,8 @@
     import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
     import { match } from '../../../lib/utils/fuzzy-match';
-    import type { RowEntry } from '../components/CatalogTable.svelte';
     import ActivityRail from '../components/ActivityRail.svelte';
+    import type { RowEntry } from '../components/CatalogTable.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
     import Standfirst from '../components/Standfirst.svelte';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
