@@ -250,7 +250,7 @@
         background: var(--panel);
         border-top: 1px solid var(--border-default);
         padding: 0 var(--s-4) var(--s-2);
-        z-index: 40;
+        z-index: 110;
         display: flex;
         flex-direction: column;
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.25);

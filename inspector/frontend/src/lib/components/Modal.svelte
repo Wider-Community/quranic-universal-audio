@@ -144,7 +144,10 @@
 <style>
     .backdrop {
         position: fixed;
-        inset: 0;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: var(--player-h, 72px);
         background: oklch(0.06 0.005 268 / 0.72);
         backdrop-filter: blur(3px);
         z-index: 100;

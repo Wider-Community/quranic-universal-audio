@@ -12,6 +12,7 @@ function delivery(overrides: Partial<PublicDelivery> = {}): PublicDelivery {
         recording_year: null,
         source: 'mp3quran',
         channel: 'mp3quran',
+        channel_name: 'mp3quran',
         audio_category: 'by_surah',
         chapter_count: 114,
         coverage_kind: 'full',

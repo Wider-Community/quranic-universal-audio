@@ -21,10 +21,10 @@
 <style>
     .standfirst {
         text-align: center;
-        padding: var(--s-8) var(--gutter) var(--s-6);
+        padding: var(--s-3) var(--gutter) var(--s-2);
         color: var(--text-secondary);
         font-size: var(--fs-body);
-        line-height: 1.5;
+        line-height: 1.4;
     }
     .num {
         font-variant-numeric: tabular-nums;

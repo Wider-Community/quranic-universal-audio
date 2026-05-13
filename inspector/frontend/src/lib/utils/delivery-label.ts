@@ -28,6 +28,8 @@ const BITRATE_MODE_LABEL: Record<string, string> = {
     cbr: 'cbr',
     vbr: 'vbr',
     abr: 'abr',
+    mostly_cbr: 'mostly cbr',
+    mostly_vbr: 'mostly vbr',
     mixed: 'mixed',
     unknown: '',
 };
@@ -35,7 +37,7 @@ const BITRATE_MODE_LABEL: Record<string, string> = {
 export function bitrateLabel(d: PublicDelivery): string {
     const mode = (d.bitrate_mode || '').toLowerCase();
     const kbps = d.bitrate_kbps_nominal;
-    const modeText = BITRATE_MODE_LABEL[mode] ?? mode;
+    const modeText = BITRATE_MODE_LABEL[mode] ?? mode.replace(/_/g, ' ');
     if (kbps == null) return modeText || '—';
     if (!modeText) return `${kbps} kbps`;
     return `${kbps} kbps ${modeText}`;
@@ -52,7 +54,11 @@ export function coverageLabel(d: PublicDelivery): string {
 }
 
 export function categoryLabel(d: PublicDelivery): string {
-    return d.audio_category === 'by_ayah' ? 'ayah' : 'surah';
+    return d.audio_category === 'by_ayah' ? 'Ayah' : 'Surah';
+}
+
+export function channelDisplay(d: PublicDelivery): string {
+    return d.channel_name || titleCaseSlug(d.channel);
 }
 
 /** Total hours from total_duration_sec. */

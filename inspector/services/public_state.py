@@ -75,6 +75,7 @@ class PublicDelivery(TypedDict, total=False):
     recording_year: int | None
     source: str
     channel: str
+    channel_name: str            # human display name from vocab; falls back to slug
     audio_category: str          # by_surah | by_ayah
     chapter_count: int
     coverage_kind: Literal["full", "partial"]
@@ -139,7 +140,11 @@ def _delivery_coverage(d: Delivery) -> Literal["full", "partial"]:
     return "full"
 
 
-def _to_public_delivery(d: Delivery, row: ReciterRow | None) -> PublicDelivery:
+def _to_public_delivery(
+    d: Delivery,
+    row: ReciterRow | None,
+    channel_names: dict[str, str],
+) -> PublicDelivery:
     return PublicDelivery(
         slug=d.slug,
         bucket=bucket_for(row),
@@ -150,6 +155,7 @@ def _to_public_delivery(d: Delivery, row: ReciterRow | None) -> PublicDelivery:
         recording_year=d.recording_year,
         source=d.source,
         channel=d.channel,
+        channel_name=channel_names.get(d.channel, d.channel),
         audio_category=d.audio_category.value,
         chapter_count=d.chapter_count,
         coverage_kind=_delivery_coverage(d),
@@ -191,10 +197,16 @@ def _unique_ordered(values: list) -> list:
     return out
 
 
+def _channel_name_map() -> dict[str, str]:
+    catalog = catalog_service.snapshot()
+    return {ch.slug: ch.name for ch in catalog.vocab.channels}
+
+
 def to_public_reciter(
     reciter: ReciterEntry,
     deliveries: list[Delivery],
     state_index: dict[str, ReciterRow],
+    channel_names: dict[str, str] | None = None,
 ) -> PublicReciter:
     """Aggregate one reciter's catalog + state into a single public payload.
 
@@ -206,12 +218,14 @@ def to_public_reciter(
     are excluded entirely (admin-only listing surfaces them via a separate
     code path in Phase 7).
     """
+    if channel_names is None:
+        channel_names = _channel_name_map()
     public_dels: list[PublicDelivery] = []
     for d in deliveries:
         row = state_index.get(d.slug)
         if row is not None and row.visibility != Visibility.PUBLIC:
             continue
-        public_dels.append(_to_public_delivery(d, row))
+        public_dels.append(_to_public_delivery(d, row, channel_names))
 
     buckets = _unique_ordered([d["bucket"] for d in public_dels])
     last_activity_values = [d["state_since"] for d in public_dels if d["state_since"]]
@@ -255,6 +269,7 @@ def all_public_reciters() -> list[PublicReciter]:
     """
     catalog = catalog_service.snapshot()
     state_index = _build_state_index()
+    channel_names = {ch.slug: ch.name for ch in catalog.vocab.channels}
 
     # Group deliveries by reciter_id once.
     by_reciter: dict[str, list[Delivery]] = {}
@@ -266,7 +281,7 @@ def all_public_reciters() -> list[PublicReciter]:
         dels = by_reciter.get(reciter.reciter_id, [])
         if not dels:
             continue
-        public = to_public_reciter(reciter, dels, state_index)
+        public = to_public_reciter(reciter, dels, state_index, channel_names)
         # If every delivery was discarded, the reciter has no public deliveries
         # — also skip; it would render an empty row.
         if not public["deliveries"]:
@@ -291,7 +306,8 @@ def detail(reciter_id: str) -> PublicReciter | None:
     if not deliveries:
         return None
     state_index = _build_state_index()
-    public = to_public_reciter(reciter, deliveries, state_index)
+    channel_names = {ch.slug: ch.name for ch in catalog.vocab.channels}
+    public = to_public_reciter(reciter, deliveries, state_index, channel_names)
     if not public["deliveries"]:
         return None
     return public

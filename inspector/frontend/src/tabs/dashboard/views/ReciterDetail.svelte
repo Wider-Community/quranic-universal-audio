@@ -18,11 +18,13 @@
     import {
         bitrateLabel,
         categoryLabel,
+        channelDisplay,
         countryName,
         coverageLabel,
         titleCaseSlug,
         totalHoursLabel,
     } from '../../../lib/utils/delivery-label';
+    import StateTimeline from '../components/StateTimeline.svelte';
     import { closeDetail, dashboardState } from '../stores/dashboard-state';
 
     let reciter: PublicReciter | null = null;
@@ -77,7 +79,7 @@
         { key: 'year',    label: 'Year',    present: (d) => d.recording_year != null, value: (d) => String(d.recording_year ?? '') },
         { key: 'category', label: 'Category', present: (d) => !!d.audio_category, value: (d) => categoryLabel(d) },
         { key: 'coverage', label: 'Coverage', present: (d) => d.chapter_count > 0, value: (d) => coverageLabel(d) },
-        { key: 'channel', label: 'Channel', present: (d) => !!d.channel, value: (d) => titleCaseSlug(d.channel) },
+        { key: 'channel', label: 'Channel', present: (d) => !!d.channel, value: (d) => channelDisplay(d) },
         { key: 'bitrate', label: 'Bitrate', present: (d) => d.bitrate_kbps_nominal != null || !!d.bitrate_mode, value: (d) => bitrateLabel(d) },
         { key: 'hours',   label: 'Total hours', present: (d) => d.total_duration_sec != null, value: (d) => totalHoursLabel(d) },
     ];
@@ -126,6 +128,8 @@
                     <div class="country">{countryName(reciter.country)}</div>
                 {/if}
             </header>
+
+            <StateTimeline {reciter} />
 
             {#if reciter.deliveries.length === 0}
                 <div class="state">No combinations available.</div>
@@ -195,13 +199,12 @@
 
     .head {
         display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: var(--s-3);
-        padding-bottom: var(--s-4);
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--s-1);
+        padding-bottom: var(--s-3);
         border-bottom: 1px solid var(--border-quiet);
-        margin-bottom: var(--s-5);
+        margin-bottom: var(--s-4);
     }
     .names {
         display: flex;
@@ -251,7 +254,7 @@
     }
     .combinations tbody tr:hover td { background: var(--panel); }
     .col-play { width: 36px; }
-    .col-state { text-align: right; }
+    .col-state { text-align: left; }
     .cell-coverage,
     .cell-bitrate,
     .cell-hours,

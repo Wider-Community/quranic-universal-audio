@@ -35,6 +35,7 @@ export interface PublicDelivery {
     recording_year: number | null;
     source: string;
     channel: string;
+    channel_name: string;
     audio_category: string;
     chapter_count: number;
     coverage_kind: 'full' | 'partial';

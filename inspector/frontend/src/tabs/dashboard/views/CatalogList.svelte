@@ -149,31 +149,6 @@
     channelCount={totalChannels}
 />
 
-<div class="toolbar">
-    <div class="search">
-        <input
-            type="search"
-            placeholder="Search reciters"
-            value={$dashboardState.search}
-            on:input={onSearchInput}
-        />
-        <span class="search-count">{sorted.length} of {totalReciters}</span>
-    </div>
-    <div class="sort">
-        <label>
-            <span class="sort-label">Sort</span>
-            <select
-                value={$dashboardState.sort}
-                on:change={onSortChange}
-            >
-                <option value="recent">Recently updated</option>
-                <option value="alphabetical">A → Z</option>
-                <option value="combinations">Most combinations</option>
-            </select>
-        </label>
-    </div>
-</div>
-
 <div class="grid">
     <aside class="rail">
         {#if descriptor}
@@ -187,6 +162,30 @@
     </aside>
 
     <section class="body">
+        <div class="toolbar">
+            <div class="search">
+                <input
+                    type="search"
+                    placeholder="Search reciters"
+                    value={$dashboardState.search}
+                    on:input={onSearchInput}
+                />
+                <span class="search-count">{sorted.length} of {totalReciters}</span>
+            </div>
+            <div class="sort">
+                <label>
+                    <span class="sort-label">Sort</span>
+                    <select
+                        value={$dashboardState.sort}
+                        on:change={onSortChange}
+                    >
+                        <option value="recent">Recently updated</option>
+                        <option value="alphabetical">A → Z</option>
+                        <option value="combinations">Most combinations</option>
+                    </select>
+                </label>
+            </div>
+        </div>
         {#if $catalogData.loading}
             <div class="state">Loading reciters…</div>
         {:else if $catalogData.error}
@@ -231,7 +230,7 @@
         align-items: center;
         justify-content: space-between;
         gap: var(--s-4);
-        padding: 0 var(--gutter) var(--s-3);
+        padding: 0 0 var(--s-2);
         flex-wrap: wrap;
     }
     .search { display: flex; align-items: center; gap: var(--s-3); flex: 1; min-width: 240px; }
@@ -273,12 +272,12 @@
 
     .grid {
         display: grid;
-        grid-template-columns: 240px minmax(0, 1fr) 320px;
+        grid-template-columns: 360px minmax(0, 1fr) 320px;
         gap: var(--s-6);
         padding: 0 var(--gutter) var(--s-12);
     }
     @media (max-width: 1280px) {
-        .grid { grid-template-columns: 220px minmax(0, 1fr); }
+        .grid { grid-template-columns: 330px minmax(0, 1fr); }
         .grid :global(.activity) { display: none; }
     }
     @media (max-width: 900px) {

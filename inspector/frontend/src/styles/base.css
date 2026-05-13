@@ -31,11 +31,11 @@ body {
 
 .container {
     margin: 0 auto;
-    padding: 20px;
+    padding: 12px 20px;
 }
 
 header {
-    margin-bottom: 30px;
+    margin-bottom: 12px;
 }
 
 h1 {
@@ -100,7 +100,7 @@ footer {
 .tab-bar {
     display: flex;
     gap: 4px;
-    margin-bottom: 20px;
+    margin-bottom: 8px;
 }
 
 .tab-btn {

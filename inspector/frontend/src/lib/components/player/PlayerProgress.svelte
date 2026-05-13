@@ -19,11 +19,12 @@
     $: shownPos = dragging ? dragRatio * durationMs : positionMs;
 
     function fmt(ms: number): string {
-        if (!ms || !isFinite(ms)) return '0:00';
+        if (!ms || !isFinite(ms)) return '0:00:00';
         const total = Math.floor(ms / 1000);
-        const m = Math.floor(total / 60);
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
         const s = total % 60;
-        return `${m}:${s.toString().padStart(2, '0')}`;
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
     function ratioFromX(clientX: number): number {
