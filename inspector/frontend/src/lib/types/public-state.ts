@@ -8,15 +8,6 @@
  * Slice B (backend) and Slice D (frontend primitives) of phase 6.
  */
 
-export const PUBLIC_BUCKET_LABELS: Record<string, string> = {
-    available_for_request: 'Available for request',
-    requested: 'Requested',
-    available_for_review: 'Available to claim',
-    under_review: 'Under review',
-    publishing: 'Publishing',
-    published: 'Published',
-};
-
 export type PublicBucket =
     | 'available_for_request'
     | 'requested'
@@ -24,6 +15,15 @@ export type PublicBucket =
     | 'under_review'
     | 'publishing'
     | 'published';
+
+export const PUBLIC_BUCKET_LABELS: Record<PublicBucket, string> = {
+    available_for_request: 'Available for request',
+    requested: 'Requested',
+    available_for_review: 'Available to claim',
+    under_review: 'Under review',
+    publishing: 'Publishing',
+    published: 'Published',
+};
 
 export const PUBLIC_BUCKETS: readonly PublicBucket[] = [
     'available_for_request',
