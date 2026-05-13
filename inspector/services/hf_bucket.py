@@ -70,6 +70,7 @@ class StorageBackend(Protocol):
     def copy(self, src: str, dst: str) -> None: ...
     def move(self, src: str, dst: str) -> None: ...
     def delete(self, path: str) -> None: ...
+    def local_path(self, path: str) -> Path | None: ...
 
 
 # ----------------------------------------------------------------------
@@ -215,6 +216,10 @@ class FilesystemBackend:
         elif p.exists():
             p.unlink()
 
+    def local_path(self, path: str) -> Path | None:
+        p = self._resolve(path)
+        return p if p.exists() else None
+
 
 # ----------------------------------------------------------------------
 # BucketBackend
@@ -316,6 +321,20 @@ class BucketBackend:
             if self._is_not_found(e):
                 raise StorageNotFound(path) from e
             raise
+
+    def local_path(self, path: str) -> Path | None:
+        """Return the mount-backed local path for ``path`` if available.
+
+        Returns ``None`` in local-dev mode (no mount) or when the file isn't
+        on the mount yet. The audio-proxy uses this to hand a real path to
+        ``send_file`` so Werkzeug can serve Range/304 via OS sendfile —
+        avoiding the whole-chapter slurp + BytesIO round-trip.
+        """
+        _ensure_posix(path)
+        if self._mount is None:
+            return None
+        mp = self._mount / PurePosixPath(path)
+        return mp if mp.exists() else None
 
     def read_json(self, path: str) -> dict | list:
         import orjson

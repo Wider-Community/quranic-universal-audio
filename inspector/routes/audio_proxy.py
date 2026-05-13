@@ -30,8 +30,14 @@ audio_proxy_bp = Blueprint("audio_proxy", __name__, url_prefix="/api/seg")
 
 @audio_proxy_bp.route("/audio-proxy/<reciter>")
 def seg_audio_proxy(reciter):
-    """Proxy/serve a chapter MP3 via the shared audio-source resolver:
-    bucket-prefetched bytes → local disk cache → 302 to CDN."""
+    """Proxy/serve a chapter MP3 via the shared audio-source resolver.
+
+    Priority: mount/disk path (streamed via send_file with Range + ETag/304)
+    → in-memory bytes (local-dev fallback, still served with Range via a
+    seekable BytesIO) → 302 to CDN. Browser issues partial-content requests
+    once the first response advertises ``Accept-Ranges``; subsequent seeks
+    are byte-range fetches handled by Werkzeug's conditional path.
+    """
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "No url provided"}), 400
@@ -39,15 +45,29 @@ def seg_audio_proxy(reciter):
     src = audio_source.resolve(reciter, url)
     immutable = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
 
-    if src.data is not None:
-        resp = send_file(BytesIO(src.data), mimetype="audio/mpeg")
-        resp.headers["Cache-Control"] = immutable
-        return resp
-
     if src.path is not None:
         mime = AUDIO_MIME_TYPES.get(src.path.suffix.lower(), "audio/mpeg")
-        resp = send_file(src.path, mimetype=mime)
+        resp = send_file(
+            src.path,
+            mimetype=mime,
+            conditional=True,
+            etag=True,
+            last_modified=src.path.stat().st_mtime,
+            max_age=AUDIO_CACHE_MAX_AGE,
+        )
         resp.headers["Cache-Control"] = immutable
+        resp.headers["Accept-Ranges"] = "bytes"
+        return resp
+
+    if src.data is not None:
+        resp = send_file(
+            BytesIO(src.data),
+            mimetype="audio/mpeg",
+            conditional=True,
+            etag=f'"{src.chapter_key or "chapter"}-{len(src.data)}"',
+        )
+        resp.headers["Cache-Control"] = immutable
+        resp.headers["Accept-Ranges"] = "bytes"
         return resp
 
     return redirect(url, 302)

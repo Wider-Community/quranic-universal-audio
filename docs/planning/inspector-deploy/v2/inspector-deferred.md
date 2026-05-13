@@ -224,28 +224,6 @@ Either way, both source and destination live in the **same private bucket** — 
 
 ---
 
-## D14 — Inspector-native reciter-request flow
-
-**What.** A "Request a reciter" surface inside the Inspector UI itself. Anonymous (or signed-in) users submit a request through Inspector; maintainers approve from the admin dashboard; approval writes the catalog row + initial state in the same path the existing admin endpoints use.
-
-This is the longer-term sibling to D2: D2 is about decommissioning the existing Reciter Requests Space (which is happening in v2 cleanup); D14 is about replacing the bridge with a first-class native flow.
-
-**Why deferred.** v2 ships with GH issues + maintainer manual `POST /api/admin/catalog/add` as the lightweight transitional intake. Building the Inspector-native form requires:
-- Public-facing form UX (anonymous submission flow, captcha or HF-OAuth-gate decision)
-- Maintainer review queue UI
-- Permission model for "approve catalog add"
-- Migration of any in-flight GH issues to the new flow once it lands
-
-None of these block v2.
-
-**Trigger to revisit.** After v2 stabilizes AND request volume justifies investing in a dedicated flow, OR a maintainer reports the GH-issue intake as a real bottleneck.
-
-**Affected if never done.** New reciter requests live as GH issues forever; maintainer manually triages. Workable; mild operational friction.
-
-**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §2 (workflow inventory; the forward webhook is removed in v2 cleanup).
-
----
-
 ## D19 — 14 legacy-pattern test failures from Phase 1 fixture migration
 
 **What.** Phase 1's call-site migration moved per-reciter IO behind `services/data_dir` + the storage backend, and the conftest fixture was rewritten to install a `FilesystemBackend` rooted at `tmp_path`. That brought 138/152 inspector tests green, but 14 tests still fail because they bypass the conftest fixture and bake in legacy patterns:
@@ -450,20 +428,6 @@ After both syncs land, re-run `python -m scripts.inspector_v2_seed.migrate_bucke
 
 ---
 
-## D28 — ESLint rule for `use:editGate` coverage
-
-**What.** Add an ESLint rule that flags any `<button on:click={fn}>` (or analogous element) where `fn` is a state-mutating handler and the element has no sibling `use:editGate` action. Catches the failure mode where a contributor adds a new edit affordance and forgets to wire the gate.
-
-**Why deferred.** The 7-case Vitest unit (`inspector/frontend/src/lib/actions/__tests__/editGate.test.ts`) catches the per-button regressions we have today; coverage at the new-component-introduction time is what's missing. Designing the rule needs an "is this handler a mutator?" heuristic — likely an allow/deny list of handler suffixes (`onApply`, `onSave`, `onDelete`, etc.) — non-trivial to get right, easy to make noisy.
-
-**Trigger to revisit.** First PR landing a new edit affordance without `use:editGate` (review catches it; second time, write the rule).
-
-**Affected if never done.** Frontend reviewers carry the cognitive load of "is this a state-mutating button? does it need the gate?" on every PR.
-
-**Cross-refs.** `inspector/frontend/src/lib/actions/editGate.ts`, `inspector/frontend/src/lib/actions/__tests__/editGate.test.ts`.
-
----
-
 ## D29 — Maintainer edit on `released`/`completed` (`published.edited` route surface)
 
 **What.** State machine handler `_h_published_edited` already exists in `inspector/services/state.py` for the `published.edited` event — fires when an admin edits a reciter that has moved past `under_review`. Phase 3's `require_edit_lock` decorator rejects every save where `row.state != UNDER_REVIEW`, which means there is **no route surface** for maintainers to perform this edit. The handler is reachable only via direct service-layer call.
@@ -475,34 +439,6 @@ After both syncs land, re-run `python -m scripts.inspector_v2_seed.migrate_bucke
 **Affected if never done.** Maintainers cannot edit completed reciters via the UI. Manual workaround: edit the bucket file directly via `huggingface_hub`, or `force_set_state` the row back to `under_review` (allowed pair in Phase 4), edit, mark-ready, publish.
 
 **Cross-refs.** `inspector/services/state.py::_h_published_edited`, `phases/03-auth-and-claims.md` (Out of scope), `phases/07-admin-dashboard.md`.
-
----
-
-## D30 — Bucket-data-hygiene replay-style edit-history validator
-
-**What.** The Phase-6 `bucket-data-hygiene.yml` workflow was originally going to call into `validators/validate_edit_history.py` for its replay-style chain check. That file has been deleted. Its five checks (genesis row, file-hash chain, _meta tampering, diff-vs-history cross-ref, history-only changes) are all either obsolete (Phase 1 dropped the `file_hash_after` chain so the chain check has no premise) or now hold by construction (`batch_id` uniqueness comes from `uuid7`; peaks-file integrity is already tolerated by `services/peaks_history.load_peaks_records`).
-
-**Why deferred.** No live consumer today. If Phase 6 hygiene wants a replay-style check (verify that the segment state at `time T` matches what the patch stream from genesis says it should be), it's a fresh implementation against `inspector/domain/command.apply_inverse_patch` — not a port of the old file-hash chain code.
-
-**Trigger to revisit.** Phase 6 `bucket-data-hygiene.yml` design lands a concrete check spec.
-
-**Affected if never done.** No mechanical hygiene check on `edit_history.jsonl`. Inspector reads + replays it correctly at runtime; corruption would surface there. Acceptable until Phase 6.
-
-**Cross-refs.** `phases/04-save-migration.md` (Out of scope), Phase 6 design doc TBD.
-
----
-
-## D31 — Audio manifest validation as an Inspector admin tab
-
-**What.** `scripts/lib/audio_manifest.validate_audio()` is now a pure library. The CI workflow (`validate-audio-pr.yml`) that consumed it for PR-time manifest diff comments was deleted. There is no live UI surface for triggering manifest validation today.
-
-**Why deferred.** Audio manifest validation runs at *new reciter intake* time. The Reciter Requests Space + GitHub PR flow handle intake; once we wire an Inspector "New reciter" admin tab (Phase 7 admin dashboard, or later) it can call `scripts.lib.audio_manifest.validate_audio()` directly and render the same coverage report the deleted CI workflow used to post on PRs.
-
-**Trigger to revisit.** A maintainer hits a case where manual PR review missed a manifest issue and asks for the automation back, OR Phase 7 admin dashboard explicitly scopes a "New reciter intake" panel.
-
-**Affected if never done.** Maintainers eyeball incoming reciter manifests manually. The library is preserved at `scripts/lib/audio_manifest.py` so this is a 1-day UI/route job whenever it's wanted.
-
-**Cross-refs.** `scripts/lib/audio_manifest.py`, `phases/07-admin-dashboard.md`.
 
 ---
 

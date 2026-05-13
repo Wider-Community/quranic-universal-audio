@@ -17,13 +17,14 @@ def audio_sources():
 
 @audio_meta_bp.route("/surahs/<category>/<source>/<slug>")
 def audio_surahs(category, source, slug):
-    """Return surah/ayah URLs for a reciter within a specific source.
+    """Return per-chapter ``{url, duration_ms}`` for a delivery.
 
-    v2: reads the per-delivery audio_manifest sidecar from
-    ``<bucket>/catalog/audio_manifest/<slug>.json``. Phase 1's stub catalog
-    hasn't promoted sidecars yet, so this route returns 404 for every slug
-    until the bulk audio probe completes and ``seed_catalog_stub`` is
-    extended (Phase 6 work).
+    Reads the per-delivery audio_manifest sidecar from
+    ``<bucket>/catalog/audio_manifest/<slug>.json``. ``duration_ms`` is
+    derived from the sidecar's ``duration_sec`` so the dashboard player can
+    show full chapter length before the browser fetches MP3 headers — the
+    ``BottomPlayer`` runs ``<audio preload="none">`` and would otherwise
+    show ``0:00`` until first play.
     """
     key = f"{category}/{source}/{slug}"
     cached = cache.get_audio_url_cache(key)
@@ -36,6 +37,20 @@ def audio_surahs(category, source, slug):
     if not isinstance(doc, dict):
         return jsonify({"error": "invalid audio_manifest sidecar"}), 500
     chapters = doc.get("chapters") or {}
-    surahs = {k: (v.get("url") if isinstance(v, dict) else v) for k, v in chapters.items()}
+    surahs: dict[str, dict] = {}
+    for k, v in chapters.items():
+        if isinstance(v, dict):
+            url = v.get("url")
+            if not isinstance(url, str):
+                continue
+            duration_sec = v.get("duration_sec")
+            duration_ms = (
+                int(round(duration_sec * 1000))
+                if isinstance(duration_sec, (int, float))
+                else None
+            )
+            surahs[k] = {"url": url, "duration_ms": duration_ms}
+        elif isinstance(v, str):
+            surahs[k] = {"url": v, "duration_ms": None}
     cache.set_audio_url_cache(key, surahs)
     return jsonify({"surahs": surahs})

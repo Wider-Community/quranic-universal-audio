@@ -99,3 +99,7 @@ export function setPosition(positionMs: number, durationMs?: number): void {
         durationMs: durationMs ?? s.durationMs,
     }));
 }
+
+export function setDuration(durationMs: number): void {
+    playerContext.update((s) => ({ ...s, durationMs }));
+}

@@ -249,6 +249,25 @@ def read_prefetched_audio_bytes(slug: str, url: str) -> bytes | None:
         return None
 
 
+def read_prefetched_audio_local_path(slug: str, url: str):
+    """Return a real local ``Path`` to the prefetched chapter when the
+    backend can expose one (deployed bucket mount or local-disk backend).
+
+    Lets the audio-proxy hand ``send_file`` a path instead of a BytesIO —
+    Werkzeug then handles Range/304 via OS sendfile and we avoid pulling
+    the whole 4–5 MB MP3 into Flask memory on every surah switch.
+    Returns ``None`` for local-dev no-mount (callers fall back to bytes).
+    """
+    chapter = audio_meta.chapter_for_url(slug, url)
+    if chapter is None:
+        return None
+    path = storage_paths.prefetched_audio_path(slug, chapter)
+    try:
+        return get_backend().local_path(path)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     """Return the prefetched peaks JSON for ``url`` if present in the bucket.
 

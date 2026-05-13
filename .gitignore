@@ -15,6 +15,7 @@ node_modules/
 .agents/
 CLAUDE.md
 AGENTS.md
+PRODUCT.md
 
 # envs
 .env

@@ -99,6 +99,24 @@ function _resumeIfSuspended(ctx: AudioContext): void {
     if (ctx.state === 'suspended') void ctx.resume();
 }
 
+/** Resume the shared AudioContext if suspended. Safe no-op when Web Audio
+ *  is unavailable or the context is already running. Awaits the resume so
+ *  the caller can sequence ``audio.play()`` immediately after — fixes the
+ *  "progress moves but no audio" case after a tab switch. */
+export async function ensureAudioContextRunning(): Promise<void> {
+    const ctx = _getCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+        try {
+            await ctx.resume();
+        } catch {
+            // Browser may reject if no user gesture is active. The caller's
+            // play() will still produce audio via the element's default path
+            // until the graph is wired on a later, gesture-bound play.
+        }
+    }
+}
+
 /** Schedule a fast (5 ms) gain ramp to 0. Cancels any pending ramp first.
  *  Click-free; sample-accurate at the AudioContext quantum. No-op if
  *  Web Audio is unavailable. */

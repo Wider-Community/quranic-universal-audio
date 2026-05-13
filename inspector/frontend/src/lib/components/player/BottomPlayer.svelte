@@ -14,12 +14,14 @@
     import { onDestroy, onMount } from 'svelte';
 
     import { clickOutside } from '../../actions/click-outside';
-    import { fetchSurahsForDelivery } from '../../api/audio-surahs';
+    import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
+    import { ensureAudioContextRunning } from '../../playback/audio-graph';
     import { dashPort } from '../../playback/dash-port';
     import {
         loadPersistedSlice,
         persistSlice,
         playerContext,
+        setDuration,
         setIsPlaying,
         setPosition,
         setSpeed,
@@ -33,7 +35,7 @@
     import SurahPopover from './SurahPopover.svelte';
 
     let audioEl: HTMLAudioElement | null = null;
-    let urls: Record<string, string> = {};
+    let urls: Record<string, SurahEntry> = {};
     let lastDeliverySlug: string | null = null;
     let lastSurahNum: number | null = null;
     let surahPopoverOpen = false;
@@ -100,22 +102,42 @@
         }
 
         if (surahNum !== lastSurahNum || deliverySwitched) {
-            const url = urls[String(surahNum)];
-            if (url) {
+            const entry = urls[String(surahNum)];
+            if (entry) {
+                const url = entry.url;
                 const cbrSrc = url.startsWith('/api/')
                     ? url
                     : `/api/seg/audio-proxy/${delivery.slug}?url=${encodeURIComponent(url)}`;
                 dashPort.setSource({ audioUrl: url, cbrSrc, reciter: delivery.slug, vbr: false });
-                dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
-                if (wasPlaying) dashPort.play();
+                // Seed duration from the manifest so the progress bar shows
+                // total length before <audio> fetches MP3 headers (which
+                // doesn't happen until play with preload="none").
+                if (entry.durationMs && entry.durationMs > 0) {
+                    setDuration(entry.durationMs);
+                }
+                if (wasPlaying) {
+                    await ensureAudioContextRunning();
+                    dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+                    dashPort.play();
+                }
             }
             lastSurahNum = surahNum;
         }
     }
 
-    function togglePlay(): void {
-        if ($playerContext.isPlaying) dashPort.pause();
-        else dashPort.play();
+    async function togglePlay(): Promise<void> {
+        if ($playerContext.isPlaying) {
+            dashPort.pause();
+            return;
+        }
+        await ensureAudioContextRunning();
+        // preload="none" means the element has no buffered media until
+        // loadCovering points it at the proxy URL. Browsers ignore play()
+        // when src is empty, so we ensure coverage first.
+        if (dashPort.source) {
+            dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+        }
+        dashPort.play();
     }
 
     function seekBack(): void {
@@ -238,7 +260,7 @@
         </div>
     </div>
 
-    <audio bind:this={audioEl} preload="metadata" />
+    <audio bind:this={audioEl} preload="none" />
 </div>
 
 <style>

@@ -520,6 +520,10 @@ export interface AudioSourcesResponse {
 }
 
 /** GET /api/audio/surahs/:category/:source/:slug */
+export interface AudioSurahEntry {
+    url: string;
+    duration_ms: number | null;
+}
 export interface AudioSurahsResponse {
-    surahs: Record<string, string>;
+    surahs: Record<string, AudioSurahEntry>;
 }

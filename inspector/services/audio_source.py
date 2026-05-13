@@ -52,10 +52,13 @@ def resolve(reciter: str, url: str) -> AudioSource:
     vbr = bool(meta and (meta.get("bitrate_mode") or "").lower() == "vbr")
     bitrate_kbps = meta.get("bitrate_kbps") if isinstance(meta, dict) else None
 
-    data = audio_fetch.read_prefetched_audio_bytes(reciter, url)
-    if data is not None:
+    # Prefer a real local path so callers can stream via send_file/sendfile
+    # (Range, ETag, 304). The bytes fallback is only for local-dev when no
+    # mount or disk shadow is available.
+    local = audio_fetch.read_prefetched_audio_local_path(reciter, url)
+    if local is not None:
         return AudioSource(
-            cdn_url=url, data=data, path=None,
+            cdn_url=url, data=None, path=local,
             vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
         )
 
@@ -63,6 +66,13 @@ def resolve(reciter: str, url: str) -> AudioSource:
     if disk.exists():
         return AudioSource(
             cdn_url=url, data=None, path=disk,
+            vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
+        )
+
+    data = audio_fetch.read_prefetched_audio_bytes(reciter, url)
+    if data is not None:
+        return AudioSource(
+            cdn_url=url, data=data, path=None,
             vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
         )
 

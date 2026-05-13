@@ -272,7 +272,7 @@
 
     .grid {
         display: grid;
-        grid-template-columns: 360px minmax(0, 1fr) 320px;
+        grid-template-columns: 300px minmax(0, 1fr) 320px;
         gap: var(--s-6);
         padding: 0 var(--gutter) var(--s-12);
     }

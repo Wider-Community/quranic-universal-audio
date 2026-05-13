@@ -1,22 +1,26 @@
 /**
  * Audio-surahs fetcher — wraps ``/api/audio/surahs/<category>/<source>/<slug>``.
  *
- * Returns a surah-number → audio-URL map for a delivery. The Phase 6
- * BottomPlayer is by-surah only; ayah-level wiring stays in the Audio
- * tab's archive history (not exposed in dashboard).
+ * Returns ``{surahNum → {url, durationMs}}`` for a delivery. ``durationMs``
+ * comes from the sidecar so the dashboard's progress bar can show full
+ * chapter length even with ``<audio preload="none">`` (the element doesn't
+ * fetch MP3 headers until the user hits play).
  */
 
-interface AudioSurahsResponse {
-    surahs: Record<string, string>;
+import type { AudioSurahsResponse } from '../types/api';
+
+export interface SurahEntry {
+    url: string;
+    durationMs: number | null;
 }
 
-const _cache: Map<string, Record<string, string>> = new Map();
+const _cache: Map<string, Record<string, SurahEntry>> = new Map();
 
 export async function fetchSurahsForDelivery(
     source: string,
     slug: string,
     signal?: AbortSignal,
-): Promise<Record<string, string>> {
+): Promise<Record<string, SurahEntry>> {
     const key = `by_surah/${source}/${slug}`;
     const cached = _cache.get(key);
     if (cached) return cached;
@@ -25,7 +29,11 @@ export async function fetchSurahsForDelivery(
         throw new Error(`fetchSurahsForDelivery: HTTP ${resp.status}`);
     }
     const data = (await resp.json()) as AudioSurahsResponse;
-    const surahs = data.surahs ?? {};
-    _cache.set(key, surahs);
-    return surahs;
+    const raw = data.surahs ?? {};
+    const out: Record<string, SurahEntry> = {};
+    for (const [k, v] of Object.entries(raw)) {
+        out[k] = { url: v.url, durationMs: v.duration_ms };
+    }
+    _cache.set(key, out);
+    return out;
 }
