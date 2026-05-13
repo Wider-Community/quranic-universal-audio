@@ -22,6 +22,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -32,6 +33,12 @@ from services.hf_bucket import get_backend
 from services.peaks import compute_audio_peaks
 
 logger = logging.getLogger(__name__)
+
+# Global ffmpeg gate. mp3_to_xing is CPU-bound; letting the prefetch fan-out
+# spawn one ffmpeg per chapter pegs small Space CPU and starves the request
+# path. Cap to a single concurrent remux process; downloads + uploads still
+# parallelize via the prefetch thread pool.
+_FFMPEG_SEM = threading.Semaphore(1)
 
 
 @dataclass(frozen=True)
@@ -79,23 +86,24 @@ def _remux_mp3_to_xing(src: str, tmp_dir: str) -> str | None:
     fd, tmp = tempfile.mkstemp(suffix=".mp3", dir=tmp_dir)
     os.close(fd)
     try:
-        result = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                src,
-                "-c:a",
-                "copy",
-                "-bsf:a",
-                "mp3_to_xing",
-                "-v",
-                "error",
-                tmp,
-            ],
-            capture_output=True,
-            timeout=FFMPEG_FULL_TIMEOUT,
-        )
+        with _FFMPEG_SEM:
+            result = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    src,
+                    "-c:a",
+                    "copy",
+                    "-bsf:a",
+                    "mp3_to_xing",
+                    "-v",
+                    "error",
+                    tmp,
+                ],
+                capture_output=True,
+                timeout=FFMPEG_FULL_TIMEOUT,
+            )
         if result.returncode != 0 or os.path.getsize(tmp) == 0:
             logger.warning(
                 "mp3_to_xing remux failed (rc=%s): %s",

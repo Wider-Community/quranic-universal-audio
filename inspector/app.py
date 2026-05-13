@@ -246,11 +246,17 @@ def _hydrate_bucket_stores() -> None:
 
             state_service.register_transition_hook(audio_prefetch.on_state_transition)
             audio_prefetch.start_cleanup_daemon()
-            resumed = audio_prefetch.resume_orphaned()
-            if resumed:
-                logger.info(
-                    "audio_prefetch: re-enqueued %d orphaned slug(s) at boot", resumed
-                )
+            # Boot-resume is opt-in: a fresh Space with many awaiting_review
+            # rows would otherwise enqueue the entire backlog and peg CPU on
+            # ffmpeg remux for hours. Operators flip this on after confirming
+            # the queue is shaped right for the deploy.
+            if os.environ.get("AUDIO_PREFETCH_RESUME_ON_BOOT") == "1":
+                resumed = audio_prefetch.resume_orphaned()
+                if resumed:
+                    logger.info(
+                        "audio_prefetch: re-enqueued %d orphaned slug(s) at boot",
+                        resumed,
+                    )
         except Exception as e:  # noqa: BLE001
             logger.warning("audio_prefetch wiring failed: %s", e)
 
