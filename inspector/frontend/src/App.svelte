@@ -5,9 +5,9 @@
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
+    import { dashPort } from './lib/playback/dash-port';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
-    import { dashPort } from './lib/playback/dash-port';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import DashboardTab from './tabs/dashboard/DashboardTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
@@ -84,7 +84,6 @@
                 {/if}
             </div>
         </div>
-        <p class="header-links">Want to add a reciter? <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests" target="_blank" rel="noopener">Submit a request</a></p>
         <div class="tab-bar">
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => switchTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => switchTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>

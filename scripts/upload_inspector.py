@@ -151,6 +151,7 @@ def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
         repo_id=repo_id,
         repo_type="space",
         commit_message=commit_msg,
+        delete_patterns="*",
     )
     # Code-only pushes don't change the Dockerfile hash, so HF doesn't
     # rebuild the container automatically — the new commit shows up in
