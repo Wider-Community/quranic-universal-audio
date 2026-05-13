@@ -7,6 +7,7 @@ import { get } from 'svelte/store';
 import { fetchJson } from '../../../../lib/api';
 import type { SegResolveRefResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
+import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,
     invalidateChapterIndexFor,
@@ -16,17 +17,15 @@ import {
     syncChapterSegsToAll,
 } from '../../stores/chapter';
 import {
-    createOp,
     markDirty,
-    snapshotSeg,
 } from '../../stores/dirty';
 import {
     clearEdit,
     setEdit,
 } from '../../stores/edit';
+import { recordMergeRedirect } from '../../stores/merge-redirect';
 import { clearFlashForChapter } from '../../stores/navigation';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
-import { _fixupValIndicesForMerge } from '../validation/fixups';
 import { finalizeEdit } from './common';
 
 // ---------------------------------------------------------------------------
@@ -63,20 +62,25 @@ export async function mergeAdjacent(
     const first = direction === 'prev' ? other : seg;
     const second = direction === 'prev' ? seg : other;
 
+    // Audio-URL guard: cross-audio merges aren't representable. Bail before
+    // signaling merge mode so the store doesn't briefly reflect an aborted op.
+    const firstAudio = first.audio_url || '';
+    const secondAudio = second.audio_url || '';
+    if (firstAudio !== secondAudio) return;
+
+    // Reducer needs both halves identifiable by uid.
+    const segUid = seg.segment_uid;
+    const otherUid = other.segment_uid;
+    if (!segUid || !otherUid) return;
+
     // Signal merge mode to EditOverlay (and future MergePanel) only after all
     // pure guard checks pass, so the store only reflects merge while we're
     // actually committed to executing. `mountId` pins the initiating row
     // so accordion twins stay passive; omit (null) for programmatic calls.
     setEdit('merge', seg.segment_uid ?? null, mountId);
 
-    const mergeOp = createOp('merge_segments', contextCategory ? { contextCategory } : undefined);
-    mergeOp.merge_direction = direction;
-    mergeOp.targets_before = [snapshotSeg(first), snapshotSeg(second)];
-
-    const firstAudio = first.audio_url || '';
-    const secondAudio = second.audio_url || '';
-    if (firstAudio !== secondAudio) { clearEdit(); return; }
-
+    // Async ref resolution at the edge: produces the canonical merged ref+text
+    // pair that the reducer slots into the merged segment.
     let mergedRef = '';
     const refs = [first.matched_ref, second.matched_ref].filter(Boolean);
     if (refs.length > 0) {
@@ -103,29 +107,35 @@ export async function mergeAdjacent(
         }
     }
 
-    // UID preservation: the merged seg inherits `first`'s UID so the row-registry
-    // entry and accordion twins that were bound to first stay bound. The
-    // consumed side's UID is simply dropped.
-    const merged: Segment = {
-        ...first,
-        segment_uid: first.segment_uid,
-        index: first.index,
-        time_start: first.time_start,
-        time_end: second.time_end,
-        matched_ref: mergedRef,
-        matched_text: mergedText,
-        display_text: mergedDisplay,
-        confidence: 1.0,
-    };
-    const mergedIc = new Set<string>([
-        ...(first.ignored_categories || []),
-        ...(second.ignored_categories || []),
-    ]);
-    if (contextCategory && contextCategory !== 'muqattaat') mergedIc.add(contextCategory);
-    if (mergedIc.size) merged.ignored_categories = [...mergedIc];
+    const result = applyCommand(
+        {
+            byId: { [segUid]: seg, [otherUid]: other },
+            idsByChapter: { [chapter]: chapterSegs.map(s => s.segment_uid).filter((u): u is string => !!u) },
+            selectedChapter: chapter,
+        },
+        {
+            type: 'merge',
+            fromUid: segUid,
+            toUid: otherUid,
+            direction,
+            mergedRef,
+            mergedText,
+            mergedDisplayText: mergedDisplay,
+            sourceCategory: contextCategory ?? undefined,
+            contextCategory: contextCategory ?? undefined,
+        },
+    );
+    const keptUid = first.segment_uid!;
+    const consumedUid = second.segment_uid!;
+    const merged = result.nextState.byId[keptUid] as Segment;
+    if (!merged) { clearEdit(); return; }
 
-    const keptOldIdx = first.index;
-    const consumedOldIdx = second.index;
+    // Record the merge redirect so accordion cards pinned to the consumed
+    // UID can follow the redirect to the surviving segment.
+    recordMergeRedirect(consumedUid, keptUid);
+
+    const _keptOldIdx = first.index;
+    const _consumedOldIdx = second.index;
 
     // Capture pre-mutation UIDs for playing-pair reconciliation. The playing
     // seg might be either side of the merge; try whichever survives post-merge.
@@ -156,10 +166,9 @@ export async function mergeAdjacent(
     clearFlashForChapter(chapter);
 
     markDirty(chapter, undefined, true);
-    _fixupValIndicesForMerge(chapter, keptOldIdx, consumedOldIdx);
     if (chapter === currentChapter && curData) {
         curData.segments = getChapterSegments(chapter);
     }
-    finalizeEdit(mergeOp, chapter, [merged]);
+    finalizeEdit(result.operation, chapter, [merged], { patch: result.patch });
     clearEdit();
 }

@@ -1,6 +1,18 @@
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
+import { afterEach,beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
+import { TS_VIEW_MODES,viewMode } from '../../stores/display';
+import { loopTarget } from '../../stores/playback';
+import type { TsLoadedVerse } from '../../stores/verse';
+import { loadedVerse } from '../../stores/verse';
+import { tsZoom } from '../../stores/zoom';
+import {
+    TS_ZOOM_ANIMATE_MAX_MS,
+    TS_ZOOM_ANIMATE_MIN_MS,
+    TS_ZOOM_ANIMATE_MS,
+    TS_ZOOM_ANIMATE_MS_PER_SEC,
+} from '../constants';
 import {
     _resetZoomModuleForTests,
     animateZoomOut,
@@ -11,18 +23,6 @@ import {
     setupZoomLifecycle,
     zoomToWord,
 } from '../zoom';
-import {
-    TS_ZOOM_ANIMATE_MAX_MS,
-    TS_ZOOM_ANIMATE_MIN_MS,
-    TS_ZOOM_ANIMATE_MS,
-    TS_ZOOM_ANIMATE_MS_PER_SEC,
-} from '../constants';
-import { tsZoom } from '../../stores/zoom';
-import { loopTarget } from '../../stores/playback';
-import { loadedVerse } from '../../stores/verse';
-import { viewMode, TS_VIEW_MODES } from '../../stores/display';
-import type { TsLoadedVerse } from '../../stores/verse';
-import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
 
 // ---- Fixture helpers --------------------------------------------------------
 

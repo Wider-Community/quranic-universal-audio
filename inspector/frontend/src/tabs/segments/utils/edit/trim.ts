@@ -6,6 +6,7 @@ import { get } from 'svelte/store';
 
 import type { Segment } from '../../../../lib/types/domain';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
+import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,
     getCurrentChapterSegs,
@@ -20,7 +21,6 @@ import { segConfig } from '../../stores/config';
 import {
     getPendingOp,
     markDirty,
-    setPendingOp,
 } from '../../stores/dirty';
 import {
     editCanvas,
@@ -73,9 +73,10 @@ export function computeTrimBounds(
     const segIdx = chapterSegs.findIndex((s) => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
     const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(seg.chapter ?? 0)] || '';
+    const fallbackPad = Math.max(1000, cfg.trimPadRight);
     const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
-        ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + 1000)
-        : (peaksDurationMs || seg.time_end + 1000);
+        ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + fallbackPad)
+        : (peaksDurationMs || seg.time_end + fallbackPad);
     const windowStart = Math.max(prevEnd, seg.time_start - cfg.trimPadLeft);
     const windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
     return { windowStart, windowEnd, audioUrl };
@@ -141,6 +142,28 @@ export function enterTrimMode(seg: Segment, row: HTMLElement, mountId: symbol | 
     previewTrimAudio(canvas);
     void _fetchPeaksForClick(seg, chapter).then(() => {
         if (!canvas._trimWindow) return; // user exited trim mode mid-fetch
+
+        const loadedDuration = getWaveformPeaks(seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '')?.duration_ms;
+        if (loadedDuration) {
+            const { windowStart, windowEnd } = computeTrimBounds(
+                { ...seg, chapter },
+                chapterSegs,
+                cfg,
+                loadedDuration,
+            );
+            const tw = canvas._trimWindow;
+            tw.windowStart = windowStart;
+            tw.windowEnd = windowEnd;
+            tw.viewStart = Math.max(windowStart, tw.viewStart);
+            tw.viewEnd = Math.min(windowEnd, tw.viewEnd);
+            
+            // Constrain cursors. If they were already dragged past the new true end, snap them back.
+            tw.currentStart = Math.max(windowStart, Math.min(tw.currentStart, windowEnd - EDIT_MIN_DURATION_MS));
+            tw.currentEnd = Math.min(windowEnd, Math.max(tw.currentEnd, tw.currentStart + EDIT_MIN_DURATION_MS));
+            
+            setTrimWindow({ ...tw });
+        }
+
         drawTrimWaveform(canvas);
     });
 }
@@ -349,19 +372,43 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
         return;
     }
 
-    seg.time_start = newStart;
-    seg.time_end = newEnd;
-    seg.confidence = 1.0;
     const pending = getPendingOp();
-    if (pending?.op_context_category && pending.op_context_category !== 'muqattaat') {
-        if (!seg.ignored_categories) seg.ignored_categories = [];
-        if (!seg.ignored_categories.includes(pending.op_context_category))
-            seg.ignored_categories.push(pending.op_context_category);
+    const ctxCat = pending?.op_context_category ?? null;
+    const uid = seg.segment_uid;
+    if (!uid) {
+        seg.time_start = newStart;
+        seg.time_end = newEnd;
+        seg.confidence = 1.0;
+        markDirty(chapter, undefined, true);
+        exitEditMode();
+        refreshSegInStore(seg);
+        return;
+    }
+
+    const result = applyCommand(
+        {
+            byId: { [uid]: seg },
+            idsByChapter: { [chapter]: [uid] },
+            selectedChapter: chapter,
+        },
+        {
+            type: 'trim',
+            segmentUid: uid,
+            delta: { time_start: newStart, time_end: newEnd },
+            sourceCategory: ctxCat ?? undefined,
+            contextCategory: ctxCat ?? undefined,
+        },
+    );
+    const updated = result.nextState.byId[uid];
+    if (updated) {
+        seg.time_start = updated.time_start;
+        seg.time_end = updated.time_end;
+        seg.confidence = updated.confidence;
+        if (updated.ignored_categories) {
+            seg.ignored_categories = [...updated.ignored_categories];
+        }
     }
     markDirty(chapter, undefined, true);
-
-    const trimOp = pending;
-    setPendingOp(null);
 
     const curData = get(segData);
     if (chapter !== currentChapter || !curData?.segments) {
@@ -376,9 +423,7 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 
     exitEditMode();
     refreshSegInStore(seg);
-    if (trimOp) {
-        finalizeEdit(trimOp, chapter, [seg], { skipAccordion: true });
-    }
+    finalizeEdit(result.operation, chapter, [seg], { skipAccordion: true, patch: result.patch });
 }
 
 // ---------------------------------------------------------------------------

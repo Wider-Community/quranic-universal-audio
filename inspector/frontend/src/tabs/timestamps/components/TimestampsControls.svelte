@@ -10,6 +10,10 @@
     export function cycleSpeed(direction: 'up' | 'down'): void {
         _speedCtrl?.cycle(direction);
     }
+    import type { TsReciter } from '../../../lib/types/domain';
+    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../../lib/utils/constants';
+    import { buildGroupedReciters, reciterGroupsToOptions } from '../../../lib/utils/grouped-reciters';
+    import { tsAudioElement } from '../stores/playback';
     import {
         chaptersOptions,
         reciters,
@@ -18,10 +22,6 @@
         selectedVerse,
         versesOptions,
     } from '../stores/verse';
-    import { tsAudioElement } from '../stores/playback';
-    import { buildGroupedReciters } from '../../../lib/utils/grouped-reciters';
-    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../../lib/utils/constants';
-    import type { TsReciter } from '../../../lib/types/domain';
 
     const dispatch = createEventDispatcher<{
         reciterChange: string;
@@ -31,37 +31,21 @@
 
     // ---- Grouped reciter options ----
     $: groupedReciters = buildGroupedReciters($reciters as TsReciter[]);
-
-    // ---- Event handlers ----
-    function onReciterSelectChange(e: Event): void {
-        const v = (e.currentTarget as HTMLSelectElement).value;
-        dispatch('reciterChange', v);
-    }
-
-    function onVerseSelectChange(e: Event): void {
-        const v = (e.currentTarget as HTMLSelectElement).value;
-        dispatch('verseChange', v);
-    }
+    $: reciterOptions = reciterGroupsToOptions(groupedReciters);
 </script>
 
 <div class="info-bar">
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Reciter:
-        <select
-            id="ts-reciter-select"
+        <SearchableSelect
+            options={reciterOptions}
             bind:value={$selectedReciter}
-            on:change={onReciterSelectChange}
-        >
-            <option value="">{$reciters.length ? PLACEHOLDER_SELECT : 'Loading...'}</option>
-            {#each groupedReciters as g}
-                <optgroup label={g.group}>
-                    {#each g.items as r}
-                        <option value={r.slug}>{r.name}</option>
-                    {/each}
-                </optgroup>
-            {/each}
-        </select>
+            placeholder={$reciters.length ? PLACEHOLDER_SELECT : 'Loading...'}
+            className="reciter-select"
+            on:change={(e) => dispatch('reciterChange', e.detail)}
+        />
     </label>
-    <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Surah:
         <SearchableSelect
             options={$chaptersOptions}
@@ -70,17 +54,14 @@
             on:change={(e) => dispatch('chapterChange', e.detail)}
         />
     </label>
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Ayah:
-        <select
-            id="ts-segment-select"
+        <SearchableSelect
+            options={$versesOptions}
             bind:value={$selectedVerse}
-            on:change={onVerseSelectChange}
-        >
-            <option value="">--</option>
-            {#each $versesOptions as v}
-                <option value={v.value}>{v.label}</option>
-            {/each}
-        </select>
+            placeholder="--"
+            on:change={(e) => dispatch('verseChange', e.detail)}
+        />
     </label>
     <SpeedControl bind:this={_speedCtrl} audioElement={$tsAudioElement} lsKey={LS_KEYS.TS_SPEED} />
 </div>

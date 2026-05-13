@@ -9,8 +9,9 @@ from pathlib import Path
 
 from config import RECITATION_SEGMENTS_PATH
 from constants import HISTORY_SCHEMA_VERSION, VALIDATION_CATEGORIES
+from domain.command import apply_inverse_patch
 from services import cache
-from services.data_loader import load_detailed
+from services.data_loader import load_detailed, load_probe_v2
 from services.save import persist_detailed
 from services.validation import chapter_validation_counts
 from services.history_query import parse_history_file
@@ -227,10 +228,35 @@ def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> Non
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
+    """Apply the inverse of an op by running the patch in reverse.
+
+    Validates that the patch's affectedChapterIds are within the batch's
+    chapter_set. A mismatch indicates a malformed patch claiming chapters
+    outside the batch scope; raise ValueError so the caller can surface it.
+    """
+    import logging
+    patch = op["patch"]
+    patch_chapters = set(patch.get("affectedChapterIds") or [])
+    if patch_chapters and chapter_set and not patch_chapters.issubset(chapter_set):
+        outside = patch_chapters - chapter_set
+        logging.getLogger(__name__).warning(
+            "patch affectedChapterIds %s outside batch chapter_set %s — skipping op",
+            outside, chapter_set,
+        )
+        raise ValueError(
+            f"patch claims chapters {outside} outside the batch scope {chapter_set}"
+        )
+    apply_inverse_patch(entries, patch)
+
+
 def apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     """Apply the reverse of a single operation.  Raises ``ValueError`` on conflict."""
+    if "patch" in op:
+        _reverse_via_patch(entries, op, chapter_set)
+        return
     op_type = op.get("op_type", "")
-    if op_type in ("trim_segment", "auto_fix_missing_word"):
+    if op_type in ("trim_segment", "auto_fix_missing_word", "qalqala_pad"):
         _reverse_trim(entries, op, chapter_set)
     elif op_type == "split_segment":
         _reverse_split(entries, op, chapter_set)
@@ -307,13 +333,15 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
 
     all_records = parse_history_file(history_path)
 
-    target_batch = None
-    for rec in all_records:
-        if rec.get("batch_id") == target_batch_id:
-            target_batch = rec
-            break
-    if not target_batch:
+    matching = [
+        rec for rec in all_records
+        if rec.get("batch_id") == target_batch_id and not rec.get("reverts_batch_id")
+    ]
+    if not matching:
         return {"error": "Batch not found"}, 404
+
+    matching.sort(key=lambda r: (r.get("saved_at_utc") or "", id(r)))
+    target_batch = matching[0]
 
     if target_batch.get("reverts_batch_id"):
         return {"error": "Cannot undo a revert record"}, 400
@@ -325,7 +353,9 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
     if target_batch_id in already_reverted:
         return {"error": "This batch has already been undone"}, 400
 
-    operations = target_batch.get("operations", [])
+    operations: list = []
+    for rec in matching:
+        operations.extend(rec.get("operations") or [])
     if not operations:
         return {"error": "Batch has no operations to undo"}, 400
 
@@ -344,9 +374,12 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
         return {"error": "Reciter data not found"}, 404
 
     meta = cache.get_seg_meta(reciter)
-    affected_chapters = _get_affected_chapters(target_batch)
+    affected_chapters: set[int] = set()
+    for rec in matching:
+        affected_chapters.update(_get_affected_chapters(rec))
 
-    val_before_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    probe_failed_uids, _ = load_probe_v2(reciter)
+    val_before_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
 
     try:
         for op in reversed(operations):
@@ -356,13 +389,15 @@ def undo_batch(reciter: str, target_batch_id: str) -> dict | tuple:
 
     file_hash = persist_detailed(reciter, meta, entries)
 
-    val_after_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
     val_before = _merge_val_summaries(val_before_all)
     val_after = _merge_val_summaries(val_after_all)
 
+    ch_union = sorted(affected_chapters)
     _append_revert_record(
         history_path, target_batch_id, reciter,
-        target_batch.get("chapter"), target_batch.get("chapters"),
+        ch_union[0] if len(ch_union) == 1 else None,
+        ch_union if len(ch_union) > 1 else None,
         file_hash, val_before, val_after,
     )
 
@@ -381,13 +416,14 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
 
     all_records = parse_history_file(history_path)
 
-    target_batch = None
-    for rec in all_records:
-        if rec.get("batch_id") == target_batch_id:
-            target_batch = rec
-            break
-    if not target_batch:
+    matching = [
+        rec for rec in all_records
+        if rec.get("batch_id") == target_batch_id and not rec.get("reverts_batch_id")
+    ]
+    if not matching:
         return {"error": "Batch not found"}, 404
+
+    target_batch = matching[0]
 
     if target_batch.get("reverts_batch_id"):
         return {"error": "Cannot undo operations in a revert record"}, 400
@@ -408,21 +444,28 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
     if already_undone:
         return {"error": f"Operation(s) already undone: {', '.join(already_undone)}"}, 400
 
-    all_op_ids = {op.get("op_id") for op in target_batch.get("operations", [])}
+    all_operations: list = []
+    for rec in matching:
+        all_operations.extend(rec.get("operations") or [])
+
+    all_op_ids = {op.get("op_id") for op in all_operations}
     missing = requested_op_ids - all_op_ids
     if missing:
         return {"error": f"Operation(s) not found in batch: {', '.join(missing)}"}, 404
 
-    ops_to_undo = [op for op in target_batch.get("operations", []) if op.get("op_id") in requested_op_ids]
+    ops_to_undo = [op for op in all_operations if op.get("op_id") in requested_op_ids]
 
     entries = load_detailed(reciter)
     if not entries:
         return {"error": "Reciter data not found"}, 404
 
     meta = cache.get_seg_meta(reciter)
-    affected_chapters = _get_affected_chapters(target_batch)
+    affected_chapters: set[int] = set()
+    for rec in matching:
+        affected_chapters.update(_get_affected_chapters(rec))
 
-    val_before_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    probe_failed_uids, _ = load_probe_v2(reciter)
+    val_before_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
 
     try:
         for op in reversed(ops_to_undo):
@@ -432,13 +475,15 @@ def undo_ops(reciter: str, target_batch_id: str, requested_op_ids: set[str]) -> 
 
     file_hash = persist_detailed(reciter, meta, entries)
 
-    val_after_all = {ch: chapter_validation_counts(entries, ch, meta) for ch in affected_chapters}
+    val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
     val_before = _merge_val_summaries(val_before_all)
     val_after = _merge_val_summaries(val_after_all)
 
+    ch_union = sorted(affected_chapters)
     _append_revert_record(
         history_path, target_batch_id, reciter,
-        target_batch.get("chapter"), target_batch.get("chapters"),
+        ch_union[0] if len(ch_union) == 1 else None,
+        ch_union if len(ch_union) > 1 else None,
         file_hash, val_before, val_after,
         reverts_op_ids=list(requested_op_ids),
     )

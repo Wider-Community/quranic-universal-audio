@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { SPEEDS, DEFAULT_SPEED } from '../utils/speed-control';
+
+    import { DEFAULT_SPEED,SPEEDS } from '../utils/speed-control';
 
     /** The audio element whose playbackRate this widget controls. */
     export let audioElement: HTMLAudioElement | null = null;

@@ -7,17 +7,26 @@
      * Mounts validation, history, and save-preview panels as Svelte children.
      */
 
-    import { get } from 'svelte/store';
     import { onMount, tick } from 'svelte';
+    import { get } from 'svelte/store';
 
-    import { isDirtyStore } from './stores/dirty';
-    import { handleSegmentsKey } from './utils/keyboard';
-    import { showHistoryView } from './utils/history/actions';
-    import { onSegSaveClick } from './utils/save/actions';
-    import { loadSegConfig } from './utils/data/config-loader';
-    import { buildGroupedReciters } from '../../lib/utils/grouped-reciters';
-    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson } from '../../lib/api';
+    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
+    import type { SegReciter } from '../../lib/types/domain';
+    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
+    import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
+    import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
+    import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
+    import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
+    import EditOverlay from './components/edit/EditOverlay.svelte';
+    import FiltersBar from './components/filters/FiltersBar.svelte';
+    import HistoryPanel from './components/history/HistoryPanel.svelte';
+    import SegmentsList from './components/list/SegmentsList.svelte';
+    import SavePreview from './components/save/SavePreview.svelte';
+    import StatsPanel from './components/stats/StatsPanel.svelte';
+    import ValidationPanel from './components/validation/ValidationPanel.svelte';
+    import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { autoSaveEnabled, toggleAutoSave } from './stores/autosave';
     import {
         getChapterSegments,
         segAllData,
@@ -27,33 +36,29 @@
         selectedVerse,
         verseOptions,
     } from './stores/chapter';
+    import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
-    import { savedFilterView } from './stores/navigation';
-    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
-    import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
-    import type { SegReciter } from '../../lib/types/domain';
-
-    import { reloadCurrentReciter } from './utils/data/reciter-actions';
-    import { loadChapterData } from './utils/data/chapter-actions';
-    import { playFromSegment } from './utils/playback/playback';
-    import HistoryPanel from './components/history/HistoryPanel.svelte';
-    import { segListElement, waveformContainer } from './stores/playback';
     import { historyData, historyVisible } from './stores/history';
-    import { savePreviewVisible, saveButtonLabel } from './stores/save';
-    import ValidationPanel from './components/validation/ValidationPanel.svelte';
-    import EditOverlay from './components/edit/EditOverlay.svelte';
-    import FiltersBar from './components/filters/FiltersBar.svelte';
-    import SegmentsList from './components/list/SegmentsList.svelte';
-    import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
-    import StatsPanel from './components/stats/StatsPanel.svelte';
-    import SavePreview from './components/save/SavePreview.svelte';
-    import AudioCacheBar from './components/audio/AudioCacheBar.svelte';
-    import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { savedFilterView } from './stores/navigation';
+    import { segListElement, waveformContainer } from './stores/playback';
+    import { cancelQalqalaBatch,qalqalaBatch } from './stores/qalqala-batch';
+    import { saveButtonLabel,savePreviewVisible } from './stores/save';
+    import { loadChapterData } from './utils/data/chapter-actions';
+    import { loadSegConfig } from './utils/data/config-loader';
+    import { reloadCurrentReciter } from './utils/data/reciter-actions';
+    import { hideHistoryView,showHistoryView } from './utils/history/actions';
+    import { handleSegmentsKey } from './utils/keyboard';
+    import { playFromSegment } from './utils/playback/playback';
+    import { confirmSaveFromPreview, executeSave,hideSavePreview, onSegSaveClick } from './utils/save/actions';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
     let segAudioEl: HTMLAudioElement | null = null;
 
     $: groupedReciters = buildGroupedReciters($segAllReciters);
+    $: reciterSelectOptions = reciterGroupsToOptions(groupedReciters);
+    $: verseSelectOptions = $verseOptions.map((v) => ({ value: String(v), label: String(v) }));
+    // Jump-trigger state: resets immediately after use so SearchableSelect shows placeholder
+    let verseJump = '';
     $: chaptersOptions = $segAllData
         ? [...new Set($segAllData.segments.filter(s => s.chapter != null).map(s => s.chapter as number))]
             .sort((a, b) => a - b)
@@ -61,7 +66,7 @@
         : [];
     $: filterBarHidden = $segAllData === null;
     $: historyBtnHidden = !$historyData || !$historyData.batches || $historyData.batches.length === 0;
-    $: saveBtnDisabled = !$isDirtyStore;
+    $: saveBtnDisabled = !$isDirtyStore || $qalqalaBatch.isActive;
 
     let cssFontSize: string = '';
     let cssWordSpacing: string = '';
@@ -75,12 +80,12 @@
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }
 
-    function onReciterSelectChange(e: Event): void {
-        const v = (e.currentTarget as HTMLSelectElement).value;
+    function onReciterSelectChange(v: string): void {
         selectedReciter.set(v);
         onReciterChange(v);
     }
     async function onReciterChange(reciter: string): Promise<void> {
+        cancelQalqalaBatch();
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
         await reloadCurrentReciter();
     }
@@ -88,14 +93,13 @@
         const v = e.detail; selectedChapter.set(v); onChapterChange(v);
     }
     async function onChapterChange(chapter: string): Promise<void> {
+        cancelQalqalaBatch();
         await loadChapterData(get(selectedReciter), chapter);
     }
-    function onVerseSelectChange(e: Event): void {
-        const sel = e.currentTarget as HTMLSelectElement;
-        const v = sel.value;
-        // Reset immediately so the dropdown snaps back to "All" — we don't
-        // want the verse filter to engage; this is a jump-and-play trigger.
-        sel.value = '';
+    function onVerseSelectChange(v: string): void {
+        // Reset immediately so the SearchableSelect snaps back to placeholder
+        // ("All") — this is a jump-and-play trigger, not a filter toggle.
+        verseJump = '';
         if (!v) return;
         const chStr = get(selectedChapter);
         const chapter = parseInt(chStr);
@@ -126,6 +130,16 @@
     // Keep chapter-segment cache hot after chapter changes.
     $: if ($segAllData) { void getChapterSegments($selectedChapter || 0); }
 
+    let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    $: if ($autoSaveEnabled && $dirtyTick > 0 && $isDirtyStore && !$qalqalaBatch.isActive) {
+        if (autoSaveTimer) clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+            if ($isDirtyStore && !get(qalqalaBatch).isActive) {
+                void executeSave(true);
+            }
+        }, 1000); // 1s debounce
+    }
+
     function onKeydown(e: KeyboardEvent): void {
         if (handleSegmentsKey(e)) e.preventDefault();
     }
@@ -149,23 +163,17 @@
     <ShortcutsGuide />
 
     <div class="info-bar seg-selector-bar">
+        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Reciter:
-            <select
-                id="seg-reciter-select"
+            <SearchableSelect
+                options={reciterSelectOptions}
                 value={$selectedReciter}
-                on:change={onReciterSelectChange}
-            >
-                <option value="">{$segAllReciters.length ? PLACEHOLDER_SELECT : 'Loading...'}</option>
-                {#each groupedReciters as g}
-                    <optgroup label={g.group}>
-                        {#each g.items as r}
-                            <option value={r.slug}>{r.name}</option>
-                        {/each}
-                    </optgroup>
-                {/each}
-            </select>
+                placeholder={$segAllReciters.length ? PLACEHOLDER_SELECT : 'Loading...'}
+                className="reciter-select"
+                on:change={(e) => onReciterSelectChange(e.detail)}
+            />
         </label>
-        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Surah:
             <SearchableSelect
                 options={chaptersOptions}
@@ -174,31 +182,45 @@
                 on:change={onChapterSelectChange}
             />
         </label>
+        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Ayah:
-            <select
-                id="seg-verse-select"
-                value={$selectedVerse}
-                on:change={onVerseSelectChange}
-            >
-                <option value="">All</option>
-                {#each $verseOptions as v}
-                    <option value={String(v)}>{v}</option>
-                {/each}
-            </select>
+            <SearchableSelect
+                options={verseSelectOptions}
+                value={verseJump}
+                placeholder="All"
+                on:change={(e) => onVerseSelectChange(e.detail)}
+            />
         </label>
         <div class="seg-bar-actions">
-            <button
-                id="seg-save-btn"
-                class="btn btn-save"
-                disabled={saveBtnDisabled}
-                on:click={onSegSaveClick}
-            >{$saveButtonLabel}</button>
+            {#if $savePreviewVisible}
+                <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>Cancel</button>
+                <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
+            {:else}
+                <button
+                    class="btn {$autoSaveEnabled ? 'btn-save' : 'btn-cancel'}"
+                    on:click={() => toggleAutoSave(!$autoSaveEnabled)}
+                >
+                    Auto Save
+                </button>
+                <button
+                    id="seg-save-btn"
+                    class="btn btn-save"
+                    disabled={$autoSaveEnabled || saveBtnDisabled}
+                    on:click={onSegSaveClick}
+                >
+                    {#if $autoSaveEnabled}
+                        {$saveButtonLabel === 'Save' ? (saveBtnDisabled ? 'Saved' : 'Saving...') : $saveButtonLabel}
+                    {:else}
+                        {$saveButtonLabel}
+                    {/if}
+                </button>
+            {/if}
             <button
                 id="seg-history-btn"
                 class="btn btn-history"
-                hidden={historyBtnHidden}
-                on:click={showHistoryView}
-            >History</button>
+                hidden={historyBtnHidden && !$historyVisible}
+                on:click={$historyVisible ? hideHistoryView : showHistoryView}
+            >{$historyVisible ? '← Back' : 'History'}</button>
         </div>
     </div>
 

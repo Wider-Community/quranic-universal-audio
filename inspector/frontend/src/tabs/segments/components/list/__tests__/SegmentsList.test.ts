@@ -124,7 +124,7 @@ describe('SegmentsList virtualization — spacer invariant', () => {
         const heights = makeHeights(segs);
         const cum = rebuildCumHeights(segs, rowKey, heights, 140);
         const startIdx = 40;
-        const endIdx = 60;
+        const _endIdx = 60;
         const editingPos = 10; // above window, pinned
         const pinnedH = heights.get(rowKey(segs[editingPos]!))!;
 
@@ -137,7 +137,7 @@ describe('SegmentsList virtualization — spacer invariant', () => {
         const segs = makeSegs(100);
         const heights = makeHeights(segs);
         const cum = rebuildCumHeights(segs, rowKey, heights, 140);
-        const startIdx = 40;
+        const _startIdx = 40;
         const endIdx = 60;
         const editingPos = 90; // below window, pinned
         const pinnedH = heights.get(rowKey(segs[editingPos]!))!;

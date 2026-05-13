@@ -57,7 +57,7 @@ export function _updateCacheStatusUI(data: SegAudioCacheStatusResponse | null | 
         if (allCached) {
             cacheStatusText.set(`All cached (${_formatBytes(data.cached_bytes)})`);
         } else {
-            cacheStatusText.set('Download audio for offline editing');
+            cacheStatusText.set('Download audio (~1-2 GB) for offline editing, faster audio playback, and instant waveform drawing');
         }
     }
 }
@@ -103,6 +103,6 @@ export async function _deleteAudioCache(reciter: string): Promise<void> {
             method: 'DELETE',
         });
     } catch { /* ignore */ }
-    cacheDeleteButton.update(b => ({ ...b, disabled: false, label: 'Delete Cache' }));
+    cacheDeleteButton.update(b => ({ ...b, disabled: false, label: 'Delete Audio' }));
     await _fetchCacheStatus(reciter);
 }

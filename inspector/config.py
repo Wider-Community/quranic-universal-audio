@@ -35,7 +35,11 @@ CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))
 # missing, so these paths are advisory rather than required. Override the base dir via
 # INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.
 _QUA_DATA_OVERRIDE = os.getenv("INSPECTOR_QUA_DATA_PATH")
-_QUA_DATA = Path(_QUA_DATA_OVERRIDE) if _QUA_DATA_OVERRIDE else _REPO / "quranic_universal_aligner" / "data"
+_QUA_DATA = (
+    Path(_QUA_DATA_OVERRIDE)
+    if _QUA_DATA_OVERRIDE
+    else _REPO / ".local" / "spaces" / "quranic_universal_aligner" / "data"
+)
 QPC_HAFS_PATH = _QUA_DATA / "qpc_hafs.json"
 DK_SCRIPT_PATH = _QUA_DATA / "digital_khatt_v2_script.json"
 PHONEME_SUB_COSTS_PATH = _QUA_DATA / "phoneme_sub_costs.json"
@@ -76,12 +80,12 @@ SEG_WORD_SPACING = "0.2em"         # gap between words in segment cards
 SEG_SCROLL_ANIM_MODE = "hybrid"
 
 # Adjust (trim) mode settings
-TRIM_PAD_LEFT = 10000                     # ms padding before segment
-TRIM_PAD_RIGHT = 10000                    # ms padding after segment
+TRIM_PAD_LEFT = 15000                     # ms padding before segment
+TRIM_PAD_RIGHT = 15000                    # ms padding after segment
 TRIM_DIM_ALPHA = 0.4                      # dimming opacity for padded regions
 
 # Boundary adjustment: phoneme tail mismatch detection
-BOUNDARY_TAIL_K = 3                       # number of trailing phonemes to compare
+BOUNDARY_TAIL_K = 3                        # number of trailing phonemes to compare
 SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards
 
 # Accordion context: which validation categories auto-expand context cards
@@ -98,7 +102,7 @@ ACCORDION_CONTEXT = {
 }
 
 # HTTP / subprocess timeouts (seconds)
-FFMPEG_TIMEOUT = 10
+FFMPEG_TIMEOUT = 15
 FFMPEG_FULL_TIMEOUT = 300
 ID3_PROBE_TIMEOUT = 5
 
@@ -108,7 +112,7 @@ RANGE_DECODE_PAD_SEC = 5
 ID3_PROBE_BYTES = 50_000
 MIN_SEG_PEAK_BUCKETS = 10
 MIN_FULL_PEAK_BUCKETS = 100
-PEAKS_BUCKETS_PER_SEC = 50                # target peak density for segment-level peaks
+PEAKS_BUCKETS_PER_SEC = 30                # target peak density for segment-level peaks
 
 # Validation thresholds
 LOW_CONFIDENCE_THRESHOLD = 0.80
@@ -154,7 +158,7 @@ FLASK_DEV_VALUE = "development"          # value that triggers debug/reloader mo
 SERVER_HOST = os.environ.get("INSPECTOR_HOST", "0.0.0.0")
 
 # Timestamps validation (routes/timestamps.py)
-TS_RANDOM_MAX_RETRIES = 10              # max attempts to find a non-empty verse in /ts/random
+TS_RANDOM_MAX_RETRIES = 10             # max attempts to find a non-empty verse in /ts/random
 TS_BOUNDARY_TOLERANCE_MS = 500         # default boundary tolerance when not in result metadata
 # Sort-order weight for missing-word issues: one missing word adds this many ms to diff_ms.
 # This is NOT a unit conversion — it is purely a sort-order heuristic.

@@ -41,11 +41,11 @@
 import { get } from 'svelte/store';
 
 import { TS_VIEW_MODES, viewMode } from '../stores/display';
-import { loopTarget } from '../stores/playback';
 import type { TsLoopTarget } from '../stores/playback';
+import { loopTarget } from '../stores/playback';
 import { loadedVerse } from '../stores/verse';
-import { tsZoom, tsZoomAnimating } from '../stores/zoom';
 import type { TsZoom } from '../stores/zoom';
+import { tsZoom, tsZoomAnimating } from '../stores/zoom';
 import {
     TS_MIN_VIEW_SEC,
     TS_WHEEL_ZOOM_FACTOR,

@@ -6,15 +6,15 @@
      * State is component-local except for audAudioElement store used by App.svelte.
      */
 
-    import { onMount, onDestroy } from 'svelte';
+    import { onDestroy,onMount } from 'svelte';
 
-    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { fetchJson } from '../../lib/api';
+    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
+    import type { AudioSourcesResponse, AudioSurahsResponse } from '../../lib/types/api';
+    import type { SelectOption } from '../../lib/types/ui';
     import { LS_KEYS, PLACEHOLDER_RECITER } from '../../lib/utils/constants';
     import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
     import { audAudioElement } from './stores/audio';
-    import type { SelectOption } from '../../lib/types/ui';
-    import type { AudioSourcesResponse, AudioSurahsResponse } from '../../lib/types/api';
 
     // ---- Types ----
     interface AudioReciter {
@@ -335,16 +335,17 @@
             on:click={() => setCategory('by_ayah')}
         >By Ayah</button>
     </div>
-    <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Reciter:
         <SearchableSelect
             options={reciterOptions}
             bind:value={selectedReciter}
             placeholder={PLACEHOLDER_RECITER}
+            className="reciter-select"
             on:change={(e) => { void onReciterChange(e.detail); }}
         />
     </label>
-    <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Surah:
         <SearchableSelect
             options={surahOptions}
@@ -354,7 +355,7 @@
         />
     </label>
     {#if selectedCategory === 'by_ayah'}
-        <!-- svelte-ignore a11y-label-has-associated-control (control is inside SearchableSelect) -->
+        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Ayah:
             <SearchableSelect
                 options={ayahOptions}

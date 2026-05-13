@@ -100,6 +100,18 @@ export const playButtonLabel = writable<'Play' | 'Pause'>('Play');
 export interface PlayingSegment {
     chapter: number;
     index: number;
+    /**
+     * Which surface initiated this play. `main` = main segment list row,
+     * `accordion` = a row mounted inside a validation accordion card. Used
+     * by main-list autoscroll (and any other "follow the playhead" UI) to
+     * stay put when the play came from an accordion — accordion plays are
+     * self-contained and must NOT yank the main list around.
+     *
+     * Optional on the wire so identity-preserving updates (rAF tick,
+     * cross-segment advance, post-mutation reconcile) can omit it and
+     * inherit the existing pair's origin via `setPlayingSegment`.
+     */
+    origin?: 'main' | 'accordion';
 }
 export const playingSegmentIndex = writable<PlayingSegment | null>(null);
 
@@ -107,12 +119,23 @@ export const playingSegmentIndex = writable<PlayingSegment | null>(null);
  *  does not allocate a fresh object when the active pair has not changed.
  *  Svelte's safe_not_equal returns true for any two object literals even
  *  when their contents match; this guard avoids the resulting subscriber
- *  wake-up storm on every frame. */
+ *  wake-up storm on every frame.
+ *
+ *  When `next` omits `origin`, the previous pair's origin is preserved —
+ *  so updates from rAF / time-update / advance ticks don't accidentally
+ *  reclassify an accordion play as a main-list one. */
 export function setPlayingSegment(next: PlayingSegment | null): void {
     playingSegmentIndex.update((cur) => {
         if (cur === next) return cur;
-        if (cur && next && cur.chapter === next.chapter && cur.index === next.index) return cur;
-        return next;
+        if (next == null) return null;
+        const origin = next.origin ?? cur?.origin ?? 'main';
+        if (
+            cur
+            && cur.chapter === next.chapter
+            && cur.index === next.index
+            && cur.origin === origin
+        ) return cur;
+        return { chapter: next.chapter, index: next.index, origin };
     });
 }
 

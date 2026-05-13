@@ -9,18 +9,19 @@
      * groups degrade cleanly to a single pair of cards.
      */
 
-    import { tick } from 'svelte';
+    import { afterUpdate } from 'svelte';
 
-    import SegmentRow from '../list/SegmentRow.svelte';
-    import HistoryArrows from './HistoryArrows.svelte';
-    import { EDIT_OP_LABELS } from '../../utils/constants';
-    import { onOpUndoClick } from '../../utils/save/undo';
+    import type { EditOp } from '../../../../lib/types/domain';
     import {
-        snapToSeg,
         type HistorySnapshot,
+        snapToSeg,
     } from '../../stores/history';
     import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
-    import type { EditOp } from '../../../../lib/types/domain';
+    import { EDIT_OP_LABELS } from '../../utils/constants';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
+    import { onOpUndoClick } from '../../utils/save/undo';
+    import SegmentRow from '../list/SegmentRow.svelte';
+    import HistoryArrows from './HistoryArrows.svelte';
 
     // Props ------------------------------------------------------------------
 
@@ -28,6 +29,7 @@
     export let chapter: number | null = null;
     export let batchId: string | null = null;
     export let skipLabel: boolean = false;
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
 
     // Derived diff inputs ----------------------------------------------------
 
@@ -104,12 +106,11 @@
     // 2→1 merge highlight on result card.
     $: mergeAfterHL = (() => {
         if (!primary) return null;
-        const mergeLike = primary.op_type === 'merge_segments' || primary.op_type === 'waqf_sakt';
-        if (!mergeLike) return null;
         if (diff.before.length !== 2 || diff.after.length !== 1) return null;
         if (!primary.merge_direction) return null;
         const hlSnap = primary.merge_direction === 'prev' ? diff.before[1]! : diff.before[0]!;
-        const hl: MergeHighlight = { hlStart: hlSnap.time_start, hlEnd: hlSnap.time_end };
+        const mergePoint = primary.merge_direction === 'prev' ? hlSnap.time_start : hlSnap.time_end;
+        const hl: MergeHighlight = { mergePoint };
         return hl;
     })();
 
@@ -125,16 +126,17 @@
     let emptyEl: HTMLElement | null = null;
 
     // After each render cycle, regroup non-null refs into arrays that
-    // HistoryArrows measures. A tick ensures <SegmentRow> children have
-    // committed their DOM by the time we read the wrappers.
+    // HistoryArrows measures. afterUpdate fires synchronously after the DOM
+    // has committed, so reading `bind:this` arrays is safe. Previous version
+    // used an async IIFE inside `$:` with `await tick()`, which raced when
+    // `diff` changed twice before the first tick resolved — the older write
+    // could land last and leave HistoryArrows pointing at stale wrappers.
     let arrowsBefore: HTMLElement[] = [];
     let arrowsAfter: HTMLElement[] = [];
-    $: void (async () => {
-        void diff;
-        await tick();
+    afterUpdate(() => {
         arrowsBefore = beforeCardEls.filter((e): e is HTMLElement => !!e);
         arrowsAfter = afterCardEls.filter((e): e is HTMLElement => !!e);
-    })();
+    });
 </script>
 
 <div class="seg-history-op" class:seg-history-grouped-op={isGroup}>
@@ -174,6 +176,8 @@
                         mode="history"
                         instanceRole="history"
                         trimHL={i === 0 ? trimHighlights.before : null}
+                        opId={primary?.op_id ?? null}
+                        {previewCtx}
                     />
                 </div>
             {/each}
@@ -203,6 +207,8 @@
                             trimHL={isOneToOne && i === 0 ? trimHighlights.after : null}
                             mergeHL={i === 0 ? mergeAfterHL : null}
                             changedFields={isOneToOne && i === 0 ? afterChangedFields : null}
+                            opId={primary?.op_id ?? null}
+                            {previewCtx}
                         />
                     </div>
                 {/each}

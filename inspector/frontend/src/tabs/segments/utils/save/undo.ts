@@ -6,22 +6,23 @@ import type {
     SegUndoBatchResponse,
     SegUndoOpsResponse,
 } from '../../../../lib/types/api';
-import type { HistoryBatch } from '../../../../lib/types/domain';
+import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import { surahOptionText } from '../../../../lib/utils/surah-info';
-import { selectedReciter } from '../../stores/chapter';
+import { applyInversePatchToSegments } from '../../domain/inverse-patch';
+import { segAllData, selectedReciter } from '../../stores/chapter';
 import {
-    deleteDirtyEntry,
-    deleteOpLogEntry,
+    getChapterOps,
     isDirty,
+    recomputeDirtyEntryFromOps,
+    setChapterOps,
 } from '../../stores/dirty';
 import { pendingChainTarget } from '../../stores/edit';
 import {
-    buildSplitChains,
-    buildSplitLineage,
+    buildEditChains,
+    type EditChain,
     historyData,
     historyDataStale,
-    setSplitChains,
-    type SplitChain,
+    setEditChains,
 } from '../../stores/history';
 import { setSavePreviewData } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
@@ -31,7 +32,7 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 // _afterUndoSuccess -- shared post-undo refresh
 // ---------------------------------------------------------------------------
 
-export async function _afterUndoSuccess(reciter: string, opsReversed: number): Promise<void> {
+export async function _afterUndoSuccess(reciter: string, _opsReversed: number): Promise<void> {
     pendingChainTarget.set(null);
 
     try {
@@ -123,7 +124,7 @@ export async function onOpUndoClick(batchId: string, opIds: string[], btn: HTMLB
 // _getChainBatchIds
 // ---------------------------------------------------------------------------
 
-export function _getChainBatchIds(chain: SplitChain): string[] {
+export function _getChainBatchIds(chain: EditChain): string[] {
     const seen = new Set<string>();
     const ids: string[] = [];
     for (let i = chain.ops.length - 1; i >= 0; i--) {
@@ -184,21 +185,76 @@ export async function onChainUndoClick(batchIds: string[], chapter: number | nul
 }
 
 // ---------------------------------------------------------------------------
-// onPendingBatchDiscard -- discard unsaved edits for a chapter
+// onPendingOpsDiscard -- atomic per-card discard of unsaved ops
 // ---------------------------------------------------------------------------
 
-export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): void {
+/**
+ * Atomically revert a specific subset of unsaved ops for a chapter without
+ * touching the rest of that chapter's pending edits.
+ *
+ * Each unsaved op carries a forward `patch` (attached at finalize time —
+ * see `finalizeEdit`). We invert those patches in reverse op-log order
+ * against `segAllData.segments`, drop the discarded ops from `_opLog`,
+ * and recompute the chapter's dirty entry from the kept ops. If no kept
+ * ops remain, the chapter exits dirty state and the save preview hides.
+ *
+ * Discard is client-only — server history is unchanged, so do NOT set
+ * `historyDataStale`. Doing so caused an earlier bug (commit `e73a46d`)
+ * where confirming the save afterwards triggered a fire-and-forget
+ * `reloadCurrentReciter()` that raced `executeSave()` and wiped the
+ * remaining dirty chapters' ops.
+ *
+ * `groupRelatedOps` (utils/history/items.ts) ensures one card's ops form
+ * a uid-connected component with no overlap into other cards' uid sets,
+ * so this revert cannot bleed into other cards' segments.
+ */
+export function onPendingOpsDiscard(
+    chapter: number,
+    opIds: string[],
+    btn: HTMLButtonElement,
+): void {
     void btn;
+    if (opIds.length === 0) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
-    if (!confirm(`Discard pending edits${chLabel}?`)) return;
+    const noun = opIds.length === 1 ? 'edit' : 'edits';
+    if (!confirm(`Discard ${opIds.length} ${noun}${chLabel}?`)) return;
 
     pendingChainTarget.set(null);
 
-    // Use dirty store helpers (number keys only).
-    deleteDirtyEntry(chapter);
-    deleteOpLogEntry(chapter);
+    const opIdSet = new Set(opIds);
+    const all = getChapterOps(chapter);
+    const toRevert: EditOp[] = [];
+    const toKeep: EditOp[] = [];
+    for (const op of all) {
+        if (opIdSet.has(op.op_id)) toRevert.push(op);
+        else toKeep.push(op);
+    }
 
-    historyDataStale.set(true);
+    // Reverse-apply each discarded op's forward patch to segAllData. Walk
+    // in REVERSE op-log order so chained ops (split → edit-ref) invert
+    // in the correct sequence: undo edit-ref first, then split.
+    if (toRevert.length > 0) {
+        segAllData.update((d) => {
+            if (!d) return d;
+            let segs = d.segments;
+            for (let i = toRevert.length - 1; i >= 0; i--) {
+                const op = toRevert[i]!;
+                if (op.patch) {
+                    segs = applyInversePatchToSegments(segs, op.patch);
+                } else {
+                    console.warn(
+                        '[discard] op missing patch — cannot revert in-place',
+                        op.op_id,
+                        op.op_type,
+                    );
+                }
+            }
+            return { ...d, segments: segs };
+        });
+    }
+
+    setChapterOps(chapter, toKeep);
+    recomputeDirtyEntryFromOps(chapter, toKeep);
 
     if (!isDirty()) {
         hideSavePreview();
@@ -206,8 +262,7 @@ export function onPendingBatchDiscard(chapter: number, btn: HTMLButtonElement): 
     }
     const data = buildSavePreviewData();
     const allBatches = [...(storeGet(historyData)?.batches || []), ...(data.batches as HistoryBatch[])];
-    const splitLineage = buildSplitLineage(allBatches);
-    const built = buildSplitChains(allBatches, splitLineage);
-    setSplitChains(built.chains, built.chainedOpIds);
+    const built = buildEditChains(allBatches);
+    setEditChains(built.chains, built.chainedOpIds);
     setSavePreviewData(data);
 }

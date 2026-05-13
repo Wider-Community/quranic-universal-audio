@@ -1,6 +1,6 @@
 # How the Timestamp Pipeline Handles Repetitions and Verse Boundaries
 
-This doc explains how `extract_timestamps.py` decides which word timings to keep when multiple segments of a recording contribute to the same verse. It covers the normal case, within-verse repetitions, and verse-boundary handling. Examples use Minshawi's real data.
+This doc explains how the timestamp pipeline (`scripts/lib/timestamps_pipeline.py`, invoked by `.github/scripts/extract_timestamps.py`) decides which word timings to keep when multiple segments of a recording contribute to the same verse. It covers the normal case, within-verse repetitions, and verse-boundary handling. Examples use Minshawi's real data.
 
 ## The setup
 
@@ -11,7 +11,7 @@ The pipeline writes two files per reciter:
 - `timestamps.json` — compact: `[word_idx, start_ms, end_ms]` per verse
 - `timestamps_full.json` — same plus per-letter and per-phoneme timings
 
-Downstream, `scripts/build_reciter.py` turns these into the HF dataset, **one row per ayah**.
+Downstream, `.github/scripts/build_reciter.py` turns these into the HF dataset, **one row per ayah**.
 
 ## Home vs. cross-verse segments
 

@@ -18,6 +18,7 @@ from config import (
     SURAH_INFO_PATH,
     TIMESTAMPS_PATH,
 )
+from adapters.detailed_json import load_entries as _load_detailed_entries
 from constants import AUDIO_META_CATEGORIES, STOP_SIGNS, TS_AUDIO_CATEGORIES
 from services import cache
 from utils.formatting import slug_to_name
@@ -34,8 +35,8 @@ def load_qpc() -> dict[str, dict]:
     if cached is not None:
         return cached
     if QPC_HAFS_PATH.exists():
-        with open(QPC_HAFS_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        import orjson
+        data = orjson.loads(QPC_HAFS_PATH.read_bytes())
     else:
         data = {}
     cache.set_qpc_cache(data)
@@ -48,8 +49,8 @@ def load_dk() -> dict[str, dict]:
     if cached is not None:
         return cached
     if DK_SCRIPT_PATH.exists():
-        with open(DK_SCRIPT_PATH, encoding="utf-8") as f:
-            data = json.load(f)
+        import orjson
+        data = orjson.loads(DK_SCRIPT_PATH.read_bytes())
     else:
         data = {}
     cache.set_dk_cache(data)
@@ -157,8 +158,8 @@ def load_timestamps(reciter: str) -> dict:
             break
     if path is None:
         return {}
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
+    import orjson
+    doc = orjson.loads(path.read_bytes())
     meta = doc.pop("_meta", {})
     verses = doc
     result = {"meta": meta, "verses": verses, "audio_category": category}
@@ -170,20 +171,42 @@ def load_timestamps(reciter: str) -> dict:
 # Segments
 # ---------------------------------------------------------------------------
 
-def load_seg_verses(reciter: str) -> tuple[dict, int]:
-    """Load segments.json verse data for boundary mismatch checking.  Cached."""
+def resolve_pad(meta: dict) -> tuple[int, int, int]:
+    """Resolve VAD pad fields from ``_meta`` with alias-on-read.
+
+    Returns ``(pad_left_ms, pad_right_ms, min_silence_floor_ms)``.
+
+    For files written before asymmetric pad landed, ``pad_ms`` is
+    treated as both left and right; ``min_silence_floor_ms`` defaults
+    to 0 (no daylight guarantee was enforced pre-feature).
+    """
+    legacy = int(meta.get("pad_ms", 0))
+    pad_left = int(meta.get("pad_left_ms", legacy))
+    pad_right = int(meta.get("pad_right_ms", legacy))
+    floor = int(meta.get("min_silence_floor_ms", 0))
+    return pad_left, pad_right, floor
+
+
+def load_seg_verses(reciter: str) -> tuple[dict, int, int, int]:
+    """Load segments.json verse data for boundary mismatch checking.
+
+    Returns ``(verses, pad_left_ms, pad_right_ms, min_silence_floor_ms)``.
+    Cached.
+    """
     cached = cache.get_seg_verses_cache(reciter)
     if cached is not None:
         return cached
     seg_path = RECITATION_SEGMENTS_PATH / reciter / "segments.json"
     if not seg_path.exists():
-        return {}, 0
-    with open(seg_path, encoding="utf-8") as f:
-        doc = json.load(f)
-    pad_ms = doc.get("_meta", {}).get("pad_ms", 0)
+        return {}, 0, 0, 0
+    import orjson
+    doc = orjson.loads(seg_path.read_bytes())
+    meta = doc.get("_meta", {})
+    pad_left, pad_right, floor = resolve_pad(meta)
     verses = {k: v for k, v in doc.items() if k != "_meta"}
-    cache.set_seg_verses_cache(reciter, (verses, pad_ms))
-    return verses, pad_ms
+    result = (verses, pad_left, pad_right, floor)
+    cache.set_seg_verses_cache(reciter, result)
+    return result
 
 
 def load_detailed(reciter: str) -> list[dict]:
@@ -194,24 +217,54 @@ def load_detailed(reciter: str) -> list[dict]:
     path = RECITATION_SEGMENTS_PATH / reciter / "detailed.json"
     if not path.exists():
         return []
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
-    if "_meta" in doc:
-        cache.set_seg_meta(reciter, doc["_meta"])
-    entries = doc.get("entries", [])
+    meta, entries = _load_detailed_entries(path)
+    if meta:
+        cache.set_seg_meta(reciter, meta)
     cache.set_seg_cache(reciter, entries)
     # Fallback: if detailed.json had no _meta, try segments.json
     if not cache.get_seg_meta(reciter):
         seg_path = path.parent / "segments.json"
         if seg_path.exists():
-            with open(seg_path, encoding="utf-8") as sf:
-                try:
-                    seg_doc = json.load(sf)
-                    if "_meta" in seg_doc:
-                        cache.set_seg_meta(reciter, seg_doc["_meta"])
-                except json.JSONDecodeError:
-                    pass
+            try:
+                import orjson
+                seg_doc = orjson.loads(seg_path.read_bytes())
+                if "_meta" in seg_doc:
+                    cache.set_seg_meta(reciter, seg_doc["_meta"])
+            except Exception:
+                pass
     return entries
+
+
+def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
+    """Load ``low_confidence_v2.json`` sidecar for *reciter*.
+
+    Returns ``(failed_uid_set, meta_dict)``. When the sidecar is absent
+    returns ``(set(), None)`` and caches the empty result so repeated
+    lookups don't re-stat the filesystem. The sidecar is the source of
+    truth for the *Low Confidence v2* validation category and is never
+    written from the Inspector — it's emitted by the segments-stage
+    MFA probe (``scripts/lib/probe_mfa.py``).
+    """
+    cached = cache.get_seg_probe_v2(reciter)
+    if cached is not None:
+        return cached
+    path = RECITATION_SEGMENTS_PATH / reciter / "low_confidence_v2.json"
+    if not path.exists():
+        result: tuple[set[str], dict | None] = (set(), None)
+        cache.set_seg_probe_v2(reciter, result)
+        return result
+    try:
+        import orjson
+        doc = orjson.loads(path.read_bytes())
+    except Exception:
+        result = (set(), None)
+        cache.set_seg_probe_v2(reciter, result)
+        return result
+    failures = doc.get("failures") or []
+    meta = doc.get("_meta") or None
+    result = (set(failures), meta)
+    cache.set_seg_probe_v2(reciter, result)
+    return result
 
 
 def load_audio_urls(audio_source: str, reciter: str) -> dict:
@@ -223,8 +276,8 @@ def load_audio_urls(audio_source: str, reciter: str) -> dict:
     path = AUDIO_METADATA_PATH / audio_source / f"{reciter}.json"
     if not path.exists():
         return {}
-    with open(path, encoding="utf-8") as f:
-        urls = json.load(f)
+    import orjson
+    urls = orjson.loads(path.read_bytes())
     urls.pop("_meta", None)
     cache.set_audio_url_cache(key, urls)
     return urls
@@ -244,8 +297,8 @@ def get_word_counts() -> dict[tuple[int, int], int]:
     if not sip.exists():
         sip = RECITATION_SEGMENTS_PATH.parent / "surah_info.json"
     if sip.exists():
-        with open(sip, encoding="utf-8") as f:
-            si = json.load(f)
+        import orjson
+        si = orjson.loads(sip.read_bytes())
         for surah_str, data in si.items():
             for v in data["verses"]:
                 wc[(int(surah_str), v["verse"])] = v["num_words"]
@@ -258,8 +311,8 @@ def load_surah_info_lite() -> dict:
     cached = cache.get_surah_info_lite_cache()
     if cached is not None:
         return cached
-    with open(SURAH_INFO_PATH, encoding="utf-8") as f:
-        raw = json.load(f)
+    import orjson
+    raw = orjson.loads(SURAH_INFO_PATH.read_bytes())
     result = {}
     for num, info in raw.items():
         result[num] = {

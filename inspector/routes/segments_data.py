@@ -13,17 +13,18 @@ from config import (
     ACCORDION_CONTEXT,
 )
 from constants import (
-    VALIDATION_CATEGORIES,
     MUQATTAAT_VERSES as _MUQATTAAT_VERSES,
     QALQALA_LETTERS as _QALQALA_LETTERS,
     STANDALONE_REFS as _STANDALONE_REFS,
     STANDALONE_WORDS as _STANDALONE_WORDS,
 )
+from services.validation.registry import ALL_CATEGORIES
 from services import cache
 from services.data_loader import (
     dk_text_for_ref,
     get_word_counts,
     load_detailed,
+    resolve_pad,
 )
 from services.segments_query import get_chapter_data
 from utils.formatting import slug_to_name
@@ -45,7 +46,7 @@ def seg_config():
         "trim_dim_alpha": TRIM_DIM_ALPHA,
         "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
         "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
-        "validation_categories": list(VALIDATION_CATEGORIES),
+        "validation_categories": list(ALL_CATEGORIES),
         "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
         "qalqala_letters": sorted(_QALQALA_LETTERS),
         "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
@@ -152,9 +153,16 @@ def seg_all(reciter):
     for (surah, ayah), n in get_word_counts().items():
         verse_word_counts[f"{surah}:{ayah}"] = n
 
+    pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(
+        cache.get_seg_meta(reciter)
+    )
     return jsonify({
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "verse_word_counts": verse_word_counts,
-        "pad_ms": cache.get_seg_meta(reciter).get("pad_ms", 0),
+        # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
+        "pad_ms": (pad_left_ms + pad_right_ms) // 2,
+        "pad_left_ms": pad_left_ms,
+        "pad_right_ms": pad_right_ms,
+        "min_silence_floor_ms": min_silence_floor_ms,
     })

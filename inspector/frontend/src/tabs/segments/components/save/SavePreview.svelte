@@ -12,28 +12,38 @@
      *   showSavePreview; cleared by clearSavePreviewData in hideSavePreview.
      */
 
-    import HistoryBatch from '../history/HistoryBatch.svelte';
-    import SplitChainRow from '../history/SplitChainRow.svelte';
+    import { onDestroy } from 'svelte';
+
+    import AudioElement from '../../../../lib/components/AudioElement.svelte';
     import {
         buildDisplayItems,
-        flattenBatchesToItems,
-        splitChains,
+        chainedOpIds,
         type DisplayEntry,
+        editChains,
+        flattenBatchesToItems,
     } from '../../stores/history';
     import { waveformContainer } from '../../stores/playback';
     import { savePreviewData, savePreviewVisible } from '../../stores/save';
-    import { confirmSaveFromPreview, hideSavePreview } from '../../utils/save/actions';
+    import { createPreviewPlaybackContext } from '../../utils/playback/preview';
+    import EditChainRow from '../history/EditChainRow.svelte';
+    import HistoryBatch from '../history/HistoryBatch.svelte';
 
     // Derive display entries from the preview data --------------------------
-    $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../types/domain').HistoryBatch[];
+    $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../../lib/types/domain').HistoryBatch[];
 
-    $: flatPreviewItems = flattenBatchesToItems(previewBatches, new Set<string>());
+    // Filter chained ops out of the flat list so they only render via
+    // <SplitChainRow>. Without this, ops belonging to a split chain would
+    // appear twice — once in the chain row, once as a duplicate op-card
+    // (the latter carrying its own Discard button). The chainedOpIds set
+    // is populated by `showSavePreview` (utils/save/actions.ts), which
+    // rebuilds chains across history + pending batches.
+    $: flatPreviewItems = flattenBatchesToItems(previewBatches, $chainedOpIds ?? new Set<string>());
 
     $: displayEntries = buildDisplayItems(
         flatPreviewItems,
         previewBatches,
         'time',
-        $splitChains,
+        $editChains,
         new Set<string>(),
         new Set<string>(),
     ) as DisplayEntry[];
@@ -59,14 +69,20 @@
         }
         return `op:${di.item.batchId ?? 'p'}:${di.item.batchIdx}:${di.item.groupIdx}:${di.item.type}`;
     }
+
+    // Preview playback context — owns one hidden <audio> element and one
+    // AudioRange instance. SegmentRow children with `readOnly + previewCtx`
+    // route their play button through this. Disposed on panel unmount.
+    const previewCtx = createPreviewPlaybackContext();
+    let audio: AudioElement;
+    $: if (audio && $savePreviewVisible) {
+        previewCtx.attachAudioEl(audio.element());
+    }
+    onDestroy(() => previewCtx.dispose());
 </script>
 
 <div id="seg-save-preview" class="seg-history-view" hidden={!$savePreviewVisible} use:waveformContainer>
-    <div class="seg-history-toolbar seg-save-preview-toolbar">
-        <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>&larr; Cancel</button>
-        <span class="seg-history-title">Review Changes</span>
-        <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
-    </div>
+    <AudioElement bind:this={audio} preload="metadata" />
 
     <div id="seg-save-preview-stats" class="seg-history-stats">
         {#if $savePreviewData?.warningChapters && $savePreviewData.warningChapters.length > 0}
@@ -89,11 +105,13 @@
 
     <div id="seg-save-preview-batches" class="seg-history-batches">
         {#each displayEntries as entry (entryKey(entry))}
-            {#if entry.type === 'chain'}
-                <SplitChainRow chain={entry.chain} />
-            {:else}
-                <HistoryBatch item={entry.item} />
-            {/if}
+            <div>
+                {#if entry.type === 'chain'}
+                    <EditChainRow chain={entry.chain} {previewCtx} />
+                {:else}
+                    <HistoryBatch item={entry.item} {previewCtx} />
+                {/if}
+            </div>
         {/each}
     </div>
 </div>

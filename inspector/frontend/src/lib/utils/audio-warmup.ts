@@ -12,9 +12,17 @@
  * touching the real chapter audio. By the time the user clicks the
  * Play button (a later gesture), the pipeline is already warm.
  *
+ * Also bootstraps the shared `AudioContext` here so the GainNode kill-
+ * switch in `lib/playback/audio-graph.ts` is in `running` state by the
+ * time the first segment-end boundary fires. Chrome creates contexts
+ * in `suspended` state outside a gesture; doing it here lets us call
+ * `.resume()` inside the gesture handler.
+ *
  * The MP3 below is a ~0.05s silent frame (data URI, ~250 bytes).
  * Decoded by the same MP3 decoder the chapter audio will use.
  */
+
+import { _getCtx } from '../playback/audio-graph';
 
 const SILENT_MP3 =
     'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjQ1LjEwMAAAAAAAAAAAAAAA//tQwAAAAAAAAAAAAAAAAAAAAABJbmZvAAAADwAAAAEAAAJAAJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiY//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjkxAAAAAAAAAAAAAAAAJAYwAAAAAAAAAkBJSwQ4//tQxAADwAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//tSxAADwAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
@@ -34,6 +42,10 @@ function _warm(): void {
         a.load();
     };
     a.play().then(cleanup, cleanup);
+    // Resume the shared AudioContext inside the gesture handler so the
+    // GainNode kill-switch is live before the first segment-end boundary.
+    const ctx = _getCtx();
+    if (ctx && ctx.state === 'suspended') void ctx.resume();
 }
 
 /**

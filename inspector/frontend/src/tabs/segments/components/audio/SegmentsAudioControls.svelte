@@ -6,6 +6,10 @@
 
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
+
+    import AudioPlayer from '../../../../lib/components/AudioPlayer.svelte';
+    import { LS_KEYS } from '../../../../lib/utils/constants';
+    import { SPEEDS } from '../../../../lib/utils/speed-control';
     import { segData } from '../../stores/chapter';
     import {
         autoPlayEnabled,
@@ -15,8 +19,6 @@
         playButtonLabel,
         segAudioElement,
     } from '../../stores/playback';
-    import { LS_KEYS } from '../../../../lib/utils/constants';
-    import { SPEEDS } from '../../../../lib/utils/speed-control';
     import {
         onSegAudioEnded,
         onSegPlayClick,
@@ -24,7 +26,6 @@
         startSegAnimation,
         stopSegAnimation,
     } from '../../utils/playback/playback';
-    import AudioPlayer from '../../../../lib/components/AudioPlayer.svelte';
 
     // ---- Exported prop: raw HTMLAudioElement exposed to parent via bind:audioEl ----
     // Populated reactively once AudioPlayer mounts and element() returns non-null.

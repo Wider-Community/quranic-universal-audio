@@ -176,6 +176,104 @@ export function formatDurationMs(ms: number): string {
     return `${mins}m ${secs}s`;
 }
 
+/** A single ref endpoint — surah:ayah:word triple. */
+export interface RefPoint {
+    surah: number;
+    ayah: number;
+    word: number;
+}
+
+/**
+ * Advance a ref endpoint by one word.
+ *
+ * - Mid-verse: word + 1.
+ * - Last word of verse: roll over to {ayah+1, word=1} if `s:ayah+1` is in vwc.
+ * - Last verse of surah (or vwc unavailable for next verse): return null.
+ *   Segments don't cross surahs in practice, so no cross-surah rollover.
+ */
+export function _advanceRefByOneWord(point: RefPoint, vwc?: VerseWordCounts): RefPoint | null {
+    if (!vwc) return null;
+    const verseKey = `${point.surah}:${point.ayah}`;
+    const verseSize = vwc[verseKey];
+    if (verseSize == null) return null;
+    if (point.word < verseSize) {
+        return { surah: point.surah, ayah: point.ayah, word: point.word + 1 };
+    }
+    const nextKey = `${point.surah}:${point.ayah + 1}`;
+    if (vwc[nextKey] == null) return null;
+    return { surah: point.surah, ayah: point.ayah + 1, word: 1 };
+}
+
+/**
+ * Clamp word overshoot within known verses. If `word_from > vwc[s:ayah_from]`
+ * (and analogously for end), clamps to that verse's word count. Returns the
+ * clamped ref + a flag. If either endpoint's verse is unknown to vwc, returns
+ * {clamped: false} — that's an `unknown_verse` case, not a recoverable
+ * overshoot, and should be reported as invalid by the caller.
+ */
+export function _clampRefWordOvershoot(
+    parsed: ParsedSegRef,
+    vwc?: VerseWordCounts,
+): { clampedRef: Ref; clamped: boolean } | null {
+    if (!vwc) return null;
+    const fromKey = `${parsed.surah}:${parsed.ayah_from}`;
+    const toKey = `${parsed.surah}:${parsed.ayah_to}`;
+    const fromMax = vwc[fromKey];
+    const toMax = vwc[toKey];
+    if (fromMax == null || toMax == null) return null;
+    let wf = parsed.word_from;
+    let wt = parsed.word_to;
+    let clamped = false;
+    if (wf > fromMax) { wf = fromMax; clamped = true; }
+    if (wt > toMax) { wt = toMax; clamped = true; }
+    const clampedRef: Ref =
+        `${parsed.surah}:${parsed.ayah_from}:${wf}-${parsed.surah}:${parsed.ayah_to}:${wt}`;
+    return { clampedRef, clamped };
+}
+
+export type RefValidation =
+    | { ok: true; ref: Ref }
+    | { ok: false; reason: 'malformed' | 'unknown_verse' | 'word_overshoot'; clamped?: Ref };
+
+/**
+ * Structural validation of a ref against vwc. Caller is expected to have run
+ * `_normalizeRef` first so shorthand is expanded.
+ *
+ * - `malformed`: parseSegRef fails (bad format, non-numeric, missing parts).
+ * - `unknown_verse`: any of the verse keys (`s:ayah_from`, `s:ayah_to`) is
+ *   absent from vwc — out-of-range surah/verse, not a recoverable typo.
+ * - `word_overshoot`: structure is fine and verses are known, but word count
+ *   exceeds the verse size; `clamped` carries the corrected ref so the caller
+ *   can opt into the silent-fix path.
+ * - `ok`: passes all checks; `ref` is the canonical form.
+ */
+export function _validateRefStructural(ref: Ref | null | undefined, vwc?: VerseWordCounts): RefValidation {
+    if (!ref) return { ok: false, reason: 'malformed' };
+    const p = parseSegRef(ref);
+    if (!p || !Number.isFinite(p.surah) || !Number.isFinite(p.ayah_from) ||
+        !Number.isFinite(p.word_from) || !Number.isFinite(p.ayah_to) ||
+        !Number.isFinite(p.word_to)) {
+        return { ok: false, reason: 'malformed' };
+    }
+    if (p.surah < 1 || p.ayah_from < 1 || p.word_from < 1 ||
+        p.ayah_to < p.ayah_from || p.word_to < 1 ||
+        (p.ayah_from === p.ayah_to && p.word_to < p.word_from)) {
+        return { ok: false, reason: 'malformed' };
+    }
+    if (vwc) {
+        const fromKey = `${p.surah}:${p.ayah_from}`;
+        const toKey = `${p.surah}:${p.ayah_to}`;
+        if (vwc[fromKey] == null || vwc[toKey] == null) {
+            return { ok: false, reason: 'unknown_verse' };
+        }
+        const clamp = _clampRefWordOvershoot(p, vwc);
+        if (clamp?.clamped) {
+            return { ok: false, reason: 'word_overshoot', clamped: clamp.clampedRef };
+        }
+    }
+    return { ok: true, ref };
+}
+
 /**
  * Suggest per-verse refs for the two halves when splitting a cross-verse segment.
  * Returns {first, second} ref strings or null if single-verse or data unavailable.
@@ -188,9 +286,7 @@ export function _suggestSplitRefs(ref: Ref, vwc?: VerseWordCounts): { first: Ref
     const firstEnd = vwc[firstVerseKey];
     if (!firstEnd) return null;
 
-    const first: Ref = (p.word_from === 1 && p.word_from <= firstEnd)
-        ? `${p.surah}:${p.ayah_from}`
-        : `${p.surah}:${p.ayah_from}:${p.word_from}-${p.surah}:${p.ayah_from}:${firstEnd}`;
+    const first: Ref = `${p.surah}:${p.ayah_from}:${p.word_from}-${p.surah}:${p.ayah_from}:${firstEnd}`;
 
     const nextAyah = p.ayah_from + 1;
     const second: Ref = (nextAyah === p.ayah_to)

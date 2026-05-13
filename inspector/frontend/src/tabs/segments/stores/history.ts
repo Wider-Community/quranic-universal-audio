@@ -11,29 +11,29 @@
 import { derived, get, writable } from 'svelte/store';
 
 import type { SegEditHistoryResponse } from '../../../lib/types/api';
-import type { SplitChain } from '../types/segments';
+import type { EditChain } from '../types/segments';
 import {
-    buildSplitChains,
-    buildSplitLineage,
+    buildEditChains,
 } from '../utils/history/chains';
 import { flattenBatchesToItems } from '../utils/history/items';
 
 // Re-export chain helpers so existing consumers keep one import site.
 export {
-    buildSplitChains,
-    buildSplitLineage,
+    buildEditChains,
     computeChainLeafSnaps,
     getChainBatchIds,
     snapToSeg,
     type BuildChainsResult,
-    type SplitChain,
-    type SplitChainOp,
+    type EditChain as SplitChain,
+    type EditChainOp as SplitChainOp,
+    type EditChain,
+    type EditChainOp,
 } from '../utils/history/chains';
 
 // Re-export item helpers so existing consumers keep one import site.
 export {
     buildDisplayItems,
-    computeFilteredItemSummary,
+    computeFilteredSummary,
     countVersesFromBatches,
     countVersesFromItems,
     flattenBatchesToItems,
@@ -58,8 +58,8 @@ export {
 /** Raw edit-history response from `/api/seg/edit-history/<reciter>`. */
 export const historyData = writable<SegEditHistoryResponse | null>(null);
 
-/** Map of split-chain id (root op_id) → chain descriptor. */
-export const splitChains = writable<Map<string, SplitChain> | null>(null);
+/** Map of edit-chain id (root op_id) → chain descriptor. */
+export const editChains = writable<Map<string, EditChain> | null>(null);
 
 /** Set of op_ids absorbed into split chains (so they hide from flat items). */
 export const chainedOpIds = writable<Set<string> | null>(null);
@@ -99,15 +99,24 @@ export const flatItems = derived(
  * Pass `null` to clear (e.g. on reciter change).
  */
 export function setHistoryData(data: SegEditHistoryResponse | null): void {
+    if (data && data.batches) {
+        for (const batch of data.batches) {
+            const isStripSpecials = batch.batch_type === 'strip_specials';
+            for (const op of (batch.operations || [])) {
+                if (isStripSpecials || op.op_type === 'waqf_sakt') {
+                    op.op_type = 'pipeline';
+                }
+            }
+        }
+    }
     historyData.set(data);
     if (!data || !data.batches || data.batches.length === 0) {
-        splitChains.set(null);
+        editChains.set(null);
         chainedOpIds.set(null);
         return;
     }
-    const lineage = buildSplitLineage(data.batches);
-    const built = buildSplitChains(data.batches, lineage);
-    splitChains.set(built.chains);
+    const built = buildEditChains(data.batches);
+    editChains.set(built.chains);
     chainedOpIds.set(built.chainedOpIds);
 }
 
@@ -115,9 +124,11 @@ export function setHistoryData(data: SegEditHistoryResponse | null): void {
 export function toggleFilter(kind: 'op' | 'cat', value: string): void {
     const store = kind === 'op' ? filterOpTypes : filterErrCats;
     store.update((s) => {
-        const next = new Set(s);
-        if (next.has(value)) next.delete(value); else next.add(value);
-        return next;
+        if (s.has(value)) {
+            return new Set();
+        } else {
+            return new Set([value]);
+        }
     });
 }
 
@@ -138,18 +149,18 @@ export function setHistoryVisible(v: boolean): void {
 }
 
 /** Synchronously snapshot derived split chains. */
-export function snapshotSplitChains(): { chains: Map<string, SplitChain> | null; chainedOpIds: Set<string> | null } {
-    return { chains: get(splitChains), chainedOpIds: get(chainedOpIds) };
+export function snapshotEditChains(): { chains: Map<string, EditChain> | null; chainedOpIds: Set<string> | null } {
+    return { chains: get(editChains), chainedOpIds: get(chainedOpIds) };
 }
 
 /** Restore previously-snapshotted split chains. */
-export function restoreSplitChains(snap: { chains: Map<string, SplitChain> | null; chainedOpIds: Set<string> | null }): void {
-    splitChains.set(snap.chains);
+export function restoreEditChains(snap: { chains: Map<string, EditChain> | null; chainedOpIds: Set<string> | null }): void {
+    editChains.set(snap.chains);
     chainedOpIds.set(snap.chainedOpIds);
 }
 
 /** Overwrite split chain state directly (used by undo/discard rebuild). */
-export function setSplitChains(chains: Map<string, SplitChain> | null, ops: Set<string> | null): void {
-    splitChains.set(chains);
+export function setEditChains(chains: Map<string, EditChain> | null, ops: Set<string> | null): void {
+    editChains.set(chains);
     chainedOpIds.set(ops);
 }

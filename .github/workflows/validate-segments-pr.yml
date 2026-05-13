@@ -100,7 +100,7 @@ jobs:
         if: steps.detect.outputs.reciters != ''
         run: |
           reciters="${{ steps.detect.outputs.reciters }}"
-          summary=$(python scripts/summarize_pr_edits.py $reciters)
+          summary=$(python .github/scripts/summarize_pr_edits.py $reciters)
 
           # Build header from template
           # For multi-reciter PRs, use generic name; for single, use slug

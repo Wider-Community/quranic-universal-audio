@@ -7,14 +7,17 @@ import shutil
 from pathlib import Path
 
 
+import orjson
+
 def atomic_json_write(path: Path, data, *, ensure_ascii: bool = False) -> None:
     """Write *data* to *path* as JSON via a temp file + atomic rename.
 
     This avoids partial reads if the server crashes mid-write.
     """
     tmp_path = path.with_suffix(".json.tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=ensure_ascii)
+    with open(tmp_path, "wb") as f:
+        # orjson defaults to UTF-8 without ASCII escaping.
+        f.write(orjson.dumps(data))
     os.replace(tmp_path, path)
 
 
@@ -26,7 +29,10 @@ def file_sha256(path: Path) -> str:
 def backup_file(path: Path) -> None:
     """Create a ``.bak`` copy of *path* if it exists."""
     if path.exists():
-        shutil.copy2(path, path.with_name(path.name + ".bak"))
+        # Use copyfile() instead of copy() or copy2() to avoid PermissionError
+        # on copystat (utime) or copymode (chmod), which often fails on 
+        # Docker-mounted volumes or specific filesystems (e.g. CIFS/WSL).
+        shutil.copyfile(path, path.with_name(path.name + ".bak"))
 
 
 def safe_filename(name: str, fallback: str = "file") -> str:

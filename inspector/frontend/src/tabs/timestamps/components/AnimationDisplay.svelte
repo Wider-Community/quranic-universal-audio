@@ -11,10 +11,7 @@
     import { afterUpdate } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { granularity, TS_GRANULARITIES } from '../stores/display';
-    import { loadedVerse } from '../stores/verse';
-    import { loopTarget, tsAudioElement } from '../stores/playback';
-    import { safePlay } from '../../../lib/utils/audio';
+    import type { TsWord } from '../../../lib/types/domain';
     import {
         charsMatch,
         DAGGER_ALEF,
@@ -22,7 +19,10 @@
         splitIntoCharGroups,
         ZWSP,
     } from '../../../lib/utils/arabic-text';
-    import type { TsWord } from '../../../lib/types/domain';
+    import { safePlay } from '../../../lib/utils/audio';
+    import { granularity, TS_GRANULARITIES } from '../stores/display';
+    import { loopTarget, tsAudioElement } from '../stores/playback';
+    import { loadedVerse } from '../stores/verse';
 
     // ---- Data model (produced by buildStructure) ----
 

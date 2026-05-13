@@ -19,9 +19,9 @@
     import { afterUpdate, onMount, tick } from 'svelte';
 
     import {
-        computeArrowLayout,
         type ArrowLayout,
         type ArrowPath,
+        computeArrowLayout,
         type XMark,
     } from '../../../../lib/utils/svg-arrow-geometry';
 
@@ -81,6 +81,18 @@
         // First measurement also runs via afterUpdate; schedule once more
         // after the browser has settled layout (images, late fonts, etc.).
         void tick().then(measure);
+        // HistoryPanel mounts its children while hidden (HTML `hidden` attr),
+        // so onMount fires with zero layout and afterUpdate won't re-fire when
+        // the panel becomes visible (no prop changes). IntersectionObserver
+        // catches that visibility transition without needing prop drilling.
+        if (typeof IntersectionObserver !== 'undefined' && svgEl) {
+            const obs = new IntersectionObserver(
+                (entries) => { if (entries.some((e) => e.isIntersecting)) void tick().then(measure); },
+                { threshold: 0 },
+            );
+            obs.observe(svgEl);
+            return () => obs.disconnect();
+        }
     });
 </script>
 

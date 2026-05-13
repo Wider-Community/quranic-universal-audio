@@ -16,27 +16,29 @@
      * badges, "Reverted" badge, chapter name, formatted date, Undo/Discard.
      */
 
-    import HistoryOp from './HistoryOp.svelte';
-    import SegmentRow from '../list/SegmentRow.svelte';
+    import type { EditOp } from '../../../../lib/types/domain';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
-    import { EDIT_OP_LABELS } from '../../utils/constants';
-    import {
-        onOpUndoClick,
-        onPendingBatchDiscard,
-    } from '../../utils/save/undo';
     import {
         formatHistDate,
-        SHORT_LABELS,
-        snapToSeg,
         type HistorySnapshot,
         type OpFlatItem,
+        SHORT_LABELS,
+        snapToSeg,
     } from '../../stores/history';
-    import { _deriveOpIssueDelta } from '../../utils/validation/classify';
-    import type { EditOp } from '../../../../lib/types/domain';
+    import { EDIT_OP_LABELS } from '../../utils/constants';
+    import type { PreviewPlaybackContext } from '../../utils/playback/preview';
+    import {
+        onOpUndoClick,
+        onPendingOpsDiscard,
+    } from '../../utils/save/undo';
+    import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
+    import SegmentRow from '../list/SegmentRow.svelte';
+    import HistoryOp from './HistoryOp.svelte';
 
     // Props ------------------------------------------------------------------
 
     export let item: OpFlatItem;
+    export let previewCtx: PreviewPlaybackContext | undefined = undefined;
 
     // Derived header bits ----------------------------------------------------
 
@@ -60,7 +62,14 @@
         }
         return [...set];
     })();
-    $: issueDelta = group.length > 0 ? _deriveOpIssueDelta(group) : { resolved: [], introduced: [] };
+    $: issueDelta = group.length > 0 ? deriveOpIssueDelta(group) : { resolved: [], introduced: [] };
+
+    $: isQalqalaPadGroup =
+        item.type === 'op-card'
+        && group.length > 1
+        && group.every((op) => op.op_type === 'qalqala_pad');
+
+    let qalqalaExpanded = false;
 
     // Strip-specials single-snapshot diff (shared "before" card + empty-after).
     $: stripSnap = item.type === 'strip-specials-card'
@@ -71,7 +80,8 @@
     function handleDiscardClick(e: MouseEvent): void {
         if (item.chapter == null) return;
         const btn = e.currentTarget as HTMLButtonElement;
-        onPendingBatchDiscard(item.chapter, btn);
+        const opIds = (group as EditOp[]).map((op) => op.op_id);
+        onPendingOpsDiscard(item.chapter, opIds, btn);
     }
     function handleUndoClick(e: MouseEvent): void {
         const bid = item.batchId;
@@ -92,6 +102,15 @@
             </span>
         {:else if item.type === 'revert-card'}
             <!-- no op badge -->
+        {:else if primary && isQalqalaPadGroup}
+            <span class="seg-history-op-type-badge">
+                {EDIT_OP_LABELS.qalqala_pad} &times;{group.length}
+            </span>
+            <button
+                type="button"
+                class="btn btn-sm seg-history-expand-btn"
+                on:click|stopPropagation={() => { qalqalaExpanded = !qalqalaExpanded; }}
+            >{qalqalaExpanded ? 'Collapse' : 'Expand'}</button>
         {:else if primary}
             <span class="seg-history-op-type-badge">
                 {EDIT_OP_LABELS[primary.op_type] || primary.op_type}
@@ -153,6 +172,7 @@
                                 showPlayBtn={true}
                                 mode="history"
                                 instanceRole="history"
+                                {previewCtx}
                             />
                         {/if}
                     </div>
@@ -166,12 +186,31 @@
                 <div class="seg-history-chapter-list">
                     Chapters: {(item.chapters || []).map((c) => surahOptionText(c)).join(', ')}
                 </div>
+            {:else if isQalqalaPadGroup}
+                {#if qalqalaExpanded}
+                    {#each group as op (op.op_id)}
+                        <div class="seg-history-qalqala-nested">
+                            <HistoryOp
+                                group={[op]}
+                                chapter={item.chapter}
+                                batchId={item.batchId}
+                                skipLabel={true}
+                                {previewCtx}
+                            />
+                        </div>
+                    {/each}
+                {:else}
+                    <div class="seg-history-qalqala-collapsed-hint">
+                        {group.length} boundary adjustments — expand to view each segment.
+                    </div>
+                {/if}
             {:else if group.length === 1 && primary}
                 <HistoryOp
                     group={[primary]}
                     chapter={item.chapter}
                     batchId={item.batchId}
                     skipLabel={true}
+                    {previewCtx}
                 />
             {:else if group.length > 1}
                 <HistoryOp
@@ -179,6 +218,7 @@
                     chapter={item.chapter}
                     batchId={item.batchId}
                     skipLabel={true}
+                    {previewCtx}
                 />
             {/if}
         </div>
