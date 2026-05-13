@@ -32,8 +32,6 @@ async function setupStore(): Promise<(() => void) | null> {
   segAllData.set({
     segments: [seg],
     audio_by_chapter: {},
-    verse_word_counts: {},
-    dk_words: {},
     pad_ms: 0,
     pad_left_ms: 0,
     pad_right_ms: 0,

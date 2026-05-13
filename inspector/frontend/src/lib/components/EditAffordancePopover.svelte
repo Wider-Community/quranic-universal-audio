@@ -62,8 +62,8 @@
     }
 
     async function _reposition() {
-        if (!state || !popoverEl) return;
         await tick();
+        if (!state || !popoverEl) return;
         const rect = state.anchor.getBoundingClientRect();
         const popRect = popoverEl.getBoundingClientRect();
         const margin = 8;

@@ -70,9 +70,11 @@ def load_dk() -> dict[str, dict]:
 def get_dk_words_flat() -> dict[str, str]:
     """Flat ``"surah:ayah:word" -> text`` projection of ``load_dk()``.
 
-    Served to the FE on every chapter-data response so client-side
-    ``dkTextForRef`` can build display text from a ref without an HTTP
-    round-trip. Cached after first call.
+    Promoted off per-request payloads to the immutable
+    ``/api/static/quran-refs.json`` asset (see ``services/quran_refs.py``).
+    Still consumed in-process by save / auto-split / validation. End-of-verse
+    markers (``۝``) are stripped — ``dkTextForRef`` walks bounded by verse
+    word counts and never indexes them, so they're dead weight.
     """
     cached = cache.get_dk_words_flat_cache()
     if cached is not None:
@@ -80,7 +82,7 @@ def get_dk_words_flat() -> dict[str, str]:
     flat: dict[str, str] = {}
     for loc, entry in load_dk().items():
         text = entry.get("text") if isinstance(entry, dict) else None
-        if text:
+        if text and not text.startswith("۝"):
             flat[loc] = text
     cache.set_dk_words_flat_cache(flat)
     return flat

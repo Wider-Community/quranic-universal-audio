@@ -9,6 +9,7 @@
 
 import { get } from 'svelte/store';
 
+import { quranRefs } from '../../../../lib/refs/quran-refs';
 import type { Segment } from '../../../../lib/types/domain';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { applyCommand } from '../../domain/apply-command';
@@ -349,7 +350,7 @@ export function confirmSplit(
     // (cross-verse N=2 or repetition N≥2); otherwise fall back to today's
     // cross-verse N=2 suggestion (single cursor case). Refs and texts have
     // the same length as the produced segment list (= cursors.length + 1).
-    const dk = get(segAllData)?.dk_words;
+    const dk = get(quranRefs)?.dk_words;
     const vwc = getVerseWordCounts();
     let refs: (string | undefined)[] = new Array(cursors.length + 1).fill(undefined);
     let texts: (string | undefined)[] = new Array(cursors.length + 1).fill(undefined);

@@ -10,6 +10,7 @@
 import { tick } from 'svelte';
 import { get } from 'svelte/store';
 
+import { quranRefs } from '../../../../lib/refs/quran-refs';
 import type { Segment } from '../../../../lib/types/domain';
 import { applyCommand } from '../../domain/apply-command';
 import {
@@ -244,7 +245,7 @@ export async function commitRefEdit(seg: Segment, newRefIn: string): Promise<Com
     // persisted for downstream consumers (qalqala classifier, ASR audit).
     let matchedText = '';
     if (candidate) {
-        const dk = get(segAllData)?.dk_words;
+        const dk = get(quranRefs)?.dk_words;
         matchedText = dkTextForRef(candidate, dk, vwc);
         if (!matchedText) {
             // dk_words missing the ref's words means the ref is structurally

@@ -46,6 +46,7 @@ def _load_dotenv_for_local_dev() -> None:
 _load_dotenv_for_local_dev()
 
 from flask import Flask, jsonify, send_from_directory
+from flask_compress import Compress
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -163,6 +164,11 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # the site root (`/assets/<hash>.js`, `/fonts/DigitalKhattV2.otf`, …). The
 # `/` route below handles index.html explicitly.
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
+
+# Gzip (and brotli when the client advertises it) every JSON response over
+# ~500 bytes. Pre-gzipped octet-stream bodies (Timestamps shards) fall outside
+# the default MIME allow-list, so they're left untouched — no double-compress.
+Compress(app)
 
 # Behind HF Spaces' TLS-terminating proxy the X-Forwarded-* headers carry
 # the real scheme/host/client; ProxyFix tells werkzeug to trust one hop so

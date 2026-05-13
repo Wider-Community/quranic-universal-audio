@@ -244,10 +244,6 @@ export interface SegDataResponse {
     reciter_vbr_chapters: number[];
     segments: Segment[];
     summary: SegmentsChapterSummary;
-    verse_word_counts: Record<VerseRef, number>;
-    /** Flat ``"surah:ayah:word" -> Digital Khatt text`` slice for this chapter.
-     *  Consumed by `dkTextForRef` to render row body text from `matched_ref`. */
-    dk_words: Record<string, string>;
     /** Present when the route returns 404 (reciter/chapter not found). */
     error?: string;
 }
@@ -260,10 +256,6 @@ export interface SegAllResponse {
      *  SegDataResponse.reciter_vbr_chapters so global accordions can route
      *  cross-chapter playback before/independent of a chapter-data refresh. */
     reciter_vbr_chapters?: number[];
-    verse_word_counts: Record<VerseRef, number>;
-    /** Flat ``"surah:ayah:word" -> Digital Khatt text`` map (full corpus).
-     *  Consumed by `dkTextForRef` to render row body text from `matched_ref`. */
-    dk_words: Record<string, string>;
     /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
     pad_ms: number;
     pad_left_ms: number;

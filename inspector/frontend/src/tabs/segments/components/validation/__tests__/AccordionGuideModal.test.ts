@@ -16,8 +16,6 @@ beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
   segAllData.set({
     segments: [{ ...makeSegment(0, 0, 1000), chapter: 1, index: 0, segment_uid: 'seg-1' }],
-    dk_words: {},
-    verse_word_counts: {},
   } as any);
   segValidation.set({
     low_confidence: [{

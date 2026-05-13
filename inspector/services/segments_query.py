@@ -9,7 +9,6 @@ from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
 from services import cache
 from services.audio_meta import is_vbr, vbr_chapters_for_reciter
 from services.data_loader import (
-    get_dk_words_flat,
     get_word_counts,
     load_detailed,
     resolve_pad,
@@ -122,25 +121,12 @@ def get_chapter_data(reciter: str, chapter: int,
         "missing_verses": [f"{chapter}:{v}" for v in missing_verses],
     }
 
-    verse_word_counts = {}
-    for (s, v), n in wc.items():
-        if s == chapter:
-            verse_word_counts[f"{chapter}:{v}"] = n
-
-    # Chapter-scoped slice of the flat DK map. Sent so the FE can build per-row
-    # display text directly from ``matched_ref`` (covers history snapshots that
-    # never stored ``display_text``). Scoping by chapter keeps the per-chapter
-    # payload small; ``/api/seg/all`` ships the full map.
-    chapter_prefix = f"{chapter}:"
-    dk_full = get_dk_words_flat()
-    dk_words = {k: v for k, v in dk_full.items() if k.startswith(chapter_prefix)}
-
+    # dk_words + verse_word_counts moved off per-request payloads to the
+    # immutable ``/api/static/quran-refs.json`` asset (fetched once per browser).
     return {
         "audio_url": audio_url,
         "vbr": is_vbr(reciter, chapter),
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
         "segments": segments,
         "summary": summary,
-        "verse_word_counts": verse_word_counts,
-        "dk_words": dk_words,
     }

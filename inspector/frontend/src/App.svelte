@@ -6,6 +6,7 @@
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
+    import { loadQuranRefs } from './lib/refs/quran-refs';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
     import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
@@ -47,6 +48,9 @@
 
     onMount(() => {
         cleanupLegacyAudioKeys();
+        // Quran refs (dk_words + verse_word_counts) live behind one immutable
+        // static asset — fire-and-forget; tabs tolerate the null pre-hydration.
+        void loadQuranRefs();
         const savedTab = localStorage.getItem(LS_KEYS.ACTIVE_TAB);
         const validTabs: string[] = [
             TAB_NAMES.DASHBOARD,

@@ -1,4 +1,9 @@
 flask
+# gzip/brotli middleware. Default config (min-size 500, MIME allow-list incl.
+# application/json + text/*) covers every JSON route. Pre-gzipped octet-stream
+# bodies (Timestamps shards in routes/timestamps.py) are outside the allow-list
+# so they're skipped — no double-compression.
+flask-compress>=1.14
 quranic-phonemizer>=2.2
 orjson
 pydantic>=2.10

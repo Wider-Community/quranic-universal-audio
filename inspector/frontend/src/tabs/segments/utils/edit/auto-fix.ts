@@ -13,11 +13,11 @@
 
 import { get } from 'svelte/store';
 
+import { quranRefs } from '../../../../lib/refs/quran-refs';
 import type { Segment } from '../../../../lib/types/domain';
 import { applyCommand } from '../../domain/apply-command';
 import {
     refreshSegInStore,
-    segAllData,
     selectedChapter,
 } from '../../stores/chapter';
 import {
@@ -64,7 +64,7 @@ export function autoFixMissingWord(
         ignored_categories: seg.ignored_categories ? [...seg.ignored_categories] : null,
     };
 
-    const dk = get(segAllData)?.dk_words;
+    const dk = get(quranRefs)?.dk_words;
     const resolvedText = dkTextForRef(newRef, dk, getVerseWordCounts()) || '(invalid ref)';
 
     const result = applyCommand(

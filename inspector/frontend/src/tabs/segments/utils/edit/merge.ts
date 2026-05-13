@@ -4,6 +4,7 @@
 
 import { get } from 'svelte/store';
 
+import { quranRefs } from '../../../../lib/refs/quran-refs';
 import type { Segment } from '../../../../lib/types/domain';
 import { applyCommand } from '../../domain/apply-command';
 import {
@@ -93,7 +94,7 @@ export function mergeAdjacent(
 
     let mergedText = [first.matched_text, second.matched_text].filter(Boolean).join(' ');
     if (mergedRef) {
-        const dk = get(segAllData)?.dk_words;
+        const dk = get(quranRefs)?.dk_words;
         const resolved = dkTextForRef(mergedRef, dk, getVerseWordCounts());
         if (resolved) mergedText = resolved;
     }

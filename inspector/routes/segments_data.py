@@ -20,8 +20,6 @@ from services.validation.registry import ALL_CATEGORIES
 from services import cache, data_dir
 from services import state as state_service
 from services.data_loader import (
-    get_dk_words_flat,
-    get_word_counts,
     load_detailed,
     resolve_pad,
 )
@@ -165,22 +163,15 @@ def seg_all(reciter):
                 seg_dict["ignored_categories"] = ["_all"]
             segments.append(seg_dict)
 
-    verse_word_counts = {}
-    for (surah, ayah), n in get_word_counts().items():
-        verse_word_counts[f"{surah}:{ayah}"] = n
-
     pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(
         cache.get_seg_meta(reciter)
     )
+    # dk_words + verse_word_counts moved off this payload to the immutable
+    # ``/api/static/quran-refs.json`` asset (fetched once per browser).
     return jsonify({
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
-        "verse_word_counts": verse_word_counts,
-        # Flat ``"surah:ayah:word" -> Digital Khatt text`` map. Lets the FE
-        # build per-row body text directly from ``matched_ref``, so history
-        # snapshots without stored text fields still render correctly.
-        "dk_words": get_dk_words_flat(),
         # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
         "pad_ms": (pad_left_ms + pad_right_ms) // 2,
         "pad_left_ms": pad_left_ms,

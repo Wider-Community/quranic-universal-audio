@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 
+import { quranRefs } from '../../../../lib/refs/quran-refs';
 import type { Ref, VerseRef } from '../../../../lib/types/domain';
-import { segAllData, segData } from '../../stores/chapter';
 import { _ARABIC_DIGITS } from '../constants';
 
 /** Parsed canonical segment ref. */
@@ -15,9 +15,9 @@ export interface ParsedSegRef {
 
 type VerseWordCounts = Record<VerseRef, number>;
 
-/** Read verse-word-counts from segAllData first, falling back to segData. */
+/** Read verse-word-counts from the shared Quran-refs bundle. */
 export function getVerseWordCounts(): VerseWordCounts | undefined {
-    return get(segAllData)?.verse_word_counts ?? get(segData)?.verse_word_counts;
+    return get(quranRefs)?.verse_word_counts as VerseWordCounts | undefined;
 }
 
 export function isCrossVerse(ref: Ref | null | undefined): boolean {

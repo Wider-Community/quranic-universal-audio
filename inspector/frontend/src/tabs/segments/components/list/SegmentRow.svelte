@@ -26,6 +26,7 @@
 
     import { editGate } from '../../../../lib/actions/editGate';
     import { fetchJsonOrNull } from '../../../../lib/api';
+    import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
     import {
         getAdjacentSegments,
@@ -242,9 +243,9 @@
     $: changedConf = !!changedFields?.has('conf');
     $: bodyRef = previewState?.ref ?? seg.matched_ref;
     $: bodyText = (() => {
-        const text = dkTextForRef(bodyRef, $segAllData?.dk_words, $segAllData?.verse_word_counts);
+        const text = dkTextForRef(bodyRef, $quranRefs?.dk_words, $quranRefs?.verse_word_counts);
         if (!text) return seg.matched_ref ? '(no text)' : '(no match)';
-        return _addVerseMarkers(text, bodyRef, $segAllData?.verse_word_counts) || text;
+        return _addVerseMarkers(text, bodyRef, $quranRefs?.verse_word_counts) || text;
     })();
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
     $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
@@ -717,7 +718,7 @@
                     <ReferenceEditor {seg} on:preview={(e) => previewState = e.detail} />
                 {:else}
                     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-                    <span class="seg-text-ref" class:seg-history-changed={changedRef} use:editGate on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
+                    <span class="seg-text-ref" class:seg-history-changed={changedRef} use:editGate on:click={onRefTextClick}>{formatRef(seg.matched_ref, $quranRefs?.verse_word_counts)}</span>
                 {/if}
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
