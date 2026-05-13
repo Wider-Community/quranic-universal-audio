@@ -1,74 +1,75 @@
 <script lang="ts">
     /**
-     * Horizontal state timeline. Nodes alternate above/below the axis;
-     * labels + dates render on the same side as their node. Each of the
-     * six lifecycle states is plotted; states the reciter has reached
-     * are highlighted, the rest sit muted.
+     * Per-combination 4-state timeline.
      *
-     * Dates are derived from per-delivery `state_since`: for each bucket
-     * we take the most-recent state_since across deliveries currently in
-     * that bucket. Buckets that no delivery is currently in get no date.
+     * Renders the simplified lifecycle of a single delivery:
+     *   requested → available_for_review → under_review → published
+     *
+     * Off-axis buckets:
+     *   - available_for_request → no nodes reached, no current
+     *   - publishing            → reached up to under_review (current)
+     *
+     * Dates: the wire-level ``PublicDelivery`` carries ``state_since`` only
+     * for the current bucket, so only the current node shows a date — the
+     * others render an em dash. (Full bucket_dates history would require
+     * an audit-log replay on the backend; out of scope here.)
      */
-    import { PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicReciter } from '../../../lib/types/public-state';
+    import { PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../../../lib/types/public-state';
 
-    export let reciter: PublicReciter;
+    export let delivery: PublicDelivery | null = null;
 
-    const ORDER: readonly PublicBucket[] = [
-        'available_for_request',
+    const AXIS: readonly PublicBucket[] = [
         'requested',
         'available_for_review',
         'under_review',
-        'publishing',
         'published',
-    ];
-
-    const LABELS = PUBLIC_BUCKET_LABELS;
+    ] as const;
 
     function fmtDate(iso: string | null): string {
         if (!iso) return '';
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return '';
-        return d.toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-        });
+        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     }
 
-    $: dateByBucket = (() => {
-        const m = new Map<PublicBucket, string>();
-        for (const d of reciter.deliveries) {
-            if (!d.state_since) continue;
-            const prev = m.get(d.bucket);
-            if (!prev || d.state_since > prev) m.set(d.bucket, d.state_since);
+    // Map any bucket to where it lands on the 4-node axis.
+    // Returns the highest axis index considered "reached", or -1 for none.
+    function reachedIndex(b: PublicBucket | null): number {
+        if (b === null) return -1;
+        switch (b) {
+            case 'available_for_request': return -1;
+            case 'requested':              return 0;
+            case 'available_for_review':   return 1;
+            case 'under_review':           return 2;
+            case 'publishing':             return 2; // most-recent reached
+            case 'published':              return 3;
         }
-        return m;
-    })();
+    }
 
-    $: reachedSet = new Set<PublicBucket>([...reciter.buckets, reciter.primary_bucket]);
+    $: bucket = delivery?.bucket ?? null;
+    $: currentIdx = reachedIndex(bucket);
+    $: dateLabel = delivery?.state_since ? fmtDate(delivery.state_since) : '';
 
-    $: items = ORDER.map((bucket, i) => ({
-        bucket,
-        label: LABELS[bucket],
-        date: fmtDate(dateByBucket.get(bucket) ?? null),
-        reached: reachedSet.has(bucket),
-        current: bucket === reciter.primary_bucket,
-        side: i % 2 === 0 ? 'up' : 'down' as 'up' | 'down',
+    $: items = AXIS.map((b, i) => ({
+        bucket: b,
+        label: PUBLIC_BUCKET_LABELS[b],
+        reached: i <= currentIdx,
+        current: i === currentIdx,
+        date: i === currentIdx ? dateLabel : '',
     }));
 </script>
 
-<div class="timeline" role="list" aria-label="Reciter lifecycle">
+<div class="timeline" role="list" aria-label="Combination lifecycle">
     <div class="axis"></div>
     <ol class="nodes">
-        {#each items as item (item.bucket)}
+        {#each items as item, i (item.bucket)}
             <li
                 class="node"
                 class:reached={item.reached}
                 class:current={item.current}
-                class:up={item.side === 'up'}
-                class:down={item.side === 'down'}
                 role="listitem"
             >
+                <span class="dot" aria-hidden="true"></span>
                 <div class="meta">
                     <div class="label">{item.label}</div>
                     {#if item.date}
@@ -77,8 +78,9 @@
                         <div class="date faint">—</div>
                     {/if}
                 </div>
-                <span class="dot" aria-hidden="true"></span>
-                <span class="leader" aria-hidden="true"></span>
+                {#if i < items.length - 1}
+                    <span class="connector" class:filled={item.reached && (items[i + 1]?.reached ?? false)} aria-hidden="true"></span>
+                {/if}
             </li>
         {/each}
     </ol>
@@ -87,32 +89,23 @@
 <style>
     .timeline {
         position: relative;
-        margin: var(--s-3) 0 var(--s-5);
-        padding: var(--s-6) var(--s-2);
+        padding: var(--s-4) var(--s-2) var(--s-3);
     }
-    .axis {
-        position: absolute;
-        left: 0; right: 0;
-        top: 50%;
-        height: 1px;
-        background: var(--border-quiet);
-    }
+    .axis { display: none; }
     .nodes {
         list-style: none;
         padding: 0;
         margin: 0;
         display: grid;
-        grid-template-columns: repeat(6, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         position: relative;
-        height: 120px;
     }
     .node {
         position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        height: 100%;
+        gap: var(--s-2);
     }
     .dot {
         width: 11px; height: 11px;
@@ -120,10 +113,6 @@
         background: var(--border-default);
         border: 2px solid var(--canvas);
         box-shadow: 0 0 0 1px var(--border-default);
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
         z-index: 1;
     }
     .node.reached .dot {
@@ -134,35 +123,22 @@
         width: 13px; height: 13px;
         box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint-soft);
     }
-    .leader {
+    .connector {
         position: absolute;
-        left: 50%;
-        width: 1px;
+        top: 5px;
+        left: calc(50% + 8px);
+        right: calc(-50% + 8px);
+        height: 1px;
         background: var(--border-quiet);
+        z-index: 0;
     }
-    .node.up .leader {
-        bottom: 50%;
-        height: 22px;
-    }
-    .node.down .leader {
-        top: 50%;
-        height: 22px;
-    }
+    .connector.filled { background: var(--accent); }
     .meta {
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
         text-align: center;
         white-space: nowrap;
-        opacity: 0.5;
+        opacity: 0.55;
     }
     .node.reached .meta { opacity: 1; }
-    .node.up .meta {
-        bottom: calc(50% + 26px);
-    }
-    .node.down .meta {
-        top: calc(50% + 26px);
-    }
     .label {
         font-size: var(--fs-meta);
         color: var(--text-secondary);

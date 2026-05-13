@@ -19,7 +19,7 @@ export type PublicBucket =
 export const PUBLIC_BUCKET_LABELS: Record<PublicBucket, string> = {
     available_for_request: 'Available for request',
     requested: 'Requested',
-    available_for_review: 'Available to claim',
+    available_for_review: 'Available for review',
     under_review: 'Under review',
     publishing: 'Publishing',
     published: 'Published',
@@ -33,6 +33,33 @@ export const PUBLIC_BUCKETS: readonly PublicBucket[] = [
     'publishing',
     'published',
 ] as const;
+
+/**
+ * Status display ordering — most progressed first. Used for the dashboard
+ * status filter cards, modal combination sort, and any UI that surfaces
+ * lifecycle "rank". Distinct from `PUBLIC_BUCKETS` (ascending lifecycle).
+ */
+export const BUCKET_PRIORITY: readonly PublicBucket[] = [
+    'published',
+    'publishing',
+    'under_review',
+    'available_for_review',
+    'requested',
+    'available_for_request',
+] as const;
+
+const BUCKET_RANK: Record<PublicBucket, number> = {
+    published: 0,
+    publishing: 1,
+    under_review: 2,
+    available_for_review: 3,
+    requested: 4,
+    available_for_request: 5,
+};
+
+export function bucketRank(b: PublicBucket): number {
+    return BUCKET_RANK[b];
+}
 
 export type CoverageKind = 'full' | 'partial' | 'mixed';
 

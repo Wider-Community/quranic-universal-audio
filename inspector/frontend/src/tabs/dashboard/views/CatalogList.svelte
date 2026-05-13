@@ -12,7 +12,7 @@
     } from '../../../lib/catalog/schema-descriptor';
     import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
     import { playerContext } from '../../../lib/stores/player-context';
-    import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+    import { bucketRank, type PublicDelivery, type PublicReciter } from '../../../lib/types/public-state';
     import { defaultCombination } from '../../../lib/utils/default-combination';
     import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
@@ -86,6 +86,12 @@
             copy.sort((a, b) => a.reciter.name.localeCompare(b.reciter.name));
         } else if (sort === 'combinations') {
             copy.sort((a, b) => b.visibleDeliveries.length - a.visibleDeliveries.length);
+        } else if (sort === 'status') {
+            copy.sort((a, b) => {
+                const s = bucketRank(a.reciter.primary_bucket) - bucketRank(b.reciter.primary_bucket);
+                if (s !== 0) return s;
+                return a.reciter.name.localeCompare(b.reciter.name);
+            });
         } else {
             copy.sort((a, b) => {
                 const ax = a.reciter.last_activity ?? '';
@@ -185,6 +191,7 @@
                         on:change={onSortChange}
                     >
                         <option value="recent">Recently updated</option>
+                        <option value="status">Status</option>
                         <option value="alphabetical">A → Z</option>
                         <option value="combinations">Most combinations</option>
                     </select>

@@ -70,27 +70,25 @@
 
 <div class="container">
     <header>
-        <div class="header-row">
-            <div class="auth-controls">
-                {#if isSignedIn($currentUser)}
-                    <span class="auth-login" title="Signed in as {$currentUser.login}">
-                        {$currentUser.login}
-                        {#if $currentUser.role && $currentUser.role !== 'contributor'}
-                            <span class="auth-role">·{$currentUser.role}</span>
-                        {/if}
-                    </span>
-                    <button type="button" class="auth-btn" on:click={_onSignOut}>Sign out</button>
-                {:else}
-                    <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
-                        Sign in with HF
-                    </button>
-                {/if}
-            </div>
-        </div>
         <div class="tab-bar">
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => switchTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => switchTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => switchTab(TAB_NAMES.SEGMENTS)}>Segments</button>
+        </div>
+        <div class="auth-controls">
+            {#if isSignedIn($currentUser)}
+                <span class="auth-login" title="Signed in as {$currentUser.login}">
+                    {$currentUser.login}
+                    {#if $currentUser.role && $currentUser.role !== 'contributor'}
+                        <span class="auth-role">·{$currentUser.role}</span>
+                    {/if}
+                </span>
+                <button type="button" class="auth-btn" on:click={_onSignOut}>Sign out</button>
+            {:else}
+                <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
+                    Sign in with HF
+                </button>
+            {/if}
         </div>
     </header>
 
@@ -121,12 +119,17 @@
 <ToastHost />
 
 <style>
-    .header-row {
+    header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
         flex-wrap: wrap;
+    }
+    .tab-bar {
+        display: flex;
+        align-items: center;
+        gap: 0;
     }
     .auth-controls {
         display: flex;

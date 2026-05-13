@@ -14,7 +14,7 @@
  * lifecycle), independent of counts.
  */
 
-import { PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../types/public-state';
+import { BUCKET_PRIORITY, PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../types/public-state';
 
 export interface AxisOption {
     key: string;
@@ -28,7 +28,7 @@ export interface Axis {
     options: AxisOption[];
 }
 
-export type SortKey = 'recent' | 'alphabetical' | 'combinations';
+export type SortKey = 'recent' | 'status' | 'alphabetical' | 'combinations';
 
 export interface SchemaDescriptor {
     axes: Axis[];
@@ -55,7 +55,11 @@ function titleCase(slug: string): string {
         .join(' ');
 }
 
-const STATUS_ORDER: readonly PublicBucket[] = [
+// Dashboard status filter: most-progressed first.
+const STATUS_ORDER = BUCKET_PRIORITY;
+
+// Picker keeps its workflow-oriented order (claimable states first).
+const PICKER_ORDER: readonly PublicBucket[] = [
     'available_for_review',
     'under_review',
     'publishing',
@@ -81,8 +85,8 @@ function optionsByCount(counts: Map<string, number>): AxisOption[] {
         .map(([slug]) => ({ key: slug, label: titleCase(slug) }));
 }
 
-/** Six public buckets in display order — stable across schema rebuilds. */
-export const PICKER_BUCKETS: readonly PublicBucket[] = STATUS_ORDER;
+/** Six public buckets in picker display order — stable across schema rebuilds. */
+export const PICKER_BUCKETS: readonly PublicBucket[] = PICKER_ORDER;
 
 export function buildSchemaDescriptor(deliveries: readonly PublicDelivery[]): SchemaDescriptor {
     const riwayahCounts = countBy(deliveries.map((d) => d.riwayah));
@@ -136,6 +140,6 @@ export function buildSchemaDescriptor(deliveries: readonly PublicDelivery[]): Sc
 
     return {
         axes,
-        sortKeys: ['recent', 'alphabetical', 'combinations'],
+        sortKeys: ['recent', 'status', 'alphabetical', 'combinations'],
     };
 }

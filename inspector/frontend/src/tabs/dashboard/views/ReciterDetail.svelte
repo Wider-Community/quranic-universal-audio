@@ -3,10 +3,11 @@
      * Reciter detail modal.
      *
      * Opened from the dashboard catalog. Lists the reciter's combinations
-     * in a flat table; columns where every value is null are omitted.
-     *
-     * No reciter-level aggregate totals (hours, coverage) — those are
-     * properties of combinations and are shown per row.
+     * in a flat table, sorted by status priority and other axes (see
+     * compareDeliveries below). Selected row drives the per-combination
+     * timeline pinned at the top of the modal; clicking a row updates the
+     * timeline. When dashboard filters are active, matching combinations
+     * are grouped above non-matching ones.
      */
     import { onDestroy } from 'svelte';
 
@@ -14,7 +15,11 @@
     import Modal from '../../../lib/components/Modal.svelte';
     import StatePill from '../../../lib/components/StatePill.svelte';
     import { playerContext } from '../../../lib/stores/player-context';
-    import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+    import {
+        bucketRank,
+        type PublicDelivery,
+        type PublicReciter,
+    } from '../../../lib/types/public-state';
     import {
         bitrateLabel,
         categoryLabel,
@@ -33,6 +38,7 @@
     let error: string | null = null;
     let inflight: AbortController | null = null;
     let lastFetched: string | null = null;
+    let selectedSlug: string | null = null;
 
     $: detailId = $dashboardState.view.kind === 'detail' ? $dashboardState.view.reciterId : null;
     $: void maybeReload(detailId);
@@ -41,6 +47,7 @@
         if (id === null) {
             reciter = null;
             lastFetched = null;
+            selectedSlug = null;
             return;
         }
         if (id === lastFetched) return;
@@ -51,6 +58,7 @@
         notFound = false;
         error = null;
         reciter = null;
+        selectedSlug = null;
         try {
             const result = await fetchPublicReciter(id, inflight.signal);
             if (result === null) notFound = true;
@@ -88,8 +96,91 @@
         ? ALL_COLS.filter((c) => reciter!.deliveries.some(c.present))
         : [];
 
-    function playDelivery(d: PublicDelivery): void {
+    // ---- sort ----
+    function catRank(cat: string): number {
+        // surah-style first, ayah-style last
+        if (cat === 'by_surah') return 0;
+        if (cat === 'by_ayah')  return 2;
+        return 1;
+    }
+
+    function compareDeliveries(a: PublicDelivery, b: PublicDelivery): number {
+        const s = bucketRank(a.bucket) - bucketRank(b.bucket);
+        if (s !== 0) return s;
+        const c = catRank(a.audio_category) - catRank(b.audio_category);
+        if (c !== 0) return c;
+        // full coverage > partial
+        if (a.coverage_kind !== b.coverage_kind) {
+            return a.coverage_kind === 'full' ? -1 : 1;
+        }
+        const r = a.riwayah.localeCompare(b.riwayah);
+        if (r !== 0) return r;
+        const st = a.style.localeCompare(b.style);
+        if (st !== 0) return st;
+        return (b.bitrate_kbps_nominal ?? 0) - (a.bitrate_kbps_nominal ?? 0);
+    }
+
+    // ---- filter-match partition (ignore status axis) ----
+    const AXIS_TAGS: Record<string, (d: PublicDelivery) => string[]> = {
+        riwayah: (d) => [d.riwayah],
+        style: (d) => [d.style],
+        coverage: (d) => [d.coverage_kind],
+        recording_context: (d) => (d.recording_context ? [d.recording_context] : []),
+        channel: (d) => [d.channel],
+    };
+
+    function matchesActiveFilters(
+        d: PublicDelivery,
+        filters: Record<string, Set<string>>,
+    ): boolean {
+        for (const [axisKey, tags] of Object.entries(filters)) {
+            if (axisKey === 'status') continue;
+            if (!tags || tags.size === 0) continue;
+            const tagsOf = AXIS_TAGS[axisKey];
+            if (!tagsOf) continue;
+            const dTags = tagsOf(d);
+            if (!dTags.some((t) => tags.has(t))) return false;
+        }
+        return true;
+    }
+
+    $: sortedDeliveries = reciter
+        ? [...reciter.deliveries].sort(compareDeliveries)
+        : [];
+
+    $: hasFacetFilters = (() => {
+        for (const [k, set] of Object.entries($dashboardState.activeFilters)) {
+            if (k === 'status') continue;
+            if (set && set.size > 0) return true;
+        }
+        return false;
+    })();
+
+    $: partition = (() => {
+        if (!hasFacetFilters) {
+            return { matching: sortedDeliveries, other: [] as PublicDelivery[] };
+        }
+        const matching: PublicDelivery[] = [];
+        const other: PublicDelivery[] = [];
+        for (const d of sortedDeliveries) {
+            if (matchesActiveFilters(d, $dashboardState.activeFilters)) matching.push(d);
+            else other.push(d);
+        }
+        return { matching, other };
+    })();
+
+    // Default selection: first row of the matching group (or first row overall).
+    $: defaultSlug = partition.matching[0]?.slug ?? partition.other[0]?.slug ?? null;
+    $: if (defaultSlug && (selectedSlug === null || !sortedDeliveries.some((d) => d.slug === selectedSlug))) {
+        selectedSlug = defaultSlug;
+    }
+
+    $: selectedDelivery = sortedDeliveries.find((d) => d.slug === selectedSlug) ?? null;
+
+    function playDelivery(d: PublicDelivery, ev: Event): void {
+        ev.stopPropagation();
         if (!reciter) return;
+        selectedSlug = d.slug;
         playerContext.update((s) => ({
             ...s,
             reciter,
@@ -98,6 +189,10 @@
             positionMs: 0,
             isPlaying: true,
         }));
+    }
+
+    function selectRow(d: PublicDelivery): void {
+        selectedSlug = d.slug;
     }
 
     $: open = detailId !== null;
@@ -129,7 +224,9 @@
                 {/if}
             </header>
 
-            <StateTimeline {reciter} />
+            <div class="timeline-pin">
+                <StateTimeline delivery={selectedDelivery} />
+            </div>
 
             {#if reciter.deliveries.length === 0}
                 <div class="state">No combinations available.</div>
@@ -145,28 +242,101 @@
                                 <th class="col-state">State</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {#each reciter.deliveries as d (d.slug)}
-                                <tr>
-                                    <td class="col-play">
-                                        {#if d.audio_category !== 'by_ayah'}
-                                            <button
-                                                type="button"
-                                                class="play"
-                                                aria-label="Play this combination"
-                                                on:click={() => playDelivery(d)}
-                                            >▶</button>
-                                        {/if}
-                                    </td>
-                                    {#each visibleCols as col (col.key)}
-                                        <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
-                                    {/each}
-                                    <td class="col-state">
-                                        <StatePill state={d.bucket} size="sm" />
+                        {#if hasFacetFilters && partition.matching.length > 0}
+                            <tbody>
+                                <tr class="group-head">
+                                    <td colspan={visibleCols.length + 2}>
+                                        Matching your filters
+                                        <span class="group-count">{partition.matching.length}</span>
                                     </td>
                                 </tr>
-                            {/each}
-                        </tbody>
+                                {#each partition.matching as d (d.slug)}
+                                    <tr
+                                        class="row"
+                                        class:selected={d.slug === selectedSlug}
+                                        on:click={() => selectRow(d)}
+                                    >
+                                        <td class="col-play">
+                                            {#if d.audio_category !== 'by_ayah'}
+                                                <button
+                                                    type="button"
+                                                    class="play"
+                                                    aria-label="Play this combination"
+                                                    on:click={(e) => playDelivery(d, e)}
+                                                >▶</button>
+                                            {/if}
+                                        </td>
+                                        {#each visibleCols as col (col.key)}
+                                            <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
+                                        {/each}
+                                        <td class="col-state">
+                                            <StatePill state={d.bucket} size="sm" />
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                            {#if partition.other.length > 0}
+                                <tbody>
+                                    <tr class="group-head other">
+                                        <td colspan={visibleCols.length + 2}>
+                                            Other combinations
+                                            <span class="group-count">{partition.other.length}</span>
+                                        </td>
+                                    </tr>
+                                    {#each partition.other as d (d.slug)}
+                                        <tr
+                                            class="row dim"
+                                            class:selected={d.slug === selectedSlug}
+                                            on:click={() => selectRow(d)}
+                                        >
+                                            <td class="col-play">
+                                                {#if d.audio_category !== 'by_ayah'}
+                                                    <button
+                                                        type="button"
+                                                        class="play"
+                                                        aria-label="Play this combination"
+                                                        on:click={(e) => playDelivery(d, e)}
+                                                    >▶</button>
+                                                {/if}
+                                            </td>
+                                            {#each visibleCols as col (col.key)}
+                                                <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
+                                            {/each}
+                                            <td class="col-state">
+                                                <StatePill state={d.bucket} size="sm" />
+                                            </td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                            {/if}
+                        {:else}
+                            <tbody>
+                                {#each sortedDeliveries as d (d.slug)}
+                                    <tr
+                                        class="row"
+                                        class:selected={d.slug === selectedSlug}
+                                        on:click={() => selectRow(d)}
+                                    >
+                                        <td class="col-play">
+                                            {#if d.audio_category !== 'by_ayah'}
+                                                <button
+                                                    type="button"
+                                                    class="play"
+                                                    aria-label="Play this combination"
+                                                    on:click={(e) => playDelivery(d, e)}
+                                                >▶</button>
+                                            {/if}
+                                        </td>
+                                        {#each visibleCols as col (col.key)}
+                                            <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
+                                        {/each}
+                                        <td class="col-state">
+                                            <StatePill state={d.bucket} size="sm" />
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        {/if}
                     </table>
                 </div>
             {/if}
@@ -206,7 +376,7 @@
         gap: var(--s-1);
         padding-bottom: var(--s-3);
         border-bottom: 1px solid var(--border-quiet);
-        margin-bottom: var(--s-4);
+        margin-bottom: var(--s-2);
     }
     .names {
         display: flex;
@@ -230,6 +400,20 @@
         color: var(--text-muted);
     }
 
+    /* Pin the timeline to the modal scroll container so the table can
+       scroll under it. The closest scrolling ancestor is `.modal-body`. */
+    .timeline-pin {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--canvas);
+        padding-bottom: var(--s-2);
+        margin: 0 calc(var(--s-6) * -1) var(--s-3);
+        padding-left: var(--s-6);
+        padding-right: var(--s-6);
+        border-bottom: 1px solid var(--border-quiet);
+    }
+
     .table-wrap { overflow-x: auto; }
     .combinations {
         width: 100%;
@@ -246,6 +430,9 @@
         padding: var(--s-2) var(--s-3);
         border-bottom: 1px solid var(--border-quiet);
         white-space: nowrap;
+        position: sticky;
+        top: 0;
+        background: var(--canvas);
     }
     .combinations tbody td {
         padding: var(--s-3);
@@ -254,7 +441,29 @@
         vertical-align: middle;
         white-space: nowrap;
     }
-    .combinations tbody tr:hover td { background: var(--panel); }
+    .row { cursor: pointer; }
+    .row:hover td { background: var(--panel); }
+    .row.selected td {
+        background: var(--accent-tint-soft);
+        box-shadow: inset 2px 0 0 var(--accent);
+    }
+    .row.dim td { color: var(--text-muted); }
+    .group-head td {
+        padding: var(--s-3) var(--s-3) var(--s-2);
+        color: var(--text-muted);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border-quiet);
+    }
+    .group-count {
+        margin-left: var(--s-2);
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
+        font-family: var(--font-mono);
+        text-transform: none;
+    }
     .col-play { width: 36px; }
     .col-state { text-align: left; }
     .cell-coverage,

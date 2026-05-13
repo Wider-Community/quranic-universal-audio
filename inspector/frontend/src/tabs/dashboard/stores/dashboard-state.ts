@@ -14,7 +14,7 @@ export type DashboardView =
     | { kind: 'list' }
     | { kind: 'detail'; reciterId: string };
 
-export type DashboardSort = 'recent' | 'alphabetical' | 'combinations';
+export type DashboardSort = 'status' | 'recent' | 'alphabetical' | 'combinations';
 
 export interface DashboardState {
     view: DashboardView;
