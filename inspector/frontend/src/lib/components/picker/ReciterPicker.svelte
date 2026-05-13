@@ -90,7 +90,8 @@
             ]);
             reciters = page.reciters;
             stats = s;
-            descriptor = buildSchemaDescriptor(reciters);
+            const allDeliveries = reciters.flatMap((r) => r.deliveries);
+            descriptor = buildSchemaDescriptor(allDeliveries);
             for (const axis of descriptor.axes) {
                 activeFilters[axis.key] = new Set();
             }
@@ -109,9 +110,11 @@
         ? reciters.filter((r) => r.primary_bucket === activeBucket)
         : reciters;
 
+    // Adapt axes (combination/delivery-scoped) to reciter-scoped tagsOf for
+    // the picker — a reciter passes a facet when any of its deliveries does.
     $: facetSpecs = (descriptor?.axes ?? []).map<FacetSpec<PublicReciter>>((axis: Axis) => ({
         key: axis.key,
-        tagsOf: axis.tagsOf,
+        tagsOf: (r: PublicReciter) => r.deliveries.flatMap((d) => [...axis.tagsOf(d)]),
     }));
 
     $: facetResult = recomputeFacets(bucketScoped, activeFilters, facetSpecs);
@@ -398,14 +401,12 @@
         cursor: pointer;
         background: transparent;
         border: none;
-        border-left: 2px solid transparent;
         text-align: left;
-        transition: background var(--t-fast), border-color var(--t-fast);
+        transition: background var(--t-fast);
     }
     .row:hover { background: var(--panel); }
     .row.focused {
-        background: var(--panel);
-        border-left-color: var(--accent);
+        background: var(--accent-tint-soft);
     }
     .row-name {
         color: var(--text-primary);

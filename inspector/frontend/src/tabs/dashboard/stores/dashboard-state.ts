@@ -1,27 +1,23 @@
 /**
  * Dashboard-tab local state.
  *
- * One writable store covering list-view filtering, sort, search, and
- * the list↔detail view toggle. Mounted at the DashboardTab root so
- * back-navigation from a detail view preserves the list-view filters
- * without remounting CatalogList.
+ * Covers filter state (faceted on combinations), sort, search, and the
+ * detail-modal open flag. Mounted at the DashboardTab root so closing
+ * the modal preserves list-view filters without remounting CatalogList.
  *
- * Intentionally independent of player-context — the BottomPlayer in
- * slice I is decoupled from list filtering.
+ * Status is just another facet axis (`activeFilters['status']`); the
+ * sidebar pill rail is the only path to set it.
  */
 import { derived, writable } from 'svelte/store';
-
-import type { PublicBucket } from '../../../lib/types/public-state';
 
 export type DashboardView =
     | { kind: 'list' }
     | { kind: 'detail'; reciterId: string };
 
-export type DashboardSort = 'recent' | 'alphabetical' | 'deliveries';
+export type DashboardSort = 'recent' | 'alphabetical' | 'combinations';
 
 export interface DashboardState {
     view: DashboardView;
-    activeBucket: PublicBucket | null;
     activeFilters: Record<string, Set<string>>;
     sort: DashboardSort;
     search: string;
@@ -30,7 +26,6 @@ export interface DashboardState {
 function initial(): DashboardState {
     return {
         view: { kind: 'list' },
-        activeBucket: null,
         activeFilters: {},
         sort: 'recent',
         search: '',
@@ -38,10 +33,6 @@ function initial(): DashboardState {
 }
 
 export const dashboardState = writable<DashboardState>(initial());
-
-export function setBucket(bucket: PublicBucket | null): void {
-    dashboardState.update((s) => ({ ...s, activeBucket: bucket }));
-}
 
 export function toggleFacet(axisKey: string, tag: string): void {
     dashboardState.update((s) => {
@@ -63,7 +54,6 @@ export function setSearch(search: string): void {
 export function clearAllFilters(): void {
     dashboardState.update((s) => ({
         ...s,
-        activeBucket: null,
         activeFilters: {},
         search: '',
     }));
@@ -73,7 +63,7 @@ export function openDetail(reciterId: string): void {
     dashboardState.update((s) => ({ ...s, view: { kind: 'detail', reciterId } }));
 }
 
-export function backToList(): void {
+export function closeDetail(): void {
     dashboardState.update((s) => ({ ...s, view: { kind: 'list' } }));
 }
 

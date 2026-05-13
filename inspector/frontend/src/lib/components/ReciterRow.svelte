@@ -1,30 +1,27 @@
 <script lang="ts">
     /**
-     * ReciterRow — single catalog row primitive. Used by both
-     * `CatalogTable` (dashboard) and `ReciterPicker` (modal).
+     * ReciterRow — single catalog row primitive used by CatalogTable.
      *
-     * - `compact`  — single line, hover row, no expansion.
-     * - `expanded` — same row with the inline deliveries table beneath.
+     * Layout (left to right):
+     *   [Play] [Name en + Arabic + country + state-stack] (spacer) [count pills]
      *
-     * Slug never rendered in the DOM (PUBLIC contract).
+     * `visibleDeliveries` is the post-facet subset of the reciter's
+     * combinations; counts shown on the row reflect that subset (so the
+     * row "honors" the user's active filters).
      */
     import { createEventDispatcher } from 'svelte';
 
-    import type { PublicDelivery, PublicReciter } from '../types/public-state';
-    import CoveragePill from './CoveragePill.svelte';
-    import DeliveriesTable from './DeliveriesTable.svelte';
+    import type { PublicBucket, PublicDelivery, PublicReciter } from '../types/public-state';
+    import { countryName, titleCaseSlug } from '../utils/delivery-label';
     import StatePill from './StatePill.svelte';
 
     export let reciter: PublicReciter;
-    export let mode: 'compact' | 'expanded' = 'compact';
-    /** When true the play button is rendered. */
+    export let visibleDeliveries: PublicDelivery[];
     export let showPlay = true;
 
     const dispatch = createEventDispatcher<{
         click: void;
         play: void;
-        playDelivery: PublicDelivery;
-        toggleDeliveries: void;
     }>();
 
     function onPlay(ev: Event): void {
@@ -32,19 +29,36 @@
         dispatch('play');
     }
 
-    function onDeliveryChip(ev: Event): void {
-        ev.stopPropagation();
-        dispatch('toggleDeliveries');
+    interface StateCount {
+        bucket: PublicBucket;
+        n: number;
     }
 
-    function onDeliveryPlay(ev: CustomEvent<PublicDelivery>): void {
-        dispatch('playDelivery', ev.detail);
+    const STATE_ORDER: readonly PublicBucket[] = [
+        'available_for_review',
+        'under_review',
+        'publishing',
+        'published',
+        'requested',
+        'available_for_request',
+    ];
+
+    $: stateCounts = computeStateCounts(visibleDeliveries);
+    $: combinationCount = visibleDeliveries.length;
+    $: riwayahCount = new Set(visibleDeliveries.map((d) => d.riwayah)).size;
+    $: styleCount = new Set(visibleDeliveries.map((d) => d.style)).size;
+
+    function computeStateCounts(dels: PublicDelivery[]): StateCount[] {
+        const counts: Partial<Record<PublicBucket, number>> = {};
+        for (const d of dels) counts[d.bucket] = (counts[d.bucket] ?? 0) + 1;
+        return STATE_ORDER
+            .filter((b) => (counts[b] ?? 0) > 0)
+            .map((b) => ({ bucket: b, n: counts[b]! }));
     }
 </script>
 
 <div
     class="row"
-    class:expanded={mode === 'expanded'}
     role="button"
     tabindex="0"
     on:click={() => dispatch('click')}
@@ -59,56 +73,60 @@
         <button
             type="button"
             class="play"
-            aria-label="Play"
+            aria-label="Play {reciter.name}"
             on:click={onPlay}
+            disabled={combinationCount === 0}
         >▶</button>
     {:else}
         <span class="play-spacer" aria-hidden="true" />
     {/if}
 
-    <span class="name">{reciter.name}</span>
-
-    <StatePill state={reciter.primary_bucket} size="sm" />
-
-    {#if reciter.deliveries_count > 0}
-        <button
-            type="button"
-            class="delivery-chip"
-            on:click={onDeliveryChip}
-            aria-expanded={mode === 'expanded'}
-        >deliveries: {reciter.deliveries_count}</button>
-    {/if}
-
-    {#if reciter.chapter_count_total > 0}
-        <CoveragePill
-            chapterCount={reciter.chapter_count_total}
-            total={114 * Math.max(reciter.deliveries_count, 1)}
-        />
-    {/if}
-
-    {#if reciter.riwayat.length > 0}
-        <span class="meta">{reciter.riwayat.join(' · ')}</span>
-    {/if}
-
-    {#if reciter.country}
-        <span class="meta dim">{reciter.country}</span>
-    {/if}
-</div>
-
-{#if mode === 'expanded' && reciter.deliveries_count > 0}
-    <div class="deliveries-pane">
-        <DeliveriesTable
-            deliveries={reciter.deliveries}
-            variant="inline"
-            on:play={onDeliveryPlay}
-        />
+    <div class="left">
+        <div class="name-line">
+            <span class="name">{reciter.name}</span>
+            {#if reciter.name_ar}
+                <span class="name-ar" dir="rtl">{reciter.name_ar}</span>
+            {/if}
+            {#if reciter.country}
+                <span class="country">{countryName(reciter.country)}</span>
+            {/if}
+        </div>
+        {#if stateCounts.length > 0}
+            <div class="states">
+                {#each stateCounts as sc (sc.bucket)}
+                    <span class="state-item">
+                        <StatePill state={sc.bucket} size="sm" />
+                        {#if sc.n > 1}
+                            <span class="state-n">·{sc.n}</span>
+                        {/if}
+                    </span>
+                {/each}
+            </div>
+        {/if}
     </div>
-{/if}
+
+    <div class="right">
+        {#if combinationCount > 0}
+            <span class="pill">
+                <span class="pill-n">{combinationCount}</span>
+                {combinationCount === 1 ? 'combination' : 'combinations'}
+            </span>
+            <span class="pill">
+                <span class="pill-n">{riwayahCount}</span>
+                {riwayahCount === 1 ? 'riwayah' : 'riwayahs'}
+            </span>
+            <span class="pill">
+                <span class="pill-n">{styleCount}</span>
+                {styleCount === 1 ? 'style' : 'styles'}
+            </span>
+        {/if}
+    </div>
+</div>
 
 <style>
     .row {
         display: grid;
-        grid-template-columns: 36px minmax(180px, 2fr) auto auto auto auto auto;
+        grid-template-columns: 36px minmax(0, 1fr) auto;
         align-items: center;
         gap: var(--s-3);
         padding: var(--s-3) var(--s-2);
@@ -116,8 +134,7 @@
         transition: background var(--t-fast);
         cursor: pointer;
     }
-    .row:hover,
-    .row.expanded { background: var(--panel); }
+    .row:hover { background: var(--panel); }
     .row:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: -2px;
@@ -134,54 +151,82 @@
         transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
     }
     .play-spacer { border: none; }
-    .play:hover {
+    .play:hover:not(:disabled) {
         color: var(--accent);
         border-color: var(--accent);
         background: var(--accent-tint-soft);
     }
+    .play:disabled { opacity: 0.3; cursor: default; }
 
+    .left {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .name-line {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-3);
+        min-width: 0;
+        flex-wrap: wrap;
+    }
     .name {
         font-size: var(--fs-row);
         color: var(--text-primary);
         font-weight: 450;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
     }
-
-    .meta {
+    .name-ar {
         font-size: var(--fs-meta);
-        color: var(--text-muted);
-        white-space: nowrap;
+        color: var(--text-secondary);
+        font-family: var(--font-arabic, inherit);
     }
-    .meta.dim { color: var(--text-faint); }
-
-    .delivery-chip {
+    .country {
+        font-size: var(--fs-meta);
+        color: var(--text-faint);
+    }
+    .states {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-2);
+    }
+    .state-item {
         display: inline-flex;
         align-items: center;
-        padding: 1px 6px;
+        gap: 2px;
+    }
+    .state-n {
         font-size: 10.5px;
-        color: var(--text-secondary);
+        color: var(--text-faint);
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .right {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
         background: var(--panel-2);
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
+        white-space: nowrap;
+    }
+    .pill-n {
+        font-family: var(--font-mono);
         font-variant-numeric: tabular-nums;
-        cursor: pointer;
-        transition: color var(--t-fast), border-color var(--t-fast);
-    }
-    .delivery-chip:hover {
         color: var(--text-primary);
-        border-color: var(--border-strong);
     }
-    .row.expanded .delivery-chip {
-        color: var(--accent);
-        border-color: var(--accent);
-    }
-
-    .deliveries-pane {
-        padding: var(--s-2) var(--s-2) var(--s-3) calc(36px + var(--s-3));
-        background: var(--canvas-inset);
-        border-bottom: 1px solid var(--border-quiet);
+    @media (max-width: 720px) {
+        .pill { font-size: 10.5px; padding: 1px 6px; }
     }
 </style>

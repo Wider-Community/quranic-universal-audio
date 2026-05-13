@@ -1,23 +1,29 @@
 <script lang="ts">
     /**
-     * Dashboard detail view — per-reciter page.
+     * Reciter detail modal.
      *
-     * Fetches /api/public/reciter/<id> on mount and re-fetches whenever
-     * the active detail reciterId changes. 404 renders a "not found"
-     * state with a back link; failed requests show a retry-able error.
+     * Opened from the dashboard catalog. Lists the reciter's combinations
+     * in a flat table; columns where every value is null are omitted.
      *
-     * Back navigation returns to the list view via dashboard-state;
-     * filter state is preserved because both views remain mounted.
+     * No reciter-level aggregate totals (hours, coverage) — those are
+     * properties of combinations and are shown per row.
      */
     import { onDestroy } from 'svelte';
 
     import { fetchPublicReciter } from '../../../lib/api/public-reciter-detail';
-    import DeliveriesTable from '../../../lib/components/DeliveriesTable.svelte';
-    import type { PublicReciter } from '../../../lib/types/public-state';
-    import DetailHeader from '../components/DetailHeader.svelte';
-    import FactsList from '../components/FactsList.svelte';
-    import Timeline from '../components/Timeline.svelte';
-    import { backToList, dashboardState } from '../stores/dashboard-state';
+    import Modal from '../../../lib/components/Modal.svelte';
+    import StatePill from '../../../lib/components/StatePill.svelte';
+    import { playerContext } from '../../../lib/stores/player-context';
+    import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+    import {
+        bitrateLabel,
+        categoryLabel,
+        countryName,
+        coverageLabel,
+        titleCaseSlug,
+        totalHoursLabel,
+    } from '../../../lib/utils/delivery-label';
+    import { closeDetail, dashboardState } from '../stores/dashboard-state';
 
     let reciter: PublicReciter | null = null;
     let loading = false;
@@ -26,12 +32,16 @@
     let inflight: AbortController | null = null;
     let lastFetched: string | null = null;
 
-    $: void maybeReload($dashboardState.view.kind === 'detail'
-        ? $dashboardState.view.reciterId
-        : null);
+    $: detailId = $dashboardState.view.kind === 'detail' ? $dashboardState.view.reciterId : null;
+    $: void maybeReload(detailId);
 
     async function maybeReload(id: string | null): Promise<void> {
-        if (id === null || id === lastFetched) return;
+        if (id === null) {
+            reciter = null;
+            lastFetched = null;
+            return;
+        }
+        if (id === lastFetched) return;
         lastFetched = id;
         inflight?.abort();
         inflight = new AbortController();
@@ -53,88 +63,118 @@
 
     onDestroy(() => inflight?.abort());
 
-    $: facts = reciter ? [
-        { key: 'Country', value: reciter.country },
-        { key: 'Riwayah', value: reciter.riwayat.join(' · ') || null },
-        { key: 'Style', value: reciter.styles.join(' · ') || null },
-        { key: 'Source', value: reciter.sources.join(' · ') || null },
-        { key: 'Channel', value: reciter.channels.join(' · ') || null },
-        {
-            key: 'Recording',
-            value: reciter.recording_contexts.filter(Boolean).join(' · ') || null,
-        },
-        {
-            key: 'Coverage',
-            value: reciter.coverage_kind === 'full'
-                ? 'Full mushaf'
-                : reciter.coverage_kind === 'partial' ? 'Partial' : 'Mixed',
-        },
-    ] : [];
+    interface ColSpec {
+        key: 'riwayah' | 'style' | 'context' | 'year' | 'category' | 'coverage' | 'channel' | 'bitrate' | 'hours';
+        label: string;
+        present: (d: PublicDelivery) => boolean;
+        value: (d: PublicDelivery) => string;
+    }
+
+    const ALL_COLS: ColSpec[] = [
+        { key: 'riwayah', label: 'Riwayah', present: (d) => !!d.riwayah, value: (d) => titleCaseSlug(d.riwayah) },
+        { key: 'style',   label: 'Style',   present: (d) => !!d.style,   value: (d) => titleCaseSlug(d.style) },
+        { key: 'context', label: 'Context', present: (d) => !!d.recording_context, value: (d) => titleCaseSlug(d.recording_context!) },
+        { key: 'year',    label: 'Year',    present: (d) => d.recording_year != null, value: (d) => String(d.recording_year ?? '') },
+        { key: 'category', label: 'Category', present: (d) => !!d.audio_category, value: (d) => categoryLabel(d) },
+        { key: 'coverage', label: 'Coverage', present: (d) => d.chapter_count > 0, value: (d) => coverageLabel(d) },
+        { key: 'channel', label: 'Channel', present: (d) => !!d.channel, value: (d) => titleCaseSlug(d.channel) },
+        { key: 'bitrate', label: 'Bitrate', present: (d) => d.bitrate_kbps_nominal != null || !!d.bitrate_mode, value: (d) => bitrateLabel(d) },
+        { key: 'hours',   label: 'Total hours', present: (d) => d.total_duration_sec != null, value: (d) => totalHoursLabel(d) },
+    ];
+
+    $: visibleCols = reciter
+        ? ALL_COLS.filter((c) => reciter!.deliveries.some(c.present))
+        : [];
+
+    function playDelivery(d: PublicDelivery): void {
+        if (!reciter) return;
+        playerContext.update((s) => ({
+            ...s,
+            reciter,
+            delivery: d,
+            surahNum: s.surahNum ?? 1,
+            positionMs: 0,
+            isPlaying: true,
+        }));
+    }
+
+    $: open = detailId !== null;
 </script>
 
-<div class="detail">
-    <button class="back" on:click={backToList}>← Back to catalog</button>
-
-    {#if loading}
-        <div class="state">Loading…</div>
-    {:else if notFound}
-        <div class="state">
-            <p>Reciter not found.</p>
-            <button class="link" on:click={backToList}>Return to catalog</button>
-        </div>
-    {:else if error}
-        <div class="state error">
-            <p>{error}</p>
-            <button class="link" on:click={() => { lastFetched = null; void maybeReload(($dashboardState.view.kind === 'detail') ? $dashboardState.view.reciterId : null); }}>Retry</button>
-        </div>
-    {:else if reciter}
-        <DetailHeader reciter={reciter} />
-
-        <div class="grid">
-            <main>
-                {#if reciter.deliveries_count > 0}
-                    <section class="section">
-                        <div class="section-head">
-                            <h2>Deliveries</h2>
-                            <span class="count">{reciter.deliveries_count}</span>
-                        </div>
-                        <DeliveriesTable
-                            deliveries={reciter.deliveries}
-                            variant="detail"
-                        />
-                    </section>
+<Modal {open} title={null} on:close={closeDetail}>
+    <div class="detail" role="region" aria-label="Reciter detail">
+        {#if loading}
+            <div class="state">Loading…</div>
+        {:else if notFound}
+            <div class="state">
+                <p>Reciter not found.</p>
+            </div>
+        {:else if error}
+            <div class="state error">
+                <p>{error}</p>
+                <button class="link" on:click={() => { lastFetched = null; void maybeReload(detailId); }}>Retry</button>
+            </div>
+        {:else if reciter}
+            <header class="head">
+                <div class="names">
+                    <h2 class="name-en">{reciter.name}</h2>
+                    {#if reciter.name_ar}
+                        <span class="name-ar" dir="rtl">{reciter.name_ar}</span>
+                    {/if}
+                </div>
+                {#if reciter.country}
+                    <div class="country">{countryName(reciter.country)}</div>
                 {/if}
+            </header>
 
-                <section class="section">
-                    <div class="section-head">
-                        <h2>Progress</h2>
-                    </div>
-                    <Timeline reciter={reciter} />
-                </section>
-            </main>
-
-            <aside class="side">
-                <FactsList facts={facts} />
-            </aside>
-        </div>
-    {/if}
-</div>
+            {#if reciter.deliveries.length === 0}
+                <div class="state">No combinations available.</div>
+            {:else}
+                <div class="table-wrap">
+                    <table class="combinations">
+                        <thead>
+                            <tr>
+                                <th class="col-play" aria-label="Play"></th>
+                                {#each visibleCols as col (col.key)}
+                                    <th>{col.label}</th>
+                                {/each}
+                                <th class="col-state">State</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {#each reciter.deliveries as d (d.slug)}
+                                <tr>
+                                    <td class="col-play">
+                                        <button
+                                            type="button"
+                                            class="play"
+                                            aria-label="Play this combination"
+                                            on:click={() => playDelivery(d)}
+                                        >▶</button>
+                                    </td>
+                                    {#each visibleCols as col (col.key)}
+                                        <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
+                                    {/each}
+                                    <td class="col-state">
+                                        <StatePill state={d.bucket} size="sm" />
+                                    </td>
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
+                </div>
+            {/if}
+        {/if}
+    </div>
+</Modal>
 
 <style>
     .detail {
-        padding: 0 var(--gutter) var(--s-12);
+        padding: var(--s-4) var(--s-6) var(--s-6);
+        max-width: 1100px;
+        width: min(96vw, 1100px);
+        min-height: 240px;
     }
-    .back {
-        background: transparent;
-        border: 0;
-        color: var(--text-muted);
-        font-size: var(--fs-meta);
-        padding: var(--s-3) 0;
-        cursor: pointer;
-        transition: color var(--t-fast);
-    }
-    .back:hover { color: var(--text-primary); }
-
     .state {
         padding: var(--s-12) 0;
         text-align: center;
@@ -152,47 +192,84 @@
         text-underline-offset: 3px;
         margin-top: var(--s-2);
     }
-    .link:hover { color: var(--accent-strong); }
 
-    .grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 320px;
-        gap: var(--s-12);
-    }
-    @media (max-width: 1020px) {
-        .grid { grid-template-columns: 1fr; gap: var(--s-8); }
-    }
-
-    .section {
-        margin-bottom: var(--s-12);
-    }
-    .section-head {
+    .head {
         display: flex;
         align-items: baseline;
-        gap: var(--s-2);
-        margin-bottom: var(--s-4);
-        padding-bottom: var(--s-3);
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--s-3);
+        padding-bottom: var(--s-4);
         border-bottom: 1px solid var(--border-quiet);
+        margin-bottom: var(--s-5);
     }
-    .section-head h2 {
+    .names {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-3);
+        flex-wrap: wrap;
+    }
+    .name-en {
         font-size: var(--fs-h3);
         font-weight: 500;
         color: var(--text-primary);
-        letter-spacing: 0.01em;
         margin: 0;
     }
-    .section-head .count {
-        color: var(--text-muted);
+    .name-ar {
+        font-size: var(--fs-body);
+        color: var(--text-secondary);
+        font-family: var(--font-arabic, inherit);
+    }
+    .country {
         font-size: var(--fs-meta);
-        font-variant-numeric: tabular-nums;
+        color: var(--text-muted);
     }
 
-    .side {
-        position: sticky;
-        top: var(--s-6);
-        align-self: start;
+    .table-wrap { overflow-x: auto; }
+    .combinations {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--fs-meta);
     }
-    @media (max-width: 1020px) {
-        .side { position: static; }
+    .combinations thead th {
+        text-align: left;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 10.5px;
+        padding: var(--s-2) var(--s-3);
+        border-bottom: 1px solid var(--border-quiet);
+        white-space: nowrap;
+    }
+    .combinations tbody td {
+        padding: var(--s-3);
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-quiet);
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .combinations tbody tr:hover td { background: var(--panel); }
+    .col-play { width: 36px; }
+    .col-state { text-align: right; }
+    .cell-coverage,
+    .cell-bitrate,
+    .cell-hours,
+    .cell-year { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+    .play {
+        width: 26px; height: 26px;
+        border-radius: 50%;
+        border: 1px solid var(--border-default);
+        background: transparent;
+        color: var(--text-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer;
+        transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+    }
+    .play:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: var(--accent-tint-soft);
     }
 </style>

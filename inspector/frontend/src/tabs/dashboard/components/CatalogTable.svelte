@@ -1,50 +1,42 @@
+<script context="module" lang="ts">
+    import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+
+    export interface RowEntry {
+        reciter: PublicReciter;
+        visibleDeliveries: PublicDelivery[];
+    }
+</script>
+
 <script lang="ts">
     /**
-     * Dashboard catalog table — Smithsonian-density list of reciters.
-     *
-     * Renders the visible-after-filter slice; row click navigates to
-     * the per-reciter detail view (Slice G). Inline delivery expansion
-     * is wired but the BottomPlayer hook lands in Slice I.
+     * Catalog list. Renders one row per reciter that has at least one
+     * combination passing the active filters. Counts on each row reflect
+     * the post-filter combinations for that reciter.
      */
     import { createEventDispatcher } from 'svelte';
 
     import ReciterRow from '../../../lib/components/ReciterRow.svelte';
-    import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
 
-    export let reciters: PublicReciter[];
-
-    let expandedKey: string | null = null;
+    export let rows: RowEntry[];
 
     const dispatch = createEventDispatcher<{
         open: PublicReciter;
         play: PublicReciter;
-        playDelivery: { reciter: PublicReciter; delivery: PublicDelivery };
     }>();
-
-    function rowKey(r: PublicReciter): string {
-        return r.name + (r.deliveries[0]?.slug ?? '');
-    }
-
-    function toggleExpand(r: PublicReciter): void {
-        const k = rowKey(r);
-        expandedKey = expandedKey === k ? null : k;
-    }
 </script>
 
-{#if reciters.length === 0}
+{#if rows.length === 0}
     <div class="empty">
         <p>No reciters match the current filters.</p>
     </div>
 {:else}
     <div class="catalog">
-        {#each reciters as r (rowKey(r))}
+        {#each rows as row (row.reciter.reciter_id)}
             <ReciterRow
-                reciter={r}
-                mode={expandedKey === rowKey(r) ? 'expanded' : 'compact'}
-                on:click={() => dispatch('open', r)}
-                on:play={() => dispatch('play', r)}
-                on:toggleDeliveries={() => toggleExpand(r)}
-                on:playDelivery={(ev) => dispatch('playDelivery', { reciter: r, delivery: ev.detail })}
+                reciter={row.reciter}
+                visibleDeliveries={row.visibleDeliveries}
+                on:click={() => dispatch('open', row.reciter)}
+                on:play={() => dispatch('play', row.reciter)}
             />
         {/each}
     </div>

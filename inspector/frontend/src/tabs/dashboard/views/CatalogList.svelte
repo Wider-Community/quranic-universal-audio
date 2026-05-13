@@ -1,34 +1,32 @@
 <script lang="ts">
     /**
-     * Dashboard list-view orchestrator.
-     * Standfirst → [FilterRail | catalog body] grid.
-     *
-     * Activity rail (Slice H) mounts later; for now the right column is
-     * a placeholder that keeps the grid spaced correctly.
+     * Dashboard list view. Filters operate on combinations (deliveries),
+     * then visible combinations are grouped back by reciter for display.
      */
     import { onMount } from 'svelte';
 
     import {
+        type Axis,
         buildSchemaDescriptor,
         type SchemaDescriptor,
     } from '../../../lib/catalog/schema-descriptor';
-    import FilterPill from '../../../lib/components/FilterPill.svelte';
     import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
-    import StatePill from '../../../lib/components/StatePill.svelte';
     import { playerContext } from '../../../lib/stores/player-context';
-    import type { PublicBucket, PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+    import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+    import { defaultCombination } from '../../../lib/utils/default-combination';
+    import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
     import { match } from '../../../lib/utils/fuzzy-match';
+    import type { RowEntry } from '../components/CatalogTable.svelte';
     import ActivityRail from '../components/ActivityRail.svelte';
-    import AvailableToClaimStrip from '../components/AvailableToClaimStrip.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
     import Standfirst from '../components/Standfirst.svelte';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
     import {
         clearAllFilters,
+        type DashboardSort,
         dashboardState,
         openDetail,
-        setBucket,
         setSearch,
         setSort,
         toggleFacet,
@@ -39,45 +37,60 @@
     });
 
     let descriptor: SchemaDescriptor | null = null;
-    $: if ($catalogData.reciters.length > 0) {
-        descriptor = buildSchemaDescriptor($catalogData.reciters);
+    $: allDeliveries = $catalogData.reciters.flatMap((r) => r.deliveries);
+    $: if (allDeliveries.length > 0 && descriptor === null) {
+        descriptor = buildSchemaDescriptor(allDeliveries);
     }
 
-    // bucket scope first, then facets, then search
-    $: bucketScoped = $dashboardState.activeBucket
-        ? $catalogData.reciters.filter((r) => r.primary_bucket === $dashboardState.activeBucket)
-        : $catalogData.reciters;
-
-    $: facetSpecs = (descriptor?.axes ?? []).map<FacetSpec<PublicReciter>>((a) => ({
-        key: a.key,
-        tagsOf: a.tagsOf,
+    $: facetSpecs = (descriptor?.axes ?? []).map<FacetSpec<PublicDelivery>>((axis: Axis) => ({
+        key: axis.key,
+        tagsOf: axis.tagsOf,
     }));
 
-    $: facetResult = recomputeFacets(bucketScoped, $dashboardState.activeFilters, facetSpecs);
+    $: facetResult = recomputeFacets(allDeliveries, $dashboardState.activeFilters, facetSpecs);
 
-    $: facetVisible = bucketScoped.filter((_, i) => facetResult.rowVisibility[i]);
+    $: visibleDeliveries = allDeliveries.filter((_, i) => facetResult.rowVisibility[i]);
+
+    // Group visible combinations back under their reciter.
+    $: rowEntries = groupByReciter($catalogData.reciters, visibleDeliveries);
 
     $: searched = $dashboardState.search
-        ? facetVisible.filter((r) => match(r.name, $dashboardState.search))
-        : facetVisible;
+        ? rowEntries.filter((e) => match(e.reciter.name, $dashboardState.search)
+            || (e.reciter.name_ar && match(e.reciter.name_ar, $dashboardState.search)))
+        : rowEntries;
 
-    $: sorted = sortReciters(searched, $dashboardState.sort);
+    $: sorted = sortRows(searched, $dashboardState.sort);
 
-    $: availableToClaim = $catalogData.reciters.filter(
-        (r) => r.primary_bucket === 'available_for_review',
-    );
+    // Standfirst totals from the full catalog (not filtered).
+    $: totalReciters = $catalogData.reciters.length;
+    $: totalCombinations = allDeliveries.length;
+    $: totalChannels = new Set(allDeliveries.map((d) => d.channel)).size;
 
-    function sortReciters(rs: PublicReciter[], sort: typeof $dashboardState.sort): PublicReciter[] {
+    function groupByReciter(
+        reciters: PublicReciter[],
+        visible: PublicDelivery[],
+    ): RowEntry[] {
+        const bySlug = new Set(visible.map((d) => d.slug));
+        const out: RowEntry[] = [];
+        for (const r of reciters) {
+            const vis = r.deliveries.filter((d) => bySlug.has(d.slug));
+            if (vis.length === 0) continue;
+            out.push({ reciter: r, visibleDeliveries: vis });
+        }
+        return out;
+    }
+
+    function sortRows(rs: RowEntry[], sort: DashboardSort): RowEntry[] {
         const copy = [...rs];
         if (sort === 'alphabetical') {
-            copy.sort((a, b) => a.name.localeCompare(b.name));
-        } else if (sort === 'deliveries') {
-            copy.sort((a, b) => b.deliveries_count - a.deliveries_count);
+            copy.sort((a, b) => a.reciter.name.localeCompare(b.reciter.name));
+        } else if (sort === 'combinations') {
+            copy.sort((a, b) => b.visibleDeliveries.length - a.visibleDeliveries.length);
         } else {
             copy.sort((a, b) => {
-                const ax = a.last_activity ?? '';
-                const bx = b.last_activity ?? '';
-                if (ax === bx) return a.name.localeCompare(b.name);
+                const ax = a.reciter.last_activity ?? '';
+                const bx = b.reciter.last_activity ?? '';
+                if (ax === bx) return a.reciter.name.localeCompare(b.reciter.name);
                 return ax < bx ? 1 : -1;
             });
         }
@@ -92,16 +105,20 @@
     }
 
     $: hasFilters =
-        $dashboardState.activeBucket !== null
-        || $dashboardState.search.length > 0
+        $dashboardState.search.length > 0
         || hasActiveFacets();
 
     function onSearchInput(ev: Event): void {
         setSearch((ev.target as HTMLInputElement).value);
     }
 
+    function onSortChange(ev: Event): void {
+        const value = (ev.target as HTMLSelectElement).value;
+        setSort(value as DashboardSort);
+    }
+
     function onPlay(reciter: PublicReciter): void {
-        const delivery = reciter.deliveries[0];
+        const delivery = defaultCombination(reciter.deliveries);
         if (!delivery) return;
         playerContext.update((s) => ({
             ...s,
@@ -113,19 +130,49 @@
         }));
     }
 
-    function onPlayDelivery(detail: { reciter: PublicReciter; delivery: PublicDelivery }): void {
-        playerContext.update((s) => ({
-            ...s,
-            reciter: detail.reciter,
-            delivery: detail.delivery,
-            surahNum: s.surahNum ?? 1,
-            positionMs: 0,
-            isPlaying: true,
-        }));
+    function tagLabel(axisKey: string, tag: string): string {
+        if (!descriptor) return tag;
+        const axis = descriptor.axes.find((a) => a.key === axisKey);
+        const option = axis?.options.find((o) => o.key === tag);
+        return option?.label ?? titleCaseSlug(tag);
+    }
+
+    function axisLabel(axisKey: string): string {
+        if (!descriptor) return axisKey;
+        return descriptor.axes.find((a) => a.key === axisKey)?.label ?? axisKey;
     }
 </script>
 
-<Standfirst stats={$catalogData.stats} on:select={(e) => setBucket(e.detail)} />
+<Standfirst
+    reciterCount={totalReciters}
+    combinationCount={totalCombinations}
+    channelCount={totalChannels}
+/>
+
+<div class="toolbar">
+    <div class="search">
+        <input
+            type="search"
+            placeholder="Search reciters"
+            value={$dashboardState.search}
+            on:input={onSearchInput}
+        />
+        <span class="search-count">{sorted.length} of {totalReciters}</span>
+    </div>
+    <div class="sort">
+        <label>
+            <span class="sort-label">Sort</span>
+            <select
+                value={$dashboardState.sort}
+                on:change={onSortChange}
+            >
+                <option value="recent">Recently updated</option>
+                <option value="alphabetical">A → Z</option>
+                <option value="combinations">Most combinations</option>
+            </select>
+        </label>
+    </div>
+</div>
 
 <div class="grid">
     <aside class="rail">
@@ -137,27 +184,6 @@
                 on:toggle={(e) => toggleFacet(e.detail.axis, e.detail.tag)}
             />
         {/if}
-        <div class="sort-row">
-            <span class="label">Sort</span>
-            <FilterPill
-                label="Recent"
-                active={$dashboardState.sort === 'recent'}
-                sort
-                on:click={() => setSort('recent')}
-            />
-            <FilterPill
-                label="A–Z"
-                active={$dashboardState.sort === 'alphabetical'}
-                sort
-                on:click={() => setSort('alphabetical')}
-            />
-            <FilterPill
-                label="Deliveries"
-                active={$dashboardState.sort === 'deliveries'}
-                sort
-                on:click={() => setSort('deliveries')}
-            />
-        </div>
     </aside>
 
     <section class="body">
@@ -168,16 +194,11 @@
         {:else}
             <div class="chips-bar" class:empty={!hasFilters}>
                 <span class="chips-label">Filters</span>
-                {#if $dashboardState.activeBucket}
-                    <span class="chip">
-                        <StatePill state={$dashboardState.activeBucket} size="sm" />
-                        <button class="chip-close" aria-label="Clear bucket" on:click={() => setBucket(null)}>×</button>
-                    </span>
-                {/if}
                 {#each Object.entries($dashboardState.activeFilters) as [axisKey, tags]}
                     {#each [...tags] as tag (axisKey + ':' + tag)}
                         <span class="chip">
-                            {tag}
+                            <span class="chip-axis">{axisLabel(axisKey)}:</span>
+                            {tagLabel(axisKey, tag)}
                             <button class="chip-close" aria-label="Clear filter" on:click={() => toggleFacet(axisKey, tag)}>×</button>
                         </span>
                     {/each}
@@ -193,27 +214,10 @@
                 {/if}
             </div>
 
-            <div class="search">
-                <input
-                    type="search"
-                    placeholder="Search reciters"
-                    value={$dashboardState.search}
-                    on:input={onSearchInput}
-                />
-                <span class="search-count">{sorted.length} of {$catalogData.reciters.length}</span>
-            </div>
-
-            <AvailableToClaimStrip
-                reciters={availableToClaim}
-                on:open={(e) => openDetail(e.detail.reciter_id)}
-                on:play={(e) => onPlay(e.detail)}
-            />
-
             <CatalogTable
-                reciters={sorted}
+                rows={sorted}
                 on:open={(e) => openDetail(e.detail.reciter_id)}
                 on:play={(e) => onPlay(e.detail)}
-                on:playDelivery={(e) => onPlayDelivery(e.detail)}
             />
         {/if}
     </section>
@@ -222,6 +226,51 @@
 </div>
 
 <style>
+    .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--s-4);
+        padding: 0 var(--gutter) var(--s-3);
+        flex-wrap: wrap;
+    }
+    .search { display: flex; align-items: center; gap: var(--s-3); flex: 1; min-width: 240px; }
+    .search input {
+        flex: 1;
+        max-width: 420px;
+        padding: var(--s-2) var(--s-3);
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        color: var(--text-primary);
+        font-size: var(--fs-body);
+        outline: none;
+    }
+    .search input:focus { border-color: var(--accent); }
+    .search-count {
+        font-size: 10.5px;
+        font-family: var(--font-mono);
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
+    }
+    .sort label { display: inline-flex; align-items: center; gap: var(--s-2); }
+    .sort-label {
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .sort select {
+        padding: var(--s-2) var(--s-2);
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        color: var(--text-primary);
+        font-size: var(--fs-meta);
+        cursor: pointer;
+    }
+    .sort select:focus { border-color: var(--accent); outline: none; }
+
     .grid {
         display: grid;
         grid-template-columns: 240px minmax(0, 1fr) 320px;
@@ -239,20 +288,7 @@
         display: flex;
         flex-direction: column;
         gap: var(--s-5);
-        padding-top: var(--s-5);
-    }
-    .sort-row {
-        display: flex;
-        align-items: center;
-        gap: var(--s-2);
-        flex-wrap: wrap;
-        padding-top: var(--s-2);
-    }
-    .sort-row .label {
-        font-size: var(--fs-meta);
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
+        padding-top: var(--s-3);
     }
     .body { min-width: 0; }
     .state {
@@ -262,6 +298,7 @@
         font-size: var(--fs-meta);
     }
     .state.error { color: var(--state-publishing-fg); }
+
     .chips-bar {
         display: flex;
         flex-wrap: wrap;
@@ -291,6 +328,10 @@
         color: var(--text-primary);
         font-size: var(--fs-meta);
     }
+    .chip-axis {
+        color: var(--text-muted);
+        text-transform: lowercase;
+    }
     .chip-close {
         background: transparent;
         border: 0;
@@ -314,30 +355,4 @@
         cursor: pointer;
     }
     .clear:hover { color: var(--text-primary); }
-    .search {
-        display: flex;
-        align-items: center;
-        gap: var(--s-3);
-        padding: var(--s-3) 0;
-    }
-    .search input {
-        flex: 1;
-        max-width: 380px;
-        padding: var(--s-2) var(--s-3);
-        background: var(--panel);
-        border: 1px solid var(--border-quiet);
-        border-radius: var(--r-2);
-        color: var(--text-primary);
-        font-size: var(--fs-body);
-        outline: none;
-    }
-    .search input:focus {
-        border-color: var(--accent);
-    }
-    .search-count {
-        font-size: 10.5px;
-        font-family: var(--font-mono);
-        color: var(--text-faint);
-        font-variant-numeric: tabular-nums;
-    }
 </style>

@@ -1,34 +1,35 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PublicReciter } from '../../types/public-state';
+import type { PublicDelivery } from '../../types/public-state';
 import { buildSchemaDescriptor } from '../schema-descriptor';
 
-function reciter(overrides: Partial<PublicReciter> = {}): PublicReciter {
+function delivery(overrides: Partial<PublicDelivery> = {}): PublicDelivery {
     return {
-        reciter_id: 'test',
-        name: 'Test',
-        country: null,
-        primary_bucket: 'published',
-        buckets: ['published'],
-        deliveries: [],
-        riwayat: ['hafs'],
-        styles: ['murattal'],
-        recording_contexts: [],
-        sources: ['mp3quran'],
-        channels: ['mp3quran'],
-        deliveries_count: 1,
-        chapter_count_total: 114,
+        slug: 'test_slug',
+        riwayah: 'hafs',
+        style: 'murattal',
+        recording_context: null,
+        recording_year: null,
+        source: 'mp3quran',
+        channel: 'mp3quran',
+        audio_category: 'by_surah',
+        chapter_count: 114,
         coverage_kind: 'full',
-        last_activity: null,
+        state_since: null,
+        bitrate_kbps_nominal: 128,
+        bitrate_mode: 'cbr',
+        total_duration_sec: null,
+        bucket: 'published',
         ...overrides,
     };
 }
 
 describe('buildSchemaDescriptor', () => {
-    it('derives axes from the observed reciter set', () => {
+    it('orders non-status axes by overall combination count desc', () => {
         const d = buildSchemaDescriptor([
-            reciter({ riwayat: ['hafs'], styles: ['murattal'] }),
-            reciter({ riwayat: ['warsh'], styles: ['mujawwad'] }),
+            delivery({ riwayah: 'hafs', style: 'murattal' }),
+            delivery({ riwayah: 'hafs', style: 'mujawwad' }),
+            delivery({ riwayah: 'warsh', style: 'mujawwad' }),
         ]);
         const riwayah = d.axes.find((a) => a.key === 'riwayah')!;
         expect(riwayah.options.map((o) => o.key)).toEqual(['hafs', 'warsh']);
@@ -36,27 +37,55 @@ describe('buildSchemaDescriptor', () => {
         expect(style.options.map((o) => o.key)).toEqual(['mujawwad', 'murattal']);
     });
 
-    it('always includes the coverage axis with full/partial/mixed', () => {
-        const d = buildSchemaDescriptor([reciter()]);
-        const coverage = d.axes.find((a) => a.key === 'coverage')!;
-        expect(coverage.options.map((o) => o.key)).toEqual(['full', 'partial', 'mixed']);
+    it('always includes a status axis in the fixed lifecycle order', () => {
+        const d = buildSchemaDescriptor([delivery()]);
+        const status = d.axes.find((a) => a.key === 'status')!;
+        expect(status.options.map((o) => o.key)).toEqual([
+            'available_for_review',
+            'under_review',
+            'publishing',
+            'published',
+            'requested',
+            'available_for_request',
+        ]);
     });
 
-    it('omits the recording_context axis when no reciter has one', () => {
-        const d = buildSchemaDescriptor([reciter({ recording_contexts: [] })]);
+    it('includes a coverage axis with full/partial only', () => {
+        const d = buildSchemaDescriptor([delivery()]);
+        const coverage = d.axes.find((a) => a.key === 'coverage')!;
+        expect(coverage.options.map((o) => o.key)).toEqual(['full', 'partial']);
+    });
+
+    it('omits the recording_context axis when no combination has one', () => {
+        const d = buildSchemaDescriptor([delivery({ recording_context: null })]);
         expect(d.axes.find((a) => a.key === 'recording_context')).toBeUndefined();
     });
 
-    it('includes the recording_context axis when at least one reciter has one', () => {
-        const d = buildSchemaDescriptor([reciter({ recording_contexts: ['studio'] })]);
+    it('includes the recording_context axis when at least one combination has one', () => {
+        const d = buildSchemaDescriptor([delivery({ recording_context: 'studio' })]);
         const ax = d.axes.find((a) => a.key === 'recording_context')!;
         expect(ax.options.map((o) => o.key)).toEqual(['studio']);
     });
 
-    it('tagsOf returns the right tags for facet computation', () => {
-        const d = buildSchemaDescriptor([reciter({ sources: ['a', 'b'] })]);
-        const source = d.axes.find((a) => a.key === 'source')!;
-        const r = reciter({ sources: ['a', 'b'] });
-        expect(Array.from(source.tagsOf(r))).toEqual(['a', 'b']);
+    it('drops the source axis (use channel instead)', () => {
+        const d = buildSchemaDescriptor([delivery()]);
+        expect(d.axes.find((a) => a.key === 'source')).toBeUndefined();
+    });
+
+    it('exposes a channel axis sorted by combination count desc', () => {
+        const d = buildSchemaDescriptor([
+            delivery({ channel: 'mp3quran' }),
+            delivery({ channel: 'mp3quran' }),
+            delivery({ channel: 'quranicaudio' }),
+        ]);
+        const ax = d.axes.find((a) => a.key === 'channel')!;
+        expect(ax.options.map((o) => o.key)).toEqual(['mp3quran', 'quranicaudio']);
+    });
+
+    it('tagsOf returns the right tag for facet computation', () => {
+        const d = buildSchemaDescriptor([delivery({ channel: 'tarteel' })]);
+        const channel = d.axes.find((a) => a.key === 'channel')!;
+        const row = delivery({ channel: 'tarteel' });
+        expect(Array.from(channel.tagsOf(row))).toEqual(['tarteel']);
     });
 });
