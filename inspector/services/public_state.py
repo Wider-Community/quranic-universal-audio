@@ -79,12 +79,14 @@ class PublicDelivery(TypedDict, total=False):
     chapter_count: int
     coverage_kind: Literal["full", "partial"]
     bitrate_kbps_nominal: int | None
+    bitrate_mode: str
     total_duration_sec: int | None
 
 
 class PublicReciter(TypedDict, total=False):
     reciter_id: str              # ID only.
-    name: str                    # display
+    name: str                    # display (en)
+    name_ar: str | None
     country: str | None
     primary_bucket: PublicBucket
     buckets: list[PublicBucket]  # union across deliveries
@@ -152,6 +154,7 @@ def _to_public_delivery(d: Delivery, row: ReciterRow | None) -> PublicDelivery:
         chapter_count=d.chapter_count,
         coverage_kind=_delivery_coverage(d),
         bitrate_kbps_nominal=d.bitrate_kbps_nominal,
+        bitrate_mode=d.bitrate_mode.value if hasattr(d.bitrate_mode, "value") else str(d.bitrate_mode),
         total_duration_sec=d.total_duration_sec,
     )
 
@@ -217,6 +220,7 @@ def to_public_reciter(
     return PublicReciter(
         reciter_id=reciter.reciter_id,
         name=reciter.name_en,
+        name_ar=reciter.name_ar,
         country=reciter.country,
         primary_bucket=_primary_bucket(buckets),
         buckets=buckets,

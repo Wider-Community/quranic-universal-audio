@@ -40,6 +40,7 @@ export interface PublicDelivery {
     coverage_kind: 'full' | 'partial';
     state_since: string | null;
     bitrate_kbps_nominal: number | null;
+    bitrate_mode: string; // cbr | vbr | abr | mixed | unknown
     total_duration_sec: number | null;
     bucket: PublicBucket;
 }
@@ -47,6 +48,7 @@ export interface PublicDelivery {
 export interface PublicReciter {
     reciter_id: string;                 // internal lookup key; never rendered
     name: string;
+    name_ar: string | null;
     country: string | null;
     primary_bucket: PublicBucket;
     buckets: PublicBucket[];
