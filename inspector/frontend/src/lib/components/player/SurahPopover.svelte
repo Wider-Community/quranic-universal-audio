@@ -1,63 +1,150 @@
 <script lang="ts">
     /**
-     * Surah picker popover — wraps SearchableSelect with the same
-     * Arabic-normalizing fuzzy search the timestamps + segments tabs
-     * use. The label uses surahOptionText() so users see the same
-     * format ("3 Ali Imran الْعِمْرَانَ") they're used to elsewhere.
+     * Surah picker popover — single-click select. Plain scrollable list
+     * with a text filter input; avoids the SearchableSelect double-click
+     * (first click focuses input, second click selects).
      */
-    import { createEventDispatcher, onMount } from 'svelte';
+    import { createEventDispatcher, onMount, tick } from 'svelte';
 
-    import type { SelectOption } from '../../types/ui';
     import { getSurahInfo, surahInfoReady, surahOptionText } from '../../utils/surah-info';
-    import SearchableSelect from '../SearchableSelect.svelte';
 
     export let surahNums: number[] = [];
     export let value: number | null = null;
 
     let ready = false;
-    let options: SelectOption[] = [];
+    let query = '';
+    let inputEl: HTMLInputElement | null = null;
 
     onMount(async () => {
         await surahInfoReady;
         ready = true;
+        await tick();
+        inputEl?.focus();
     });
 
-    $: if (ready && surahNums.length > 0) {
-        const _info = getSurahInfo();
-        void _info; // ensure deps tracked
-        options = surahNums.map((n) => ({
-            value: String(n),
-            label: surahOptionText(n),
-        }));
+    interface Item {
+        n: number;
+        label: string;
     }
+
+    $: items = ready
+        ? surahNums.map((n) => {
+              void getSurahInfo();
+              return { n, label: surahOptionText(n) } as Item;
+          })
+        : [];
+    $: filtered = query.trim()
+        ? items.filter((it) => it.label.toLowerCase().includes(query.trim().toLowerCase()))
+        : items;
 
     const dispatch = createEventDispatcher<{ change: number }>();
 
-    function onChange(ev: CustomEvent<string>): void {
-        const n = parseInt(ev.detail, 10);
-        if (!Number.isNaN(n)) dispatch('change', n);
+    function pick(n: number): void {
+        dispatch('change', n);
+    }
+
+    function onKeydown(ev: KeyboardEvent): void {
+        if (ev.key === 'Enter' && filtered.length > 0) {
+            pick(filtered[0]!.n);
+        }
     }
 </script>
 
-<div class="wrap">
-    <SearchableSelect
-        options={options}
-        value={value === null ? '' : String(value)}
-        placeholder="Pick a surah"
-        on:change={onChange}
+<div class="wrap" role="dialog" aria-label="Surah picker">
+    <input
+        bind:this={inputEl}
+        bind:value={query}
+        on:keydown={onKeydown}
+        class="search"
+        type="text"
+        placeholder="Filter surahs…"
+        autocomplete="off"
     />
+    <div class="list" role="listbox">
+        {#each filtered as it (it.n)}
+            <button
+                type="button"
+                class="row"
+                class:active={value === it.n}
+                role="option"
+                aria-selected={value === it.n}
+                on:click={() => pick(it.n)}
+            >
+                <span class="num">{it.n}</span>
+                <span class="label">{it.label.replace(/^\d+\s*/, '')}</span>
+            </button>
+        {:else}
+            <div class="empty">No matches</div>
+        {/each}
+    </div>
 </div>
 
 <style>
     .wrap {
-        width: 340px;
+        width: 320px;
+        display: flex;
+        flex-direction: column;
+        max-height: min(420px, 60vh);
     }
-    .wrap :global(.ss-input) {
-        background: var(--panel);
-        border-color: var(--border-quiet);
+    .search {
+        flex: 0 0 auto;
+        background: var(--canvas-inset);
+        border: 1px solid var(--border-quiet);
+        color: var(--text-primary);
+        padding: 6px var(--s-2);
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
+        outline: none;
+    }
+    .search:focus {
+        border-color: var(--accent);
+    }
+    .list {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        margin-top: var(--s-2);
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+    }
+    .row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-2);
+        padding: 6px var(--s-2);
+        background: transparent;
+        border: 0;
+        text-align: left;
+        color: var(--text-secondary);
+        cursor: pointer;
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
+    }
+    .row:hover {
+        background: var(--canvas-inset);
         color: var(--text-primary);
     }
-    .wrap :global(.ss-input:focus) {
-        border-color: var(--accent);
+    .row.active {
+        background: var(--canvas-inset);
+        color: var(--accent);
+    }
+    .num {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--text-faint);
+        min-width: 22px;
+        text-align: right;
+    }
+    .row.active .num {
+        color: var(--accent);
+    }
+    .label {
+        flex: 1 1 auto;
+    }
+    .empty {
+        padding: var(--s-3);
+        color: var(--text-muted);
+        font-size: var(--fs-meta);
+        text-align: center;
     }
 </style>

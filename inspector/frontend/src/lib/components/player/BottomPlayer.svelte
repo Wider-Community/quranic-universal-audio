@@ -2,18 +2,18 @@
     /**
      * Dashboard-scoped persistent BottomPlayer.
      *
-     * Owns the dashPort, binds the <audio> element via attachElement,
-     * subscribes to player-context for source changes, drives controls
-     * via dashPort, and updates positionMs / isPlaying via port event
-     * subscriptions. Sticky at the bottom of the Dashboard tab; the
-     * App-shell `hidden` cascade hides it when the Dashboard tab is
-     * inactive (transport keeps its position; explicit play required
-     * on tab return).
+     * Pinned to the viewport bottom while the Dashboard tab is active.
+     * The App-shell `hidden` cascade hides it when the Dashboard tab is
+     * inactive (transport keeps its position; explicit play required on
+     * tab return).
      *
-     * Slice I+K of phase 6.
+     * Owns the dashPort, binds the <audio> element, subscribes to
+     * player-context for source changes, drives controls via dashPort,
+     * and updates positionMs / isPlaying via port event subscriptions.
      */
     import { onDestroy, onMount } from 'svelte';
 
+    import { clickOutside } from '../../actions/click-outside';
     import { fetchSurahsForDelivery } from '../../api/audio-surahs';
     import { dashPort } from '../../playback/dash-port';
     import {
@@ -25,7 +25,7 @@
         setSpeed,
         setSurah,
     } from '../../stores/player-context';
-    import ReciterPicker from '../picker/ReciterPicker.svelte';
+    import type { PublicDelivery } from '../../types/public-state';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
@@ -38,11 +38,9 @@
     let lastSurahNum: number | null = null;
     let surahPopoverOpen = false;
     let speedPopoverOpen = false;
-    let pickerOpen = false;
 
     onMount(() => {
         dashPort.attachElement(audioEl);
-        // Replay persisted speed if any.
         const slice = loadPersistedSlice();
         if (slice.speed && slice.speed !== 1) setSpeed(slice.speed);
         dashPort.setPlaybackRate(slice.speed);
@@ -70,7 +68,6 @@
         dashPort.pause();
     });
 
-    // Source swap on context change.
     $: void reactToContext($playerContext);
 
     async function reactToContext(ctx: typeof $playerContext): Promise<void> {
@@ -86,8 +83,9 @@
             return;
         }
         const wasPlaying = ctx.isPlaying;
+        const deliverySwitched = delivery.slug !== lastDeliverySlug;
 
-        if (delivery.slug !== lastDeliverySlug) {
+        if (deliverySwitched) {
             try {
                 urls = await fetchSurahsForDelivery(delivery.source, delivery.slug);
             } catch {
@@ -101,10 +99,13 @@
             });
         }
 
-        if (surahNum !== lastSurahNum || delivery.slug !== lastDeliverySlug) {
+        if (surahNum !== lastSurahNum || deliverySwitched) {
             const url = urls[String(surahNum)];
             if (url) {
-                dashPort.setSource({ audioUrl: url, reciter: delivery.slug, vbr: false });
+                const cbrSrc = url.startsWith('/api/')
+                    ? url
+                    : `/api/seg/audio-proxy/${delivery.slug}?url=${encodeURIComponent(url)}`;
+                dashPort.setSource({ audioUrl: url, cbrSrc, reciter: delivery.slug, vbr: false });
                 dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
                 if (wasPlaying) dashPort.play();
             }
@@ -159,16 +160,11 @@
         dashPort.seek(ev.detail);
     }
 
-    function onPickerSelect(
-        ev: CustomEvent<{ kind: 'reciter'; reciter: import('../../types/public-state').PublicReciter; delivery: import('../../types/public-state').PublicDelivery | null }>,
-    ): void {
-        const { reciter, delivery } = ev.detail;
-        if (!delivery) return;
+    function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
+        const d = ev.detail;
         playerContext.update((s) => ({
             ...s,
-            reciter,
-            delivery,
-            surahNum: s.surahNum ?? 1,
+            delivery: d,
             positionMs: 0,
         }));
     }
@@ -180,97 +176,97 @@
         && surahNums.indexOf($playerContext.surahNum) < surahNums.length - 1;
 </script>
 
-<div class="player">
-    <PlayerMetaChip
-        reciter={$playerContext.reciter}
-        delivery={$playerContext.delivery}
-        on:open={() => (pickerOpen = true)}
+<div class="player" class:has-reciter={$playerContext.reciter !== null}>
+    <PlayerProgress
+        positionMs={$playerContext.positionMs}
+        durationMs={$playerContext.durationMs}
+        on:seek={onSeekFromBar}
     />
 
-    <div class="center">
-        <PlayerControls
-            isPlaying={$playerContext.isPlaying}
-            canStepBack={canPrev}
-            canStepForward={canNext}
-            on:toggle={togglePlay}
-            on:seekBack={seekBack}
-            on:seekForward={seekForward}
-            on:prev={prevSurah}
-            on:next={nextSurah}
+    <div class="row">
+        <PlayerMetaChip
+            reciter={$playerContext.reciter}
+            delivery={$playerContext.delivery}
+            on:select={onCombinationSelect}
         />
-        <PlayerProgress
-            positionMs={$playerContext.positionMs}
-            durationMs={$playerContext.durationMs}
-            on:seek={onSeekFromBar}
-        />
-    </div>
 
-    <div class="right">
-        <div class="surah-trigger-wrap">
-            <button
-                type="button"
-                class="surah-trigger"
-                on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
-                disabled={surahNums.length === 0}
-            >
-                {#if $playerContext.surahNum}
-                    Surah <span class="num">{$playerContext.surahNum}</span>
-                {:else}
-                    Pick surah
-                {/if}
-            </button>
-            {#if surahPopoverOpen}
-                <div class="surah-pop">
-                    <SurahPopover
-                        surahNums={surahNums}
-                        value={$playerContext.surahNum}
-                        on:change={onSurahChange}
-                    />
-                </div>
-            {/if}
+        <div class="controls">
+            <PlayerControls
+                isPlaying={$playerContext.isPlaying}
+                canStepBack={canPrev}
+                canStepForward={canNext}
+                on:toggle={togglePlay}
+                on:seekBack={seekBack}
+                on:seekForward={seekForward}
+                on:prev={prevSurah}
+                on:next={nextSurah}
+            />
         </div>
-        <SpeedPopover
-            value={$playerContext.speed}
-            open={speedPopoverOpen}
-            on:toggle={() => (speedPopoverOpen = !speedPopoverOpen)}
-            on:change={(e) => onSpeedChange(e.detail)}
-        />
+
+        <div class="right">
+            <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
+                <button
+                    type="button"
+                    class="surah-trigger"
+                    on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
+                    disabled={surahNums.length === 0}
+                    aria-expanded={surahPopoverOpen}
+                    aria-haspopup="dialog"
+                >
+                    {#if $playerContext.surahNum}
+                        Surah <span class="num">{$playerContext.surahNum}</span>
+                    {:else}
+                        Pick surah
+                    {/if}
+                </button>
+                {#if surahPopoverOpen}
+                    <div class="surah-pop">
+                        <SurahPopover
+                            surahNums={surahNums}
+                            value={$playerContext.surahNum}
+                            on:change={onSurahChange}
+                        />
+                    </div>
+                {/if}
+            </div>
+            <SpeedPopover
+                value={$playerContext.speed}
+                open={speedPopoverOpen}
+                on:toggle={() => (speedPopoverOpen = !speedPopoverOpen)}
+                on:change={(e) => onSpeedChange(e.detail)}
+            />
+        </div>
     </div>
 
     <audio bind:this={audioEl} preload="metadata" />
 </div>
 
-{#if pickerOpen}
-    <ReciterPicker
-        open={pickerOpen}
-        mode="modal"
-        title="Switch reciter"
-        on:select={onPickerSelect}
-        on:close={() => (pickerOpen = false)}
-    />
-{/if}
-
 <style>
     .player {
-        position: sticky;
+        position: fixed;
         bottom: 0;
         left: 0;
         right: 0;
-        height: var(--player-h, 72px);
         background: var(--panel);
         border-top: 1px solid var(--border-default);
+        padding: 0 var(--s-4) var(--s-2);
+        z-index: 40;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 -8px 24px oklch(0 0 0 / 0.25);
+    }
+    .row {
         display: grid;
         grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
         align-items: center;
-        padding: 0 var(--s-4);
         gap: var(--s-4);
-        z-index: 20;
+        height: calc(var(--player-h, 72px) - 14px);
     }
-    .center {
+    .controls {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: var(--s-3);
-        min-width: 320px;
     }
     .right {
         display: flex;
@@ -278,9 +274,7 @@
         justify-content: flex-end;
         gap: var(--s-2);
     }
-    .surah-trigger-wrap {
-        position: relative;
-    }
+    .surah-trigger-wrap { position: relative; }
     .surah-trigger {
         display: inline-flex;
         align-items: center;
@@ -311,12 +305,13 @@
         position: absolute;
         bottom: calc(100% + var(--s-2));
         right: 0;
+        max-width: calc(100vw - var(--s-4) * 2);
         padding: var(--s-2);
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
         box-shadow: 0 16px 48px oklch(0 0 0 / 0.45);
-        z-index: 30;
+        z-index: 50;
     }
     audio { display: none; }
 </style>
