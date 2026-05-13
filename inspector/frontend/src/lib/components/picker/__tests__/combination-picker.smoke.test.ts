@@ -6,8 +6,17 @@ import type {
     PublicDelivery,
     PublicReciter,
 } from '../../../types/public-state';
-import type { CombinationSelection } from '../CombinationPicker.svelte';
 import CombinationPicker from '../CombinationPicker.svelte';
+
+// CombinationSelection is exported from a Svelte `<script context="module">`.
+// The default `*.svelte` ambient only surfaces the default export to tsc, so
+// we restate the shape here for the test rather than reaching into the
+// module-context exports.
+interface CombinationSelection {
+    kind: 'combination';
+    reciter: PublicReciter;
+    delivery: PublicDelivery;
+}
 
 function makeDelivery(slug: string, bucket: PublicBucket, riwayah = 'hafs'): PublicDelivery {
     return {
