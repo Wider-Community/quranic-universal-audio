@@ -28,7 +28,6 @@
     import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
-    import BrowseByStateStrip from './components/header/BrowseByStateStrip.svelte';
     import ReciterContextChip from './components/header/ReciterContextChip.svelte';
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
@@ -264,7 +263,6 @@
             currentBucket={contextBucket}
             on:change={onPickerChange}
         />
-        <BrowseByStateStrip on:change={onPickerChange} />
     </div>
 
     <div class="info-bar seg-selector-bar">
