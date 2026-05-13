@@ -1,24 +1,23 @@
 <script lang="ts">
     /**
-     * Segments-tab reciter chip. Replaces the bare-select-on-reciters
-     * with a clickable chip that opens the ReciterPicker modal.
+     * Segments-tab reciter chip. Opens the CombinationPicker modal — the
+     * picker commits a (reciter, delivery) pair; this component never
+     * deals with audio.
      *
-     * The picker's onSelect commits the chosen delivery's slug back to
-     * the parent via the `change` event — this component knows nothing
-     * about segments-tab stores.
+     * A right-side default slot holds inline action buttons (Claim /
+     * Unclaim / Mark-ready) supplied by the parent.
      */
     import { createEventDispatcher } from 'svelte';
 
-    import ReciterPicker, {
-        type PickerSelection,
-    } from '../../../../lib/components/picker/ReciterPicker.svelte';
+    import CombinationPicker, {
+        type CombinationSelection,
+    } from '../../../../lib/components/picker/CombinationPicker.svelte';
     import StatePill from '../../../../lib/components/StatePill.svelte';
     import type { PublicBucket } from '../../../../lib/types/public-state';
 
     export let currentSlug: string | null = null;
     export let currentName: string | null = null;
     export let currentBucket: PublicBucket | null = null;
-    export let initialBucket: PublicBucket = 'under_review';
 
     const dispatch = createEventDispatcher<{
         change: { slug: string; name: string; bucket: PublicBucket };
@@ -26,44 +25,48 @@
 
     let pickerOpen = false;
 
-    function onSelect(ev: CustomEvent<PickerSelection>): void {
+    function onSelect(ev: CustomEvent<CombinationSelection>): void {
         const { reciter, delivery } = ev.detail;
-        if (!delivery) return;
         dispatch('change', {
             slug: delivery.slug,
             name: reciter.name,
-            bucket: reciter.primary_bucket,
+            bucket: delivery.bucket,
         });
         pickerOpen = false;
     }
 </script>
 
-<div class="chip-wrap">
-    <span class="label">Reciter</span>
-    <button
-        type="button"
-        class="chip"
-        on:click={() => (pickerOpen = true)}
-        aria-haspopup="dialog"
-    >
-        <div class="chip-body">
-            <div class="name">{currentName ?? (currentSlug ? 'Loading…' : 'Pick a reciter')}</div>
-            {#if currentBucket}
-                <div class="meta">
-                    <StatePill state={currentBucket} size="sm" />
-                </div>
-            {/if}
+<div class="seg-chip-row">
+    <div class="chip-wrap">
+        <span class="label">Reciter</span>
+        <button
+            type="button"
+            class="chip"
+            on:click={() => (pickerOpen = true)}
+            aria-haspopup="dialog"
+        >
+            <div class="chip-body">
+                <div class="name">{currentName ?? (currentSlug ? 'Loading…' : 'Pick a reciter')}</div>
+                {#if currentBucket}
+                    <div class="meta">
+                        <StatePill state={currentBucket} size="sm" />
+                    </div>
+                {/if}
+            </div>
+            <span class="switch" aria-hidden="true">⇄</span>
+        </button>
+    </div>
+    {#if $$slots.default}
+        <div class="seg-chip-row-actions">
+            <slot />
         </div>
-        <span class="switch" aria-hidden="true">⇄</span>
-    </button>
+    {/if}
 </div>
 
 {#if pickerOpen}
-    <ReciterPicker
+    <CombinationPicker
         open={pickerOpen}
-        mode="modal"
         title="Switch reciter"
-        initialFilter={{ bucket: initialBucket }}
         on:select={onSelect}
         on:close={() => (pickerOpen = false)}
     />

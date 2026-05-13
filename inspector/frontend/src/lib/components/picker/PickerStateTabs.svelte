@@ -6,33 +6,33 @@
     import { createEventDispatcher } from 'svelte';
 
     import { PICKER_BUCKETS } from '../../catalog/schema-descriptor';
-    import type { BucketCounts, PublicBucket } from '../../types/public-state';
+    import { type BucketCounts, PUBLIC_BUCKET_LABELS, type PublicBucket } from '../../types/public-state';
     import FilterPill from '../FilterPill.svelte';
 
     export let activeBucket: PublicBucket | null = null;
     export let totalCount = 0;
     export let counts: Partial<BucketCounts> = {};
+    export let allowedBuckets: readonly PublicBucket[] = PICKER_BUCKETS;
 
     const dispatch = createEventDispatcher<{ select: PublicBucket | null }>();
 
-    const LABELS: Record<PublicBucket, string> = {
-        available_for_review: 'Available to claim',
-        under_review: 'Under review',
-        publishing: 'Publishing',
-        published: 'Published',
-        requested: 'Requested',
-        available_for_request: 'Available for request',
-    };
+    const LABELS = PUBLIC_BUCKET_LABELS;
+
+    // When the consumer narrows the bucket set, the "All" total no longer
+    // matches the global reciter count — recompute it from `counts` instead.
+    $: allTotal = allowedBuckets === PICKER_BUCKETS
+        ? totalCount
+        : allowedBuckets.reduce((acc, b) => acc + (counts[b] ?? 0), 0);
 </script>
 
 <div class="tabs" role="tablist" aria-label="State">
     <FilterPill
         label="All"
-        count={totalCount}
+        count={allTotal}
         active={activeBucket === null}
         on:click={() => dispatch('select', null)}
     />
-    {#each PICKER_BUCKETS as bucket (bucket)}
+    {#each allowedBuckets as bucket (bucket)}
         {@const count = counts[bucket] ?? 0}
         <FilterPill
             label={LABELS[bucket]}

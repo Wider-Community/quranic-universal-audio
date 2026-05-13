@@ -5,6 +5,9 @@
     export let title = 'Switch reciter';
     export let search = '';
     export let resultsLabel: string | null = null;
+    /** When true, render only the title row — the consumer will render
+     *  its own search input. `focusSearch()` becomes a no-op. */
+    export let compact = false;
 
     const dispatch = createEventDispatcher<{
         close: void;
@@ -33,6 +36,7 @@
     >×</button>
 </header>
 
+{#if !compact}
 <div class="search">
     <span class="search-icon" aria-hidden="true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -52,6 +56,7 @@
         <span class="hint">{resultsLabel}</span>
     {/if}
 </div>
+{/if}
 
 <style>
     .head {

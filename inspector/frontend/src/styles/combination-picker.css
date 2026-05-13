@@ -1,0 +1,185 @@
+/* ============ CombinationPicker + Segments header/action-bar ============ */
+
+.picker-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-3) var(--s-6);
+    border-bottom: 1px solid var(--border-quiet);
+    flex-shrink: 0;
+}
+
+.picker-section-head {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-3) var(--s-6) var(--s-1);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+.picker-section-head .head-count {
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.picker-section-head.mine-head {
+    color: var(--accent);
+}
+.picker-section-head .mine-dot,
+.mine-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.combo-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 24px auto minmax(0, 1fr) auto auto 56px;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-6);
+    align-items: center;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    text-align: left;
+    transition: background var(--t-fast);
+}
+.combo-row:hover { background: var(--panel); }
+.combo-row.focused { background: var(--accent-tint-soft); }
+.combo-row .row-name {
+    color: var(--text-primary);
+    font-size: var(--fs-row);
+    white-space: nowrap;
+}
+.combo-row .row-meta {
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.combo-row .row-coverage,
+.combo-row .row-hours {
+    color: var(--text-secondary);
+    font-size: var(--fs-meta);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.combo-row .row-state {
+    text-align: right;
+    font-size: var(--fs-meta);
+}
+
+.combo-row .play-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-default);
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 10px;
+    line-height: 1;
+    padding: 0;
+    transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.combo-row .play-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-tint);
+}
+
+/* ---------- Segments-tab chip row (header row 1) ---------- */
+.seg-chip-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--s-3);
+    padding: var(--s-2) 0;
+}
+.seg-chip-row > :first-child { flex: 1; min-width: 0; }
+.seg-chip-row-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--s-2);
+    padding-bottom: var(--s-2);
+}
+
+/* ---------- Action-bar buttons (header row 2) ---------- */
+.seg-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-4);
+    background: var(--panel);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-2);
+    font-size: var(--fs-body);
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.seg-btn:hover:not(:disabled) {
+    background: var(--panel-2);
+    border-color: var(--border-strong);
+}
+.seg-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.seg-btn.lg {
+    padding: var(--s-3) var(--s-5);
+    font-size: var(--fs-row);
+}
+.seg-btn.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+}
+.seg-btn.primary:hover:not(:disabled) {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+}
+.seg-btn.success {
+    color: var(--state-published-fg);
+    background: transparent;
+    border-color: var(--border-default);
+}
+
+/* Segmented toggle (Auto-save: Off | On). */
+.seg-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-2);
+    overflow: hidden;
+    background: var(--panel);
+}
+.seg-toggle .opt {
+    background: transparent;
+    color: var(--text-muted);
+    border: 0;
+    padding: var(--s-2) var(--s-3);
+    font-size: var(--fs-meta);
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast);
+}
+.seg-toggle .opt + .opt {
+    border-left: 1px solid var(--border-default);
+}
+.seg-toggle .opt:hover { color: var(--text-primary); }
+.seg-toggle .opt.on {
+    background: var(--accent-tint);
+    color: var(--accent);
+}
+
+/* Neutralize legacy colored buttons inside the segments action bar. */
+.seg-selector-bar .seg-bar-actions .seg-btn { box-shadow: none; }

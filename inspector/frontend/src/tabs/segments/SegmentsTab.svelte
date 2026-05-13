@@ -11,9 +11,9 @@
     import { get, type Readable } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
+    import { markReady, release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import ClaimButton from '../../lib/components/ClaimButton.svelte';
-    import ReviewerBanner from '../../lib/components/ReviewerBanner.svelte';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import {
@@ -120,6 +120,31 @@
             ? 'History...'
             : 'History';
     $: saveBtnDisabled = !$isDirtyStore;
+
+    // Inline header actions — Unclaim and Mark-ready operate on the
+    // active claim's slug. We don't need busy spinners here; the network
+    // round-trip refreshes the task and the UI flips accordingly.
+    let chipActionBusy: '' | 'unclaim' | 'mark' = '';
+    async function _unclaim(): Promise<void> {
+        const slug = $selectedReciter;
+        if (!slug || chipActionBusy) return;
+        chipActionBusy = 'unclaim';
+        try {
+            await release(slug);
+            await _refreshTask();
+        } catch { /* toast already surfaced */ }
+        finally { chipActionBusy = ''; }
+    }
+    async function _markReady(): Promise<void> {
+        const slug = $selectedReciter;
+        if (!slug || chipActionBusy) return;
+        chipActionBusy = 'mark';
+        try {
+            await markReady(slug);
+            await _refreshTask();
+        } catch { /* toast already surfaced */ }
+        finally { chipActionBusy = ''; }
+    }
 
     let cssFontSize: string = '';
     let cssWordSpacing: string = '';
@@ -254,25 +279,43 @@
 >
     <ShortcutsGuide />
 
-    <ReviewerBanner task={reciterTask} onChanged={_refreshTask} />
-
     <div class="seg-context-block">
         <ReciterContextChip
             currentSlug={$selectedReciter || null}
             currentName={contextName}
             currentBucket={contextBucket}
             on:change={onPickerChange}
-        />
+        >
+            {#if $selectedReciter}
+                {#if reciterTask?.predicates.can_release}
+                    <button
+                        type="button"
+                        class="seg-btn lg"
+                        disabled={chipActionBusy !== ''}
+                        on:click={_unclaim}
+                    >Unclaim</button>
+                {/if}
+                {#if reciterTask?.predicates.can_mark_ready}
+                    <button
+                        type="button"
+                        class="seg-btn lg primary"
+                        disabled={chipActionBusy !== ''}
+                        title="Mark this reciter ready for a maintainer to publish"
+                        on:click={_markReady}
+                    >Mark ready</button>
+                {/if}
+                <span class="claim-lg-wrap">
+                    <ClaimButton
+                        slug={$selectedReciter}
+                        task={reciterTask}
+                        onClaimed={_refreshTask}
+                    />
+                </span>
+            {/if}
+        </ReciterContextChip>
     </div>
 
     <div class="info-bar seg-selector-bar">
-        {#if $selectedReciter}
-            <ClaimButton
-                slug={$selectedReciter}
-                task={reciterTask}
-                onClaimed={_refreshTask}
-            />
-        {/if}
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>Surah:
             <SearchableSelect
@@ -293,8 +336,8 @@
         </label>
         <div class="seg-bar-actions">
             {#if $savePreviewVisible}
-                <button id="seg-save-preview-cancel" class="btn" on:click={() => hideSavePreview()}>Cancel</button>
-                <button id="seg-save-preview-confirm" class="btn btn-save" on:click={confirmSaveFromPreview}>Confirm Save</button>
+                <button id="seg-save-preview-cancel" class="seg-btn" on:click={() => hideSavePreview()}>Cancel</button>
+                <button id="seg-save-preview-confirm" class="seg-btn primary" on:click={confirmSaveFromPreview}>Confirm Save</button>
             {:else if $editingMode.kind !== 'view'}
                 <!--
                     Save + Auto-Save only visible when the user has write
@@ -303,28 +346,36 @@
                     authoritative; this is the UX layer hiding noise from
                     users who can't act on it.
                 -->
-                <button
-                    class="btn {$autoSaveEnabled ? 'btn-save' : 'btn-cancel'}"
-                    on:click={() => toggleAutoSave(!$autoSaveEnabled)}
-                >
-                    Auto Save
-                </button>
+                <div class="seg-toggle" role="group" aria-label="Auto-save">
+                    <button
+                        type="button"
+                        class="opt"
+                        class:on={!$autoSaveEnabled}
+                        on:click={() => toggleAutoSave(false)}
+                    >Auto-save off</button>
+                    <button
+                        type="button"
+                        class="opt"
+                        class:on={$autoSaveEnabled}
+                        on:click={() => toggleAutoSave(true)}
+                    >On</button>
+                </div>
                 <button
                     id="seg-save-btn"
-                    class="btn btn-save"
+                    class="seg-btn {$isDirtyStore ? 'primary' : 'success'}"
                     disabled={$autoSaveEnabled || saveBtnDisabled}
                     on:click={onSegSaveClick}
                 >
-                    {#if $autoSaveEnabled}
-                        {$saveButtonLabel === 'Save' ? (saveBtnDisabled ? 'Saved' : 'Saving...') : $saveButtonLabel}
+                    {#if $isDirtyStore}
+                        {$autoSaveEnabled && $saveButtonLabel === 'Save' ? 'Saving…' : $saveButtonLabel}
                     {:else}
-                        {$saveButtonLabel}
+                        ✓ Saved
                     {/if}
                 </button>
             {/if}
             <button
                 id="seg-history-btn"
-                class="btn btn-history"
+                class="seg-btn"
                 hidden={historyBtnHidden && !$historyVisible}
                 on:click={$historyVisible ? hideHistoryView : showHistoryView}
             >{historyBtnLabel}</button>
