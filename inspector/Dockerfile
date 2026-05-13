@@ -64,14 +64,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     INSPECTOR_DATA_DIR=/app/data \
     INSPECTOR_QUA_DATA_PATH=/app/data \
-    INSPECTOR_TS_SOURCE=bucket \
-    INSPECTOR_TS_VALIDATE_ENABLED=0 \
     INSPECTOR_CACHE_DIR=/tmp/inspector-cache \
     INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket \
     INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev \
     INSPECTOR_PARSED_CACHE_BYTES=134217728 \
     INSPECTOR_BEHIND_PROXY=1 \
     INSPECTOR_FORCE_FLUSH_ON_SAVE=0 \
+    INSPECTOR_AUDIO_PREFETCH=1 \
     GUNICORN_WORKERS=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -107,9 +106,9 @@ COPY inspector/domain/ ./inspector/domain/
 COPY inspector/routes/ ./inspector/routes/
 COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
-# scripts/lib/ is shared with the CI build pipeline (e.g. timestamps_shards
-# keeps local-mode docker shards bytewise identical to HF-mode shards via
-# deterministic gzip + same split logic). Top-level scripts/ contains local
+# scripts/lib/ is shared with the CI build pipeline. Inspector imports
+# ``scripts.lib.timestamps_shards`` for ``SCHEMA_VERSION`` + ``derive_url_template``
+# when composing the bucket-mode manifest. Top-level scripts/ contains local
 # CLIs we don't need at runtime — only lib/ ships.
 COPY scripts/__init__.py ./scripts/__init__.py
 COPY scripts/lib/ ./scripts/lib/

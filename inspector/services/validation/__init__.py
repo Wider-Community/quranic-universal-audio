@@ -1,5 +1,4 @@
-"""Validation engine: registry-backed segment validation, chapter validation counts,
-and timestamp validation.
+"""Validation engine: registry-backed segment validation + chapter counts.
 
 No Flask imports -- all functions accept parameters and return plain dicts.
 
@@ -9,7 +8,6 @@ Public API (routes use ``from services.validation import X``):
 - ``classify_snapshot``
 - ``chapter_validation_counts``
 - ``validate_reciter_segments``
-- ``validate_reciter_timestamps``
 - registry symbols (re-exported)
 """
 
@@ -37,7 +35,6 @@ from services.validation.snapshot_classifier import classify_snapshot
 from services.validation.detail import _build_detail_lists
 from services.validation._missing import _build_missing_words
 from services.validation._structural import _check_structural_errors
-from services.validation.timestamps import validate_reciter_timestamps
 from services.validation.registry import (
     IssueDefinition,
     IssueRegistry,
@@ -227,7 +224,6 @@ __all__ = [
     "classify_snapshot",
     "chapter_validation_counts",
     "validate_reciter_segments",
-    "validate_reciter_timestamps",
     "_build_detail_lists",
     "IssueDefinition",
     "IssueRegistry",

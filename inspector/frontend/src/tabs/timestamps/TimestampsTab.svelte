@@ -17,7 +17,7 @@
     import { get } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
-    import type { TsConfigResponse, TsDataResponse, TsValidateResponse } from '../../lib/types/api';
+    import type { TsConfigResponse, TsDataResponse } from '../../lib/types/api';
     import type { TsReciter } from '../../lib/types/domain';
     import { getActiveTab } from '../../lib/utils/active-tab';
     import { LS_KEYS } from '../../lib/utils/constants';
@@ -204,17 +204,6 @@
             }
         } catch (e) {
             console.error('Error reading manifest for reciter:', e);
-        }
-
-        // /api/ts/validate is gated off in deployed mode (returns 410); local
-        // maintainers keep the route for offline review.
-        try {
-            const valResult = await fetchJson<TsValidateResponse>(
-                `/api/ts/validate/${encodeURIComponent(reciter)}`,
-            );
-            if (!valResult.error) validationData.set(valResult);
-        } catch (e) {
-            console.error('Error loading validation:', e);
         }
 
         // Auto-load a random verse from this reciter so the tab always has

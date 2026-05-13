@@ -1,15 +1,13 @@
 """Timestamp manifest + per-chapter shard server.
 
-Two read modes share one frontend protocol:
+Bucket-only: manifest is composed from state (released/completed reciters)
++ catalog (display + delivery metadata) + audio_manifest sidecars (URL
+template). Per-chapter shards read from
+``<bucket>/published/<slug>/timestamps/<chapter>.json`` on demand and gzip
+through a small per-process LRU so chapter scrubbing within one reciter
+doesn't pay the bucket fetch + gzip cost on every shard hit.
 
-- **local**  — slices ``data/timestamps/by_*/*/timestamps_full.json`` on demand
-  via ``scripts.lib.timestamps_shards`` and gzips the per-chapter result.
-- **bucket** — reads ``<bucket>/published/<slug>/timestamps/<chapter>.json``
-  on demand and gzips per request (small per-reciter LRU). Manifest is
-  composed from the bucket catalog + state + audio_manifest sidecars.
-
-Mode is picked by ``config.TS_SOURCE`` once at import; ``invalidate()`` drops
-the cache so tests / future hot-reload can re-pick.
+``invalidate()`` drops the cache for tests / future hot-reload.
 """
 
 from __future__ import annotations
@@ -20,23 +18,9 @@ import logging
 import threading
 from collections import OrderedDict
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
 
-from config import (
-    AUDIO_METADATA_PATH,
-    DK_SCRIPT_PATH,
-    QPC_HAFS_PATH,
-    TIMESTAMPS_PATH,
-    TS_SOURCE,
-)
-from constants import TS_AUDIO_CATEGORIES
-from scripts.lib.timestamps_shards import (
-    SCHEMA_VERSION,
-    derive_url_template,
-    gzip_shard,
-    split_to_shards,
-)
+from config import DK_SCRIPT_PATH, QPC_HAFS_PATH
+from scripts.lib.timestamps_shards import SCHEMA_VERSION, derive_url_template
 from services import data_dir
 from services import catalog as catalog_service
 from services import state as state_service
@@ -60,128 +44,17 @@ _RESOURCE_PATHS = {
 _lock = threading.Lock()
 _built = False
 _manifest_bytes: bytes | None = None
-_shard_bytes: dict[tuple[str, int], bytes] = {}
 _resource_bytes: dict[str, bytes] = {}
 
-
-def _walk_local_reciters() -> list[tuple[str, str]]:
-    """Return ``[(slug, audio_category), ...]`` for every reciter under
-    `data/timestamps/by_*_audio/`.
-
-    A slug present in both `by_ayah_audio` and `by_surah_audio` reports
-    the by_surah row (matching the HF manifest's preference rule).
-    """
-    seen: dict[str, str] = {}
-    if not TIMESTAMPS_PATH.exists():
-        return []
-    for category in TS_AUDIO_CATEGORIES:
-        cat_dir = TIMESTAMPS_PATH / category
-        if not cat_dir.is_dir():
-            continue
-        for reciter_dir in sorted(cat_dir.iterdir()):
-            if not reciter_dir.is_dir():
-                continue
-            ts_file = reciter_dir / "timestamps_full.json"
-            if not ts_file.exists():
-                ts_file = reciter_dir / "timestamps.json"
-                if not ts_file.exists():
-                    continue
-            slug = reciter_dir.name
-            # Prefer by_surah_audio when both exist (matches build_reciter's rule).
-            existing = seen.get(slug)
-            if existing is None or category == "by_surah_audio":
-                seen[slug] = category
-    return sorted(seen.items())
-
-
-def _find_audio_manifest(slug: str) -> dict | None:
-    """Locate `data/audio/<category>/<source>/<slug>.json` and parse it."""
-    if not AUDIO_METADATA_PATH.exists():
-        return None
-    for category in ("by_surah", "by_ayah"):
-        cat_dir = AUDIO_METADATA_PATH / category
-        if not cat_dir.is_dir():
-            continue
-        for source_dir in cat_dir.iterdir():
-            if not source_dir.is_dir():
-                continue
-            path = source_dir / f"{slug}.json"
-            if path.exists():
-                try:
-                    return json.loads(path.read_bytes())
-                except (json.JSONDecodeError, OSError):
-                    return None
-    return None
-
-
-def _load_ts_doc(slug: str, audio_category: str) -> dict | None:
-    """Load the reciter's `timestamps_full.json` (or fallback `timestamps.json`)."""
-    base = TIMESTAMPS_PATH / audio_category / slug
-    for name in ("timestamps_full.json", "timestamps.json"):
-        path = base / name
-        if path.exists():
-            try:
-                return json.loads(path.read_bytes())
-            except (json.JSONDecodeError, OSError):
-                return None
-    return None
-
-
-def _build_reciter_block(
-    slug: str, audio_category: str
-) -> tuple[dict, dict[int, bytes]]:
-    """Compose a manifest reciter block + the gzipped per-chapter shard bytes.
-
-    Returns ``(reciter_block, {chapter: gzipped_shard_bytes})``. The shard
-    bytes go straight into the on-demand serving cache; the reciter block
-    is composed from the source `_meta` + audio manifest metadata.
-    """
-    doc = _load_ts_doc(slug, audio_category)
-    if doc is None:
-        return {}, {}
-
-    audio_cat_short = audio_category.replace("_audio", "")
-    audio_manifest = _find_audio_manifest(slug) or {}
-    url_template = (
-        derive_url_template(audio_manifest, audio_cat_short)
-        if audio_manifest
-        else ""
-    )
-    audio_manifest_meta = audio_manifest.get("_meta", {}) if audio_manifest else {}
-
-    shards = split_to_shards(
-        doc,
-        reciter=slug,
-        audio_category=audio_cat_short,
-        url_template=url_template,
-        audio_urls_fallback=audio_manifest if not url_template else None,
-    )
-    shard_bytes: dict[int, bytes] = {ch: gzip_shard(d) for ch, d in shards.items()}
-
-    block: dict[str, Any] = {
-        "name_en": audio_manifest_meta.get("name_en") or slug_to_name(slug),
-        "name_ar": audio_manifest_meta.get("name_ar"),
-        "riwayah": audio_manifest_meta.get("riwayah", "hafs_an_asim"),
-        "style": audio_manifest_meta.get("style", "murattal"),
-        "source": audio_manifest_meta.get("source", ""),
-        "audio_category": audio_cat_short,
-        "url_template": url_template,
-        "ts_chapters": sorted(shards.keys()),
-        "vbr_chapters": vbr_chapters_for_reciter(slug),
-        # Validation falls through to /api/ts/validate/<slug> in local mode;
-        # the manifest carries no pre-computed boundary_mismatches.
-        "validation": {"boundary_mismatches": []},
-    }
-    return block, shard_bytes
+_SHARD_LRU_CAP = 256
+_shard_lru: "OrderedDict[tuple[str, int], bytes]" = OrderedDict()
 
 
 def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
-    """Compose the manifest body. Mirrors the HF manifest schema."""
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "commit": "",
-        # Local-mode URLs join cleanly with relative resource/shard paths.
         "dataset_base_url": "",
         "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
         "resources": {key: f"/api/ts/resource/{key}" for key in _RESOURCE_KEYS},
@@ -199,63 +72,8 @@ def _build_resource_bytes() -> dict[str, bytes]:
     return out
 
 
-def _ensure_built_local() -> None:
-    """Local-mode: lazy boot — walk on-disk tree, eagerly build all shards.
-
-    Idempotent and thread-safe. First request pays a one-time cost
-    proportional to local reciter count; later are dict lookups.
-    """
-    global _built, _manifest_bytes
-    reciters_block: dict[str, dict] = {}
-    shards_acc: dict[tuple[str, int], bytes] = {}
-    for slug, audio_category in _walk_local_reciters():
-        block, shard_bytes = _build_reciter_block(slug, audio_category)
-        if not block:
-            continue
-        reciters_block[slug] = block
-        for chapter, body in shard_bytes.items():
-            shards_acc[(slug, chapter)] = body
-
-    manifest = _build_manifest_dict(reciters_block)
-    _manifest_bytes = gzip.compress(
-        json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
-        compresslevel=6,
-        mtime=0,
-    )
-    _shard_bytes.clear()
-    _shard_bytes.update(shards_acc)
-    _resource_bytes.clear()
-    _resource_bytes.update(_build_resource_bytes())
-    _built = True
-    log.info(
-        "timestamps: built local-mode manifest (%d reciters, %d shards, %d resources)",
-        len(reciters_block),
-        len(_shard_bytes),
-        len(_resource_bytes),
-    )
-
-
-# ----------------------------------------------------------------------
-# Bucket-mode builder
-#
-# Walks completed reciters in state, joins with catalog metadata, lists
-# per-chapter timestamps in ``<bucket>/published/<slug>/timestamps/``, and
-# composes a manifest with the same wire shape as local mode. Shard bytes
-# are read on demand and held in a per-process LRU (~256 entries ≈ 1–4 MB
-# of gzipped JSON) so cold boot doesn't pay 600+ bucket reads up front.
-# ----------------------------------------------------------------------
-
-_SHARD_LRU_CAP = 256
-_shard_lru: "OrderedDict[tuple[str, int], bytes]" = OrderedDict()
-
-
 def _bucket_completed_reciters() -> list[str]:
-    """Return slugs of reciters that have published timestamps in the bucket.
-
-    Source: state file (released/completed states). Filtered by presence of
-    at least one timestamps file. Empty when the state file is empty (e.g.
-    fresh bucket).
-    """
+    """Return slugs of reciters that have published timestamps in the bucket."""
     out: list[str] = []
     for row in state_service.all_rows():
         if row.state.value not in ("released", "completed"):
@@ -269,20 +87,10 @@ def _bucket_completed_reciters() -> list[str]:
 def _bucket_url_template(slug: str, audio_category: str) -> str:
     """Resolve the audio URL template from the bucket audio_manifest sidecar.
 
-    The v2 sidecar shape is::
-
-        {
-          "schema_version": 1,
-          "slug": "...",
-          "_meta": {...},
-          "chapters": {"1": {"url": "...", ...}, "2": {...}, ...},
-        }
-
-    The legacy ``derive_url_template`` expects a flat ``{chapter: url}`` dict,
-    so flatten before calling. Returns ``""`` if the sidecar is absent, the
-    chapters block is missing, or the template can't be derived (e.g. URL
-    pattern doesn't match the surah-pad heuristic). Callers tolerate empty
-    templates — the TS UI degrades gracefully (no audio playback URL pattern).
+    The v2 sidecar shape is ``{schema_version, slug, _meta, chapters: {ch: {url, ...}}}``.
+    ``derive_url_template`` expects a flat ``{chapter: url}`` dict so flatten
+    before calling. Returns ``""`` when the sidecar is absent or the template
+    can't be derived — callers degrade gracefully (no audio playback URL).
     """
     try:
         raw = get_backend().read_json(storage_paths.audio_manifest_path(slug))
@@ -355,37 +163,42 @@ def _bucket_reciter_block(slug: str, ts_chapters: list[int]) -> dict | None:
     }
 
 
-def _ensure_built_bucket() -> None:
-    """Bucket-mode: build manifest from state + catalog + bucket file listing.
+def _ensure_built() -> None:
+    """Lazy boot — build manifest from state + catalog + bucket listing.
 
-    Shards are NOT eagerly loaded — see ``_load_bucket_shard()``.
+    Idempotent and thread-safe. Shards are NOT eagerly loaded — see
+    ``_load_bucket_shard()``.
     """
     global _built, _manifest_bytes
-    reciters_block: dict[str, dict] = {}
-    for slug in _bucket_completed_reciters():
-        chapters = data_dir.list_published_timestamps_chapters(slug)
-        if not chapters:
-            continue
-        block = _bucket_reciter_block(slug, chapters)
-        if block is not None:
-            reciters_block[slug] = block
+    if _built:
+        return
+    with _lock:
+        if _built:
+            return
+        reciters_block: dict[str, dict] = {}
+        for slug in _bucket_completed_reciters():
+            chapters = data_dir.list_published_timestamps_chapters(slug)
+            if not chapters:
+                continue
+            block = _bucket_reciter_block(slug, chapters)
+            if block is not None:
+                reciters_block[slug] = block
 
-    manifest = _build_manifest_dict(reciters_block)
-    _manifest_bytes = gzip.compress(
-        json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
-        compresslevel=6,
-        mtime=0,
-    )
-    _shard_bytes.clear()
-    _shard_lru.clear()
-    _resource_bytes.clear()
-    _resource_bytes.update(_build_resource_bytes())
-    _built = True
-    log.info(
-        "timestamps: built bucket-mode manifest (%d reciters, %d resources)",
-        len(reciters_block),
-        len(_resource_bytes),
-    )
+        manifest = _build_manifest_dict(reciters_block)
+        _manifest_bytes = gzip.compress(
+            json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
+            compresslevel=6,
+            mtime=0,
+        )
+        _shard_lru.clear()
+        _resource_bytes.clear()
+        _resource_bytes.update(_build_resource_bytes())
+        _built = True
+        log.info(
+            "timestamps: built manifest (%d reciters, %d resources)",
+            len(reciters_block),
+            len(_resource_bytes),
+        )
 
 
 def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
@@ -393,11 +206,6 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
 
     LRU-cached so chapter scrubbing within one reciter doesn't pay the
     bucket fetch + gzip cost on every shard hit.
-
-    The frontend treats the bucket path as the canonical reciter ID and
-    ignores ``_meta.reciter`` (which can drift across legacy seeds — see
-    ``scripts/inspector_v2_seed/migrate_bucket_meta.py``). No runtime
-    rewrite is needed here.
     """
     key = (reciter, chapter)
     cached = _shard_lru.get(key)
@@ -415,24 +223,6 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     return body
 
 
-# ----------------------------------------------------------------------
-# Public API — dispatches on TS_SOURCE
-# ----------------------------------------------------------------------
-
-
-def _ensure_built() -> None:
-    """Mode-aware lazy boot. Idempotent and thread-safe."""
-    if _built:
-        return
-    with _lock:
-        if _built:
-            return
-        if TS_SOURCE == "bucket":
-            _ensure_built_bucket()
-        else:
-            _ensure_built_local()
-
-
 def manifest_bytes() -> bytes:
     _ensure_built()
     assert _manifest_bytes is not None
@@ -441,9 +231,7 @@ def manifest_bytes() -> bytes:
 
 def shard_bytes(reciter: str, chapter: int) -> bytes | None:
     _ensure_built()
-    if TS_SOURCE == "bucket":
-        return _load_bucket_shard(reciter, chapter)
-    return _shard_bytes.get((reciter, chapter))
+    return _load_bucket_shard(reciter, chapter)
 
 
 def resource_bytes(name: str) -> bytes | None:
@@ -457,6 +245,5 @@ def invalidate() -> None:
     with _lock:
         _built = False
         _manifest_bytes = None
-        _shard_bytes.clear()
         _shard_lru.clear()
         _resource_bytes.clear()

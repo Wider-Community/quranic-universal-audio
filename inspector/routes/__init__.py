@@ -1,8 +1,5 @@
 """Inspector route blueprints.
 
-``timestamps.ts_validate`` is gated route-level inside ``timestamps.py``
-via ``INSPECTOR_TS_VALIDATE_ENABLED`` (the rest of ``ts_bp`` is always on).
-
 ``audio_proxy_bp`` is registered unconditionally because ``source.ts``
 routes by_surah audio through ``/api/seg/audio-proxy/<reciter>?url=...``
 and that route is the only thing standing between the user and broken

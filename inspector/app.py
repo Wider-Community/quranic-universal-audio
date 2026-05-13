@@ -45,11 +45,11 @@ def _load_dotenv_for_local_dev() -> None:
 
 _load_dotenv_for_local_dev()
 
-from flask import Flask, jsonify, send_file, send_from_directory
+from flask import Flask, jsonify, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import (AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR, DEFAULT_PORT,
+from config import (CACHE_DIR, DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
 from services import access as access_service
@@ -233,14 +233,11 @@ def _hydrate_bucket_stores() -> None:
     # scan re-enqueues any AWAITING_REVIEW slug whose `_done.json` sentinel
     # never landed (e.g. Space rebooted mid-job).
     #
-    # Gated on the bucket backend so pytest's FilesystemBackend never spawns
-    # a worker that would HTTP-fetch real CDN URLs + ffmpeg-remux behind the
-    # test's back. Tests that exercise the prefetch lifecycle call the
-    # individual helpers directly (see ``tests/test_audio_prefetch.py``).
-    # Skip under pytest — fixtures install a FilesystemBackend per test, and
-    # a leaked daemon thread on the bucket backend would HTTP-fetch real URLs
-    # behind tests' backs.
-    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_BACKEND", "bucket") == "bucket":
+    # Opt-in via ``INSPECTOR_AUDIO_PREFETCH=1`` (Dockerfile sets it). Local
+    # dev runs (``python3 inspector/app.py``) leave it unset so background
+    # workers don't hammer the dev bucket on every restart. Tests skip via
+    # the pytest guard.
+    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_AUDIO_PREFETCH") == "1":
         try:
             from services import audio_prefetch
 
@@ -322,26 +319,6 @@ def index():
 def get_surah_info():
     """Return lightweight surah metadata."""
     return jsonify(load_surah_info_lite())
-
-
-@app.route("/audio/<reciter>/<filename>")
-def serve_audio(reciter, filename):
-    """Serve audio files.
-
-    Sends `Access-Control-Allow-Origin: *` so the frontend can mark the
-    `<audio>` element with `crossorigin="anonymous"`. That CORS tag is
-    required for Web Audio's `MediaElementAudioSourceNode` to emit real
-    samples (the GainNode kill-switch in `lib/playback/audio-graph.ts`
-    needs it to silence the OS sink at segment boundaries). Without it
-    the spec mandates the source emits silence even on same-origin loads.
-    """
-    audio_path = AUDIO_PATH / reciter / filename
-    if not audio_path.exists():
-        return jsonify({"error": "Audio file not found"}), 404
-    mime_type = AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "audio/mpeg")
-    response = send_file(audio_path, mimetype=mime_type)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return response
 
 
 # ---------------------------------------------------------------------------

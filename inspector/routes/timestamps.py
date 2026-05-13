@@ -1,18 +1,10 @@
 """Timestamps tab routes (/api/ts/*).
 
-Two read paths share the same shard-fetch model on the frontend:
-  - **local**  mode: this blueprint's `/manifest`, `/shard/<reciter>/<int:chapter>`,
-    and `/resource/<name>` endpoints serve gzipped bodies sliced from the
-    on-disk timestamps tree (`services/timestamps.py` local branch).
-  - **bucket** mode: same URL surface, but `/manifest` and `/shard` read from
-    `<INSPECTOR_BUCKET_MOUNT>/published/<slug>/timestamps/...` (composed in
-    the `services/timestamps.py` bucket branch).
-
-`/config` advertises the active mode + manifest/shard URL templates so the
-frontend can pick the right base without needing its own env knob.
+``/manifest`` and ``/shard/<reciter>/<int:chapter>`` read from
+``<INSPECTOR_BUCKET_MOUNT>/published/<slug>/timestamps/...`` (composed in
+``services/timestamps.py``). ``/config`` advertises manifest + shard URL
+templates so the frontend doesn't need its own env knob.
 """
-import os
-
 from flask import Blueprint, Response, jsonify
 
 from config import (
@@ -21,25 +13,17 @@ from config import (
     ANIM_CHAR_TRANSITION_DURATION, ANIM_TRANSITION_EASING,
     ANIM_WORD_SPACING, ANIM_LINE_HEIGHT, ANIM_FONT_SIZE,
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
-    TS_SOURCE,
 )
 from services.audio_meta import vbr_chapters_for_reciter
 from services import timestamps as ts_serve
-from services.validation import validate_reciter_timestamps
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 
 
 @ts_bp.route("/config")
 def ts_config():
-    """Return display configuration + read-path URLs for Timestamps tab.
-
-    `mode`, `manifest_url`, and `shard_url_template` drive the frontend's
-    shard-fetch model. URLs are identical in local and bucket modes — only
-    the backend's data source differs.
-    """
+    """Return display configuration + read-path URLs for Timestamps tab."""
     return jsonify({
-        "mode": TS_SOURCE,
         "manifest_url": "/api/ts/manifest",
         "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
         # D20 Track B: reciter dropdown migrates off ``manifest.json.gz`` to the
@@ -100,23 +84,3 @@ def ts_resource(name):
 def ts_vbr(reciter):
     """Return VBR chapters for timestamp clients reading older HF manifests."""
     return jsonify({"vbr_chapters": vbr_chapters_for_reciter(reciter)})
-
-
-@ts_bp.route("/validate/<reciter>")
-def ts_validate(reciter):
-    """Validate timestamp data via the in-process timestamps validator.
-
-    Gated behind ``INSPECTOR_TS_VALIDATE_ENABLED`` (default ``1`` for local).
-    Deployed Spaces flip it to ``0``; the validator reads from the on-disk
-    timestamps tree which doesn't exist in the bucket layout.
-    """
-    if os.environ.get("INSPECTOR_TS_VALIDATE_ENABLED", "1") != "1":
-        return jsonify({
-            "error": "ts_validate is disabled in deployed mode "
-                     "(see INSPECTOR_TS_VALIDATE_ENABLED)"
-        }), 410
-
-    result = validate_reciter_timestamps(reciter)
-    if result is None:
-        return jsonify({"error": "Reciter not found"}), 404
-    return jsonify(result)

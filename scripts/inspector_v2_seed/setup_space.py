@@ -180,9 +180,8 @@ def main(argv: list[str] | None = None) -> int:
     variables = {
         "INSPECTOR_BUCKET_REPO": bucket_repo,
         "INSPECTOR_BUCKET_MOUNT": MOUNT_PATH,
-        "INSPECTOR_TS_SOURCE": "bucket",
-        "INSPECTOR_TS_VALIDATE_ENABLED": "0",
         "INSPECTOR_PARSED_CACHE_BYTES": "134217728",
+        "INSPECTOR_AUDIO_PREFETCH": "1",
         "GUNICORN_WORKERS": "1",
     }
     for k, v in variables.items():
