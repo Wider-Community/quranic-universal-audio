@@ -134,8 +134,6 @@ def fetch_and_persist_chapter(
     peaks_path = storage_paths.prefetched_peaks_path(slug, chapter)
 
     if not force and backend.exists(audio_path) and backend.exists(peaks_path):
-        # Treat as already-prefetched; the caller still records a chapter_done
-        # audit event so the timeline is complete after restarts.
         size = len(backend.read_bytes(audio_path))
         return ChapterArtifact(
             chapter=chapter,

@@ -212,6 +212,8 @@ def _run_one(slug: str) -> None:
 
     errors = 0
     completed = 0
+    total_bytes = 0
+    remuxed_count = 0
     with ThreadPoolExecutor(max_workers=AUDIO_DL_WORKER_COUNT) as pool:
         futures = {
             pool.submit(audio_fetch.fetch_and_persist_chapter, slug, ch, url): ch
@@ -241,17 +243,9 @@ def _run_one(slug: str) -> None:
                 )
             else:
                 completed += 1
-                _emit(
-                    "audio_prefetch.chapter_done",
-                    slug,
-                    _SYSTEM_ACTOR,
-                    {
-                        "chapter": chapter,
-                        "bytes": artifact.bytes_written,
-                        "duration_ms": artifact.duration_ms,
-                        "ffmpeg_remuxed": artifact.ffmpeg_remuxed,
-                    },
-                )
+                total_bytes += artifact.bytes_written or 0
+                if artifact.ffmpeg_remuxed:
+                    remuxed_count += 1
             with lock:
                 cache.set_audio_dl_progress(
                     slug,
@@ -275,6 +269,8 @@ def _run_one(slug: str) -> None:
             {
                 "total": total,
                 "duration_ms": finished_at_ms - started_at_ms,
+                "bytes": total_bytes,
+                "ffmpeg_remuxed": remuxed_count,
             },
         )
     else:
@@ -287,6 +283,8 @@ def _run_one(slug: str) -> None:
                 "completed": completed,
                 "errors": errors,
                 "duration_ms": finished_at_ms - started_at_ms,
+                "bytes": total_bytes,
+                "ffmpeg_remuxed": remuxed_count,
             },
             result="error",
         )
