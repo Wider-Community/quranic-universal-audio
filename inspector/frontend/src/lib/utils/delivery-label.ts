@@ -34,13 +34,30 @@ const BITRATE_MODE_LABEL: Record<string, string> = {
     unknown: '',
 };
 
+/** Field separator used across all combination display surfaces. */
+export const SEP = ' · ';
+
 export function bitrateLabel(d: PublicDelivery): string {
     const mode = (d.bitrate_mode || '').toLowerCase();
     const kbps = d.bitrate_kbps_nominal;
     const modeText = BITRATE_MODE_LABEL[mode] ?? mode.replace(/_/g, ' ');
     if (kbps == null) return modeText || '—';
     if (!modeText) return `${kbps} kbps`;
-    return `${kbps} kbps ${modeText}`;
+    return `${kbps} kbps${SEP}${modeText}`;
+}
+
+/** Compact coverage badge for the picker — "Full" or "47/114". */
+export function compactCoverageLabel(d: PublicDelivery): string {
+    if (d.coverage_kind === 'full') return 'Full';
+    return `${d.chapter_count}/114`;
+}
+
+/** Compact hours badge for the picker — "3.5h", "45m", or "—". */
+export function compactHoursLabel(d: PublicDelivery): string {
+    if (d.total_duration_sec == null) return '—';
+    const h = d.total_duration_sec / 3600;
+    if (h < 1) return `${Math.round(h * 60)}m`;
+    return `${h.toFixed(1)}h`;
 }
 
 /** "x ayahs" if by_ayah, "x surahs" if by_surah. */
@@ -72,10 +89,34 @@ export function totalHoursLabel(d: PublicDelivery): string {
     return `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
-/** Compact combination meta line: "Hafs · Murattal · qdc". */
-export function combinationShortLabel(d: PublicDelivery): string {
-    const parts = [titleCaseSlug(d.riwayah), titleCaseSlug(d.style), titleCaseSlug(d.channel)];
-    return parts.filter(Boolean).join(' · ');
+/**
+ * Compact one-line combination label for the bottom-player chip.
+ * "Hafs · Murattal · QDC Official"
+ */
+export function combinationCompact(d: PublicDelivery): string {
+    return [titleCaseSlug(d.riwayah), titleCaseSlug(d.style), channelDisplay(d)]
+        .filter(Boolean)
+        .join(SEP);
+}
+
+/**
+ * Two-line combination label for the player's combination-switcher dropup.
+ * line 1: Riwayah · Style · [Context ·] Channel
+ * line 2: Coverage · Bitrate · [Hours]
+ */
+export function combinationStandard(d: PublicDelivery): { line1: string; line2: string } {
+    const line1Parts: string[] = [titleCaseSlug(d.riwayah), titleCaseSlug(d.style)];
+    if (d.recording_context) line1Parts.push(titleCaseSlug(d.recording_context));
+    line1Parts.push(channelDisplay(d));
+
+    const line2Parts: string[] = [coverageLabel(d), bitrateLabel(d)];
+    const hours = totalHoursLabel(d);
+    if (hours && hours !== '—') line2Parts.push(hours);
+
+    return {
+        line1: line1Parts.filter(Boolean).join(SEP),
+        line2: line2Parts.filter(Boolean).join(SEP),
+    };
 }
 
 /** ISO-2 → country display name. Falls back to the code when unknown. */

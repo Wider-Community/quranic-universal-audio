@@ -38,14 +38,13 @@ describe('buildSchemaDescriptor', () => {
         expect(style.options.map((o) => o.key)).toEqual(['mujawwad', 'murattal']);
     });
 
-    it('always includes a status axis in the fixed lifecycle order', () => {
+    it('always includes a status axis in the fixed priority order', () => {
         const d = buildSchemaDescriptor([delivery()]);
         const status = d.axes.find((a) => a.key === 'status')!;
         expect(status.options.map((o) => o.key)).toEqual([
-            'available_for_review',
-            'under_review',
-            'publishing',
             'published',
+            'under_review',
+            'available_for_review',
             'requested',
             'available_for_request',
         ]);

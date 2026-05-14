@@ -68,7 +68,6 @@ vi.mock('../../../api/public-reciters', () => ({
             requested: 0,
             available_for_review: 1,
             under_review: 0,
-            publishing: 0,
             published: 1,
         }),
     ),

@@ -15,6 +15,7 @@
  */
 
 import { BUCKET_PRIORITY, PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../types/public-state';
+import { titleCaseSlug } from '../utils/delivery-label';
 
 export interface AxisOption {
     key: string;
@@ -35,26 +36,6 @@ export interface SchemaDescriptor {
     sortKeys: readonly SortKey[];
 }
 
-const TITLE_CASE_OVERRIDES: Record<string, string> = {
-    mp3quran: 'mp3quran',
-    quranicaudio: 'quranicaudio',
-    qul: 'qul',
-    archive_org: 'archive.org',
-    tvquran: 'tvquran',
-    everyayah: 'everyayah',
-    tarteel: 'tarteel',
-};
-
-function titleCase(slug: string): string {
-    if (!slug) return '';
-    const override = TITLE_CASE_OVERRIDES[slug];
-    if (override) return override;
-    return slug
-        .split(/[_-]/)
-        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-        .join(' ');
-}
-
 // Dashboard status filter: most-progressed first.
 const STATUS_ORDER = BUCKET_PRIORITY;
 
@@ -62,7 +43,6 @@ const STATUS_ORDER = BUCKET_PRIORITY;
 const PICKER_ORDER: readonly PublicBucket[] = [
     'available_for_review',
     'under_review',
-    'publishing',
     'published',
     'requested',
     'available_for_request',
@@ -82,7 +62,7 @@ function countBy(values: Iterable<string | null>): Map<string, number> {
 function optionsByCount(counts: Map<string, number>): AxisOption[] {
     return [...counts.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([slug]) => ({ key: slug, label: titleCase(slug) }));
+        .map(([slug]) => ({ key: slug, label: titleCaseSlug(slug) }));
 }
 
 /** Six public buckets in picker display order — stable across schema rebuilds. */

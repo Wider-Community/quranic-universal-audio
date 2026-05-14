@@ -22,7 +22,7 @@
      * appear multiple times in different buckets). The user's active claim
      * is pinned to the top in a "Your active claim" section; the rest are
      * grouped by `delivery.bucket` in the workflow order
-     *   available_for_review → under_review → publishing → published.
+     *   available_for_review → under_review → published.
      *
      * Only emits `select` for a non-null delivery. Audio preview is a
      * bubbled `preview` event — this component doesn't touch audio itself.
@@ -36,14 +36,16 @@
         type SchemaDescriptor,
     } from '../../catalog/schema-descriptor';
     import { currentUser } from '../../stores/current-user';
-    import { type BucketCounts, PUBLIC_BUCKET_LABELS } from '../../types/public-state';
+    import type { BucketCounts } from '../../types/public-state';
+    import { tagLabel } from '../../utils/axis-labels';
+    import { compactCoverageLabel, compactHoursLabel } from '../../utils/delivery-label';
     import { type FacetSpec, recomputeFacets } from '../../utils/facets';
     import { match } from '../../utils/fuzzy-match';
     import Modal from '../Modal.svelte';
+    import SearchInput from '../SearchInput.svelte';
     import StatePill from '../StatePill.svelte';
     import PickerFilterRail from './PickerFilterRail.svelte';
     import PickerFooter from './PickerFooter.svelte';
-    import PickerHeader from './PickerHeader.svelte';
     import PickerStateTabs from './PickerStateTabs.svelte';
 
     interface Combo {
@@ -58,13 +60,11 @@
     export let allowedBuckets: readonly PublicBucket[] = [
         'available_for_review',
         'under_review',
-        'publishing',
         'published',
     ];
 
     const dispatch = createEventDispatcher<{
         select: CombinationSelection;
-        preview: { delivery: PublicDelivery };
         close: void;
         cancel: void;
     }>();
@@ -80,14 +80,13 @@
     let activeFilters: Record<string, Set<string>> = {};
     let focusedIdx = -1;
 
-    let searchInputEl: HTMLInputElement | null = null;
+    let searchInputEl: SearchInput | null = null;
     let listEl: HTMLDivElement | null = null;
 
     // Group order for non-pinned rows.
     const GROUP_ORDER: PublicBucket[] = [
         'available_for_review',
         'under_review',
-        'publishing',
         'published',
     ];
 
@@ -176,8 +175,6 @@
         ? [mineRow, ...groupedRest.flatMap((g) => g.rows)]
         : groupedRest.flatMap((g) => g.rows);
 
-    $: resultsLabel = loading ? null : `${orderedRows.length} of ${allCombos.length}`;
-
     // Reactive so the tabs re-render the moment `stats` resolves — calling
     // a helper inline can fail to track `stats` as a dependency.
     $: tabCounts = (stats ?? {}) as Partial<BucketCounts>;
@@ -204,13 +201,8 @@
         dispatch('close');
     }
 
-    function onPreview(ev: Event, combo: Combo): void {
-        ev.stopPropagation();
-        dispatch('preview', { delivery: combo.delivery });
-    }
-
-    function onSearchInput(e: Event): void {
-        search = (e.target as HTMLInputElement).value;
+    function onSearchInput(value: string): void {
+        search = value;
         focusedIdx = orderedRows.length > 0 ? 0 : -1;
     }
 
@@ -236,13 +228,6 @@
                 e.preventDefault();
                 searchInputEl?.focus();
             }
-        } else if (e.key === ' ') {
-            const c = orderedRows[focusedIdx];
-            const active = document.activeElement as HTMLElement | null;
-            if (c && active?.tagName !== 'INPUT') {
-                e.preventDefault();
-                dispatch('preview', { delivery: c.delivery });
-            }
         } else if (e.key === 'Escape') {
             e.preventDefault();
             dispatch('cancel');
@@ -263,24 +248,12 @@
 
     function deliveryMeta(d: PublicDelivery): string {
         const parts: string[] = [];
-        if (d.riwayah) parts.push(d.riwayah);
-        if (d.style) parts.push(d.style);
-        if (d.recording_context) parts.push(d.recording_context);
+        if (d.riwayah) parts.push(tagLabel(descriptor, 'riwayah', d.riwayah));
+        if (d.style) parts.push(tagLabel(descriptor, 'style', d.style));
+        if (d.recording_year) parts.push(String(d.recording_year));
         if (d.channel_name) parts.push(d.channel_name);
-        else if (d.channel) parts.push(d.channel);
-        return parts.join(' · ');
-    }
-
-    function coverageLabel(d: PublicDelivery): string {
-        if (d.coverage_kind === 'full') return 'Full';
-        return `${d.chapter_count}/114`;
-    }
-
-    function hoursLabel(d: PublicDelivery): string {
-        if (d.total_duration_sec == null) return '—';
-        const h = d.total_duration_sec / 3600;
-        if (h < 1) return `${Math.round(h * 60)}m`;
-        return `${h.toFixed(1)}h`;
+        else if (d.channel) parts.push(tagLabel(descriptor, 'channel', d.channel));
+        return parts.filter(Boolean).join(' · ');
     }
 </script>
 
@@ -293,31 +266,16 @@
         on:keydown={onKey}
         tabindex="-1"
     >
-        <PickerHeader
-            compact
-            {title}
-            on:close={onClose}
-        />
-
         <div class="picker-controls">
             <div class="picker-controls-search">
-                <span class="search-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="M21 21l-4.35-4.35" />
-                    </svg>
-                </span>
-                <input
+                <SearchInput
                     bind:this={searchInputEl}
-                    type="text"
-                    autocomplete="off"
-                    placeholder="Search reciters — name in English or Arabic"
                     value={search}
-                    on:input={onSearchInput}
+                    placeholder="Search reciters — name in English or Arabic"
+                    count={orderedRows.length}
+                    total={allCombos.length}
+                    on:input={(e) => onSearchInput(e.detail)}
                 />
-                {#if resultsLabel}
-                    <span class="results-hint">{resultsLabel}</span>
-                {/if}
             </div>
             <div class="picker-controls-tabs">
                 <PickerStateTabs
@@ -364,27 +322,24 @@
                             on:click={() => commit(c)}
                             on:mouseenter={() => (focusedIdx = idx)}
                         >
-                            <button
-                                type="button"
-                                class="play-btn"
-                                aria-label="Preview audio"
-                                on:click={(e) => onPreview(e, c)}
-                            >▶</button>
-                            <span class="row-name">
-                                {c.reciter.name}
-                                {#if c.reciter.name_ar}<span class="row-name-ar">{c.reciter.name_ar}</span>{/if}
-                            </span>
-                            <span class="row-meta">{deliveryMeta(c.delivery)}</span>
-                            <span class="row-coverage">{coverageLabel(c.delivery)}</span>
-                            <span class="row-hours">{hoursLabel(c.delivery)}</span>
-                            <span class="row-state">
+                            <div class="row-primary">
+                                <span class="name-en">{c.reciter.name}</span>
+                                {#if c.reciter.name_ar}<span class="name-ar">{c.reciter.name_ar}</span>{/if}
+                                {#if c.reciter.country}<span class="country">{c.reciter.country}</span>{/if}
+                            </div>
+                            <div class="row-state">
                                 <StatePill state={c.delivery.bucket} size="sm" />
-                            </span>
+                            </div>
+                            <div class="row-meta">{deliveryMeta(c.delivery)}</div>
+                            <div class="row-figures">
+                                <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
+                                <span class="dur">{compactHoursLabel(c.delivery)}</span>
+                            </div>
                         </div>
                     {/if}
                     {#each groupedRest as group (group.bucket)}
                         <div class="picker-section-head">
-                            {PUBLIC_BUCKET_LABELS[group.bucket]}
+                            <span class="state-dot state-dot-{group.bucket}" aria-hidden="true"></span>
                             <span class="head-count">{group.rows.length}</span>
                         </div>
                         {#each group.rows as c (c.delivery.slug)}
@@ -398,22 +353,19 @@
                                 on:click={() => commit(c)}
                                 on:mouseenter={() => (focusedIdx = idx)}
                             >
-                                <button
-                                    type="button"
-                                    class="play-btn"
-                                    aria-label="Preview audio"
-                                    on:click={(e) => onPreview(e, c)}
-                                >▶</button>
-                                <span class="row-name">
-                                {c.reciter.name}
-                                {#if c.reciter.name_ar}<span class="row-name-ar">{c.reciter.name_ar}</span>{/if}
-                            </span>
-                                <span class="row-meta">{deliveryMeta(c.delivery)}</span>
-                                <span class="row-coverage">{coverageLabel(c.delivery)}</span>
-                                <span class="row-hours">{hoursLabel(c.delivery)}</span>
-                                <span class="row-state">
+                                <div class="row-primary">
+                                    <span class="name-en">{c.reciter.name}</span>
+                                    {#if c.reciter.name_ar}<span class="name-ar">{c.reciter.name_ar}</span>{/if}
+                                    {#if c.reciter.country}<span class="country">{c.reciter.country}</span>{/if}
+                                </div>
+                                <div class="row-state">
                                     <StatePill state={c.delivery.bucket} size="sm" />
-                                </span>
+                                </div>
+                                <div class="row-meta">{deliveryMeta(c.delivery)}</div>
+                                <div class="row-figures">
+                                    <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
+                                    <span class="dur">{compactHoursLabel(c.delivery)}</span>
+                                </div>
                             </div>
                         {/each}
                     {/each}
@@ -437,7 +389,7 @@
     }
     .body {
         display: grid;
-        grid-template-columns: 220px 1fr;
+        grid-template-columns: minmax(160px, max-content) 1fr;
         flex: 1;
         min-height: 0;
     }
@@ -451,46 +403,11 @@
         color: var(--text-muted);
         font-size: var(--fs-meta);
     }
-    .state.error { color: var(--state-publishing-fg); }
+    .state.error { color: var(--state-error-fg); }
 
     .picker-controls-search {
-        position: relative;
-        display: flex;
-        align-items: center;
         width: 360px;
         flex-shrink: 0;
-    }
-    .search-icon {
-        position: absolute;
-        left: var(--s-3);
-        color: var(--text-faint);
-        pointer-events: none;
-        display: flex;
-    }
-    .picker-controls-search input {
-        width: 100%;
-        padding: var(--s-3) var(--s-3) var(--s-3) calc(var(--s-3) + 24px);
-        background: var(--panel);
-        border: 1px solid var(--border-default);
-        border-radius: var(--r-2);
-        color: var(--text-primary);
-        font-size: var(--fs-body);
-        outline: none;
-        transition: border-color var(--t-fast), background var(--t-fast);
-    }
-    .picker-controls-search input:focus {
-        border-color: var(--accent);
-        background: var(--panel-2);
-    }
-    .picker-controls-search input::placeholder { color: var(--text-faint); }
-    .results-hint {
-        position: absolute;
-        right: var(--s-3);
-        font-size: 10.5px;
-        color: var(--text-faint);
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
-        pointer-events: none;
     }
     .picker-controls-tabs {
         flex: 1;
