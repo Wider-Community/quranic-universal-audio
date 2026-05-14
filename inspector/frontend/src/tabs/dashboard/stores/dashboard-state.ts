@@ -12,7 +12,7 @@ import { derived, writable } from 'svelte/store';
 
 export type DashboardView =
     | { kind: 'list' }
-    | { kind: 'detail'; reciterId: string };
+    | { kind: 'detail'; reciterId: string; initialSlug?: string };
 
 export type DashboardSort = 'status' | 'recent' | 'alphabetical' | 'combinations';
 
@@ -59,8 +59,8 @@ export function clearAllFilters(): void {
     }));
 }
 
-export function openDetail(reciterId: string): void {
-    dashboardState.update((s) => ({ ...s, view: { kind: 'detail', reciterId } }));
+export function openDetail(reciterId: string, initialSlug?: string): void {
+    dashboardState.update((s) => ({ ...s, view: { kind: 'detail', reciterId, initialSlug } }));
 }
 
 export function closeDetail(): void {

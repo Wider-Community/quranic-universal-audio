@@ -9,14 +9,14 @@
 
     import { clickOutside } from '../../actions/click-outside';
     import type { PublicDelivery, PublicReciter } from '../../types/public-state';
-    import { combinationStandard } from '../../utils/delivery-label';
+    import {
+        combinationCompact,
+        combinationStandard,
+    } from '../../utils/delivery-label';
     import { compareDeliveries } from '../../utils/delivery-sort';
-    import StatePill from '../StatePill.svelte';
 
     export let reciter: PublicReciter | null;
     export let delivery: PublicDelivery | null;
-    export let surahNum: number | null = null;
-    export let speed: number = 1;
 
     const dispatch = createEventDispatcher<{ select: PublicDelivery }>();
 
@@ -62,11 +62,7 @@
                 </div>
                 <div class="sub">
                     {#if delivery}
-                        <StatePill state={delivery.bucket} size="sm" />
-                        <span class="sep" aria-hidden="true">|</span>
-                        <span>Surah {surahNum ?? '—'}</span>
-                        <span class="sep" aria-hidden="true">|</span>
-                        <span class="mono">{speed}×</span>
+                        <span>{combinationCompact(delivery)}</span>
                     {/if}
                 </div>
             </div>
@@ -150,8 +146,6 @@
         font-size: var(--fs-meta);
         color: var(--text-muted);
     }
-    .sep { color: var(--border-default); user-select: none; }
-    .mono { font-family: var(--font-mono); font-size: 10.5px; }
     .switch {
         color: var(--text-faint);
         font-size: 14px;

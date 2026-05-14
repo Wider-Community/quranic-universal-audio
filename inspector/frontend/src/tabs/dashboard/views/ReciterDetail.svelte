@@ -117,7 +117,8 @@
         }
     }
 
-    $: detailId = $dashboardState.view.kind === 'detail' ? $dashboardState.view.reciterId : null;
+    $: detailView = $dashboardState.view.kind === 'detail' ? $dashboardState.view : null;
+    $: detailId = detailView?.reciterId ?? null;
     $: void maybeReload(detailId);
 
     async function maybeReload(id: string | null): Promise<void> {
@@ -139,7 +140,15 @@
         try {
             const result = await fetchPublicReciter(id, inflight.signal);
             if (result === null) notFound = true;
-            else reciter = result;
+            else {
+                reciter = result;
+                // Pre-select the slug requested by the caller (e.g. from the
+                // bottom player's state pill), if it exists on this reciter.
+                const req = detailView?.initialSlug;
+                if (req && result.deliveries.some((d) => d.slug === req)) {
+                    selectedSlug = req;
+                }
+            }
         } catch (e) {
             if ((e as Error).name === 'AbortError') return;
             error = (e as Error).message ?? 'Failed to load reciter';

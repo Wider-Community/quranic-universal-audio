@@ -30,6 +30,8 @@
     } from '../../stores/player-context';
     import type { PublicDelivery } from '../../types/public-state';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
+    import StatePill from '../StatePill.svelte';
+    import { openDetail } from '../../../tabs/dashboard/stores/dashboard-state';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
@@ -229,6 +231,12 @@
         onSpeedChange(next);
     }
 
+    function openReciterDetail(): void {
+        const reciter = $playerContext.reciter;
+        const delivery = $playerContext.delivery;
+        if (reciter && delivery) openDetail(reciter.reciter_id, delivery.slug);
+    }
+
     function onSeekFromBar(ev: CustomEvent<number>): void {
         dashPort.seek(ev.detail);
     }
@@ -263,8 +271,6 @@
         <PlayerMetaChip
             reciter={$playerContext.reciter}
             delivery={$playerContext.delivery}
-            surahNum={$playerContext.surahNum}
-            speed={$playerContext.speed}
             on:select={onCombinationSelect}
         />
 
@@ -284,6 +290,15 @@
         </div>
 
         <div class="right">
+            {#if $playerContext.delivery && $playerContext.reciter}
+                <button
+                    type="button"
+                    class="state-pill-btn"
+                    on:click={openReciterDetail}
+                >
+                    <StatePill state={$playerContext.delivery.bucket} size="sm" />
+                </button>
+            {/if}
             <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
                 <button
                     type="button"
@@ -410,5 +425,14 @@
         border-color: var(--border-strong);
         color: var(--text-primary);
     }
+    .state-pill-btn {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        border-radius: 999px;
+        transition: opacity var(--t-fast);
+    }
+    .state-pill-btn:hover { opacity: 0.8; }
     audio { display: none; }
 </style>
