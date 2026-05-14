@@ -8,21 +8,15 @@ from __future__ import annotations
 import concurrent.futures
 import hashlib
 import json
-import os
 import struct
 import subprocess
-import tempfile
-import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     MIN_FULL_PEAK_BUCKETS, MIN_SEG_PEAK_BUCKETS,
                     PEAKS_BUCKETS_PER_SEC, PEAKS_FFMPEG_SAMPLE_RATE,
-                    PEAKS_MIN_CHUNK_BYTES, PEAKS_PCM_NORMALIZER,
-                    PEAKS_WORKER_COUNT, ID3_PROBE_BYTES,
-                    ID3_PROBE_TIMEOUT, DEFAULT_BYTES_PER_SEC,
-                    RANGE_DECODE_PAD_SEC, TEMP_AUDIO_SUFFIX)
+                    PEAKS_PCM_NORMALIZER, PEAKS_WORKER_COUNT)
 from services import cache
 from services.data_loader import load_detailed
 
@@ -106,133 +100,31 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
 
 
 # ---------------------------------------------------------------------------
-# HTTP Range infrastructure for segment-level peak extraction
+# Segment-level peak extraction
 # ---------------------------------------------------------------------------
 
-def _decode_synchsafe_int(b: bytes) -> int:
-    """Decode a 4-byte ID3v2 synchsafe integer. Per ID3v2.3 §3.1 spec."""
-    return (b[0] & 0x7F) << 21 | (b[1] & 0x7F) << 14 | (b[2] & 0x7F) << 7 | (b[3] & 0x7F)
+def _ffmpeg_decode_segment(src: AudioSource | None, url: str,
+                           start_sec: float, duration_sec: float) -> bytes | None:
+    """VBR-safe segment decode. Picks the cheapest available input for the
+    requested window:
 
+    * ``src.path`` (bucket mount or disk cache) → ffmpeg reads a local file.
+    * ``src.data`` (in-memory bytes, local-dev only) → fed through stdin.
+    * ``url`` fallback → ffmpeg fetches the chapter via HTTP Range itself
+      (frame-aware, VBR-correct). Requires the network-enabled ffmpeg build —
+      see ``inspector/Dockerfile`` (``--enable-protocol=…,http,https,tcp,tls``).
 
-def _get_audio_meta(url: str) -> dict:
-    """Probe a remote MP3 URL for ID3v2 offset and approximate bytes_per_sec."""
-    cached = cache.get_url_audio_meta(url)
-    if cached is not None:
-        return cached
-
-    id3_offset = 0
-    try:
-        req = urllib.request.Request(url, headers={"Range": f"bytes=0-{ID3_PROBE_BYTES - 1}"})
-        with urllib.request.urlopen(req, timeout=ID3_PROBE_TIMEOUT) as resp:
-            header_data = resp.read(ID3_PROBE_BYTES)
-            # Check for ID3v2 header: "ID3" magic bytes
-            if len(header_data) >= 10 and header_data[:3] == b"ID3":
-                # ID3v2 size is a synchsafe integer in bytes 6-9
-                id3_offset = 10 + _decode_synchsafe_int(header_data[6:10])
-    except Exception:
-        pass
-
-    # Estimate bytes_per_sec from ffprobe on a small chunk
-    bytes_per_sec = DEFAULT_BYTES_PER_SEC
-    try:
-        req = urllib.request.Request(url, headers={"Range": f"bytes={id3_offset}-{id3_offset + ID3_PROBE_BYTES - 1}"})
-        with urllib.request.urlopen(req, timeout=ID3_PROBE_TIMEOUT) as resp:
-            probe_data = resp.read(ID3_PROBE_BYTES)
-        fd, tmp_path = tempfile.mkstemp(suffix=TEMP_AUDIO_SUFFIX)
-        try:
-            os.write(fd, probe_data)
-            os.close(fd)
-            result = subprocess.run(
-                ["ffprobe", "-v", "quiet", "-print_format", "json",
-                 "-show_streams", tmp_path],
-                capture_output=True, timeout=ID3_PROBE_TIMEOUT,
-            )
-            if result.returncode == 0:
-                streams = json.loads(result.stdout).get("streams", [])
-                for s in streams:
-                    br = int(s.get("bit_rate", 0))
-                    if br > 0:
-                        bytes_per_sec = br // 8
-                        break
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-    except Exception:
-        pass
-
-    meta = {"id3_offset": id3_offset, "bytes_per_sec": bytes_per_sec}
-    cache.set_url_audio_meta(url, meta)
-    return meta
-
-
-def _range_decode_segment(url: str, start_sec: float, duration_sec: float,
-                          meta: dict) -> bytes | None:
-    """Download an HTTP Range byte-slice and decode to raw PCM via ffmpeg.
-
-    CBR-only path: maps time → byte by ``bytes_per_sec * t`` then fetches a
-    padded Range and trims with ffmpeg ``-ss``. Cheap (~0.4 s) but assumes
-    constant bitrate. Use :func:`_ffmpeg_decode_segment` for VBR sources.
+    Returns raw mono 16-bit PCM at ``PEAKS_FFMPEG_SAMPLE_RATE``, or ``None``
+    on ffmpeg failure / timeout.
     """
-    bps = meta["bytes_per_sec"]
-    id3 = meta["id3_offset"]
-    pad = RANGE_DECODE_PAD_SEC
-
-    # Align to a round boundary for MP3 frame sync
-    aligned_start = max(0, start_sec - pad)
-    aligned_end = start_sec + duration_sec + pad
-    byte_start = id3 + int(aligned_start * bps)
-    byte_end = id3 + int(aligned_end * bps)
-
-    try:
-        req = urllib.request.Request(url, headers={"Range": f"bytes={byte_start}-{byte_end}"})
-        with urllib.request.urlopen(req, timeout=FFMPEG_TIMEOUT) as resp:
-            chunk = resp.read()
-    except Exception:
-        return None
-
-    if len(chunk) < PEAKS_MIN_CHUNK_BYTES:
-        return None
-
-    # Write to temp file and decode with ffmpeg
-    fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
-    try:
-        os.write(fd, chunk)
-        os.close(fd)
-        # Seek within the chunk to the exact target window, emitting exactly
-        # `duration_sec` seconds of PCM. The byte-range pad exists only so
-        # ffmpeg has enough context for MP3 frame sync — it must NOT leak into
-        # the output, or downstream peaks will cover a longer range than
-        # requested (mis-aligning every peak relative to [start_ms, end_ms]).
-        seek_within = max(0, start_sec - aligned_start)
-        result = subprocess.run(
-            ["ffmpeg", "-ss", str(seek_within), "-i", tmp_path,
-             "-t", str(duration_sec),
-             "-f", "s16le", "-ac", "1",
-             "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
-             "-v", "quiet", "-"],
-            capture_output=True, timeout=FFMPEG_TIMEOUT,
-        )
-        if result.returncode != 0 or len(result.stdout) < 4:
-            return None
-        return result.stdout
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
-
-
-def _ffmpeg_decode_segment(src: AudioSource, start_sec: float,
-                           duration_sec: float) -> bytes | None:
-    """VBR-safe segment decode from a local source (bucket bytes or disk).
-
-    ffmpeg seeks by time (frame-aware) so this works for both VBR and CBR
-    without the byte-arithmetic mis-estimate of :func:`_range_decode_segment`.
-    Reads from stdin pipe when ``src.data`` is in memory, from disk when
-    ``src.path`` is set. Never from a URL — the inspector image's ffmpeg has
-    ``--disable-network``.
-    """
-    if not src.has_local_bytes:
-        return None
-    input_arg = str(src.path) if src.path is not None else "pipe:0"
+    stdin_data: bytes | None = None
+    if src is not None and src.path is not None:
+        input_arg = str(src.path)
+    elif src is not None and src.data is not None:
+        input_arg = "pipe:0"
+        stdin_data = src.data
+    else:
+        input_arg = url
     try:
         result = subprocess.run(
             ["ffmpeg", "-ss", str(start_sec), "-i", input_arg,
@@ -241,7 +133,7 @@ def _ffmpeg_decode_segment(src: AudioSource, start_sec: float,
              "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
              "-v", "quiet", "-"],
             capture_output=True, timeout=FFMPEG_TIMEOUT,
-            input=src.data if src.path is None else None,
+            input=stdin_data,
         )
         if result.returncode != 0 or len(result.stdout) < 4:
             return None
@@ -272,23 +164,15 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     if cached_only:
         return None
 
-    # Not cached -- decode via resolver (local bytes/path) or fall back to
-    # HTTP Range arithmetic for CBR remote sources.
+    # Decode via resolver — local bytes / path when prefetched, otherwise
+    # ffmpeg fetches the chapter via HTTP Range directly (frame-aware,
+    # VBR-correct).
     start_sec = start_ms / 1000
     duration_sec = (end_ms - start_ms) / 1000
 
     from services import audio_source
     src = audio_source.resolve(reciter, url) if reciter else None
-    if src and src.has_local_bytes:
-        raw = _ffmpeg_decode_segment(src, start_sec, duration_sec)
-    else:
-        # No local bytes — ffmpeg can't fetch HTTPS in the stripped inspector
-        # image. Range-decode via urllib (CBR-correct, VBR-approximate) is the
-        # only remaining option. For VBR remote chapters this mis-estimates
-        # by seconds on late segments; acceptable degraded fallback until the
-        # prefetch worker has populated the bucket.
-        meta = _get_audio_meta(url)
-        raw = _range_decode_segment(url, start_sec, duration_sec, meta)
+    raw = _ffmpeg_decode_segment(src, url, start_sec, duration_sec)
     if raw is None:
         return None
 

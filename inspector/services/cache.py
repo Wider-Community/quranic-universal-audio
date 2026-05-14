@@ -192,18 +192,6 @@ def discard_peaks_computing(key: str) -> None:
     _PEAKS_COMPUTING.discard(key)
 
 
-# Remote audio meta (url -> {id3_offset, bytes_per_sec})
-_url_audio_meta: _KeyedCache[dict] = _KeyedCache()
-
-
-def get_url_audio_meta(url: str) -> dict | None:
-    return _url_audio_meta.get(url)
-
-
-def set_url_audio_meta(url: str, meta: dict) -> None:
-    _url_audio_meta.set(url, meta)
-
-
 # Phonemizer singleton
 _phonemizer: _SingletonCache[Any] = _SingletonCache()
 

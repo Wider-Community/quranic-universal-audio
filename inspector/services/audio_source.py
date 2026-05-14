@@ -24,9 +24,9 @@ class AudioSource:
     Exactly one of ``data`` / ``path`` is populated when the chapter is on
     the bucket or on local disk; both are ``None`` for CDN-only chapters.
     Callers prefer ``data`` (bucket bytes — already in memory after the read)
-    over ``path`` (disk, ffmpeg can mmap), and fall back to ``cdn_url`` only
-    when ffmpeg can be given a network handle (it cannot, in the stripped
-    inspector image — see ``Dockerfile`` ``--disable-network``).
+    over ``path`` (disk, ffmpeg can mmap), and fall back to ``cdn_url`` —
+    ffmpeg can fetch HTTPS directly via its built-in HTTP protocol when no
+    local bytes are available.
     """
 
     cdn_url: str

@@ -96,12 +96,8 @@ ACCORDION_CONTEXT = {
 # HTTP / subprocess timeouts (seconds)
 FFMPEG_TIMEOUT = 15
 FFMPEG_FULL_TIMEOUT = 300
-ID3_PROBE_TIMEOUT = 5
 
 # Audio processing
-DEFAULT_BYTES_PER_SEC = 16_000
-RANGE_DECODE_PAD_SEC = 5
-ID3_PROBE_BYTES = 50_000
 MIN_SEG_PEAK_BUCKETS = 10
 MIN_FULL_PEAK_BUCKETS = 100
 PEAKS_BUCKETS_PER_SEC = 30                # target peak density for segment-level peaks
@@ -125,15 +121,13 @@ AUDIO_CACHE_MAX_AGE = 31_536_000
 # Confidence thresholds
 LOW_CONFIDENCE_RED = 0.60           # below this = red highlight ("below_60" stat)
 
-# Temp audio suffix — used by services/peaks.py and services/cache.py when writing
-# partial HTTP byte-range chunks. ffmpeg needs a plausible extension for frame sync.
+# Temp audio suffix fallback for cache paths derived from URLs without an extension.
 TEMP_AUDIO_SUFFIX = ".mp3"
 
 # Peaks (ffmpeg) — waveform peak extraction defaults (services/peaks.py)
 PEAKS_FFMPEG_SAMPLE_RATE = 8000          # Hz — ffmpeg resample target for peak computation
 PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 1] float
 PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parallel peak compute
-PEAKS_MIN_CHUNK_BYTES = 100              # short-circuit below this raw-chunk size (prevents tiny ffmpeg invocations)
 
 # Audio-cache background download (routes/audio_proxy.py)
 AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download workers for by_surah cache warmup

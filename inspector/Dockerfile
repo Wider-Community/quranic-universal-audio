@@ -25,7 +25,8 @@ RUN npm run build
 
 # --- Stage 2: compile minimal static ffmpeg (mp3 decode + s16le/wav output) ---
 FROM alpine:3.20 AS ffmpeg-build
-RUN apk add --no-cache build-base yasm nasm curl tar xz
+RUN apk add --no-cache build-base yasm nasm curl tar xz \
+                       openssl-dev openssl-libs-static zlib-dev zlib-static
 ARG FFMPEG_VERSION=7.1
 RUN curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" | tar -xJ -C /tmp
 WORKDIR /tmp/ffmpeg-${FFMPEG_VERSION}
@@ -34,22 +35,27 @@ WORKDIR /tmp/ffmpeg-${FFMPEG_VERSION}
 #   encoder/muxer:   pcm_s16le + wav output (s16le muxer is silently dropped
 #                    unless pcm_s16le muxer is listed alongside in ffmpeg 7.1)
 #   filter:          aresample (for `-ar` sample-rate conversion), aformat, anull
-#   protocol:        file + pipe (subprocess `-i <path>`, stdout `-`)
+#   protocol:        file + pipe (local I/O) + http,https,tcp,tls (CDN reads —
+#                    lets `_ffmpeg_decode_segment` decode remote-only chapters
+#                    directly via HTTP Range without the Python ID3v2 + byte-
+#                    arithmetic workaround. Costs ~8.5 MB statically-linked
+#                    OpenSSL, measured.)
 # ffprobe is built alongside ffmpeg; needed by services/peaks.py stream probe.
 RUN ./configure \
       --prefix=/ff \
       --disable-everything \
       --disable-autodetect \
       --disable-doc --disable-htmlpages --disable-manpages --disable-podpages --disable-txtpages \
-      --disable-network --disable-debug --disable-ffplay \
+      --disable-debug --disable-ffplay \
       --disable-shared --enable-static \
       --enable-small \
+      --enable-openssl \
       --enable-decoder=mp3,mp3float,pcm_s16le \
       --enable-demuxer=mp3,wav,s16le \
       --enable-encoder=pcm_s16le \
       --enable-muxer=s16le,wav,pcm_s16le \
       --enable-filter=aresample,aformat,anull \
-      --enable-protocol=file,pipe \
+      --enable-protocol=file,pipe,http,https,tcp,tls \
       --enable-parser=mpegaudio \
       --extra-ldflags="-static" \
       --pkg-config-flags="--static" && \
