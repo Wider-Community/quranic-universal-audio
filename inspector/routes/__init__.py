@@ -43,3 +43,10 @@ def register_blueprints(app):
     app.register_blueprint(audio_meta_bp)
     app.register_blueprint(segment_clip_bp)
     app.register_blueprint(static_bp)
+
+    # Dev-only blueprint. Registered unconditionally so the route exists
+    # for tests that flip ``INSPECTOR_DEV_MODE`` at runtime; the handler
+    # itself returns 404 when dev mode is off. Keeps Flask's setup-finished
+    # contract intact without sacrificing prod surface (one no-op route).
+    from routes.dev import dev_bp
+    app.register_blueprint(dev_bp)

@@ -17,6 +17,7 @@ function _user(overrides: Partial<CurrentUser> = {}): CurrentUser {
         hf_user_id: 'u-1',
         role: 'contributor' as Role,
         active_claim: null,
+        dev_mode: false,
         ...overrides,
     };
 }
@@ -161,6 +162,7 @@ describe('syncEditingMode', () => {
             hf_user_id: null,
             role: null,
             active_claim: null,
+            dev_mode: false,
         };
         expect(syncEditingMode(anon, _task())).toEqual({
             kind: 'view',

@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
 
     import { signIn, signOut } from './lib/api/auth-client';
+    import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
@@ -76,7 +77,10 @@
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => switchTab(TAB_NAMES.SEGMENTS)}>Segments</button>
         </div>
         <div class="auth-controls">
-            {#if isSignedIn($currentUser)}
+            {#if $currentUser.dev_mode}
+                <!-- Local dev only — never rendered on the deployed Space. -->
+                <DevRoleSwitcher />
+            {:else if isSignedIn($currentUser)}
                 <span class="auth-login" title="Signed in as {$currentUser.login}">
                     {$currentUser.login}
                     {#if $currentUser.role && $currentUser.role !== 'contributor'}

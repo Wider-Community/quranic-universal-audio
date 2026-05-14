@@ -65,6 +65,7 @@ def test_me_anonymous_returns_null_shape(flask_client):
         "hf_user_id": None,
         "role": None,
         "active_claim": None,
+        "dev_mode": False,
     }
 
 

@@ -13,6 +13,14 @@ role fresh on every call via ``access.resolve_role``, so a revoked
 maintainer becomes a contributor on the very next request without re-login.
 CSRF defense for mutating routes is ``SameSite=Lax`` + ``require_same_origin``.
 
+Local dev (``INSPECTOR_DEV_MODE=1``) bypasses OAuth entirely: ``current_user()``
+returns a synthetic ``User(hf_user_id="dev-local", login="dev", role=<from cookie>)``
+driven by the ``inspector_dev_role`` cookie (default ``"owner"``). Claims and
+audit entries created in dev mode carry that synthetic ID — fine because dev
+runs against a dev bucket. ``INSPECTOR_DEV_MODE`` is auto-enabled by ``app.py``
+when running locally (no ``INSPECTOR_BEHIND_PROXY=1``, no pytest). HF Space
+deploys leave it off and OAuth gates everything as before.
+
 Spec: docs/planning/inspector-deploy/v2/phases/03-auth-and-claims.md
 """
 
@@ -37,6 +45,13 @@ logger = logging.getLogger(__name__)
 SESSION_COOKIE_NAME = "inspector_session"
 SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 1 week — mirrors hf_oauth_expiration_minutes: 10080
 SESSION_SALT = "inspector-session-v1"
+
+# Dev-mode synthetic identity. Unsigned cookie; only honoured when
+# INSPECTOR_DEV_MODE=1. See module docstring.
+DEV_ROLE_COOKIE_NAME = "inspector_dev_role"
+DEV_USER_HF_ID = "dev-local"
+DEV_USER_LOGIN = "dev"
+DEV_ROLE_VALUES = ("owner", "maintainer", "contributor", "anonymous")
 
 _oauth: OAuth | None = None
 
@@ -67,6 +82,16 @@ def get_oauth() -> OAuth:
     if _oauth is None:
         raise RuntimeError("OAuth not initialized; call init_oauth(app) first")
     return _oauth
+
+
+def is_dev_mode() -> bool:
+    """True when the synthetic-user auth bypass is active.
+
+    Gated by ``INSPECTOR_DEV_MODE=1`` (set automatically by ``app.py`` when
+    running locally outside pytest; explicit ``0`` forces it off). HF Space
+    deploys never see it on.
+    """
+    return os.environ.get("INSPECTOR_DEV_MODE") == "1"
 
 
 def is_oauth_configured() -> bool:
@@ -130,7 +155,12 @@ def current_user() -> User | None:
     ``role`` is resolved fresh on every call via ``access.resolve_role`` —
     the cookie does not carry it, so role revocation takes effect on the
     very next request without forcing re-login.
+
+    In dev mode (``INSPECTOR_DEV_MODE=1``) this short-circuits OAuth and
+    returns the synthetic dev user driven by ``inspector_dev_role``.
     """
+    if is_dev_mode():
+        return _dev_current_user()
     cookie_val = request.cookies.get(SESSION_COOKIE_NAME, "")
     payload = decode_session(cookie_val)
     if payload is None:
@@ -141,3 +171,16 @@ def current_user() -> User | None:
         return None
     role = access.resolve_role(hf_user_id)
     return User(hf_user_id=hf_user_id, login=login, role=role)
+
+
+def _dev_current_user() -> User | None:
+    """Dev-mode synthetic user. ``"anonymous"`` cookie value → None."""
+    raw = request.cookies.get(DEV_ROLE_COOKIE_NAME, "owner") or "owner"
+    if raw == "anonymous":
+        return None
+    try:
+        role = Role(raw)
+    except ValueError:
+        # Garbage cookie — don't 500 a dev page, fall back to owner.
+        role = Role.OWNER
+    return User(hf_user_id=DEV_USER_HF_ID, login=DEV_USER_LOGIN, role=role)

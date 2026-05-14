@@ -19,6 +19,12 @@ export interface CurrentUser {
     hf_user_id: string | null;
     role: Role;
     active_claim: string | null;
+    /**
+     * True when the backend is running with the dev-mode auth bypass
+     * (`INSPECTOR_DEV_MODE=1`). Only ever true locally — never on the
+     * deployed HF Space. Toggles the in-app role switcher UI.
+     */
+    dev_mode: boolean;
 }
 
 const _ANON: CurrentUser = {
@@ -26,6 +32,7 @@ const _ANON: CurrentUser = {
     hf_user_id: null,
     role: null,
     active_claim: null,
+    dev_mode: false,
 };
 
 export const currentUser = writable<CurrentUser>(_ANON);

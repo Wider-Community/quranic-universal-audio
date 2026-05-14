@@ -36,6 +36,7 @@ describe('ClaimButton', () => {
             hf_user_id: 'u-1',
             role: 'contributor',
             active_claim: 'some-other-slug',
+            dev_mode: false,
         });
 
         const { container } = render(ClaimButton, {
@@ -56,6 +57,7 @@ describe('ClaimButton', () => {
             hf_user_id: 'u-1',
             role: 'contributor',
             active_claim: null,
+            dev_mode: false,
         });
 
         const { container } = render(ClaimButton, {
@@ -70,6 +72,6 @@ describe('ClaimButton', () => {
         expect(btn).not.toBeNull();
         expect(btn!.classList.contains('seg-btn')).toBe(true);
         expect(btn!.classList.contains('primary')).toBe(true);
-        expect(btn!.classList.contains('lg')).toBe(true);
+        expect(btn!.classList.contains('lg')).toBe(false);
     });
 });

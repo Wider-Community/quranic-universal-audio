@@ -45,6 +45,18 @@ def _load_dotenv_for_local_dev() -> None:
 
 _load_dotenv_for_local_dev()
 
+
+# Auto-enable dev-mode auth bypass when running locally outside pytest.
+# Tri-state env var: unset → auto-detect; "1" → force on; "0" → force off.
+# Auto-detect: on iff INSPECTOR_BEHIND_PROXY != "1" AND not running under
+# pytest (mirrors the audio-prefetch gate at module-load below). HF Space
+# deploys set INSPECTOR_BEHIND_PROXY=1, so they never auto-enable.
+if "INSPECTOR_DEV_MODE" not in os.environ:
+    if (os.environ.get("INSPECTOR_BEHIND_PROXY") != "1"
+            and "pytest" not in sys.modules):
+        os.environ["INSPECTOR_DEV_MODE"] = "1"
+
+
 from flask import Flask, jsonify, send_from_directory
 from flask_compress import Compress
 from werkzeug.exceptions import HTTPException
@@ -98,6 +110,13 @@ def _configure_logging() -> None:
 
 _configure_logging()
 logger = logging.getLogger("inspector")
+
+if auth_service.is_dev_mode():
+    logger.warning(
+        "INSPECTOR_DEV_MODE=1 — synthetic dev user active, OAuth bypassed. "
+        "Default role 'owner'; flip via the in-app role switcher or the "
+        "'inspector_dev_role' cookie."
+    )
 
 _HERE = Path(__file__).parent.resolve()
 FRONTEND_DIST = _HERE / "frontend" / "dist"
