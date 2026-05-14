@@ -48,13 +48,29 @@ def test_proposed_edits_populated():
 
 
 def test_proposed_edits_rejects_bad_year_low():
+    # Pre-phonograph era — 1885 is the floor.
     with pytest.raises(ValidationError):
         ProposedEdits(recording_year=1800)
 
 
-def test_proposed_edits_rejects_bad_year_high():
+def test_proposed_edits_accepts_year_at_lower_bound():
+    edits = ProposedEdits(recording_year=1885)
+    assert edits.recording_year == 1885
+
+
+def test_proposed_edits_rejects_year_above_current():
+    # Dynamic upper bound = current UTC year; anything beyond that is implausible.
+    from datetime import datetime, timezone
+    next_year = datetime.now(timezone.utc).year + 1
     with pytest.raises(ValidationError):
-        ProposedEdits(recording_year=3000)
+        ProposedEdits(recording_year=next_year)
+
+
+def test_proposed_edits_accepts_current_year():
+    from datetime import datetime, timezone
+    this_year = datetime.now(timezone.utc).year
+    edits = ProposedEdits(recording_year=this_year)
+    assert edits.recording_year == this_year
 
 
 def test_proposed_edits_rejects_unknown_field():
