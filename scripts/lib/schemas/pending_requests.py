@@ -23,7 +23,7 @@ Spec: docs/planning/inspector-deploy/v2/inspector-state-management.md
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -31,12 +31,16 @@ from .audit import Actor
 from .state import SLUG_RE
 
 
-# Recording-year plausibility window: earliest plausible studio recording
-# of Quranic recitation predates 1900 only theoretically; we accept 1900+.
-# Upper bound is loose (current year + a small slack) so the schema doesn't
-# break at year boundaries without redeploy.
-MIN_RECORDING_YEAR = 1900
-MAX_RECORDING_YEAR = 2100
+# Recording-year plausibility window. Lower bound: 1885 — recorded audio
+# predates the cylinder phonograph era by only a few years, and we want to
+# admit any plausible historical recording. Upper bound is dynamic
+# (current UTC year), enforced in the field validator so the schema
+# tolerates year rollovers without redeploy.
+MIN_RECORDING_YEAR = 1885
+
+
+def _max_recording_year() -> int:
+    return datetime.now(timezone.utc).year
 
 
 class ProposedEdits(BaseModel):
@@ -62,11 +66,19 @@ class ProposedEdits(BaseModel):
         description="ISO-2 country code; validation deferred to catalog write",
     )
     recording_context: str | None = None
-    recording_year: int | None = Field(
-        default=None,
-        ge=MIN_RECORDING_YEAR,
-        le=MAX_RECORDING_YEAR,
-    )
+    recording_year: int | None = None
+
+    @field_validator("recording_year")
+    @classmethod
+    def _check_year(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
+        max_year = _max_recording_year()
+        if v < MIN_RECORDING_YEAR or v > max_year:
+            raise ValueError(
+                f"recording_year must be between {MIN_RECORDING_YEAR} and {max_year}"
+            )
+        return v
 
     def has_any(self) -> bool:
         """True iff at least one field is populated."""
@@ -94,6 +106,15 @@ class PendingRequest(BaseModel):
     requester: Actor
     proposed_edits: ProposedEdits = Field(default_factory=ProposedEdits)
     comments: str | None = Field(default=None, max_length=1000)
+    auto_claim: bool = Field(
+        default=False,
+        description=(
+            "If true, when ``reciter.alignment_completed`` fires for this slug "
+            "the requester is automatically claimed as the reviewer (i.e. a "
+            "follow-up ``reciter.claimed`` is dispatched on their behalf). "
+            "Skipped silently when the user already holds another active claim."
+        ),
+    )
 
     @field_validator("slug")
     @classmethod

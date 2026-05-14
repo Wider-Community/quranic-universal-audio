@@ -477,6 +477,107 @@ def test_alignment_completed_applies_pending_edits(state_env, monkeypatch):
     assert pending_service.get("test_reciter") is None
 
 
+def test_alignment_completed_auto_claims_when_flag_set(state_env, monkeypatch):
+    """auto_claim=True: alignment_completed fires a follow-up reciter.claimed
+    on the requester's behalf, landing the row in UNDER_REVIEW."""
+    state_service, _, _, _ = state_env
+    from services import audit as audit_service
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    requester = _actor(hf_user_id="u-req", role="contributor")
+    state_service.transition(
+        "test_reciter",
+        "reciter.requested",
+        actor=requester,
+        payload={"proposed_edits": {}, "comments": None, "auto_claim": True},
+    )
+
+    system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
+    state_service.transition(
+        "test_reciter", "reciter.alignment_completed", actor=system,
+    )
+
+    row = state_service.get_row("test_reciter")
+    assert row is not None
+    assert row.state == ReciterState.UNDER_REVIEW
+    assert row.assignee_hf_id == "u-req"
+
+
+def test_alignment_completed_skips_auto_claim_when_flag_unset(state_env, monkeypatch):
+    """Default behavior: no auto_claim, row sits in AWAITING_REVIEW for a
+    contributor to pick up."""
+    state_service, _, _, _ = state_env
+    from services import audit as audit_service
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    state_service.transition(
+        "test_reciter",
+        "reciter.requested",
+        actor=_actor(role="contributor"),
+        payload={"proposed_edits": {}, "comments": None},
+    )
+    system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
+    state_service.transition(
+        "test_reciter", "reciter.alignment_completed", actor=system,
+    )
+    row = state_service.get_row("test_reciter")
+    assert row is not None
+    assert row.state == ReciterState.AWAITING_REVIEW
+    assert row.assignee_hf_id is None
+
+
+def test_alignment_completed_skips_auto_claim_when_other_claim_held(
+    state_env, monkeypatch, tmp_path,
+):
+    """auto_claim=True but requester already holds another active claim:
+    skip silently, row stays in AWAITING_REVIEW for someone else to grab."""
+    state_service, _, _, backend = state_env
+    from services import audit as audit_service
+    from services import storage_paths
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    # Seed an existing claim for the requester on a different slug.
+    rows = ReciterStateFile(
+        reciters=[
+            ReciterRow(
+                slug="test_reciter",
+                state=ReciterState.CATALOGUED,
+                state_since=datetime.now(timezone.utc),
+            ),
+            ReciterRow(
+                slug="other_reciter",
+                state=ReciterState.UNDER_REVIEW,
+                state_since=datetime.now(timezone.utc),
+                assignee_hf_id="u-req",
+                assignee_login="alice",
+                assignee_since=datetime.now(timezone.utc),
+            ),
+        ]
+    )
+    backend.write_json_atomic(
+        storage_paths.state_path(), rows.model_dump(mode="json"),
+    )
+    state_service.hydrate()
+
+    requester = _actor(hf_user_id="u-req", role="contributor")
+    state_service.transition(
+        "test_reciter",
+        "reciter.requested",
+        actor=requester,
+        payload={"proposed_edits": {}, "comments": None, "auto_claim": True},
+    )
+    system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
+    state_service.transition(
+        "test_reciter", "reciter.alignment_completed", actor=system,
+    )
+    row = state_service.get_row("test_reciter")
+    assert row is not None
+    # Auto-claim skipped because the requester has another active claim;
+    # row stays in AWAITING_REVIEW for a different contributor.
+    assert row.state == ReciterState.AWAITING_REVIEW
+    assert row.assignee_hf_id is None
+
+
 def test_alignment_completed_noop_when_no_pending(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service

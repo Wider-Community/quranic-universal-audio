@@ -63,6 +63,10 @@ def submit_request(user, slug: str):
     if comments is not None and not isinstance(comments, str):
         return jsonify({"error": "comments must be a string or null"}), 400
 
+    auto_claim = body.get("auto_claim", False)
+    if not isinstance(auto_claim, bool):
+        return jsonify({"error": "auto_claim must be a boolean"}), 400
+
     # Verify the slug refers to a real catalog delivery — the state-machine
     # handler accepts `before is None` (no state row yet) so it cannot tell a
     # never-seen slug apart from a not-yet-progressed one. Route-layer check
@@ -85,6 +89,7 @@ def submit_request(user, slug: str):
             payload={
                 "proposed_edits": proposed_edits,
                 "comments": comments,
+                "auto_claim": auto_claim,
             },
         )
     except state_service.UnknownReciter:
@@ -113,6 +118,7 @@ def _pending_to_payload(pending, *, owner: bool) -> dict:
         "submitted_at": pending.submitted_at.isoformat(),
         "proposed_edits": pending.proposed_edits.model_dump(mode="json"),
         "comments": pending.comments,
+        "auto_claim": pending.auto_claim,
     }
     if owner:
         payload["requester_login"] = pending.requester.login_at_time

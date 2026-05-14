@@ -37,6 +37,15 @@
         normalizeCountry as resolveCountry,
     } from '../../../lib/utils/countries';
 
+    /**
+     * Recording-year plausibility bounds. Lower: 1885 (early phonograph era).
+     * Upper: current year, computed at component load so the field tolerates
+     * year rollovers without redeploy. Mirrors
+     * ``scripts/lib/schemas/pending_requests.py::_check_year``.
+     */
+    const MIN_RECORDING_YEAR = 1885;
+    const MAX_RECORDING_YEAR = new Date().getFullYear();
+
     export let mode: 'create' | 'review';
     export let reciter: PublicReciter;
     export let delivery: PublicDelivery;
@@ -65,6 +74,7 @@
     let recording_context = delivery.recording_context ?? '';
     let recording_year: number | '' = delivery.recording_year ?? '';
     let comments = '';
+    let autoClaim = false;
 
     // Vocab options fetched lazily from /api/static/catalog.json.
     let riwayatOptions: { slug: string; name: string }[] = [];
@@ -109,6 +119,7 @@
                     pending.proposed_edits.recording_context ?? recording_context;
                 recording_year = pending.proposed_edits.recording_year ?? recording_year;
                 comments = pending.comments ?? '';
+                autoClaim = pending.auto_claim;
             } else {
                 pendingError =
                     'No pending request for this combination (it may have been cleared).';
@@ -195,6 +206,7 @@
                 delivery.slug,
                 edits,
                 comments.trim() ? comments.trim() : null,
+                autoClaim,
             );
             dispatch('submitted', { slug: delivery.slug });
         } catch (e) {
@@ -364,12 +376,17 @@
             <span>Recording year</span>
             <input
                 type="number"
-                min="1900"
-                max="2100"
+                min={MIN_RECORDING_YEAR}
+                max={MAX_RECORDING_YEAR}
                 placeholder="Leave blank if unsure"
                 bind:value={recording_year}
                 disabled={readOnly}
             />
+            {#if recording_year !== '' && (recording_year < MIN_RECORDING_YEAR || recording_year > MAX_RECORDING_YEAR)}
+                <span class="field-hint warn">
+                    Year must be between {MIN_RECORDING_YEAR} and {MAX_RECORDING_YEAR}.
+                </span>
+            {/if}
         </label>
     </div>
 
@@ -390,6 +407,23 @@
                 : ''}
             disabled={readOnly}
         ></textarea>
+    </label>
+
+    <label class="auto-claim">
+        <input
+            type="checkbox"
+            bind:checked={autoClaim}
+            disabled={readOnly}
+        />
+        <span class="auto-claim-text">
+            <span class="auto-claim-label">
+                Automatically assign me as reviewer to fix errors once
+                alignment is complete
+            </span>
+            <span class="auto-claim-hint">
+                If unchecked, another contributor can claim the reviewing.
+            </span>
+        </span>
     </label>
 
     {#if conflict}
@@ -538,6 +572,36 @@
     .comments textarea {
         resize: vertical;
         min-height: 60px;
+    }
+    .auto-claim {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: var(--s-2);
+        margin-top: var(--s-2);
+        padding: var(--s-2) var(--s-3);
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        cursor: pointer;
+    }
+    .auto-claim input[type='checkbox'] {
+        margin-top: 3px;
+        flex-shrink: 0;
+    }
+    .auto-claim-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .auto-claim-label {
+        color: var(--text-primary);
+        font-size: var(--fs-meta);
+    }
+    .auto-claim-hint {
+        color: var(--text-muted);
+        font-size: 10.5px;
+        line-height: 1.35;
     }
     .warning {
         margin: 0;

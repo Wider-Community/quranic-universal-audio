@@ -321,6 +321,66 @@ def clear_transition_hooks() -> None:
     _TRANSITION_HOOKS.clear()
 
 
+# ----------------------------------------------------------------------
+# Auto-claim queue — stashed in `_h_alignment_completed` and consumed by
+# the post-transition hook so the second `reciter.claimed` transition can
+# acquire the slug lock fresh (the handler ran inside it).
+# ----------------------------------------------------------------------
+
+
+_AUTO_CLAIM_QUEUE: dict[str, Actor] = {}
+_auto_claim_lock = threading.Lock()
+
+
+def _auto_claim_hook(
+    before: ReciterRow | None,
+    new_row: ReciterRow,
+    event: str,
+    actor: Actor,  # noqa: ARG001 — unused; system actor fired alignment_completed
+) -> None:
+    """When ``reciter.alignment_completed`` fires for a slug whose pending
+    request was submitted with ``auto_claim=True``, fire a follow-up
+    ``reciter.claimed`` on the requester's behalf.
+
+    Skips silently if the user already holds another active claim — the
+    one-claim-per-user invariant takes precedence; they can claim manually
+    later from the dashboard.
+    """
+    if event != "reciter.alignment_completed":
+        return
+    with _auto_claim_lock:
+        requester = _AUTO_CLAIM_QUEUE.pop(new_row.slug, None)
+    if requester is None:
+        return
+    if has_other_active_claim(requester.hf_user_id):
+        logger.info(
+            "auto_claim: %s already has an active claim; skipping auto-claim "
+            "of %s",
+            requester.hf_user_id,
+            new_row.slug,
+        )
+        return
+    try:
+        transition(
+            new_row.slug,
+            "reciter.claimed",
+            actor=requester,
+            payload={
+                "assignee_hf_id": requester.hf_user_id,
+                "assignee_login": requester.login_at_time,
+            },
+        )
+    except StateError:
+        logger.exception(
+            "auto_claim: claim transition failed for slug=%s requester=%s",
+            new_row.slug,
+            requester.hf_user_id,
+        )
+
+
+_TRANSITION_HOOKS.append(_auto_claim_hook)
+
+
 def transition(
     slug: str,
     event: str,
@@ -442,6 +502,12 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
     the row leaves AWAITING_ALIGNMENT. See ``services.pending_requests``.
     The pending entry is cleared regardless of whether edits applied
     cleanly — catalog failures are logged but don't block the transition.
+
+    If the pending request carried ``auto_claim=True``, the requester is
+    stashed in ``_AUTO_CLAIM_QUEUE`` keyed by slug — the post-transition
+    hook ``_auto_claim_hook`` then fires ``reciter.claimed`` on the
+    requester's behalf once this transition has fully persisted. Skipping
+    silently if they already hold another active claim.
     """
     if before is None:
         raise UnknownReciter(slug)
@@ -450,10 +516,16 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
             f"alignment_completed requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
 
-    # Apply pending request edits + clear before persisting the new state row.
+    # Capture the auto_claim requester (if any) BEFORE apply_and_clear
+    # wipes the pending entry.
     # Imported here (not at module top) to avoid a circular import:
     # pending_requests → catalog → audit; audit doesn't touch state.
     from . import pending_requests as _pending_requests
+    pending = _pending_requests.get(slug)
+    if pending is not None and pending.auto_claim:
+        with _auto_claim_lock:
+            _AUTO_CLAIM_QUEUE[slug] = pending.requester
+
     _pending_requests.apply_and_clear(slug, actor=actor)
 
     return _replace(
@@ -515,12 +587,18 @@ def _h_requested(slug, before, actor, payload, reason):
     if comments is not None and len(comments) > 1000:
         raise InvalidTransition("comments exceeds 1000 chars")
 
+    auto_claim = bool(payload.get("auto_claim", False))
+
     # Persist the pending entry *inside* the slug lock so a second concurrent
     # request fails the get() check above. If _persist_row fails downstream,
     # the entry will be cleaned up the next time the slug is rejected — or
     # rebuildable from the audit log.
     _pending_requests.submit(
-        slug, requester=actor, edits=edits, comments=comments,
+        slug,
+        requester=actor,
+        edits=edits,
+        comments=comments,
+        auto_claim=auto_claim,
     )
 
     now = _now()

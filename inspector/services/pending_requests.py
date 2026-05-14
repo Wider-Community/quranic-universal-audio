@@ -97,12 +97,17 @@ def submit(
     requester: Actor,
     edits: ProposedEdits,
     comments: str | None,
+    auto_claim: bool = False,
 ) -> PendingRequest:
     """Record a new pending request for ``slug``.
 
     Raises ``RequestAlreadyPending`` if an entry already exists. The
     state-machine handler (``reciter.requested``) also enforces the same
     invariant inside the slug lock, so this is a defense-in-depth check.
+
+    ``auto_claim`` is the user-facing "assign me as reviewer when
+    alignment completes" checkbox — see ``PendingRequest.auto_claim`` for
+    the downstream side-effect.
     """
     global _store
     with _store_lock:
@@ -116,6 +121,7 @@ def submit(
             requester=requester,
             proposed_edits=edits,
             comments=comments,
+            auto_claim=auto_claim,
         )
         new_store = _store.model_copy(deep=True)
         new_store.by_slug[slug] = entry

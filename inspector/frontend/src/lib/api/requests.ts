@@ -20,6 +20,7 @@ export interface ProposedEdits {
 export interface SubmitRequestPayload {
     proposed_edits: ProposedEdits;
     comments: string | null;
+    auto_claim: boolean;
 }
 
 export interface PendingRequest {
@@ -27,6 +28,7 @@ export interface PendingRequest {
     submitted_at: string;
     proposed_edits: ProposedEdits;
     comments: string | null;
+    auto_claim: boolean;
     /** Present only for owner callers. */
     requester_login?: string;
     requester_hf_user_id?: string;
@@ -60,10 +62,12 @@ export async function submitRequest(
     slug: string,
     proposed_edits: ProposedEdits,
     comments: string | null,
+    auto_claim: boolean = false,
 ): Promise<{ ok: true; slug: string; state: string }> {
     return _postJson(`/api/reciter/${slug}/request`, {
         proposed_edits,
         comments,
+        auto_claim,
     }) as Promise<{ ok: true; slug: string; state: string }>;
 }
 
