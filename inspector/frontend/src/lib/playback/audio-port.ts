@@ -161,6 +161,8 @@ export class AudioPort {
     private endedSubs = new Set<() => void>();
     private timeUpdateSubs = new Set<(fileMs: number) => void>();
     private errorSubs = new Set<(err: MediaError | null) => void>();
+    private waitingSubs = new Set<() => void>();
+    private playingSubs = new Set<() => void>();
 
     constructor(opts: AudioPortOptions = {}) {
         this.defaultPadMs = opts.defaultPadMs ?? 0;
@@ -201,6 +203,8 @@ export class AudioPort {
         this.endedSubs.clear();
         this.timeUpdateSubs.clear();
         this.errorSubs.clear();
+        this.waitingSubs.clear();
+        this.playingSubs.clear();
     }
 
     // -----------------------------------------------------------------------
@@ -490,6 +494,23 @@ export class AudioPort {
         return () => this.errorSubs.delete(cb);
     }
 
+    /** Fires on the element's `waiting` event — playback has paused because
+     *  the next frame isn't yet available. Use for buffering indicators.
+     *  Distinct from `pause`: `pause` is user/programmatic; `waiting` is
+     *  network/decoder starvation. */
+    onWaiting(cb: () => void): Unsub {
+        this.waitingSubs.add(cb);
+        return () => this.waitingSubs.delete(cb);
+    }
+
+    /** Fires on the element's `playing` event — actual audible playback has
+     *  started or resumed. Distinct from `play`, which fires synchronously
+     *  when `.play()` is called even if the element is still loading. */
+    onPlaying(cb: () => void): Unsub {
+        this.playingSubs.add(cb);
+        return () => this.playingSubs.delete(cb);
+    }
+
     // -----------------------------------------------------------------------
     // Internal: src swap
     // -----------------------------------------------------------------------
@@ -559,17 +580,23 @@ export class AudioPort {
         const onEnded = (): void => this._fanout(this.endedSubs);
         const onTimeUpdate = (): void => this._fanout(this.timeUpdateSubs, this.currentTimeMs());
         const onError = (): void => this._fanout(this.errorSubs, el.error);
+        const onWaiting = (): void => this._fanout(this.waitingSubs);
+        const onPlaying = (): void => this._fanout(this.playingSubs);
         el.addEventListener('play', onPlay);
         el.addEventListener('pause', onPause);
         el.addEventListener('ended', onEnded);
         el.addEventListener('timeupdate', onTimeUpdate);
         el.addEventListener('error', onError);
+        el.addEventListener('waiting', onWaiting);
+        el.addEventListener('playing', onPlaying);
         this.domListeners = [
             ['play', onPlay],
             ['pause', onPause],
             ['ended', onEnded],
             ['timeupdate', onTimeUpdate],
             ['error', onError],
+            ['waiting', onWaiting],
+            ['playing', onPlaying],
         ];
     }
 

@@ -3,6 +3,8 @@
     import { createEventDispatcher } from 'svelte';
 
     export let isPlaying = false;
+    export let isLoading = false;
+    export let canPlay = true;
     export let canStepBack = true;
     export let canStepForward = true;
 
@@ -27,7 +29,10 @@
     <button
         type="button"
         class="btn primary"
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        class:loading={isLoading}
+        aria-label={isLoading ? 'Loading audio' : isPlaying ? 'Pause' : 'Play'}
+        aria-busy={isLoading}
+        disabled={!canPlay || isLoading}
         on:click={() => dispatch('toggle')}
     >{isPlaying ? '⏸' : '▶'}</button>
     <button type="button" class="btn" aria-label="Forward 15 seconds" on:click={() => dispatch('seekForward')}>»</button>
@@ -69,9 +74,42 @@
         height: 40px;
         background: var(--accent);
         color: var(--accent-fg);
+        position: relative;
     }
     .btn.primary:hover {
         background: var(--accent-strong);
         color: var(--accent-fg);
+    }
+    /* Loading: pulse a ring around the play button until audio is ready
+     * to play immediately. The play/pause glyph stays visible — only the
+     * ring signals "buffering". Ring is a ::before pseudo-element so it
+     * doesn't interfere with the click target. */
+    .btn.primary.loading {
+        cursor: progress;
+    }
+    /* The .loading disc itself keeps full opacity so the glyph stays
+     * legible — override the generic :disabled dim. */
+    .btn.primary.loading:disabled {
+        opacity: 1;
+    }
+    .btn.primary.loading::before {
+        content: '';
+        position: absolute;
+        inset: -3px;
+        border-radius: 50%;
+        border: 2px solid var(--accent);
+        animation: player-ring-pulse 1.2s ease-in-out infinite;
+        pointer-events: none;
+    }
+    @keyframes player-ring-pulse {
+        0%   { transform: scale(1);    opacity: 0.35; }
+        50%  { transform: scale(1.18); opacity: 1; }
+        100% { transform: scale(1);    opacity: 0.35; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .btn.primary.loading::before {
+            animation: none;
+            opacity: 0.7;
+        }
     }
 </style>

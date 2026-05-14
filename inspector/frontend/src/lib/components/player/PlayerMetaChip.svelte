@@ -10,11 +10,9 @@
     import { clickOutside } from '../../actions/click-outside';
     import type { PublicDelivery, PublicReciter } from '../../types/public-state';
     import {
-        bitrateLabel,
-        coverageLabel,
-        titleCaseSlug,
+        combinationCompact,
+        combinationStandard,
     } from '../../utils/delivery-label';
-    import StatePill from '../StatePill.svelte';
 
     export let reciter: PublicReciter | null;
     export let delivery: PublicDelivery | null;
@@ -23,7 +21,12 @@
 
     let open = false;
 
-    $: combinations = reciter?.deliveries ?? [];
+    // Only by_surah deliveries are playable — BottomPlayer's url lookup
+    // is keyed by surah number and silently misses by_ayah sidecars.
+    // Hide them from the switcher entirely.
+    $: combinations = (reciter?.deliveries ?? []).filter(
+        (d) => d.audio_category !== 'by_ayah',
+    );
     $: hasMany = combinations.length > 1;
 
     function toggle(): void {
@@ -58,12 +61,7 @@
                 </div>
                 <div class="sub">
                     {#if delivery}
-                        <span>{titleCaseSlug(delivery.riwayah)}</span>
-                        <span class="dot-sep">·</span>
-                        <span>{titleCaseSlug(delivery.style)}</span>
-                        <span class="dot-sep">·</span>
-                        <span>{titleCaseSlug(delivery.channel)}</span>
-                        <StatePill state={delivery.bucket} size="sm" />
+                        <span>{combinationCompact(delivery)}</span>
                     {/if}
                 </div>
             </div>
@@ -80,6 +78,7 @@
     {#if open && hasMany}
         <div class="dropup" role="listbox" aria-label="Switch combination">
             {#each combinations as d (d.slug)}
+                {@const lines = combinationStandard(d)}
                 <button
                     class="opt"
                     class:active={delivery?.slug === d.slug}
@@ -88,16 +87,8 @@
                     aria-selected={delivery?.slug === d.slug}
                     on:click={() => pick(d)}
                 >
-                    <span class="opt-main">
-                        {titleCaseSlug(d.riwayah)} · {titleCaseSlug(d.style)}
-                        {#if d.recording_context}
-                            · {titleCaseSlug(d.recording_context)}
-                        {/if}
-                        · {titleCaseSlug(d.channel)}
-                    </span>
-                    <span class="opt-meta">
-                        {coverageLabel(d)} · {bitrateLabel(d)}
-                    </span>
+                    <span class="opt-main">{lines.line1}</span>
+                    <span class="opt-meta">{lines.line2}</span>
                 </button>
             {/each}
         </div>
@@ -154,7 +145,6 @@
         font-size: var(--fs-meta);
         color: var(--text-muted);
     }
-    .dot-sep { color: var(--text-faint); }
     .switch {
         color: var(--text-faint);
         font-size: 14px;

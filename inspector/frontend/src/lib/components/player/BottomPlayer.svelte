@@ -22,6 +22,7 @@
         persistSlice,
         playerContext,
         setDuration,
+        setIsLoading,
         setIsPlaying,
         setPosition,
         setSpeed,
@@ -52,16 +53,25 @@
         const unsubLoad = dashPort.onLoad(() => {
             const dur = audioEl?.duration ?? 0;
             setPosition(0, Number.isFinite(dur) ? dur * 1000 : 0);
+            // Swap-complete (canplay): if the user wasn't already in a
+            // mid-play buffering stall, this is the moment audio is ready
+            // to start. Clear the ring; `playing` will also clear it on
+            // the actual audible start as a safety net.
+            setIsLoading(false);
         });
         const unsubTime = dashPort.onTimeUpdate((fileMs) => {
             setPosition(fileMs, audioEl?.duration ? audioEl.duration * 1000 : undefined);
         });
+        const unsubWaiting = dashPort.onWaiting(() => setIsLoading(true));
+        const unsubPlaying = dashPort.onPlaying(() => setIsLoading(false));
 
         return () => {
             unsubPlay();
             unsubPause();
             unsubLoad();
             unsubTime();
+            unsubWaiting();
+            unsubPlaying();
             dashPort.attachElement(null);
         };
     });
@@ -101,7 +111,33 @@
             });
         }
 
+        // Fallback: this combo may not carry the currently-selected surah
+        // (default 1 when entering a reciter for the first time, or the
+        // user's prior pick carried across a reciter switch). Pick the
+        // first available chapter and re-enter via setSurah — the store
+        // change retriggers this function with a valid surahNum.
+        if (!urls[String(surahNum)]) {
+            const available = Object.keys(urls)
+                .map(Number)
+                .filter(Number.isFinite)
+                .sort((a, b) => a - b);
+            if (available.length > 0 && available[0] !== surahNum) {
+                setSurah(available[0]!);
+                return;
+            }
+        }
+
         if (surahNum !== lastSurahNum || deliverySwitched) {
+            // Stop the previous chapter immediately. Without this, the
+            // old MP3 keeps playing until _swapTo writes el.src for the
+            // new source — audible as a chunk of the wrong reciter when
+            // the user changes combination mid-playback. setIsPlaying(false)
+            // flips the glyph to ▶ for the duration of the load (re-flips
+            // to ⏸ when `playing` fires on the new source if wasPlaying).
+            if (wasPlaying) {
+                dashPort.pause();
+                setIsPlaying(false);
+            }
             const entry = urls[String(surahNum)];
             if (entry) {
                 const url = entry.url;
@@ -116,6 +152,13 @@
                     setDuration(entry.durationMs);
                 }
                 if (wasPlaying) {
+                    // Buffering ring only makes sense when we're actually
+                    // about to play — paused-switch users get a clean ▶
+                    // with no ring, since nothing is loading until they
+                    // hit play (preload="none"). Cleared by the canplay
+                    // → onLoad subscription (and by `playing` as a safety
+                    // net on the audible-start edge).
+                    setIsLoading(true);
                     await ensureAudioContextRunning();
                     dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
                     dashPort.play();
@@ -136,6 +179,13 @@
         // when src is empty, so we ensure coverage first.
         if (dashPort.source) {
             dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+        }
+        // If the element isn't yet at HAVE_FUTURE_DATA (readyState >= 3),
+        // play() will be queued until canplay fires. Surface that as a
+        // loading state so the user sees the ring instead of an instant
+        // pause icon with no audio.
+        if (audioEl && audioEl.readyState < 3) {
+            setIsLoading(true);
         }
         dashPort.play();
     }
@@ -216,6 +266,8 @@
         <div class="controls">
             <PlayerControls
                 isPlaying={$playerContext.isPlaying}
+                isLoading={$playerContext.isLoading}
+                canPlay={$playerContext.delivery !== null && $playerContext.surahNum !== null}
                 canStepBack={canPrev}
                 canStepForward={canNext}
                 on:toggle={togglePlay}

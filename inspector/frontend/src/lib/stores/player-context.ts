@@ -21,6 +21,10 @@ export interface PlayerContext {
     delivery: PublicDelivery | null;
     surahNum: number | null;
     isPlaying: boolean;
+    /** True between a source swap (or play() on a not-yet-ready element)
+     *  and the moment the browser can actually produce audio. Drives the
+     *  ring-pulse buffering indicator around the play button. */
+    isLoading: boolean;
     positionMs: number;
     durationMs: number;
     speed: number;
@@ -34,6 +38,7 @@ function initial(): PlayerContext {
         delivery: null,
         surahNum: null,
         isPlaying: false,
+        isLoading: false,
         positionMs: 0,
         durationMs: 0,
         speed: DEFAULT_SPEED,
@@ -90,6 +95,10 @@ export function setSpeed(speed: number): void {
 
 export function setIsPlaying(isPlaying: boolean): void {
     playerContext.update((s) => ({ ...s, isPlaying }));
+}
+
+export function setIsLoading(isLoading: boolean): void {
+    playerContext.update((s) => ({ ...s, isLoading }));
 }
 
 export function setPosition(positionMs: number, durationMs?: number): void {
