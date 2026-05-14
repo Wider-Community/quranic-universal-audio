@@ -334,7 +334,7 @@
                                             <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
                                         {/each}
                                         <td class="col-state">
-                                            {#if d.bucket === 'available_for_request' && !$isAdmin}
+                                            {#if d.bucket === 'available_for_request'}
                                                 <button
                                                     type="button"
                                                     class="request-btn"
@@ -410,7 +410,7 @@
                                             <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
                                         {/each}
                                         <td class="col-state">
-                                            {#if d.bucket === 'available_for_request' && !$isAdmin}
+                                            {#if d.bucket === 'available_for_request'}
                                                 <button
                                                     type="button"
                                                     class="request-btn"
@@ -475,7 +475,7 @@
     </div>
 </Modal>
 
-{#if formState}
+{#if formState && reciter}
     <div
         class="form-backdrop"
         role="presentation"
@@ -483,7 +483,7 @@
     >
         <RequestForm
             mode={formState.mode}
-            reciter={reciter!}
+            {reciter}
             delivery={formState.delivery}
             on:submitted={onFormResolved}
             on:rejected={onFormResolved}
