@@ -1,5 +1,6 @@
 # Docs
 docs/reciters-research/
+docs/planning/
 
 # Cache
 __pycache__/
@@ -24,8 +25,7 @@ PRODUCT.md
 # Local
 .local/
 .tmp/
-notebooks/
-codebase-map.html
+data/archive/
 
 # Release packaging output
 dist/
