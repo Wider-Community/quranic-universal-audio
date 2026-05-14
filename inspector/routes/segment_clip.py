@@ -68,9 +68,9 @@ def seg_segment_clip(reciter):
         return jsonify({"error": "url must be http or https"}), 400
 
     # Prefer the local cached file when audio_proxy has already pulled it down.
-    # That drops ffmpeg's seek/decode work from a streaming HTTP fetch (~0.7 s)
-    # to a local read (~0.15 s) — significant when the user is rapid-clicking
-    # through Alghazali.
+    # ffmpeg can fetch the URL directly (image ships with HTTPS support), but
+    # local read drops seek/decode from ~0.7 s to ~0.15 s — significant when
+    # the user is rapid-clicking through Alghazali.
     local_path = cache.audio_cache_path(reciter, url)
     source = str(local_path) if local_path.exists() else url
 

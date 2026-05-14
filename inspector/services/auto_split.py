@@ -118,10 +118,10 @@ def _slice_to_wav(src: audio_source.AudioSource, start_ms: int, end_ms: int,
                   out_path: Path) -> bool:
     """ffmpeg-extract [start, end] from *src* into mono 16 kHz PCM WAV.
 
-    Reads from bytes (stdin pipe) or a local path. Never from a URL — the
-    inspector image's ffmpeg is built with ``--disable-network`` so handing
-    it ``https://...`` would always fail. Caller falls back when ``src``
-    lacks local bytes.
+    Reads from bytes (stdin pipe) or a local path. Skips remote URLs by
+    design — auto-split fans out many slices per chapter, and a per-slice
+    HTTP fetch through ffmpeg would re-download the whole MP3 each time.
+    Caller falls back when ``src`` lacks local bytes.
     """
     if not src.has_local_bytes:
         return False

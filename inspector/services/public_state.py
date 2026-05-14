@@ -40,7 +40,6 @@ PublicBucket = Literal[
     "requested",
     "available_for_review",
     "under_review",
-    "publishing",
     "published",
 ]
 
@@ -51,8 +50,7 @@ _BUCKET_PROGRESS: dict[PublicBucket, int] = {
     "requested": 1,
     "available_for_review": 2,
     "under_review": 3,
-    "publishing": 4,
-    "published": 5,
+    "published": 4,
 }
 
 # Full-mushaf chapter counts per audio category. Anything less is "partial".
@@ -122,9 +120,12 @@ def bucket_for(row: ReciterRow | None) -> PublicBucket:
     if state == ReciterState.AWAITING_REVIEW:
         return "available_for_review"
     if state == ReciterState.UNDER_REVIEW:
-        return "publishing" if row.marked_ready else "under_review"
+        # marked_ready stays internal-only; row remains publicly "under review"
+        # until it actually transitions to RELEASED.
+        return "under_review"
     if state == ReciterState.AWAITING_TIMESTAMPS:
-        return "publishing"
+        # Post-mark-ready, pre-released window. Still surfaced as under_review.
+        return "under_review"
     if state in (ReciterState.RELEASED, ReciterState.COMPLETED):
         return "published"
 
@@ -311,6 +312,142 @@ def detail(reciter_id: str) -> PublicReciter | None:
     if not public["deliveries"]:
         return None
     return public
+
+
+class AdminViewDelivery(PublicDelivery, total=False):
+    """Admin-view delivery: same fields as PublicDelivery plus visibility + reason
+    so the reciter modal can render a separate ``Discarded`` section.
+    """
+
+    visibility: str             # "public" | "discarded"
+    visibility_reason: str | None
+
+
+class AdminViewReciter(TypedDict, total=False):
+    """Like ``PublicReciter`` but the discarded combos are pulled into a
+    separate list so the frontend can render them in a dedicated section
+    (only visible to maintainers + owners). The ``deliveries`` list still
+    contains only PUBLIC-visible combos, so primary_bucket/coverage rollups
+    stay consistent with what end-users see."""
+
+    reciter_id: str
+    name: str
+    name_ar: str | None
+    country: str | None
+    primary_bucket: PublicBucket
+    buckets: list[PublicBucket]
+    deliveries: list[PublicDelivery]
+    discarded_deliveries: list[AdminViewDelivery]
+    riwayat: list[str]
+    styles: list[str]
+    recording_contexts: list[str]
+    sources: list[str]
+    channels: list[str]
+    chapter_count_total: int
+    deliveries_count: int
+    coverage_kind: Literal["full", "partial", "mixed"]
+    last_activity: str | None
+    fully_discarded: bool
+
+
+def _to_admin_discarded_delivery(
+    d: Delivery,
+    row: ReciterRow,
+    channel_names: dict[str, str],
+) -> AdminViewDelivery:
+    """Like ``_to_public_delivery`` but adds visibility fields. Caller guarantees
+    ``row.visibility == DISCARDED``."""
+    base = _to_public_delivery(d, row, channel_names)
+    return AdminViewDelivery(
+        **base,
+        visibility=row.visibility.value,
+        visibility_reason=row.visibility_reason,
+    )
+
+
+def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:
+    """Materialize a single reciter for admin viewers (maintainer + owner).
+
+    Surfaces PUBLIC combos in ``deliveries`` (same shape as the public
+    detail endpoint) AND discarded combos in ``discarded_deliveries`` so
+    the modal can render the latter in a dedicated section. ``fully_discarded``
+    is true iff every combo is discarded — derived at read time, no state
+    flag needed.
+    """
+    catalog = catalog_service.snapshot()
+    reciter = next(
+        (r for r in catalog.reciters if r.reciter_id == reciter_id), None,
+    )
+    if reciter is None:
+        return None
+    deliveries = [d for d in catalog.deliveries if d.reciter_id == reciter_id]
+    if not deliveries:
+        return None
+
+    state_index = _build_state_index()
+    channel_names = {ch.slug: ch.name for ch in catalog.vocab.channels}
+
+    public_dels: list[PublicDelivery] = []
+    discarded_dels: list[AdminViewDelivery] = []
+    for d in deliveries:
+        row = state_index.get(d.slug)
+        if row is not None and row.visibility == Visibility.DISCARDED:
+            discarded_dels.append(_to_admin_discarded_delivery(d, row, channel_names))
+        else:
+            public_dels.append(_to_public_delivery(d, row, channel_names))
+
+    fully_discarded = (
+        len(public_dels) == 0
+        and len(discarded_dels) > 0
+    )
+
+    buckets = _unique_ordered([d["bucket"] for d in public_dels])
+    last_activity_values = [
+        d["state_since"] for d in public_dels if d["state_since"]
+    ]
+    last_activity = max(last_activity_values) if last_activity_values else None
+
+    return AdminViewReciter(
+        reciter_id=reciter.reciter_id,
+        name=reciter.name_en,
+        name_ar=reciter.name_ar,
+        country=reciter.country,
+        primary_bucket=_primary_bucket(buckets),
+        buckets=buckets,
+        deliveries=public_dels,
+        discarded_deliveries=discarded_dels,
+        riwayat=_unique_ordered([d["riwayah"] for d in public_dels]),
+        styles=_unique_ordered([d["style"] for d in public_dels]),
+        recording_contexts=_unique_ordered(
+            [d["recording_context"] for d in public_dels if d["recording_context"]]
+        ),
+        sources=_unique_ordered([d["source"] for d in public_dels]),
+        channels=_unique_ordered([d["channel"] for d in public_dels]),
+        chapter_count_total=sum(d["chapter_count"] for d in public_dels),
+        deliveries_count=len(public_dels),
+        coverage_kind=_coverage_rollup(public_dels),
+        last_activity=last_activity,
+        fully_discarded=fully_discarded,
+    )
+
+
+def is_reciter_fully_discarded(reciter_id: str) -> bool:
+    """True iff every delivery of ``reciter_id`` is discarded.
+
+    Computed at read time from per-combo visibility — no separate
+    reciter-level flag to keep in sync. Adding a new public combo
+    auto-undiscards the reciter.
+    """
+    catalog = catalog_service.snapshot()
+    deliveries = [d for d in catalog.deliveries if d.reciter_id == reciter_id]
+    if not deliveries:
+        return False
+    state_index = _build_state_index()
+    for d in deliveries:
+        row = state_index.get(d.slug)
+        if row is None or row.visibility == Visibility.PUBLIC:
+            return False
+    return True
 
 
 def stats() -> dict[str, int]:

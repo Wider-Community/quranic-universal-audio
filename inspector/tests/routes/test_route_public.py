@@ -122,7 +122,7 @@ def test_stats_returns_six_bucket_counts(flask_client, monkeypatch):
     # Every public bucket key is present, even if count is 0.
     for key in (
         "available_for_request", "requested", "available_for_review",
-        "under_review", "publishing", "published",
+        "under_review", "published",
     ):
         assert key in body
 

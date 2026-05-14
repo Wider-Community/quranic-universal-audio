@@ -87,9 +87,31 @@ def activity():
 def reciter_detail(reciter_id: str):
     """Single-reciter detail payload for the dashboard detail page.
 
-    404 when the reciter_id is unknown or every delivery has been
-    discarded (admin-only visibility).
+    For anonymous + contributor callers: returns the public shape, with
+    discarded combos filtered out (404 if every combo is discarded).
+
+    For maintainer + owner callers: returns the admin shape with a
+    ``discarded_deliveries`` array surfacing the hidden combos in a
+    separate list so the modal can render a maintainer-only section. A
+    fully-discarded reciter still returns 200 in this case (with empty
+    ``deliveries`` and populated ``discarded_deliveries``) — admins need
+    to be able to navigate to + un-discard such a reciter.
+
+    The caller's role is read from the session cookie; no extra auth
+    parameter is required (callers without a cookie just get the public
+    shape).
     """
+    caller = auth_service.current_user()
+    is_admin = caller is not None and permissions.is_maintainer(caller)
+
+    if is_admin:
+        admin_payload = public_state_service.admin_view_reciter(reciter_id)
+        if admin_payload is None:
+            return jsonify({"error": "reciter not found"}), 404
+        resp = jsonify(admin_payload)
+        resp.headers["Cache-Control"] = "no-store"  # admin view varies by caller
+        return resp
+
     public = public_state_service.detail(reciter_id)
     if public is None:
         return jsonify({"error": "reciter not found"}), 404

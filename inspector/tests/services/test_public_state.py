@@ -97,21 +97,23 @@ def test_bucket_for_under_review_unmarked_is_under_review():
     assert bucket_for(row) == "under_review"
 
 
-def test_bucket_for_under_review_marked_ready_is_publishing():
+def test_bucket_for_under_review_marked_ready_is_under_review():
+    """marked_ready is internal-only; row stays publicly under_review."""
     from services.public_state import bucket_for
 
     row = _state_row(
         "test_a", state="under_review", assignee_hf_id="u-1", marked_ready=True,
     )
-    assert bucket_for(row) == "publishing"
+    assert bucket_for(row) == "under_review"
 
 
-def test_bucket_for_awaiting_timestamps_is_publishing():
+def test_bucket_for_awaiting_timestamps_is_under_review():
+    """Post-mark-ready, pre-released rows still surface as under_review."""
     from services.public_state import bucket_for
 
     assert (
         bucket_for(_state_row("test_a", state="awaiting_timestamps"))
-        == "publishing"
+        == "under_review"
     )
 
 

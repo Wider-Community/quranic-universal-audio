@@ -67,6 +67,8 @@ from config import (CACHE_DIR, DEFAULT_PORT,
 from routes import register_blueprints
 from services import access as access_service
 from services import activity_state as activity_state_service
+from services import auto_detect as auto_detect_service
+from services import pending_requests as pending_requests_service
 from services import audit as audit_service
 from services import auth as auth_service
 from services import catalog as catalog_service
@@ -240,6 +242,7 @@ def _hydrate_bucket_stores() -> None:
         ("state", state_service.hydrate),
         ("catalog", catalog_service.hydrate),
         ("activity_state", activity_state_service.hydrate),
+        ("pending_requests", pending_requests_service.hydrate),
     ):
         try:
             fn()
@@ -264,6 +267,21 @@ def _hydrate_bucket_stores() -> None:
     # dev runs (``python3 inspector/app.py``) leave it unset so background
     # workers don't hammer the dev bucket on every restart. Tests skip via
     # the pytest guard.
+    # Auto-detect reconciler: server-side acceptance of pending requests.
+    # Off by default in dev (devs trigger it manually via /api/admin/reconcile);
+    # on by default in deployed (Dockerfile sets INSPECTOR_AUTO_DETECT=1).
+    # Tests skip via the pytest guard.
+    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
+        try:
+            auto_detect_service.hydrate_initial_seen()
+            interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
+            auto_detect_service.start_background_loop(interval_seconds=interval)
+            logger.info(
+                "auto_detect: background loop scheduled (interval=%ss)", interval,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("auto_detect wiring failed: %s", e)
+
     if "pytest" not in sys.modules and os.environ.get("INSPECTOR_AUDIO_PREFETCH") == "1":
         try:
             from services import audio_prefetch
