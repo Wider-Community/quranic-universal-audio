@@ -96,6 +96,11 @@
         setEditingMode(syncEditingMode($currentUser, fresh));
         // /api/me's active_claim derives from state — pull a fresh copy too.
         void loadCurrentUser();
+        // Re-resolve the chip's bucket so its StatePill reflects the new
+        // state immediately (claim flips awaiting_review → under_review,
+        // unclaim flips it back). Without this, the pill stays stale until
+        // a manual reload.
+        void resolveContextFromSlug(slug);
     }
 
     // Re-sync editing mode whenever the currentUser store updates (e.g.
@@ -177,7 +182,9 @@
                 const d = r.deliveries.find((x) => x.slug === slug);
                 if (d) {
                     contextName = r.name;
-                    contextBucket = r.primary_bucket;
+                    contextBucket = d.bucket;
+                    contextRiwayah = d.riwayah;
+                    contextStyle = d.style;
                     return;
                 }
             }
@@ -188,6 +195,8 @@
 
     let contextName: string | null = null;
     let contextBucket: import('../../lib/types/public-state').PublicBucket | null = null;
+    let contextRiwayah: string | null = null;
+    let contextStyle: string | null = null;
 
     function onReciterSelectChange(v: string): void {
         selectedReciter.set(v);
@@ -196,11 +205,19 @@
     }
 
     function onPickerChange(
-        ev: CustomEvent<{ slug: string; name: string; bucket: import('../../lib/types/public-state').PublicBucket }>,
+        ev: CustomEvent<{
+            slug: string;
+            name: string;
+            bucket: import('../../lib/types/public-state').PublicBucket;
+            riwayah: string;
+            style: string;
+        }>,
     ): void {
-        const { slug, name, bucket } = ev.detail;
+        const { slug, name, bucket, riwayah, style } = ev.detail;
         contextName = name;
         contextBucket = bucket;
+        contextRiwayah = riwayah;
+        contextStyle = style;
         onReciterSelectChange(slug);
     }
     async function onReciterChange(reciter: string): Promise<void> {
@@ -279,18 +296,24 @@
 >
     <ShortcutsGuide />
 
+    {#if $currentUser.role === 'maintainer' || $currentUser.role === 'owner'}
+        <StatsPanel />
+    {/if}
+
     <div class="seg-context-block">
         <ReciterContextChip
             currentSlug={$selectedReciter || null}
             currentName={contextName}
             currentBucket={contextBucket}
+            currentRiwayah={contextRiwayah}
+            currentStyle={contextStyle}
             on:change={onPickerChange}
         >
             {#if $selectedReciter}
                 {#if reciterTask?.predicates.can_release}
                     <button
                         type="button"
-                        class="seg-btn lg"
+                        class="seg-btn"
                         disabled={chipActionBusy !== ''}
                         on:click={_unclaim}
                     >Unclaim</button>
@@ -298,7 +321,7 @@
                 {#if reciterTask?.predicates.can_mark_ready}
                     <button
                         type="button"
-                        class="seg-btn lg primary"
+                        class="seg-btn primary"
                         disabled={chipActionBusy !== ''}
                         title="Mark this reciter ready for a maintainer to publish"
                         on:click={_markReady}
@@ -381,8 +404,6 @@
     </div>
 
     {#if !$historyVisible && !$savePreviewVisible}
-        <StatsPanel />
-
         <div id="seg-validation-global" class="seg-validation" use:waveformContainer>
             {#if $selectedChapter}
                 <ValidationPanel chapter={null} label="All Chapters" />
