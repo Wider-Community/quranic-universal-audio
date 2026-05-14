@@ -8,9 +8,9 @@ CLAUDE.md
 captures/
 
 # Local-only scripts
-.process_state.json
-.timestamps_state.json
-audit_reciters.py
-attach_tajweed.py
-request_helpers.py
-process_requests.py
+inspector_v2_seed/
+legacy/
+audio/
+upload_inspector.py
+
+docs/planning/
