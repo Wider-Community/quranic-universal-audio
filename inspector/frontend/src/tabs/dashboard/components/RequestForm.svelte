@@ -141,6 +141,24 @@
         country = resolveCountry(country);
     }
 
+    /**
+     * Force the full datalist to drop down on click. Without this, Chrome
+     * filters options against the current value — if the input already
+     * holds "SA" the user only sees Saudi Arabia (or nothing), and has to
+     * clear the field before browsing alternatives. ``showPicker()`` shows
+     * the unfiltered list regardless of current value. Wrapped in try/catch
+     * because some user-activation contexts (e.g. programmatic focus) throw.
+     */
+    function showCountryPicker(event: Event): void {
+        const input = event.currentTarget as HTMLInputElement;
+        try {
+            input.showPicker?.();
+        } catch {
+            // No-op: browser refused (typically because the click wasn't a
+            // direct user activation). Native focus behaviour still applies.
+        }
+    }
+
     $: countryMatch = countryByCode(country);
     /** True iff the user typed a country that doesn't match any ISO-2 entry.
      *  Blank is fine (truly unknown is allowed); only a populated-but-invalid
@@ -349,6 +367,7 @@
                     bind:value={country}
                     placeholder="Type country name or ISO-2 code"
                     disabled={readOnly}
+                    on:click={showCountryPicker}
                     on:blur={normalizeCountry}
                 />
                 {#if country && countryMatch}
@@ -557,6 +576,16 @@
     .input-overlay-wrap input {
         width: 100%;
         padding-right: 7em;
+    }
+    /* Hide the native datalist dropdown arrow that Chromium injects at the
+       right edge of <input list> on hover/focus — it collides visually with
+       the country-name overlay and looks like a second control. Clicking the
+       input still opens the full option list because we call
+       ``input.showPicker()`` from the click handler. */
+    .input-overlay-wrap input::-webkit-calendar-picker-indicator {
+        display: none;
+        -webkit-appearance: none;
+        appearance: none;
     }
     .input-overlay {
         position: absolute;
