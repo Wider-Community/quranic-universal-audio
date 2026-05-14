@@ -304,13 +304,11 @@
                         on:click={_markReady}
                     >Mark ready</button>
                 {/if}
-                <span class="claim-lg-wrap">
-                    <ClaimButton
-                        slug={$selectedReciter}
-                        task={reciterTask}
-                        onClaimed={_refreshTask}
-                    />
-                </span>
+                <ClaimButton
+                    slug={$selectedReciter}
+                    task={reciterTask}
+                    onClaimed={_refreshTask}
+                />
             {/if}
         </ReciterContextChip>
     </div>

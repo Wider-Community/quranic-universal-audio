@@ -30,7 +30,7 @@ function makeTask(canClaim: boolean): ReciterTask {
 }
 
 describe('ClaimButton', () => {
-    it('renders nothing when can_claim is false and user holds another claim', () => {
+    it('renders nothing when user holds another active claim, even if can_claim is true', () => {
         currentUser.set({
             login: 'me',
             hf_user_id: 'u-1',
@@ -40,17 +40,17 @@ describe('ClaimButton', () => {
 
         const { container } = render(ClaimButton, {
             props: {
-                slug: 'other-reciter',
-                task: makeTask(false),
+                slug: 'this-reciter',
+                task: makeTask(true),
                 onClaimed: null,
             },
         });
 
-        expect(container.querySelector('.claim-btn')).toBeNull();
+        expect(container.querySelector('button')).toBeNull();
         expect(container.textContent ?? '').not.toMatch(/Already claiming/);
     });
 
-    it('renders the Claim button when can_claim is true', () => {
+    it('renders the Claim button when can_claim is true and no foreign active claim', () => {
         currentUser.set({
             login: 'me',
             hf_user_id: 'u-1',
@@ -66,6 +66,10 @@ describe('ClaimButton', () => {
             },
         });
 
-        expect(container.querySelector('.claim-btn')).not.toBeNull();
+        const btn = container.querySelector('button');
+        expect(btn).not.toBeNull();
+        expect(btn!.classList.contains('seg-btn')).toBe(true);
+        expect(btn!.classList.contains('primary')).toBe(true);
+        expect(btn!.classList.contains('lg')).toBe(true);
     });
 });

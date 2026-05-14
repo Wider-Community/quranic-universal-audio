@@ -56,6 +56,13 @@
     font-size: var(--fs-row);
     white-space: nowrap;
 }
+.combo-row .row-name-ar {
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+    margin-inline-start: var(--s-2);
+    direction: rtl;
+    unicode-bidi: isolate;
+}
 .combo-row .row-meta {
     color: var(--text-muted);
     font-size: var(--fs-meta);

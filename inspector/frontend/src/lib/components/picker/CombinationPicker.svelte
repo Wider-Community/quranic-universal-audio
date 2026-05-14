@@ -52,7 +52,7 @@
     }
 
     export let open = true;
-    export let title = 'Switch reciter';
+    export let title = 'Pick a reciter';
     export let initialFilter: InitialFilter = {};
     /** Buckets eligible to appear in the picker. */
     export let allowedBuckets: readonly PublicBucket[] = [
@@ -178,6 +178,10 @@
 
     $: resultsLabel = loading ? null : `${orderedRows.length} of ${allCombos.length}`;
 
+    // Reactive so the tabs re-render the moment `stats` resolves — calling
+    // a helper inline can fail to track `stats` as a dependency.
+    $: tabCounts = (stats ?? {}) as Partial<BucketCounts>;
+
     function toggleFacet(detail: { axis: string; tag: string }): void {
         const set = new Set(activeFilters[detail.axis] ?? []);
         if (set.has(detail.tag)) set.delete(detail.tag);
@@ -257,15 +261,11 @@
         dispatch('close');
     }
 
-    function bucketCountsForTabs(): Partial<BucketCounts> {
-        if (!stats) return {};
-        return stats;
-    }
-
     function deliveryMeta(d: PublicDelivery): string {
         const parts: string[] = [];
         if (d.riwayah) parts.push(d.riwayah);
         if (d.style) parts.push(d.style);
+        if (d.recording_context) parts.push(d.recording_context);
         if (d.channel_name) parts.push(d.channel_name);
         else if (d.channel) parts.push(d.channel);
         return parts.join(' · ');
@@ -324,7 +324,7 @@
                     {activeBucket}
                     {allowedBuckets}
                     totalCount={allCombos.length}
-                    counts={bucketCountsForTabs()}
+                    counts={tabCounts}
                     on:select={(e) => selectBucket(e.detail)}
                 />
             </div>
@@ -370,7 +370,10 @@
                                 aria-label="Preview audio"
                                 on:click={(e) => onPreview(e, c)}
                             >▶</button>
-                            <span class="row-name">{c.reciter.name}</span>
+                            <span class="row-name">
+                                {c.reciter.name}
+                                {#if c.reciter.name_ar}<span class="row-name-ar">{c.reciter.name_ar}</span>{/if}
+                            </span>
                             <span class="row-meta">{deliveryMeta(c.delivery)}</span>
                             <span class="row-coverage">{coverageLabel(c.delivery)}</span>
                             <span class="row-hours">{hoursLabel(c.delivery)}</span>
@@ -401,7 +404,10 @@
                                     aria-label="Preview audio"
                                     on:click={(e) => onPreview(e, c)}
                                 >▶</button>
-                                <span class="row-name">{c.reciter.name}</span>
+                                <span class="row-name">
+                                {c.reciter.name}
+                                {#if c.reciter.name_ar}<span class="row-name-ar">{c.reciter.name_ar}</span>{/if}
+                            </span>
                                 <span class="row-meta">{deliveryMeta(c.delivery)}</span>
                                 <span class="row-coverage">{coverageLabel(c.delivery)}</span>
                                 <span class="row-hours">{hoursLabel(c.delivery)}</span>
