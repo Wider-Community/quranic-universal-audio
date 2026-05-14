@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     /**
      * ValidationPanel — Svelte accordion panel for registry-backed validation categories.
      *
@@ -25,12 +25,9 @@
 
     import type {
         SegValAnyItem,
-        SegValAudioBleedingItem,
         SegValidateResponse,
         SegValLowConfidenceItem,
-        SegValMissingWordsItem,
         SegValQalqalaItem,
-        SegValRepetitionItem,
     } from '../../../../lib/types/api';
     import { IssueRegistry } from '../../domain/registry';
     import { segAllData } from '../../stores/chapter';
@@ -38,16 +35,9 @@
     import { editingSegUid } from '../../stores/edit';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
-        CONF_MID_THRESHOLD,
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
-    import {
-        jumpToMissingVerseContext,
-        jumpToSegment,
-        jumpToVerse,
-    } from '../../utils/data/navigation-actions';
-    import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { filterStaleIssues } from '../../utils/validation/stale';
     import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
@@ -450,91 +440,6 @@
     $: topSpacerPx = virtualize ? startIdx * measuredCardHeight : 0;
     $: bottomSpacerPx = virtualize ? Math.max(0, (openTotal - endIdx) * measuredCardHeight) : 0;
 
-    // ---- Item navigation button helpers ----
-    function getItemBtnClass(type: string, issue: SegValAnyItem): string {
-        if (type === 'low_confidence') {
-            return ((issue as SegValLowConfidenceItem).confidence < CONF_MID_THRESHOLD) ? 'val-conf-low' : 'val-conf-mid';
-        }
-        if (type === 'low_confidence_v2') return 'val-conf-mid';
-        if (type === 'repetitions') return 'val-rep';
-        if (type === 'cross_verse' || type === 'muqattaat' || type === 'qalqala' || type === 'basmala_amin') return 'val-cross';
-        if (type === 'audio_bleeding') return 'val-bleed';
-        if (type === 'boundary_adj') return 'val-conf-mid';
-        return 'val-error';
-    }
-
-    // Pill label reads the LIVE seg's `matched_ref` so post-edit mutations
-    // (split, ref-edit, merge) are reflected immediately — `issue.ref` is a
-    // server snapshot frozen at `/api/seg/validate` time and goes stale as
-    // soon as the user mutates the seg.  See `utils/validation/resolve-issue.ts`
-    // for the "four ref fields" rule.
-    function _liveRef(issue: SegValAnyItem, type: string, fallbackRef: string | undefined): string {
-        const seg = resolveIssueSeg(issue, type, null);
-        return seg?.matched_ref || fallbackRef || '';
-    }
-
-    function getItemBtnLabel(type: string, issue: SegValAnyItem): string {
-        const any = issue as {
-            seg_index?: number; verse_key?: string; ref?: string;
-            display_ref?: string; entry_ref?: string; matched_verse?: string;
-            chapter: number;
-        };
-        void $segAllData; // re-evaluate on seg mutations so live ref tracks
-        if (type === 'failed') return `${any.chapter}:#${any.seg_index}`;
-        if (type === 'missing_verses' || type === 'structural_errors') return any.verse_key ?? '';
-        if (type === 'missing_words') {
-            const indices = (issue as SegValMissingWordsItem).seg_indices || [];
-            return indices.length > 0 ? `${any.verse_key} #${indices.join('/#')}` : (any.verse_key ?? '');
-        }
-        if (type === 'repetitions') {
-            return _liveRef(issue, type, (issue as SegValRepetitionItem).display_ref || any.ref);
-        }
-        if (type === 'audio_bleeding') {
-            const ab = issue as SegValAudioBleedingItem;
-            return `${ab.entry_ref}\u2192${ab.matched_verse}`;
-        }
-        return _liveRef(issue, type, any.ref);
-    }
-
-    function getItemBtnTitle(type: string, issue: SegValAnyItem): string {
-        const any = issue as { msg?: string; time?: string; verse_key?: string; ref?: string; entry_ref?: string; matched_verse?: string; confidence?: number };
-        void $segAllData;
-        if (type === 'failed') return any.time ?? '';
-        if (type === 'missing_verses' || type === 'structural_errors') return any.msg ?? '';
-        if (type === 'missing_words') return any.msg ?? '';
-        if (type === 'low_confidence') return `${((any.confidence ?? 0) * 100).toFixed(1)}%`;
-        if (type === 'boundary_adj') return any.verse_key ?? '';
-        if (type === 'audio_bleeding') {
-            const ab = issue as SegValAudioBleedingItem;
-            const liveRef = _liveRef(issue, type, ab.ref);
-            return `audio ${ab.entry_ref} contains segment matching ${liveRef} (${ab.time})`;
-        }
-        if (type === 'repetitions') return (issue as SegValRepetitionItem).text;
-        return '';
-    }
-
-    function handleItemBtnClick(type: string, issue: SegValAnyItem): void {
-        const any = issue as {
-            seg_index?: number; verse_key?: string; chapter: number;
-        };
-        if (type === 'failed' || type === 'low_confidence' || type === 'low_confidence_v2' ||
-            type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' ||
-            type === 'repetitions' || type === 'muqattaat' || type === 'qalqala' ||
-            type === 'basmala_amin') {
-            if (any.seg_index != null) jumpToSegment(any.chapter, any.seg_index);
-        } else if (type === 'missing_verses') {
-            jumpToMissingVerseContext(any.chapter, any.verse_key ?? '');
-        } else if (type === 'missing_words') {
-            const mw = issue as SegValMissingWordsItem;
-            const indices = mw.seg_indices || [];
-            const first = indices[0];
-            if (first != null) jumpToSegment(any.chapter, first);
-            else jumpToVerse(any.chapter, any.verse_key ?? '');
-        } else if (type === 'structural_errors') {
-            jumpToVerse(any.chapter, any.verse_key ?? '');
-        }
-    }
-
     // ---- ErrorCard refs (window-slice array, synced to absolute Map in afterUpdate) ----
     // `windowCardRefs` holds bind:this refs for the currently rendered slice.
     // Rebuilt into `cardRefMap` in the shared afterUpdate block above so
@@ -707,19 +612,6 @@
                 {/if}
 
                 {#if openCategory === cat.type}
-                    <!-- Item navigation buttons (non-qalqala) -->
-                    {#if !cat.isQalqala}
-                        <div class="val-items">
-                            {#each cat.visibleItems as issue (issueKey(issue, cat.type))}
-                                <button
-                                    class="val-btn {getItemBtnClass(cat.type, issue)}"
-                                    title={getItemBtnTitle(cat.type, issue)}
-                                    on:click={() => handleItemBtnClick(cat.type, issue)}
-                                >{getItemBtnLabel(cat.type, issue)}</button>
-                            {/each}
-                        </div>
-                    {/if}
-
                     <!-- "Show All Context" + cards -->
                     <div class="val-ctx-all-row">
                         <button

@@ -103,6 +103,10 @@ export const flatItems = derived(
  */
 export function setHistoryData(data: SegEditHistoryResponse | null): void {
     if (data && data.batches) {
+        data = {
+            ...data,
+            batches: data.batches.filter(b => b.batch_type !== 'pad_migration'),
+        };
         for (const batch of data.batches) {
             const isStripSpecials = batch.batch_type === 'strip_specials';
             for (const op of (batch.operations || [])) {
