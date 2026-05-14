@@ -28,6 +28,13 @@ Bucket = Literal["public", "admin_only", "hidden"]
 # Public bucket: event -> public-card "kind" (drives the marker dot + template).
 PUBLIC_EVENTS: dict[str, str] = {
     "catalog.added": "added",
+    # `reciter.requested` lands in BOTH PUBLIC_EVENTS and ADMIN_ONLY_EVENTS:
+    # the public rail shows "X was requested" as plain prose, the admin rail
+    # shows a clickable card linking to the proposed-edits form. `classify()`
+    # returns the public bucket (priority order below) so the anti-drift test
+    # treats it as a single classified event; the two `*_kind_for()` lookups
+    # are what the two feeds actually consume.
+    "reciter.requested": "requested",
     "reciter.alignment_completed": "available_review",
     "reciter.claimed": "under_review",
     # `reciter.published` is the human "publish this reciter" action; the
@@ -39,6 +46,12 @@ PUBLIC_EVENTS: dict[str, str] = {
 
 # Admin-only bucket: event -> admin-card "kind".
 ADMIN_ONLY_EVENTS: dict[str, str] = {
+    # See PUBLIC_EVENTS note above — `reciter.requested` is dual-bucket so the
+    # admin rail can render a clickable review card alongside the public
+    # rail's plain-prose entry.
+    "reciter.requested": "request_submitted",
+    "reciter.request_rejected_soft": "request_rejected_soft",
+    "reciter.request_rejected_hard": "request_rejected_hard",
     "reciter.released": "released",
     "reciter.marked_ready": "marked_ready",
     "reciter.unmarked_ready": "unmarked_ready",
@@ -60,6 +73,10 @@ ADMIN_ONLY_EVENTS: dict[str, str] = {
 # (vs. "developer added a new event and forgot to classify it").
 HIDDEN_EVENTS: frozenset[str] = frozenset({
     "catalog.edited",
+    # Non-blocking warning emitted by ``services.pending_requests.apply_and_clear``
+    # when a requester's proposed (riwayah, style) matches another delivery of
+    # the same reciter. Visible in the audit log for debugging only.
+    "catalog.conflict_warning",
     "reciter.seeded",
     "reciter.timestamps_completed",
     "published.edited",
@@ -87,6 +104,12 @@ def classify(record: dict) -> Bucket:
 
     Unknown events default to ``hidden`` — the safe choice that keeps new
     events off both rails until they're explicitly classified.
+
+    Precedence for dual-bucket events (currently only ``reciter.requested``):
+    ``public`` wins so the anti-drift test treats the event as classified
+    and the public rail's "Requested" entry stays visible. The admin rail
+    consumes ``admin_kind_for()`` directly, not ``classify()``, so dual
+    bucketing is honored downstream regardless.
     """
     event = record.get("event")
     if isinstance(event, str):

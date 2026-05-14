@@ -273,6 +273,84 @@ def add_delivery(
     return delivery
 
 
+def edit_delivery(
+    *,
+    actor: Actor,
+    slug: str,
+    riwayah: str | None = None,
+    style: str | None = None,
+    recording_context: str | None = None,
+    recording_year: int | None = None,
+    reason: str | None = None,
+) -> Delivery:
+    """Mutate a delivery row in place. ``slug`` and ``reciter_id`` are immutable.
+
+    Used by ``services.pending_requests.apply_and_clear`` to apply the
+    requester's proposed edits at auto-acceptance time, and by future
+    admin catalog-edit routes. Fields left ``None`` are not touched. The
+    catalog model_validator enforces FK invariants (riwayah, style,
+    recording_context must be in vocab) — invalid edits raise
+    ``InvalidCatalogChange``.
+    """
+    global _store
+    _require_maintainer(actor)
+
+    with _store_lock:
+        existing = _store.find_delivery(slug)
+        if existing is None:
+            raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
+
+        new_store = _store.model_copy(deep=True)
+        patch: dict = {}
+        for d in new_store.deliveries:
+            if d.slug == slug:
+                if riwayah is not None and riwayah != d.riwayah:
+                    patch["riwayah"] = {"from": d.riwayah, "to": riwayah}
+                    d.riwayah = riwayah
+                if style is not None and style != d.style:
+                    patch["style"] = {"from": d.style, "to": style}
+                    d.style = style
+                if (
+                    recording_context is not None
+                    and recording_context != d.recording_context
+                ):
+                    patch["recording_context"] = {
+                        "from": d.recording_context,
+                        "to": recording_context,
+                    }
+                    d.recording_context = recording_context
+                if (
+                    recording_year is not None
+                    and recording_year != d.recording_year
+                ):
+                    patch["recording_year"] = {
+                        "from": d.recording_year,
+                        "to": recording_year,
+                    }
+                    d.recording_year = recording_year
+                existing = d
+                break
+
+        if not patch:
+            return existing
+
+        try:
+            new_store = ReciterCatalog.model_validate(new_store.model_dump(mode="json"))
+        except ValidationError as e:
+            raise InvalidCatalogChange(str(e)) from e
+        _persist(new_store)
+        _store = new_store
+
+    audit.append(
+        event="catalog.edited",
+        actor=actor,
+        slug=slug,
+        payload={"kind": "delivery", "slug": slug, "patch": patch},
+        reason=reason,
+    )
+    return existing
+
+
 def add_audio_source(
     *,
     actor: Actor,
@@ -317,6 +395,7 @@ __all__ = [
     "add_audio_source",
     "add_delivery",
     "add_reciter",
+    "edit_delivery",
     "edit_reciter",
     "find_delivery",
     "find_reciter",

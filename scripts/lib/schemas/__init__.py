@@ -28,6 +28,11 @@ from .catalog import (
     Vocab,
 )
 from .edit_history import EditHistoryBatch, parse_edit_history_line
+from .pending_requests import (
+    PendingRequest,
+    PendingRequestsFile,
+    ProposedEdits,
+)
 from .state import (
     ReciterRow,
     ReciterState,
@@ -47,6 +52,9 @@ __all__ = [
     "Delivery",
     "EditHistoryBatch",
     "Member",
+    "PendingRequest",
+    "PendingRequestsFile",
+    "ProposedEdits",
     "ReciterCatalog",
     "ReciterEntry",
     "ReciterRow",

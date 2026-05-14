@@ -432,17 +432,143 @@ def _h_catalog_edited(slug, before, actor, payload, reason):
 
 
 def _h_alignment_completed(slug, before, actor, payload, reason):
+    """Server-side or admin-triggered acceptance: the alignment pipeline has
+    produced files under ``wip/<slug>/`` and the row is ready for human
+    review.
+
+    Side effect: if a pending user request exists for this slug, applies the
+    proposed catalog edits (riwayah/style/recording_*/names/country) at the
+    same time so the catalog reflects whatever the requester proposed before
+    the row leaves AWAITING_ALIGNMENT. See ``services.pending_requests``.
+    The pending entry is cleared regardless of whether edits applied
+    cleanly — catalog failures are logged but don't block the transition.
+    """
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.AWAITING_ALIGNMENT:
         raise InvalidTransition(
             f"alignment_completed requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
+
+    # Apply pending request edits + clear before persisting the new state row.
+    # Imported here (not at module top) to avoid a circular import:
+    # pending_requests → catalog → audit; audit doesn't touch state.
+    from . import pending_requests as _pending_requests
+    _pending_requests.apply_and_clear(slug, actor=actor)
+
     return _replace(
         before,
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
         prefetch_purge_at=None,
+    )
+
+
+def _h_requested(slug, before, actor, payload, reason):
+    """User-submitted request to align this reciter combination.
+
+    Any signed-in user (contributor or above) can fire this. Transitions
+    CATALOGUED → AWAITING_ALIGNMENT and stores the proposed catalog edits +
+    free-form comments in the ``pending_requests`` bucket store. Acceptance
+    is implicit and server-side (see ``_h_alignment_completed``); admins can
+    reject pre-acceptance via ``reciter.request_rejected_*``.
+    """
+    if before is None:
+        raise UnknownReciter(slug)
+    if before.state != ReciterState.CATALOGUED:
+        raise InvalidTransition(
+            f"requested requires CATALOGUED, got {before.state.value}"
+        )
+    if before.visibility != Visibility.PUBLIC:
+        raise InvalidTransition(
+            f"cannot request a {before.visibility.value!r} reciter"
+        )
+    _require_contributor_or_higher(actor)
+
+    # Defense-in-depth: also checked by the route layer.
+    from . import pending_requests as _pending_requests
+    if _pending_requests.get(slug) is not None:
+        raise InvalidTransition(
+            f"slug {slug!r} already has a pending request"
+        )
+
+    # Persist the pending entry *inside* the slug lock so a second concurrent
+    # request fails the get() check above. If _persist_row fails downstream,
+    # the entry will be cleaned up the next time the slug is rejected — or
+    # rebuildable from the audit log.
+    from scripts.lib.schemas import ProposedEdits as _ProposedEdits
+    edits_raw = payload.get("proposed_edits") or {}
+    try:
+        edits = _ProposedEdits.model_validate(edits_raw)
+    except Exception as e:  # noqa: BLE001
+        raise InvalidTransition(f"invalid proposed_edits: {e}") from e
+    comments = payload.get("comments")
+    if comments is not None and not isinstance(comments, str):
+        raise InvalidTransition("comments must be a string or null")
+    if comments is not None and len(comments) > 1000:
+        raise InvalidTransition("comments exceeds 1000 chars")
+
+    _pending_requests.submit(
+        slug, requester=actor, edits=edits, comments=comments,
+    )
+
+    return _replace(
+        before,
+        state=ReciterState.AWAITING_ALIGNMENT,
+        state_since=_now(),
+    )
+
+
+def _h_request_rejected_soft(slug, before, actor, payload, reason):
+    """Admin sends a pending request back. Row returns to CATALOGUED.
+
+    Pending edits are discarded; the requester can submit again. Reason is
+    required and lands in the audit record for accountability.
+    """
+    if before is None:
+        raise UnknownReciter(slug)
+    if before.state != ReciterState.AWAITING_ALIGNMENT:
+        raise InvalidTransition(
+            f"request_rejected_soft requires AWAITING_ALIGNMENT, got {before.state.value}"
+        )
+    _require_maintainer(actor)
+    _require_reason(reason, "request_rejected_soft")
+
+    from . import pending_requests as _pending_requests
+    _pending_requests.clear(slug)
+
+    return _replace(
+        before,
+        state=ReciterState.CATALOGUED,
+        state_since=_now(),
+    )
+
+
+def _h_request_rejected_hard(slug, before, actor, payload, reason):
+    """Admin rejects a pending request and discards the combination.
+
+    Row returns to CATALOGUED with ``visibility=DISCARDED`` so the public
+    dashboard hides it. Admins can still view discarded rows in the modal's
+    separate discarded section; owners can un-discard via ``reciter.undiscarded``.
+    """
+    if before is None:
+        raise UnknownReciter(slug)
+    if before.state != ReciterState.AWAITING_ALIGNMENT:
+        raise InvalidTransition(
+            f"request_rejected_hard requires AWAITING_ALIGNMENT, got {before.state.value}"
+        )
+    _require_maintainer(actor)
+    norm_reason = _require_reason(reason, "request_rejected_hard")
+
+    from . import pending_requests as _pending_requests
+    _pending_requests.clear(slug)
+
+    return _replace(
+        before,
+        state=ReciterState.CATALOGUED,
+        state_since=_now(),
+        visibility=Visibility.DISCARDED,
+        visibility_reason=norm_reason,
     )
 
 
@@ -792,6 +918,9 @@ def _h_clear_prefetch_purge_at(slug, before, actor, payload, reason):
 _HANDLERS: dict[str, Any] = {
     "catalog.added": _h_catalog_added,
     "catalog.edited": _h_catalog_edited,
+    "reciter.requested": _h_requested,
+    "reciter.request_rejected_soft": _h_request_rejected_soft,
+    "reciter.request_rejected_hard": _h_request_rejected_hard,
     "reciter.alignment_completed": _h_alignment_completed,
     "reciter.claimed": _h_claimed,
     "reciter.released": _h_released,

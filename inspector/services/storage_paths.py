@@ -50,6 +50,11 @@ def activity_state_path() -> str:
     return "activity/state.json"
 
 
+def pending_requests_path() -> str:
+    """Open user requests awaiting acceptance/rejection (one entry per slug)."""
+    return "requests/pending.json"
+
+
 def reciter_dir(slug: str, kind: WipOrPublished) -> str:
     return f"{kind}/{slug}"
 

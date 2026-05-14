@@ -117,6 +117,39 @@ def test_unknown_event_defaults_to_hidden():
     assert ac.classify(_record("totally.new.event")) == "hidden"
 
 
+def test_reciter_requested_is_dual_bucket_public_priority():
+    """`reciter.requested` is in BOTH public and admin maps. classify()
+    returns public (so the anti-drift test treats it as classified); the
+    admin rail consumes admin_kind_for() directly."""
+    from services import activity_classification as ac
+
+    record = _record("reciter.requested")
+    assert ac.classify(record) == "public"
+    assert ac.public_kind_for(record) == "requested"
+    assert ac.admin_kind_for(record) == "request_submitted"
+
+
+@pytest.mark.parametrize("event,expected_kind", [
+    ("reciter.request_rejected_soft", "request_rejected_soft"),
+    ("reciter.request_rejected_hard", "request_rejected_hard"),
+])
+def test_request_reject_events_admin_only(event, expected_kind):
+    from services import activity_classification as ac
+
+    record = _record(event)
+    assert ac.classify(record) == "admin_only"
+    assert ac.admin_kind_for(record) == expected_kind
+    assert ac.public_kind_for(record) is None
+
+
+def test_catalog_conflict_warning_is_hidden():
+    """The non-blocking conflict signal emitted by apply_and_clear must not
+    surface on either rail."""
+    from services import activity_classification as ac
+
+    assert ac.classify(_record("catalog.conflict_warning")) == "hidden"
+
+
 def test_anti_drift_every_state_handler_is_classified():
     """Anti-drift: every event registered in ``services/state.py:_HANDLERS``
     must have an explicit bucket in the classifier. Forces new events to be
