@@ -51,8 +51,6 @@
     /* ---------- state pill semantics ---------- */
     --state-published-fg:        oklch(0.84 0.135 150);
     --state-published-bg:        oklch(0.84 0.135 150 / 0.14);
-    --state-publishing-fg:       oklch(0.86 0.130 75);
-    --state-publishing-bg:       oklch(0.86 0.130 75 / 0.14);
     --state-under-review-fg:     oklch(0.86 0.130 220);
     --state-under-review-bg:     oklch(0.86 0.130 220 / 0.14);
     --state-available-fg:        oklch(0.84 0.110 300);
@@ -61,6 +59,14 @@
     --state-requested-bg:        oklch(0.78 0.040 268 / 0.14);
     --state-available-request-fg:oklch(0.62 0.020 268);
     --state-available-request-bg:oklch(0.62 0.020 268 / 0.12);
+    /* Discarded — admin-only pill on combos hidden from the public dashboard.
+       Muted grey so it reads as "demoted" not "error". */
+    --state-discarded-fg:        oklch(0.55 0.010 268);
+    --state-discarded-bg:        oklch(0.55 0.010 268 / 0.10);
+
+    /* Error text in dashboard/picker loading states. Kept as a separate
+       semantic token so component CSS doesn't reach for a bucket color. */
+    --state-error-fg:            oklch(0.86 0.130 75);
 
     /* ---------- type ---------- */
     --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,

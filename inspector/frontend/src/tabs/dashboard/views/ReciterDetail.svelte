@@ -11,15 +11,21 @@
      */
     import { onDestroy } from 'svelte';
 
+    import { undiscardReciter } from '../../../lib/api/requests';
     import { fetchPublicReciter } from '../../../lib/api/public-reciter-detail';
     import Modal from '../../../lib/components/Modal.svelte';
     import StatePill from '../../../lib/components/StatePill.svelte';
+    import { currentUser, isAdmin, isOwner, isSignedIn } from '../../../lib/stores/current-user';
     import { playerContext } from '../../../lib/stores/player-context';
+    import { openSignInModal } from '../../../lib/stores/sign-in-modal';
     import {
         bucketRank,
+        type AdminDiscardedDelivery,
+        type AdminViewReciter,
         type PublicDelivery,
         type PublicReciter,
     } from '../../../lib/types/public-state';
+    import RequestForm from '../components/RequestForm.svelte';
     import {
         bitrateLabel,
         categoryLabel,
@@ -32,13 +38,64 @@
     import StateTimeline from '../components/StateTimeline.svelte';
     import { closeDetail, dashboardState } from '../stores/dashboard-state';
 
-    let reciter: PublicReciter | null = null;
+    let reciter: (PublicReciter & Partial<AdminViewReciter>) | null = null;
     let loading = false;
     let notFound = false;
     let error: string | null = null;
     let inflight: AbortController | null = null;
     let lastFetched: string | null = null;
     let selectedSlug: string | null = null;
+
+    /** Open request form, in either user-create or admin-review mode. */
+    let formState: {
+        mode: 'create' | 'review';
+        delivery: PublicDelivery;
+    } | null = null;
+
+    function openRequest(d: PublicDelivery): void {
+        if (!isSignedIn($currentUser)) {
+            openSignInModal();
+            return;
+        }
+        formState = { mode: 'create', delivery: d };
+    }
+
+    function openReview(d: PublicDelivery): void {
+        formState = { mode: 'review', delivery: d };
+    }
+
+    function closeForm(): void {
+        formState = null;
+    }
+
+    async function onFormResolved(): Promise<void> {
+        formState = null;
+        // Refresh the modal so the row's pill (and the discarded section)
+        // reflect the new state.
+        if (detailId !== null) {
+            lastFetched = null;
+            await maybeReload(detailId);
+        }
+    }
+
+    async function onUndiscard(d: AdminDiscardedDelivery): Promise<void> {
+        const reason = window.prompt(
+            'Reason (≥10 characters) for un-discarding this combination — recorded in the audit log:',
+            '',
+        );
+        if (reason === null) return;
+        const trimmed = reason.trim();
+        if (trimmed.length < 10) {
+            window.alert('Reason must be at least 10 characters.');
+            return;
+        }
+        try {
+            await undiscardReciter(d.slug, trimmed);
+            await onFormResolved();
+        } catch (e) {
+            window.alert(`Un-discard failed: ${(e as Error).message}`);
+        }
+    }
 
     $: detailId = $dashboardState.view.kind === 'detail' ? $dashboardState.view.reciterId : null;
     $: void maybeReload(detailId);
@@ -104,6 +161,11 @@
         return 1;
     }
 
+    function riwayahRank(r: string): number {
+        // Hafs first; everything else falls through to alphabetical.
+        return r.toLowerCase().startsWith('hafs') ? 0 : 1;
+    }
+
     function compareDeliveries(a: PublicDelivery, b: PublicDelivery): number {
         const s = bucketRank(a.bucket) - bucketRank(b.bucket);
         if (s !== 0) return s;
@@ -113,8 +175,10 @@
         if (a.coverage_kind !== b.coverage_kind) {
             return a.coverage_kind === 'full' ? -1 : 1;
         }
-        const r = a.riwayah.localeCompare(b.riwayah);
+        const r = riwayahRank(a.riwayah) - riwayahRank(b.riwayah);
         if (r !== 0) return r;
+        const ra = a.riwayah.localeCompare(b.riwayah);
+        if (ra !== 0) return ra;
         const st = a.style.localeCompare(b.style);
         if (st !== 0) return st;
         return (b.bitrate_kbps_nominal ?? 0) - (a.bitrate_kbps_nominal ?? 0);
@@ -270,7 +334,22 @@
                                             <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
                                         {/each}
                                         <td class="col-state">
-                                            <StatePill state={d.bucket} size="sm" />
+                                            {#if d.bucket === 'available_for_request' && !$isAdmin}
+                                                <button
+                                                    type="button"
+                                                    class="request-btn"
+                                                    on:click|stopPropagation={() => openRequest(d)}
+                                                >Request</button>
+                                            {:else if d.bucket === 'requested' && $isAdmin}
+                                                <button
+                                                    type="button"
+                                                    class="pill-as-btn"
+                                                    title="Review submitted request"
+                                                    on:click|stopPropagation={() => openReview(d)}
+                                                ><StatePill state={d.bucket} size="sm" /></button>
+                                            {:else}
+                                                <StatePill state={d.bucket} size="sm" />
+                                            {/if}
                                         </td>
                                     </tr>
                                 {/each}
@@ -331,7 +410,22 @@
                                             <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
                                         {/each}
                                         <td class="col-state">
-                                            <StatePill state={d.bucket} size="sm" />
+                                            {#if d.bucket === 'available_for_request' && !$isAdmin}
+                                                <button
+                                                    type="button"
+                                                    class="request-btn"
+                                                    on:click|stopPropagation={() => openRequest(d)}
+                                                >Request</button>
+                                            {:else if d.bucket === 'requested' && $isAdmin}
+                                                <button
+                                                    type="button"
+                                                    class="pill-as-btn"
+                                                    title="Review submitted request"
+                                                    on:click|stopPropagation={() => openReview(d)}
+                                                ><StatePill state={d.bucket} size="sm" /></button>
+                                            {:else}
+                                                <StatePill state={d.bucket} size="sm" />
+                                            {/if}
                                         </td>
                                     </tr>
                                 {/each}
@@ -340,9 +434,63 @@
                     </table>
                 </div>
             {/if}
+
+            {#if $isAdmin && reciter.discarded_deliveries && reciter.discarded_deliveries.length > 0}
+                <section class="discarded-section" aria-label="Discarded combinations">
+                    <h3>
+                        Discarded combinations
+                        <span class="count">{reciter.discarded_deliveries.length}</span>
+                    </h3>
+                    <p class="note">
+                        Hidden from public view. Maintainers + owners only.
+                        {#if $isOwner}Owners can un-discard.{/if}
+                    </p>
+                    <ul class="discarded-list">
+                        {#each reciter.discarded_deliveries as d (d.slug)}
+                            <li>
+                                <div class="d-row">
+                                    <span class="d-combo">
+                                        {titleCaseSlug(d.riwayah)} · {titleCaseSlug(d.style)}
+                                        {#if d.recording_context}· {titleCaseSlug(d.recording_context)}{/if}
+                                        {#if d.recording_year}· {d.recording_year}{/if}
+                                    </span>
+                                    <StatePill state={'discarded'} size="sm" />
+                                </div>
+                                {#if d.visibility_reason}
+                                    <p class="d-reason">{d.visibility_reason}</p>
+                                {/if}
+                                {#if $isOwner}
+                                    <button
+                                        type="button"
+                                        class="undiscard-btn"
+                                        on:click={() => onUndiscard(d)}
+                                    >Un-discard</button>
+                                {/if}
+                            </li>
+                        {/each}
+                    </ul>
+                </section>
+            {/if}
         {/if}
     </div>
 </Modal>
+
+{#if formState}
+    <div
+        class="form-backdrop"
+        role="presentation"
+        on:click={(e) => { if (e.target === e.currentTarget) closeForm(); }}
+    >
+        <RequestForm
+            mode={formState.mode}
+            reciter={reciter!}
+            delivery={formState.delivery}
+            on:submitted={onFormResolved}
+            on:rejected={onFormResolved}
+            on:close={closeForm}
+        />
+    </div>
+{/if}
 
 <style>
     .detail {
@@ -357,7 +505,7 @@
         color: var(--text-muted);
         font-size: var(--fs-meta);
     }
-    .state.error { color: var(--state-publishing-fg); }
+    .state.error { color: var(--state-error-fg); }
     .link {
         background: transparent;
         border: 0;
@@ -445,7 +593,6 @@
     .row:hover td { background: var(--panel); }
     .row.selected td {
         background: var(--accent-tint-soft);
-        box-shadow: inset 2px 0 0 var(--accent);
     }
     .row.dim td { color: var(--text-muted); }
     .group-head td {
@@ -485,5 +632,114 @@
         color: var(--accent);
         border-color: var(--accent);
         background: var(--accent-tint-soft);
+    }
+
+    /* Request button — replaces the "Available for request" pill for
+       signed-in non-admin viewers. Compact so it doesn't reflow the row. */
+    .request-btn {
+        background: var(--state-available-request-bg);
+        color: var(--state-available-request-fg);
+        border: 1px solid var(--state-available-request-fg);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: background var(--t-fast), color var(--t-fast);
+    }
+    .request-btn:hover {
+        background: var(--state-available-request-fg);
+        color: var(--canvas);
+    }
+    /* Pill-as-button: admin click target on the "Requested" pill that opens
+       the review form. Strips the default button chrome so the pill renders
+       identically to the non-interactive variant. */
+    .pill-as-btn {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    /* Discarded section (admin-only). */
+    .discarded-section {
+        margin-top: var(--s-5);
+        padding-top: var(--s-4);
+        border-top: 1px dashed var(--border-quiet);
+    }
+    .discarded-section h3 {
+        font-size: var(--fs-body);
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin: 0 0 var(--s-1);
+    }
+    .discarded-section .count {
+        margin-left: var(--s-2);
+        color: var(--text-faint);
+        font-weight: 400;
+        font-size: var(--fs-meta);
+    }
+    .discarded-section .note {
+        margin: 0 0 var(--s-3);
+        font-size: var(--fs-meta);
+        color: var(--text-faint);
+    }
+    .discarded-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+    }
+    .discarded-list li {
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        padding: var(--s-3);
+        opacity: 0.85;
+    }
+    .d-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--s-3);
+    }
+    .d-combo {
+        color: var(--text-secondary);
+        font-size: var(--fs-meta);
+    }
+    .d-reason {
+        margin: var(--s-1) 0 0;
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+        font-style: italic;
+    }
+    .undiscard-btn {
+        margin-top: var(--s-2);
+        background: transparent;
+        border: 1px solid var(--border-default);
+        color: var(--text-secondary);
+        border-radius: var(--r-2);
+        padding: 4px 10px;
+        font-size: 11px;
+        cursor: pointer;
+    }
+    .undiscard-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--accent);
+    }
+
+    /* Inner sub-modal hosting the RequestForm. Sits above the reciter
+       Modal's backdrop without nesting Modal (which would compete on
+       focus trap + scroll lock). */
+    .form-backdrop {
+        position: fixed;
+        inset: 0;
+        background: oklch(0.06 0.005 268 / 0.65);
+        z-index: 110;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--s-6);
     }
 </style>

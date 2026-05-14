@@ -7,7 +7,6 @@
      *
      * Off-axis buckets:
      *   - available_for_request → no nodes reached, no current
-     *   - publishing            → reached up to under_review (current)
      *
      * Dates: the wire-level ``PublicDelivery`` carries ``state_since`` only
      * for the current bucket, so only the current node shows a date — the
@@ -41,7 +40,6 @@
             case 'requested':              return 0;
             case 'available_for_review':   return 1;
             case 'under_review':           return 2;
-            case 'publishing':             return 2; // most-recent reached
             case 'published':              return 3;
         }
     }

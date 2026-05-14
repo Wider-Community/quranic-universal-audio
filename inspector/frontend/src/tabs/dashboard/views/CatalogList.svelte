@@ -11,16 +11,16 @@
         type SchemaDescriptor,
     } from '../../../lib/catalog/schema-descriptor';
     import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
+    import SearchInput from '../../../lib/components/SearchInput.svelte';
     import { playerContext } from '../../../lib/stores/player-context';
     import { bucketRank, type PublicDelivery, type PublicReciter } from '../../../lib/types/public-state';
+    import { axisLabel as axisLabelOf, tagLabel as tagLabelOf } from '../../../lib/utils/axis-labels';
     import { defaultCombination } from '../../../lib/utils/default-combination';
-    import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
     import { match } from '../../../lib/utils/fuzzy-match';
     import ActivityRail from '../components/ActivityRail.svelte';
     import type { RowEntry } from '../components/CatalogTable.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
-    import Standfirst from '../components/Standfirst.svelte';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
     import {
         clearAllFilters,
@@ -61,10 +61,8 @@
 
     $: sorted = sortRows(searched, $dashboardState.sort);
 
-    // Standfirst totals from the full catalog (not filtered).
+    // Total reciters in the catalog (search-bar denominator).
     $: totalReciters = $catalogData.reciters.length;
-    $: totalCombinations = allDeliveries.length;
-    $: totalChannels = new Set(allDeliveries.map((d) => d.channel)).size;
 
     function groupByReciter(
         reciters: PublicReciter[],
@@ -114,10 +112,6 @@
         $dashboardState.search.length > 0
         || hasActiveFacets();
 
-    function onSearchInput(ev: Event): void {
-        setSearch((ev.target as HTMLInputElement).value);
-    }
-
     function onSortChange(ev: Event): void {
         const value = (ev.target as HTMLSelectElement).value;
         setSort(value as DashboardSort);
@@ -141,24 +135,9 @@
         }));
     }
 
-    function tagLabel(axisKey: string, tag: string): string {
-        if (!descriptor) return tag;
-        const axis = descriptor.axes.find((a) => a.key === axisKey);
-        const option = axis?.options.find((o) => o.key === tag);
-        return option?.label ?? titleCaseSlug(tag);
-    }
-
-    function axisLabel(axisKey: string): string {
-        if (!descriptor) return axisKey;
-        return descriptor.axes.find((a) => a.key === axisKey)?.label ?? axisKey;
-    }
+    const tagLabel = (axisKey: string, tag: string): string => tagLabelOf(descriptor, axisKey, tag);
+    const axisLabel = (axisKey: string): string => axisLabelOf(descriptor, axisKey);
 </script>
-
-<Standfirst
-    reciterCount={totalReciters}
-    combinationCount={totalCombinations}
-    channelCount={totalChannels}
-/>
 
 <div class="grid">
     <aside class="rail">
@@ -175,13 +154,13 @@
     <section class="body">
         <div class="toolbar">
             <div class="search">
-                <input
-                    type="search"
-                    placeholder="Search reciters"
+                <SearchInput
                     value={$dashboardState.search}
-                    on:input={onSearchInput}
+                    placeholder="Search reciters"
+                    count={sorted.length}
+                    total={totalReciters}
+                    on:input={(e) => setSearch(e.detail)}
                 />
-                <span class="search-count">{sorted.length} of {totalReciters}</span>
             </div>
             <div class="sort">
                 <label>
@@ -245,24 +224,10 @@
         padding: 0 0 var(--s-2);
         flex-wrap: wrap;
     }
-    .search { display: flex; align-items: center; gap: var(--s-3); flex: 1; min-width: 240px; }
-    .search input {
+    .search {
         flex: 1;
+        min-width: 240px;
         max-width: 420px;
-        padding: var(--s-2) var(--s-3);
-        background: var(--panel);
-        border: 1px solid var(--border-quiet);
-        border-radius: var(--r-2);
-        color: var(--text-primary);
-        font-size: var(--fs-body);
-        outline: none;
-    }
-    .search input:focus { border-color: var(--accent); }
-    .search-count {
-        font-size: 10.5px;
-        font-family: var(--font-mono);
-        color: var(--text-faint);
-        font-variant-numeric: tabular-nums;
     }
     .sort label { display: inline-flex; align-items: center; gap: var(--s-2); }
     .sort-label {
@@ -308,7 +273,7 @@
         color: var(--text-muted);
         font-size: var(--fs-meta);
     }
-    .state.error { color: var(--state-publishing-fg); }
+    .state.error { color: var(--state-error-fg); }
 
     .chips-bar {
         display: flex;

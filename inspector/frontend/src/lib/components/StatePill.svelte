@@ -1,12 +1,18 @@
 <script lang="ts">
     /**
-     * StatePill — leading dot + label for a six-bucket public state.
+     * StatePill — leading dot + label for a five-bucket public state.
      * Mirrors the design `.state.state-*` classes from
      * `inspector/frontend/design/components.css`.
      */
-    import { PUBLIC_BUCKET_LABELS, type PublicBucket } from '../types/public-state';
+    import { PUBLIC_BUCKET_LABELS, type AdminBucket } from '../types/public-state';
 
-    export let state: PublicBucket;
+    /**
+     * Accepts `AdminBucket` which is `PublicBucket | 'discarded'`. The
+     * `discarded` variant only appears on rows inside the admin-only
+     * `discarded_deliveries` array of `AdminViewReciter` — callers are
+     * responsible for gating that section on `$isAdmin`.
+     */
+    export let state: AdminBucket;
     export let size: 'sm' | 'md' | 'lg' = 'md';
 
     $: bucketClass = `bucket-${state.replace(/_/g, '-')}`;
@@ -46,9 +52,9 @@
     .pill.lg .dot { width: 8px; height: 8px; }
 
     .bucket-published        { color: var(--state-published-fg);         background: var(--state-published-bg); }
-    .bucket-publishing       { color: var(--state-publishing-fg);        background: var(--state-publishing-bg); }
     .bucket-under-review     { color: var(--state-under-review-fg);      background: var(--state-under-review-bg); }
     .bucket-available-for-review { color: var(--state-available-fg);     background: var(--state-available-bg); }
     .bucket-requested        { color: var(--state-requested-fg);         background: var(--state-requested-bg); }
     .bucket-available-for-request{ color: var(--state-available-request-fg); background: var(--state-available-request-bg); }
+    .bucket-discarded        { color: var(--state-discarded-fg);         background: var(--state-discarded-bg); }
 </style>

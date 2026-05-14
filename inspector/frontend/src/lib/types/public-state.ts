@@ -13,16 +13,24 @@ export type PublicBucket =
     | 'requested'
     | 'available_for_review'
     | 'under_review'
-    | 'publishing'
     | 'published';
 
-export const PUBLIC_BUCKET_LABELS: Record<PublicBucket, string> = {
+/**
+ * Admin-extended bucket. ``discarded`` is the orthogonal visibility flag,
+ * not a state-machine state — it only appears on combos returned in the
+ * ``discarded_deliveries`` array of ``/api/public/reciter/<id>`` when the
+ * caller is a maintainer or owner. Used to type the StatePill rendered in
+ * the admin-only discarded section of the reciter modal.
+ */
+export type AdminBucket = PublicBucket | 'discarded';
+
+export const PUBLIC_BUCKET_LABELS: Record<AdminBucket, string> = {
     available_for_request: 'Available for request',
     requested: 'Requested',
     available_for_review: 'Available for review',
     under_review: 'Under review',
-    publishing: 'Publishing',
     published: 'Published',
+    discarded: 'Discarded',
 };
 
 export const PUBLIC_BUCKETS: readonly PublicBucket[] = [
@@ -30,7 +38,6 @@ export const PUBLIC_BUCKETS: readonly PublicBucket[] = [
     'requested',
     'available_for_review',
     'under_review',
-    'publishing',
     'published',
 ] as const;
 
@@ -41,7 +48,6 @@ export const PUBLIC_BUCKETS: readonly PublicBucket[] = [
  */
 export const BUCKET_PRIORITY: readonly PublicBucket[] = [
     'published',
-    'publishing',
     'under_review',
     'available_for_review',
     'requested',
@@ -50,11 +56,10 @@ export const BUCKET_PRIORITY: readonly PublicBucket[] = [
 
 const BUCKET_RANK: Record<PublicBucket, number> = {
     published: 0,
-    publishing: 1,
-    under_review: 2,
-    available_for_review: 3,
-    requested: 4,
-    available_for_request: 5,
+    under_review: 1,
+    available_for_review: 2,
+    requested: 3,
+    available_for_request: 4,
 };
 
 export function bucketRank(b: PublicBucket): number {
@@ -99,6 +104,28 @@ export interface PublicReciter {
     chapter_count_total: number;
     coverage_kind: CoverageKind;
     last_activity: string | null;
+}
+
+/**
+ * Discarded delivery surface. Mirrors ``services.public_state.AdminViewDelivery``
+ * — same fields as ``PublicDelivery`` plus ``visibility`` + ``visibility_reason``
+ * so the modal can label why a combo was discarded.
+ */
+export interface AdminDiscardedDelivery extends PublicDelivery {
+    visibility: 'public' | 'discarded';
+    visibility_reason: string | null;
+}
+
+/**
+ * Admin-view reciter payload. Returned by ``/api/public/reciter/<id>`` when
+ * the caller is signed in as maintainer or owner. ``deliveries`` still
+ * contains only public combos (same as the anonymous shape) so the existing
+ * counts + sorts stay consistent; discarded combos move into a dedicated
+ * array for the maintainer-only section of the modal.
+ */
+export interface AdminViewReciter extends PublicReciter {
+    discarded_deliveries: AdminDiscardedDelivery[];
+    fully_discarded: boolean;
 }
 
 export interface PublicReciterPage {

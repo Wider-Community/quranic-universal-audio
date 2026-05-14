@@ -47,7 +47,7 @@
 {#if visible}
     <button
         type="button"
-        class="seg-btn primary lg"
+        class="seg-btn primary"
         disabled={busy}
         on:click={_onClick}
     >
