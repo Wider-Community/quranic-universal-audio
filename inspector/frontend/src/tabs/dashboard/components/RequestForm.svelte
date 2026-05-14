@@ -123,6 +123,10 @@
     }
 
     $: countryMatch = countryByCode(country);
+    /** True iff the user typed a country that doesn't match any ISO-2 entry.
+     *  Blank is fine (truly unknown is allowed); only a populated-but-invalid
+     *  value blocks submission. */
+    $: invalidCountry = !!country && !countryMatch;
 
     /**
      * Compute the proposed_edits patch: only include fields the user
@@ -165,6 +169,10 @@
 
     async function onSubmit(): Promise<void> {
         if (busy) return;
+        if (invalidCountry) {
+            formError = 'Country must be a valid ISO-2 code from the list, or blank.';
+            return;
+        }
         formError = null;
         busy = true;
         try {
@@ -245,8 +253,8 @@
                 <li>
                     If multiple combinations of this riwayah / style /
                     context exist, pick the one with the highest coverage,
-                    followed by highest bitrate, followed by best channel
-                    quality. (Different channels may be serving the same
+                    followed by best channel audio, followed by highest bitrate.
+                    (Different channels may be serving the same
                     recording or a different one — listen to compare.)
                 </li>
                 <li>
@@ -322,7 +330,9 @@
             {#if country && countryMatch}
                 <span class="field-hint">{countryMatch.name}</span>
             {:else if country}
-                <span class="field-hint warn">Unknown country code — admin will review.</span>
+                <span class="field-hint warn">
+                    Not a valid country — pick one from the list or leave blank.
+                </span>
             {/if}
         </label>
 
@@ -392,7 +402,8 @@
                 type="button"
                 class="primary"
                 on:click={onSubmit}
-                disabled={busy}
+                disabled={busy || invalidCountry}
+                title={invalidCountry ? 'Fix the country field first' : ''}
             >
                 {busy ? 'Submitting…' : 'Submit request'}
             </button>
