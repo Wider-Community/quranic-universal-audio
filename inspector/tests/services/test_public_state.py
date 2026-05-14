@@ -74,10 +74,17 @@ def test_bucket_for_none_row_is_available_for_request():
     assert bucket_for(None) == "available_for_request"
 
 
-def test_bucket_for_catalogued_and_awaiting_alignment_is_requested():
+def test_bucket_for_catalogued_is_available_for_request():
+    """CATALOGUED rows haven't been requested yet — they're still requestable."""
     from services.public_state import bucket_for
 
-    assert bucket_for(_state_row("test_a", state="catalogued")) == "requested"
+    assert bucket_for(_state_row("test_a", state="catalogued")) == "available_for_request"
+
+
+def test_bucket_for_awaiting_alignment_is_requested():
+    """AWAITING_ALIGNMENT is the post-request, pre-acceptance state."""
+    from services.public_state import bucket_for
+
     assert bucket_for(_state_row("test_b", state="awaiting_alignment")) == "requested"
 
 

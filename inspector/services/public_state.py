@@ -110,12 +110,20 @@ def bucket_for(row: ReciterRow | None) -> PublicBucket:
     ``None`` means the catalog has a delivery but no state row has been
     created — that's ``available_for_request`` (a "suggest this reciter"
     affordance in the UI).
+
+    A row in ``CATALOGUED`` likewise maps to ``available_for_request``: the
+    maintainer has seeded the row but no one has fired ``reciter.requested``
+    yet, so it's still requestable. ``AWAITING_ALIGNMENT`` is the first
+    state that maps to the ``requested`` pill (i.e. someone has actually
+    submitted a request and the pending entry is in flight).
     """
     if row is None:
         return "available_for_request"
 
     state = row.state
-    if state in (ReciterState.CATALOGUED, ReciterState.AWAITING_ALIGNMENT):
+    if state == ReciterState.CATALOGUED:
+        return "available_for_request"
+    if state == ReciterState.AWAITING_ALIGNMENT:
         return "requested"
     if state == ReciterState.AWAITING_REVIEW:
         return "available_for_review"

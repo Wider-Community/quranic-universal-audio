@@ -467,23 +467,34 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
 def _h_requested(slug, before, actor, payload, reason):
     """User-submitted request to align this reciter combination.
 
-    Any signed-in user (contributor or above) can fire this. Transitions
-    CATALOGUED → AWAITING_ALIGNMENT and stores the proposed catalog edits +
-    free-form comments in the ``pending_requests`` bucket store. Acceptance
-    is implicit and server-side (see ``_h_alignment_completed``); admins can
-    reject pre-acceptance via ``reciter.request_rejected_*``.
+    Any signed-in user (contributor or above) can fire this. Accepts two
+    source shapes — both map to the same "available for request" public
+    bucket and both land in ``AWAITING_ALIGNMENT``:
+
+    - No state row exists yet (``before is None``). The dispatcher inserts
+      a fresh row. This is the common case: catalog deliveries don't get a
+      state row until a lifecycle event fires.
+    - A row exists in ``CATALOGUED``. Transition in place. This is the
+      post-soft-reject re-request path: ``reciter.request_rejected_soft``
+      drops the row back to CATALOGUED, and the next request transitions
+      it forward again.
+
+    Stores the proposed catalog edits + free-form comments in the
+    ``pending_requests`` bucket store. Acceptance is implicit and
+    server-side (see ``_h_alignment_completed``); admins can reject
+    pre-acceptance via ``reciter.request_rejected_*``.
     """
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.state != ReciterState.CATALOGUED:
-        raise InvalidTransition(
-            f"requested requires CATALOGUED, got {before.state.value}"
-        )
-    if before.visibility != Visibility.PUBLIC:
-        raise InvalidTransition(
-            f"cannot request a {before.visibility.value!r} reciter"
-        )
     _require_contributor_or_higher(actor)
+
+    if before is not None:
+        if before.state != ReciterState.CATALOGUED:
+            raise InvalidTransition(
+                f"requested requires CATALOGUED or no row, got {before.state.value}"
+            )
+        if before.visibility != Visibility.PUBLIC:
+            raise InvalidTransition(
+                f"cannot request a {before.visibility.value!r} reciter"
+            )
 
     # Defense-in-depth: also checked by the route layer.
     from . import pending_requests as _pending_requests
@@ -492,10 +503,6 @@ def _h_requested(slug, before, actor, payload, reason):
             f"slug {slug!r} already has a pending request"
         )
 
-    # Persist the pending entry *inside* the slug lock so a second concurrent
-    # request fails the get() check above. If _persist_row fails downstream,
-    # the entry will be cleaned up the next time the slug is rejected — or
-    # rebuildable from the audit log.
     from scripts.lib.schemas import ProposedEdits as _ProposedEdits
     edits_raw = payload.get("proposed_edits") or {}
     try:
@@ -508,14 +515,25 @@ def _h_requested(slug, before, actor, payload, reason):
     if comments is not None and len(comments) > 1000:
         raise InvalidTransition("comments exceeds 1000 chars")
 
+    # Persist the pending entry *inside* the slug lock so a second concurrent
+    # request fails the get() check above. If _persist_row fails downstream,
+    # the entry will be cleaned up the next time the slug is rejected — or
+    # rebuildable from the audit log.
     _pending_requests.submit(
         slug, requester=actor, edits=edits, comments=comments,
     )
 
+    now = _now()
+    if before is None:
+        return ReciterRow(
+            slug=slug,
+            state=ReciterState.AWAITING_ALIGNMENT,
+            state_since=now,
+        )
     return _replace(
         before,
         state=ReciterState.AWAITING_ALIGNMENT,
-        state_since=_now(),
+        state_since=now,
     )
 
 

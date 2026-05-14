@@ -63,6 +63,14 @@ def submit_request(user, slug: str):
     if comments is not None and not isinstance(comments, str):
         return jsonify({"error": "comments must be a string or null"}), 400
 
+    # Verify the slug refers to a real catalog delivery — the state-machine
+    # handler accepts `before is None` (no state row yet) so it cannot tell a
+    # never-seen slug apart from a not-yet-progressed one. Route-layer check
+    # keeps random slugs out of the state file.
+    from services import catalog as catalog_service
+    if catalog_service.find_delivery(slug) is None:
+        return jsonify({"error": "unknown reciter"}), 404
+
     # Reject up front (HTTP 409) when a pending entry exists, so the
     # frontend can surface a clean "already pending" message instead of a
     # 400 from the state-machine handler.

@@ -157,6 +157,40 @@ def test_requested_happy_path(state_env, monkeypatch):
     assert pending.requester.hf_user_id == "u-1"
 
 
+def test_requested_creates_row_when_none_exists(state_env, monkeypatch):
+    """Most-common path: catalog delivery has no state row yet. Request
+    creates a fresh row in AWAITING_ALIGNMENT in one step."""
+    state_service, pending_service, _, backend = state_env
+    from services import audit as audit_service
+    from services import storage_paths
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    # Wipe the state file so test_reciter has no row.
+    backend.write_json_atomic(
+        storage_paths.state_path(),
+        ReciterStateFile().model_dump(mode="json"),
+    )
+    state_service.hydrate()
+    assert state_service.get_row("test_reciter") is None
+
+    state_service.transition(
+        "test_reciter",
+        "reciter.requested",
+        actor=_actor(),
+        payload={
+            "proposed_edits": {"name_en": "Better"},
+            "comments": None,
+        },
+    )
+    row = state_service.get_row("test_reciter")
+    assert row is not None
+    assert row.state == ReciterState.AWAITING_ALIGNMENT
+
+    pending = pending_service.get("test_reciter")
+    assert pending is not None
+    assert pending.proposed_edits.name_en == "Better"
+
+
 def test_requested_rejects_non_catalogued(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service
