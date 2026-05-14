@@ -118,7 +118,6 @@ export const COUNTRIES: readonly Country[] = [
     { code: 'HU', name: 'Hungary' },
     { code: 'ID', name: 'Indonesia' },
     { code: 'IE', name: 'Ireland' },
-    { code: 'IL', name: 'Israel' },
     { code: 'IM', name: 'Isle of Man' },
     { code: 'IN', name: 'India' },
     { code: 'IO', name: 'British Indian Ocean Territory' },
