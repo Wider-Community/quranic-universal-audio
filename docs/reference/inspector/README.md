@@ -32,6 +32,7 @@ When this doc and a planning doc disagree on **behavior**, this doc is the contr
 |---|---|
 | [`auth-flow.md`](auth-flow.md) | HF OAuth callback URL, signed cookie payload, role resolution at session bind |
 | [`claim-endpoints.md`](claim-endpoints.md) | `/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` contracts |
+| [`roles.md`](roles.md) | Role tiers + predicates + where role gating is enforced (state handlers / `@require_role` / edit-lock / frontend); HF vs local-dev identity; admin endpoints by tier |
 
 ### Admin (Phase 4)
 
