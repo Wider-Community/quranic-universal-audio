@@ -31,7 +31,11 @@
         PublicDelivery,
         PublicReciter,
     } from '../../../lib/types/public-state';
-    import { COUNTRIES, countryByCode } from '../../../lib/utils/countries';
+    import {
+        COUNTRIES,
+        countryByCode,
+        normalizeCountry as resolveCountry,
+    } from '../../../lib/utils/countries';
 
     export let mode: 'create' | 'review';
     export let reciter: PublicReciter;
@@ -53,7 +57,11 @@
     let style = delivery.style;
     let name_en = reciter.name;
     let name_ar = reciter.name_ar ?? '';
-    let country = reciter.country ?? '';
+    // Legacy catalog rows store country as the full name (e.g. "Saudi Arabia")
+    // instead of the ISO-2 code the schema documents. The resolver accepts
+    // either shape and returns the canonical code so the datalist recognises
+    // the prefill — catalog migrates naturally to ISO-2 as edits land.
+    let country = resolveCountry(reciter.country);
     let recording_context = delivery.recording_context ?? '';
     let recording_year: number | '' = delivery.recording_year ?? '';
     let comments = '';
@@ -96,7 +104,7 @@
                 style = pending.proposed_edits.style ?? style;
                 name_en = pending.proposed_edits.name_en ?? name_en;
                 name_ar = pending.proposed_edits.name_ar ?? name_ar;
-                country = pending.proposed_edits.country ?? country;
+                country = resolveCountry(pending.proposed_edits.country ?? country);
                 recording_context =
                     pending.proposed_edits.recording_context ?? recording_context;
                 recording_year = pending.proposed_edits.recording_year ?? recording_year;
@@ -111,15 +119,15 @@
     }
 
     /**
-     * On country-input blur: uppercase whatever the user typed, and if it
-     * matches an ISO-2 code (either entered as a code or selected via the
-     * datalist) leave it as-is. The datalist passes the selected option's
-     * `value` (the ISO-2 code) through directly, so most picks land here
-     * already normalized.
+     * On country-input blur: resolve whatever the user typed (code or
+     * full name) to the canonical ISO-2 code. The datalist passes the
+     * selected option's value (the code) through directly so most picks
+     * land here already normalized; this catches the keyboard-only path
+     * where someone types "saudi arabia" without selecting from the list.
+     * Unknown strings round-trip unchanged so the user can fix them.
      */
     function normalizeCountry(): void {
-        const trimmed = country.trim().toUpperCase();
-        country = trimmed;
+        country = resolveCountry(country);
     }
 
     $: countryMatch = countryByCode(country);
@@ -139,7 +147,13 @@
         if (style && style !== delivery.style) out.style = style;
         if (name_en && name_en !== reciter.name) out.name_en = name_en;
         if (name_ar !== (reciter.name_ar ?? '')) out.name_ar = name_ar || null;
-        if (country !== (reciter.country ?? '')) out.country = country || null;
+        // Compare against the normalized form of the catalog value so legacy
+        // rows storing full names (e.g. "Saudi Arabia") don't show up as
+        // edits when the user hasn't touched the field. On submit we always
+        // send the ISO-2 code regardless.
+        if (country !== resolveCountry(reciter.country)) {
+            out.country = country || null;
+        }
         if (recording_context !== (delivery.recording_context ?? '')) {
             out.recording_context = recording_context || null;
         }
@@ -248,21 +262,18 @@
                 <li>
                     Listen to some quick audio samples and verify the audio
                     belongs to the correct reciter, style, and riwayah —
-                    and that quality is decent.
+                    and that quality is decent. Verify accurate metadata for this reciter combination
+                    and edit anything that looks wrong.
                 </li>
                 <li>
                     If multiple combinations of this riwayah / style /
                     context exist, pick the one with the highest coverage,
-                    followed by best channel audio, followed by highest bitrate.
+                    followed by best channel audio quality, followed by highest bitrate.
                     (Different channels may be serving the same
                     recording or a different one — listen to compare.)
                 </li>
                 <li>
-                    Verify accurate metadata for this reciter combination
-                    and edit anything that looks wrong.
-                </li>
-                <li>
-                    An admin will review your submission. Acceptance happens
+                    An admin will review your submission. State changes to Available for Review / Under Review
                     automatically once the alignment pipeline finishes.
                 </li>
             </ul>

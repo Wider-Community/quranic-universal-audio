@@ -273,3 +273,37 @@ export function countryByCode(code: string | null | undefined): Country | null {
     const upper = code.toUpperCase();
     return COUNTRIES.find((c) => c.code === upper) ?? null;
 }
+
+
+/** Lookup by full country name (case-insensitive). Returns null when no match. */
+export function countryByName(name: string | null | undefined): Country | null {
+    if (!name) return null;
+    const lower = name.trim().toLowerCase();
+    if (!lower) return null;
+    return COUNTRIES.find((c) => c.name.toLowerCase() === lower) ?? null;
+}
+
+
+/**
+ * Normalize an arbitrary catalog ``country`` value to its ISO-2 code.
+ *
+ * Legacy catalog rows wrote the full country name (e.g. ``"Saudi Arabia"``)
+ * instead of the ISO-2 code the schema documents (``"SA"``). This resolver
+ * accepts either shape and returns the canonical ISO-2 code when it can —
+ * the request form prefills with the resolved code so the dropdown
+ * recognizes it, and on submit we always write ISO-2 back. The catalog
+ * migrates naturally as edits land; no backfill required.
+ *
+ * Returns the original input (trimmed) when nothing matches, so unknown
+ * strings still round-trip rather than getting silently dropped.
+ */
+export function normalizeCountry(raw: string | null | undefined): string {
+    if (!raw) return '';
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    const byCode = countryByCode(trimmed);
+    if (byCode) return byCode.code;
+    const byName = countryByName(trimmed);
+    if (byName) return byName.code;
+    return trimmed;
+}
