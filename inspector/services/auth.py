@@ -48,6 +48,13 @@ SESSION_SALT = "inspector-session-v1"
 
 # Dev-mode synthetic identity. Unsigned cookie; only honoured when
 # INSPECTOR_DEV_MODE=1. See module docstring.
+#
+# Each dev role resolves to a *distinct* synthetic identity (e.g. owner →
+# ``dev-owner`` / ``@dev-owner``) so the role switcher behaves like switching
+# between real HF users in prod: per-user dismissals, claims, and audit
+# actor records are scoped per role rather than collapsing onto one shared
+# ``dev-local`` user. ``DEV_USER_HF_ID`` is kept as the legacy default for
+# any caller that still references it (no in-tree callers do).
 DEV_ROLE_COOKIE_NAME = "inspector_dev_role"
 DEV_USER_HF_ID = "dev-local"
 DEV_USER_LOGIN = "dev"
@@ -174,7 +181,13 @@ def current_user() -> User | None:
 
 
 def _dev_current_user() -> User | None:
-    """Dev-mode synthetic user. ``"anonymous"`` cookie value → None."""
+    """Dev-mode synthetic user. ``"anonymous"`` cookie value → None.
+
+    Each role gets its own ``hf_user_id`` (``dev-<role>``) so flipping the
+    role switcher in dev simulates switching between distinct admin users
+    in prod — per-user dismissals and claim ownership scope correctly
+    instead of collapsing onto a single shared ``dev-local`` user.
+    """
     raw = request.cookies.get(DEV_ROLE_COOKIE_NAME, "owner") or "owner"
     if raw == "anonymous":
         return None
@@ -183,4 +196,8 @@ def _dev_current_user() -> User | None:
     except ValueError:
         # Garbage cookie — don't 500 a dev page, fall back to owner.
         role = Role.OWNER
-    return User(hf_user_id=DEV_USER_HF_ID, login=DEV_USER_LOGIN, role=role)
+    return User(
+        hf_user_id=f"dev-{role.value}",
+        login=f"dev-{role.value}",
+        role=role,
+    )
