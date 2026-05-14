@@ -10,13 +10,17 @@ export type PublicEventKind =
     | 'requested'
     | 'available_review'
     | 'under_review'
-    | 'publishing'
     | 'published';
 
 export interface PublicActivityCard {
     ts: string;
     kind: PublicEventKind;
     name: string;
+    /** Delivery riwayah slug. `null` when the slug is no longer in the catalog. */
+    riwayah: string | null;
+    /** Delivery style slug. `null` when the slug is no longer in the catalog. */
+    style: string | null;
+    /** Fallback human-readable line; the frontend prefers composing from structured fields. */
     text: string;
 }
 

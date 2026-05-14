@@ -30,15 +30,16 @@ PublicEventKind = Literal[
     "requested",
     "available_review",
     "under_review",
-    "publishing",
     "published",
 ]
 
+# `reciter.marked_ready` is deliberately absent — that event is internal-only
+# (admins use it to find rows pending timestamp extraction) and never surfaces
+# on the public activity feed.
 _EVENT_TO_KIND: dict[str, PublicEventKind] = {
     "catalog.added": "added",
     "reciter.alignment_completed": "available_review",
     "reciter.claimed": "under_review",
-    "reciter.marked_ready": "publishing",
     "reciter.timestamps_completed": "published",
 }
 
@@ -53,7 +54,9 @@ class PublicActivityCard(TypedDict, total=False):
     ts: str                  # ISO datetime UTC
     kind: PublicEventKind
     name: str                # reciter display name; resolved via catalog
-    text: str                # human-readable line (no slug, no assignee)
+    riwayah: str | None      # delivery riwayah slug; None if slug missing from catalog
+    style: str | None        # delivery style slug; None if slug missing from catalog
+    text: str                # human-readable fallback line (no slug, no assignee)
 
 
 _TEMPLATES: dict[PublicEventKind, str] = {
@@ -61,7 +64,6 @@ _TEMPLATES: dict[PublicEventKind, str] = {
     "requested": "{name} has been requested",
     "available_review": "{name} is now available for review",
     "under_review": "{name} is now under review",
-    "publishing": "{name} is being published",
     "published": "{name} is now published",
 }
 
@@ -104,20 +106,47 @@ def _iter_partitions(months: int) -> Iterable[dict]:
         yield from reversed(list(backend.iter_jsonl(path)))
 
 
+def _delivery_descriptor(slug: str) -> tuple[str, str, str] | None:
+    """Resolve a delivery slug to ``(reciter_name, riwayah, style)``.
+
+    Returns ``None`` when the slug is no longer in the catalog (e.g. a
+    delivery was removed after its audit entries were written). Callers
+    fall back to a name-only lookup so older entries don't disappear.
+    """
+    delivery = catalog_service.find_delivery(slug)
+    if delivery is None:
+        return None
+    reciter = catalog_service.find_reciter(delivery.reciter_id)
+    if reciter is None:
+        return None
+    return reciter.name_en, delivery.riwayah, delivery.style
+
+
 def _to_card(record: dict, kind: PublicEventKind) -> PublicActivityCard | None:
     slug = record.get("slug")
     if not isinstance(slug, str):
         return None
-    name = catalog_service.display_name(slug)
-    if name is None:
-        return None
     ts = record.get("ts")
     if not isinstance(ts, str):
         return None
+    descriptor = _delivery_descriptor(slug)
+    if descriptor is not None:
+        name, riwayah, style = descriptor
+    else:
+        # Fallback: slug missing from catalog. Use display_name (which may
+        # still resolve via a name-only path) to keep older entries
+        # visible without rich combination metadata.
+        name = catalog_service.display_name(slug)
+        if name is None:
+            return None
+        riwayah = None
+        style = None
     return PublicActivityCard(
         ts=ts,
         kind=kind,
         name=name,
+        riwayah=riwayah,
+        style=style,
         text=_TEMPLATES[kind].format(name=name),
     )
 

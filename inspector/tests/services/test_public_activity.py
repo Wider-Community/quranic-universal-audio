@@ -39,14 +39,13 @@ def _record(event, *, slug="husary_qdc", to_state=None,
     }
 
 
-def test_classifies_six_allowlisted_events(monkeypatch):
+def test_classifies_allowlisted_events(monkeypatch):
     from services.public_activity import all_public_cards
 
     _install_audit(monkeypatch, [
         _record("catalog.added"),
         _record("reciter.alignment_completed"),
         _record("reciter.claimed"),
-        _record("reciter.marked_ready"),
         _record("reciter.timestamps_completed"),
         _record("state.transition", to_state="awaiting_alignment"),
     ])
@@ -58,10 +57,19 @@ def test_classifies_six_allowlisted_events(monkeypatch):
         "added",
         "available_review",
         "published",
-        "publishing",
         "requested",
         "under_review",
     ]
+
+
+def test_marked_ready_is_redacted_from_public_feed(monkeypatch):
+    """marked_ready is internal-only — never surfaces on the public feed."""
+    from services.public_activity import all_public_cards
+
+    _install_audit(monkeypatch, [_record("reciter.marked_ready")])
+    _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
+
+    assert all_public_cards() == []
 
 
 def test_redacts_non_allowlisted_events(monkeypatch):
@@ -122,6 +130,91 @@ def test_card_payload_omits_assignee(monkeypatch):
     cards = all_public_cards()
     assert "actor" not in cards[0]
     assert "assignee" not in repr(cards[0])
+
+
+class _StubDelivery:
+    def __init__(self, slug, reciter_id, riwayah, style):
+        self.slug = slug
+        self.reciter_id = reciter_id
+        self.riwayah = riwayah
+        self.style = style
+
+
+class _StubReciter:
+    def __init__(self, reciter_id, name_en):
+        self.reciter_id = reciter_id
+        self.name_en = name_en
+
+
+def _install_delivery_descriptor(monkeypatch, deliveries, reciters):
+    """Patch catalog lookups used by ``_delivery_descriptor``."""
+    from services import catalog as catalog_service
+
+    monkeypatch.setattr(
+        catalog_service,
+        "find_delivery",
+        lambda slug: deliveries.get(slug),
+    )
+    monkeypatch.setattr(
+        catalog_service,
+        "find_reciter",
+        lambda rid: reciters.get(rid),
+    )
+    # display_name is still the fallback path; keep it consistent.
+    monkeypatch.setattr(
+        catalog_service,
+        "display_name",
+        lambda slug: (
+            reciters[deliveries[slug].reciter_id].name_en
+            if slug in deliveries and deliveries[slug].reciter_id in reciters
+            else None
+        ),
+    )
+
+
+def test_card_carries_riwayah_and_style(monkeypatch):
+    """Cards include the delivery's riwayah and style slugs for rich rendering."""
+    from services.public_activity import all_public_cards
+
+    deliveries = {
+        "husary_qdc": _StubDelivery(
+            slug="husary_qdc",
+            reciter_id="husary",
+            riwayah="hafs_an_asim",
+            style="murattal",
+        ),
+    }
+    reciters = {"husary": _StubReciter("husary", "Mahmoud Khalil Al-Husary")}
+
+    _install_audit(monkeypatch, [_record("reciter.claimed", slug="husary_qdc")])
+    _install_delivery_descriptor(monkeypatch, deliveries, reciters)
+
+    cards = all_public_cards()
+    assert len(cards) == 1
+    card = cards[0]
+    assert card["name"] == "Mahmoud Khalil Al-Husary"
+    assert card["riwayah"] == "hafs_an_asim"
+    assert card["style"] == "murattal"
+    # Text fallback still emitted for older clients.
+    assert "Mahmoud Khalil Al-Husary" in card["text"]
+
+
+def test_card_falls_back_when_slug_missing_from_catalog(monkeypatch):
+    """When the catalog no longer has the delivery, riwayah/style are null
+    but the card still renders via the display_name fallback."""
+    from services.public_activity import all_public_cards
+
+    _install_audit(monkeypatch, [_record("reciter.claimed", slug="husary_qdc")])
+    # No delivery/reciter rows — only display_name resolves.
+    _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
+
+    cards = all_public_cards()
+    assert len(cards) == 1
+    card = cards[0]
+    assert card["name"] == "Husary"
+    assert card["riwayah"] is None
+    assert card["style"] is None
+    assert "Husary" in card["text"]
 
 
 def test_feed_paginates(monkeypatch):

@@ -11,7 +11,12 @@
      */
     import { createEventDispatcher } from 'svelte';
 
-    import type { PublicBucket, PublicDelivery, PublicReciter } from '../types/public-state';
+    import {
+        BUCKET_PRIORITY,
+        type PublicBucket,
+        type PublicDelivery,
+        type PublicReciter,
+    } from '../types/public-state';
     import { countryName, titleCaseSlug } from '../utils/delivery-label';
     import StatePill from './StatePill.svelte';
 
@@ -29,31 +34,24 @@
         dispatch('play');
     }
 
-    interface StateCount {
-        bucket: PublicBucket;
-        n: number;
-    }
-
-    const STATE_ORDER: readonly PublicBucket[] = [
-        'available_for_review',
-        'under_review',
-        'publishing',
-        'published',
-        'requested',
+    // Buckets that drop out of the displayed pill stack as soon as any
+    // non-suppressible bucket is present on the reciter's combinations.
+    const SUPPRESSIBLE: ReadonlySet<PublicBucket> = new Set([
         'available_for_request',
-    ];
+        'requested',
+    ]);
 
-    $: stateCounts = computeStateCounts(visibleDeliveries);
+    $: visibleBuckets = computeVisibleBuckets(visibleDeliveries);
     $: combinationCount = visibleDeliveries.length;
     $: riwayahCount = new Set(visibleDeliveries.map((d) => d.riwayah)).size;
     $: styleCount = new Set(visibleDeliveries.map((d) => d.style)).size;
 
-    function computeStateCounts(dels: PublicDelivery[]): StateCount[] {
-        const counts: Partial<Record<PublicBucket, number>> = {};
-        for (const d of dels) counts[d.bucket] = (counts[d.bucket] ?? 0) + 1;
-        return STATE_ORDER
-            .filter((b) => (counts[b] ?? 0) > 0)
-            .map((b) => ({ bucket: b, n: counts[b]! }));
+    function computeVisibleBuckets(dels: PublicDelivery[]): PublicBucket[] {
+        const present = new Set<PublicBucket>(dels.map((d) => d.bucket));
+        const nonSuppressible = [...present].filter((b) => !SUPPRESSIBLE.has(b));
+        const survivors: ReadonlySet<PublicBucket> =
+            nonSuppressible.length > 0 ? new Set(nonSuppressible) : present;
+        return BUCKET_PRIORITY.filter((b) => survivors.has(b));
     }
 </script>
 
@@ -91,15 +89,10 @@
                 <span class="country">{countryName(reciter.country)}</span>
             {/if}
         </div>
-        {#if stateCounts.length > 0}
+        {#if visibleBuckets.length > 0}
             <div class="states">
-                {#each stateCounts as sc (sc.bucket)}
-                    <span class="state-item">
-                        <StatePill state={sc.bucket} size="sm" />
-                        {#if sc.n > 1}
-                            <span class="state-n">·{sc.n}</span>
-                        {/if}
-                    </span>
+                {#each visibleBuckets as bucket (bucket)}
+                    <StatePill state={bucket} size="sm" />
                 {/each}
             </div>
         {/if}
@@ -189,17 +182,6 @@
         display: flex;
         flex-wrap: wrap;
         gap: var(--s-2);
-    }
-    .state-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 2px;
-    }
-    .state-n {
-        font-size: 10.5px;
-        color: var(--text-faint);
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
     }
 
     .right {

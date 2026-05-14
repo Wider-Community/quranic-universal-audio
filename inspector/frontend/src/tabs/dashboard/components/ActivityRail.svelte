@@ -10,7 +10,9 @@
     import {
         fetchPublicActivity,
         type PublicActivityCard,
+        type PublicEventKind,
     } from '../../../lib/api/public-activity';
+    import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
 
@@ -40,6 +42,21 @@
     function dotClass(kind: PublicActivityCard['kind']): string {
         return `marker marker-${kind.replace(/_/g, '-')}`;
     }
+
+    const ACTION: Record<PublicEventKind, string> = {
+        added: 'added to catalog',
+        requested: 'has been requested',
+        available_review: 'is now available for review',
+        under_review: 'is now under review',
+        published: 'is now published',
+    };
+
+    function formatLine(card: PublicActivityCard): string {
+        if (card.riwayah && card.style) {
+            return `${card.name} (${titleCaseSlug(card.riwayah)}) (${titleCaseSlug(card.style)}) ${ACTION[card.kind]}`;
+        }
+        return card.text;
+    }
 </script>
 
 <aside class="activity" aria-label="Recent activity">
@@ -60,7 +77,7 @@
                 <li class="item">
                     <span class={dotClass(card.kind)} aria-hidden="true"></span>
                     <div class="body">
-                        <p class="text">{card.text}</p>
+                        <p class="text">{formatLine(card)}</p>
                         <time class="time" datetime={card.ts}>{relativeTime(card.ts)}</time>
                     </div>
                 </li>
@@ -101,7 +118,7 @@
         color: var(--text-muted);
         font-size: var(--fs-meta);
     }
-    .state.error { color: var(--state-publishing-fg); }
+    .state.error { color: var(--state-error-fg); }
 
     .list {
         list-style: none;
@@ -128,7 +145,6 @@
     .marker-requested         { background: var(--state-requested-fg); }
     .marker-available-review  { background: var(--state-available-fg); }
     .marker-under-review      { background: var(--state-under-review-fg); }
-    .marker-publishing        { background: var(--state-publishing-fg); }
     .marker-published         { background: var(--state-published-fg); }
 
     .body { min-width: 0; }
