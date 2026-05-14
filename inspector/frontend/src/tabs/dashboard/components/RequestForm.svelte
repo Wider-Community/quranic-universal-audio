@@ -342,21 +342,25 @@
 
         <label>
             <span>Country</span>
-            <input
-                type="text"
-                list="request-form-countries"
-                bind:value={country}
-                placeholder="Type country name or ISO-2 code"
-                disabled={readOnly}
-                on:blur={normalizeCountry}
-            />
-            {#if country && countryMatch}
-                <span class="field-hint">{countryMatch.name}</span>
-            {:else if country}
-                <span class="field-hint warn">
-                    Not a valid country — pick one from the list or leave blank.
-                </span>
-            {/if}
+            <div class="input-overlay-wrap">
+                <input
+                    type="text"
+                    list="request-form-countries"
+                    bind:value={country}
+                    placeholder="Type country name or ISO-2 code"
+                    disabled={readOnly}
+                    on:blur={normalizeCountry}
+                />
+                {#if country && countryMatch}
+                    <span class="input-overlay" aria-hidden="true"
+                        >({countryMatch.name})</span
+                    >
+                {:else if country}
+                    <span class="input-overlay warn" aria-hidden="true"
+                        >(Invalid)</span
+                    >
+                {/if}
+            </div>
         </label>
 
         <label>
@@ -540,6 +544,37 @@
     }
     .field-hint.warn {
         color: var(--state-error-fg);
+    }
+    /* Country input: name renders inside the same box at the right edge,
+       muted, in parens. Keeps the field's footprint unchanged. The input
+       itself gets right-padding so the typed code never collides with the
+       overlay, and the overlay has `pointer-events: none` so clicks still
+       land on the input. */
+    .input-overlay-wrap {
+        position: relative;
+        display: block;
+    }
+    .input-overlay-wrap input {
+        width: 100%;
+        padding-right: 7em;
+    }
+    .input-overlay {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        max-width: 60%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        pointer-events: none;
+        font-size: 11px;
+        color: var(--text-faint);
+        font-style: italic;
+    }
+    .input-overlay.warn {
+        color: var(--state-error-fg);
+        font-style: normal;
     }
     .grid {
         display: grid;
