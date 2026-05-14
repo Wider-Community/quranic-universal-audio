@@ -19,12 +19,12 @@
     import { playerContext } from '../../../lib/stores/player-context';
     import { openSignInModal } from '../../../lib/stores/sign-in-modal';
     import {
-        bucketRank,
         type AdminDiscardedDelivery,
         type AdminViewReciter,
         type PublicDelivery,
         type PublicReciter,
     } from '../../../lib/types/public-state';
+    import { compareDeliveries } from '../../../lib/utils/delivery-sort';
     import RequestForm from '../components/RequestForm.svelte';
     import {
         bitrateLabel,
@@ -172,37 +172,6 @@
     $: visibleCols = reciter
         ? ALL_COLS.filter((c) => reciter!.deliveries.some(c.present))
         : [];
-
-    // ---- sort ----
-    function catRank(cat: string): number {
-        // surah-style first, ayah-style last
-        if (cat === 'by_surah') return 0;
-        if (cat === 'by_ayah')  return 2;
-        return 1;
-    }
-
-    function riwayahRank(r: string): number {
-        // Hafs first; everything else falls through to alphabetical.
-        return r.toLowerCase().startsWith('hafs') ? 0 : 1;
-    }
-
-    function compareDeliveries(a: PublicDelivery, b: PublicDelivery): number {
-        const s = bucketRank(a.bucket) - bucketRank(b.bucket);
-        if (s !== 0) return s;
-        const c = catRank(a.audio_category) - catRank(b.audio_category);
-        if (c !== 0) return c;
-        // full coverage > partial
-        if (a.coverage_kind !== b.coverage_kind) {
-            return a.coverage_kind === 'full' ? -1 : 1;
-        }
-        const r = riwayahRank(a.riwayah) - riwayahRank(b.riwayah);
-        if (r !== 0) return r;
-        const ra = a.riwayah.localeCompare(b.riwayah);
-        if (ra !== 0) return ra;
-        const st = a.style.localeCompare(b.style);
-        if (st !== 0) return st;
-        return (b.bitrate_kbps_nominal ?? 0) - (a.bitrate_kbps_nominal ?? 0);
-    }
 
     // ---- filter-match partition (ignore status axis) ----
     const AXIS_TAGS: Record<string, (d: PublicDelivery) => string[]> = {

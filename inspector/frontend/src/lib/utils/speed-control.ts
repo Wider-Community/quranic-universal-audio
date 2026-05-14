@@ -7,6 +7,9 @@ import { get } from 'svelte/store';
 
 /** Canonical speed options shared across all speed controls. */
 export const SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
+
+/** Speed options for the dashboard bottom player (cycle-button, no higher speeds). */
+export const DASHBOARD_SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const DEFAULT_SPEED = 1;
 
 /** @deprecated Internal alias — use SPEEDS */

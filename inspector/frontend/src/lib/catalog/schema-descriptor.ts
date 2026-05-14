@@ -59,10 +59,10 @@ function countBy(values: Iterable<string | null>): Map<string, number> {
     return out;
 }
 
-function optionsByCount(counts: Map<string, number>): AxisOption[] {
+function optionsByCount(counts: Map<string, number>, labels?: Map<string, string>): AxisOption[] {
     return [...counts.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([slug]) => ({ key: slug, label: titleCaseSlug(slug) }));
+        .map(([slug]) => ({ key: slug, label: labels?.get(slug) ?? titleCaseSlug(slug) }));
 }
 
 /** Six public buckets in picker display order — stable across schema rebuilds. */
@@ -73,6 +73,9 @@ export function buildSchemaDescriptor(deliveries: readonly PublicDelivery[]): Sc
     const styleCounts = countBy(deliveries.map((d) => d.style));
     const channelCounts = countBy(deliveries.map((d) => d.channel));
     const contextCounts = countBy(deliveries.map((d) => d.recording_context));
+    const channelNames = new Map(
+        deliveries.filter((d) => d.channel).map((d) => [d.channel, d.channel_name || titleCaseSlug(d.channel)]),
+    );
 
     const axes: Axis[] = [
         {
@@ -115,7 +118,7 @@ export function buildSchemaDescriptor(deliveries: readonly PublicDelivery[]): Sc
         key: 'channel',
         label: 'Channel',
         tagsOf: (d) => [d.channel],
-        options: optionsByCount(channelCounts),
+        options: optionsByCount(channelCounts, channelNames),
     });
 
     return {

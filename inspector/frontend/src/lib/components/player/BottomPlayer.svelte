@@ -29,10 +29,10 @@
         setSurah,
     } from '../../stores/player-context';
     import type { PublicDelivery } from '../../types/public-state';
+    import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
-    import SpeedPopover from './SpeedPopover.svelte';
     import SurahPopover from './SurahPopover.svelte';
 
     let audioEl: HTMLAudioElement | null = null;
@@ -40,7 +40,6 @@
     let lastDeliverySlug: string | null = null;
     let lastSurahNum: number | null = null;
     let surahPopoverOpen = false;
-    let speedPopoverOpen = false;
 
     onMount(() => {
         dashPort.attachElement(audioEl);
@@ -96,6 +95,9 @@
         }
         const wasPlaying = ctx.isPlaying;
         const deliverySwitched = delivery.slug !== lastDeliverySlug;
+        // True only when switching away from an already-loaded combination
+        // (not on initial load from null). Used to auto-play on paused switch.
+        const isActiveCombinationSwitch = deliverySwitched && lastDeliverySlug !== null;
 
         if (deliverySwitched) {
             try {
@@ -133,8 +135,9 @@
             // new source — audible as a chunk of the wrong reciter when
             // the user changes combination mid-playback. setIsPlaying(false)
             // flips the glyph to ▶ for the duration of the load (re-flips
-            // to ⏸ when `playing` fires on the new source if wasPlaying).
-            if (wasPlaying) {
+            // to ⏸ when `playing` fires on the new source if wasPlaying or
+            // isActiveCombinationSwitch).
+            if (wasPlaying || isActiveCombinationSwitch) {
                 dashPort.pause();
                 setIsPlaying(false);
             }
@@ -151,13 +154,7 @@
                 if (entry.durationMs && entry.durationMs > 0) {
                     setDuration(entry.durationMs);
                 }
-                if (wasPlaying) {
-                    // Buffering ring only makes sense when we're actually
-                    // about to play — paused-switch users get a clean ▶
-                    // with no ring, since nothing is loading until they
-                    // hit play (preload="none"). Cleared by the canplay
-                    // → onLoad subscription (and by `playing` as a safety
-                    // net on the audible-start edge).
+                if (wasPlaying || isActiveCombinationSwitch) {
                     setIsLoading(true);
                     await ensureAudioContextRunning();
                     dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
@@ -218,12 +215,18 @@
     function onSpeedChange(rate: number): void {
         setSpeed(rate);
         dashPort.setPlaybackRate(rate);
-        speedPopoverOpen = false;
         persistSlice({
             deliverySlug: lastDeliverySlug,
             surahNum: lastSurahNum,
             speed: rate,
         });
+    }
+
+    function cycleSpeed(): void {
+        const cur = $playerContext.speed;
+        const idx = DASHBOARD_SPEEDS.findIndex((s) => Math.abs(s - cur) < 0.01);
+        const next = DASHBOARD_SPEEDS[(idx + 1) % DASHBOARD_SPEEDS.length] ?? 1;
+        onSpeedChange(next);
     }
 
     function onSeekFromBar(ev: CustomEvent<number>): void {
@@ -260,6 +263,8 @@
         <PlayerMetaChip
             reciter={$playerContext.reciter}
             delivery={$playerContext.delivery}
+            surahNum={$playerContext.surahNum}
+            speed={$playerContext.speed}
             on:select={onCombinationSelect}
         />
 
@@ -304,12 +309,12 @@
                     </div>
                 {/if}
             </div>
-            <SpeedPopover
-                value={$playerContext.speed}
-                open={speedPopoverOpen}
-                on:toggle={() => (speedPopoverOpen = !speedPopoverOpen)}
-                on:change={(e) => onSpeedChange(e.detail)}
-            />
+            <button
+                type="button"
+                class="speed-btn"
+                on:click={cycleSpeed}
+                title="Playback speed"
+            >{$playerContext.speed}×</button>
         </div>
     </div>
 
@@ -387,6 +392,23 @@
         border-radius: var(--r-3);
         box-shadow: 0 16px 48px oklch(0 0 0 / 0.45);
         z-index: 50;
+    }
+    .speed-btn {
+        padding: 4px var(--s-2);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-secondary);
+        background: transparent;
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        cursor: pointer;
+        transition: border-color var(--t-fast), color var(--t-fast);
+        min-width: 36px;
+        text-align: center;
+    }
+    .speed-btn:hover {
+        border-color: var(--border-strong);
+        color: var(--text-primary);
     }
     audio { display: none; }
 </style>
