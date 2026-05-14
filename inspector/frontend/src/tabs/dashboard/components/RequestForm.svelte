@@ -31,6 +31,7 @@
         PublicDelivery,
         PublicReciter,
     } from '../../../lib/types/public-state';
+    import { COUNTRIES, countryByCode } from '../../../lib/utils/countries';
 
     export let mode: 'create' | 'review';
     export let reciter: PublicReciter;
@@ -108,6 +109,20 @@
             pendingError = (e as Error).message;
         }
     }
+
+    /**
+     * On country-input blur: uppercase whatever the user typed, and if it
+     * matches an ISO-2 code (either entered as a code or selected via the
+     * datalist) leave it as-is. The datalist passes the selected option's
+     * `value` (the ISO-2 code) through directly, so most picks land here
+     * already normalized.
+     */
+    function normalizeCountry(): void {
+        const trimmed = country.trim().toUpperCase();
+        country = trimmed;
+    }
+
+    $: countryMatch = countryByCode(country);
 
     /**
      * Compute the proposed_edits patch: only include fields the user
@@ -219,12 +234,31 @@
     </header>
 
     {#if mode === 'create'}
-        <p class="intro">
-            Request rules: provide accurate metadata for this reciter
-            combination. An admin will review your submission and may send
-            it back or discard it. Acceptance happens automatically once
-            the alignment pipeline finishes.
-        </p>
+        <div class="intro">
+            <p class="intro-heading">Request rules</p>
+            <ul class="rules">
+                <li>
+                    Listen to some quick audio samples and verify the audio
+                    belongs to the correct reciter, style, and riwayah —
+                    and that quality is decent.
+                </li>
+                <li>
+                    If multiple combinations of this riwayah / style /
+                    context exist, pick the one with the highest coverage,
+                    followed by highest bitrate, followed by best channel
+                    quality. (Different channels may be serving the same
+                    recording or a different one — listen to compare.)
+                </li>
+                <li>
+                    Verify accurate metadata for this reciter combination
+                    and edit anything that looks wrong.
+                </li>
+                <li>
+                    An admin will review your submission. Acceptance happens
+                    automatically once the alignment pipeline finishes.
+                </li>
+            </ul>
+        </div>
     {:else if pending && $isOwner}
         <p class="intro">
             Submitted by <strong>@{pending.requester_login}</strong>
@@ -276,20 +310,26 @@
         </label>
 
         <label>
-            <span>Country (ISO-2)</span>
+            <span>Country</span>
             <input
                 type="text"
+                list="request-form-countries"
                 bind:value={country}
-                placeholder="e.g. SA"
-                maxlength="2"
+                placeholder="Type country name or ISO-2 code"
                 disabled={readOnly}
+                on:blur={normalizeCountry}
             />
+            {#if country && countryMatch}
+                <span class="field-hint">{countryMatch.name}</span>
+            {:else if country}
+                <span class="field-hint warn">Unknown country code — admin will review.</span>
+            {/if}
         </label>
 
         <label>
             <span>Recording context</span>
             <select bind:value={recording_context} disabled={readOnly}>
-                <option value="">—</option>
+                <option value="">— Leave blank if unsure</option>
                 {#each contextOptions as c (c.slug)}
                     <option value={c.slug}>{c.name}</option>
                 {/each}
@@ -305,11 +345,18 @@
                 type="number"
                 min="1900"
                 max="2100"
+                placeholder="Leave blank if unsure"
                 bind:value={recording_year}
                 disabled={readOnly}
             />
         </label>
     </div>
+
+    <datalist id="request-form-countries">
+        {#each COUNTRIES as c (c.code)}
+            <option value={c.code}>{c.name}</option>
+        {/each}
+    </datalist>
 
     <label class="comments">
         <span>Comments {mode === 'create' ? '(optional)' : ''}</span>
@@ -414,6 +461,29 @@
         font-size: var(--fs-meta);
         color: var(--text-muted);
         line-height: var(--lh-normal);
+    }
+    .intro-heading {
+        margin: 0 0 var(--s-1);
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+    .rules {
+        margin: 0;
+        padding-left: var(--s-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-1);
+    }
+    .rules li {
+        line-height: 1.45;
+    }
+    .field-hint {
+        margin-top: 2px;
+        font-size: 10.5px;
+        color: var(--text-faint);
+    }
+    .field-hint.warn {
+        color: var(--state-error-fg);
     }
     .grid {
         display: grid;
