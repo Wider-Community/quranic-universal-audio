@@ -22,6 +22,11 @@ export interface PublicActivityCard {
     style: string | null;
     /** Fallback human-readable line; the frontend prefers composing from structured fields. */
     text: string;
+    /** Stable id derived from the underlying audit record. Always present. */
+    audit_id?: string;
+    /** Populated only when the caller is signed in as an owner. */
+    actor_login?: string;
+    actor_hf_user_id?: string;
 }
 
 export interface PublicActivityPage {

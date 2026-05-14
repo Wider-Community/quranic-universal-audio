@@ -8,7 +8,7 @@
  * the same schema regardless of auth state.
  */
 
-import { writable } from 'svelte/store';
+import { derived, writable } from 'svelte/store';
 
 import { fetchJson } from '../api';
 
@@ -41,6 +41,22 @@ export const currentUser = writable<CurrentUser>(_ANON);
 export function isSignedIn(u: CurrentUser): boolean {
     return u.hf_user_id !== null;
 }
+
+/**
+ * Global role-tier derived stores driven by ``currentUser`` (not the
+ * reciter-scoped ``editingMode`` store in ``editing-mode.ts``). These are
+ * the right hooks for dashboard-level UI gating: admin notification rail,
+ * owner-only delete affordances, etc.
+ *
+ * - ``isAdmin`` — maintainer OR owner. Mirrors ``services/permissions.is_maintainer``.
+ * - ``isOwner`` — owner only. Mirrors ``services/permissions.is_owner``.
+ */
+export const isAdmin = derived(
+    currentUser,
+    (u) => u.role === 'maintainer' || u.role === 'owner',
+);
+
+export const isOwner = derived(currentUser, (u) => u.role === 'owner');
 
 /** Fetch /api/me and replace the store. Returns the loaded value. */
 export async function loadCurrentUser(): Promise<CurrentUser> {
