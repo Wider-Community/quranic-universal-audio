@@ -29,8 +29,3 @@ codebase-map.html
 
 # Release packaging output
 dist/
-
-data/timestamps/**/beam_review.json
-data/timestamps/**/timestamps.beam_*.json
-data/timestamps/**/timestamps_full.beam_*.json
-data/timestamps/**/beam_diff_report.txt
