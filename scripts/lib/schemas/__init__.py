@@ -10,6 +10,7 @@ authoritative spec.
 from __future__ import annotations
 
 from .access import Member, Role, RolesFile
+from .activity_state import ActivityState
 from .audit import Actor, AuditRecord
 from .catalog import (
     AudioCategory,
@@ -36,6 +37,7 @@ from .state import (
 )
 
 __all__ = [
+    "ActivityState",
     "Actor",
     "AudioCategory",
     "AudioManifestSidecar",

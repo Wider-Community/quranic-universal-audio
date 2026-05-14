@@ -45,6 +45,11 @@ def audit_meta_path() -> str:
     return "audit/_meta.json"
 
 
+def activity_state_path() -> str:
+    """Per-user dismissals + global tombstones for the activity rails."""
+    return "activity/state.json"
+
+
 def reciter_dir(slug: str, kind: WipOrPublished) -> str:
     return f"{kind}/{slug}"
 

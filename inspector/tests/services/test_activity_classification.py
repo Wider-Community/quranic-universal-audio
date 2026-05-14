@@ -1,0 +1,201 @@
+"""Tests for ``services/activity_classification``.
+
+Centralised classifier that maps every state-machine event to one of three
+buckets: ``public`` (anyone can see), ``admin_only`` (maintainers + owners),
+or ``hidden`` (off both rails). Public and admin feeds both read from this
+module so the two views can never drift out of sync.
+
+Also covers ``audit_id`` — a stable content-derived identifier used by
+dismissals and tombstones to point at audit records without mutating the
+append-only audit log.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+
+def _record(event, *, slug="husary_qdc", to_state=None,
+            ts="2026-05-13T12:00:00+00:00", result="ok",
+            actor_hf_id="u-1", actor_login="alice", actor_role="maintainer"):
+    return {
+        "event": event,
+        "slug": slug,
+        "to_state": to_state,
+        "ts": ts,
+        "result": result,
+        "actor": {
+            "hf_user_id": actor_hf_id,
+            "login_at_time": actor_login,
+            "role": actor_role,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# classify()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("event,expected_kind", [
+    ("catalog.added", "added"),
+    ("reciter.alignment_completed", "available_review"),
+    ("reciter.claimed", "under_review"),
+    ("reciter.published", "published"),
+])
+def test_public_events_classified_with_kind(event, expected_kind):
+    from services import activity_classification as ac
+
+    record = _record(event)
+    assert ac.classify(record) == "public"
+    assert ac.PUBLIC_EVENTS[event] == expected_kind
+
+
+def test_awaiting_alignment_state_transition_classified_public_requested():
+    """The synthetic 'requested' kind is driven by to_state, not event name."""
+    from services import activity_classification as ac
+
+    record = _record("state.transition", to_state="awaiting_alignment")
+    assert ac.classify(record) == "public"
+    assert ac.public_kind_for(record) == "requested"
+
+
+def test_timestamps_completed_is_hidden_not_public():
+    """`reciter.timestamps_completed` was demoted from public to hidden in
+    favour of `reciter.published` taking over the `published` kind."""
+    from services import activity_classification as ac
+
+    assert "reciter.timestamps_completed" not in ac.PUBLIC_EVENTS
+    assert ac.classify(_record("reciter.timestamps_completed")) == "hidden"
+
+
+@pytest.mark.parametrize("event,expected_kind", [
+    ("reciter.released", "released"),
+    ("reciter.marked_ready", "marked_ready"),
+    ("reciter.unmarked_ready", "unmarked_ready"),
+    ("reciter.merge_rejected", "merge_rejected"),
+    ("reciter.unpublished", "unpublished"),
+    ("reciter.dataset_published", "dataset_published"),
+    ("reciter.removed_from_dataset", "removed_from_dataset"),
+    ("reciter.discarded", "discarded"),
+    ("reciter.undiscarded", "undiscarded"),
+    ("claim.force_released", "force_released"),
+    ("claim.reassigned", "reassigned"),
+    ("admin.force_set_state", "force_set_state"),
+    ("admin.unlocked_for_revision", "unlocked_for_revision"),
+])
+def test_admin_only_events_classified(event, expected_kind):
+    from services import activity_classification as ac
+
+    record = _record(event)
+    assert ac.classify(record) == "admin_only"
+    assert ac.ADMIN_ONLY_EVENTS[event] == expected_kind
+
+
+@pytest.mark.parametrize("event", [
+    "catalog.edited",
+    "reciter.seeded",
+    "published.edited",
+    "admin.batch_timestamps_refresh",
+    "admin.clear_prefetch_purge_at",
+    "access.role_granted",
+    "access.role_revoked",
+    "access.role_updated",
+    "activity.dismissed",
+    "admin.activity_deleted",
+])
+def test_hidden_events_classified(event):
+    from services import activity_classification as ac
+
+    assert ac.classify(_record(event)) == "hidden"
+
+
+def test_unknown_event_defaults_to_hidden():
+    """Safe-default: new events not in either allowlist stay off both rails."""
+    from services import activity_classification as ac
+
+    assert ac.classify(_record("totally.new.event")) == "hidden"
+
+
+def test_anti_drift_every_state_handler_is_classified():
+    """Anti-drift: every event registered in ``services/state.py:_HANDLERS``
+    must have an explicit bucket in the classifier. Forces new events to be
+    deliberately classified at the time they're added, not silently dropped.
+    """
+    from services import activity_classification as ac
+    from services import state as state_service
+
+    handlers = state_service._HANDLERS  # type: ignore[attr-defined]
+    for event in handlers:
+        assert ac.is_classified(event), (
+            f"state.py registers {event!r} but it isn't classified in "
+            "activity_classification. Add it to PUBLIC_EVENTS, "
+            "ADMIN_ONLY_EVENTS, or HIDDEN_EVENTS."
+        )
+
+
+# ---------------------------------------------------------------------------
+# audit_id()
+# ---------------------------------------------------------------------------
+
+
+def test_audit_id_is_deterministic():
+    from services import activity_classification as ac
+
+    r = _record("reciter.claimed")
+    assert ac.audit_id(r) == ac.audit_id(r)
+
+
+def test_audit_id_changes_when_record_differs():
+    from services import activity_classification as ac
+
+    base = _record("reciter.claimed")
+    different_ts = _record("reciter.claimed", ts="2026-05-14T12:00:00+00:00")
+    different_actor = _record("reciter.claimed", actor_hf_id="u-2")
+    different_slug = _record("reciter.claimed", slug="other_qdc")
+
+    base_id = ac.audit_id(base)
+    assert ac.audit_id(different_ts) != base_id
+    assert ac.audit_id(different_actor) != base_id
+    assert ac.audit_id(different_slug) != base_id
+
+
+def test_audit_id_is_short_hex_string():
+    from services import activity_classification as ac
+
+    aid = ac.audit_id(_record("reciter.claimed"))
+    assert isinstance(aid, str)
+    assert len(aid) == 16
+    int(aid, 16)  # parses as hex
+
+
+def test_audit_id_handles_missing_slug_and_actor():
+    """Some legacy records may carry None for slug or actor — id should still
+    be derivable (we never raise from this function)."""
+    from services import activity_classification as ac
+
+    bare = {
+        "event": "catalog.added",
+        "ts": "2026-05-13T12:00:00+00:00",
+        "result": "ok",
+    }
+    aid = ac.audit_id(bare)
+    assert isinstance(aid, str)
+    assert len(aid) == 16
+
+
+def test_audit_id_collision_resistant_over_fixture():
+    """Across 100 distinct synthetic records every audit_id is unique."""
+    from services import activity_classification as ac
+
+    records = [
+        _record(
+            "reciter.claimed",
+            slug=f"slug_{i:03d}",
+            ts=f"2026-05-{(i % 28) + 1:02d}T12:00:00+00:00",
+            actor_hf_id=f"u-{i}",
+        )
+        for i in range(100)
+    ]
+    ids = {ac.audit_id(r) for r in records}
+    assert len(ids) == 100

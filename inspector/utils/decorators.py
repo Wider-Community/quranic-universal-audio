@@ -4,8 +4,11 @@
 - ``require_edit_lock`` — gate save/undo routes on (signed in + active claim
   + row is editable). Supports ``admin_bypass=True`` for maintainer/owner
   override on under_review rows.
-
-Phase 3 Drop D will add ``require_role`` for the access-admin endpoints.
+- ``require_role(*roles)`` — generic role gate for admin endpoints. Composes
+  ``require_signed_in_or_401`` + ``require_role_or_403`` and injects the
+  authenticated user as the first positional argument into the handler.
+  Preferred over inline helpers (``_require_maintainer_or_above`` etc.) for
+  new admin routes; existing routes can migrate incrementally.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from urllib.parse import urlparse
 
 from flask import abort, g, request
 
-from scripts.lib.schemas import ReciterState, Visibility
+from scripts.lib.schemas import ReciterState, Role, Visibility
 
 from services import auth as auth_service
 from services import permissions
@@ -54,6 +57,45 @@ def require_same_origin(fn):
         abort(403, description="missing Origin/Referer header on mutating request")
 
     return wrapper
+
+
+def require_role(*allowed: Role):
+    """Gate a route on (signed in + role in ``allowed``).
+
+    The wrapped handler receives the authenticated ``User`` as its first
+    positional argument; remaining route args follow:
+
+        @require_role(Role.MAINTAINER, Role.OWNER)
+        def handler(user, slug): ...
+
+    Returns canonical envelopes:
+    - 401 ``{"error": "authentication required"}`` for anonymous callers.
+    - 403 ``{"error": "insufficient role for this action"}`` for callers
+      whose role isn't in ``allowed``.
+
+    Pair with ``@require_same_origin`` on POST/PUT/DELETE for CSRF defense.
+    """
+    # Inline import to keep decorators.py free of route-layer dependencies
+    # at module-import time.
+    from routes._admin_helpers import (
+        require_role_or_403,
+        require_signed_in_or_401,
+    )
+
+    def wrap(fn):
+        @wraps(fn)
+        def inner(*args, **kwargs):
+            user, err = require_signed_in_or_401()
+            if err is not None:
+                return err
+            err_resp = require_role_or_403(user, *allowed)
+            if err_resp is not None:
+                return err_resp
+            return fn(user, *args, **kwargs)
+
+        return inner
+
+    return wrap
 
 
 def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = False):
