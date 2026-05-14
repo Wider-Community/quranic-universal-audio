@@ -61,17 +61,22 @@
         // Load surah 1 of this combination in the bottom player so the user
         // can listen to a sample while filling out the form. Skipped for
         // by_ayah deliveries (surah-level streams aren't available — same
-        // reason the row's play button hides for those).
+        // reason the row's play button hides for those). Also skipped when
+        // the player already has this exact delivery loaded — don't yank
+        // playback position back to 0 for the user who's already listening.
         if (reciter && d.audio_category !== 'by_ayah') {
             selectedSlug = d.slug;
-            playerContext.update((s) => ({
-                ...s,
-                reciter,
-                delivery: d,
-                surahNum: 1,
-                positionMs: 0,
-                isPlaying: true,
-            }));
+            const currentSlug = $playerContext.delivery?.slug;
+            if (currentSlug !== d.slug) {
+                playerContext.update((s) => ({
+                    ...s,
+                    reciter,
+                    delivery: d,
+                    surahNum: 1,
+                    positionMs: 0,
+                    isPlaying: true,
+                }));
+            }
         }
     }
 
