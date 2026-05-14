@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, jsonify, request
 
+from services import auth as auth_service
+from services import permissions
 from services import public_activity as public_activity_service
 from services import public_state as public_state_service
 from services import search_normalize as search_normalize_service
@@ -71,7 +73,11 @@ def activity():
     if limit < 1 or limit > 500:
         return jsonify({"error": "limit must be between 1 and 500"}), 400
 
-    payload = public_activity_service.feed(cursor=cursor, limit=limit)
+    caller = auth_service.current_user()
+    caller_role = permissions.role_of(caller) if caller is not None else None
+    payload = public_activity_service.feed(
+        cursor=cursor, limit=limit, caller_role=caller_role,
+    )
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store"
     return resp

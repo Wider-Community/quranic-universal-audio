@@ -8,6 +8,22 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolate_activity_state():
+    """Reset the in-memory activity-state store between tests so a tombstone
+    or dismissal written by one test doesn't leak into the next."""
+    from scripts.lib.schemas import ActivityState
+    from services import activity_state as activity_state_service
+
+    with activity_state_service._store_lock:  # type: ignore[attr-defined]
+        activity_state_service._store = ActivityState()  # type: ignore[attr-defined]
+    yield
+    with activity_state_service._store_lock:  # type: ignore[attr-defined]
+        activity_state_service._store = ActivityState()  # type: ignore[attr-defined]
+
 
 def _install_audit(monkeypatch, records):
     """Patch ``_iter_partitions`` to yield the supplied test records."""
@@ -28,14 +44,19 @@ def _install_catalog(monkeypatch, name_by_slug):
 
 
 def _record(event, *, slug="husary_qdc", to_state=None,
-            ts="2026-05-13T12:00:00+00:00", result="ok"):
+            ts="2026-05-13T12:00:00+00:00", result="ok",
+            actor_hf="u-1", actor_login="alice", actor_role="maintainer"):
     return {
         "event": event,
         "slug": slug,
         "to_state": to_state,
         "ts": ts,
         "result": result,
-        "actor": {"hf_user_id": "u-1", "login_at_time": "alice", "role": "maintainer"},
+        "actor": {
+            "hf_user_id": actor_hf,
+            "login_at_time": actor_login,
+            "role": actor_role,
+        },
     }
 
 
@@ -46,7 +67,7 @@ def test_classifies_allowlisted_events(monkeypatch):
         _record("catalog.added"),
         _record("reciter.alignment_completed"),
         _record("reciter.claimed"),
-        _record("reciter.timestamps_completed"),
+        _record("reciter.published"),
         _record("state.transition", to_state="awaiting_alignment"),
     ])
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
@@ -60,6 +81,17 @@ def test_classifies_allowlisted_events(monkeypatch):
         "requested",
         "under_review",
     ]
+
+
+def test_timestamps_completed_no_longer_public(monkeypatch):
+    """``reciter.timestamps_completed`` was demoted from public to hidden in
+    favour of ``reciter.published`` taking over the ``published`` kind."""
+    from services.public_activity import all_public_cards
+
+    _install_audit(monkeypatch, [_record("reciter.timestamps_completed")])
+    _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
+
+    assert all_public_cards() == []
 
 
 def test_marked_ready_is_redacted_from_public_feed(monkeypatch):
@@ -112,7 +144,7 @@ def test_skips_failed_audit_records(monkeypatch):
 def test_card_text_uses_display_name_not_slug(monkeypatch):
     from services.public_activity import all_public_cards
 
-    _install_audit(monkeypatch, [_record("reciter.timestamps_completed", slug="husary_qdc")])
+    _install_audit(monkeypatch, [_record("reciter.published", slug="husary_qdc")])
     _install_catalog(monkeypatch, {"husary_qdc": "Mahmoud Khalil Al-Husary"})
 
     cards = all_public_cards()
@@ -121,7 +153,8 @@ def test_card_text_uses_display_name_not_slug(monkeypatch):
     assert "husary_qdc" not in cards[0]["text"]
 
 
-def test_card_payload_omits_assignee(monkeypatch):
+def test_card_payload_omits_assignee_by_default(monkeypatch):
+    """Default (no caller role) keeps the pre-existing redacted shape."""
     from services.public_activity import all_public_cards
 
     _install_audit(monkeypatch, [_record("reciter.claimed")])
@@ -129,7 +162,60 @@ def test_card_payload_omits_assignee(monkeypatch):
 
     cards = all_public_cards()
     assert "actor" not in cards[0]
-    assert "assignee" not in repr(cards[0])
+    assert "actor_login" not in cards[0]
+
+
+def test_owner_caller_sees_actor_login(monkeypatch):
+    """Owners see actor identity on the public rail; lower tiers don't."""
+    from scripts.lib.schemas import Role
+
+    from services.public_activity import all_public_cards
+
+    _install_audit(monkeypatch, [
+        _record("reciter.claimed", actor_login="alice", actor_hf="u-A"),
+    ])
+    _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
+
+    cards = all_public_cards(caller_role=Role.OWNER)
+    assert cards[0]["actor_login"] == "alice"
+    assert cards[0]["actor_hf_user_id"] == "u-A"
+
+
+def test_maintainer_caller_does_not_see_actor(monkeypatch):
+    from scripts.lib.schemas import Role
+
+    from services.public_activity import all_public_cards
+
+    _install_audit(monkeypatch, [_record("reciter.claimed", actor_login="alice")])
+    _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
+
+    cards = all_public_cards(caller_role=Role.MAINTAINER)
+    assert "actor_login" not in cards[0]
+
+
+def test_tombstoned_audit_id_excluded(monkeypatch, tmp_path):
+    """Records whose audit_id is in the global tombstone list disappear."""
+    from services import activity_classification as ac
+    from services import activity_state as activity_state_service
+    from services import hf_bucket as _hf_bucket
+    from services.public_activity import all_public_cards
+    from scripts.lib.schemas import Actor, Role
+
+    backend = _hf_bucket.FilesystemBackend(tmp_path)
+    _hf_bucket.set_backend(backend)
+    activity_state_service.hydrate()
+
+    rec = _record("reciter.claimed")
+    _install_audit(monkeypatch, [rec])
+    _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
+    monkeypatch.setattr("services.audit.append", lambda **kw: None)
+
+    actor = Actor(hf_user_id="u-O", login_at_time="owen", role=Role.OWNER)
+    activity_state_service.delete(ac.audit_id(rec), actor=actor,
+                                  reason="ten chars or more here")
+
+    assert all_public_cards() == []
+    _hf_bucket.reset_backend()
 
 
 class _StubDelivery:

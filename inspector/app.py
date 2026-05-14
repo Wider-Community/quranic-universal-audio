@@ -66,6 +66,7 @@ from config import (CACHE_DIR, DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
 from services import access as access_service
+from services import activity_state as activity_state_service
 from services import audit as audit_service
 from services import auth as auth_service
 from services import catalog as catalog_service
@@ -238,6 +239,7 @@ def _hydrate_bucket_stores() -> None:
         ("access", access_service.hydrate),
         ("state", state_service.hydrate),
         ("catalog", catalog_service.hydrate),
+        ("activity_state", activity_state_service.hydrate),
     ):
         try:
             fn()
