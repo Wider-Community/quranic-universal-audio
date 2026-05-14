@@ -10,7 +10,7 @@
      * - A small arrow toggles a collapsed archive section listing dismissed
      *   cards (with an undismiss affordance).
      */
-    import { onDestroy, onMount } from 'svelte';
+    import { onDestroy } from 'svelte';
 
     import {
         type AdminActivityCard,
@@ -32,8 +32,14 @@
     let error: string | null = null;
     let teardown: (() => void) | null = null;
 
-    onMount(() => {
-        if (!$isAdmin) return;
+    // Start the poll the first time the caller becomes admin. `onMount`
+    // would be wrong here because this component is instantiated by its
+    // parent before `loadCurrentUser()` resolves — the lifecycle hook would
+    // fire when `$isAdmin` is still false. Reactive statement fires whenever
+    // `$isAdmin` flips, and the `teardown === null` guard makes it idempotent
+    // so the role-switcher flipping admin → contributor → admin doesn't
+    // spawn duplicate pollers.
+    $: if ($isAdmin && teardown === null) {
         teardown = visiblePoll<typeof live>({
             intervalMs: 30_000,
             fetcher: async (signal) => {
@@ -51,7 +57,7 @@
                 error = (e as Error).message ?? 'Failed to load admin activity';
             },
         });
-    });
+    }
 
     onDestroy(() => teardown?.());
 
