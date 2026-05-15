@@ -19,6 +19,7 @@
         snapToSeg,
     } from '../../stores/history';
     import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
+    import { undoPending } from '../../stores/undo-pending';
     import { EDIT_OP_LABELS } from '../../utils/constants';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onOpUndoClick } from '../../utils/save/undo';
@@ -115,11 +116,12 @@
         return hl;
     })();
 
-    function handleOpUndoClick(e: MouseEvent): void {
+    function handleOpUndoClick(): void {
         if (!batchId) return;
-        const btn = e.currentTarget as HTMLButtonElement;
-        void onOpUndoClick(batchId, group.map((op) => op.op_id), btn);
+        void onOpUndoClick(batchId, group.map((op) => op.op_id));
     }
+    $: opUndoKey = batchId ? `${batchId}:${group.map((op) => op.op_id).join(',')}` : '';
+    $: isOpUndoing = opUndoKey ? $undoPending.has(opUndoKey) : false;
 
     // Bound card refs driving HistoryArrows ---------------------------------
     let beforeCardEls: (HTMLElement | undefined)[] = [];
@@ -161,7 +163,8 @@
                     class="btn btn-sm seg-history-op-undo-btn"
                     use:editGate
                     on:click|stopPropagation={handleOpUndoClick}
-                >Undo</button>
+                    disabled={isOpUndoing}
+                >{isOpUndoing ? 'Undoing…' : 'Undo'}</button>
             {/if}
         </div>
     {/if}

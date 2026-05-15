@@ -27,6 +27,7 @@
         SHORT_LABELS,
         snapToSeg,
     } from '../../stores/history';
+    import { undoPending } from '../../stores/undo-pending';
     import { EDIT_OP_LABELS } from '../../utils/constants';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import {
@@ -82,13 +83,16 @@
         const opIds = (group as EditOp[]).map((op) => op.op_id);
         onPendingOpsDiscard(item.chapter, opIds, btn);
     }
-    function handleUndoClick(e: MouseEvent): void {
+    function handleUndoClick(): void {
         const bid = item.batchId;
         if (!bid) return;
-        const btn = e.currentTarget as HTMLButtonElement;
         const opIds = (group as EditOp[]).map((op) => op.op_id);
-        void onOpUndoClick(bid, opIds, btn);
+        void onOpUndoClick(bid, opIds);
     }
+    $: undoKey = item.batchId
+        ? `${item.batchId}:${(group as EditOp[]).map((op) => op.op_id).join(',')}`
+        : '';
+    $: isUndoing = undoKey ? $undoPending.has(undoKey) : false;
 </script>
 
 <div class="seg-history-batch" class:is-revert={item.isRevert}>
@@ -147,7 +151,8 @@
                     class="btn btn-sm seg-history-undo-btn"
                     use:editGate
                     on:click|stopPropagation={handleUndoClick}
-                >Undo</button>
+                    disabled={isUndoing}
+                >{isUndoing ? 'Undoing…' : 'Undo'}</button>
             {/if}
         {/if}
     </div>

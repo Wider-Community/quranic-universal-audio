@@ -24,6 +24,7 @@
         SHORT_LABELS,
         snapToSeg,
     } from '../../stores/history';
+    import { undoPending } from '../../stores/undo-pending';
     import type { SplitHighlight, TrimHighlight } from '../../types/segments-waveform';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
@@ -156,10 +157,11 @@
         arrowsAfter = afterCardEls.filter((e): e is HTMLElement => !!e);
     }
 
-    function handleChainUndoClick(e: MouseEvent): void {
-        const btn = e.currentTarget as HTMLButtonElement;
-        void onChainUndoClick(chainBatchIds, chapter, btn);
+    function handleChainUndoClick(): void {
+        void onChainUndoClick(chainBatchIds, chapter);
     }
+    $: chainUndoKey = `chain:${chainBatchIds.join(',')}`;
+    $: isChainUndoing = $undoPending.has(chainUndoKey);
 
     function handleChainDiscardClick(e: MouseEvent): void {
         if (chapter == null || pendingOpIds.length === 0) return;
@@ -188,7 +190,8 @@
                 class="btn btn-sm seg-history-undo-btn"
                 use:editGate
                 on:click|stopPropagation={handleChainUndoClick}
-            >Undo</button>
+                disabled={isChainUndoing}
+            >{isChainUndoing ? 'Undoing…' : 'Undo'}</button>
         {/if}
         {#if variant !== 'guide' && pendingOpIds.length > 0 && chapter != null}
             <button

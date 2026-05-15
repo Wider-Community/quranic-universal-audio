@@ -62,6 +62,29 @@ function _hydrateSegAll(all: SegAllResponse): SegAllResponse {
 }
 
 /**
+ * Re-fetch just `/seg/all` for the currently selected reciter. Lighter
+ * counterpart to `reloadCurrentReciter` — used post-save / post-undo when
+ * filters, chapter selection, and per-reciter waveform/peaks state must be
+ * preserved.
+ */
+export async function reloadSegAll(): Promise<void> {
+    const reciter = get(selectedReciter);
+    if (!reciter) return;
+    try {
+        const all = await fetchJson<SegAllResponse>(`/api/seg/all/${reciter}`);
+        if (get(selectedReciter) !== reciter) return;
+        if ('error' in all) {
+            console.error('Error loading all segments:', (all as any).error);
+            return;
+        }
+        segAllData.set(_hydrateSegAll(all));
+        reciterVbrChapters.set(new Set(all.reciter_vbr_chapters ?? []));
+    } catch (e) {
+        console.error('Error reloading seg all:', e);
+    }
+}
+
+/**
  * Re-fetch data for the currently selected reciter. Used for the stale-data
  * reload paths triggered after undo (from hideHistoryView / hideSavePreview)
  * and from SegmentsTab's reciter-change handler.
