@@ -68,6 +68,10 @@ _seg_resolved_by_edit: _KeyedCache[dict[str, set[str]]] = _KeyedCache()
 _seg_probe_v2: _KeyedCache[tuple[set[str], dict | None]] = _KeyedCache()
 _seg_edit_history: _KeyedCache[dict] = _KeyedCache()
 _seg_history_peaks: _KeyedCache[list[dict]] = _KeyedCache()
+# Validation + stats results — recomputed only on cache miss; cleared by
+# ``invalidate_seg_caches`` on every save / undo so writers can't read stale data.
+_seg_validate_result: _KeyedCache[dict] = _KeyedCache()
+_seg_stats_result: _KeyedCache[dict] = _KeyedCache()
 
 
 def get_seg_cache(reciter: str) -> list[dict] | None:
@@ -134,6 +138,22 @@ def set_seg_history_peaks(reciter: str, value: list[dict]) -> None:
     _seg_history_peaks.set(reciter, value)
 
 
+def get_seg_validate_cache(reciter: str) -> dict | None:
+    return _seg_validate_result.get(reciter)
+
+
+def set_seg_validate_cache(reciter: str, value: dict) -> None:
+    _seg_validate_result.set(reciter, value)
+
+
+def get_seg_stats_cache(reciter: str) -> dict | None:
+    return _seg_stats_result.get(reciter)
+
+
+def set_seg_stats_cache(reciter: str, value: dict) -> None:
+    _seg_stats_result.set(reciter, value)
+
+
 def invalidate_seg_caches(reciter: str) -> None:
     """Remove all segment-related caches for *reciter* and reset reciters list."""
     _seg.pop(reciter)
@@ -143,6 +163,8 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_probe_v2.pop(reciter)
     _seg_edit_history.pop(reciter)
     _seg_history_peaks.pop(reciter)
+    _seg_validate_result.pop(reciter)
+    _seg_stats_result.pop(reciter)
     _seg_reciters.clear()  # MUST be a full reset — not a per-reciter pop
 
 
