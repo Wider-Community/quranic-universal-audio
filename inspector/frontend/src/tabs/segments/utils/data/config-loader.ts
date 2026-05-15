@@ -16,7 +16,6 @@ type SegConfigApiResponse = {
     show_boundary_phonemes?: boolean;
     validation_categories?: string[];
     low_conf_default_threshold?: number;
-    muqattaat_verses?: Array<[number, number]>;
     qalqala_letters?: string[];
     standalone_refs?: Array<[number, number, number]>;
     standalone_words?: string[];
@@ -36,7 +35,6 @@ export async function loadSegConfig(): Promise<{ fontSize: string; wordSpacing: 
         if (!cfg) return { fontSize: '', wordSpacing: '' };
         segConfig.set({
             validationCategories: cfg.validation_categories ?? null,
-            muqattaatVerses: cfg.muqattaat_verses ? new Set(cfg.muqattaat_verses.map(([s, a]) => `${s}:${a}`)) : null,
             qalqalaLetters: cfg.qalqala_letters ? new Set(cfg.qalqala_letters) : null,
             standaloneRefs: cfg.standalone_refs ? new Set(cfg.standalone_refs.map(([s, a, w]) => `${s}:${a}:${w}`)) : null,
             standaloneWords: cfg.standalone_words ? new Set(cfg.standalone_words) : null,

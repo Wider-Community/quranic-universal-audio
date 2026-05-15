@@ -4,7 +4,6 @@ import { SCROLL_ANIM_DEFAULT, type ScrollAnimMode } from '../../../lib/utils/con
 
 export interface SegConfig {
     validationCategories: string[] | null;
-    muqattaatVerses: Set<string> | null;
     qalqalaLetters: Set<string> | null;
     standaloneRefs: Set<string> | null;
     standaloneWords: Set<string> | null;
@@ -19,7 +18,6 @@ export interface SegConfig {
 
 const _defaults: SegConfig = {
     validationCategories: null,
-    muqattaatVerses: null,
     qalqalaLetters: null,
     standaloneRefs: null,
     standaloneWords: null,

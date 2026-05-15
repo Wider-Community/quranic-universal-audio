@@ -8,7 +8,7 @@
 VALIDATION_CATEGORIES = (
     "failed", "low_confidence", "low_confidence_v2", "boundary_adj",
     "cross_verse", "missing_words", "audio_bleeding", "repetitions",
-    "muqattaat", "qalqala",
+    "qalqala",
 )
 
 # Quranic stop/pause signs (sili, qili, small meem, jeem)

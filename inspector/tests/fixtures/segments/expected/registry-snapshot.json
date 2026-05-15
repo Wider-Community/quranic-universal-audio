@@ -111,24 +111,12 @@
     "kind": "qalqala",
     "card_type": "generic",
     "severity": "info",
-    "accordion_order": 10,
-    "can_ignore": false,
-    "auto_suppress": false,
-    "persists_ignore": false,
-    "scope": "per_segment",
-    "display_title": "Qalqala",
-    "description": ""
-  },
-  "muqattaat": {
-    "kind": "muqattaat",
-    "card_type": "generic",
-    "severity": "info",
     "accordion_order": 11,
     "can_ignore": false,
     "auto_suppress": false,
     "persists_ignore": false,
     "scope": "per_segment",
-    "display_title": "Muqattaʼat",
+    "display_title": "Qalqala",
     "description": ""
   }
 }

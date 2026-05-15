@@ -12,7 +12,7 @@ and pytest reads the same files via `load_fixture(name)` in `conftest.py`.
 | File | Origin | Purpose |
 |---|---|---|
 | `112-ikhlas.detailed.json` | Real Minshawi slice (Surah 112) + minimal synthetic tweak | Coverage for `qalqala` (final letter), `low_confidence` (one segment dropped to 0.65) |
-| `113-falaq.detailed.json` | Real Minshawi slice (Surah 113) + injected synthetic segments | Coverage for `muqattaat` (one synthetic segment with `s_word=1` matched against a real `MUQATTAAT_VERSES` entry), `audio_bleeding`, `cross_verse` |
+| `113-falaq.detailed.json` | Real Minshawi slice (Surah 113) + injected synthetic segments | Coverage for `audio_bleeding`, `cross_verse` |
 | `synthetic-structural.detailed.json` | Hand-crafted | Coverage for `missing_verses`, `missing_words`, `structural_errors` |
 | `synthetic-classifier.detailed.json` | Hand-crafted | One segment per per-segment category for parametrized tests |
 | `expected/<fixture>.classify.json` | Generated | Post-Phase-2 unified classifier baseline. Regenerated via `python -m inspector.tests.parity.snapshot_expected_outputs` |

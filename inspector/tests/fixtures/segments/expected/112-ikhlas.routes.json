@@ -16,7 +16,6 @@
       "low_confidence",
       "missing_verses",
       "missing_words",
-      "muqattaat",
       "qalqala",
       "repetitions",
       "stats",
@@ -51,7 +50,6 @@
     "field_keys_top_level": [
       "accordion_context",
       "low_conf_default_threshold",
-      "muqattaat_verses",
       "qalqala_letters",
       "seg_font_size",
       "seg_scroll_anim_mode",

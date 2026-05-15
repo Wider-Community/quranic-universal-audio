@@ -88,7 +88,6 @@ ACCORDION_CONTEXT = {
     "boundary_adj": "hidden",
     "repetitions": "hidden",
     "cross_verse": "hidden",
-    "muqattaat": "hidden",
     "qalqala": "hidden",
     "audio_bleeding": "shown",
 }
