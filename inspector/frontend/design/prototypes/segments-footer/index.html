@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Segments Footer — direction probes</title>
+    <link rel="stylesheet" href="../../../src/styles/tokens.css" />
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: var(--s-6);
+            margin-top: var(--s-8);
+        }
+        .card {
+            display: flex;
+            flex-direction: column;
+            padding: var(--s-5);
+            background: var(--panel);
+            border: 1px solid var(--border-quiet);
+            border-radius: var(--r-3);
+            text-decoration: none;
+            color: inherit;
+            transition: border-color var(--t-fast), transform var(--t-fast);
+        }
+        .card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        .card .letter {
+            font-size: 48px;
+            font-weight: 300;
+            color: var(--accent);
+            letter-spacing: -0.02em;
+            line-height: 1;
+            margin-bottom: var(--s-3);
+        }
+        .card h2 {
+            margin: 0 0 var(--s-2);
+            font-size: var(--fs-h3);
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .card p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: var(--fs-meta);
+            line-height: var(--lh-normal);
+        }
+        .card .tag {
+            margin-top: var(--s-4);
+            color: var(--text-faint);
+            font-family: var(--font-mono);
+            font-size: 10.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .intro {
+            color: var(--text-secondary);
+            font-size: var(--fs-row);
+            line-height: var(--lh-normal);
+            max-width: 72ch;
+        }
+        .intro strong { color: var(--text-primary); font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="proto-page">
+        <div class="proto-header">
+            <div>
+                <h1>Segments Footer — direction probes</h1>
+                <div class="sub">SHAPE / PHASE 1.5 · pick a lane before svelte</div>
+            </div>
+        </div>
+
+        <p class="intro">
+            Three takes on merging <strong>SegmentsAudioControls</strong> into the new
+            <strong>SegmentsFooter</strong>. Each variant stacks ~9 states (paused, playing,
+            loading, claim-eligible, claim-held, dirty, autosaving, save-preview,
+            mark-ready confirm) so you scan them in one scroll. All three share a
+            thin 4px progress bar across the top and the same OKLCH tokens; the
+            differences are <strong>where transport sits relative to navigation</strong>.
+        </p>
+
+        <div class="grid">
+            <a class="card" href="./variant-a.html">
+                <div class="letter">A</div>
+                <h2>Player-centric</h2>
+                <p>
+                    Surah / Ayah pickers fused INTO the transport cluster, divider-separated.
+                    The whole center reads as one player: prev · play · next │ Surah · Ayah │ speed · loops · scroll.
+                </p>
+                <div class="tag">most player-like</div>
+            </a>
+            <a class="card" href="./variant-b.html">
+                <div class="letter">B</div>
+                <h2>Three-cluster centered</h2>
+                <p>
+                    Surah / Ayah stay pinned dead-center (your earlier ask). Transport
+                    flanks identity on the left; speed + auto-toggles flank save on the right.
+                    Navigation keeps its prime spot.
+                </p>
+                <div class="tag">least disruptive</div>
+            </a>
+            <a class="card" href="./variant-c.html">
+                <div class="letter">C</div>
+                <h2>Icon-dense, one cluster</h2>
+                <p>
+                    No prev/next chevrons — the Surah / Ayah popovers ARE the step.
+                    All player chrome collapses into one tight cluster between location
+                    and save. Most breathing room, least visible affordance.
+                </p>
+                <div class="tag">most compact</div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

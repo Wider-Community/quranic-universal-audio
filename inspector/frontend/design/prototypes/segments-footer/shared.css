@@ -1,0 +1,628 @@
+/* shared.css — prototype-only styles for the unified Segments footer.
+ *
+ * Loads the real OKLCH tokens from ../../../src/styles/tokens.css so
+ * colours render true to production. All layout / icon / state styling
+ * specific to the prototypes lives here. NOT shipped — this folder is
+ * design-only.
+ */
+
+/* ---------- Prototype page chrome ---------- */
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--canvas);
+    color: var(--text-primary);
+    font: var(--fs-body)/var(--lh-normal) var(--font-sans);
+    min-height: 100vh;
+}
+
+/* Default SVG icon size — bare <svg> tags without explicit width/height
+ * default to 300x150 in browsers; this clamps every icon in the prototype
+ * footers. Per-component CSS below can still override for the play button. */
+svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.proto-page {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: var(--s-12) var(--s-6) 200px;
+}
+
+.proto-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s-6);
+    margin-bottom: var(--s-10);
+    padding-bottom: var(--s-5);
+    border-bottom: 1px solid var(--border-quiet);
+}
+
+.proto-header h1 {
+    margin: 0;
+    font-size: var(--fs-h2);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+}
+
+.proto-header .sub {
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+    font-family: var(--font-mono);
+}
+
+.variant-nav {
+    display: flex;
+    gap: var(--s-2);
+}
+
+.variant-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-4);
+    background: var(--panel);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-quiet);
+    border-radius: var(--r-2);
+    font-size: var(--fs-meta);
+    text-decoration: none;
+    transition: border-color var(--t-fast), color var(--t-fast);
+}
+
+.variant-nav a:hover {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.variant-nav a.current {
+    background: var(--accent-tint);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ---------- Row stack ---------- */
+.proto-row {
+    margin-bottom: var(--s-8);
+}
+
+.row-label {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-3);
+    margin-bottom: var(--s-3);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.row-label .row-num {
+    font-family: var(--font-mono);
+    color: var(--text-faint);
+    font-size: 10.5px;
+}
+
+.row-label .row-note {
+    font-family: var(--font-sans);
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-faint);
+    font-size: var(--fs-meta);
+}
+
+/* ---------- Footer base (shared topology) ---------- */
+.f {
+    position: relative;
+    width: 100%;
+    background: var(--panel);
+    border-top: 1px solid var(--border-default);
+    border-radius: var(--r-3);
+    overflow: hidden;
+    box-shadow: 0 -8px 24px oklch(0 0 0 / 0.28);
+}
+
+.f .progress {
+    position: relative;
+    height: 4px;
+    background: var(--canvas-inset);
+    cursor: pointer;
+}
+
+.f .progress .fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--accent);
+    transition: width var(--t-base) var(--ease-out-quart);
+}
+
+.f .progress .fill.pulse {
+    animation: pulse-fill 1.4s var(--ease-out-quart) infinite alternate;
+}
+
+@keyframes pulse-fill {
+    from { opacity: 0.55; }
+    to   { opacity: 1; }
+}
+
+.f .row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+    min-height: 68px;
+}
+
+/* ---------- Zones ---------- */
+.zone {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+}
+
+.zone-center-abs {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.zone-identity { flex: 0 1 auto; }
+.zone-save     { flex: 0 1 auto; }
+
+.divider {
+    width: 1px;
+    align-self: stretch;
+    margin: var(--s-2) var(--s-1);
+    background: var(--border-quiet);
+}
+
+/* ---------- Reciter chip ---------- */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: 6px var(--s-3) 6px var(--s-2);
+    background: var(--panel-2);
+    border: 1px solid var(--border-quiet);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: border-color var(--t-fast);
+    max-width: 280px;
+}
+
+.chip:hover { border-color: var(--border-default); }
+
+.chip .country {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.chip .names {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.chip .name-en {
+    color: var(--text-primary);
+    font-size: var(--fs-body);
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chip .name-ar {
+    color: var(--text-muted);
+    font-size: 11px;
+    direction: rtl;
+    unicode-bidi: isolate;
+    line-height: 1.1;
+}
+
+.chip.empty {
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+    padding: 6px var(--s-3);
+}
+
+/* ---------- State pill ---------- */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+.pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.pill.published     { color: var(--state-published-fg);    background: var(--state-published-bg); }
+.pill.under-review  { color: var(--state-under-review-fg); background: var(--state-under-review-bg); }
+.pill.available     { color: var(--state-available-fg);    background: var(--state-available-bg); }
+.pill.requested     { color: var(--state-requested-fg);    background: var(--state-requested-bg); }
+
+/* ---------- Buttons (Claim, Mark, Unclaim, Save, History, etc.) ---------- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    padding: 7px var(--s-3);
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-2);
+    font-size: var(--fs-meta);
+    font-family: var(--font-sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+.btn:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.btn:disabled,
+.btn.disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+}
+
+.btn.primary:hover:not(:disabled) {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+    color: var(--accent-fg);
+}
+
+.btn.success {
+    color: var(--state-published-fg);
+    background: transparent;
+    border-color: var(--border-default);
+}
+
+.btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+    padding: 7px var(--s-2);
+}
+
+.btn.ghost:hover { color: var(--text-primary); background: var(--panel-2); }
+
+.btn.danger {
+    color: oklch(0.78 0.140 28);
+    border-color: var(--border-default);
+}
+
+/* ---------- Transport (icon) buttons ---------- */
+.transport {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-quiet);
+    border-radius: var(--r-2);
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+    padding: 0;
+}
+
+.transport:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+    background: var(--panel-2);
+}
+
+.transport:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.transport.play {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+}
+
+.transport.play:hover:not(:disabled) {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+    color: var(--accent-fg);
+}
+
+.transport.play.loading {
+    background: transparent;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.transport.play.loading svg {
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.transport svg { width: 14px; height: 14px; }
+.transport.play svg { width: 14px; height: 14px; }
+
+/* ---------- Popover triggers (Surah / Ayah) ---------- */
+.loc-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px var(--s-3);
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-quiet);
+    border-radius: var(--r-2);
+    font-size: var(--fs-meta);
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast);
+    min-width: 78px;
+}
+
+.loc-trigger:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.loc-trigger:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.loc-trigger .loc-label {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.loc-trigger .loc-value {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    font-variant-numeric: tabular-nums;
+}
+
+.loc-trigger .caret {
+    color: var(--text-faint);
+    font-size: 9px;
+    margin-left: 2px;
+}
+
+.loc-trigger.has-value { color: var(--text-primary); }
+
+.loc-trigger.live {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.loc-trigger.live .loc-value { color: var(--accent); }
+.loc-trigger.live .loc-label { color: var(--accent); }
+
+.loc-group {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0;
+    background: var(--panel-2);
+    border: 1px solid var(--border-quiet);
+    border-radius: var(--r-2);
+    overflow: hidden;
+}
+
+.loc-group .loc-trigger {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.loc-group .loc-trigger + .loc-trigger {
+    border-left: 1px solid var(--border-quiet);
+}
+
+.loc-group .loc-trigger:hover { background: var(--elevated); }
+
+/* ---------- Preference toggles (Auto-play / Auto-scroll) ---------- */
+.pref {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-quiet);
+    border-radius: var(--r-2);
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+    padding: 0;
+    position: relative;
+}
+
+.pref:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+.pref.on {
+    background: var(--accent-tint);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.pref.on:hover { background: var(--accent-tint); color: var(--accent-strong); }
+
+.pref svg { width: 16px; height: 16px; }
+
+/* Speed pill — looks like a pref toggle but text-based */
+.speed-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 var(--s-2);
+    min-width: 44px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-quiet);
+    border-radius: var(--r-2);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+.speed-pill:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+.speed-pill.boosted { color: var(--accent); border-color: var(--accent); background: var(--accent-tint); }
+
+/* ---------- Pref + Speed grouped (icon-dense) ---------- */
+.pref-group {
+    display: inline-flex;
+    align-items: stretch;
+    background: var(--panel-2);
+    border: 1px solid var(--border-quiet);
+    border-radius: var(--r-2);
+    overflow: hidden;
+}
+
+.pref-group .pref,
+.pref-group .speed-pill {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.pref-group .pref + .pref,
+.pref-group .pref + .speed-pill,
+.pref-group .speed-pill + .pref {
+    border-left: 1px solid var(--border-quiet);
+}
+
+.pref-group .pref.on { background: var(--accent-tint); }
+.pref-group .speed-pill.boosted { background: var(--accent-tint); }
+.pref-group .pref:hover:not(.on),
+.pref-group .speed-pill:hover:not(.boosted) { background: var(--elevated); }
+
+/* ---------- Save cluster ---------- */
+.save-cluster {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+}
+
+.save-cluster .save {
+    min-width: 92px;
+    padding: 7px var(--s-4);
+    font-weight: 500;
+}
+
+.save-cluster .save.dirty {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+}
+
+.save-cluster .save.saved {
+    color: var(--state-published-fg);
+    border-color: var(--border-quiet);
+    background: transparent;
+}
+
+.save-cluster .save.auto-saving {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-tint);
+    padding-left: var(--s-3);
+}
+
+.save-cluster .save.auto-saving::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse-dot 1.4s var(--ease-out-quart) infinite alternate;
+}
+
+@keyframes pulse-dot {
+    from { opacity: 0.4; transform: scale(0.85); }
+    to   { opacity: 1;   transform: scale(1.1); }
+}
+
+/* ---------- Reciter-actions confirmation row ---------- */
+.confirm-row {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-3);
+    padding: 4px var(--s-3);
+    background: var(--accent-tint);
+    border: 1px solid var(--accent);
+    border-radius: var(--r-2);
+}
+
+.confirm-row .label {
+    color: var(--accent);
+    font-size: var(--fs-meta);
+    font-weight: 500;
+}
+
+/* ---------- Caption above the prototype canvas ---------- */
+.proto-caption {
+    margin: 0 0 var(--s-3);
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+    max-width: 78ch;
+    line-height: var(--lh-normal);
+}
+
+.proto-caption strong { color: var(--text-primary); font-weight: 500; }
+
+/* ---------- Section heading inside a variant page ---------- */
+.section {
+    margin-top: var(--s-12);
+    margin-bottom: var(--s-6);
+    padding-bottom: var(--s-2);
+    border-bottom: 1px dashed var(--border-quiet);
+    color: var(--text-secondary);
+    font-size: var(--fs-h3);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+}
+
+/* ---------- Width simulators ---------- */
+.viewport-narrow {
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.viewport-mid {
+    max-width: 1300px;
+    margin-left: auto;
+    margin-right: auto;
+}
