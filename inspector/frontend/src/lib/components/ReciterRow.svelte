@@ -117,20 +117,29 @@
 </div>
 
 <style>
+    /* Row reads as a rounded pill: side-inset margin so the hover
+       background doesn't bleed to the page edges, and a soft accent
+       tint on hover that matches the ReciterChip family elsewhere.
+       Bottom border dropped — at rounded radii a bottom rule looks
+       cut off. Rhythm comes from row padding alone. */
     .row {
         display: grid;
         grid-template-columns: 36px minmax(0, 1fr) auto;
         align-items: center;
         gap: var(--s-3);
-        padding: var(--s-3) var(--s-2);
-        border-bottom: 1px solid var(--border-quiet);
-        transition: background var(--t-fast);
+        padding: var(--s-3) var(--s-3);
+        margin-inline: var(--s-2);
+        border-radius: var(--r-3);
+        transition: background var(--t-fast), border-color var(--t-fast);
         cursor: pointer;
     }
-    .row:hover { background: var(--panel); }
+    .row:hover {
+        background: var(--accent-tint-soft);
+    }
     .row:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: -2px;
+        border-radius: var(--r-3);
     }
 
     .play, .play-spacer {
