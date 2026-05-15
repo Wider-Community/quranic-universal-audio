@@ -59,7 +59,7 @@
                 bucket={delivery?.bucket ?? null}
             />
             {#if hasMany}
-                <span class="switch" aria-hidden="true">⌃</span>
+                <span class="switch" aria-hidden="true">⇄</span>
             {/if}
         {:else}
             <span class="name muted">Pick a reciter to start</span>
@@ -82,7 +82,6 @@
                         nameAr={reciter.name_ar}
                         country={reciter.country}
                         subline={combinationCompact(d)}
-                        bucket={d.bucket}
                         variant="compact"
                     />
                 </button>
@@ -96,23 +95,34 @@
         position: relative;
         min-width: 0;
     }
+    /* Pill-shaped wrapper — kept in lockstep with the segments footer's
+       `.identity` button (tabs/segments/components/footer/SegmentsFooter.svelte)
+       so both reciter-picker affordances read as the same surface. */
     .meta {
-        display: flex;
+        display: inline-flex;
         align-items: center;
         gap: var(--s-3);
+        max-width: 100%;
         min-width: 0;
-        width: 100%;
-        background: transparent;
-        border: 0;
-        padding: var(--s-2);
-        text-align: left;
-        cursor: default;
-        border-radius: var(--r-2);
-        transition: background var(--t-fast);
+        flex: 0 1 auto;
+        padding: 5px var(--s-3) 5px 5px;
+        background: var(--panel-2);
+        border: 1px solid var(--border-quiet);
+        border-radius: 999px;
         color: inherit;
+        cursor: default;
+        font: inherit;
+        text-align: left;
+        transition: border-color var(--t-fast), background var(--t-fast);
     }
     .meta.interactive { cursor: pointer; }
-    .meta.interactive:hover { background: var(--panel-2); }
+    .meta.interactive:hover {
+        border-color: var(--border-strong);
+        background: var(--panel);
+    }
+    .meta:focus-visible { outline: none; border-color: var(--accent); }
+    .meta:disabled { opacity: 0.7; cursor: default; }
+
     .name {
         font-size: var(--fs-body);
         color: var(--text-primary);
@@ -120,13 +130,15 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        padding-inline: var(--s-2);
     }
     .name.muted { color: var(--text-muted); font-weight: 400; }
+
     .switch {
+        margin-inline-start: var(--s-2);
         color: var(--text-faint);
-        font-size: 14px;
+        font-size: var(--fs-meta);
         transition: color var(--t-fast);
-        margin-inline-start: auto;
     }
     .meta.interactive:hover .switch { color: var(--text-secondary); }
 
