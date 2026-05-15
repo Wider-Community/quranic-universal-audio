@@ -1,7 +1,14 @@
 # Validation engine optimization — final report
 
-Worktree: `.local/worktrees/validate-opt` (branch `worktree-validate-opt`).
+Companion to [`migrate_wip.md`](migrate_wip.md) — the validate-perf migration is
+documented there with the apply procedure and re-run conditions. This file is
+the bench-driven evidence: per-change drift checks, before/after timings, and
+the NFS-mount simulation that confirms the deployed-Space cold floor.
+
 Dataset: 8 WIP reciters on dev bucket `hetchyy/quranic-inspector-bucket-dev`.
+Iteration was done in worktree `.local/worktrees/validate-opt` (branch
+`worktree-validate-opt`) and cherry-picked onto `dev` after every commit
+landed drift-clean.
 
 ## TL;DR
 
