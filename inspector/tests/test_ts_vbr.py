@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def test_ts_vbr_route_returns_chapters(flask_client, monkeypatch):
-    from routes import timestamps as ts_routes
+    from routes.timestamps import timestamps as ts_routes
 
     monkeypatch.setattr(
         ts_routes,

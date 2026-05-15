@@ -8,7 +8,7 @@ samples beyond the segment boundary.
 """
 from __future__ import annotations
 
-from routes.peaks import _slice_chapter_peaks
+from routes.segments.peaks import _slice_chapter_peaks
 
 
 def _make_chapter_peaks(num: int = 1000, duration_ms: int = 10_000):
