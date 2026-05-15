@@ -9,7 +9,7 @@ atomically promotes to the live `wip/<slug>/detailed.json`.
 | # | Migration | Scope at time of writing | Script | Status |
 |---|---|---|---|---|
 | 1 | [`wrap_word_ranges` purge (stale wraps)](#1-stale-wrap_word_ranges-purge) | 7 reciters / 34 segs | `inspector/scripts/purge_stale_wraps.py` | shipped May 2026 |
-| 2 | [`qalqala_letter` + `is_boundary_adj` backfill (validate-perf)](#2-qalqala_letter--is_boundary_adj-backfill) | 8 WIP reciters / ~80 k segs | `inspector/scripts/backfill_qalqala_letter.py`, `inspector/scripts/backfill_boundary_adj.py` | WIP only — published pending |
+| 2 | [`qalqala_letter` + `is_boundary_adj` backfill (validate-perf)](#2-qalqala_letter--is_boundary_adj-backfill) | 14 reciters (8 WIP + 6 published) / ~144 k segs | `inspector/scripts/backfill_qalqala_letter.py`, `inspector/scripts/backfill_boundary_adj.py` | shipped May 2026, WIP + published (extraction also stamps natively) |
 | 3 | [`pad_migration` batch purge (edit-history slim)](#3-pad_migration-batch-purge) | 14 reciters / 1 388 batches / ~95 MB | `inspector/scripts/purge_pad_migration.py` | shipped May 2026, WIP + published |
 | 4 | [edit-history schema slim-down (writer-side)](#4-edit-history-schema-slim-down) | All future records — legacy records untouched | code change, no script | shipped May 2026 |
 
@@ -250,20 +250,33 @@ heavily — wire overhead is small (~1-2 %).
 
 #### When to re-run
 
-The save flow stamps both fields on every edited seg
-([`services/save.py::_stamp_persisted_classifier_fields`](../../inspector/services/save.py)),
-so interactive editing keeps the data in lockstep. Re-run after:
+All three writers now stamp both fields, so new data lands in lockstep:
 
-- **Published-reciter migration** — current backfill is WIP only. Apply
-  to `published/<slug>/detailed.json` when extending to the rest of the
-  catalog.
-- **New reciter from extraction** — until the offline pipeline at
-  `.local/extraction/extract_segments.py` is updated to stamp these
-  fields at extraction time, run the backfill once per fresh reciter.
+- **Save flow** stamps every edited seg
+  ([`services/save.py::_stamp_persisted_classifier_fields`](../../inspector/services/save.py))
+  with `canonical=None` (structural side only — the phonemic-side detection
+  was captured at extraction or backfill time and the persisted value rides
+  through saves).
+- **Extraction** stamps every newly-produced seg
+  ([`.local/extraction/segments/outputs.py::stamp_persisted_classifier_fields`](../../.local/extraction/segments/outputs.py))
+  with the full canonical-loaded dict (structural + phonemic). Output is
+  byte-equivalent to a fresh backfill — no follow-up backfill needed for
+  new reciters. `upload_to_bucket.py`'s pre-flight aborts if any seg is
+  missing the fields, which would mean a stale `outputs.py` ran on Katana.
+- **Backfill scripts** are now used only for legacy / archive recovery
+  paths (below).
+
+Re-run the backfill scripts after:
+
 - **Restoring a reciter from an old `archive/` snapshot** that predates
   this migration.
 - **`quranic_phonemizer` version bump** — the phoneme tail tokenization
   could shift; `is_boundary_adj`'s phonemic side would need recomputation.
+  (Save flow keeps `canonical=None`, so a phonemizer bump alone doesn't
+  re-stamp anything; the backfill is the catch-up.)
+- **Manual catalog import** — any path that drops a `detailed.json` into
+  `wip/<slug>/` or `published/<slug>/` without going through extraction
+  or the save flow.
 
 If a seg lacks the field at read time (legacy data), the classifier falls
 through to the original computation path and produces an identical
@@ -345,16 +358,13 @@ On failure the wip file is untouched.
 
 ### What it does NOT do
 
-- **Does not touch published reciters yet.** Re-running with
-  `--all-wip` is safe but doesn't extend to `published/`. Use a
-  follow-up script invocation (planned addition: `--all-published`)
-  before flipping the runtime to require the persisted fields on
-  published reads.
 - **Does not delete `services/phonemizer_service.py` or the
-  `quranic_phonemizer` package.** The backfill script still imports
-  them — they're the ONE remaining consumer. Removal happens after
-  every reciter (WIP + published + extraction-pipeline output) is
-  pre-stamped.
+  `quranic_phonemizer` package.** The backfill script + the extraction
+  pipeline both still import them — they're the two writers that compute
+  the phonemic-side `is_boundary_adj` natively. Removal from the
+  Inspector runtime is already done (Step 7 of the original perf plan);
+  full package removal is gated on those two writers migrating to a
+  stripped-down phoneme module.
 - **Does not touch `edit_history.jsonl`.** Same rationale as migration 1
   — schema-level data fix, not a user edit.
 - **Does not invalidate caches across processes.** The save flow's
