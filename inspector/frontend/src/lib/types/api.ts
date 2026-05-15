@@ -256,6 +256,12 @@ export interface SegAllResponse {
      *  SegDataResponse.reciter_vbr_chapters so global accordions can route
      *  cross-chapter playback before/independent of a chapter-data refresh. */
     reciter_vbr_chapters?: number[];
+    /** Segment UIDs that have a precomputed Auto Split entry in
+     *  ``<reciter>/auto_split_v1.json``. The FE checks membership before
+     *  flipping a row's button label from *Split* to *Auto Split*: when the
+     *  offline alignment failed for a seg, the entry is absent and the FE
+     *  falls back to plain manual single-cursor split UX. */
+    auto_split_uids?: string[];
     /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
     pad_ms: number;
     pad_left_ms: number;

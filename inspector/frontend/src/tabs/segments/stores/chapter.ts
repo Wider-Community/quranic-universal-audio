@@ -34,6 +34,17 @@ export const selectedVerse = writable<string>('');
 /** Full reciter corpus (segments across all chapters). */
 export const segAllData = writable<SegAllResponse | null>(null);
 
+/** Set of ``segment_uid``s with a precomputed Auto Split sidecar entry. The
+ *  *Auto Split* button only renders for rows whose seg uid is in this set;
+ *  others fall back to plain *Split*. Derived from ``segAllData.auto_split_uids``
+ *  on every load — empty set means the reciter has no sidecar yet (extraction
+ *  hasn't run, or the dev bucket is missing the file), in which case every
+ *  candidate seg keeps the manual Split UX. */
+export const autoSplitUids = derived(
+    segAllData,
+    ($all) => new Set<string>($all?.auto_split_uids ?? []),
+);
+
 /** Per-chapter loaded data (audio_url, pad fields, segments). */
 export const segData = writable<SegDataState | null>(null);
 

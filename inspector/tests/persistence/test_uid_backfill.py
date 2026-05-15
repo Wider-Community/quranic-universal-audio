@@ -228,6 +228,7 @@ def test_uid_deterministic_across_processes(tmp_path):
         """
         import json, os, sys
         sys.path.insert(0, os.environ['INSPECTOR_DIR'])
+        sys.path.insert(0, os.environ['REPO_ROOT'])
         os.environ['INSPECTOR_DATA_DIR'] = os.environ['DATA_DIR']
         from services.data_loader import load_detailed
         entries = load_detailed('legacy_reciter')
@@ -242,12 +243,12 @@ def test_uid_deterministic_across_processes(tmp_path):
     proc1 = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
-        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector},
+        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector, "REPO_ROOT": str(_Path(repo_inspector).parent)},
     )
     proc2 = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
-        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector},
+        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector, "REPO_ROOT": str(_Path(repo_inspector).parent)},
     )
     assert proc1.returncode == 0, proc1.stderr
     assert proc2.returncode == 0, proc2.stderr

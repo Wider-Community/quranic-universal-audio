@@ -31,6 +31,11 @@ def dev_mode_client(monkeypatch):
     monkeypatch.setenv("INSPECTOR_DEV_MODE", "1")
 
     from app import app
+    from scripts.lib.schemas import ReciterStateFile
+    from services import state as state_service
+
+    with state_service._state_lock:  # type: ignore[attr-defined]
+        state_service._state_file = ReciterStateFile()  # type: ignore[attr-defined]
 
     app.config["TESTING"] = True
     return app.test_client()
@@ -56,10 +61,11 @@ def test_dev_mode_default_owner_when_cookie_missing(dev_mode_client):
     assert resp.status_code == 200
     body = json.loads(resp.data)
     assert body == {
-        "login": "dev",
-        "hf_user_id": "dev-local",
+        "login": "dev-owner",
+        "hf_user_id": "dev-owner",
         "role": "owner",
         "active_claim": None,
+        "active_claims": [],
         "dev_mode": True,
     }
 
@@ -71,7 +77,7 @@ def test_dev_mode_cookie_drives_role(dev_mode_client, role):
     resp = dev_mode_client.get("/api/me")
     body = json.loads(resp.data)
     assert body["role"] == role
-    assert body["hf_user_id"] == "dev-local"
+    assert body["hf_user_id"] == f"dev-{role}"
     assert body["dev_mode"] is True
 
 
@@ -87,6 +93,7 @@ def test_dev_mode_anonymous_cookie_yields_null_user(dev_mode_client):
         "hf_user_id": None,
         "role": None,
         "active_claim": None,
+        "active_claims": [],
         "dev_mode": True,
     }
 
@@ -109,8 +116,8 @@ def test_dev_mode_ignores_real_oauth_cookie(dev_mode_client):
     dev_mode_client.set_cookie(auth_service.SESSION_COOKIE_NAME, real_cookie, path="/")
     resp = dev_mode_client.get("/api/me")
     body = json.loads(resp.data)
-    assert body["hf_user_id"] == "dev-local"
-    assert body["login"] == "dev"
+    assert body["hf_user_id"] == "dev-owner"
+    assert body["login"] == "dev-owner"
 
 
 # ---- /api/dev/role route ----
