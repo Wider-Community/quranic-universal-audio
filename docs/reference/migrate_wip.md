@@ -11,6 +11,7 @@ atomically promotes to the live `wip/<slug>/detailed.json`.
 | 1 | [`wrap_word_ranges` purge (stale wraps)](#1-stale-wrap_word_ranges-purge) | 7 reciters / 34 segs | `inspector/scripts/purge_stale_wraps.py` | shipped May 2026 |
 | 2 | [`qalqala_letter` + `is_boundary_adj` backfill (validate-perf)](#2-qalqala_letter--is_boundary_adj-backfill) | 8 WIP reciters / ~80 k segs | `inspector/scripts/backfill_qalqala_letter.py`, `inspector/scripts/backfill_boundary_adj.py` | WIP only — published pending |
 | 3 | [`pad_migration` batch purge (edit-history slim)](#3-pad_migration-batch-purge) | 14 reciters / 1 388 batches / ~95 MB | `inspector/scripts/purge_pad_migration.py` | shipped May 2026, WIP + published |
+| 4 | [edit-history schema slim-down (writer-side)](#4-edit-history-schema-slim-down) | All future records — legacy records untouched | code change, no script | shipped May 2026 |
 
 Companion perf report for migration #2: [`validate_perf_report.md`](validate_perf_report.md).
 
@@ -553,3 +554,182 @@ report at the end shows which mutated and which were skipped).
   keep `HISTORY_SCHEMA_VERSION` as-is — the slim-down is a deletion of
   optional fields the schema already tolerated as absent via
   `default_factory=dict` / `extra="allow"`.
+
+---
+
+## 4. edit-history schema slim-down
+
+Writer-side change to `wip/<slug>/edit_history.jsonl` (and `published/<slug>/`)
+that drops fields with no live consumer from every newly-written batch /
+op / snapshot. **No data backfill** — existing records on disk keep their
+legacy shape forever; readers tolerate both via `extra="allow"` and
+falsy-check fall-throughs. The "migration" is the code change itself.
+
+Commits:
+
+- [`b8aa414`](https://github.com/Wider-Community/quranic-universal-audio/commit/b8aa414) — drops the 3 op timestamps + `validation_summary_*` + top-level `reciter`; orjson on the read paths
+- [`1e0d805`](https://github.com/Wider-Community/quranic-universal-audio/commit/1e0d805) — drops `matched_text` from per-op snapshots; new helper `services/quran_refs.py::dk_text_for_ref` derives it server-side at classify / undo / save time
+- [`a86fa72`](https://github.com/Wider-Community/quranic-universal-audio/commit/a86fa72) — route-level: `Cache-Control` + ETag for 304 revalidation (not schema, listed for completeness)
+
+### High level
+
+#### What the change does
+
+For every new batch that the save / undo paths append to `edit_history.jsonl`,
+the following fields are no longer written:
+
+| Field | Where it used to live | Why dropped |
+|---|---|---|
+| `started_at_utc` | per-op (top of each `operations[i]`) | No consumer in code, tests, or analytics. Captured `_baseOperation` time — overwritten relative to `applied_at_utc` so dwell-time was always near-zero |
+| `applied_at_utc` | per-op | No consumer. Stamped by `finalizeEdit` a few ms after `started_at_utc` — never meaningful |
+| `ready_at_utc` | per-op | No consumer. Stamped by `finalizeOp` AFTER `applied_at_utc`, so `applied - ready` was systematically negative — field names misordered relative to code flow |
+| `validation_summary_before` | per-batch | Only fed by `chapter_validation_counts` and only read back into itself; no FE consumer or analytics |
+| `validation_summary_after` | per-batch | Same; dropping it eliminated the redundant second `chapter_validation_counts` call per save (5-20 ms) |
+| `reciter` (top-level) | per-batch | Slug already in the file path `<tier>/<slug>/edit_history.jsonl`; `history_query.load_edit_history` already stripped it from the wire shape |
+| `matched_text` (inside snapshots) | each `targets_before[i]` / `targets_after[i]` | Derivable from `matched_ref` via `dk_words` (see [Migration #2](#2-qalqala_letter--is_boundary_adj-backfill)'s `dk_text_for_ref` helper). Largest single contributor — ~200-600 B per snapshot, ~2-3 snapshots per op |
+
+#### Why it's needed
+
+The dropped fields were collectively ~10-15 % of edit_history.jsonl wire
+bytes (brotli) and 25-40 % of the decoded bytes. The 3 op timestamps were
+the biggest per-op contributor (~127 B per op for the 3 ISO strings); on
+heavy reciters with thousands of ops this adds up. None had consumers.
+
+The `matched_text` strip is the largest single saving by mass but is also
+the most-load-bearing change — the runtime classifier (qalqala +
+boundary_adj) reads it to detect last-letter and standalone-word
+patterns. Replacing the field with on-demand derivation kept the
+classifier producing byte-equivalent output (drift-checked) while
+shaving ~200-600 B per snapshot off the wire and making the round-trip
+self-consistent (server is now authoritative on the matched-ref ↔
+matched-text relationship instead of trusting whatever the FE echoed).
+
+#### What's affected
+
+- **New records (post-commit)**: slim shape — none of the dropped fields
+  are written.
+- **Legacy records (pre-commit)**: untouched. Still parse fine via
+  `scripts/lib/schemas/edit_history.py` (pydantic `extra="allow"` +
+  `default_factory=dict`). The runtime classifier's
+  `seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))`
+  fall-through means legacy snapshots with `matched_text` continue to
+  use it; new snapshots without it derive equivalently.
+- **`detailed.json`**: still carries `matched_text` per seg (documented
+  schema, external dataset/release consumers depend on it). The save
+  flow now derives it server-side rather than echoing from the FE — see
+  [`adapters/save_payload.py::make_seg`](../../inspector/adapters/save_payload.py)
+  and [`services/save.py::_apply_patch`](../../inspector/services/save.py). The
+  undo path enriches snapshots before writing them back via
+  [`domain/command.py::apply_inverse_patch`](../../inspector/domain/command.py).
+
+#### When to re-run
+
+There is nothing to run. The change is purely writer-side.
+
+**The two scenarios where you might want a real backfill** (currently
+NOT implemented — would need a new one-shot script):
+
+1. **Storage cleanup**: rewrite legacy records to the new slim shape.
+   Would save the disk bytes of legacy records but doesn't help anything
+   at runtime (those records are read-once, mostly via History panel
+   render). Low priority; defer until edit_history.jsonl grows large
+   again or the legacy fields actively cause friction.
+2. **External downstream consumer** that can't tolerate the dropped
+   fields. None exists today.
+
+If either becomes relevant, the script shape mirrors migration #3:
+walk every reciter's `edit_history.jsonl`, partition records, write
+to `archive/schema_slim/<slug>/edit_history.jsonl.<ts>.bak` first,
+then overwrite the live file.
+
+### Low level
+
+#### Reader compatibility
+
+The slim-down is safe-for-readers because:
+
+| Reader | How it tolerates the change |
+|---|---|
+| `services/history_query.py::load_edit_history` | Uses `record.get(...)` everywhere; absent fields surface as `None` |
+| `services/validation/classifier.py` | `seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))` — legacy + new both work |
+| `services/undo.py::apply_reverse_op` + `domain/command.py::apply_inverse_patch::_hydrate` | Re-derives `matched_text` for restored snapshots before writing back to `detailed.json` |
+| `scripts/lib/schemas/edit_history.py` (pydantic) | `extra="allow"` + `default_factory=dict` — both shapes parse |
+| Frontend `frontend/src/tabs/segments/utils/history/chains.ts` | `snap.matched_text || ''` falsy-check; FE History panel re-derives Arabic text from `matched_ref + dk_words` for display regardless |
+
+#### Writer changes (per commit)
+
+`b8aa414`:
+- FE `frontend/src/tabs/segments/stores/dirty.ts::createOp` + `finalizeOp` + `frontend/src/tabs/segments/domain/apply-command.ts::_baseOperation` + `frontend/src/tabs/segments/utils/edit/common.ts::finalizeEdit` — drop all 3 timestamp writes
+- FE `frontend/src/lib/types/domain.ts::EditOp` — drop the 3 timestamp fields + `validation_summary_*` from `HistoryBatch`
+- BE `services/save.py::_persist_and_record` — drop `validation_summary_before` + `validation_summary_after` from the batch dict; drop the second `chapter_validation_counts` call; drop `"reciter": reciter,`
+- BE `services/undo.py::_append_revert_record` — same drops; remove `val_before` / `val_after` params + the now-unused `_merge_val_summaries` helper and `chapter_validation_counts` + `VALIDATION_CATEGORIES` imports
+- BE `services/history_query.py:176` — drop `validation_summary_before` / `validation_summary_after` from the wire shape
+- BE `routes/segments_data.py::seg_data` + `routes/segments_validation.py::seg_edit_history` — `jsonify` → `orjson_response`
+
+`1e0d805`:
+- BE `services/quran_refs.py::dk_text_for_ref` — new helper (~30 LOC), mirror of FE's `references.ts::dkTextForRef`
+- BE `services/validation/classifier.py` — qalqala + boundary_adj checks gain `or dk_text_for_ref(seg.get("matched_ref"))` fall-through
+- BE `domain/command.py::apply_inverse_patch::_hydrate` — populates `matched_text` on restored snapshots before they land in `detailed.json`
+- BE `adapters/save_payload.py::make_seg` + `services/save.py::_apply_patch` — derive `matched_text` from `matched_ref` instead of trusting the FE payload
+- FE `frontend/src/tabs/segments/stores/dirty.ts::snapshotSeg` — drop `matched_text` from the snapshot field set
+- FE `frontend/src/tabs/segments/utils/save/{payload,execute}.ts` — drop `matched_text` from `SaveSegmentPayload{Full,Patch}` and their construction sites
+
+#### Drift guarantee
+
+The classifier change passes a parity check by construction:
+
+```python
+# Legacy record:           {"matched_ref": "1:1:1-1:1:4", "matched_text": "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ"}
+# New record:              {"matched_ref": "1:1:1-1:1:4"}                       # no matched_text written
+# Effective text both ways: dk_text_for_ref("1:1:1-1:1:4") == "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ"
+```
+
+The fall-through prefers the explicit `matched_text` when present
+(handles any manual / legacy override), else derives from
+`matched_ref + dk_words`. Both branches produce the same Unicode-NFD
+last-letter / standalone-word lookup, so qalqala + boundary_adj
+detection is byte-equivalent across the rollout boundary.
+
+### Apply procedure
+
+None — code change only. Verification is:
+
+```bash
+# 1. New record shape (write an edit, fetch history, confirm absent keys):
+curl http://localhost:5000/api/seg/edit-history/<slug> | python3 -c "
+import json, sys
+batches = json.load(sys.stdin)['batches']
+banned_batch = ['validation_summary_before', 'validation_summary_after', 'reciter']
+banned_op = ['started_at_utc', 'ready_at_utc', 'applied_at_utc']
+banned_snap = ['matched_text']
+# Check most recent batch (post-commit)
+b = batches[-1]
+print('batch banned present:', [k for k in banned_batch if k in b])
+op = (b.get('operations') or [{}])[0]
+print('op banned present:', [k for k in banned_op if k in op])
+snap = (op.get('targets_after') or [{}])[0]
+print('snap banned present:', [k for k in banned_snap if k in snap])
+"
+
+# 2. Backward compat (legacy record still parses):
+curl http://localhost:5000/api/seg/edit-history/<slug>   # any pre-commit slug — should 200 with legacy fields still present in old batches
+
+# 3. Classifier parity (qalqala + boundary_adj):
+curl http://localhost:5000/api/seg/validate/<slug>       # category_counts identical to pre-commit baseline (drift-checked via bench/drift.py if available)
+```
+
+### What it does NOT do
+
+- **Does not rewrite legacy records.** Pre-commit batches keep all their
+  fields on disk. The runtime has no way to tell them apart from new
+  records and doesn't try to.
+- **Does not change `HISTORY_SCHEMA_VERSION`.** The pydantic schema in
+  `scripts/lib/schemas/edit_history.py` always allowed these fields to
+  be absent (`default_factory=dict`); they're now consistently absent
+  instead of inconsistently present.
+- **Does not strip `matched_text` from `detailed.json`.** The save flow
+  now writes a server-derived value instead of the FE-echoed value, but
+  the on-disk schema field stays — external dataset / release consumers
+  depend on it.
+- **Does not run any data script.** The migration is a pure code change
+  shipped in two commits.
