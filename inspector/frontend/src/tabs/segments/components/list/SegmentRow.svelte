@@ -29,6 +29,7 @@
     import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
     import {
+        autoSplitUids,
         getAdjacentSegments,
         segAllData,
         selectedChapter,
@@ -496,12 +497,17 @@
         enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId, rowChapter);
     }
 
-    /** Cross-verse + repetitions accordions swap `Split` for `Auto Split`:
-     *  ask MFA for the cursor positions (and per-section refs), then open
-     *  the split panel with cursors pre-placed and ref-edit chain seeded.
-     *  Any backend miss falls through silently to the normal midpoint flow. */
-    $: isAutoSplit = (validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref))
+    /** Cross-verse + repetitions accordions swap `Split` for `Auto Split` —
+     *  but only when the offline pre-compute (``auto_split_v1.json``) has an
+     *  entry for this seg's uid. Misses keep the plain *Split* UX, matching
+     *  what a non-candidate row has always shown. The runtime endpoint hit
+     *  on click is now a pure sidecar lookup (~10 ms vs the prior 5–15 s MFA
+     *  Space round trip). */
+    $: isAutoSplitCandidate = (validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref))
         || (validationCategory === 'repetitions' && !!(seg as any).wrap_word_ranges);
+    $: isAutoSplit = isAutoSplitCandidate
+        && !!seg.segment_uid
+        && $autoSplitUids.has(seg.segment_uid);
 
     async function onSplitClick(e: MouseEvent): Promise<void> {
         e.stopPropagation();

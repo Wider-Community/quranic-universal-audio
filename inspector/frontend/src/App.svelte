@@ -138,21 +138,24 @@
 
 <style>
     header {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        justify-content: space-between;
         gap: 12px;
-        flex-wrap: wrap;
     }
     .tab-bar {
         display: flex;
         align-items: center;
         gap: 0;
+        grid-column: 2;
+        justify-self: center;
     }
     .auth-controls {
         display: flex;
         align-items: center;
         gap: 10px;
+        grid-column: 3;
+        justify-self: end;
     }
     .auth-login {
         font-size: 0.92rem;

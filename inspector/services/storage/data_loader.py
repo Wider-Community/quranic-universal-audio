@@ -182,6 +182,34 @@ def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
     return result
 
 
+def load_auto_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
+    """Load ``auto_split_v1.json`` sidecar for *reciter*.
+
+    Returns ``(by_uid_map, meta_dict)`` where each value in ``by_uid_map`` is
+    ``{"cursors": [int, ...], "refs": [str, ...], "kind": "cross_verse" |
+    "repetition"}``. Empty dict + None when the sidecar is absent — that
+    signals to the FE that every Auto Split candidate should fall back to
+    the plain Split button (manual single-cursor placement). The sidecar is
+    emitted offline by ``scripts/lib/auto_split_precompute.py``; the
+    Inspector never writes it.
+    """
+    cached = cache.get_seg_auto_split(reciter)
+    if cached is not None:
+        return cached
+    doc = data_dir.read_auto_split_doc(reciter)
+    if doc is None:
+        result: tuple[dict[str, dict], dict | None] = ({}, None)
+        cache.set_seg_auto_split(reciter, result)
+        return result
+    by_uid = doc.get("by_uid") or {}
+    meta = doc.get("_meta") or None
+    if not isinstance(by_uid, dict):
+        by_uid = {}
+    result = (by_uid, meta)
+    cache.set_seg_auto_split(reciter, result)
+    return result
+
+
 # Audio URL maps remain cached via `cache._audio_url`, but the only
 # remaining caller is `routes/audio_metadata.py` (Audio tab), which now
 # loads them inline. The Timestamps tab's old `load_audio_urls` flow is

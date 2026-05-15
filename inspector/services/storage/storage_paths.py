@@ -83,6 +83,17 @@ def low_confidence_path(slug: str, kind: WipOrPublished) -> str:
     return reciter_file(slug, kind, "low_confidence_v2.json")
 
 
+def auto_split_path(slug: str, kind: WipOrPublished) -> str:
+    """Auto-split cursor sidecar — per-seg precomputed cursors + refs.
+
+    Written offline by ``scripts/lib/auto_split_precompute.py`` once segments
+    are finalised; read at boot by ``services/data_loader.load_auto_split``.
+    Replaces the runtime MFA Space call the inspector used to make on every
+    Auto Split button click.
+    """
+    return reciter_file(slug, kind, "auto_split_v1.json")
+
+
 def published_timestamps_path(slug: str, chapter: str | int) -> str:
     """Timestamps live only under ``published/<slug>/timestamps/`` — not wip."""
     return f"published/{slug}/timestamps/{chapter}.json"
@@ -117,4 +128,5 @@ PER_RECITER_FILES: tuple[str, ...] = (
     "edit_history.jsonl",
     "edit_history_peaks.jsonl",
     "low_confidence_v2.json",
+    "auto_split_v1.json",
 )

@@ -207,7 +207,7 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
 
 def test_uid_deterministic_across_processes(tmp_path):
     """Backfill the same legacy fixture in two cold processes; UIDs must match."""
-    legacy_dir = tmp_path / "recitation_segments" / "legacy_reciter"
+    legacy_dir = tmp_path / "wip" / "legacy_reciter"
     legacy_dir.mkdir(parents=True)
     legacy_path = legacy_dir / "detailed.json"
     legacy_doc = {
@@ -228,7 +228,9 @@ def test_uid_deterministic_across_processes(tmp_path):
         """
         import json, os, sys
         sys.path.insert(0, os.environ['INSPECTOR_DIR'])
-        os.environ['INSPECTOR_DATA_DIR'] = os.environ['DATA_DIR']
+        sys.path.insert(0, os.environ['REPO_ROOT'])
+        os.environ['INSPECTOR_BACKEND'] = 'filesystem'
+        os.environ['INSPECTOR_FILESYSTEM_ROOT'] = os.environ['DATA_DIR']
         from services.data_loader import load_detailed
         entries = load_detailed('legacy_reciter')
         print(json.dumps([s['segment_uid'] for e in entries for s in e['segments']]))
@@ -242,12 +244,12 @@ def test_uid_deterministic_across_processes(tmp_path):
     proc1 = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
-        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector},
+        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector, "REPO_ROOT": str(_Path(repo_inspector).parent)},
     )
     proc2 = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True, text=True,
-        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector},
+        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector, "REPO_ROOT": str(_Path(repo_inspector).parent)},
     )
     assert proc1.returncode == 0, proc1.stderr
     assert proc2.returncode == 0, proc2.stderr

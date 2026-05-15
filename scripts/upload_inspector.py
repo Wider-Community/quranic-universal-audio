@@ -48,7 +48,7 @@ SPACE_REPOS = {
 
 # README frontmatter shipped to the Space. Mirrors the runbook §1 setup.
 SPACE_README = """---
-title: Quranic Inspector{suffix}
+title: Quranic Universal Audio{suffix}
 emoji: 🎙️
 colorFrom: yellow
 colorTo: indigo
@@ -59,7 +59,7 @@ hf_oauth: true
 hf_oauth_expiration_minutes: 480
 ---
 
-# Quranic Inspector{suffix}
+# Quranic Universal Audio{suffix}
 
 Read-only public surface (Phase 2). Anonymous browsers can view all reciters
 across the Audio, Segments, and Timestamps tabs. Editing requires Hugging

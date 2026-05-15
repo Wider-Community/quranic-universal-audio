@@ -66,6 +66,9 @@ _seg_verses: _KeyedCache[tuple] = _KeyedCache()
 _seg_resolved_by_edit: _KeyedCache[dict[str, set[str]]] = _KeyedCache()
 # Low-Confidence v2 sidecar — uid set + meta dict (or None when sidecar absent).
 _seg_probe_v2: _KeyedCache[tuple[set[str], dict | None]] = _KeyedCache()
+# Auto-Split sidecar — precomputed cursors/refs by uid, plus meta. Empty dict
+# tuple member when sidecar absent so callers don't re-stat on every lookup.
+_seg_auto_split: _KeyedCache[tuple[dict[str, dict], dict | None]] = _KeyedCache()
 _seg_edit_history: _KeyedCache[dict] = _KeyedCache()
 _seg_history_peaks: _KeyedCache[list[dict]] = _KeyedCache()
 # Validation + stats results — recomputed only on cache miss; cleared by
@@ -122,6 +125,14 @@ def set_seg_probe_v2(reciter: str, value: tuple[set[str], dict | None]) -> None:
     _seg_probe_v2.set(reciter, value)
 
 
+def get_seg_auto_split(reciter: str) -> tuple[dict[str, dict], dict | None] | None:
+    return _seg_auto_split.get(reciter)
+
+
+def set_seg_auto_split(reciter: str, value: tuple[dict[str, dict], dict | None]) -> None:
+    _seg_auto_split.set(reciter, value)
+
+
 def get_seg_edit_history(reciter: str) -> dict | None:
     return _seg_edit_history.get(reciter)
 
@@ -161,6 +172,7 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_verses.pop(reciter)
     _seg_resolved_by_edit.pop(reciter)
     _seg_probe_v2.pop(reciter)
+    _seg_auto_split.pop(reciter)
     _seg_edit_history.pop(reciter)
     _seg_history_peaks.pop(reciter)
     _seg_validate_result.pop(reciter)

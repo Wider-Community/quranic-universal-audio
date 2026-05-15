@@ -70,6 +70,10 @@ def low_confidence_path(slug: str, kind: WipOrPublished | None = None) -> str:
     return storage_paths.low_confidence_path(slug, kind or kind_for(slug))
 
 
+def auto_split_path(slug: str, kind: WipOrPublished | None = None) -> str:
+    return storage_paths.auto_split_path(slug, kind or kind_for(slug))
+
+
 def has_reciter(slug: str, kind: WipOrPublished | None = None) -> bool:
     """True if the reciter directory exists under the given subtree."""
     return get_backend().exists(storage_paths.reciter_dir(slug, kind or kind_for(slug)))
@@ -97,6 +101,14 @@ def read_detailed_bytes(slug: str) -> bytes | None:
 def read_low_confidence_doc(slug: str) -> dict | None:
     try:
         return get_backend().read_json(low_confidence_path(slug))  # type: ignore[return-value]
+    except StorageNotFound:
+        return None
+
+
+def read_auto_split_doc(slug: str) -> dict | None:
+    """Return the parsed ``auto_split_v1.json`` doc, or ``None`` if absent."""
+    try:
+        return get_backend().read_json(auto_split_path(slug))  # type: ignore[return-value]
     except StorageNotFound:
         return None
 
