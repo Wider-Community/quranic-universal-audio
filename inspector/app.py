@@ -77,6 +77,7 @@ from services.data_loader import load_surah_info_lite
 from services.phonemizer_service import get_phonemizer, has_phonemizer
 from services.secrets_guard import MissingSecret, get_session_secret
 from services.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
+from utils.json_response import orjson_response
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +364,11 @@ def index():
 @app.route("/api/surah-info")
 def get_surah_info():
     """Return lightweight surah metadata."""
-    return jsonify(load_surah_info_lite())
+    # Pure Quran-structure constants — never change without a redeploy.
+    return orjson_response(
+        load_surah_info_lite(),
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 # ---------------------------------------------------------------------------

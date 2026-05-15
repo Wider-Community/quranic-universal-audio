@@ -36,22 +36,27 @@ seg_data_bp = Blueprint("seg_data", __name__, url_prefix="/api/seg")
 @seg_data_bp.route("/config")
 def seg_config():
     """Return display configuration for Segments tab."""
-    return jsonify({
-        "seg_font_size": SEG_FONT_SIZE,
-        "seg_word_spacing": SEG_WORD_SPACING,
-        "seg_scroll_anim_mode": SEG_SCROLL_ANIM_MODE,
-        "trim_pad_left": TRIM_PAD_LEFT,
-        "trim_pad_right": TRIM_PAD_RIGHT,
-        "trim_dim_alpha": TRIM_DIM_ALPHA,
-        "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
-        "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
-        "validation_categories": list(ALL_CATEGORIES),
-        "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
-        "qalqala_letters": sorted(_QALQALA_LETTERS),
-        "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
-        "standalone_words": sorted(_STANDALONE_WORDS),
-        "accordion_context": ACCORDION_CONTEXT,
-    })
+    return orjson_response(
+        {
+            "seg_font_size": SEG_FONT_SIZE,
+            "seg_word_spacing": SEG_WORD_SPACING,
+            "seg_scroll_anim_mode": SEG_SCROLL_ANIM_MODE,
+            "trim_pad_left": TRIM_PAD_LEFT,
+            "trim_pad_right": TRIM_PAD_RIGHT,
+            "trim_dim_alpha": TRIM_DIM_ALPHA,
+            "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
+            "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
+            "validation_categories": list(ALL_CATEGORIES),
+            "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
+            "qalqala_letters": sorted(_QALQALA_LETTERS),
+            "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
+            "standalone_words": sorted(_STANDALONE_WORDS),
+            "accordion_context": ACCORDION_CONTEXT,
+        },
+        # Static config keyed off process restart — minute-long client cache
+        # is safe (changing a constant requires a restart anyway).
+        headers={"Cache-Control": "private, max-age=60"},
+    )
 
 
 @seg_data_bp.route("/reciters")
@@ -65,9 +70,13 @@ def seg_reciters():
     bucket-resident ``segments.json`` is fetched per-row to populate
     ``audio_source`` (matches the v1 response shape).
     """
+    # Lifecycle-volatile (claims, state transitions). Short TTL only so a
+    # client doesn't keep stale "awaiting_review" rows across edits, but
+    # repeat reloads inside ~30 s skip the per-row segments_doc fetch loop.
+    headers = {"Cache-Control": "private, max-age=30"}
     cached = cache.get_seg_reciters_cache()
     if cached is not None:
-        return jsonify(cached)
+        return orjson_response(cached, headers=headers)
     result = []
     for row in sorted(state_service.all_rows(), key=lambda r: r.slug):
         slug = row.slug
@@ -85,7 +94,7 @@ def seg_reciters():
             }
         )
     cache.set_seg_reciters_cache(result)
-    return jsonify(result)
+    return orjson_response(result, headers=headers)
 
 
 @seg_data_bp.route("/chapters/<reciter>")

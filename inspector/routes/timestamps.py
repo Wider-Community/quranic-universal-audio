@@ -16,6 +16,7 @@ from config import (
 )
 from services.audio_meta import vbr_chapters_for_reciter
 from services import timestamps as ts_serve
+from utils.json_response import orjson_response
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 
@@ -23,25 +24,29 @@ ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 @ts_bp.route("/config")
 def ts_config():
     """Return display configuration + read-path URLs for Timestamps tab."""
-    return jsonify({
-        "manifest_url": "/api/ts/manifest",
-        "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
-        # D20 Track B: reciter dropdown migrates off ``manifest.json.gz`` to the
-        # v2 catalog served by the Inspector backend. Frontend prefers this
-        # when present; ``manifest_url`` stays as the fallback feeding
-        # ts_chapters / vbr_chapters / validation / resources.
-        "catalog_url": "/api/static/catalog.json",
-        "unified_display_max_height": UNIFIED_DISPLAY_MAX_HEIGHT,
-        "anim_highlight_color": ANIM_HIGHLIGHT_COLOR,
-        "anim_word_transition_duration": ANIM_WORD_TRANSITION_DURATION,
-        "anim_char_transition_duration": ANIM_CHAR_TRANSITION_DURATION,
-        "anim_transition_easing": ANIM_TRANSITION_EASING,
-        "anim_word_spacing": ANIM_WORD_SPACING,
-        "anim_line_height": ANIM_LINE_HEIGHT,
-        "anim_font_size": ANIM_FONT_SIZE,
-        "analysis_word_font_size": ANALYSIS_WORD_FONT_SIZE,
-        "analysis_letter_font_size": ANALYSIS_LETTER_FONT_SIZE,
-    })
+    return orjson_response(
+        {
+            "manifest_url": "/api/ts/manifest",
+            "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
+            # D20 Track B: reciter dropdown migrates off ``manifest.json.gz`` to the
+            # v2 catalog served by the Inspector backend. Frontend prefers this
+            # when present; ``manifest_url`` stays as the fallback feeding
+            # ts_chapters / vbr_chapters / validation / resources.
+            "catalog_url": "/api/static/catalog.json",
+            "unified_display_max_height": UNIFIED_DISPLAY_MAX_HEIGHT,
+            "anim_highlight_color": ANIM_HIGHLIGHT_COLOR,
+            "anim_word_transition_duration": ANIM_WORD_TRANSITION_DURATION,
+            "anim_char_transition_duration": ANIM_CHAR_TRANSITION_DURATION,
+            "anim_transition_easing": ANIM_TRANSITION_EASING,
+            "anim_word_spacing": ANIM_WORD_SPACING,
+            "anim_line_height": ANIM_LINE_HEIGHT,
+            "anim_font_size": ANIM_FONT_SIZE,
+            "analysis_word_font_size": ANALYSIS_WORD_FONT_SIZE,
+            "analysis_letter_font_size": ANALYSIS_LETTER_FONT_SIZE,
+        },
+        # Pure constants; changing them needs a server restart.
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 # Bodies are pre-gzipped (`mtime=0`, deterministic). Sent without a
