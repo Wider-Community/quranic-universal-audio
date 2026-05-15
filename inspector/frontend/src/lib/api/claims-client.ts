@@ -3,7 +3,7 @@
  * backend's status code envelope into UI side effects:
  *
  *   - 200 → resolves with the new row.
- *   - 401 → toast "Sign in to claim" + open SignInModal; rejects.
+ *   - 401 → open SignInModal with session-expired context; rejects.
  *   - 403 → toast with the error body; rejects.
  *   - 409 → toast "Unclaim {other} first" (or generic conflict); rejects.
  *   - other → generic error toast; rejects.
@@ -13,6 +13,7 @@
  */
 
 import { loadCurrentUser } from '../stores/current-user';
+import { SIGN_IN_MESSAGES } from '../sign-in-messages';
 import { openSignInModal } from '../stores/sign-in-modal';
 import { pushToast } from '../stores/toast';
 import type { ReciterRow } from './reciter-task';
@@ -51,8 +52,7 @@ async function _post(route: RouteName, slug: string): Promise<ReciterRow> {
     }
 
     if (res.status === 401) {
-        pushToast({ kind: 'info', text: 'Sign in with Hugging Face to continue.' });
-        openSignInModal();
+        openSignInModal(null, SIGN_IN_MESSAGES.claimExpired);
     } else if (res.status === 409 && body.existing_claim) {
         const existing = body.existing_claim_name || body.existing_claim;
         const target = body.target_name || slug;

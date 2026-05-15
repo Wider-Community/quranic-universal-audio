@@ -8,6 +8,7 @@
     import { claim } from '../api/claims-client';
     import type { ReciterTask } from '../api/reciter-task';
     import { currentUser, isSignedIn } from '../stores/current-user';
+    import { SIGN_IN_MESSAGES } from '../sign-in-messages';
     import { openSignInModal } from '../stores/sign-in-modal';
 
     export let slug: string;
@@ -29,7 +30,7 @@
     async function _onClick() {
         if (busy) return;
         if (!isSignedIn($currentUser)) {
-            openSignInModal();
+            openSignInModal(null, SIGN_IN_MESSAGES.claim);
             return;
         }
         busy = true;

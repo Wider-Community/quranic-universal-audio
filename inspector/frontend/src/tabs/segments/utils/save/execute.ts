@@ -6,6 +6,7 @@
 import { get as storeGet } from 'svelte/store';
 
 import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
+import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
 import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
 import { pushToast } from '../../../../lib/stores/toast';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../../../../lib/types/api';
@@ -238,12 +239,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 } catch { /* non-JSON body */ }
                 console.error(`Save error (ch ${ch}, ${res.status}):`, errMsg);
                 if (res.status === 401) {
-                    pushToast({
-                        kind: 'info',
-                        text: 'Sign in with Hugging Face to save changes.',
-                        ttl: 5000,
-                    });
-                    openSignInModal();
+                    openSignInModal(null, SIGN_IN_MESSAGES.save);
                 } else {
                     pushToast({ kind: 'error', text: errMsg, ttl: 6000 });
                 }

@@ -27,6 +27,8 @@ import { get } from 'svelte/store';
 
 import { showEditPopover } from '../stores/edit-popover';
 import { editingMode } from '../stores/editing-mode';
+import { SIGN_IN_MESSAGES } from '../sign-in-messages';
+import { openSignInModal } from '../stores/sign-in-modal';
 
 export interface EditGateParams {
     require?: 'edit' | 'admin';
@@ -48,7 +50,11 @@ export function editGate(node: HTMLElement, params: EditGateParams = {}) {
 
         event.stopImmediatePropagation();
         event.preventDefault();
-        showEditPopover(node, mode);
+        if (mode.kind === 'view' && mode.viewReason === 'unauthenticated') {
+            openSignInModal(null, SIGN_IN_MESSAGES.edit);
+        } else {
+            showEditPopover(node, mode);
+        }
     }
 
     // Capture-phase so we run before any inline `on:click` handler the

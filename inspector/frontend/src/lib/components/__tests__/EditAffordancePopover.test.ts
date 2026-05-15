@@ -27,14 +27,14 @@ describe('EditAffordancePopover', () => {
         });
 
         const { container } = render(EditAffordancePopover);
-        showEditPopover(anchor, { kind: 'view', viewReason: 'unauthenticated' });
+        showEditPopover(anchor, { kind: 'view', viewReason: 'wrong-assignee' });
 
         await tick();
         await tick();
 
         const popover = container.querySelector<HTMLElement>('.edit-popover');
         expect(popover).not.toBeNull();
-        expect(popover?.textContent).toContain('Sign in to edit');
+        expect(popover?.textContent).toContain('Reciter under review');
         expect(popover?.style.top).toBe('98px');
         expect(popover?.style.left).toBe('120px');
     });

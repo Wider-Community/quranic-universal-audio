@@ -17,6 +17,7 @@
     import StatePill from '../../../lib/components/StatePill.svelte';
     import { currentUser, isAdmin, isOwner, isSignedIn } from '../../../lib/stores/current-user';
     import { playerContext } from '../../../lib/stores/player-context';
+    import { SIGN_IN_MESSAGES } from '../../../lib/sign-in-messages';
     import { openSignInModal } from '../../../lib/stores/sign-in-modal';
     import {
         type AdminDiscardedDelivery,
@@ -54,7 +55,7 @@
 
     function openRequest(d: PublicDelivery): void {
         if (!isSignedIn($currentUser)) {
-            openSignInModal();
+            openSignInModal(null, SIGN_IN_MESSAGES.request);
             return;
         }
         formState = { mode: 'create', delivery: d };

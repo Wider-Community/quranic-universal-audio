@@ -19,7 +19,6 @@
 
     $: title = state ? _titleFor(state.mode.viewReason) : '';
     $: body = state ? _bodyFor(state.mode.viewReason) : '';
-    $: showSignIn = state?.mode.viewReason === 'unauthenticated';
 
     function _titleFor(reason: string | undefined): string {
         switch (reason) {
@@ -35,9 +34,8 @@
                 return 'Not available for editing';
             case 'discarded':
                 return 'Reciter unavailable';
-            case 'unauthenticated':
             default:
-                return 'Sign in to edit';
+                return 'Not available for editing';
         }
     }
 
@@ -55,9 +53,8 @@
                 return 'This reciter is in a pipeline state and cannot be claimed yet.';
             case 'discarded':
                 return 'This reciter is not available for editing.';
-            case 'unauthenticated':
             default:
-                return 'Editing requires a Hugging Face account. Sign in to claim this reciter and start contributing.';
+                return 'This reciter is not available for editing.';
         }
     }
 
@@ -95,11 +92,6 @@
         if (e.key === 'Escape') hideEditPopover();
     }
 
-    function _onSignIn() {
-        const next = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/api/auth/login?return=${next}`;
-    }
-
     $: if (state) void _reposition();
 
     onMount(() => {
@@ -128,34 +120,15 @@
     >
         <div class="edit-popover__title">{title}</div>
         <div class="edit-popover__body">{body}</div>
-        {#if showSignIn}
-            <div class="edit-popover__actions">
-                <button
-                    type="button"
-                    class="edit-popover__cta"
-                    on:click={_onSignIn}
-                >
-                    Sign in with Hugging Face
-                </button>
-                <button
-                    type="button"
-                    class="edit-popover__dismiss"
-                    on:click={hideEditPopover}
-                >
-                    Dismiss
-                </button>
-            </div>
-        {:else}
-            <div class="edit-popover__actions">
-                <button
-                    type="button"
-                    class="edit-popover__dismiss"
-                    on:click={hideEditPopover}
-                >
-                    OK
-                </button>
-            </div>
-        {/if}
+        <div class="edit-popover__actions">
+            <button
+                type="button"
+                class="edit-popover__dismiss"
+                on:click={hideEditPopover}
+            >
+                OK
+            </button>
+        </div>
     </div>
 {/if}
 
@@ -186,18 +159,6 @@
         display: flex;
         gap: 8px;
         justify-content: flex-end;
-    }
-    .edit-popover__cta {
-        background: #f0a500;
-        color: #1a1a1a;
-        border: 0;
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-weight: 600;
-        cursor: pointer;
-    }
-    .edit-popover__cta:hover {
-        background: #ffba2c;
     }
     .edit-popover__dismiss {
         background: transparent;

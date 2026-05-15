@@ -7,6 +7,9 @@
     import { signIn } from '../api/auth-client';
     import { closeSignInModal, signInModal } from '../stores/sign-in-modal';
 
+    $: title = $signInModal.context?.title ?? 'Sign in to contribute';
+    $: body = $signInModal.context?.body ?? 'Sign in with your Hugging Face account to claim a reciter and edit segments. We only read your username and avatar — nothing else.';
+
     function _onContinue() {
         const returnPath = $signInModal.returnPath ?? '/';
         closeSignInModal();
@@ -32,11 +35,8 @@
             aria-modal="true"
             aria-labelledby="sign-in-title"
         >
-            <h2 id="sign-in-title" class="sign-in-title">Sign in to contribute</h2>
-            <p class="sign-in-body">
-                Sign in with your Hugging Face account to claim a reciter and edit
-                segments. We only read your username and avatar — nothing else.
-            </p>
+            <h2 id="sign-in-title" class="sign-in-title">{title}</h2>
+            <p class="sign-in-body">{body}</p>
             <div class="sign-in-actions">
                 <button type="button" class="sign-in-cta" on:click={_onContinue}>
                     Continue with Hugging Face
