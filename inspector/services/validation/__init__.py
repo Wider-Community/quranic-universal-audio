@@ -13,10 +13,12 @@ Public API (routes use ``from services.validation import X``):
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from config import LOW_CONFIDENCE_THRESHOLD
 from constants import VALIDATION_CATEGORIES
 from services import cache
-from services.data_loader import get_word_counts, load_detailed, load_probe_v2
+from services.data_loader import get_word_counts, load_detailed, load_probe_v2, load_seg_verses
 from services.history_query import build_resolved_by_edit_index
 from services.phonemizer_service import get_canonical_phonemes
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
@@ -118,12 +120,38 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
     return counts
 
 
+def _load_resolved_idx_cached(reciter: str) -> dict:
+    """Cache-aware wrapper for ``build_resolved_by_edit_index``.
+
+    Hoisted so the parallel fan-out below can submit it as a single callable.
+    """
+    resolved = cache.get_seg_resolved_by_edit(reciter)
+    if resolved is None:
+        resolved = build_resolved_by_edit_index(reciter)
+        cache.set_seg_resolved_by_edit(reciter, resolved)
+    return resolved
+
+
 def validate_reciter_segments(reciter: str) -> dict:
     """Validate all chapters for a reciter, returning issues grouped by category.
 
     Returns a plain dict suitable for ``jsonify()``.
     """
-    entries = load_detailed(reciter)
+    # Parallel I/O fan-out: four independent bucket reads. SSL recv releases
+    # the GIL, so threads cut the wall-clock cost from sum(serial) to
+    # max(slowest). Each loader caches its own result via services/cache.py,
+    # so the threads don't double-fetch. ``load_seg_verses`` populates the
+    # cache that ``_check_structural_errors`` later reads.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_detailed = pool.submit(load_detailed, reciter)
+        f_resolved = pool.submit(_load_resolved_idx_cached, reciter)
+        f_probe = pool.submit(load_probe_v2, reciter)
+        f_verses = pool.submit(load_seg_verses, reciter)
+        entries = f_detailed.result()
+        resolved_idx = f_resolved.result()
+        probe_failed_uids, probe_meta = f_probe.result()
+        f_verses.result()  # prime the seg_verses cache before structural pass
+
     if not entries:
         return None
 
@@ -134,18 +162,13 @@ def validate_reciter_segments(reciter: str) -> dict:
     meta = cache.get_seg_meta(reciter)
     is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
 
-    # Inject resolved-by-edit categories from edit_history.jsonl. The
-    # transient ``_resolved_by_edit`` field is consulted by
-    # ``is_resolved_by_edit`` during this validate pass and stripped from
-    # every seg before returning so it never reaches disk via the cached
-    # entries list. Categories are limited to the soft set in
+    # Inject resolved-by-edit categories. The transient ``_resolved_by_edit``
+    # field is consulted by ``is_resolved_by_edit`` during this validate pass
+    # and stripped from every seg before returning so it never reaches disk
+    # via the cached entries list. Categories are limited to the soft set in
     # ``RESOLVES_BY_EDIT_CATEGORIES`` (boundary_adj / audio_bleeding /
-    # qalqala / repetitions) -- this is what makes those cards disappear
-    # from the accordion once the user has edited from them.
-    resolved_idx = cache.get_seg_resolved_by_edit(reciter)
-    if resolved_idx is None:
-        resolved_idx = build_resolved_by_edit_index(reciter)
-        cache.set_seg_resolved_by_edit(reciter, resolved_idx)
+    # repetitions) -- this is what makes those cards disappear from the
+    # accordion once the user has edited from them.
     _injected_segs: list[dict] = []
     if resolved_idx:
         for entry in entries:
@@ -155,7 +178,6 @@ def validate_reciter_segments(reciter: str) -> dict:
                     seg["_resolved_by_edit"] = resolved_idx[uid]
                     _injected_segs.append(seg)
 
-    probe_failed_uids, probe_meta = load_probe_v2(reciter)
     detail = _build_detail_lists(
         entries, is_by_ayah, word_counts, canonical, single_word_verses,
         probe_failed_uids=probe_failed_uids,
