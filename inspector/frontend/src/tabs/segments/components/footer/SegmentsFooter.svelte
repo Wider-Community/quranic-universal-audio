@@ -418,7 +418,38 @@
                 class="zone zone-location"
                 use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}
             >
-                <div class="player-stack">
+                <div class="player-row">
+                    <button
+                        type="button"
+                        class="speed-cell"
+                        class:boosted={$playbackSpeed !== 1}
+                        on:click={cyclePlaybackSpeed}
+                        title="Playback speed (click to cycle)"
+                        aria-label="Playback speed {$playbackSpeed}×"
+                    >{$playbackSpeed}×</button>
+
+                    <button
+                        type="button"
+                        class="pref-cell"
+                        class:on={$autoPlayEnabled}
+                        aria-pressed={$autoPlayEnabled}
+                        title="Auto-play next segment when current ends"
+                        on:click={handleAutoPlayToggle}
+                    >
+                        <Icon name="autoplay" size={16} />
+                    </button>
+
+                    <button
+                        type="button"
+                        class="pref-cell"
+                        class:on={$autoScrollEnabled}
+                        aria-pressed={$autoScrollEnabled}
+                        title="Auto-scroll the list to follow the playing segment"
+                        on:click={handleAutoScrollToggle}
+                    >
+                        <Icon name="autoscroll" size={16} />
+                    </button>
+
                     <button
                         type="button"
                         class="play-cell"
@@ -426,7 +457,7 @@
                         on:click={handlePlayClick}
                         aria-label={$isMainAudioPlaying ? 'Pause' : 'Play'}
                     >
-                        <Icon name={playGlyph} size={13} />
+                        <Icon name={playGlyph} size={14} />
                     </button>
 
                     <button
@@ -464,37 +495,6 @@
                             <span class="loc-empty">all</span>
                         {/if}
                         <Icon name="caret-down" size={10} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="speed-cell"
-                        class:boosted={$playbackSpeed !== 1}
-                        on:click={cyclePlaybackSpeed}
-                        title="Playback speed (click to cycle)"
-                        aria-label="Playback speed {$playbackSpeed}×"
-                    >{$playbackSpeed}×</button>
-
-                    <button
-                        type="button"
-                        class="pref-cell"
-                        class:on={$autoPlayEnabled}
-                        aria-pressed={$autoPlayEnabled}
-                        title="Auto-play next segment when current ends"
-                        on:click={handleAutoPlayToggle}
-                    >
-                        <Icon name="autoplay" size={17} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="pref-cell"
-                        class:on={$autoScrollEnabled}
-                        aria-pressed={$autoScrollEnabled}
-                        title="Auto-scroll the list to follow the playing segment"
-                        on:click={handleAutoScrollToggle}
-                    >
-                        <Icon name="autoscroll" size={17} />
                     </button>
                 </div>
 
@@ -625,7 +625,7 @@
         z-index: 100;
         display: flex;
         flex-direction: column;
-        min-height: var(--seg-footer-h, 108px);
+        min-height: var(--seg-footer-h, 72px);
         background: var(--panel);
         border-top: 1px solid var(--border-default);
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.28);
@@ -755,30 +755,19 @@
     .identity:hover .identity-switch { color: var(--text-secondary); }
     .identity.placeholder .identity-switch { color: var(--accent); }
 
-    /* ---------- Player stack (3×2 grid) ----------
-       Row 1 = playback context (play · Surah · Ayah)
-       Row 2 = preferences      (speed · auto-play · auto-scroll)
-       Each cell is a button with the same visual weight; the play cell
-       is the only accent-filled one, the Surah/Ayah cells share an
-       outline-only style, the speed cell is text, the prefs are icon-
-       only square toggles. Whole grid sits in a single tinted pill so
-       it reads as one component. */
-    .player-stack {
-        display: grid;
-        grid-template-columns: 38px 96px 96px;
-        grid-template-rows: 34px 30px;
-        gap: 3px 4px;
-        padding: 5px;
-        background: var(--panel-2);
-        border: 1px solid var(--border-quiet);
-        border-radius: var(--r-3);
+    /* ---------- Player row (single-row, container-less) ----------
+       Reading order, left-to-right:
+         speed pill · auto-play · auto-scroll · ▶ play · Surah · Ayah
+       The play button is the only accent-filled element; everything
+       else is naked text or icon, no surrounding pill. The cluster
+       sits viewport-centered (zone-location's absolute positioning). */
+    .player-row {
+        display: inline-flex;
         align-items: center;
-        justify-items: stretch;
+        gap: var(--s-2);
     }
 
-    .player-stack > button {
-        width: 100%;
-        height: 100%;
+    .player-row > button {
         border: 0;
         background: transparent;
         color: var(--text-secondary);
@@ -789,91 +778,107 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 5px;
-        padding: 0 6px;
+        padding: 0;
         transition: background var(--t-fast), color var(--t-fast);
         min-width: 0;
     }
-    .player-stack > button:hover:not(:disabled) {
-        background: var(--elevated);
+    .player-row > button:hover:not(:disabled) {
         color: var(--text-primary);
     }
-    .player-stack > button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .player-row > button:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    .player-stack .play-cell {
+    /* Play — the only accent-filled element. Round, slightly larger
+       than the icon prefs so it reads as the primary action. */
+    .player-row .play-cell {
         background: var(--accent);
         color: var(--accent-fg);
         border-radius: 50%;
-        width: 32px;
-        height: 32px;
-        justify-self: center;
-        align-self: center;
-        padding: 0;
-        grid-column: 1;
-        grid-row: 1;
+        width: 30px;
+        height: 30px;
+        margin: 0 var(--s-1);
     }
-    .player-stack .play-cell:hover:not(:disabled) {
+    .player-row .play-cell:hover:not(:disabled) {
         background: var(--accent-strong);
         color: var(--accent-fg);
     }
 
-    .player-stack .loc-cell {
-        grid-row: 1;
+    /* Pref toggles (auto-play / auto-scroll) — naked square icon
+       buttons. Active state tints the icon accent; no background. */
+    .player-row .pref-cell {
+        width: 26px;
+        height: 26px;
+        color: var(--text-muted);
+    }
+    .player-row .pref-cell:hover:not(:disabled) {
+        color: var(--text-primary);
+        background: var(--panel-2);
+    }
+    .player-row .pref-cell.on {
+        color: var(--accent);
+    }
+    .player-row .pref-cell.on:hover:not(:disabled) {
+        color: var(--accent-strong);
+        background: var(--accent-tint);
+    }
+
+    /* Speed — text pill, slightly subdued. Goes accent when boosted. */
+    .player-row .speed-cell {
+        height: 26px;
+        padding: 0 7px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text-muted);
+    }
+    .player-row .speed-cell:hover:not(:disabled) {
+        color: var(--text-primary);
+        background: var(--panel-2);
+    }
+    .player-row .speed-cell.boosted {
+        color: var(--accent);
+    }
+    .player-row .speed-cell.boosted:hover:not(:disabled) {
+        color: var(--accent-strong);
+        background: var(--accent-tint);
+    }
+
+    /* Location triggers (Surah / Ayah) — text + small caret. Subtle
+       outline only on hover; accent tint when the playing segment
+       advances past their boundary. */
+    .player-row .loc-cell {
+        gap: 5px;
+        height: 28px;
+        padding: 0 8px;
         color: var(--text-secondary);
         font-size: var(--fs-meta);
-        justify-content: space-between;
-        padding: 0 8px;
     }
-    .player-stack .loc-cell .loc-label {
+    .player-row .loc-cell .loc-label {
         color: var(--text-faint);
         font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.07em;
     }
-    .player-stack .loc-cell .loc-value {
+    .player-row .loc-cell .loc-value {
         color: var(--text-primary);
         font-family: var(--font-mono);
         font-size: 11.5px;
         font-variant-numeric: tabular-nums;
     }
-    .player-stack .loc-cell .loc-empty {
+    .player-row .loc-cell .loc-empty {
         color: var(--text-faint);
         font-style: italic;
         font-size: 10.5px;
     }
-    .player-stack .loc-cell:hover:not(:disabled) { background: var(--elevated); }
-    .player-stack .loc-cell.has-value { color: var(--text-primary); }
-    .player-stack .loc-cell.live {
-        background: var(--accent-tint);
+    .player-row .loc-cell:hover:not(:disabled) {
+        background: var(--panel-2);
+        color: var(--text-primary);
+    }
+    .player-row .loc-cell.has-value { color: var(--text-primary); }
+    .player-row .loc-cell.live {
         color: var(--accent);
     }
-    .player-stack .loc-cell.live .loc-value,
-    .player-stack .loc-cell.live .loc-label { color: var(--accent); }
-
-    .player-stack .speed-cell {
-        grid-row: 2;
-        grid-column: 1;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        font-variant-numeric: tabular-nums;
-        justify-content: center;
-    }
-    .player-stack .speed-cell.boosted {
-        background: var(--accent-tint);
-        color: var(--accent);
-    }
-
-    .player-stack .pref-cell {
-        grid-row: 2;
-        color: var(--text-muted);
-    }
-    .player-stack .pref-cell.on {
-        background: var(--accent-tint);
-        color: var(--accent);
-    }
-    .player-stack .pref-cell.on:hover:not(:disabled) {
-        color: var(--accent-strong);
-    }
+    .player-row .loc-cell.live .loc-value,
+    .player-row .loc-cell.live .loc-label { color: var(--accent); }
 
     .pop {
         position: absolute;
