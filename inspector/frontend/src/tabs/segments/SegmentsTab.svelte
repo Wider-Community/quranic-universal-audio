@@ -13,30 +13,23 @@
     import { fetchJson } from '../../lib/api';
     import { markReady, release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
-    import ClaimButton from '../../lib/components/ClaimButton.svelte';
-    import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
-    import { catalogData, loadCatalog } from '../dashboard/stores/catalog-data';
-    import {
-        editingMode,
-        setEditingMode,
-        syncEditingMode,
-    } from '../../lib/stores/editing-mode';
+    import { setEditingMode, syncEditingMode } from '../../lib/stores/editing-mode';
     import type { SegReciter } from '../../lib/types/domain';
-    import { LS_KEYS, PLACEHOLDER_SELECT } from '../../lib/utils/constants';
-    import { buildGroupedReciters, reciterGroupsToOptions } from '../../lib/utils/grouped-reciters';
-    import { surahInfoReady, surahOptionText } from '../../lib/utils/surah-info';
+    import { LS_KEYS } from '../../lib/utils/constants';
+    import { surahInfoReady } from '../../lib/utils/surah-info';
+    import { catalogData, loadCatalog } from '../dashboard/stores/catalog-data';
     import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
-    import ReciterContextChip from './components/header/ReciterContextChip.svelte';
+    import SegmentsFooter from './components/footer/SegmentsFooter.svelte';
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
     import SavePreview from './components/save/SavePreview.svelte';
     import ValidationPanel from './components/validation/ValidationPanel.svelte';
     import ShortcutsGuide from './ShortcutsGuide.svelte';
-    import { autoSaveEnabled, toggleAutoSave } from './stores/autosave';
+    import { autoSaveEnabled } from './stores/autosave';
     import {
         getChapterSegments,
         segAllData,
@@ -44,21 +37,19 @@
         selectedChapter,
         selectedReciter,
         selectedVerse,
-        verseOptions,
     } from './stores/chapter';
     import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
-    import { historyLoadState, historyVisible } from './stores/history';
+    import { historyVisible } from './stores/history';
     import { savedFilterView } from './stores/navigation';
     import { segListElement, waveformContainer } from './stores/playback';
-    import { saveButtonLabel,savePreviewVisible } from './stores/save';
+    import { savePreviewVisible } from './stores/save';
     import { loadChapterData } from './utils/data/chapter-actions';
     import { loadSegConfig } from './utils/data/config-loader';
     import { reloadCurrentReciter } from './utils/data/reciter-actions';
-    import { hideHistoryView,showHistoryView } from './utils/history/actions';
     import { handleSegmentsKey } from './utils/keyboard';
     import { playFromSegment } from './utils/playback/playback';
-    import { confirmSaveFromPreview, executeSave,hideSavePreview, onSegSaveClick } from './utils/save/actions';
+    import { executeSave } from './utils/save/actions';
 
     // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
     let segAudioEl: HTMLAudioElement | null = null;
@@ -108,24 +99,7 @@
     // after sign-in or after access revoke).
     $: setEditingMode(syncEditingMode($currentUser, reciterTask));
 
-    $: groupedReciters = buildGroupedReciters($segAllReciters);
-    $: reciterSelectOptions = reciterGroupsToOptions(groupedReciters);
-    $: verseSelectOptions = $verseOptions.map((v) => ({ value: String(v), label: String(v) }));
-    // Jump-trigger state: resets immediately after use so SearchableSelect shows placeholder
-    let verseJump = '';
-    $: chaptersOptions = $segAllData
-        ? [...new Set($segAllData.segments.filter(s => s.chapter != null).map(s => s.chapter as number))]
-            .sort((a, b) => a - b)
-            .map(ch => ({ value: String(ch), label: surahOptionText(ch) }))
-        : [];
     $: filterBarHidden = $segAllData === null;
-    $: historyBtnHidden = !$selectedReciter;
-    $: historyBtnLabel = $historyVisible
-        ? '← Back'
-        : $historyLoadState === 'loading'
-            ? 'History...'
-            : 'History';
-    $: saveBtnDisabled = !$isDirtyStore;
 
     // Inline header actions — Unclaim and Mark-ready operate on the
     // active claim's slug. We don't need busy spinners here; the network
@@ -199,12 +173,6 @@
     let contextRiwayah: string | null = null;
     let contextStyle: string | null = null;
 
-    function onReciterSelectChange(v: string): void {
-        selectedReciter.set(v);
-        _bindTask(v || null);
-        onReciterChange(v);
-    }
-
     function onPickerChange(
         ev: CustomEvent<{
             slug: string;
@@ -219,22 +187,24 @@
         contextBucket = bucket;
         contextRiwayah = riwayah;
         contextStyle = style;
-        onReciterSelectChange(slug);
+        selectedReciter.set(slug);
+        _bindTask(slug || null);
+        onReciterChange(slug);
     }
     async function onReciterChange(reciter: string): Promise<void> {
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
         await reloadCurrentReciter();
     }
-    function onChapterSelectChange(e: CustomEvent<string>): void {
-        const v = e.detail; selectedChapter.set(v); onChapterChange(v);
+    function onChapterChange(ev: CustomEvent<string>): void {
+        const v = ev.detail;
+        selectedChapter.set(v);
+        void loadChapterData(get(selectedReciter), v);
     }
-    async function onChapterChange(chapter: string): Promise<void> {
+    async function _loadChapter(chapter: string): Promise<void> {
         await loadChapterData(get(selectedReciter), chapter);
     }
-    function onVerseSelectChange(v: string): void {
-        // Reset immediately so the SearchableSelect snaps back to placeholder
-        // ("All") — this is a jump-and-play trigger, not a filter toggle.
-        verseJump = '';
+    function onVerseJump(ev: CustomEvent<string>): void {
+        const v = ev.detail;
         if (!v) return;
         const chStr = get(selectedChapter);
         const chapter = parseInt(chStr);
@@ -242,7 +212,13 @@
         const segs = getChapterSegments(chapter);
         const prefix = `${chapter}:${v}:`;
         const first = segs.find((s) => s.matched_ref?.startsWith(prefix));
-        if (first) playFromSegment(first.index, first.chapter ?? chapter);
+        if (first) {
+            // Reflect the jump target in the footer's Ayah trigger so the
+            // user can see what they jumped to (vs. the original UI which
+            // snapped back to "All" immediately and forgot the selection).
+            selectedVerse.set(v);
+            playFromSegment(first.index, first.chapter ?? chapter);
+        }
     }
 
     async function onNavigationRestore(): Promise<void> {
@@ -253,7 +229,7 @@
 
         if (saved.chapter !== get(selectedChapter)) {
             selectedChapter.set(saved.chapter);
-            await onChapterChange(saved.chapter);
+            await _loadChapter(saved.chapter);
         }
         selectedVerse.set(saved.verse);
 
@@ -311,109 +287,6 @@
         {/await}
     {/if}
 
-    <div class="seg-context-block">
-        <ReciterContextChip
-            currentSlug={$selectedReciter || null}
-            currentName={contextName}
-            currentBucket={contextBucket}
-            currentRiwayah={contextRiwayah}
-            currentStyle={contextStyle}
-            on:change={onPickerChange}
-        >
-            {#if $selectedReciter}
-                {#if reciterTask?.predicates.can_release}
-                    <button
-                        type="button"
-                        class="seg-btn"
-                        disabled={chipActionBusy !== ''}
-                        on:click={_unclaim}
-                    >Unclaim</button>
-                {/if}
-                {#if reciterTask?.predicates.can_mark_ready}
-                    <button
-                        type="button"
-                        class="seg-btn primary"
-                        disabled={chipActionBusy !== ''}
-                        title="Mark this reciter ready for a maintainer to publish"
-                        on:click={_markReady}
-                    >Mark ready</button>
-                {/if}
-                <ClaimButton
-                    slug={$selectedReciter}
-                    task={reciterTask}
-                    onClaimed={_refreshTask}
-                />
-            {/if}
-        </ReciterContextChip>
-    </div>
-
-    <div class="info-bar seg-selector-bar">
-        <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>Surah:
-            <SearchableSelect
-                options={chaptersOptions}
-                value={$selectedChapter}
-                placeholder="--"
-                on:change={onChapterSelectChange}
-            />
-        </label>
-        <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>Ayah:
-            <SearchableSelect
-                options={verseSelectOptions}
-                value={verseJump}
-                placeholder="All"
-                on:change={(e) => onVerseSelectChange(e.detail)}
-            />
-        </label>
-        <div class="seg-bar-actions">
-            {#if $savePreviewVisible}
-                <button id="seg-save-preview-cancel" class="seg-btn" on:click={() => hideSavePreview()}>Cancel</button>
-                <button id="seg-save-preview-confirm" class="seg-btn primary" on:click={confirmSaveFromPreview}>Confirm Save</button>
-            {:else if $editingMode.kind !== 'view'}
-                <!--
-                    Save + Auto-Save only visible when the user has write
-                    rights on this reciter (active reviewer OR maintainer/
-                    owner admin-bypass). The backend lock decorator is
-                    authoritative; this is the UX layer hiding noise from
-                    users who can't act on it.
-                -->
-                <div class="seg-toggle" role="group" aria-label="Auto-save">
-                    <button
-                        type="button"
-                        class="opt"
-                        class:on={!$autoSaveEnabled}
-                        on:click={() => toggleAutoSave(false)}
-                    >Auto-save off</button>
-                    <button
-                        type="button"
-                        class="opt"
-                        class:on={$autoSaveEnabled}
-                        on:click={() => toggleAutoSave(true)}
-                    >On</button>
-                </div>
-                <button
-                    id="seg-save-btn"
-                    class="seg-btn {$isDirtyStore ? 'primary' : 'success'}"
-                    disabled={$autoSaveEnabled || saveBtnDisabled}
-                    on:click={onSegSaveClick}
-                >
-                    {#if $isDirtyStore}
-                        {$autoSaveEnabled && $saveButtonLabel === 'Save' ? 'Saving…' : $saveButtonLabel}
-                    {:else}
-                        ✓ Saved
-                    {/if}
-                </button>
-            {/if}
-            <button
-                id="seg-history-btn"
-                class="seg-btn"
-                hidden={historyBtnHidden && !$historyVisible}
-                on:click={$historyVisible ? hideHistoryView : showHistoryView}
-            >{historyBtnLabel}</button>
-        </div>
-    </div>
-
     {#if !$historyVisible && !$savePreviewVisible}
         <div id="seg-validation-global" class="seg-validation" use:waveformContainer>
             {#if $selectedChapter}
@@ -440,4 +313,28 @@
     <HistoryPanel />
 
     <SavePreview />
+
+    <SegmentsFooter
+        {reciterTask}
+        {chipActionBusy}
+        {contextName}
+        {contextBucket}
+        {contextRiwayah}
+        {contextStyle}
+        on:reciterChange={onPickerChange}
+        on:chapterChange={onChapterChange}
+        on:verseJump={onVerseJump}
+        on:unclaim={_unclaim}
+        on:markReady={_markReady}
+        on:claimed={_refreshTask}
+    />
 </div>
+
+<style>
+    /* Reserve space below the pinned SegmentsFooter so the list, validation
+       panels, and edit overlay never disappear behind it on scroll. The
+       footer min-height is `--seg-footer-h` (60px); add a token cushion. */
+    #segments-panel-inner {
+        padding-bottom: calc(var(--seg-footer-actual-h, var(--seg-footer-h, 60px)) + var(--s-3));
+    }
+</style>

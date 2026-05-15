@@ -141,10 +141,9 @@
     font-size: var(--fs-meta);
 }
 
-/* ---------- Segments-tab chip row (header row 1) ----------
-   Layout owned by ReciterContextChip.svelte's scoped <style>. */
-
-/* ---------- Action-bar buttons (header row 2) ---------- */
+/* ---------- Action-bar buttons ----------
+   Used by ClaimButton and any inline buttons reused from outside the
+   pinned SegmentsFooter (which defines its own scoped action styles). */
 .seg-btn {
     display: inline-flex;
     align-items: center;
@@ -212,5 +211,3 @@
     color: var(--accent);
 }
 
-/* Neutralize legacy colored buttons inside the segments action bar. */
-.seg-selector-bar .seg-bar-actions .seg-btn { box-shadow: none; }

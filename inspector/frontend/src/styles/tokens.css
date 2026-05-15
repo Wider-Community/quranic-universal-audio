@@ -115,6 +115,7 @@
     --page-max:      1480px;
     --gutter:        24px;
     --player-h:      72px;
+    --seg-footer-h:  60px;
 }
 
 @media (prefers-reduced-motion: reduce) {

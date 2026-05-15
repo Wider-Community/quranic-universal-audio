@@ -1,15 +1,6 @@
 /* ============ Segments tab ============ */
-.seg-selector-bar {
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-}
-
-.seg-bar-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-left: auto;
-}
+/* Layout for reciter/surah/ayah selection + actions lives in the pinned
+   SegmentsFooter component (tabs/segments/components/footer/). */
 
 /* Audio cache panel */
 .seg-cache-panel {
