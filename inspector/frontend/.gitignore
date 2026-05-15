@@ -6,3 +6,4 @@ playwright-report/
 test-results/
 blob-report/
 .playwright/
+vite.config.ts.timestamp-*

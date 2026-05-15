@@ -41,8 +41,5 @@ export default defineConfig(({ mode }) => ({
       '/api': { target: BACKEND_TARGET, changeOrigin: false },
       '/audio': { target: BACKEND_TARGET, changeOrigin: false },
     },
-    watch: {
-      usePolling: true,
-    },
   },
 }));
