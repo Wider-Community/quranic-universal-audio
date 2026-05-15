@@ -19,7 +19,7 @@ Build steps:
 3. ``upload_folder`` to the Space repo (Hugging Face git+xet under the hood).
 
 Auth: reads ``HF_TOKEN`` (or ``INSPECTOR_HF_TOKEN``) from ``$REPO/.env`` via
-``scripts.inspector_v2_seed._env.load_repo_env``.
+``scripts.lib._env.load_repo_env``.
 
 Idempotent: re-running uploads only the changed files (the Hub diffs by
 content hash). Safe to run from a fresh checkout.
@@ -37,9 +37,9 @@ from pathlib import Path
 
 from huggingface_hub import HfApi
 
-# Bring in the Inspector v2 .env loader so HF_TOKEN is available.
+# Bring in the .env loader so HF_TOKEN is available.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from inspector_v2_seed._env import load_repo_env, repo_root  # noqa: E402
+from lib._env import load_repo_env, repo_root  # noqa: E402
 
 SPACE_REPOS = {
     "dev": "hetchyy/quranic-inspector-dev",
