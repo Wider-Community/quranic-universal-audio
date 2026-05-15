@@ -70,15 +70,15 @@
 .state-dot-under_review { background: var(--state-under-review-fg, var(--accent)); }
 .state-dot-published { background: var(--state-published-fg, var(--text-secondary)); }
 
+/* The row is now `[ReciterChip flex:1] [row-figures auto]`.
+   The chip handles country circle + names + delivery meta + state pill;
+   row-figures stays as the right-side coverage/duration block. */
 .combo-row {
     width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
-    column-gap: var(--s-4);
-    row-gap: var(--s-1);
-    padding: var(--s-3) var(--s-6);
+    display: flex;
     align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-3) var(--s-6);
     cursor: pointer;
     background: transparent;
     border: none;
@@ -88,46 +88,23 @@
 .combo-row:hover { background: var(--panel); }
 .combo-row.focused { background: var(--accent-tint-soft); }
 
-.combo-row .row-primary {
-    grid-column: 1;
-    grid-row: 1;
-    display: flex;
-    align-items: baseline;
-    gap: var(--s-3);
+/* Chip claims the leading flex space; truncate gracefully so long
+   names + arabic + meta + pill never push the figures off-screen. */
+.combo-row > :first-child {
+    flex: 1 1 auto;
     min-width: 0;
 }
-.combo-row .row-state {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
-    font-size: var(--fs-meta);
-}
-.combo-row .row-meta {
-    grid-column: 1;
-    grid-row: 2;
-    color: var(--text-muted);
-    font-size: var(--fs-meta);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+
 .combo-row .row-figures {
-    grid-column: 2;
-    grid-row: 2;
+    flex: 0 0 auto;
     display: flex;
-    align-items: center;
-    gap: var(--s-3);
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
     color: var(--text-secondary);
     font-size: var(--fs-meta);
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    justify-self: end;
-}
-
-.combo-row .name-en {
-    color: var(--text-primary);
-    font-size: var(--fs-row);
     white-space: nowrap;
 }
 .combo-row .name-ar {

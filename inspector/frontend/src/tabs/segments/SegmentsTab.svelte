@@ -182,13 +182,17 @@
         ev: CustomEvent<{
             slug: string;
             name: string;
+            nameAr: string | null;
+            country: string | null;
             bucket: import('../../lib/types/public-state').PublicBucket;
             riwayah: string;
             style: string;
         }>,
     ): void {
-        const { slug, name, bucket, riwayah, style } = ev.detail;
+        const { slug, name, nameAr, country, bucket, riwayah, style } = ev.detail;
         contextName = name;
+        contextNameAr = nameAr;
+        contextCountry = country;
         contextBucket = bucket;
         contextRiwayah = riwayah;
         contextStyle = style;
@@ -321,6 +325,8 @@
         {reciterTask}
         {chipActionBusy}
         {contextName}
+        {contextNameAr}
+        {contextCountry}
         {contextBucket}
         {contextRiwayah}
         {contextStyle}

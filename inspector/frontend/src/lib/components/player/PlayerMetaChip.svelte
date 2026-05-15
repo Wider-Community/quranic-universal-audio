@@ -111,13 +111,6 @@
     }
     .meta.interactive { cursor: pointer; }
     .meta.interactive:hover { background: var(--panel-2); }
-    .body { min-width: 0; flex: 1 1 auto; }
-    .name-row {
-        display: flex;
-        align-items: baseline;
-        gap: var(--s-2);
-        min-width: 0;
-    }
     .name {
         font-size: var(--fs-body);
         color: var(--text-primary);
@@ -127,22 +120,11 @@
         white-space: nowrap;
     }
     .name.muted { color: var(--text-muted); font-weight: 400; }
-    .name-ar {
-        font-size: var(--fs-meta);
-        color: var(--text-secondary);
-        font-family: var(--font-arabic, inherit);
-    }
-    .sub {
-        display: flex;
-        align-items: center;
-        gap: var(--s-2);
-        font-size: var(--fs-meta);
-        color: var(--text-muted);
-    }
     .switch {
         color: var(--text-faint);
         font-size: 14px;
         transition: color var(--t-fast);
+        margin-inline-start: auto;
     }
     .meta.interactive:hover .switch { color: var(--text-secondary); }
 

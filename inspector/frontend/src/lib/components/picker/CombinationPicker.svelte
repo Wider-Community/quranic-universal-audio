@@ -32,8 +32,8 @@
     import { type FacetSpec, recomputeFacets } from '../../utils/facets';
     import { match } from '../../utils/fuzzy-match';
     import Modal from '../Modal.svelte';
+    import ReciterChip from '../ReciterChip.svelte';
     import SearchInput from '../SearchInput.svelte';
-    import StatePill from '../StatePill.svelte';
     import type { CombinationSelection, InitialFilter } from './combination-picker-types';
     import PickerFilterRail from './PickerFilterRail.svelte';
     import PickerFooter from './PickerFooter.svelte';
@@ -312,15 +312,14 @@
                                 on:click={() => commit(c)}
                                 on:mouseenter={() => (focusedIdx = idx)}
                             >
-                                <div class="row-primary">
-                                    <span class="name-en">{c.reciter.name}</span>
-                                    {#if c.reciter.name_ar}<span class="name-ar">{c.reciter.name_ar}</span>{/if}
-                                    {#if c.reciter.country}<span class="country">{c.reciter.country}</span>{/if}
-                                </div>
-                                <div class="row-state">
-                                    <StatePill state={c.delivery.bucket} size="sm" />
-                                </div>
-                                <div class="row-meta">{deliveryMeta(c.delivery)}</div>
+                                <ReciterChip
+                                    name={c.reciter.name}
+                                    nameAr={c.reciter.name_ar}
+                                    country={c.reciter.country}
+                                    subline={deliveryMeta(c.delivery)}
+                                    bucket={c.delivery.bucket}
+                                    variant="compact"
+                                />
                                 <div class="row-figures">
                                     <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
                                     <span class="dur">{compactHoursLabel(c.delivery)}</span>
@@ -344,15 +343,14 @@
                                 on:click={() => commit(c)}
                                 on:mouseenter={() => (focusedIdx = idx)}
                             >
-                                <div class="row-primary">
-                                    <span class="name-en">{c.reciter.name}</span>
-                                    {#if c.reciter.name_ar}<span class="name-ar">{c.reciter.name_ar}</span>{/if}
-                                    {#if c.reciter.country}<span class="country">{c.reciter.country}</span>{/if}
-                                </div>
-                                <div class="row-state">
-                                    <StatePill state={c.delivery.bucket} size="sm" />
-                                </div>
-                                <div class="row-meta">{deliveryMeta(c.delivery)}</div>
+                                <ReciterChip
+                                    name={c.reciter.name}
+                                    nameAr={c.reciter.name_ar}
+                                    country={c.reciter.country}
+                                    subline={deliveryMeta(c.delivery)}
+                                    bucket={c.delivery.bucket}
+                                    variant="compact"
+                                />
                                 <div class="row-figures">
                                     <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
                                     <span class="dur">{compactHoursLabel(c.delivery)}</span>
