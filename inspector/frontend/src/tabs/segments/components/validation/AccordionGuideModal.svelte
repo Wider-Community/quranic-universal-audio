@@ -89,7 +89,7 @@
 </script>
 
 <div class="accordion-guide-backdrop" role="presentation" on:click={onBackdropClick}>
-    <section
+    <div
         class="accordion-guide-modal"
         role="dialog"
         aria-modal="true"
@@ -160,7 +160,7 @@
         </div>
 
         <AudioElement bind:this={audio} />
-    </section>
+    </div>
 </div>
 
 <style>

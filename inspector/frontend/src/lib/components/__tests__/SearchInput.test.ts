@@ -26,12 +26,13 @@ describe('SearchInput', () => {
     });
 
     it('dispatches the input event with the new value', async () => {
-        const { container, component } = render(SearchInput, {
-            props: { value: '', placeholder: 'Search' },
-        });
-
         const fired: string[] = [];
-        component.$on('input', (e: CustomEvent<string>) => fired.push(e.detail));
+        const { container } = render(SearchInput, {
+            props: { value: '', placeholder: 'Search' },
+            events: {
+                input: (e: CustomEvent<string>) => fired.push(e.detail),
+            },
+        });
 
         const input = container.querySelector('input')!;
         await fireEvent.input(input, { target: { value: 'abu bakr' } });

@@ -1,5 +1,4 @@
-import { render } from '@testing-library/svelte';
-import { tick } from 'svelte';
+import { render, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { editPopover, showEditPopover } from '../../stores/edit-popover';
@@ -29,13 +28,13 @@ describe('EditAffordancePopover', () => {
         const { container } = render(EditAffordancePopover);
         showEditPopover(anchor, { kind: 'view', viewReason: 'wrong-assignee' });
 
-        await tick();
-        await tick();
-
-        const popover = container.querySelector<HTMLElement>('.edit-popover');
-        expect(popover).not.toBeNull();
-        expect(popover?.textContent).toContain('Reciter under review');
-        expect(popover?.style.top).toBe('98px');
-        expect(popover?.style.left).toBe('120px');
+        const popover = await waitFor(() => {
+            const el = container.querySelector<HTMLElement>('.edit-popover');
+            expect(el).not.toBeNull();
+            expect(el?.style.top).toBe('98px');
+            return el!;
+        });
+        expect(popover.textContent).toContain('Reciter under review');
+        expect(popover.style.left).toBe('120px');
     });
 });

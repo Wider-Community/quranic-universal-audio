@@ -71,8 +71,8 @@
         on:pointerdown={onPointerDown}
     >
         <div class="track">
-            <div class="fill" style={`width: ${pct}%`} />
-            <div class="thumb" style={`left: ${pct}%`} />
+            <div class="fill" style={`width: ${pct}%`}></div>
+            <div class="thumb" style={`left: ${pct}%`}></div>
         </div>
     </div>
     <div class="times">

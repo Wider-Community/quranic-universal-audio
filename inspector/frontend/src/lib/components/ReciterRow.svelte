@@ -76,7 +76,7 @@
             disabled={combinationCount === 0}
         >▶</button>
     {:else}
-        <span class="play-spacer" aria-hidden="true" />
+        <span class="play-spacer" aria-hidden="true"></span>
     {/if}
 
     <div class="left">

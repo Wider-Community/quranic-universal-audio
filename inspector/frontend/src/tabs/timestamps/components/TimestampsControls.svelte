@@ -35,7 +35,6 @@
 </script>
 
 <div class="info-bar">
-    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Reciter:
         <SearchableSelect
             options={reciterOptions}
@@ -45,7 +44,6 @@
             on:change={(e) => dispatch('reciterChange', e.detail)}
         />
     </label>
-    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Surah:
         <SearchableSelect
             options={$chaptersOptions}
@@ -54,7 +52,6 @@
             on:change={(e) => dispatch('chapterChange', e.detail)}
         />
     </label>
-    <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>Ayah:
         <SearchableSelect
             options={$versesOptions}

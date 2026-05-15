@@ -6,7 +6,7 @@ import type {
     PublicDelivery,
     PublicReciter,
 } from '../../../types/public-state';
-import type { CombinationSelection } from '../CombinationPicker.svelte';
+import type { CombinationSelection } from '../combination-picker-types';
 import CombinationPicker from '../CombinationPicker.svelte';
 
 function makeDelivery(slug: string, bucket: PublicBucket, riwayah = 'hafs'): PublicDelivery {
@@ -75,13 +75,14 @@ vi.mock('../../../api/public-reciters', () => ({
 
 describe('CombinationPicker', () => {
     it('emits a non-null delivery on first row click', async () => {
-        const { container, component } = render(CombinationPicker, {
-            props: { open: true, title: 'Switch reciter' },
-        });
-
         const selected: CombinationSelection[] = [];
-        component.$on('select', (e: CustomEvent<CombinationSelection>) => {
-            selected.push(e.detail);
+        const { container } = render(CombinationPicker, {
+            props: { open: true, title: 'Switch reciter' },
+            events: {
+                select: (e: CustomEvent<CombinationSelection>) => {
+                    selected.push(e.detail);
+                },
+            },
         });
 
         // Wait for load() to flush the rows in.

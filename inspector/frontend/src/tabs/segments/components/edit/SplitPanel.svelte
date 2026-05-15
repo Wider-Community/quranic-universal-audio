@@ -43,10 +43,11 @@
     $: regions = Array.from({ length: regionCount }, (_, i) => i);
 
     // Stepper-disable gates apply in binary mode only.
-    $: splitBackDisabled = !isBinary || !ss
-        || ss.currentSplits[0] <= ss.seg.time_start + EDIT_MIN_DURATION_MS;
-    $: splitFwdDisabled = !isBinary || !ss
-        || ss.currentSplits[0] >= ss.seg.time_end - EDIT_MIN_DURATION_MS;
+    $: firstSplit = ss?.currentSplits[0];
+    $: splitBackDisabled = !isBinary || !ss || firstSplit === undefined
+        || firstSplit <= ss.seg.time_start + EDIT_MIN_DURATION_MS;
+    $: splitFwdDisabled = !isBinary || !ss || firstSplit === undefined
+        || firstSplit >= ss.seg.time_end - EDIT_MIN_DURATION_MS;
 
     function nudgeSplitBack(): void { nudgeSplitBoundary(-EDIT_NUDGE_MS); }
     function nudgeSplitFwd():  void { nudgeSplitBoundary( EDIT_NUDGE_MS); }

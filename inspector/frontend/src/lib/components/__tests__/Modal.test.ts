@@ -26,25 +26,31 @@ describe('Modal', () => {
     });
 
     it('dispatches close on the close button click', async () => {
-        const { container, component } = render(Modal, { props: { open: true, title: 'X' } });
         const onClose = vi.fn();
-        component.$on('close', onClose);
+        const { container } = render(Modal, {
+            props: { open: true, title: 'X' },
+            events: { close: onClose },
+        });
         await fireEvent.click(container.querySelector('.modal-close')!);
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('dispatches close on Escape', async () => {
-        const { container, component } = render(Modal, { props: { open: true, title: 'X' } });
         const onClose = vi.fn();
-        component.$on('close', onClose);
+        const { container } = render(Modal, {
+            props: { open: true, title: 'X' },
+            events: { close: onClose },
+        });
         await fireEvent.keyDown(container.querySelector('.backdrop')!, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('dispatches close on backdrop click but not on inner click', async () => {
-        const { container, component } = render(Modal, { props: { open: true, title: 'X' } });
         const onClose = vi.fn();
-        component.$on('close', onClose);
+        const { container } = render(Modal, {
+            props: { open: true, title: 'X' },
+            events: { close: onClose },
+        });
         await fireEvent.click(container.querySelector('.modal')!);
         expect(onClose).not.toHaveBeenCalled();
         await fireEvent.click(container.querySelector('.backdrop')!);
@@ -52,9 +58,9 @@ describe('Modal', () => {
     });
 
     it('locks body scroll while open and restores on close', async () => {
-        const { component } = render(Modal, { props: { open: true, title: 'X' } });
+        const { rerender } = render(Modal, { props: { open: true, title: 'X' } });
         expect(document.body.style.overflow).toBe('hidden');
-        await component.$set({ open: false });
+        await rerender({ open: false, title: 'X' });
         expect(document.body.style.overflow).toBe('');
     });
 

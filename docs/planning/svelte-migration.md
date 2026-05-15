@@ -82,28 +82,55 @@ If one of these *must* be edited for an unrelated reason, migrate the surroundin
 
 ---
 
-## Phase 0 — Foundation (one session)
+## Phase 0 — Foundation ✅ (completed 2026-05-15)
 
 **Goal**: green build on Svelte 5 with every existing file still compiling in legacy mode.
 
-Changes:
+**Compat constraint discovered**: Vite-plugin-svelte `^5` requires Vite `^6`. This project uses Vite 5.4, so we pinned the plugin to `^4` (last line that supports Vite 5 + Svelte 5). Upgrade to plugin v5+ deferred until a Vite 6 bump (separate task, unrelated to this migration).
 
-1. Bump `package.json` devDependencies:
-   - `svelte` `^4` → `^5`
-   - `svelte-check` `^3` → `^4`
-   - `@sveltejs/vite-plugin-svelte` `^3` → `^5` (matches Vite 5 + Svelte 5)
-   - `eslint-plugin-svelte` `^2.46` → `^2.46`+ verify v5 lint rules, or move to `^3` once stable
-   - `@testing-library/svelte` `^5.3` — verify v5 support (5.x supports Svelte 5)
-2. `svelte.config.js`: leave `compilerOptions` empty so per-file mode detection runs. Do **not** set `compilerOptions.runes = true` globally — that would force every file into rune mode.
-3. Run `npm run check`, `npm run lint`, `npm run test`, `npm run build`. Fix any breakage.
-4. Smoke-test in dev:
-   - Dashboard browse + claim flow.
-   - Segments tab open + edit + save on a known WIP slug.
-   - Timestamps tab waveform + playback (regression-critical: audio sync).
+**Dependency bumps** (in `inspector/frontend/package.json`):
 
-**Acceptance**: zero code logic changes; only the dependency bumps and config tweaks. CI green. Manual smoke on the three tabs.
+- `svelte` `^4` → `^5` (resolved to 5.55.7)
+- `svelte-check` `^3` → `^4` (resolved to 4.4.8)
+- `@sveltejs/vite-plugin-svelte` `^3` → `^4` (resolved to 4.0.4)
+- `eslint-plugin-svelte` `^2.46.1` — kept (2.46 already understands Svelte 5)
+- `@testing-library/svelte` `^5.3.1` — kept (5.x supports Svelte 5)
 
-**Risk**: Vite plugin major bump may shift HMR behavior. Watch for canvas redraw glitches during HMR — if they appear, downgrade plugin version and pin.
+**Config**: `svelte.config.js` `compilerOptions` left empty — per-file mode detection. `compilerOptions.runes = true` is **never** set globally; that would force every file into rune mode and break legacy syntax.
+
+**Unblocking fixes required to reach green** (not "zero code changes" — Svelte 5 + svelte-check 4 surfaced real strict-typing gaps in v4 code):
+
+| File | Issue | Fix |
+|---|---|---|
+| `src/lib/components/AudioElement.svelte` | `crossorigin: string \| null` rejected by stricter HTML attribute typing | narrowed to `'' \| 'anonymous' \| 'use-credentials' \| null` |
+| `src/tabs/segments/components/edit/SplitPanel.svelte` | `ss.currentSplits[0]` flagged "possibly undefined" under `noUncheckedIndexedAccess` | extracted to local `$: firstSplit = ss?.currentSplits[0]` with guard |
+| `src/tabs/segments/ShortcutsGuide.svelte` + `tabs/timestamps/components/TimestampsShortcutsGuide.svelte` | Script-less components couldn't be resolved by TS module resolver in v5 | added empty `<script lang="ts"></script>` block |
+| `src/lib/components/picker/CombinationPicker.svelte` | `export interface CombinationSelection` from `<script context="module">` no longer surfaces as a named module export | moved to new `src/lib/components/picker/combination-picker-types.ts`; updated imports in `SegmentsFooter.svelte` and the smoke test |
+| `src/vite-env.d.ts` (new) | `*.svg?raw` imports lost their ambient type — plugin v4 no longer ships them by default | added `/// <reference types="vite/client" />` |
+| Test files: `Modal.test.ts`, `SearchInput.test.ts`, `combination-picker.smoke.test.ts` | `component.$on(...)` removed in Svelte 5 | replaced with `events: { ... }` mount option (works with legacy `createEventDispatcher` components) |
+| `src/tabs/segments/components/list/__tests__/TimeEdit.test.ts` | `component.$set(...)` removed in Svelte 5 | replaced with `rerender({ ...props })` from testing-library v5 |
+| `src/lib/components/__tests__/EditAffordancePopover.test.ts` | Svelte 5 effect timing required more ticks than v4 | switched two manual `await tick()` calls to `waitFor(...)` |
+| Stricter promoted-to-error rules: self-closing non-void HTML tags (`<div />`, `<span />`, `<audio />`) | flagged in ReciterRow, PlayerProgress, BottomPlayer | rewrote as `<div></div>` form |
+| `tabs/timestamps/components/TimestampsControls.svelte` (3x) + `lib/components/picker/CombinationPicker.svelte` (1x) | `<!-- svelte-ignore -->` comments referenced warnings v5 no longer emits | removed stale comments |
+| `tabs/segments/components/validation/AccordionGuideModal.svelte` | `<section role="dialog">` flagged as non-interactive element with interactive role | switched to `<div role="dialog">` |
+| `src/lib/icons/Icon.svelte` | `{@html}` rule promoted to error | added line-scoped `<!-- eslint-disable-next-line svelte/no-at-html-tags -->` (icon strings come from a controlled `ICONS` map, not user input) |
+
+**Pre-existing WIP unblocked** (your in-flight `active_claims` plumbing was missing fixture updates — patched as part of this pass):
+
+- `src/lib/components/__tests__/ClaimButton.test.ts` — added `active_claims: []` / `[slug]` to 3 fixtures
+- `src/lib/stores/__tests__/editing-mode.test.ts` — added `active_claims: []` to the `_user()` factory and the anonymous fixture
+
+**Verification**:
+
+- `npm run check`: 0 errors, 0 warnings (1135 files)
+- `npm run build` (tsc --noEmit + vite build): green
+- `npm run test`: 481 passed, 15 todo, 0 failed
+- `npm run lint`: 0 errors, 11 pre-existing unused-var warnings (not migration-related)
+- `npm run dev`: boots cleanly on `http://localhost:5173`, returns 200 on `/`
+
+**Smoke test outstanding**: manual run-through on the three tabs (Dashboard claim, Segments edit/save, Timestamps waveform + playback) — Claude cannot perform interactive UI smoke. Audio-sync regressions in particular won't surface without real playback.
+
+**Risk note**: HMR behavior with vite-plugin-svelte v4 + Svelte 5 wasn't stress-tested for canvas redraws (TimestampsWaveform). If HMR glitches show up during a real session, the workaround is hard-reload — does not block Phase 1+.
 
 ---
 

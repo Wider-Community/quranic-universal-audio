@@ -13,6 +13,7 @@
      */
     import { onDestroy, onMount } from 'svelte';
 
+    import { openDetail } from '../../../tabs/dashboard/stores/dashboard-state';
     import { clickOutside } from '../../actions/click-outside';
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
     import { ensureAudioContextRunning } from '../../playback/audio-graph';
@@ -31,7 +32,6 @@
     import type { PublicDelivery } from '../../types/public-state';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
     import StatePill from '../StatePill.svelte';
-    import { openDetail } from '../../../tabs/dashboard/stores/dashboard-state';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
@@ -333,7 +333,7 @@
         </div>
     </div>
 
-    <audio bind:this={audioEl} preload="none" />
+    <audio bind:this={audioEl} preload="none"></audio>
 </div>
 
 <style>
