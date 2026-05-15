@@ -17,7 +17,7 @@
         type PublicDelivery,
         type PublicReciter,
     } from '../types/public-state';
-    import ReciterChip from './ReciterChip.svelte';
+    import { countryName, titleCaseSlug } from '../utils/delivery-label';
     import StatePill from './StatePill.svelte';
 
     export let reciter: PublicReciter;
@@ -45,29 +45,6 @@
     $: combinationCount = visibleDeliveries.length;
     $: riwayahCount = new Set(visibleDeliveries.map((d) => d.riwayah)).size;
     $: styleCount = new Set(visibleDeliveries.map((d) => d.style)).size;
-
-    // Bottom-line summary for the chip: prefer the riwayah · style pair
-    // when the reciter has exactly one combination (a normal "this
-    // delivery" subline), otherwise show the aggregate counts so the
-    // chip carries the same information density as the old layout.
-    $: chipSubline = (() => {
-        if (combinationCount === 1) {
-            const only = visibleDeliveries[0]!;
-            return [only.riwayah, only.style].filter(Boolean).join(' · ');
-        }
-        const parts: string[] = [];
-        if (combinationCount > 0) parts.push(`${combinationCount} combination${combinationCount === 1 ? '' : 's'}`);
-        if (riwayahCount > 1) parts.push(`${riwayahCount} riwayahs`);
-        if (styleCount > 1) parts.push(`${styleCount} styles`);
-        return parts.join(' · ');
-    })();
-
-    // For the catalog row the chip's primary state pill is the
-    // reciter's dominant bucket; the original `.states` row stacked
-    // multiple buckets when a reciter spanned several. We keep that
-    // multi-pill stack rendered separately, below the chip.
-    $: primaryBucket = visibleBuckets[0] ?? null;
-    $: extraBuckets = visibleBuckets.slice(1);
 
     function computeVisibleBuckets(dels: PublicDelivery[]): PublicBucket[] {
         const present = new Set<PublicBucket>(dels.map((d) => d.bucket));
@@ -103,17 +80,18 @@
     {/if}
 
     <div class="left">
-        <ReciterChip
-            name={reciter.name}
-            nameAr={reciter.name_ar}
-            country={reciter.country}
-            subline={chipSubline || null}
-            bucket={primaryBucket}
-            variant="compact"
-        />
-        {#if extraBuckets.length > 0}
-            <div class="extra-states">
-                {#each extraBuckets as bucket (bucket)}
+        <div class="name-line">
+            <span class="name">{reciter.name}</span>
+            {#if reciter.name_ar}
+                <span class="name-ar" dir="rtl">{reciter.name_ar}</span>
+            {/if}
+            {#if reciter.country}
+                <span class="country">{countryName(reciter.country)}</span>
+            {/if}
+        </div>
+        {#if visibleBuckets.length > 0}
+            <div class="states">
+                {#each visibleBuckets as bucket (bucket)}
                     <StatePill state={bucket} size="sm" />
                 {/each}
             </div>
@@ -177,16 +155,33 @@
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: var(--s-2);
+        gap: 4px;
     }
-    /* Extra bucket pills stack below the chip when a reciter spans
-       more than one bucket (e.g. "published" + "under_review"). The
-       chip itself renders only the primary bucket. */
-    .extra-states {
+    .name-line {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-3);
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+    .name {
+        font-size: var(--fs-row);
+        color: var(--text-primary);
+        font-weight: 450;
+    }
+    .name-ar {
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        font-family: var(--font-arabic, inherit);
+    }
+    .country {
+        font-size: var(--fs-meta);
+        color: var(--text-faint);
+    }
+    .states {
         display: flex;
         flex-wrap: wrap;
         gap: var(--s-2);
-        padding-inline-start: calc(30px + var(--s-3)); /* align under chip text column */
     }
 
     .right {
