@@ -17,6 +17,15 @@
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
     let activeTab = getActiveTab();
+    // Lazy-mount tabs: defer Timestamps/Segments mount until the user actually
+    // visits them. Once visited, the tab stays in the DOM (hidden) so its
+    // state (loaded reciter, scroll position, edits) survives tab switches.
+    // Dashboard-only visitors avoid the cold-load shard prefetch, segment-peaks
+    // POST, quran-refs.json, etc.
+    let mountedTabs = new Set<string>([activeTab]);
+    $: if (activeTab && !mountedTabs.has(activeTab)) {
+        mountedTabs = new Set([...mountedTabs, activeTab]);
+    }
 
     function _onSignIn() {
         signIn();
@@ -96,19 +105,25 @@
     </header>
 
     <!-- ============ Dashboard Tab ============ -->
-    <div hidden={activeTab !== TAB_NAMES.DASHBOARD}>
-        <DashboardTab />
-    </div>
+    {#if mountedTabs.has(TAB_NAMES.DASHBOARD)}
+        <div hidden={activeTab !== TAB_NAMES.DASHBOARD}>
+            <DashboardTab />
+        </div>
+    {/if}
 
     <!-- ============ Timestamps Tab ============ -->
-    <div hidden={activeTab !== TAB_NAMES.TIMESTAMPS}>
-        <TimestampsTab />
-    </div>
+    {#if mountedTabs.has(TAB_NAMES.TIMESTAMPS)}
+        <div hidden={activeTab !== TAB_NAMES.TIMESTAMPS}>
+            <TimestampsTab />
+        </div>
+    {/if}
 
     <!-- ============ Segments Tab ============ -->
-    <div hidden={activeTab !== TAB_NAMES.SEGMENTS}>
-        <SegmentsTab />
-    </div>
+    {#if mountedTabs.has(TAB_NAMES.SEGMENTS)}
+        <div hidden={activeTab !== TAB_NAMES.SEGMENTS}>
+            <SegmentsTab />
+        </div>
+    {/if}
 
 
 </div>
