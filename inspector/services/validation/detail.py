@@ -27,22 +27,60 @@ from services.validation.classifier import (
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 
 
+# Precomputed ``(surah, ayah) -> cumulative-words-before-this-ayah`` map.
+# Keyed by ``id(word_counts)`` because ``get_word_counts()`` returns a process
+# singleton — a single entry suffices for the lifetime of the dict. Building
+# the table is O(N_verses) once instead of O(ayah) per ``_word_ord`` call,
+# which was ~1.5s self-time in the per-segment classifier loop.
+_SURAH_OFFSETS_CACHE: dict[int, dict[tuple[int, int], int]] = {}
+
+
+def _surah_offsets(word_counts: dict[tuple[int, int], int]) -> dict[tuple[int, int], int]:
+    """Return ``(surah, ayah) -> sum(word_counts[(surah, v)] for v in 1..ayah-1)``.
+
+    Preserves the original ``_word_ord`` semantics: only contiguous prefixes
+    from ayah=1 get an entry — if there's a gap in ``word_counts`` for a
+    surah, the post-gap ayahs are omitted so ``_word_ord`` returns None for
+    them (matching the prior ``for verse in range(1, ayah)`` behavior).
+    """
+    key = id(word_counts)
+    cached = _SURAH_OFFSETS_CACHE.get(key)
+    if cached is not None:
+        return cached
+    by_surah: dict[int, dict[int, int]] = {}
+    for (surah, ayah), wc in word_counts.items():
+        by_surah.setdefault(surah, {})[ayah] = wc
+    offsets: dict[tuple[int, int], int] = {}
+    for surah, ayah_to_wc in by_surah.items():
+        running = 0
+        ayah = 1
+        while ayah in ayah_to_wc:
+            offsets[(surah, ayah)] = running
+            running += ayah_to_wc[ayah]
+            ayah += 1
+    _SURAH_OFFSETS_CACHE[key] = offsets
+    return offsets
+
+
 def _word_ord(
     surah: int,
     ayah: int,
     word: int,
     word_counts: dict[tuple[int, int], int],
 ) -> int | None:
-    """Return 1-based word ordinal within a surah, or None if out of range."""
-    offset = 0
-    for verse in range(1, ayah):
-        wc = word_counts.get((surah, verse))
-        if wc is None:
-            return None
-        offset += wc
-    if word < 1 or word > word_counts.get((surah, ayah), 0):
+    """Return 1-based word ordinal within a surah, or None if out of range.
+
+    Uses the precomputed ``_surah_offsets`` table — O(1) per call vs the
+    prior O(ayah) prefix-sum walk.
+    """
+    offsets = _surah_offsets(word_counts)
+    base = offsets.get((surah, ayah))
+    if base is None:
         return None
-    return offset + word
+    wc = word_counts.get((surah, ayah), 0)
+    if word < 1 or word > wc:
+        return None
+    return base + word
 
 
 def _words_by_verse_for_ord_gap(
