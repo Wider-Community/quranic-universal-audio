@@ -342,22 +342,39 @@
 
     // Play button glyph: pause when actively playing, play otherwise.
     $: playGlyph = ($isMainAudioPlaying ? 'pause' : 'play') as IconName;
+
+    // Time display for the progress row.
+    function fmt(ms: number): string {
+        if (!ms || !isFinite(ms)) return '0:00:00';
+        const total = Math.floor(ms / 1000);
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    $: elapsedMs = progressVisible ? Math.max(0, currentMs - $playStartMs) : 0;
+    $: totalMs = progressVisible ? Math.max(0, $playEndMs - $playStartMs) : 0;
 </script>
 
 <div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
-    <div
-        class="progress"
-        class:active={progressVisible}
-        on:click={onProgressClick}
-        on:keydown={onProgressKey}
-        role="slider"
-        tabindex="0"
-        aria-label="Segment playback progress"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        aria-valuenow={Math.round(progressPct)}
-    >
-        <div class="fill" style:width="{progressPct}%"></div>
+    <div class="progress" class:active={progressVisible}>
+        <span class="time pos">{fmt(elapsedMs)}</span>
+        <div
+            class="bar"
+            on:click={onProgressClick}
+            on:keydown={onProgressKey}
+            role="slider"
+            tabindex="0"
+            aria-label="Segment playback progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow={Math.round(progressPct)}
+        >
+            <div class="track">
+                <div class="fill" style:width="{progressPct}%"></div>
+            </div>
+        </div>
+        <span class="time dur">{fmt(totalMs)}</span>
     </div>
 
     <div class="row">
@@ -636,25 +653,49 @@
        intrinsic 0×0 size from contributing to the footer height. */
     audio { display: none; }
 
-    /* Progress fill: 3px hairline at the very top. Visible only when a
-       segment range is queued (`active` class). The fill width is set
-       inline via `style:width="{pct}%"` so the rAF-driven onTimeUpdate
-       subscriber repaints without an animation step. */
+    /* Progress row: times flanking the scrub bar, matching the dashboard
+       PlayerProgress format. Visible only when a segment range is queued
+       (`active` class). The fill width is set inline via `style:width="{pct}%"`. */
     .progress {
-        position: relative;
-        height: 3px;
-        background: var(--canvas-inset);
-        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: var(--s-3);
+        padding: var(--s-2) var(--s-4) 0;
         flex-shrink: 0;
     }
+    .progress:not(.active) { opacity: 0; pointer-events: none; }
+    .time {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .bar {
+        position: relative;
+        flex: 1;
+        height: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        touch-action: none;
+    }
+    .track {
+        position: relative;
+        width: 100%;
+        height: 3px;
+        background: var(--canvas-inset);
+        overflow: visible;
+        transition: height var(--t-fast) ease;
+    }
+    .bar:hover .track,
+    .bar:focus-visible .track { height: 5px; }
     .progress .fill {
-        position: absolute;
-        inset: 0 auto 0 0;
+        height: 100%;
         background: var(--accent);
-        width: 0;
         transition: width 80ms linear;
     }
-    .progress:not(.active) .fill { opacity: 0; }
 
     .row {
         position: relative;

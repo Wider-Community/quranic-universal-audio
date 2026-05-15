@@ -59,6 +59,7 @@
 </script>
 
 <div class="progress">
+    <span class="time pos">{fmt(shownPos)}</span>
     <div
         class="bar"
         bind:this={barEl}
@@ -75,20 +76,27 @@
             <div class="thumb" style={`left: ${pct}%`}></div>
         </div>
     </div>
-    <div class="times">
-        <span>{fmt(shownPos)}</span>
-        <span>{fmt(durationMs)}</span>
-    </div>
+    <span class="time dur">{fmt(durationMs)}</span>
 </div>
 
 <style>
     .progress {
         display: flex;
-        flex-direction: column;
+        align-items: center;
         width: 100%;
+        gap: var(--s-3);
+    }
+    .time {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
     .bar {
         position: relative;
+        flex: 1;
         height: 14px;
         cursor: pointer;
         display: flex;
@@ -126,14 +134,5 @@
     .bar:hover .thumb,
     .bar:focus-visible .thumb {
         transform: translateY(-50%) scale(1);
-    }
-    .times {
-        display: flex;
-        justify-content: space-between;
-        padding: 2px var(--s-3) 0;
-        font-family: var(--font-mono);
-        font-size: 10.5px;
-        color: var(--text-muted);
-        font-variant-numeric: tabular-nums;
     }
 </style>
