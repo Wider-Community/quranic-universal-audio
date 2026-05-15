@@ -18,8 +18,8 @@
         type HistorySnapshot,
         snapToSeg,
     } from '../../stores/history';
-    import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
     import { undoPending } from '../../stores/undo-pending';
+    import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
     import { EDIT_OP_LABELS } from '../../utils/constants';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onOpUndoClick } from '../../utils/save/undo';
