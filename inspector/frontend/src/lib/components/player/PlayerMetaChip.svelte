@@ -9,10 +9,7 @@
 
     import { clickOutside } from '../../actions/click-outside';
     import type { PublicDelivery, PublicReciter } from '../../types/public-state';
-    import {
-        combinationCompact,
-        combinationStandard,
-    } from '../../utils/delivery-label';
+    import { combinationCompact } from '../../utils/delivery-label';
     import { compareDeliveries } from '../../utils/delivery-sort';
     import ReciterChip from '../ReciterChip.svelte';
 
@@ -69,10 +66,9 @@
         {/if}
     </button>
 
-    {#if open && hasMany}
+    {#if open && hasMany && reciter}
         <div class="dropup" role="listbox" aria-label="Switch combination">
             {#each combinations as d (d.slug)}
-                {@const lines = combinationStandard(d)}
                 <button
                     class="opt"
                     class:active={delivery?.slug === d.slug}
@@ -81,8 +77,14 @@
                     aria-selected={delivery?.slug === d.slug}
                     on:click={() => pick(d)}
                 >
-                    <span class="opt-main">{lines.line1}</span>
-                    <span class="opt-meta">{lines.line2}</span>
+                    <ReciterChip
+                        name={reciter.name}
+                        nameAr={reciter.name_ar}
+                        country={reciter.country}
+                        subline={combinationCompact(d)}
+                        bucket={d.bucket}
+                        variant="compact"
+                    />
                 </button>
             {/each}
         </div>
@@ -132,8 +134,8 @@
         position: absolute;
         bottom: calc(100% + var(--s-2));
         left: 0;
-        min-width: 280px;
-        max-width: 420px;
+        min-width: 320px;
+        max-width: 480px;
         max-height: min(360px, 50vh);
         overflow-y: auto;
         background: var(--panel);
@@ -144,27 +146,23 @@
         padding: var(--s-2);
         display: flex;
         flex-direction: column;
-        gap: 1px;
+        gap: 2px;
     }
+    /* Each option hosts a <ReciterChip> body. The button is just the
+       click target — padding + rounded pill hover matches the catalog
+       row + segments footer + combination picker so every "reciter
+       picker" surface reads the same. */
     .opt {
         display: flex;
-        flex-direction: column;
-        gap: 2px;
+        align-items: center;
         padding: 6px var(--s-2);
         background: transparent;
         border: 0;
         border-radius: var(--r-2);
         cursor: pointer;
         text-align: left;
-        color: var(--text-secondary);
+        transition: background var(--t-fast);
     }
-    .opt:hover { background: var(--canvas-inset); color: var(--text-primary); }
-    .opt.active { background: var(--canvas-inset); color: var(--accent); }
-    .opt-main { font-size: var(--fs-meta); }
-    .opt-meta {
-        font-size: 10.5px;
-        color: var(--text-faint);
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
-    }
+    .opt:hover { background: var(--accent-tint-soft); }
+    .opt.active { background: var(--accent-tint); }
 </style>
