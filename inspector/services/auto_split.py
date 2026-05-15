@@ -73,7 +73,7 @@ def _ensure_mfa_client() -> None:
 
 from services import audio_source
 from services.data_loader import get_word_counts, load_detailed
-from utils.references import chapter_from_ref
+from utils.references import chapter_from_ref, cross_verse_sections
 from utils.repetitions import (
     compute_reading_sequence,
     count_words_in_section,
@@ -199,65 +199,6 @@ def _run_mfa(reciter: str, audio_url: str, time_start: int, time_end: int,
 
 
 # ---------------------------------------------------------------------------
-# Cross-verse path
-# ---------------------------------------------------------------------------
-
-def _suggest_cross_verse_refs(matched_ref: str,
-                              word_counts: dict[tuple[int, int], int]
-                              ) -> Optional[list[str]]:
-    """Split the cross-verse ref into two per-verse refs.
-
-    ``"37:151:3-37:152:2"`` →
-    ``["37:151:3-37:151:N", "37:152:1-37:152:2"]`` where N is the verse's
-    total word count.
-    """
-    parts = matched_ref.split("-")
-    if len(parts) != 2:
-        return None
-    s = parts[0].split(":")
-    e = parts[1].split(":")
-    if len(s) != 3 or len(e) != 3:
-        return None
-    try:
-        surah = int(s[0])
-        a_ayah, a_word = int(s[1]), int(s[2])
-        b_ayah, b_word = int(e[1]), int(e[2])
-    except ValueError:
-        return None
-    a_total = word_counts.get((surah, a_ayah))
-    if not a_total:
-        return None
-    return [
-        f"{surah}:{a_ayah}:{a_word}-{surah}:{a_ayah}:{a_total}",
-        f"{surah}:{b_ayah}:1-{surah}:{b_ayah}:{b_word}",
-    ]
-
-
-def _boundary_ms_at_ayah(words: list[dict], boundary_ayah: int) -> Optional[int]:
-    """Midpoint between last word of verse A and first word of verse B."""
-    boundary_idx = None
-    for i, w in enumerate(words):
-        loc = w.get("location", "")
-        parts = loc.split(":")
-        if len(parts) < 2:
-            continue
-        try:
-            ayah = int(parts[1])
-        except ValueError:
-            continue
-        if ayah == boundary_ayah:
-            boundary_idx = i
-            break
-    if boundary_idx is None or boundary_idx == 0:
-        return None
-    prev_end = words[boundary_idx - 1].get("end")
-    next_start = words[boundary_idx].get("start")
-    if prev_end is None or next_start is None:
-        return None
-    return round(((prev_end + next_start) / 2.0) * 1000)
-
-
-# ---------------------------------------------------------------------------
 # Repetition path
 # ---------------------------------------------------------------------------
 
@@ -309,10 +250,10 @@ def compute_auto_split(reciter: str, chapter: int, segment_uid: str) -> dict:
          "kind":    "cross_verse" | "repetition" | None,
          "source":  "mfa" | "fallback"}``
 
-    Cross-verse fallback drops one cursor at the seg midpoint. Repetition
-    fallback drops N-1 evenly-spaced cursors. Either fallback still
-    populates ``refs`` from the seg metadata so the FE confirm-walk has
-    text to load even when MFA was unreachable.
+    Both kinds use the same shape: N per-verse / per-section refs and N-1
+    cursors between them. Fallback drops N-1 evenly-spaced cursors and still
+    populates ``refs`` from the seg metadata so the FE confirm-walk has text
+    to load even when MFA was unreachable.
     """
     seg = _find_segment(reciter, chapter, segment_uid)
     if not seg:
@@ -339,38 +280,46 @@ def compute_auto_split(reciter: str, chapter: int, segment_uid: str) -> dict:
 
 def _compute_cross_verse(seg, audio_url, time_start, time_end, matched_ref,
                          word_counts, reciter) -> dict:
-    refs = _suggest_cross_verse_refs(matched_ref, word_counts)
-    midpoint = (time_start + time_end) // 2
+    """N-cursor cross-verse split. Mirrors ``_compute_repetition``.
+
+    The compound matched_ref ``S:A1:W1-S:AN:WN`` becomes V per-verse sections
+    (first verse partial, middle verses full, last verse partial). MFA is
+    asked to align the whole seg against the sequence of section refs and we
+    drop a cursor at each verse boundary. For V=2 this collapses naturally to
+    one cursor + two refs — preserving the legacy shape — but V=3+ now
+    produces V-1 cursors instead of dropping intermediate verses.
+    """
+    sections = cross_verse_sections(matched_ref, word_counts)
+    if not sections or len(sections) < 2:
+        return {"cursors": None, "refs": None, "kind": "cross_verse",
+                "source": "fallback"}
+    refs = section_refs_canonical(sections)
+    n = len(sections)
+    duration = time_end - time_start
+    even_cuts = [time_start + round(duration * (i + 1) / n) for i in range(n - 1)]
+
+    section_word_counts = [
+        count_words_in_section(s[0], s[1], word_counts) for s in sections
+    ]
+    if not all(c > 0 for c in section_word_counts):
+        return {"cursors": even_cuts, "refs": refs, "kind": "cross_verse",
+                "source": "fallback"}
 
     if not audio_url:
-        return {"cursors": [midpoint], "refs": refs, "kind": "cross_verse",
+        return {"cursors": even_cuts, "refs": refs, "kind": "cross_verse",
                 "source": "fallback"}
 
-    try:
-        boundary_ayah = int(matched_ref.split("-")[1].split(":")[1])
-    except (IndexError, ValueError):
-        return {"cursors": [midpoint], "refs": refs, "kind": "cross_verse",
+    # MFA Space sequence support: pass list[str] as the ref entry. Same
+    # contract as the repetition path.
+    words = _run_mfa(reciter, audio_url, time_start, time_end, refs)
+    if not words or len(words) != sum(section_word_counts):
+        return {"cursors": even_cuts, "refs": refs, "kind": "cross_verse",
                 "source": "fallback"}
-
-    mfa_ref = None
-    try:
-        _ensure_mfa_client()
-        mfa_ref = build_mfa_ref(seg) if callable(build_mfa_ref) else None
-    except Exception:  # noqa: BLE001
-        mfa_ref = None
-    if not mfa_ref:
-        return {"cursors": [midpoint], "refs": refs, "kind": "cross_verse",
+    rel_cuts = _repetition_cuts(words, section_word_counts)
+    if rel_cuts is None:
+        return {"cursors": even_cuts, "refs": refs, "kind": "cross_verse",
                 "source": "fallback"}
-
-    words = _run_mfa(reciter, audio_url, time_start, time_end, mfa_ref)
-    if not words:
-        return {"cursors": [midpoint], "refs": refs, "kind": "cross_verse",
-                "source": "fallback"}
-    rel_ms = _boundary_ms_at_ayah(words, boundary_ayah)
-    if rel_ms is None:
-        return {"cursors": [midpoint], "refs": refs, "kind": "cross_verse",
-                "source": "fallback"}
-    return {"cursors": [time_start + rel_ms], "refs": refs,
+    return {"cursors": [time_start + c for c in rel_cuts], "refs": refs,
             "kind": "cross_verse", "source": "mfa"}
 
 
