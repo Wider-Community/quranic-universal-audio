@@ -33,7 +33,6 @@
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
     import SavePreview from './components/save/SavePreview.svelte';
-    import StatsPanel from './components/stats/StatsPanel.svelte';
     import ValidationPanel from './components/validation/ValidationPanel.svelte';
     import ShortcutsGuide from './ShortcutsGuide.svelte';
     import { autoSaveEnabled, toggleAutoSave } from './stores/autosave';
@@ -302,8 +301,13 @@
 >
     <ShortcutsGuide />
 
+    <!-- StatsPanel transitively imports chart.js (~85 KB br). Lazy-load so
+         the charts chunk only ships when a maintainer/owner actually views
+         the Segments tab — Dashboard / non-admin visitors never pay this cost. -->
     {#if $currentUser.role === 'maintainer' || $currentUser.role === 'owner'}
-        <StatsPanel />
+        {#await import('./components/stats/StatsPanel.svelte') then mod}
+            <svelte:component this={mod.default} />
+        {/await}
     {/if}
 
     <div class="seg-context-block">
