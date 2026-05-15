@@ -20,8 +20,14 @@ from constants import VALIDATION_CATEGORIES
 from services import cache
 from services.data_loader import get_word_counts, load_detailed, load_probe_v2, load_seg_verses
 from services.history_query import build_resolved_by_edit_index
-from services.phonemizer_service import get_canonical_phonemes
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
+
+# Phonemizer is no longer loaded in the validate runtime path. The phonemic
+# side of boundary_adj is captured at backfill / extraction time via
+# ``inspector/scripts/backfill_boundary_adj.py`` (which IS the only remaining
+# consumer of quranic_phonemizer / canonical_phonemes.pkl) and persisted as
+# ``is_boundary_adj`` on every segment. The classifier reads the persisted
+# value instead of recomputing — canonical=None throughout the runtime path.
 
 from services.validation.classifier import (
     is_ignored_for,
@@ -156,7 +162,11 @@ def validate_reciter_segments(reciter: str) -> dict:
         return None
 
     word_counts = get_word_counts()
-    canonical = get_canonical_phonemes(reciter)
+    # canonical=None: the phonemic side of boundary_adj is captured at backfill
+    # time onto each seg's ``is_boundary_adj`` field. Classifier short-circuits
+    # on the persisted value; legacy segs without the field fall through to
+    # compute_is_boundary_adj with canonical=None → structural side only.
+    canonical = None
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
 
     meta = cache.get_seg_meta(reciter)

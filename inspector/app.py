@@ -74,7 +74,8 @@ from services import auth as auth_service
 from services import catalog as catalog_service
 from services import state as state_service
 from services.data_loader import load_surah_info_lite
-from services.phonemizer_service import get_phonemizer, has_phonemizer
+# Phonemizer was eagerly initialized here. It's now imported lazily inside
+# inspector/scripts/backfill_boundary_adj.py (the only remaining consumer).
 from services.secrets_guard import MissingSecret, get_session_secret
 from services.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
 from utils.json_response import orjson_response
@@ -389,13 +390,11 @@ if __name__ == "__main__":
             FRONTEND_DIST / "index.html",
         )
 
-    # Eagerly initialize phonemizer
-    if has_phonemizer():
-        logger.info("Initializing phonemizer...")
-        get_phonemizer()
-        logger.info("Phonemizer ready.")
-    else:
-        logger.info("Phonemizer not available (reference resolution disabled)")
+    # Phonemizer is no longer used by the validate runtime path; the phonemic
+    # side of boundary_adj is captured at backfill / extraction time and
+    # persisted as ``is_boundary_adj`` on every segment. The remaining
+    # consumer is ``inspector/scripts/backfill_boundary_adj.py`` (offline)
+    # which imports lazily on demand.
 
     # Timestamp data loads lazily on first request now (per-reciter cache in
     # services/data_loader.py). The earlier eager preload pinned ~22 MB *
