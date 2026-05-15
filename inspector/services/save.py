@@ -26,6 +26,7 @@ from scripts.lib.schemas import Actor
 from services import cache, data_dir
 from services.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.peaks_history import append_peaks_records
+from services.quran_refs import dk_text_for_ref
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
 from utils.references import chapter_from_ref, normalize_ref
@@ -337,8 +338,12 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
     for upd in updates["segments"]:
         idx = upd.get("index")
         if idx is not None and 0 <= idx < len(flat_segments):
-            flat_segments[idx]["matched_ref"] = normalize_ref_with_wc(upd.get("matched_ref", ""))
-            flat_segments[idx]["matched_text"] = upd.get("matched_text", "")
+            ref = normalize_ref_with_wc(upd.get("matched_ref", ""))
+            flat_segments[idx]["matched_ref"] = ref
+            # FE no longer echoes matched_text; derive from dk_words so the
+            # disk schema stays consistent with the new ref. Legacy clients
+            # that still send a value override the derivation.
+            flat_segments[idx]["matched_text"] = upd.get("matched_text") or dk_text_for_ref(ref)
             if "confidence" in upd:
                 flat_segments[idx]["confidence"] = upd["confidence"]
             if "ignored_categories" in upd:

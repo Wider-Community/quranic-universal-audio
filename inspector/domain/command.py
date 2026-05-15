@@ -76,8 +76,24 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
     3. Re-insert the ``before`` snapshots for uids in ``removedIds``
        (these were deleted by the forward command; inverse re-adds them).
 
+    Snapshots are hydrated with a derived ``matched_text`` when missing so the
+    written ``detailed.json`` segment keeps the documented schema. New
+    snapshots stopped carrying ``matched_text`` (derivable from ``matched_ref``
+    via ``dk_words``); legacy snapshots that do carry it pass through unchanged.
+
     The entries list is mutated in place and returned for convenience.
     """
+    # Local import to avoid a circular at module import time (services.quran_refs
+    # imports from services.data_loader, which imports adapters that touch
+    # domain.command in some legacy paths).
+    from services.quran_refs import dk_text_for_ref
+
+    def _hydrate(snap: dict) -> dict:
+        out = dict(snap)
+        if not out.get("matched_text") and out.get("matched_ref"):
+            out["matched_text"] = dk_text_for_ref(out.get("matched_ref"))
+        return out
+
     patch_obj = patch_from_dict(patch)
 
     # Index before-snapshots by uid for O(1) lookup.
@@ -100,7 +116,7 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
         for i, seg in enumerate(entry.get("segments", [])):
             uid = seg.get("segment_uid")
             if uid and uid in before_by_uid and uid not in removed_set:
-                entry["segments"][i] = dict(before_by_uid[uid])
+                entry["segments"][i] = _hydrate(before_by_uid[uid])
 
     # 3. Re-insert segments that the forward command removed.
     #    We need to find the right entry to insert into; we match by the
@@ -113,7 +129,7 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
         audio_url = snap.get("audio_url", "")
         target_entry = _find_entry_for_restore(entries, snap, patch_obj.affectedChapterIds, audio_url)
         if target_entry is not None:
-            target_entry["segments"].append(dict(snap))
+            target_entry["segments"].append(_hydrate(snap))
 
     # 4. Re-insert any before-segments that are still absent from entries.
     #    This handles the case where a full_replace save with empty segments
@@ -133,7 +149,7 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
                 entries, snap, patch_obj.affectedChapterIds, audio_url
             )
             if target_entry is not None:
-                target_entry["segments"].append(dict(snap))
+                target_entry["segments"].append(_hydrate(snap))
 
     # Sort segments in each affected entry by time_start to maintain order.
     affected_refs = _refs_for_chapters(entries, patch_obj.affectedChapterIds)

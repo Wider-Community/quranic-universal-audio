@@ -68,3 +68,54 @@ def reset_cache() -> None:
     with _lock:
         _payload = None
         _hash = None
+
+
+# ---------------------------------------------------------------------------
+# matched_ref -> dk_words text resolver
+#
+# Mirror of `frontend/src/tabs/segments/utils/data/references.ts::dkTextForRef`.
+# Lets server-side code (validation classifier, undo snapshot enrichment)
+# derive the Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
+# ref without carrying a `matched_text` field on every snapshot or segment.
+# ---------------------------------------------------------------------------
+
+_MAX_AYAH_BOUNDARY = 300  # mirrors references.ts; runaway-ayah guard
+
+
+def dk_text_for_ref(matched_ref: str | None) -> str:
+    """Walk dk_words from the start endpoint through the end endpoint
+    (inclusive). Returns ``""`` for malformed or missing input so callers
+    can short-circuit on falsy.
+    """
+    if not matched_ref or "-" not in matched_ref:
+        return ""
+    start, _, end = matched_ref.partition("-")
+    s_parts = start.split(":")
+    e_parts = end.split(":")
+    if len(s_parts) != 3 or len(e_parts) != 3:
+        return ""
+    try:
+        s_su, s_ay, s_w = int(s_parts[0]), int(s_parts[1]), int(s_parts[2])
+        e_su, e_ay, e_w = int(e_parts[0]), int(e_parts[1]), int(e_parts[2])
+    except ValueError:
+        return ""
+
+    # Segments don't cross surahs in practice; mirror the FE assumption.
+    su = s_su
+    dk = get_dk_words_flat()
+    wc = get_word_counts()
+
+    words: list[str] = []
+    ay, w = s_ay, s_w
+    while (su, ay, w) <= (e_su, e_ay, e_w):
+        t = dk.get(f"{su}:{ay}:{w}")
+        if t:
+            words.append(t)
+        w += 1
+        max_w = wc.get((su, ay), 0)
+        if w > max_w:
+            w = 1
+            ay += 1
+            if ay > _MAX_AYAH_BOUNDARY:
+                break
+    return " ".join(words)

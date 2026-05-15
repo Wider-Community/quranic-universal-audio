@@ -81,6 +81,10 @@ export function createOp(opType: string, { contextCategory = null, fixKind = 'ma
 }
 
 export function snapshotSeg(seg: Segment): SegSnapshot {
+    // matched_text is derivable from matched_ref + dk_words server-side
+    // (see services/quran_refs.py::dk_text_for_ref). Dropping it from new
+    // snapshots saves ~200-600 B per snapshot; legacy records on disk still
+    // carry it and pass through unchanged via apply_inverse_patch hydration.
     const snap: SegSnapshot = {
         segment_uid: seg.segment_uid || null,
         index_at_save: seg.index,
@@ -88,7 +92,6 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
         time_start: seg.time_start,
         time_end: seg.time_end,
         matched_ref: seg.matched_ref || '',
-        matched_text: seg.matched_text || '',
         confidence: seg.confidence ?? 0,
     };
     if (seg.has_repeated_words) snap.has_repeated_words = true;

@@ -8,6 +8,7 @@ adapter internally; the route shape is unchanged (MUST-1).
 
 from __future__ import annotations
 
+from services.quran_refs import dk_text_for_ref
 from services.validation.registry import filter_persistent_ignores
 from utils.references import normalize_ref
 
@@ -37,13 +38,18 @@ def make_seg(
 
     phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
     seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
+    matched_ref = normalize_ref(s.get("matched_ref", ""), word_counts)
+    # The FE stopped echoing matched_text; derive from dk_words so detailed.json
+    # keeps the documented schema field consistent with matched_ref. Fall back
+    # to a payload value if a legacy client still sends one.
+    matched_text = s.get("matched_text") or dk_text_for_ref(matched_ref)
 
     result: dict = {
         "segment_uid": seg_uid,
         "time_start": s.get("time_start", 0),
         "time_end": s.get("time_end", 0),
-        "matched_ref": normalize_ref(s.get("matched_ref", ""), word_counts),
-        "matched_text": s.get("matched_text", ""),
+        "matched_ref": matched_ref,
+        "matched_text": matched_text,
         "confidence": s.get("confidence", 0.0),
         "phonemes_asr": phonemes,
     }

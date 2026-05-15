@@ -50,6 +50,7 @@ from typing import Any
 from config import BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
 from constants import MUQATTAAT_VERSES, QALQALA_LETTERS, STANDALONE_REFS, STANDALONE_WORDS
 from services.phoneme_matching import tail_phoneme_mismatch
+from services.quran_refs import dk_text_for_ref
 from utils.arabic_text import last_arabic_letter, strip_quran_deco
 from utils.references import seg_belongs_to_entry
 
@@ -133,7 +134,8 @@ def _check_boundary_adj(
     is_boundary = False
     if s_word == e_word:
         if (surah, s_ayah, s_word) not in STANDALONE_REFS:
-            if strip_quran_deco(seg.get("matched_text", "")) not in STANDALONE_WORDS:
+            text = seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))
+            if strip_quran_deco(text) not in STANDALONE_WORDS:
                 is_boundary = True
 
     if not is_boundary and canonical and seg.get("phonemes_asr"):
@@ -256,7 +258,9 @@ def classify_flags(
         if not is_ignored_for(seg, "muqattaat"):
             result["muqattaat"] = True
 
-    last_letter = last_arabic_letter(seg.get("matched_text", ""))
+    last_letter = last_arabic_letter(
+        seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))
+    )
     if last_letter and last_letter in QALQALA_LETTERS and not is_suppressed_for(seg, "qalqala"):
         result["qalqala"] = True
         result["qalqala_letter"] = last_letter

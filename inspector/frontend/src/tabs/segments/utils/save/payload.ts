@@ -4,7 +4,6 @@ interface SaveSegmentPayloadPatch {
     index: number;
     segment_uid: string;
     matched_ref: string;
-    matched_text: string;
     confidence: number;
     ignored_categories?: string[];
 }

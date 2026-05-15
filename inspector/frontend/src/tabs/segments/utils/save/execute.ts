@@ -29,12 +29,15 @@ export { buildPayloadFromCommandResult } from './payload';
 // Payload types
 // ---------------------------------------------------------------------------
 
+// Note: matched_text is intentionally omitted from save payloads. The server
+// derives it from matched_ref via dk_words (services/quran_refs.py::
+// dk_text_for_ref) so detailed.json's matched_text stays consistent with the
+// canonical reference text.
 interface SaveSegmentPayloadFull {
     segment_uid: string;
     time_start: number;
     time_end: number;
     matched_ref: string;
-    matched_text: string;
     confidence: number;
     phonemes_asr: string;
     audio_url: string;
@@ -47,7 +50,6 @@ interface SaveSegmentPayloadPatch {
     index: number;
     segment_uid: string;
     matched_ref: string;
-    matched_text: string;
     confidence: number;
     ignored_categories?: string[];
 }
@@ -165,7 +167,6 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             time_start: s.time_start,
                             time_end: s.time_end,
                             matched_ref: s.matched_ref,
-                            matched_text: s.matched_text,
                             confidence: s.confidence,
                             phonemes_asr: s.phonemes_asr || '',
                             audio_url: s.audio_url || '',
@@ -186,7 +187,6 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             index: seg.index,
                             segment_uid: seg.segment_uid || '',
                             matched_ref: seg.matched_ref,
-                            matched_text: seg.matched_text,
                             confidence: seg.confidence,
                             ignored_categories: seg.ignored_categories ?? [],
                         };
