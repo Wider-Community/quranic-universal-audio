@@ -26,6 +26,7 @@ from scripts.lib.schemas import Actor
 from services import cache, data_dir
 from services.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.peaks_history import append_peaks_records
+from services.qalqala import compute_qalqala_letter
 from services.quran_refs import dk_text_for_ref
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
@@ -280,6 +281,15 @@ def _make_seg(
     return _adapter_make_seg(s, existing_by_time, existing_by_uid, word_counts)
 
 
+def _stamp_persisted_classifier_fields(seg: dict) -> None:
+    """Set the per-seg fields the validate fast-path reads instead of recomputing.
+
+    Called by every save path that mutates a segment dict; ensures
+    ``qalqala_letter`` stays in lockstep with ``matched_ref`` / ``matched_text``.
+    """
+    seg["qalqala_letter"] = compute_qalqala_letter(seg)
+
+
 def _apply_full_replace(matching: list[dict], updates: dict,
                        existing_by_time: dict, existing_by_uid: dict):
     """Mutate ``matching`` in place for a full_replace save.
@@ -289,10 +299,13 @@ def _apply_full_replace(matching: list[dict], updates: dict,
     """
     word_counts = get_word_counts()
     if len(matching) == 1:
-        matching[0]["segments"] = [
+        new_segs = [
             _make_seg(s, existing_by_time, existing_by_uid, word_counts)
             for s in updates["segments"]
         ]
+        for seg in new_segs:
+            _stamp_persisted_classifier_fields(seg)
+        matching[0]["segments"] = new_segs
         return None
 
     entry_by_audio: dict[str, list[dict]] = defaultdict(list)
@@ -322,9 +335,9 @@ def _apply_full_replace(matching: list[dict], updates: dict,
                 "matched multiple chapter entries."
             )}, 400
 
-        candidates[0]["segments"].append(
-            _make_seg(s, existing_by_time, existing_by_uid, word_counts)
-        )
+        new_seg = _make_seg(s, existing_by_time, existing_by_uid, word_counts)
+        _stamp_persisted_classifier_fields(new_seg)
+        candidates[0]["segments"].append(new_seg)
     return None
 
 
@@ -353,6 +366,8 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
                 else:
                     flat_segments[idx].pop("ignored_categories", None)
                     flat_segments[idx].pop("ignored", None)
+            # Re-stamp persisted classifier fields since matched_ref/text changed.
+            _stamp_persisted_classifier_fields(flat_segments[idx])
 
 
 def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,

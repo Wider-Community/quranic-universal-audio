@@ -258,12 +258,19 @@ def classify_flags(
         if not is_ignored_for(seg, "muqattaat"):
             result["muqattaat"] = True
 
-    last_letter = last_arabic_letter(
-        seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))
-    )
-    if last_letter and last_letter in QALQALA_LETTERS and not is_suppressed_for(seg, "qalqala"):
+    # Persisted-field short-circuit: ``qalqala_letter`` is stamped at save /
+    # extraction time via ``services.qalqala.compute_qalqala_letter`` (the
+    # same helper this fall-through path uses for legacy segs without the
+    # field — so the value is byte-equivalent either way). Persisted value
+    # is a single Arabic letter (one of ``QALQALA_LETTERS``) or ``None``.
+    if "qalqala_letter" in seg:
+        qalqala_letter = seg["qalqala_letter"]
+    else:
+        from services.qalqala import compute_qalqala_letter  # local import: avoid cycle at module load
+        qalqala_letter = compute_qalqala_letter(seg)
+    if qalqala_letter and not is_suppressed_for(seg, "qalqala"):
         result["qalqala"] = True
-        result["qalqala_letter"] = last_letter
+        result["qalqala_letter"] = qalqala_letter
 
     return result
 
