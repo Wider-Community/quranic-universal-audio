@@ -84,11 +84,15 @@ export function buildEditChains(allBatches: HistoryBatch[]): BuildChainsResult {
         }
     }
 
-    // Unwrap single-op chains back into standard ops, EXCEPT if they are split_segment or merge_segments
+    // Unwrap single-op chains back into standard ops, EXCEPT for single splits
+    // (1 → N, kept in EditChainRow's split layout). Single merges (N → 1)
+    // fall through to HistoryOp which already renders the N-before / 1-after
+    // diff correctly with merge highlights — EditChainRow's structure assumes
+    // a 1-before root and would collapse merge into a misleading 1 → 1 card.
     for (const [chainId, chain] of chains.entries()) {
         const opType = chain.ops[0]?.op.op_type;
-        const isStructural = opType === 'split_segment' || opType === 'merge_segments';
-        if (chain.ops.length <= 1 && !isStructural) {
+        const isSplitChain = opType === 'split_segment';
+        if (chain.ops.length <= 1 && !isSplitChain) {
             chains.delete(chainId);
             chained.delete(chain.ops[0]!.op.op_id);
         }
