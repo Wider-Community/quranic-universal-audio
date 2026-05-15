@@ -15,6 +15,7 @@
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import ClaimButton from '../../lib/components/ClaimButton.svelte';
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
+    import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import {
         editingMode,
@@ -279,6 +280,11 @@
     }
 
     onMount(async () => {
+        // Fire-and-forget the 2.4 MB quran-refs bundle that only Segments
+        // consumers (SegmentRow, ReferenceEditor, split/merge/auto-fix) need.
+        // Idempotent — reciter-actions awaits this same promise before
+        // hydrating per-segment matched_text.
+        void loadQuranRefs();
         await surahInfoReady;
         const cfg = await loadSegConfig();
         cssFontSize = cfg.fontSize;
