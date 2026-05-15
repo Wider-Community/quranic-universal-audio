@@ -852,33 +852,30 @@
         color: var(--text-secondary);
         font-size: var(--fs-meta);
     }
+    /* Label and value share the button's color so the cell reads as one
+       unit ("Surah 1"), and so the live-state accent flip recolours both
+       spans together without per-span overrides. */
     .player-row .loc-cell .loc-label {
-        color: var(--text-faint);
         font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.07em;
     }
     .player-row .loc-cell .loc-value {
-        color: var(--text-primary);
         font-family: var(--font-mono);
         font-size: 11.5px;
         font-variant-numeric: tabular-nums;
     }
     .player-row .loc-cell .loc-empty {
-        color: var(--text-faint);
         font-style: italic;
         font-size: 10.5px;
+        opacity: 0.65;
     }
     .player-row .loc-cell:hover:not(:disabled) {
         background: var(--panel-2);
         color: var(--text-primary);
     }
     .player-row .loc-cell.has-value { color: var(--text-primary); }
-    .player-row .loc-cell.live {
-        color: var(--accent);
-    }
-    .player-row .loc-cell.live .loc-value,
-    .player-row .loc-cell.live .loc-label { color: var(--accent); }
+    .player-row .loc-cell.live { color: var(--accent); }
 
     .pop {
         position: absolute;
