@@ -27,7 +27,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  checks:
+    uses: ./.github/workflows/inspector-checks.yml
+
   deploy:
+    needs: [checks]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
