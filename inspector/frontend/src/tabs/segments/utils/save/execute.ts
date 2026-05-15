@@ -285,14 +285,15 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             saveButtonLabel.set(msg);
             setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
             
-            fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
-                .then(() => {
-                    if (!isCurrentRunAutoSave) {
-                        return refreshValidation();
-                    }
-                })
-                .catch((err: unknown) => { console.warn('trigger-validation failed:', err); });
-            
+            // Manual save refreshes the validation panel (autosave skips it
+            // to keep the post-save round-trip light). Previously gated behind
+            // a deprecated `trigger-validation` POST that always 410'd, so
+            // refreshValidation never actually ran.
+            if (!isCurrentRunAutoSave) {
+                void refreshValidation();
+            }
+
+
             try {
                 const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
                     `/api/seg/edit-history/${reciter}`,

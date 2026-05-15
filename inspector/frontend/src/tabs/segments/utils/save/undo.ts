@@ -10,6 +10,7 @@ import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import { surahOptionText } from '../../../../lib/utils/surah-info';
 import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import { segAllData, selectedReciter } from '../../stores/chapter';
+import { refreshValidation } from '../validation/refresh';
 import {
     getChapterOps,
     isDirty,
@@ -44,7 +45,9 @@ export async function _afterUndoSuccess(reciter: string, _opsReversed: number): 
         }
     } catch (_) { /* non-critical */ }
     historyDataStale.set(true);
-    fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
+    // Undo invalidates validation server-side (invalidate_seg_caches runs on
+    // undo too); refetch so the panel reflects the reverted state.
+    void refreshValidation();
 }
 
 // ---------------------------------------------------------------------------

@@ -305,11 +305,6 @@ export type SegUndoOpsResponse = SegUndoBatchResponse;
 // /api/seg/* — Segments tab (validation, stats, history)
 // ===========================================================================
 
-/** POST /api/seg/trigger-validation/:reciter */
-export interface SegTriggerValidationResponse {
-    ok: true;
-}
-
 // ---------------------------------------------------------------------------
 // /api/seg/validate — per-category item shapes
 // ---------------------------------------------------------------------------
