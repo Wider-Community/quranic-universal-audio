@@ -13,7 +13,7 @@ setup_space.py`).
 | Env  | Repo                             | Bucket attached at `/data/inspector-bucket` |
 |------|----------------------------------|---------------------------------------------|
 | dev  | `hetchyy/quranic-inspector-dev`  | `hetchyy/quranic-inspector-bucket-dev`      |
-| prod | `hetchyy/quranic-inspector`      | `hetchyy/quranic-inspector-bucket`          |
+| prod | `hetchyy/quranic-universal-audio` | `hetchyy/quranic-inspector-bucket`          |
 
 Both Spaces ship the Docker SDK, bind to port 7860, and use the same
 image (the only diff is the `INSPECTOR_BUCKET_REPO` variable and the

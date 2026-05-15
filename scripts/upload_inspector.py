@@ -4,7 +4,7 @@
 Usage::
 
     python -m scripts.upload_inspector dev   # → hetchyy/quranic-inspector-dev
-    python -m scripts.upload_inspector prod  # → hetchyy/quranic-inspector
+    python -m scripts.upload_inspector prod  # → hetchyy/quranic-universal-audio
 
 Build steps:
 
@@ -43,7 +43,7 @@ from inspector_v2_seed._env import load_repo_env, repo_root  # noqa: E402
 
 SPACE_REPOS = {
     "dev": "hetchyy/quranic-inspector-dev",
-    "prod": "hetchyy/quranic-inspector",
+    "prod": "hetchyy/quranic-universal-audio",
 }
 
 # README frontmatter shipped to the Space. Mirrors the runbook §1 setup.
