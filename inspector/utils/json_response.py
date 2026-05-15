@@ -34,21 +34,27 @@ def orjson_response(
 def orjson_cached_response(
     payload: Any,
     *,
-    max_age: int = 60,
+    max_age: int = 0,
 ) -> Response:
-    """orjson + ``Cache-Control: private, max-age=N`` + ETag with 304 handling.
+    """orjson + ETag-with-revalidation + 304 handling.
 
     Cheap path for endpoints whose cached payload is keyed on a reciter slug
-    and invalidated on save (validate / stats / edit-history). The ETag is
-    a sha256[:12] of the encoded body — stable as long as the upstream cache
-    isn't invalidated. When ``If-None-Match`` matches, returns 304 with no
-    body so the browser reuses its cached copy.
+    and invalidated on save (validate / stats / edit-history). Default is
+    ``Cache-Control: private, max-age=0, must-revalidate`` so the browser
+    always asks the server before reusing its cached body; the server-side
+    cache + ETag short-circuit cheaply returns 304 when the body is unchanged.
+    Pass ``max_age=N`` to opt into a stale window for genuinely static payloads.
     """
     body = orjson.dumps(payload)
     digest = hashlib.sha256(body).hexdigest()[:12]
     etag = f'"{digest}"'
+    cache_control = (
+        f"private, max-age={max_age}, must-revalidate"
+        if max_age == 0
+        else f"private, max-age={max_age}"
+    )
     headers = {
-        "Cache-Control": f"private, max-age={max_age}",
+        "Cache-Control": cache_control,
         "ETag": etag,
     }
     if request.headers.get("If-None-Match", "").strip() == etag:

@@ -26,7 +26,7 @@ from services.data_loader import (
 from services.audio_meta import vbr_chapters_for_reciter
 from services.segments_query import get_chapter_data
 from utils.formatting import slug_to_name
-from utils.json_response import orjson_response
+from utils.json_response import orjson_cached_response, orjson_response
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
@@ -110,19 +110,15 @@ def seg_chapters(reciter):
 def seg_data(reciter, chapter):
     """Return segments, audio URL, summary, and issues for a chapter.
 
-    Sets ``Cache-Control: public, max-age=86400`` so a CDN (or browser cache)
-    can hold this for a day. Not ``immutable``: shards mutate on re-edit, and
-    edits do not currently cache-bust this URL. Cache life mirrors a typical
-    review cycle — a contributor's claim usually lasts a day or two; the shard
-    rarely changes mid-session, and the small staleness window is acceptable.
+    Shards mutate on re-edit and we don't currently cache-bust this URL, so
+    we ride ETag + ``must-revalidate``: the browser always asks the server,
+    and the server returns 304 when the encoded body hasn't changed.
     """
     verse_filter = request.args.get("verse")
     result = get_chapter_data(reciter, chapter, verse_filter)
     if result is None:
         return jsonify({"error": "Chapter not found"}), 404
-    # When verse_filter is set the response is a slice — still safe for a CDN
-    # because the URL key includes ?verse=… and the shape stays identical.
-    return orjson_response(result, headers={"Cache-Control": "public, max-age=86400"})
+    return orjson_cached_response(result)
 
 
 @seg_data_bp.route("/all/<reciter>")

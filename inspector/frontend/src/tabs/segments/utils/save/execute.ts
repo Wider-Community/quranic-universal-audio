@@ -22,7 +22,7 @@ import {
 } from '../../stores/dirty';
 import { saveButtonLabel } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
-import { refreshValidation } from '../validation/refresh';
+import { refreshStats, refreshValidation } from '../validation/refresh';
 import { collectOpPeaks, type OpPeakRecord } from '../waveform/op-peaks';
 export { buildPayloadFromCommandResult } from './payload';
 
@@ -274,22 +274,24 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             savedChapters++;
         }
 
-        if (allOk && savedChapters > 0) {
-            const msg = savedChapters > 1
-                ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
-                : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
-            saveButtonLabel.set(msg);
-            setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
-            
-            // Manual save refreshes the validation panel (autosave skips it
-            // to keep the post-save round-trip light). Previously gated behind
-            // a deprecated `trigger-validation` POST that always 410'd, so
-            // refreshValidation never actually ran.
-            if (!isCurrentRunAutoSave) {
-                void refreshValidation();
+        if (savedChapters > 0) {
+            if (allOk) {
+                const msg = savedChapters > 1
+                    ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
+                    : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
+                saveButtonLabel.set(msg);
+                setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
+            } else {
+                saveButtonLabel.set('Save');
             }
 
-
+            // Refresh validation, history, and stats whenever ANY chapter
+            // saved — autosave and partial-success runs both need it so the
+            // UI doesn't keep showing pre-edit counts and history rows.
+            // Each fetch has its own try/catch so a single hiccup doesn't
+            // skip the others.
+            void refreshValidation().catch((e) => console.error('Error refreshing validation:', e));
+            void refreshStats().catch((e) => console.error('Error refreshing stats:', e));
             try {
                 const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
                     `/api/seg/edit-history/${reciter}`,
@@ -298,11 +300,8 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                     renderEditHistoryPanel(hist);
                 }
             } catch (_) { /* non-critical */ }
-        } else if (allOk && savedChapters === 0) {
-            // Nothing to save
-            saveButtonLabel.set('Save');
         } else {
-            // Error occurred
+            // Nothing saved (either nothing to save or error before first commit)
             saveButtonLabel.set('Save');
         }
     } catch (e) {
