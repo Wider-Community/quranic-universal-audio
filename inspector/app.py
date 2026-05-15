@@ -77,7 +77,7 @@ from services.data_loader import load_surah_info_lite
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
 # inspector/scripts/backfill_boundary_adj.py (the only remaining consumer).
 from services.secrets_guard import MissingSecret, get_session_secret
-from services.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
+from services.state.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
 from utils.json_response import orjson_response
 
 

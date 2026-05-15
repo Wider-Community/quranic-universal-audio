@@ -8,7 +8,7 @@ adapter internally; the route shape is unchanged (MUST-1).
 
 from __future__ import annotations
 
-from services.quran_refs import dk_text_for_ref
+from services.reference.quran_refs import dk_text_for_ref
 from services.validation.registry import filter_persistent_ignores
 from utils.references import normalize_ref
 from utils.repetitions import is_wrap_consistent

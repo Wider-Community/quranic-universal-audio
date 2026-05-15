@@ -17,9 +17,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from config import LOW_CONFIDENCE_THRESHOLD
 from constants import VALIDATION_CATEGORIES
-from services import cache
-from services.data_loader import get_word_counts, load_detailed, load_probe_v2, load_seg_verses
-from services.history_query import build_resolved_by_edit_index
+from services.storage import cache
+from services.storage.data_loader import get_word_counts, load_detailed, load_probe_v2, load_seg_verses
+from services.activity.history_query import build_resolved_by_edit_index
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic

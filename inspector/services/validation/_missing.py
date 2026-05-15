@@ -6,7 +6,7 @@ Extracted from validate_reciter_segments. Given the verse_segments map
 
 from __future__ import annotations
 
-from services.data_loader import word_has_stop
+from services.storage.data_loader import word_has_stop
 
 
 def _build_missing_words(

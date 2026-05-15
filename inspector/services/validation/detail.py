@@ -13,8 +13,8 @@ from __future__ import annotations
 from collections import defaultdict
 
 from config import BOUNDARY_TAIL_DISPLAY_EXTRA, BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, SHOW_BOUNDARY_PHONEMES
-from services.data_loader import load_detailed
-from services.phoneme_matching import get_phoneme_tails
+from services.storage.data_loader import load_detailed
+from services.segments.phoneme_matching import get_phoneme_tails
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
 
