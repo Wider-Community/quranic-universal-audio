@@ -26,6 +26,7 @@ from services.data_loader import (
 from services.audio_meta import vbr_chapters_for_reciter
 from services.segments_query import get_chapter_data
 from utils.formatting import slug_to_name
+from utils.json_response import orjson_response
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
@@ -142,6 +143,13 @@ def seg_all(reciter):
             if not seg_uid:
                 seg_uid = uuid7()
                 seg["segment_uid"] = seg_uid
+            # `matched_text` and `audio_url` deliberately omitted:
+            # - `matched_text` is reconstructable client-side via
+            #   ``dkTextForRef($quranRefs, matched_ref)`` and is the single
+            #   biggest wire contributor (~315 KB brotli savings).
+            # - `audio_url` is redundant with the top-level
+            #   ``audio_by_chapter[chapter]`` map; every FE consumer already
+            #   falls back to it.
             seg_dict = {
                 "chapter":      ch,
                 "entry_idx":    entry_idx,
@@ -150,9 +158,7 @@ def seg_all(reciter):
                 "time_start":   seg.get("time_start", 0),
                 "time_end":     seg.get("time_end", 0),
                 "matched_ref":  mref,
-                "matched_text": seg.get("matched_text", ""),
                 "confidence":   round(seg.get("confidence", 0.0), 4),
-                "audio_url":    entry_audio,
                 "entry_ref":    entry.get("ref", ""),
             }
             if seg.get("wrap_word_ranges"):
@@ -168,7 +174,7 @@ def seg_all(reciter):
     )
     # dk_words + verse_word_counts moved off this payload to the immutable
     # ``/api/static/quran-refs.json`` asset (fetched once per browser).
-    return jsonify({
+    return orjson_response({
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
