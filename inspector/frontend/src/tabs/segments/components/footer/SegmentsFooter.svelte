@@ -396,9 +396,9 @@
         left: 0;
         right: 0;
         z-index: 100;
-        display: grid;
-        grid-template-columns: minmax(360px, 1.6fr) auto minmax(220px, 1fr);
+        display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: var(--s-3);
         padding: var(--s-2) var(--s-4);
         min-height: var(--seg-footer-h, 60px);
@@ -406,8 +406,15 @@
         border-top: 1px solid var(--border-default);
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.28);
     }
-    .segs-footer.is-empty {
-        grid-template-columns: 1fr auto;
+    /* Location is pinned to the true viewport horizontal center, decoupled
+       from the side zones' widths. Identity (left) and Save (right) flex
+       naturally; reservation gutters on either side of those zones keep
+       them from sliding under the popovers. */
+    .zone-location {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
     }
 
     .zone {
@@ -421,7 +428,6 @@
         flex-wrap: nowrap;
     }
     .zone-location {
-        position: relative;
         justify-content: center;
         gap: var(--s-2);
     }
@@ -454,7 +460,10 @@
         gap: var(--s-3);
         max-width: 100%;
         min-width: 0;
-        flex: 1 1 auto;
+        /* Shrink to fit content; never expand to fill the zone. The grid
+           column itself is `auto`-sized so the chip stays the width of its
+           name + meta + pill, not stretched to a fraction of the viewport. */
+        flex: 0 1 auto;
         padding: 6px var(--s-3);
         background: var(--panel-2);
         border: 1px solid var(--border-quiet);
@@ -751,10 +760,17 @@
     /* ---------- Responsive ---------- */
     @media (max-width: 960px) {
         .segs-footer {
-            grid-template-columns: 1fr;
-            grid-auto-rows: auto;
+            flex-direction: column;
+            align-items: stretch;
             gap: var(--s-2);
             padding: var(--s-2) var(--s-3);
+        }
+        /* Return location to in-flow stacking — absolute positioning would
+           collapse it on top of the identity row at narrow widths. */
+        .zone-location {
+            position: static;
+            transform: none;
+            justify-content: flex-start;
         }
         .zone-save { justify-content: flex-start; }
         .pop-surah, .pop-ayah {
