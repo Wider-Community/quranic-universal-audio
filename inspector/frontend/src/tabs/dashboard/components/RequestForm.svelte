@@ -34,6 +34,7 @@
     import {
         COUNTRIES,
         countryByCode,
+        countryByName,
         normalizeCountry as resolveCountry,
     } from '../../../lib/utils/countries';
 
@@ -66,11 +67,18 @@
     let style = delivery.style;
     let name_en = reciter.name;
     let name_ar = reciter.name_ar ?? '';
-    // Legacy catalog rows store country as the full name (e.g. "Saudi Arabia")
-    // instead of the ISO-2 code the schema documents. The resolver accepts
-    // either shape and returns the canonical code so the datalist recognises
-    // the prefill — catalog migrates naturally to ISO-2 as edits land.
-    let country = resolveCountry(reciter.country);
+    // The input is bound to the country *name* (e.g. "Saudi Arabia"). The
+    // ISO-2 code is shown alongside the field label and stays the canonical
+    // wire format. We accept either shape on prefill — legacy catalog rows
+    // store the full name, newer rows store the code — and resolve to a
+    // canonical name for display. Unresolvable values fall through unchanged
+    // so the user can see + fix them.
+    let countryName: string = (() => {
+        const code = resolveCountry(reciter.country);
+        const known = countryByCode(code);
+        if (known) return known.name;
+        return reciter.country ?? '';
+    })();
     let recording_context = delivery.recording_context ?? '';
     let recording_year: number | '' = delivery.recording_year ?? '';
     let comments = '';
@@ -114,7 +122,14 @@
                 style = pending.proposed_edits.style ?? style;
                 name_en = pending.proposed_edits.name_en ?? name_en;
                 name_ar = pending.proposed_edits.name_ar ?? name_ar;
-                country = resolveCountry(pending.proposed_edits.country ?? country);
+                {
+                    const incoming = pending.proposed_edits.country;
+                    if (incoming != null) {
+                        const code = resolveCountry(incoming);
+                        const known = countryByCode(code);
+                        countryName = known ? known.name : incoming;
+                    }
+                }
                 recording_context =
                     pending.proposed_edits.recording_context ?? recording_context;
                 recording_year = pending.proposed_edits.recording_year ?? recording_year;
@@ -129,41 +144,13 @@
         }
     }
 
-    /**
-     * On country-input blur: resolve whatever the user typed (code or
-     * full name) to the canonical ISO-2 code. The datalist passes the
-     * selected option's value (the code) through directly so most picks
-     * land here already normalized; this catches the keyboard-only path
-     * where someone types "saudi arabia" without selecting from the list.
-     * Unknown strings round-trip unchanged so the user can fix them.
-     */
-    function normalizeCountry(): void {
-        country = resolveCountry(country);
-    }
-
-    /**
-     * Force the full datalist to drop down on click. Without this, Chrome
-     * filters options against the current value — if the input already
-     * holds "SA" the user only sees Saudi Arabia (or nothing), and has to
-     * clear the field before browsing alternatives. ``showPicker()`` shows
-     * the unfiltered list regardless of current value. Wrapped in try/catch
-     * because some user-activation contexts (e.g. programmatic focus) throw.
-     */
-    function showCountryPicker(event: Event): void {
-        const input = event.currentTarget as HTMLInputElement;
-        try {
-            input.showPicker?.();
-        } catch {
-            // No-op: browser refused (typically because the click wasn't a
-            // direct user activation). Native focus behaviour still applies.
-        }
-    }
-
-    $: countryMatch = countryByCode(country);
+    /** Resolved ISO-2 code for the currently-typed name. Empty when blank
+     *  or unrecognised — the label suffix uses this to render `(SA)` etc. */
+    $: countryCode = countryByName(countryName)?.code ?? '';
     /** True iff the user typed a country that doesn't match any ISO-2 entry.
      *  Blank is fine (truly unknown is allowed); only a populated-but-invalid
      *  value blocks submission. */
-    $: invalidCountry = !!country && !countryMatch;
+    $: invalidCountry = !!countryName && !countryCode;
 
     /**
      * Compute the proposed_edits patch: only include fields the user
@@ -176,12 +163,15 @@
         if (style && style !== delivery.style) out.style = style;
         if (name_en && name_en !== reciter.name) out.name_en = name_en;
         if (name_ar !== (reciter.name_ar ?? '')) out.name_ar = name_ar || null;
-        // Compare against the normalized form of the catalog value so legacy
-        // rows storing full names (e.g. "Saudi Arabia") don't show up as
-        // edits when the user hasn't touched the field. On submit we always
-        // send the ISO-2 code regardless.
-        if (country !== resolveCountry(reciter.country)) {
-            out.country = country || null;
+        // Wire format is always ISO-2. Compare resolved codes so a legacy
+        // full-name catalog value doesn't surface as a phantom edit when the
+        // user hasn't touched the field.
+        {
+            const submittedCode = countryByName(countryName)?.code ?? '';
+            const originalCode = resolveCountry(reciter.country);
+            if (submittedCode !== originalCode) {
+                out.country = submittedCode || null;
+            }
         }
         if (recording_context !== (delivery.recording_context ?? '')) {
             out.recording_context = recording_context || null;
@@ -213,7 +203,7 @@
     async function onSubmit(): Promise<void> {
         if (busy) return;
         if (invalidCountry) {
-            formError = 'Country must be a valid ISO-2 code from the list, or blank.';
+            formError = 'Country must match a name from the dropdown, or be left blank.';
             return;
         }
         formError = null;
@@ -359,27 +349,21 @@
         </label>
 
         <label>
-            <span>Country</span>
-            <div class="input-overlay-wrap">
-                <input
-                    type="text"
-                    list="request-form-countries"
-                    bind:value={country}
-                    placeholder="Type country name or ISO-2 code"
-                    disabled={readOnly}
-                    on:click={showCountryPicker}
-                    on:blur={normalizeCountry}
-                />
-                {#if country && countryMatch}
-                    <span class="input-overlay" aria-hidden="true"
-                        >({countryMatch.name})</span
-                    >
-                {:else if country}
-                    <span class="input-overlay warn" aria-hidden="true"
-                        >(Invalid)</span
-                    >
+            <span>
+                Country
+                {#if countryCode}
+                    <span class="label-meta">({countryCode})</span>
+                {:else if countryName}
+                    <span class="label-meta warn">(unknown)</span>
                 {/if}
-            </div>
+            </span>
+            <input
+                type="text"
+                list="request-form-countries"
+                bind:value={countryName}
+                placeholder="Start typing a country name…"
+                disabled={readOnly}
+            />
         </label>
 
         <label>
@@ -415,7 +399,7 @@
 
     <datalist id="request-form-countries">
         {#each COUNTRIES as c (c.code)}
-            <option value={c.code}>{c.name}</option>
+            <option value={c.name} label={c.code}></option>
         {/each}
     </datalist>
 
@@ -564,46 +548,17 @@
     .field-hint.warn {
         color: var(--state-error-fg);
     }
-    /* Country input: name renders inside the same box at the right edge,
-       muted, in parens. Keeps the field's footprint unchanged. The input
-       itself gets right-padding so the typed code never collides with the
-       overlay, and the overlay has `pointer-events: none` so clicks still
-       land on the input. */
-    .input-overlay-wrap {
-        position: relative;
-        display: block;
-    }
-    .input-overlay-wrap input {
-        width: 100%;
-        padding-right: 7em;
-    }
-    /* Hide the native datalist dropdown arrow that Chromium injects at the
-       right edge of <input list> on hover/focus — it collides visually with
-       the country-name overlay and looks like a second control. Clicking the
-       input still opens the full option list because we call
-       ``input.showPicker()`` from the click handler. */
-    .input-overlay-wrap input::-webkit-calendar-picker-indicator {
-        display: none;
-        -webkit-appearance: none;
-        appearance: none;
-    }
-    .input-overlay {
-        position: absolute;
-        right: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-        max-width: 60%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        pointer-events: none;
-        font-size: 11px;
+    /* The country field's resolved ISO-2 code (or `(unknown)` when the
+       typed value doesn't match any entry) rides alongside the label so
+       the input itself stays a plain text box at its natural width. */
+    .label-meta {
+        margin-left: 4px;
+        font-size: 10.5px;
         color: var(--text-faint);
-        font-style: italic;
+        font-variant-numeric: tabular-nums;
     }
-    .input-overlay.warn {
+    .label-meta.warn {
         color: var(--state-error-fg);
-        font-style: normal;
     }
     .grid {
         display: grid;
