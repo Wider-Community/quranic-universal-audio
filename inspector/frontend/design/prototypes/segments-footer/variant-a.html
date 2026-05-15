@@ -2,49 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Variant A — Player-centric</title>
+    <title>Variant A — Stacked player</title>
     <link rel="stylesheet" href="../../../src/styles/tokens.css" />
     <link rel="stylesheet" href="./shared.css" />
-    <style>
-        /* Variant A — Surah/Ayah are PART of the transport cluster.
-         * Whole center reads "I am here, with these controls."
-         */
-        .va .row {
-            justify-content: space-between;
-        }
-        .va .player {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--s-3);
-            padding: 4px var(--s-3);
-            background: var(--panel-2);
-            border: 1px solid var(--border-quiet);
-            border-radius: 999px;
-        }
-        .va .player .transport,
-        .va .player .pref,
-        .va .player .speed-pill,
-        .va .player .loc-trigger {
-            border: 0;
-            background: transparent;
-        }
-        .va .player .transport.play {
-            border-radius: 50%;
-            background: var(--accent);
-            color: var(--accent-fg);
-        }
-        .va .player .transport.play.loading {
-            background: transparent;
-            border: 1px solid var(--accent);
-            color: var(--accent);
-        }
-        .va .player .divider {
-            margin: 4px 0;
-            background: var(--border-quiet);
-        }
-        .va .player .pref.on,
-        .va .player .speed-pill.boosted { background: var(--accent-tint); border-radius: var(--r-2); }
-    </style>
 </head>
 <body>
     <!-- SVG sprite -->
@@ -52,8 +12,6 @@
         <defs>
             <symbol id="i-play" viewBox="0 0 16 16"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></symbol>
             <symbol id="i-pause" viewBox="0 0 16 16"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></symbol>
-            <symbol id="i-prev" viewBox="0 0 16 16"><path d="M5 3v10H4V3h1zm8 0v10l-7-5 7-5z" fill="currentColor"/></symbol>
-            <symbol id="i-next" viewBox="0 0 16 16"><path d="M11 3v10h1V3h-1zM3 3v10l7-5-7-5z" fill="currentColor"/></symbol>
             <symbol id="i-spin" viewBox="0 0 16 16"><path d="M8 2a6 6 0 016 6h-1.5a4.5 4.5 0 00-4.5-4.5V2z" fill="currentColor"/></symbol>
             <symbol id="i-repeat" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a1 1 0 011-1h7"/><path d="M9 2l2 2-2 2"/><path d="M13 9v2a1 1 0 01-1 1H5"/><path d="M7 14l-2-2 2-2"/></symbol>
             <symbol id="i-scroll" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v9"/><path d="M5 9l3 3 3-3"/><path d="M3 14h10"/></symbol>
@@ -64,11 +22,11 @@
         </defs>
     </svg>
 
-    <div class="proto-page va">
+    <div class="proto-page">
         <div class="proto-header">
             <div>
-                <h1>Variant A — Player-centric</h1>
-                <div class="sub">SHAPE / SEGMENTS FOOTER / DIRECTION A</div>
+                <h1>Variant A — Stacked player</h1>
+                <div class="sub">SHAPE / SEGMENTS FOOTER / DIRECTION A (iter 2)</div>
             </div>
             <nav class="variant-nav">
                 <a href="./index.html">← Index</a>
@@ -79,10 +37,12 @@
         </div>
 
         <p class="proto-caption">
-            Surah / Ayah pickers sit <strong>inside</strong> the transport pill, divider-separated.
-            The whole center reads as one continuous player. Identity on the left,
-            history + save on the right. ⏮ / ⏭ step segments (matching today's keyboard
-            shortcuts), not surahs.
+            Iteration on A: <strong>no prev / next chevrons</strong>. The 6 remaining
+            controls stack into a 3×2 grid — top row carries playback context
+            (<strong>play · Surah · Ayah</strong>), bottom row carries preferences
+            (<strong>speed · auto-play · auto-scroll</strong>). Identity sits left,
+            history + save sit right. Surah / Ayah popovers handle stepping; keyboard
+            shortcuts still work for power users.
         </p>
 
         <!-- ─── ROW 1: No reciter ─────────────────────────────── -->
@@ -90,7 +50,7 @@
             <div class="row-label">
                 <span class="row-num">01</span>
                 <span>No reciter</span>
-                <span class="row-note">— transport disabled, location triggers ghosted</span>
+                <span class="row-note">— everything except identity ghosted</span>
             </div>
             <div class="f">
                 <div class="progress"><div class="fill" style="width: 0;"></div></div>
@@ -98,23 +58,19 @@
                     <div class="zone zone-identity">
                         <span class="chip empty">Pick a reciter →</span>
                     </div>
-                    <div class="zone player">
-                        <button class="transport" disabled><svg><use href="#i-prev"/></svg></button>
-                        <button class="transport play" disabled><svg><use href="#i-play"/></svg></button>
-                        <button class="transport" disabled><svg><use href="#i-next"/></svg></button>
-                        <span class="divider"></span>
-                        <button class="loc-trigger" disabled>
+                    <div class="player-stack">
+                        <button class="play-cell" disabled><svg><use href="#i-play"/></svg></button>
+                        <button class="loc-cell" disabled>
                             <span class="loc-label">Surah</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <button class="loc-trigger" disabled>
+                        <button class="loc-cell" disabled>
                             <span class="loc-label">Ayah</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <span class="divider"></span>
-                        <button class="speed-pill" disabled>1.0×</button>
-                        <button class="pref" disabled><svg><use href="#i-repeat"/></svg></button>
-                        <button class="pref" disabled><svg><use href="#i-scroll"/></svg></button>
+                        <button class="speed-cell" disabled>1.0×</button>
+                        <button class="pref-cell" disabled><svg><use href="#i-repeat"/></svg></button>
+                        <button class="pref-cell" disabled><svg><use href="#i-scroll"/></svg></button>
                     </div>
                     <div class="zone zone-save">
                         <button class="btn ghost" disabled><svg style="width:14px;height:14px"><use href="#i-history"/></svg> History</button>
@@ -126,12 +82,11 @@
             </div>
         </div>
 
-        <!-- ─── ROW 2: Reciter selected, claim-eligible, paused ───── -->
+        <!-- ─── ROW 2: Paused, claim-eligible ───────────────────── -->
         <div class="proto-row">
             <div class="row-label">
                 <span class="row-num">02</span>
                 <span>Paused · claim-eligible · clean</span>
-                <span class="row-note">— first time on this reciter, ready to start</span>
             </div>
             <div class="f">
                 <div class="progress"><div class="fill" style="width: 0;"></div></div>
@@ -147,24 +102,20 @@
                         <span class="pill available">Available</span>
                         <button class="btn primary">Claim</button>
                     </div>
-                    <div class="zone player">
-                        <button class="transport"><svg><use href="#i-prev"/></svg></button>
-                        <button class="transport play"><svg><use href="#i-play"/></svg></button>
-                        <button class="transport"><svg><use href="#i-next"/></svg></button>
-                        <span class="divider"></span>
-                        <button class="loc-trigger has-value">
+                    <div class="player-stack">
+                        <button class="play-cell"><svg><use href="#i-play"/></svg></button>
+                        <button class="loc-cell">
                             <span class="loc-label">Surah</span>
                             <span class="loc-value">37</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <button class="loc-trigger">
+                        <button class="loc-cell">
                             <span class="loc-label">Ayah</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <span class="divider"></span>
-                        <button class="speed-pill">1.0×</button>
-                        <button class="pref" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
-                        <button class="pref" title="Auto-scroll"><svg><use href="#i-scroll"/></svg></button>
+                        <button class="speed-cell">1.0×</button>
+                        <button class="pref-cell" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
+                        <button class="pref-cell" title="Auto-scroll"><svg><use href="#i-scroll"/></svg></button>
                     </div>
                     <div class="zone zone-save">
                         <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg> History</button>
@@ -181,7 +132,7 @@
             <div class="row-label">
                 <span class="row-num">03</span>
                 <span>Playing · claim-held · auto-scroll ON · clean</span>
-                <span class="row-note">— progress at 42% of current segment 37:151:3, Ayah picker tracks live</span>
+                <span class="row-note">— Surah/Ayah cells turn accent-coloured to show live tracking</span>
             </div>
             <div class="f">
                 <div class="progress"><div class="fill" style="width: 42%;"></div></div>
@@ -198,25 +149,21 @@
                         <button class="btn">Unclaim</button>
                         <button class="btn primary">Mark ready</button>
                     </div>
-                    <div class="zone player">
-                        <button class="transport"><svg><use href="#i-prev"/></svg></button>
-                        <button class="transport play"><svg><use href="#i-pause"/></svg></button>
-                        <button class="transport"><svg><use href="#i-next"/></svg></button>
-                        <span class="divider"></span>
-                        <button class="loc-trigger has-value live">
+                    <div class="player-stack">
+                        <button class="play-cell"><svg><use href="#i-pause"/></svg></button>
+                        <button class="loc-cell live">
                             <span class="loc-label">Surah</span>
                             <span class="loc-value">37</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <button class="loc-trigger has-value live">
+                        <button class="loc-cell live">
                             <span class="loc-label">Ayah</span>
                             <span class="loc-value">151</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <span class="divider"></span>
-                        <button class="speed-pill">1.0×</button>
-                        <button class="pref" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
-                        <button class="pref on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
+                        <button class="speed-cell">1.0×</button>
+                        <button class="pref-cell" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
+                        <button class="pref-cell on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
                     </div>
                     <div class="zone zone-save">
                         <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg> History</button>
@@ -228,12 +175,11 @@
             </div>
         </div>
 
-        <!-- ─── ROW 4: Loading new segment ────────────────────────── -->
+        <!-- ─── ROW 4: Loading ────────────────────────────────────── -->
         <div class="proto-row">
             <div class="row-label">
                 <span class="row-num">04</span>
-                <span>Loading · claim-held · dirty</span>
-                <span class="row-note">— audio source swapping, progress fill pulsing, play button is a spinner</span>
+                <span>Loading · claim-held · dirty · 1.25× speed · all autos on</span>
             </div>
             <div class="f">
                 <div class="progress"><div class="fill pulse" style="width: 12%;"></div></div>
@@ -250,25 +196,21 @@
                         <button class="btn">Unclaim</button>
                         <button class="btn primary">Mark ready</button>
                     </div>
-                    <div class="zone player">
-                        <button class="transport"><svg><use href="#i-prev"/></svg></button>
-                        <button class="transport play loading"><svg><use href="#i-spin"/></svg></button>
-                        <button class="transport"><svg><use href="#i-next"/></svg></button>
-                        <span class="divider"></span>
-                        <button class="loc-trigger has-value live">
+                    <div class="player-stack">
+                        <button class="play-cell loading"><svg><use href="#i-spin"/></svg></button>
+                        <button class="loc-cell live">
                             <span class="loc-label">Surah</span>
                             <span class="loc-value">37</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <button class="loc-trigger has-value live">
+                        <button class="loc-cell live">
                             <span class="loc-label">Ayah</span>
                             <span class="loc-value">152</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <span class="divider"></span>
-                        <button class="speed-pill boosted">1.25×</button>
-                        <button class="pref on" title="Auto-play on"><svg><use href="#i-repeat"/></svg></button>
-                        <button class="pref on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
+                        <button class="speed-cell boosted">1.25×</button>
+                        <button class="pref-cell on" title="Auto-play on"><svg><use href="#i-repeat"/></svg></button>
+                        <button class="pref-cell on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
                     </div>
                     <div class="zone zone-save">
                         <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg> History</button>
@@ -285,7 +227,6 @@
             <div class="row-label">
                 <span class="row-num">05</span>
                 <span>Playing · claim-held · auto-save running</span>
-                <span class="row-note">— save button replaced by "Auto-saving…" pill with pulsing dot</span>
             </div>
             <div class="f">
                 <div class="progress"><div class="fill" style="width: 68%;"></div></div>
@@ -302,25 +243,21 @@
                         <button class="btn">Unclaim</button>
                         <button class="btn primary">Mark ready</button>
                     </div>
-                    <div class="zone player">
-                        <button class="transport"><svg><use href="#i-prev"/></svg></button>
-                        <button class="transport play"><svg><use href="#i-pause"/></svg></button>
-                        <button class="transport"><svg><use href="#i-next"/></svg></button>
-                        <span class="divider"></span>
-                        <button class="loc-trigger has-value live">
+                    <div class="player-stack">
+                        <button class="play-cell"><svg><use href="#i-pause"/></svg></button>
+                        <button class="loc-cell live">
                             <span class="loc-label">Surah</span>
                             <span class="loc-value">37</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <button class="loc-trigger has-value live">
+                        <button class="loc-cell live">
                             <span class="loc-label">Ayah</span>
                             <span class="loc-value">153</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <span class="divider"></span>
-                        <button class="speed-pill">1.0×</button>
-                        <button class="pref on" title="Auto-play on"><svg><use href="#i-repeat"/></svg></button>
-                        <button class="pref on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
+                        <button class="speed-cell">1.0×</button>
+                        <button class="pref-cell on" title="Auto-play on"><svg><use href="#i-repeat"/></svg></button>
+                        <button class="pref-cell on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
                     </div>
                     <div class="zone zone-save">
                         <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg> History</button>
@@ -332,12 +269,11 @@
             </div>
         </div>
 
-        <!-- ─── ROW 6: Save preview confirm ───────────────────── -->
+        <!-- ─── ROW 6: Save preview confirm ───────────────────────── -->
         <div class="proto-row">
             <div class="row-label">
                 <span class="row-num">06</span>
                 <span>Save preview · awaiting confirm</span>
-                <span class="row-note">— right zone swaps to Cancel | Confirm, transport keeps playing</span>
             </div>
             <div class="f">
                 <div class="progress"><div class="fill" style="width: 32%;"></div></div>
@@ -354,25 +290,21 @@
                         <button class="btn">Unclaim</button>
                         <button class="btn primary">Mark ready</button>
                     </div>
-                    <div class="zone player">
-                        <button class="transport"><svg><use href="#i-prev"/></svg></button>
-                        <button class="transport play"><svg><use href="#i-pause"/></svg></button>
-                        <button class="transport"><svg><use href="#i-next"/></svg></button>
-                        <span class="divider"></span>
-                        <button class="loc-trigger has-value live">
+                    <div class="player-stack">
+                        <button class="play-cell"><svg><use href="#i-pause"/></svg></button>
+                        <button class="loc-cell live">
                             <span class="loc-label">Surah</span>
                             <span class="loc-value">37</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <button class="loc-trigger has-value live">
+                        <button class="loc-cell live">
                             <span class="loc-label">Ayah</span>
                             <span class="loc-value">151</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <span class="divider"></span>
-                        <button class="speed-pill">1.0×</button>
-                        <button class="pref" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
-                        <button class="pref on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
+                        <button class="speed-cell">1.0×</button>
+                        <button class="pref-cell" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
+                        <button class="pref-cell on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
                     </div>
                     <div class="zone zone-save">
                         <div class="confirm-row">
@@ -385,12 +317,11 @@
             </div>
         </div>
 
-        <!-- ─── ROW 7: Mark-ready confirm ────────────────────── -->
+        <!-- ─── ROW 7: Mark-ready confirm ─────────────────────────── -->
         <div class="proto-row">
             <div class="row-label">
                 <span class="row-num">07</span>
                 <span>Mark-ready confirm</span>
-                <span class="row-note">— left zone's Mark-ready expands into Cancel | Confirm</span>
             </div>
             <div class="f">
                 <div class="progress"><div class="fill" style="width: 0;"></div></div>
@@ -405,30 +336,26 @@
                         </span>
                         <span class="pill under-review">Under review</span>
                         <div class="confirm-row">
-                            <span class="label">Mark ready for review?</span>
+                            <span class="label">Mark ready?</span>
                             <button class="btn ghost"><svg style="width:12px;height:12px"><use href="#i-close"/></svg></button>
                             <button class="btn primary"><svg style="width:12px;height:12px"><use href="#i-check"/></svg> Confirm</button>
                         </div>
                     </div>
-                    <div class="zone player">
-                        <button class="transport"><svg><use href="#i-prev"/></svg></button>
-                        <button class="transport play"><svg><use href="#i-play"/></svg></button>
-                        <button class="transport"><svg><use href="#i-next"/></svg></button>
-                        <span class="divider"></span>
-                        <button class="loc-trigger has-value">
+                    <div class="player-stack">
+                        <button class="play-cell"><svg><use href="#i-play"/></svg></button>
+                        <button class="loc-cell">
                             <span class="loc-label">Surah</span>
                             <span class="loc-value">37</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <button class="loc-trigger has-value">
+                        <button class="loc-cell">
                             <span class="loc-label">Ayah</span>
                             <span class="loc-value">151</span>
                             <span class="caret"><svg><use href="#i-caret"/></svg></span>
                         </button>
-                        <span class="divider"></span>
-                        <button class="speed-pill">1.0×</button>
-                        <button class="pref" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
-                        <button class="pref" title="Auto-scroll"><svg><use href="#i-scroll"/></svg></button>
+                        <button class="speed-cell">1.0×</button>
+                        <button class="pref-cell" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
+                        <button class="pref-cell" title="Auto-scroll"><svg><use href="#i-scroll"/></svg></button>
                     </div>
                     <div class="zone zone-save">
                         <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg> History</button>
@@ -440,11 +367,11 @@
             </div>
         </div>
 
-        <!-- ─── Narrow viewport ─────────────────────────────── -->
         <h2 class="section">At narrow viewport (1100px)</h2>
         <p class="proto-caption">
-            Identity zone hides Mark-ready label (icon only); player pill stays intact.
-            Critical question for Variant A: does the player pill wrap?
+            The stacked player cluster is intrinsically narrow (~240px) so the bigger
+            shrink question is the identity zone. At 1100px the chip's name lines truncate
+            and the Mark-ready label can collapse to icon-only if needed.
         </p>
         <div class="viewport-narrow">
             <div class="proto-row">
@@ -463,24 +390,23 @@
                                     <span class="name-ar">مشاري العفاسي</span>
                                 </span>
                             </span>
-                            <span class="pill under-review">Review</span>
+                            <button class="btn">Unclaim</button>
                         </div>
-                        <div class="zone player">
-                            <button class="transport"><svg><use href="#i-prev"/></svg></button>
-                            <button class="transport play"><svg><use href="#i-pause"/></svg></button>
-                            <button class="transport"><svg><use href="#i-next"/></svg></button>
-                            <span class="divider"></span>
-                            <button class="loc-trigger has-value live">
-                                <span class="loc-label">S</span>
+                        <div class="player-stack">
+                            <button class="play-cell"><svg><use href="#i-pause"/></svg></button>
+                            <button class="loc-cell live">
+                                <span class="loc-label">Surah</span>
                                 <span class="loc-value">37</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
                             </button>
-                            <button class="loc-trigger has-value live">
-                                <span class="loc-label">A</span>
+                            <button class="loc-cell live">
+                                <span class="loc-label">Ayah</span>
                                 <span class="loc-value">151</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
                             </button>
-                            <span class="divider"></span>
-                            <button class="speed-pill">1.0×</button>
-                            <button class="pref on"><svg><use href="#i-scroll"/></svg></button>
+                            <button class="speed-cell">1.0×</button>
+                            <button class="pref-cell on"><svg><use href="#i-repeat"/></svg></button>
+                            <button class="pref-cell on"><svg><use href="#i-scroll"/></svg></button>
                         </div>
                         <div class="zone zone-save">
                             <div class="save-cluster">
