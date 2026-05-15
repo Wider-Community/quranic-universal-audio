@@ -26,6 +26,7 @@ import {
     continuousPlay,
     playEndMs,
     playingSegmentIndex,
+    playStartMs,
 } from '../../stores/playback';
 import {
     clearSavePreviewData,
@@ -64,6 +65,7 @@ export function clearPerReciterState(): void {
     clearSegPrefetchCache();
     clearRowRegistry();
     continuousPlay.set(false);
+    playStartMs.set(0);
     playEndMs.set(0);
     playingSegmentIndex.set(null);
     clearWaveformCache();

@@ -20,7 +20,6 @@
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import { catalogData, loadCatalog } from '../dashboard/stores/catalog-data';
-    import SegmentsAudioControls from './components/audio/SegmentsAudioControls.svelte';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
     import SegmentsFooter from './components/footer/SegmentsFooter.svelte';
@@ -42,7 +41,7 @@
     import { activeFilters } from './stores/filters';
     import { historyVisible } from './stores/history';
     import { savedFilterView } from './stores/navigation';
-    import { segListElement, waveformContainer } from './stores/playback';
+    import { segAudioElement, segListElement, waveformContainer } from './stores/playback';
     import { savePreviewVisible } from './stores/save';
     import { loadChapterData } from './utils/data/chapter-actions';
     import { loadSegConfig } from './utils/data/config-loader';
@@ -51,8 +50,10 @@
     import { playFromSegment } from './utils/playback/playback';
     import { executeSave } from './utils/save/actions';
 
-    // Audio element ref exposed from SegmentsAudioControls via bind:audioEl.
-    let segAudioEl: HTMLAudioElement | null = null;
+    // Audio element ref published by SegmentsFooter's onMount into the
+    // `segAudioElement` store. EditOverlay still wants the raw element as
+    // a marker prop, so we subscribe instead of binding directly.
+    $: segAudioEl = $segAudioElement;
 
     // Reciter-task subscription: bound to the selected reciter. The store
     // self-polls every 30 s while subscribed; we replace the binding when
@@ -302,8 +303,6 @@
         </div>
 
         <FiltersBar hidden={filterBarHidden} />
-
-        <SegmentsAudioControls bind:audioEl={segAudioEl} />
 
         <SegmentsList onRestore={onNavigationRestore} />
 

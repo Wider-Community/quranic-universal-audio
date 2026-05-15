@@ -19,6 +19,8 @@ import './styles/timestamps.css';
 import './styles/validation.css';
 import './styles/combination-picker.css';
 
+import { mount } from 'svelte';
+
 import App from './App.svelte';
 import { installAudioWarmup } from './lib/utils/audio-warmup';
 
@@ -26,7 +28,10 @@ import { installAudioWarmup } from './lib/utils/audio-warmup';
 // device, so the first chapter Play click doesn't pay that cold cost.
 installAudioWarmup();
 
-// Svelte 4 mount API (Svelte 5 uses mount(); Svelte 4 uses the constructor).
-const app = new App({ target: document.getElementById('app')! });
+// Svelte 5 mount API. App.svelte and its descendants still use legacy
+// runes-free syntax (export let / on:click / $:); they keep working in
+// Svelte 5 via the compatibility shim until the migration plan in
+// docs/svelte-5-migration.md walks each file forward to runes.
+const app = mount(App, { target: document.getElementById('app')! });
 
 export default app;

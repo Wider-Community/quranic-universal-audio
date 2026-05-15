@@ -40,6 +40,7 @@ import {
     playButtonLabel,
     playEndMs,
     playingSegmentIndex,
+    playStartMs,
     segPort,
     setPlayingSegment,
 } from '../../stores/playback';
@@ -111,6 +112,7 @@ function _onRangeBoundary(ev: { reason: string }): void {
     // the audio element's 'pause' event will fire stopSegAnimation in parallel.
     if (ev.reason === 'stop') {
         playEndMs.set(0);
+        playStartMs.set(0);
         // If the user toggled autoplay ON after this play started (continuousPlay
         // flipped true while the old policy had already stopped at a boundary),
         // advance to the next segment instead of just clearing the flag.
@@ -144,6 +146,7 @@ function _onRangeBoundary(ev: { reason: string }): void {
         if (nextSource) segPort.setSource(nextSource);
         setPlayingSegment({ chapter: nextChapter, index: next.index });
         segCurrentIdx.set(next.index);
+        playStartMs.set(next.time_start);
         playEndMs.set(next.time_end);
         prefetchNextSegAudio(displayed, next.index, _curChapterUrl(), _segPrefetchCache);
         if (nextChapter) void _fetchPeaksForClick(next, nextChapter);
@@ -199,6 +202,7 @@ export function playFromSegment(
     // Autoplay is intentionally main-list only: accordion plays always stop
     // at time_end regardless of the global autoplay toggle.
     continuousPlay.set(get(autoPlayEnabled) && !isAccordionPlay);
+    playStartMs.set(seg.time_start);
     playEndMs.set(seg.time_end);
 
     // File-absolute spec — port owns CBR-vs-VBR transport and offset
@@ -364,6 +368,7 @@ export function onSegTimeUpdate(fileMs?: number): void {
             if (curSeg) {
                 const chapterForPeaks = curSeg.chapter ?? (get(selectedChapter) ? parseInt(get(selectedChapter)) : 0);
                 if (chapterForPeaks) void _fetchPeaksForClick(curSeg, chapterForPeaks);
+                playStartMs.set(curSeg.time_start);
                 playEndMs.set(curSeg.time_end);
             }
         }

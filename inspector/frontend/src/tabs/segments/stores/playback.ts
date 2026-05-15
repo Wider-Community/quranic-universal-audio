@@ -46,6 +46,14 @@ export const continuousPlay = writable<boolean>(false);
  *  the rAF tick to decide when to pause. */
 export const playEndMs = writable<number>(0);
 
+/** Timestamp (ms, within the current audio source) at which the current
+ *  play-range *starts*. Written in tandem with `playEndMs` whenever a
+ *  segment is queued for playback (initial play, autoplay-advance, manual
+ *  cross-segment seek). The pinned-footer progress bar reads
+ *  `(segPort.currentTimeMs() - playStartMs) / (playEndMs - playStartMs)`
+ *  to render the per-segment scrubber. Zero when nothing is queued. */
+export const playStartMs = writable<number>(0);
+
 /** Which audio element is currently driving playback: 'main' = the main
  *  segments tab audio element, or `null` when idle. Retained as a typed
  *  token (rather than a bare boolean) so a future secondary audio source
