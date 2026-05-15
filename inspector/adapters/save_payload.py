@@ -54,10 +54,17 @@ def make_seg(
         "phonemes_asr": phonemes,
     }
 
-    wrap = s.get("wrap_word_ranges") or existing.get("wrap_word_ranges")
+    # Repetition metadata is FE-authoritative on full_replace: the FE knows
+    # whether a seg currently represents a multi-pass reading (split resolves
+    # repetitions into independent children, ref-edits can change the picture
+    # entirely). Falling back to ``existing`` here let the parent's wrap leak
+    # into split children, re-tagging them as repetitions and feeding wrong
+    # refs to MFA on Auto Split. Trust the payload — if the FE omits the
+    # field, drop it.
+    wrap = s.get("wrap_word_ranges")
     if wrap:
         result["wrap_word_ranges"] = wrap
-    if s.get("has_repeated_words") or existing.get("has_repeated_words"):
+    if s.get("has_repeated_words"):
         result["has_repeated_words"] = True
 
     if "ignored_categories" in s:

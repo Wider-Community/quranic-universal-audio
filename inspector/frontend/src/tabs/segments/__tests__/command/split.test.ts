@@ -56,6 +56,33 @@ describe.skipIf(!applyCommand)('command/split', () => {
     const r = applyCommand(baseState(), { type: 'split', segmentUid: 'uid-split', splitMs: 2000, _mountId: 'accordion' } as any);
     expect(r.operation.targetSegmentIndex?.chapter).toBe(1);
   });
+
+  it('drops wrap_word_ranges and has_repeated_words from every child', () => {
+    // Regression: a parent repetition seg used to leak its wrap onto every
+    // split child, re-tagging post-split clean segs as repetitions and
+    // making Auto Split feed the wrong refs to MFA.
+    const state = {
+      byId: {
+        'uid-rep': makeSegment(0, 0, 4000, {
+          segment_uid: 'uid-rep',
+          matched_ref: '48:29:1-48:29:24',
+          wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
+          has_repeated_words: true,
+        }),
+      },
+      idsByChapter: { 1: ['uid-rep'] },
+      selectedChapter: 1 as number | null,
+    };
+    const r = applyCommand(state, {
+      type: 'split', segmentUid: 'uid-rep', splitMs: 2000, newUids: ['uid-new'],
+    } as any);
+    const pieces = Object.values(r.nextState.byId ?? r.nextState) as any[];
+    expect(pieces.length).toBe(2);
+    for (const p of pieces) {
+      expect(p.wrap_word_ranges).toBeUndefined();
+      expect(p.has_repeated_words).toBeUndefined();
+    }
+  });
 });
 
 describe.skipIf(applyCommand)('command/split (deferred)', () => {

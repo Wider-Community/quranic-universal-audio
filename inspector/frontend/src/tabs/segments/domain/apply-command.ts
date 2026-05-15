@@ -253,6 +253,12 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     // Build N+1 pieces. First piece reuses parent UID; the rest take from
     // `cmd.newUids` (or fall back to fresh UIDs). `cmd.secondHalfUid` is a
     // single-cursor convenience kept for older callers.
+    //
+    // Drop repetition metadata from every child: a split *resolves* the
+    // multi-pass repetition into independent pieces, so the inherited
+    // `wrap_word_ranges` / `has_repeated_words` no longer describe any one
+    // piece's content. Leaving them attached re-tags clean post-split segs
+    // as repetitions and makes Auto Split feed wrong refs to MFA.
     const pieces: Segment[] = [];
     for (let i = 0; i < nPieces; i++) {
         const start = i === 0 ? target.time_start : cursors[i - 1]!;
@@ -262,6 +268,8 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
             time_start: start,
             time_end: end,
         };
+        delete piece.wrap_word_ranges;
+        delete piece.has_repeated_words;
         if (i === 0) {
             // Keep parent uid + index for piece 0.
         } else {
