@@ -11,6 +11,7 @@ from __future__ import annotations
 from services.quran_refs import dk_text_for_ref
 from services.validation.registry import filter_persistent_ignores
 from utils.references import normalize_ref
+from utils.repetitions import is_wrap_consistent
 
 
 def make_seg(
@@ -61,11 +62,17 @@ def make_seg(
     # into split children, re-tagging them as repetitions and feeding wrong
     # refs to MFA on Auto Split. Trust the payload — if the FE omits the
     # field, drop it.
+    #
+    # Defense-in-depth geometry check: if a (current or future) client sends
+    # a wrap that doesn't fit the matched_ref (stale wrap from inheritance,
+    # or corrupted jump_to/from/end ordering), drop it rather than persist
+    # bad data. The check uses the same predicate as the cleanup script so
+    # behaviour stays consistent.
     wrap = s.get("wrap_word_ranges")
-    if wrap:
+    if wrap and is_wrap_consistent(matched_ref, wrap, word_counts):
         result["wrap_word_ranges"] = wrap
-    if s.get("has_repeated_words"):
-        result["has_repeated_words"] = True
+        if s.get("has_repeated_words"):
+            result["has_repeated_words"] = True
 
     if "ignored_categories" in s:
         ic = filter_persistent_ignores(s.get("ignored_categories") or [])

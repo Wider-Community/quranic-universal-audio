@@ -83,3 +83,78 @@ def count_words_in_section(ref_from: str, ref_to: str,
 def section_refs_canonical(sections: Iterable[list[str]]) -> list[str]:
     """Turn ``[[from, to], ...]`` into canonical compound refs ``"from-to"``."""
     return [f"{f}-{t}" for f, t in sections]
+
+
+# ---------------------------------------------------------------------------
+# Wrap-geometry validation (shared by save_payload + the cleanup script)
+# ---------------------------------------------------------------------------
+
+def _word_position(t: tuple[int, int, int],
+                   verse_word_counts: dict[tuple[int, int], int]) -> int | None:
+    """Linear word position within the surah (1-based across all verses).
+
+    Returns ``None`` when any verse along the way isn't in the counts map —
+    callers treat that as "opaque, leave alone" rather than a failure.
+    """
+    surah, ayah, word = t
+    pos = 0
+    for a in range(1, ayah):
+        n = verse_word_counts.get((surah, a))
+        if n is None:
+            return None
+        pos += n
+    return pos + word
+
+
+def is_wrap_consistent(matched_ref: str, wrap: list,
+                       verse_word_counts: dict[tuple[int, int], int]) -> bool:
+    """True iff ``wrap`` is geometrically valid for ``matched_ref``.
+
+    Two failure modes are caught:
+
+    - **stale**: any wrap word position falls outside ``matched_ref``'s
+      surah word range (the post-split-inheritance leak).
+    - **corrupted**: wrap geometry is internally inconsistent
+      (``jump_from < jump_to`` — would be a forward jump, not a back-jump,
+      or ``repeat_end < jump_to`` — repeat ends before it starts).
+
+    Returns ``True`` when the wrap looks consistent OR when any verse
+    reference is opaque (unknown surah, unparseable ref) — callers keep the
+    wrap in those cases rather than discard data based on uncertainty.
+    """
+    if not wrap:
+        return True
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return False
+    rf = _parse_word_ref(parts[0])
+    rt = _parse_word_ref(parts[1])
+    if not rf or not rt or rf[0] != rt[0]:
+        return False
+    surah = rf[0]
+    rf_pos = _word_position(rf, verse_word_counts)
+    rt_pos = _word_position(rt, verse_word_counts)
+    if rf_pos is None or rt_pos is None:
+        return True  # opaque — don't discard
+
+    for w in wrap:
+        if not isinstance(w, (list, tuple)) or len(w) < 3:
+            return False
+        wt = _parse_word_ref(w[0])
+        wf = _parse_word_ref(w[1])
+        we = _parse_word_ref(w[2])
+        if not wt or not wf or not we:
+            return False
+        if wt[0] != surah or wf[0] != surah or we[0] != surah:
+            return False
+        wt_pos = _word_position(wt, verse_word_counts)
+        wf_pos = _word_position(wf, verse_word_counts)
+        we_pos = _word_position(we, verse_word_counts)
+        if wt_pos is None or wf_pos is None or we_pos is None:
+            return True  # opaque — don't discard
+        if wf_pos < wt_pos or we_pos < wt_pos:
+            return False  # corrupted geometry
+        for p in (wt_pos, wf_pos, we_pos):
+            if p < rf_pos or p > rt_pos:
+                return False  # stale (outside matched_ref)
+    return True

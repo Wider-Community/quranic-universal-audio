@@ -39,10 +39,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from services import data_dir, storage_paths
 from services.hf_bucket import StorageNotFound, get_backend
+from utils.repetitions import _word_position, is_wrap_consistent
 
 
 # ---------------------------------------------------------------------------
-# wrap-validity predicates (mirrored from the audit script)
+# Wrap classification — split the consistency check into stale vs corrupted
+# so the report can distinguish split-inheritance leaks from pipeline bugs.
 # ---------------------------------------------------------------------------
 
 def _parse_word_ref(r: str) -> tuple[int, int, int] | None:
@@ -55,31 +57,14 @@ def _parse_word_ref(r: str) -> tuple[int, int, int] | None:
         return None
 
 
-def _word_position(t: tuple[int, int, int], verse_word_counts: dict) -> int | None:
-    """Linear word position within the surah (1-based across all verses).
-
-    Returns None if any verse along the way isn't in the word-counts map
-    (then we can't compare positions, so the wrap is treated as opaque).
-    """
-    surah, ayah, word = t
-    pos = 0
-    for a in range(1, ayah):
-        n = verse_word_counts.get((surah, a))
-        if n is None:
-            return None
-        pos += n
-    return pos + word
-
-
 def classify_wrap(matched_ref: str, wrap: list, vwc: dict) -> str | None:
     """Return ``None`` if the wrap is consistent with ``matched_ref``;
-    otherwise return one of:
-
-    - ``"stale"``     — every wrap word position is outside matched_ref's
-                        word range (typical split-inheritance leak).
-    - ``"corrupted"`` — wrap geometry is internally invalid (jump_to >
-                        jump_from, or repeat_end < jump_to, etc.).
+    otherwise ``"stale"`` (outside matched_ref range) or ``"corrupted"``
+    (geometry inconsistent or unparseable).
     """
+    if is_wrap_consistent(matched_ref, wrap, vwc):
+        return None
+    # Re-classify the failure reason for the report.
     parts = matched_ref.split("-")
     if len(parts) != 2:
         return "corrupted"
@@ -91,28 +76,22 @@ def classify_wrap(matched_ref: str, wrap: list, vwc: dict) -> str | None:
     rf_pos = _word_position(rf, vwc)
     rt_pos = _word_position(rt, vwc)
     if rf_pos is None or rt_pos is None:
-        return None  # opaque — leave alone
-
+        return None
     for w in wrap:
         if not isinstance(w, list) or len(w) < 3:
             return "corrupted"
         wt = _parse_word_ref(w[0])
         wf = _parse_word_ref(w[1])
         we = _parse_word_ref(w[2])
-        if not wt or not wf or not we:
-            return "corrupted"
-        if wt[0] != surah or wf[0] != surah or we[0] != surah:
+        if not wt or not wf or not we or wt[0] != surah or wf[0] != surah or we[0] != surah:
             return "corrupted"
         wt_pos = _word_position(wt, vwc)
         wf_pos = _word_position(wf, vwc)
         we_pos = _word_position(we, vwc)
         if wt_pos is None or wf_pos is None or we_pos is None:
             return None
-        # Geometry sanity: jump_from must be >= jump_to (back-jump or zero),
-        # repeat_end must be >= jump_to. Anything else is corrupted.
         if wf_pos < wt_pos or we_pos < wt_pos:
             return "corrupted"
-        # Stale: any word position outside matched_ref's range
         for p in (wt_pos, wf_pos, we_pos):
             if p < rf_pos or p > rt_pos:
                 return "stale"

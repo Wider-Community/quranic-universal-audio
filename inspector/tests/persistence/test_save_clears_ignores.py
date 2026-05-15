@@ -193,6 +193,63 @@ def test_save_drops_wrap_when_fe_omits_it(tmp_reciter_dir, signed_in_client):
     )
 
 
+def test_save_drops_geometrically_invalid_wrap(tmp_reciter_dir, signed_in_client):
+    """Defense-in-depth: BE rejects a wrap whose geometry doesn't fit
+    matched_ref (stale-from-inheritance shape). A buggy or malicious client
+    can't poison detailed.json with wraps that would feed wrong refs to MFA.
+    """
+    reciter = "fixture_reciter"
+    legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_doc = {
+        "_meta": {"audio_source": "by_surah/fixture"},
+        "entries": [{
+            "ref": "112",
+            "audio": "https://fixture.local/audio/112.mp3",
+            "segments": [{
+                "time_start": 1000, "time_end": 5000,
+                "matched_ref": "112:1:1-112:1:2",
+                "matched_text": "x",
+                "confidence": 1.0,
+                "segment_uid": "uid-rep",
+            }],
+        }],
+    }
+    legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
+
+    # Send a wrap whose word range (3-4) lies outside matched_ref (1-2).
+    payload = {
+        "full_replace": True,
+        "segments": [{
+            "segment_uid": "uid-rep",
+            "time_start": 1000, "time_end": 5000,
+            "matched_ref": "112:1:1-112:1:2",
+            "matched_text": "x",
+            "confidence": 1.0,
+            "phonemes_asr": "",
+            "audio_url": "https://fixture.local/audio/112.mp3",
+            "wrap_word_ranges": [["112:1:3", "112:1:3", "112:1:4"]],
+            "has_repeated_words": True,
+        }],
+        "operations": [],
+    }
+    client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps(payload),
+        headers=_HEADERS,
+    )
+    saved = json.loads(legacy_path.read_text(encoding="utf-8"))
+    seg = saved["entries"][0]["segments"][0]
+    assert "wrap_word_ranges" not in seg, (
+        f"BE should drop geometrically invalid wrap — got {seg.get('wrap_word_ranges')!r}"
+    )
+    assert "has_repeated_words" not in seg, (
+        "BE should drop has_repeated_words when wrap is rejected"
+    )
+
+
 def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client):
     """Sanity: a real repetition seg whose FE payload includes wrap keeps it."""
     reciter = "fixture_reciter"

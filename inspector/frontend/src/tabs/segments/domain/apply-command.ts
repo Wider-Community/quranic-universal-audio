@@ -364,6 +364,11 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
         confidence: 1.0,
     };
     merged.ignored_categories = mergedIc.size ? [...mergedIc] : undefined;
+    // Merging changes the seg's matched_ref + geometry; any wrap that was
+    // scoped to ``first`` may not apply to the merged span. Drop wrap +
+    // has_repeated_words for the same reasons split and edit-ref do.
+    delete merged.wrap_word_ranges;
+    delete merged.has_repeated_words;
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
     const resolved = _resolvedFromContext(ctxCat);
 
@@ -430,6 +435,16 @@ function _reduceEditReference(
     next.matched_ref = cmd.matched_ref;
     if (cmd.matched_text !== undefined) next.matched_text = cmd.matched_text;
     next.confidence = 1.0;
+    // Same reasoning as the split path: changing matched_ref invalidates any
+    // wrap that was scoped to the old range. Rather than try to detect when
+    // the new ref still geometrically contains the wrap, just drop it — the
+    // bug it prevents (stale wraps re-tagging clean segs as repetitions and
+    // poisoning Auto Split) far outweighs the cost of asking the user to
+    // re-tag a real repetition seg whose ref they edited.
+    if (target.matched_ref !== cmd.matched_ref) {
+        delete next.wrap_word_ranges;
+        delete next.has_repeated_words;
+    }
     const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
