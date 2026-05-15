@@ -45,7 +45,6 @@ def get_chapter_data(reciter: str, chapter: int,
                 "time_start": t_start,
                 "time_end": t_end,
                 "matched_ref": mref,
-                "matched_text": seg.get("matched_text", ""),
                 "confidence": round(seg.get("confidence", 0.0), 4),
                 "audio_url": entry_audio,
             }

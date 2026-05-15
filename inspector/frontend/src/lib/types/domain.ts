@@ -92,9 +92,6 @@ export interface EditOp {
     op_type: string;
     op_context_category: string | null;
     fix_kind: string | null;
-    started_at_utc: string; // ISO8601
-    applied_at_utc: string | null;
-    ready_at_utc: string | null;
     targets_before: Array<Record<string, unknown>>;
     targets_after: Array<Record<string, unknown>>;
     /** Set on merge ops — `'prev'` or `'next'`. */
@@ -103,21 +100,6 @@ export interface EditOp {
      *  path (which inverts it client-side) and by the save payload (server records
      *  it on the history entry for batch undo). */
     patch?: EditOpPatch;
-}
-
-/** Validation summary snapshot — server records before/after each save. */
-export interface ValidationSummarySnapshot {
-    failed?: number;
-    missing_verses?: number;
-    missing_words?: number;
-    structural_errors?: number;
-    low_confidence?: number;
-    cross_verse?: number;
-    repetitions?: number;
-    boundary_adj?: number;
-    muqattaat?: number;
-    qalqala?: number;
-    [k: string]: unknown;
 }
 
 /** Edit history batch as returned by /api/seg/edit-history. */
@@ -129,8 +111,6 @@ export interface HistoryBatch {
     chapters?: number[];
     save_mode: string | null;
     is_revert: boolean;
-    validation_summary_before: ValidationSummarySnapshot | null;
-    validation_summary_after: ValidationSummarySnapshot | null;
     operations: EditOp[];
     reverted_op_ids?: string[];
 }

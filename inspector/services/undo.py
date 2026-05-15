@@ -5,13 +5,12 @@ No Flask imports -- all functions accept parameters and return plain dicts.
 
 from datetime import datetime, timezone
 
-from constants import HISTORY_SCHEMA_VERSION, VALIDATION_CATEGORIES
+from constants import HISTORY_SCHEMA_VERSION
 from domain.command import apply_inverse_patch
 from scripts.lib.schemas import Actor
 from services import cache, data_dir
-from services.data_loader import load_detailed, load_probe_v2
+from services.data_loader import load_detailed
 from services.save import persist_detailed
-from services.validation import chapter_validation_counts
 from services.history_query import parse_history_for_reciter
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
@@ -286,7 +285,6 @@ def _get_affected_chapters(batch: dict) -> set[int]:
 
 def _append_revert_record(reciter: str, target_batch_id: str,
                           chapter, chapters,
-                          val_before: dict, val_after: dict,
                           *, actor: Actor,
                           reverts_op_ids: list[str] | None = None) -> None:
     """Append a revert record to edit_history.jsonl via the storage backend."""
@@ -294,11 +292,8 @@ def _append_revert_record(reciter: str, target_batch_id: str,
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
         "reverts_batch_id": target_batch_id,
-        "reciter": reciter,
         "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-        "validation_summary_before": val_before,
-        "validation_summary_after": val_after,
         "operations": [],
         "actor": actor.model_dump(mode="json"),
     }
@@ -307,14 +302,6 @@ def _append_revert_record(reciter: str, target_batch_id: str,
     if chapters:
         revert["chapters"] = chapters
     data_dir.append_edit_history(reciter, revert)
-
-
-def _merge_val_summaries(val_map: dict[int, dict]) -> dict:
-    """Merge per-chapter validation summaries into one."""
-    merged = {}
-    for cat in VALIDATION_CATEGORIES:
-        merged[cat] = sum(v.get(cat, 0) for v in val_map.values())
-    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -377,9 +364,6 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
-    probe_failed_uids, _ = load_probe_v2(reciter)
-    val_before_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
-
     try:
         for op in reversed(operations):
             apply_reverse_op(entries, op, affected_chapters)
@@ -388,16 +372,11 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
 
     persist_detailed(reciter, meta, entries)
 
-    val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
-    val_before = _merge_val_summaries(val_before_all)
-    val_after = _merge_val_summaries(val_after_all)
-
     ch_union = sorted(affected_chapters)
     _append_revert_record(
         reciter, target_batch_id,
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
-        val_before, val_after,
         actor=actor,
     )
 
@@ -468,9 +447,6 @@ def undo_ops(
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
-    probe_failed_uids, _ = load_probe_v2(reciter)
-    val_before_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
-
     try:
         for op in reversed(ops_to_undo):
             apply_reverse_op(entries, op, affected_chapters)
@@ -479,16 +455,11 @@ def undo_ops(
 
     persist_detailed(reciter, meta, entries)
 
-    val_after_all = {ch: chapter_validation_counts(entries, ch, meta, probe_failed_uids=probe_failed_uids) for ch in affected_chapters}
-    val_before = _merge_val_summaries(val_before_all)
-    val_after = _merge_val_summaries(val_after_all)
-
     ch_union = sorted(affected_chapters)
     _append_revert_record(
         reciter, target_batch_id,
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
-        val_before, val_after,
         actor=actor,
         reverts_op_ids=list(requested_op_ids),
     )

@@ -78,10 +78,6 @@ const STRUCTURAL_COMMANDS: ReadonlySet<Operation> = new Set([
 // Helpers
 // ---------------------------------------------------------------------------
 
-function _now(ctx?: ApplyCommandContext): string {
-    return (ctx?.now ?? (() => new Date().toISOString()))();
-}
-
 function _newUid(ctx?: ApplyCommandContext): string {
     return (ctx?.uid ?? (() => crypto.randomUUID()))();
 }
@@ -125,7 +121,6 @@ function _baseOperation(
     ctx: ApplyCommandContext | undefined,
 ): CommandOperation {
     void targetSeg;
-    const startedAt = _now(ctx);
     const op: CommandOperation = {
         op_id: _newUid(ctx),
         op_type: OP_TYPE_BY_COMMAND[cmd.type as Operation],
@@ -133,9 +128,6 @@ function _baseOperation(
         fix_kind: cmd.fixKind ?? (cmd.type === 'ignoreIssue' ? 'ignore'
             : cmd.type === 'autoFixMissingWord' ? 'auto_fix'
             : 'manual'),
-        started_at_utc: startedAt,
-        applied_at_utc: startedAt,
-        ready_at_utc: null,
         targets_before: [],
         targets_after: [],
         type: cmd.type as Operation,

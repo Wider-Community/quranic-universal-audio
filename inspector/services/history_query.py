@@ -181,8 +181,6 @@ def _load_edit_history_from_records(
             "chapters": record.get("chapters"),
             "save_mode": record.get("save_mode"),
             "is_revert": False,
-            "validation_summary_before": record.get("validation_summary_before"),
-            "validation_summary_after": record.get("validation_summary_after"),
             "operations": ops,
         }
         if reverted_ops_for_batch:

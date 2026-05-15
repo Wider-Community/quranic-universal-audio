@@ -126,7 +126,6 @@ export function finalizeEdit(
         patch?: EditOpPatch;
     },
 ): void {
-    op.applied_at_utc = new Date().toISOString();
     op.targets_after = targetsAfter.map(snapshotSeg);
     if (opts?.patch) op.patch = opts.patch;
     // skipSilence is retained on the type for call-site compatibility; the

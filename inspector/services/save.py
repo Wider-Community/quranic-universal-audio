@@ -26,7 +26,6 @@ from scripts.lib.schemas import Actor
 from services import cache, data_dir
 from services.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.peaks_history import append_peaks_records
-from services.validation import chapter_validation_counts
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
 from utils.references import chapter_from_ref, normalize_ref
@@ -352,7 +351,7 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
 
 
 def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,
-                        val_before: dict, updates: dict, *, actor: Actor) -> dict:
+                        updates: dict, *, actor: Actor) -> dict:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
     # Validate patch envelopes before writing anything.
     raw_ops = updates.get("operations", [])
@@ -363,15 +362,11 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     # Write detailed.json + rebuild segments.json via storage backend.
     persist_detailed(reciter, meta, entries)
 
-    # Snapshot validation counts after mutation and write batch record.
     # Each operation's snapshots gain a ``classified_issues`` field so the
     # frontend history-delta path reads it directly off the saved record
     # instead of running a second classifier pass on snapshot dicts.
     # Ops also receive a ``patch`` envelope when absent.
     probe_failed_uids, _ = load_probe_v2(reciter)
-    val_after = chapter_validation_counts(
-        entries, chapter, meta, probe_failed_uids=probe_failed_uids,
-    )
     operations = _attach_classified_issues(
         _ensure_patch_on_ops(raw_ops), probe_failed_uids=probe_failed_uids,
     )
@@ -382,12 +377,9 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
-        "reciter": reciter,
         "chapter": chapter,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "save_mode": "full_replace" if updates.get("full_replace") else "patch",
-        "validation_summary_before": val_before,
-        "validation_summary_after": val_after,
         "operations": operations,
         "actor": actor.model_dump(mode="json"),
     }
@@ -434,12 +426,7 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
     # Build lookups of existing segments by time and by uid for field preservation
     existing_by_time, existing_by_uid = _build_seg_lookups(matching)
 
-    # Snapshot validation counts before mutation
     meta = cache.get_seg_meta(reciter)
-    probe_failed_uids, _ = load_probe_v2(reciter)
-    val_before = chapter_validation_counts(
-        entries, chapter, meta, probe_failed_uids=probe_failed_uids,
-    )
 
     if updates.get("full_replace"):
         err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid)
@@ -455,5 +442,5 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
     # Card dismissal for soft-rule categories is purely a frontend
     # session-state concern.
     return _persist_and_record(
-        reciter, chapter, entries, meta, val_before, updates, actor=actor,
+        reciter, chapter, entries, meta, updates, actor=actor,
     )

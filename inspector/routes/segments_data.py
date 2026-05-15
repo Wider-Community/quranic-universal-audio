@@ -121,11 +121,9 @@ def seg_data(reciter, chapter):
     result = get_chapter_data(reciter, chapter, verse_filter)
     if result is None:
         return jsonify({"error": "Chapter not found"}), 404
-    response = jsonify(result)
     # When verse_filter is set the response is a slice — still safe for a CDN
     # because the URL key includes ?verse=… and the shape stays identical.
-    response.headers["Cache-Control"] = "public, max-age=86400"
-    return response
+    return orjson_response(result, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @seg_data_bp.route("/all/<reciter>")

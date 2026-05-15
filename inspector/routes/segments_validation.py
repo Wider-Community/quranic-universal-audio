@@ -44,4 +44,4 @@ def seg_stats(reciter):
 @seg_val_bp.route("/edit-history/<reciter>")
 def seg_edit_history(reciter):
     """Return edit history batches and summary stats for the reciter."""
-    return jsonify(load_edit_history(reciter))
+    return orjson_response(load_edit_history(reciter))

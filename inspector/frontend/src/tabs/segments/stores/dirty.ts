@@ -75,9 +75,6 @@ export function createOp(opType: string, { contextCategory = null, fixKind = 'ma
         op_type: opType,
         op_context_category: contextCategory,
         fix_kind: fixKind,
-        started_at_utc: new Date().toISOString(),
-        applied_at_utc: null,
-        ready_at_utc: null,
         targets_before: [],
         targets_after: [],
     };
@@ -104,7 +101,6 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
 }
 
 export function finalizeOp(chapter: number, op: EditOp): void {
-    op.ready_at_utc = new Date().toISOString();
     if (!_opLog.has(chapter)) _opLog.set(chapter, []);
     _opLog.get(chapter)!.push(op);
     _pendingOp = null;

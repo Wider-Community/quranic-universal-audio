@@ -64,8 +64,6 @@
             chapter: example.chapter,
             save_mode: null,
             is_revert: false,
-            validation_summary_before: null,
-            validation_summary_after: null,
             operations: example.operations,
         };
     }

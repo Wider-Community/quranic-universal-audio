@@ -215,8 +215,6 @@ export interface ApplyCommandState {
 
 /** Optional reducer context — kept open for Phase 4 + Phase 5 extensions. */
 export interface ApplyCommandContext {
-    /** Override the timestamp generator (test seam). */
-    now?: () => string;
     /** Override the uid generator (test seam). */
     uid?: () => string;
 }
