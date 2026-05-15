@@ -20,7 +20,7 @@ Chapter keys follow the audio-manifest sidecar (`"1"`..`"114"` for `by_surah`, `
 | `reciter.claimed → UNDER_REVIEW` and sentinel absent | Lazy fallback — enqueue prefetch. |
 | `reciter.timestamps_completed → RELEASED` | Stamp `ReciterRow.prefetch_purge_at = now + 7d`. Sweeper deletes after the date passes. |
 
-The post-transition observer lives in `inspector/services/state.py::register_transition_hook` and is wired by `inspector/app.py::_hydrate_bucket_stores` at boot.
+The post-transition observer lives in `inspector/services/state/state.py::register_transition_hook` and is wired by `inspector/app.py::_hydrate_bucket_stores` at boot.
 
 ## Queue + worker
 
@@ -64,13 +64,13 @@ Single-worker invariant (`app.py::_assert_single_worker`) guarantees exactly one
 
 ## Read paths
 
-Audio (`routes/audio_proxy.py::seg_audio_proxy`) lookup order:
+Audio (`routes/audio/proxy.py::seg_audio_proxy`) lookup order:
 
 1. `wip/<slug>/audio/<chapter>.mp3` — bucket prefetch.
 2. `CACHE_DIR/<reciter>/audio/<urlhash>.mp3` — legacy local disk cache (pre-prefetch deployments).
 3. `302` redirect to the upstream CDN.
 
-Peaks (`routes/peaks.py::seg_peaks`) checks the in-memory cache, then `wip/<slug>/peaks/<chapter>.json`, then schedules background computation.
+Peaks (`routes/segments/peaks.py::seg_peaks`) checks the in-memory cache, then `wip/<slug>/peaks/<chapter>.json`, then schedules background computation.
 
 ## Admin re-trigger
 

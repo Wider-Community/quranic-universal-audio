@@ -92,7 +92,10 @@ _LEGACY_ALIASES = {
     "timestamps": timestamps,
 }
 
+# Register the alias under whichever name the package was imported as
+# ("services" when inspector/ is on sys.path, or "inspector.services" when
+# external callers do ``from inspector.services import X``).
 for _name, _mod in _LEGACY_ALIASES.items():
-    _sys.modules.setdefault(f"services.{_name}", _mod)
+    _sys.modules.setdefault(f"{__name__}.{_name}", _mod)
 
 del _sys, _name, _mod, _LEGACY_ALIASES

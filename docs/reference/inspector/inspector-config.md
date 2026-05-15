@@ -66,7 +66,7 @@ reads them but never persists user tokens.
 | Secret                                | Purpose                                                                                                                                              |
 |---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `INSPECTOR_HF_TOKEN` (alias: `HF_TOKEN`) | Token Inspector uses to read + write the bucket. Needs write scope on the bucket repo. Prod should mint a dedicated bot account token, not a personal token. |
-| `INSPECTOR_GITHUB_DISPATCH_TOKEN`     | Fine-grained GitHub PAT (repo: `Wider-Community/quranic-universal-audio`, scope: `actions: write`). Fires `repository_dispatch reciter.completed` after publish so `update-reciters.yml` and `release.yml` rerun. `services/secrets_guard.py::get_dispatch_token` raises if the slot still holds the seed placeholder. |
+| `INSPECTOR_GITHUB_DISPATCH_TOKEN`     | Fine-grained GitHub PAT (repo: `Wider-Community/quranic-universal-audio`, scope: `actions: write`). Fires `repository_dispatch reciter.completed` after publish so `update-reciters.yml` and `release.yml` rerun. `services/auth/secrets_guard.py::get_dispatch_token` raises if the slot still holds the seed placeholder. |
 | `INSPECTOR_JOB_CALLBACK_SECRET`       | Bearer token Inspector validates on `POST /api/internal/job-completed` (HF Job → Inspector webhook). 32-byte hex auto-generated on first Space setup. |
 
 ## Image build / runtime

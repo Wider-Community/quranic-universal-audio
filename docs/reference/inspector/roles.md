@@ -18,7 +18,7 @@ Defined in [`scripts/lib/schemas/access.py::Role`](../../../scripts/lib/schemas/
 
 ## Predicates
 
-All predicates live in [`inspector/services/permissions.py`](../../../inspector/services/permissions.py) — Flask-free, exception-free except on programmer error. Both the state layer and the route layer call into these.
+All predicates live in [`inspector/services/auth/permissions.py`](../../../inspector/services/auth/permissions.py) — Flask-free, exception-free except on programmer error. Both the state layer and the route layer call into these.
 
 | Predicate | Returns |
 |---|---|
@@ -31,7 +31,7 @@ All predicates live in [`inspector/services/permissions.py`](../../../inspector/
 | `is_claim_holder_or_maintainer(obj, row)` | Composition; the only pre-composed helper |
 | `normalize_reason(raw, min_chars=10)` | Trimmed reason or `None` |
 
-### `services/predicates.py` — reciter-task predicates
+### `services/auth/predicates.py` — reciter-task predicates
 
 | Predicate | Condition |
 |---|---|

@@ -79,7 +79,7 @@ Each reference doc:
 
 `scripts/lib/verify_reference_docs.py` (lands in Phase 0) cross-checks every reference doc against the codebase:
 
-- Every event in `events.md` exists in `inspector/services/state.py` and vice versa.
+- Every event in `events.md` exists in `inspector/services/state/state.py` and vice versa.
 - Every state in `state-machine.md` exists in the SQLite CHECK constraint.
 - Every endpoint in `api-endpoints.md` has a registered Flask route.
 - Every env var in `env-vars.md` is read by code (and vice versa).

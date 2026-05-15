@@ -75,9 +75,10 @@ _reciter_root = _P({str(reciter_root)!r})
 import config as _cfg
 _cfg.RECITATION_SEGMENTS_PATH = _reciter_root
 
-for mod_name in ('routes.segments_data', 'routes.segments_edit',
-                 'routes.segments_validation', 'services.data_loader',
-                 'services.history_query', 'services.save', 'services.undo'):
+for mod_name in ('routes.segments.data', 'routes.segments.edit',
+                 'routes.segments.validation', 'services.storage.data_loader',
+                 'services.activity.history_query', 'services.segments.save',
+                 'services.segments.undo'):
     import importlib
     try:
         mod = importlib.import_module(mod_name)
