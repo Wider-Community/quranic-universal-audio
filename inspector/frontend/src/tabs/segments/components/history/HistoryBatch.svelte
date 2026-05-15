@@ -142,7 +142,7 @@
                     use:editGate
                     on:click|stopPropagation={handleDiscardClick}
                 >Discard</button>
-            {:else if mode === 'history' && item.batchId && !item.isRevert}
+            {:else if mode === 'history' && item.batchId && !item.isRevert && primary?.op_type !== 'pipeline'}
                 <button
                     class="btn btn-sm seg-history-undo-btn"
                     use:editGate

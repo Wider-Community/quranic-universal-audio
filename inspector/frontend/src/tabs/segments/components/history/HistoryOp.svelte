@@ -156,7 +156,7 @@
             {#each fixKinds as fk}
                 <span class="seg-history-op-fix-kind">{fk}</span>
             {/each}
-            {#if batchId && $editingMode.kind !== 'view'}
+            {#if batchId && $editingMode.kind !== 'view' && primary?.op_type !== 'pipeline'}
                 <button
                     class="btn btn-sm seg-history-op-undo-btn"
                     use:editGate
