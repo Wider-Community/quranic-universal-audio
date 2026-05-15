@@ -197,6 +197,33 @@
             {/if}
             <span class="identity-switch" aria-hidden="true">⇄</span>
         </button>
+
+        {#if hasReciter && !showSavePreview}
+            <div class="reciter-actions">
+                <ClaimButton
+                    slug={$selectedReciter || ''}
+                    task={reciterTask}
+                    onClaimed={onClaimed}
+                />
+                {#if reciterTask?.predicates.can_mark_ready}
+                    <button
+                        type="button"
+                        class="action ghost-accent"
+                        disabled={chipActionBusy !== ''}
+                        title="Mark this reciter ready for a maintainer to publish"
+                        on:click={onMarkReady}
+                    >Mark ready</button>
+                {/if}
+                {#if reciterTask?.predicates.can_release}
+                    <button
+                        type="button"
+                        class="action ghost"
+                        disabled={chipActionBusy !== ''}
+                        on:click={onUnclaim}
+                    >Unclaim</button>
+                {/if}
+            </div>
+        {/if}
     </div>
 
     {#if hasReciter}
@@ -278,7 +305,7 @@
         <div class="zone zone-location empty-spacer" aria-hidden="true"></div>
     {/if}
 
-    <div class="zone zone-actions">
+    <div class="zone zone-save">
         {#if hasReciter}
             {#if showSavePreview}
                 <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
@@ -308,69 +335,46 @@
                     {/if}
                 </button>
 
-                {#if reciterTask?.predicates.can_release}
-                    <button
-                        type="button"
-                        class="action ghost"
-                        disabled={chipActionBusy !== ''}
-                        on:click={onUnclaim}
-                    >Unclaim</button>
-                {/if}
-
-                {#if reciterTask?.predicates.can_mark_ready}
-                    <button
-                        type="button"
-                        class="action ghost-accent"
-                        disabled={chipActionBusy !== ''}
-                        title="Mark this reciter ready for a maintainer to publish"
-                        on:click={onMarkReady}
-                    >Mark ready</button>
-                {/if}
-
                 {#if writeable}
-                    <button
-                        type="button"
-                        class="autosave-toggle"
-                        class:on={$autoSaveEnabled}
-                        aria-pressed={$autoSaveEnabled}
-                        title={$autoSaveEnabled ? 'Auto-save on — click to disable' : 'Auto-save off — click to enable'}
-                        on:click={() => toggleAutoSave(!$autoSaveEnabled)}
-                    >
-                        <span class="autosave-glyph" aria-hidden="true">
-                            <!-- lightning-bolt for "auto" -->
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
-                            </svg>
-                        </span>
-                        <span>Auto</span>
-                    </button>
+                    <div class="save-group">
+                        <button
+                            type="button"
+                            class="autosave-toggle"
+                            class:on={$autoSaveEnabled}
+                            aria-pressed={$autoSaveEnabled}
+                            title={$autoSaveEnabled ? 'Auto-save on — click to disable' : 'Auto-save off — click to enable'}
+                            on:click={() => toggleAutoSave(!$autoSaveEnabled)}
+                        >
+                            <span class="autosave-glyph" aria-hidden="true">
+                                <!-- lightning-bolt for "auto" -->
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
+                                </svg>
+                            </span>
+                            <span>Auto</span>
+                        </button>
 
-                    <button
-                        type="button"
-                        class="action save"
-                        class:primary={$isDirtyStore && !$autoSaveEnabled}
-                        class:saved={!$isDirtyStore}
-                        class:auto-busy={$autoSaveEnabled && $isDirtyStore}
-                        disabled={saveDisabled}
-                        on:click={onSegSaveClick}
-                    >
-                        {#if !$isDirtyStore}
-                            <span class="save-glyph" aria-hidden="true">✓</span>
-                            <span>Saved</span>
-                        {:else if $autoSaveEnabled}
-                            <span class="save-pulse" aria-hidden="true"></span>
-                            <span>Auto-saving…</span>
-                        {:else}
-                            <span>{saveLabel}</span>
-                        {/if}
-                    </button>
+                        <button
+                            type="button"
+                            class="action save"
+                            class:primary={$isDirtyStore && !$autoSaveEnabled}
+                            class:saved={!$isDirtyStore}
+                            class:auto-busy={$autoSaveEnabled && $isDirtyStore}
+                            disabled={saveDisabled}
+                            on:click={onSegSaveClick}
+                        >
+                            {#if !$isDirtyStore}
+                                <span class="save-glyph" aria-hidden="true">✓</span>
+                                <span>Saved</span>
+                            {:else if $autoSaveEnabled}
+                                <span class="save-pulse" aria-hidden="true"></span>
+                                <span>Auto-saving…</span>
+                            {:else}
+                                <span>{saveLabel}</span>
+                            {/if}
+                        </button>
+                    </div>
                 {/if}
-
-                <ClaimButton
-                    slug={$selectedReciter || ''}
-                    task={reciterTask}
-                    onClaimed={onClaimed}
-                />
             {/if}
         {/if}
     </div>
@@ -393,7 +397,7 @@
         right: 0;
         z-index: 100;
         display: grid;
-        grid-template-columns: minmax(200px, 0.9fr) auto minmax(360px, 1.4fr);
+        grid-template-columns: minmax(360px, 1.6fr) auto minmax(220px, 1fr);
         align-items: center;
         gap: var(--s-3);
         padding: var(--s-2) var(--s-4);
@@ -411,18 +415,37 @@
         display: flex;
         align-items: center;
     }
-    .zone-identity { justify-content: flex-start; }
+    .zone-identity {
+        justify-content: flex-start;
+        gap: var(--s-3);
+        flex-wrap: nowrap;
+    }
     .zone-location {
         position: relative;
         justify-content: center;
         gap: var(--s-2);
     }
-    .zone-actions {
+    .zone-save {
         justify-content: flex-end;
         gap: var(--s-2);
         flex-wrap: wrap;
     }
     .empty-spacer { display: none; }
+
+    /* Cluster of reciter-state actions (Claim / Mark ready / Unclaim) that
+       sits to the right of the identity chip. Visually attached — the
+       chip is the subject these actions operate on. */
+    .reciter-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-2);
+        flex: 0 0 auto;
+    }
+    .save-group {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
 
     /* ---------- Identity ---------- */
     .identity {
@@ -431,6 +454,7 @@
         gap: var(--s-3);
         max-width: 100%;
         min-width: 0;
+        flex: 1 1 auto;
         padding: 6px var(--s-3);
         background: var(--panel-2);
         border: 1px solid var(--border-quiet);
@@ -732,7 +756,7 @@
             gap: var(--s-2);
             padding: var(--s-2) var(--s-3);
         }
-        .zone-actions { justify-content: flex-start; }
+        .zone-save { justify-content: flex-start; }
         .pop-surah, .pop-ayah {
             left: 0;
             right: 0;
