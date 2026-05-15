@@ -22,6 +22,7 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(INSPECTOR))
 
 from services import data_dir  # noqa: E402
+from services import state as state_service  # noqa: E402
 from services.cache import invalidate_seg_caches  # noqa: E402
 from services.data_loader import load_detailed  # noqa: E402
 from services.validation import validate_reciter_segments  # noqa: E402
@@ -97,12 +98,21 @@ def main() -> int:
     GROUND_TRUTH.mkdir(parents=True, exist_ok=True)
     RESULTS.mkdir(parents=True, exist_ok=True)
 
+    # Hydrate state so kind_for(slug) resolves wip vs published correctly —
+    # otherwise published slugs fall back to wip and validate sees no data.
+    state_service.hydrate()
+
     wip_slugs = sorted(data_dir.list_slugs("wip"))
-    print(f"Capturing ground truth for {len(wip_slugs)} WIP reciter(s)...\n")
+    pub_slugs = sorted(data_dir.list_slugs("published"))
+    all_slugs = [(s, "wip") for s in wip_slugs] + [(s, "published") for s in pub_slugs]
+    print(
+        f"Capturing ground truth for {len(wip_slugs)} WIP + "
+        f"{len(pub_slugs)} published reciter(s)...\n"
+    )
 
     counts_rows = []
-    for slug in wip_slugs:
-        print(f"  {slug:<45s}", end=" ", flush=True)
+    for slug, kind in all_slugs:
+        print(f"  [{kind}] {slug:<40s}", end=" ", flush=True)
         snap = snapshot_one(slug)
         if snap is None:
             print("EMPTY (no detailed.json)")

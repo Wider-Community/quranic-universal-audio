@@ -42,6 +42,7 @@ if str(_INSPECTOR) not in sys.path:
 
 from adapters.detailed_json import load_entries_from_bytes  # noqa: E402
 from services import cache, data_dir  # noqa: E402
+from services import state as state_service  # noqa: E402
 from services.data_loader import get_word_counts  # noqa: E402
 from services.hf_bucket import get_backend  # noqa: E402
 from services.phonemizer_service import get_canonical_phonemes  # noqa: E402
@@ -161,12 +162,22 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug")
     g.add_argument("--all-wip", action="store_true")
+    g.add_argument("--all-published", action="store_true")
+    g.add_argument("--all", action="store_true",
+                   help="both wip + published")
     g.add_argument("--slugs", help="comma-separated")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
+    # Hydrate state so data_dir.kind_for resolves wip vs published correctly.
+    state_service.hydrate()
+
     if args.all_wip:
         slugs = sorted(data_dir.list_slugs("wip"))
+    elif args.all_published:
+        slugs = sorted(data_dir.list_slugs("published"))
+    elif args.all:
+        slugs = sorted(data_dir.list_slugs("wip")) + sorted(data_dir.list_slugs("published"))
     elif args.slugs:
         slugs = [s.strip() for s in args.slugs.split(",") if s.strip()]
     else:
