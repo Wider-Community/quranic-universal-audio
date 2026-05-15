@@ -23,7 +23,7 @@ from services.data_loader import (
     load_detailed,
     resolve_pad,
 )
-from services.audio_meta import vbr_chapters_for_reciter
+from services.audio_meta import chapter_meta, vbr_chapters_for_reciter
 from services.segments_query import get_chapter_data
 from utils.formatting import slug_to_name
 from utils.json_response import orjson_cached_response, orjson_response
@@ -184,9 +184,20 @@ def seg_all(reciter):
     auto_split_uids = sorted(auto_split_by_uid.keys())
     # dk_words + verse_word_counts moved off this payload to the immutable
     # ``/api/static/quran-refs.json`` asset (fetched once per browser).
+    # Per-chapter duration in ms, sourced from the audio_manifest sidecar.
+    # Surfaced so the FE can clamp trim/adjust right-pad against the actual
+    # chapter end for the last segment (otherwise we pad past EOF and the
+    # waveform draw silently fails on the over-extended window).
+    chapter_duration_ms_by_chapter: dict[str, int] = {}
+    for ch_str in audio_by_chapter:
+        meta = chapter_meta(reciter, ch_str)
+        duration_sec = meta.get("duration_sec") if isinstance(meta, dict) else None
+        if isinstance(duration_sec, (int, float)) and duration_sec > 0:
+            chapter_duration_ms_by_chapter[ch_str] = int(duration_sec * 1000)
     return orjson_response({
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
+        "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
         "auto_split_uids": auto_split_uids,
         # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.

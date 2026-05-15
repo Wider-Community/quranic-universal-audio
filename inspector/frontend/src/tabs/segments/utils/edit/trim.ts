@@ -72,13 +72,29 @@ export function computeTrimBounds(
 ): { windowStart: number; windowEnd: number; audioUrl: string } {
     const segIdx = chapterSegs.findIndex((s) => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
-    const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(seg.chapter ?? 0)] || '';
+    const chapterKey = String(seg.chapter ?? 0);
+    const allData = get(segAllData);
+    const audioUrl = seg.audio_url || allData?.audio_by_chapter?.[chapterKey] || '';
     const fallbackPad = Math.max(1000, cfg.trimPadRight);
-    const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
-        ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + fallbackPad)
-        : (peaksDurationMs || seg.time_end + fallbackPad);
+    // Authoritative chapter end from the audio_manifest sidecar — beats both
+    // the per-URL peaks duration (only populated after whole-chapter peaks
+    // load) and `seg.time_end + fallbackPad` (which can run past actual EOF
+    // for the last verse and produce an empty waveform draw).
+    const chapterEndMs = allData?.chapter_duration_ms_by_chapter?.[chapterKey];
+    const isLastSeg = segIdx >= 0 && segIdx >= chapterSegs.length - 1;
+    let nextStart: number;
+    if (!isLastSeg) {
+        nextStart = chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + fallbackPad;
+    } else if (chapterEndMs && chapterEndMs > seg.time_end) {
+        nextStart = chapterEndMs;
+    } else if (peaksDurationMs && peaksDurationMs > seg.time_end) {
+        nextStart = peaksDurationMs;
+    } else {
+        nextStart = seg.time_end + fallbackPad;
+    }
     const windowStart = Math.max(prevEnd, seg.time_start - cfg.trimPadLeft);
-    const windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
+    let windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
+    if (chapterEndMs && windowEnd > chapterEndMs) windowEnd = chapterEndMs;
     return { windowStart, windowEnd, audioUrl };
 }
 
