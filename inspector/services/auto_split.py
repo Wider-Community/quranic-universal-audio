@@ -31,10 +31,9 @@ from config import (
     MFA_SPACE_URL,
 )
 
-# The MFA HTTP client lives in scripts/lib/timestamps_pipeline.py, which
-# imports numpy at module load. The inspector deploy image doesn't ship numpy
-# (only the offline pipeline needs it) so we must NOT import it at startup —
-# do it lazily inside compute_auto_split instead.
+# The MFA HTTP client lives in scripts/lib/timestamps_pipeline.py. Import it
+# lazily on first use rather than at module load to keep inspector startup
+# cheap (the pipeline drags in many heavy deps that no other route needs).
 #
 # Module-level placeholders keep `monkeypatch.setattr(auto_split, "...")` in
 # tests working: tests set the attrs before the lazy loader runs, and the
