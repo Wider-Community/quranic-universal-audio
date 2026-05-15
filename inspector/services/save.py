@@ -281,13 +281,44 @@ def _make_seg(
     return _adapter_make_seg(s, existing_by_time, existing_by_uid, word_counts)
 
 
-def _stamp_persisted_classifier_fields(seg: dict) -> None:
+def _stamp_persisted_classifier_fields(seg: dict, single_word_verses: set | None = None) -> None:
     """Set the per-seg fields the validate fast-path reads instead of recomputing.
 
     Called by every save path that mutates a segment dict; ensures
-    ``qalqala_letter`` stays in lockstep with ``matched_ref`` / ``matched_text``.
+    ``qalqala_letter`` and ``is_boundary_adj`` stay in lockstep with
+    ``matched_ref`` / ``matched_text`` after an edit.
+
+    ``is_boundary_adj`` is computed structural-only here (``canonical=None``):
+    the phonemic side of boundary_adj depends on ``phonemes_asr`` which is
+    only set at extraction time and never touched by user edits, so stamping
+    it without canonical is correct for save-time mutations. The backfill
+    script DOES pass canonical so historical phonemic detections are captured.
     """
+    from services.validation.classifier import compute_is_boundary_adj
     seg["qalqala_letter"] = compute_qalqala_letter(seg)
+
+    if single_word_verses is None:
+        wc = get_word_counts()
+        single_word_verses = {k for k, v in wc.items() if v == 1}
+
+    matched_ref = seg.get("matched_ref") or ""
+    parts = matched_ref.split("-")
+    if len(parts) == 2:
+        sp = parts[0].split(":")
+        ep = parts[1].split(":")
+        if len(sp) == 3 and len(ep) == 3:
+            try:
+                surah = int(sp[0])
+                s_ayah = int(sp[1])
+                s_word = int(sp[2])
+                e_word = int(ep[2])
+                seg["is_boundary_adj"] = compute_is_boundary_adj(
+                    seg, surah, s_ayah, s_word, e_word, single_word_verses, None,
+                )
+                return
+            except ValueError:
+                pass
+    seg["is_boundary_adj"] = False
 
 
 def _apply_full_replace(matching: list[dict], updates: dict,
@@ -298,13 +329,14 @@ def _apply_full_replace(matching: list[dict], updates: dict,
     input validation failure (propagated by the caller as the route response).
     """
     word_counts = get_word_counts()
+    single_word_verses = {k for k, v in word_counts.items() if v == 1}
     if len(matching) == 1:
         new_segs = [
             _make_seg(s, existing_by_time, existing_by_uid, word_counts)
             for s in updates["segments"]
         ]
         for seg in new_segs:
-            _stamp_persisted_classifier_fields(seg)
+            _stamp_persisted_classifier_fields(seg, single_word_verses)
         matching[0]["segments"] = new_segs
         return None
 
@@ -336,7 +368,7 @@ def _apply_full_replace(matching: list[dict], updates: dict,
             )}, 400
 
         new_seg = _make_seg(s, existing_by_time, existing_by_uid, word_counts)
-        _stamp_persisted_classifier_fields(new_seg)
+        _stamp_persisted_classifier_fields(new_seg, single_word_verses)
         candidates[0]["segments"].append(new_seg)
     return None
 
@@ -348,6 +380,8 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
         for seg in e.get("segments", []):
             flat_segments.append(seg)
 
+    word_counts = get_word_counts()
+    single_word_verses = {k for k, v in word_counts.items() if v == 1}
     for upd in updates["segments"]:
         idx = upd.get("index")
         if idx is not None and 0 <= idx < len(flat_segments):
@@ -367,7 +401,7 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
                     flat_segments[idx].pop("ignored_categories", None)
                     flat_segments[idx].pop("ignored", None)
             # Re-stamp persisted classifier fields since matched_ref/text changed.
-            _stamp_persisted_classifier_fields(flat_segments[idx])
+            _stamp_persisted_classifier_fields(flat_segments[idx], single_word_verses)
 
 
 def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,
