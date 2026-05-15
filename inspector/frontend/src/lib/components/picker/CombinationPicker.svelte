@@ -28,14 +28,19 @@
      * bubbled `preview` event — this component doesn't touch audio itself.
      */
     import { createEventDispatcher, onMount, tick } from 'svelte';
+    import { get } from 'svelte/store';
 
-    import { fetchPublicReciters, fetchPublicStats } from '../../api/public-reciters';
     import {
         type Axis,
         buildSchemaDescriptor,
         type SchemaDescriptor,
     } from '../../catalog/schema-descriptor';
     import { currentUser } from '../../stores/current-user';
+    // Picker subscribes to the shared dashboard catalog store instead of
+    // re-fetching /api/public/reciters. loadCatalog() is idempotent so the
+    // first caller (Dashboard, Segments-tab context resolver, or picker open)
+    // wins and others share the cached snapshot.
+    import { catalogData, loadCatalog } from '../../../tabs/dashboard/stores/catalog-data';
     import type { BucketCounts } from '../../types/public-state';
     import { tagLabel } from '../../utils/axis-labels';
     import { compactCoverageLabel, compactHoursLabel } from '../../utils/delivery-label';
@@ -98,12 +103,13 @@
         loading = true;
         error = null;
         try {
-            const [page, s] = await Promise.all([
-                fetchPublicReciters({ limit: 200 }),
-                fetchPublicStats(),
-            ]);
-            reciters = page.reciters;
-            stats = s;
+            await loadCatalog();
+            const snap = get(catalogData);
+            if (snap.error) {
+                throw new Error(snap.error);
+            }
+            reciters = snap.reciters;
+            stats = snap.stats;
             const allDeliveries = reciters.flatMap((r) => r.deliveries);
             descriptor = buildSchemaDescriptor(allDeliveries);
             for (const axis of descriptor.axes) {

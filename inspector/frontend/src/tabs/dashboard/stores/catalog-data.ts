@@ -9,7 +9,7 @@
  * for responsiveness and to keep the picker, dashboard, and detail
  * page consistent.
  */
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
 import { fetchPublicReciters, fetchPublicStats } from '../../../lib/api/public-reciters';
 import type { BucketCounts, PublicReciter } from '../../../lib/types/public-state';
@@ -34,6 +34,9 @@ let inflight: Promise<void> | null = null;
 
 export async function loadCatalog(force = false): Promise<void> {
     if (inflight && !force) return inflight;
+    // Already loaded — skip the network round-trip. Callers that need a
+    // fresh snapshot (e.g. after a known mutation) pass `force=true`.
+    if (!force && get(catalogData).reciters.length > 0) return;
     inflight = (async () => {
         catalogData.update((s) => ({ ...s, loading: true, error: null }));
         try {

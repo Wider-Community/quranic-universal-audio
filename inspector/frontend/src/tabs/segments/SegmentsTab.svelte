@@ -17,6 +17,7 @@
     import SearchableSelect from '../../lib/components/SearchableSelect.svelte';
     import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
+    import { catalogData, loadCatalog } from '../dashboard/stores/catalog-data';
     import {
         editingMode,
         setEditingMode,
@@ -176,9 +177,9 @@
 
     async function resolveContextFromSlug(slug: string): Promise<void> {
         try {
-            const { fetchPublicReciters } = await import('../../lib/api/public-reciters');
-            const page = await fetchPublicReciters({ limit: 500 });
-            for (const r of page.reciters) {
+            await loadCatalog(); // idempotent — first caller in any tab pays the cost
+            const snap = get(catalogData);
+            for (const r of snap.reciters) {
                 const d = r.deliveries.find((x) => x.slug === slug);
                 if (d) {
                     contextName = r.name;
