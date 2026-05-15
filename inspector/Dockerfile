@@ -26,14 +26,21 @@ RUN npm run build
 # --- Stage 2: compile minimal static ffmpeg (mp3 decode + s16le/wav output) ---
 FROM alpine:3.20 AS ffmpeg-build
 RUN apk add --no-cache build-base yasm nasm curl tar xz \
-                       openssl-dev openssl-libs-static zlib-dev zlib-static
+                       openssl-dev openssl-libs-static zlib-dev zlib-static \
+                       lame-dev lame-static
 ARG FFMPEG_VERSION=7.1
 RUN curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" | tar -xJ -C /tmp
 WORKDIR /tmp/ffmpeg-${FFMPEG_VERSION}
-# --disable-everything then whitelist only what services/peaks.py uses:
+# --disable-everything then whitelist only what services/peaks.py +
+# routes/audio/clip.py use:
 #   decoder/demuxer: mp3 input
-#   encoder/muxer:   pcm_s16le + wav output (s16le muxer is silently dropped
-#                    unless pcm_s16le muxer is listed alongside in ffmpeg 7.1)
+#   encoder/muxer:   pcm_s16le + wav output for peaks (s16le muxer is silently
+#                    dropped unless pcm_s16le muxer is listed alongside in
+#                    ffmpeg 7.1) AND libmp3lame + mp3 muxer for clip.py
+#                    (segment-clip route re-encodes the requested window to
+#                    mono 96k mp3 — without libmp3lame the route returns
+#                    200 OK / 0 bytes silently and browser playback hangs)
+#   bsf:             mp3_to_xing (injects VBR seek TOC, used by audio_fetch)
 #   filter:          aresample (for `-ar` sample-rate conversion), aformat, anull
 #   protocol:        file + pipe (local I/O) + http,https,tcp,tls (CDN reads —
 #                    lets `_ffmpeg_decode_segment` decode remote-only chapters
@@ -50,14 +57,17 @@ RUN ./configure \
       --disable-shared --enable-static \
       --enable-small \
       --enable-openssl \
+      --enable-libmp3lame \
       --enable-decoder=mp3,mp3float,pcm_s16le \
       --enable-demuxer=mp3,wav,s16le \
-      --enable-encoder=pcm_s16le \
-      --enable-muxer=s16le,wav,pcm_s16le \
+      --enable-encoder=libmp3lame,pcm_s16le \
+      --enable-muxer=mp3,s16le,wav,pcm_s16le \
+      --enable-bsf=mp3_to_xing \
       --enable-filter=aresample,aformat,anull \
       --enable-protocol=file,pipe,http,https,tcp,tls \
       --enable-parser=mpegaudio \
       --extra-ldflags="-static" \
+      --extra-libs="-lmp3lame" \
       --pkg-config-flags="--static" && \
     make -j"$(nproc)" && make install && \
     strip /ff/bin/ffmpeg /ff/bin/ffprobe

@@ -2,6 +2,8 @@
 
 Background pipeline that lands every chapter MP3 + waveform peaks on the bucket the moment a reciter is ready for review. Editors hit instant playback + same-time peak rendering; no manual "download all" button.
 
+> **Status note (May 2026):** For newly-extracted reciters, audio + peaks are now produced by Katana at extraction time (`.local/extraction/segments/audio_persist.py`) and uploaded atomically as part of `upload_to_bucket.py --include-audio` — the `_done.json` sentinel lands on the bucket BEFORE Inspector ever sees the row. The in-Flask `audio_prefetch.py` worker described below is kept as a **fallback for legacy reciters** that pre-date this migration. Once every reciter has been re-extracted via the new pipeline, the worker + its triggers + the CDN-streaming branch in `audio_proxy.py` can be deleted in a follow-up migration. See `.claude/skills/segments-extraction/SKILL.md` Stage 9 (Upload) for the Katana-side flow.
+
 ## Storage
 
 | Path | Contents |
