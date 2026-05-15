@@ -60,16 +60,24 @@
             const base = getSegByChapterIndex(item.chapter, idx);
             baseUids.push(base?.segment_uid ?? `_${idx}`);
         }
-        let splitOpsCount = 0;
+        // Bump on any structural OR reference-mutating op so memo busts when
+        // auto-fix / edit-reference / merge / boundary-adjust change a base
+        // seg under us. Was counting split_segment only, leaving stale
+        // Segment object refs in the cached output for non-split mutations.
+        const MUTATING_OPS = new Set([
+            'split_segment', 'merge_segments', 'edit_reference',
+            'auto_fix_missing_word', 'boundary_adjustment', 'trim_segment',
+        ]);
+        let mutatingOpsCount = 0;
         for (const b of batches) {
             for (const op of b.operations) {
-                if (op.op_type === 'split_segment') splitOpsCount++;
+                if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
             }
         }
         for (const op of ops) {
-            if (op.op_type === 'split_segment') splitOpsCount++;
+            if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
         }
-        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${splitOpsCount}`;
+        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${mutatingOpsCount}`;
         if (key !== _segRangeMemoKey) {
             _segRangeMemoKey = key;
             const out: Segment[] = [];

@@ -133,16 +133,22 @@
             const chapterSegs = getChapterSegments(_groupChapter);
             const batches = $historyData?.batches ?? [];
             const ops = getChapterOpsSnapshot(_groupChapter);
-            let splitOpsCount = 0;
+            // Bump on any structural OR reference-mutating op so memo busts
+            // when auto-fix / edit-reference / merge / etc. change a base seg.
+            const MUTATING_OPS = new Set([
+                'split_segment', 'merge_segments', 'edit_reference',
+                'auto_fix_missing_word', 'boundary_adjustment', 'trim_segment',
+            ]);
+            let mutatingOpsCount = 0;
             for (const b of batches) {
                 for (const op of b.operations) {
-                    if (op.op_type === 'split_segment') splitOpsCount++;
+                    if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
                 }
             }
             for (const op of ops) {
-                if (op.op_type === 'split_segment') splitOpsCount++;
+                if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
             }
-            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${splitOpsCount}`;
+            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${mutatingOpsCount}`;
             if (key !== _splitGroupMemoKey) {
                 _splitGroupMemoKey = key;
                 _splitGroupMemoResult = getSplitGroupMembers(

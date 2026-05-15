@@ -21,11 +21,12 @@ import {
     selectedChapter,
 } from '../../stores/chapter';
 import {
-    finalizeOp,
     markDirty,
     setPendingOp,
 } from '../../stores/dirty';
+import { segValidation } from '../../stores/validation';
 import { dkTextForRef, getVerseWordCounts } from '../data/references';
+import { finalizeEdit } from './common';
 
 export interface AutoFixResult {
     /** EditOp `op_id` so the card can wire its Undo to the right log entry. */
@@ -95,7 +96,27 @@ export function autoFixMissingWord(
     refreshSegInStore(seg);
 
     setPendingOp(null);
-    if (result.patch) result.operation.patch = result.patch;
-    finalizeOp(segChapter, result.operation);
+    // Match commitRefEdit's wiring: finalizeEdit attaches the forward patch,
+    // updates `targets_after`, and triggers applyVerseFilterAndRender so the
+    // SegmentRow body picks up the new matched_ref/matched_text right away.
+    finalizeEdit(result.operation, segChapter, [seg], { patch: result.patch });
+
+    // Clear the auto-fix availability flags on the local validation item so
+    // the green Auto-Fill button turns grey immediately without waiting for
+    // the post-save validation refresh. The next refreshValidation() call
+    // will reconcile authoritatively.
+    segValidation.update((v) => {
+        if (!v?.missing_words) return v;
+        const next = v.missing_words.map((it) => {
+            const items = it.seg_indices ?? [];
+            if (!items.includes(seg.index)) return it;
+            const stripped = { ...it };
+            delete (stripped as { auto_fix?: unknown }).auto_fix;
+            delete (stripped as { auto_fix_up?: unknown }).auto_fix_up;
+            delete (stripped as { auto_fix_down?: unknown }).auto_fix_down;
+            return stripped;
+        });
+        return { ...v, missing_words: next };
+    });
     return { opId: result.operation.op_id, before };
 }
