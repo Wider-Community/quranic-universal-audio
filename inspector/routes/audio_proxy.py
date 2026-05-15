@@ -64,7 +64,7 @@ def seg_audio_proxy(reciter):
             BytesIO(src.data),
             mimetype="audio/mpeg",
             conditional=True,
-            etag=f'"{src.chapter_key or "chapter"}-{len(src.data)}"',
+            etag=f"{src.chapter_key or 'chapter'}-{len(src.data)}",
         )
         resp.headers["Cache-Control"] = immutable
         resp.headers["Accept-Ranges"] = "bytes"
