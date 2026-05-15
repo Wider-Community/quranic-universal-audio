@@ -3,14 +3,16 @@
      * ReciterChip — reusable identity chip with the prototype design:
      *
      *     ╭───╮   Name (en)   ·   اسم بالعربية
-     *     │ 🇸🇦 │                                            [state pill]
-     *     ╰───╯   Riwayah · Style
+     *     │ 🇸🇦 │
+     *     ╰───╯   Riwayah · Style · [state pill]
      *
      * Country flag sits in a rounded circle on the left, vertically
-     * centered against two text rows. The bottom row is whatever
-     * `subline` the caller passes — usually `riwayah · style` for a
-     * specific delivery (footer, dashboard player), but the catalog
-     * picker can pass a "3 combinations · 2 riwayahs" summary.
+     * centered against two text rows. The top row carries English +
+     * Arabic name side-by-side (both at body weight so they read on the
+     * same visual level). The bottom row carries the delivery subline
+     * with the state pill INLINE at its end — so the chip stays a
+     * single self-contained block rather than spreading the pill out
+     * to the row's far edge.
      *
      * Consumers wrap the chip in their own <button> or <div> depending
      * on whether the chip itself is the click target.
@@ -78,14 +80,20 @@
                 <span class="name-ar" dir="rtl">{nameAr}</span>
             {/if}
         </div>
-        {#if displaySubline}
-            <div class="line line-bot">{displaySubline}</div>
+        {#if displaySubline || hasState}
+            <div class="line line-bot">
+                {#if displaySubline}
+                    <span class="subline">{displaySubline}</span>
+                {/if}
+                {#if hasState && bucket}
+                    {#if displaySubline}
+                        <span class="dot" aria-hidden="true">·</span>
+                    {/if}
+                    <StatePill state={bucket} size="sm" />
+                {/if}
+            </div>
         {/if}
     </div>
-
-    {#if hasState && bucket}
-        <StatePill state={bucket} size="sm" />
-    {/if}
 
     {#if switchable}
         <span class="switch" aria-hidden="true">⇄</span>
@@ -147,20 +155,24 @@
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 1px;
+        gap: 2px;
         flex: 0 1 auto;
     }
     .line {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         gap: 6px;
         min-width: 0;
-        white-space: nowrap;
     }
+    /* Top row: English + Arabic name at matched size and `center`
+       alignment (not baseline) so the two scripts read on the same
+       visual midline. Arabic fonts often have a low baseline against
+       Latin; centering corrects the optical mismatch. */
     .line-top {
         color: var(--text-primary);
         font-size: var(--fs-row);
         font-weight: 500;
+        line-height: 1.2;
     }
     .name-en {
         overflow: hidden;
@@ -170,22 +182,38 @@
     }
     .name-ar {
         color: var(--text-secondary);
-        font-size: var(--fs-meta);
+        font-size: var(--fs-row);
         font-weight: 400;
         font-family: var(--font-arabic, inherit);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-    }
-    .dot { color: var(--text-faint); }
-    .line-bot {
-        color: var(--text-muted);
-        font-size: var(--fs-meta);
+        line-height: 1.2;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        min-width: 0;
     }
+    .dot {
+        color: var(--text-faint);
+        flex: 0 0 auto;
+    }
+
+    /* Bottom row: delivery subline followed by the state pill, all
+       inline. The pill is the only non-text item and keeps its own
+       background; the dot separator sits between text and pill when
+       both are present. */
+    .line-bot {
+        color: var(--text-muted);
+        font-size: var(--fs-meta);
+        flex-wrap: wrap;
+    }
+    .line-bot .subline {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+    }
+
     .compact .line-top { font-size: var(--fs-body); }
+    .compact .name-ar  { font-size: var(--fs-body); }
     .compact .line-bot { font-size: 11px; }
 
     /* ---------- Switch hint ---------- */
