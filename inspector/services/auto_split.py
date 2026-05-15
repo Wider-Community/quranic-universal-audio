@@ -85,9 +85,11 @@ logger = logging.getLogger(__name__)
 # MFA expects 16 kHz mono. Matches what extract_timestamps feeds the Space.
 _MFA_SAMPLE_RATE = 16_000
 
-# Narrower beam than the timestamps-pipeline default (50). One seg,
-# interactive UX: tighter beam keeps the per-click latency down.
-_MFA_BEAM = 30
+# Beam progression. First pass is slightly narrower than the pipeline's
+# canonical 50 to keep typical interactive latency down; subsequent values
+# widen the search when MFA returns an AlignerError (common on repetition
+# segs where the same words recur — beam=30 frequently can't find a path).
+_MFA_BEAMS = (30, 100, 250)
 
 
 # ---------------------------------------------------------------------------
@@ -176,14 +178,20 @@ def _run_mfa(reciter: str, audio_url: str, time_start: int, time_end: int,
             wav_path = Path(tmp) / "seg.wav"
             if not _slice_to_wav(src, time_start, time_end, wav_path):
                 return None
-            event_id, headers, base_url = mfa_upload_and_submit(
-                [ref_or_seq], [wav_path], MFA_SPACE_URL,
-                beam=_MFA_BEAM,
-                padding="none",
-                timeout=AUTO_SPLIT_MFA_TIMEOUT,
-            )
-            results = mfa_wait_result(event_id, headers, base_url,
-                                      timeout=AUTO_SPLIT_MFA_TIMEOUT)
+            results = None
+            for beam in _MFA_BEAMS:
+                event_id, headers, base_url = mfa_upload_and_submit(
+                    [ref_or_seq], [wav_path], MFA_SPACE_URL,
+                    beam=beam,
+                    padding="none",
+                    timeout=AUTO_SPLIT_MFA_TIMEOUT,
+                )
+                results = mfa_wait_result(event_id, headers, base_url,
+                                          timeout=AUTO_SPLIT_MFA_TIMEOUT)
+                if _has_aligner_error(results):
+                    logger.info("auto_split: beam=%d failed, retrying wider", beam)
+                    continue
+                break
     except Exception as exc:  # noqa: BLE001
         # WARNING because a silent fallback masks a real wiring issue
         # (missing HF_TOKEN, Space asleep, network) that the user almost
@@ -196,6 +204,14 @@ def _run_mfa(reciter: str, audio_url: str, time_start: int, time_end: int,
         return None
     first = results[0] or {}
     return first.get("words") or None
+
+
+def _has_aligner_error(results) -> bool:
+    """True when MFA returned an explicit error (typically beam too narrow)."""
+    if not results or not isinstance(results, list):
+        return False
+    first = results[0] or {}
+    return first.get("status") == "error"
 
 
 # ---------------------------------------------------------------------------
