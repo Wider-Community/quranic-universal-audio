@@ -153,6 +153,28 @@
     $: invalidCountry = !!countryName && !countryCode;
 
     /**
+     * Focus/blur dance: clicking into the field temporarily blanks it so
+     * the datalist drops the unfiltered list (Chromium otherwise filters
+     * to the option exactly matching the current value, which is useless
+     * for browsing). On blur, if the user didn't pick or type anything,
+     * restore the previous value — so an accidental click + click-away
+     * is a no-op rather than a destroying-the-selection trap.
+     */
+    let countryFocusStash: string | null = null;
+    function onCountryFocus(): void {
+        if (readOnly) return;
+        countryFocusStash = countryName;
+        countryName = '';
+    }
+    function onCountryBlur(): void {
+        if (readOnly) return;
+        if (!countryName && countryFocusStash != null) {
+            countryName = countryFocusStash;
+        }
+        countryFocusStash = null;
+    }
+
+    /**
      * Compute the proposed_edits patch: only include fields the user
      * actually changed from the prefilled values. Server applies the patch
      * over the existing catalog on auto-acceptance.
@@ -363,6 +385,8 @@
                 bind:value={countryName}
                 placeholder="Start typing a country name…"
                 disabled={readOnly}
+                on:focus={onCountryFocus}
+                on:blur={onCountryBlur}
             />
         </label>
 
