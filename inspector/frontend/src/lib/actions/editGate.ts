@@ -25,9 +25,9 @@
 
 import { get } from 'svelte/store';
 
+import { SIGN_IN_MESSAGES } from '../sign-in-messages';
 import { showEditPopover } from '../stores/edit-popover';
 import { editingMode } from '../stores/editing-mode';
-import { SIGN_IN_MESSAGES } from '../sign-in-messages';
 import { openSignInModal } from '../stores/sign-in-modal';
 
 export interface EditGateParams {

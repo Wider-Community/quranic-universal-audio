@@ -128,6 +128,83 @@ def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
     assert "marked ready" in res.get_json()["error"].lower()
 
 
+def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
+    """Owner can save to a row that isn't UNDER_REVIEW (state bypass)."""
+    from datetime import datetime, timezone
+
+    from scripts.lib.schemas import (
+        ReciterRow, ReciterState, ReciterStateFile, Visibility,
+    )
+    from services import state as state_service
+
+    reciter = "fixture_reciter"
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="other-user")
+
+    # Flip state to catalogued so a non-owner would get 403.
+    snapshot = state_service.snapshot()
+    new_rows = [
+        ReciterRow(
+            slug=r.slug,
+            state=ReciterState.CATALOGUED,
+            state_since=datetime.now(timezone.utc),
+            visibility=Visibility.PUBLIC,
+        ) if r.slug == reciter else r
+        for r in snapshot.reciters
+    ]
+    with state_service._state_lock:  # type: ignore[attr-defined]
+        state_service._state_file = ReciterStateFile(reciters=new_rows)  # type: ignore[attr-defined]
+
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
+    res = client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps({"full_replace": True, "segments": [], "operations": []}),
+        headers=_HEADERS,
+    )
+    # 200 or 400 are both acceptable — the lock passed (no 403 for state mismatch).
+    assert res.status_code in (200, 400), (
+        f"unexpected status {res.status_code}; body={res.get_json()}"
+    )
+
+
+def test_save_owner_marked_ready_still_blocked(signed_in_client, tmp_reciter_dir):
+    """Owner is still blocked by marked_ready — that flag freezes for everyone."""
+    from datetime import datetime, timezone
+
+    from scripts.lib.schemas import (
+        ReciterRow, ReciterState, ReciterStateFile, Visibility,
+    )
+    from services import state as state_service
+
+    reciter = "fixture_reciter"
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="u-owner")
+
+    snapshot = state_service.snapshot()
+    new_rows = [
+        ReciterRow(
+            slug=r.slug,
+            state=ReciterState.UNDER_REVIEW,
+            state_since=r.state_since,
+            assignee_hf_id=r.assignee_hf_id,
+            assignee_login=r.assignee_login,
+            assignee_since=r.assignee_since,
+            marked_ready=True,
+            visibility=Visibility.PUBLIC,
+        ) if r.slug == reciter else r
+        for r in snapshot.reciters
+    ]
+    with state_service._state_lock:  # type: ignore[attr-defined]
+        state_service._state_file = ReciterStateFile(reciters=new_rows)  # type: ignore[attr-defined]
+
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
+    res = client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps({"segments": [], "operations": []}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 403
+    assert "marked ready" in res.get_json()["error"].lower()
+
+
 # ---------------------------------------------------------------------------
 # Existing save-payload contract tests (now signed in)
 # ---------------------------------------------------------------------------

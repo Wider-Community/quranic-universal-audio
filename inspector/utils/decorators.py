@@ -99,11 +99,18 @@ def require_role(*allowed: Role):
 
 
 def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = False):
-    """Gate a route on (signed in + state.under_review + not marked_ready
-    + visibility.public + assignee match).
+    """Gate a route on (signed in + editable row + authorised actor).
 
-    With ``admin_bypass=True``, maintainer/owner roles bypass the
-    assignee match — they can edit any row that's structurally editable.
+    **Standard path** (contributor): requires ``state.under_review`` +
+    ``not marked_ready`` + ``visibility.public`` + assignee match.
+
+    **Admin bypass** (``admin_bypass=True``): maintainer/owner can edit any
+    ``under_review`` row regardless of assignee.
+
+    **Owner bypass**: owners can edit any public, non-marked-ready row
+    regardless of ``ReciterState`` or assignee — no ``admin_bypass`` flag
+    required.
+
     Marked-ready rows are NEVER editable by anyone via this gate; the
     reviewer's "Continue editing" flips ``marked_ready=False`` first.
 
@@ -123,16 +130,24 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
             row = state_service.get_row(slug)
             if row is None:
                 abort(404, description="unknown reciter")
-            if row.state != ReciterState.UNDER_REVIEW:
-                abort(403, description="reciter is not in an editable state")
-            if row.marked_ready:
-                abort(403, description="reciter is marked ready for publish and frozen")
-            if row.visibility != Visibility.PUBLIC:
-                abort(403, description="reciter visibility blocks edits")
-            is_assignee = permissions.is_claim_holder(user, row)
-            is_admin = admin_bypass and permissions.is_maintainer(user)
-            if not (is_assignee or is_admin):
-                abort(403, description="reciter is not editable by this user")
+            if permissions.is_owner(user):
+                # Owners bypass the state check; marked_ready and visibility
+                # still apply.
+                if row.marked_ready:
+                    abort(403, description="reciter is marked ready for publish and frozen")
+                if row.visibility != Visibility.PUBLIC:
+                    abort(403, description="reciter visibility blocks edits")
+            else:
+                if row.state != ReciterState.UNDER_REVIEW:
+                    abort(403, description="reciter is not in an editable state")
+                if row.marked_ready:
+                    abort(403, description="reciter is marked ready for publish and frozen")
+                if row.visibility != Visibility.PUBLIC:
+                    abort(403, description="reciter visibility blocks edits")
+                is_assignee = permissions.is_claim_holder(user, row)
+                is_admin = admin_bypass and permissions.is_maintainer(user)
+                if not (is_assignee or is_admin):
+                    abort(403, description="reciter is not editable by this user")
             g.current_user = user
             g.current_row = row
             return fn(*args, **kwargs)

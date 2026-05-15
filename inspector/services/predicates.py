@@ -1,7 +1,9 @@
 """Server-side predicates for the ``/api/reciter-task/<slug>`` response.
 
-Mirror of the spec in inspector-state-management.md §8 plus the new
-``can_edit_as_admin`` for the maintainer/owner override on save.
+Mirror of the spec in inspector-state-management.md §8 plus
+``can_edit_as_admin`` (maintainer/owner override on UNDER_REVIEW rows) and
+``can_edit_as_owner`` (owner editing any public non-frozen row regardless of
+state).
 
 Pure functions: each takes the row + optional ``User`` and returns ``bool``.
 Anonymous (``user is None``) always yields ``False`` for any contribution
@@ -30,13 +32,15 @@ def _is_admin(user) -> bool:
 
 
 def can_claim(row, user, *, has_other_active_claim: bool = False) -> bool:
-    """``awaiting_review`` + ``public`` + signed in + no other active claim."""
+    """``awaiting_review`` + ``public`` + signed in + (owner or no other active claim)."""
     if user is None or row is None:
         return False
     if row.state != ReciterState.AWAITING_REVIEW:
         return False
     if row.visibility != Visibility.PUBLIC:
         return False
+    if permissions.is_owner(user):
+        return True  # owners exempt from one-claim-per-user rule
     return not has_other_active_claim
 
 
@@ -61,6 +65,13 @@ def can_edit_as_admin(row, user) -> bool:
         and not row.marked_ready
         and row.visibility == Visibility.PUBLIC
     )
+
+
+def can_edit_as_owner(row, user) -> bool:
+    """Owner editing any non-frozen public reciter, regardless of state."""
+    if user is None or row is None or not permissions.is_owner(user):
+        return False
+    return not row.marked_ready and row.visibility == Visibility.PUBLIC
 
 
 def can_mark_ready(row, user) -> bool:
@@ -100,6 +111,7 @@ def build_predicates(row, user, *, has_other_active_claim: bool) -> dict:
         "can_claim": can_claim(row, user, has_other_active_claim=has_other_active_claim),
         "can_edit": can_edit(row, user),
         "can_edit_as_admin": can_edit_as_admin(row, user),
+        "can_edit_as_owner": can_edit_as_owner(row, user),
         "can_mark_ready": can_mark_ready(row, user),
         "can_unmark_ready": can_unmark_ready(row, user),
         "can_release": can_release(row, user),

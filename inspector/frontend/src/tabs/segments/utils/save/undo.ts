@@ -10,7 +10,6 @@ import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
 import { surahOptionText } from '../../../../lib/utils/surah-info';
 import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import { segAllData, selectedReciter } from '../../stores/chapter';
-import { refreshValidation } from '../validation/refresh';
 import {
     getChapterOps,
     isDirty,
@@ -27,6 +26,7 @@ import {
 } from '../../stores/history';
 import { setSavePreviewData } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
+import { refreshValidation } from '../validation/refresh';
 import { buildSavePreviewData, hideSavePreview } from './actions';
 
 // ---------------------------------------------------------------------------

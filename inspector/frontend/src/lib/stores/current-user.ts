@@ -18,7 +18,10 @@ export interface CurrentUser {
     login: string | null;
     hf_user_id: string | null;
     role: Role;
+    /** The primary active claim slug (first of `active_claims`, or null). */
     active_claim: string | null;
+    /** All slugs currently under_review and assigned to this user. Owners may hold multiple. */
+    active_claims: string[];
     /**
      * True when the backend is running with the dev-mode auth bypass
      * (`INSPECTOR_DEV_MODE=1`). Only ever true locally — never on the
@@ -32,6 +35,7 @@ const _ANON: CurrentUser = {
     hf_user_id: null,
     role: null,
     active_claim: null,
+    active_claims: [],
     dev_mode: false,
 };
 

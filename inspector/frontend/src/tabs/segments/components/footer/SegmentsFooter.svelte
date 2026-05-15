@@ -26,7 +26,7 @@
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
     import CombinationPicker from '../../../../lib/components/picker/CombinationPicker.svelte';
     import SurahPopover from '../../../../lib/components/player/SurahPopover.svelte';
-    import StatePill from '../../../../lib/components/StatePill.svelte';
+    import ReciterChip from '../../../../lib/components/ReciterChip.svelte';
     import Icon from '../../../../lib/icons/Icon.svelte';
     import type { IconName } from '../../../../lib/icons/index';
     import { editingMode } from '../../../../lib/stores/editing-mode';
@@ -71,6 +71,8 @@
     export let reciterTask: ReciterTask | null = null;
     export let chipActionBusy: '' | 'unclaim' | 'mark' = '';
     export let contextName: string | null = null;
+    export let contextNameAr: string | null = null;
+    export let contextCountry: string | null = null;
     export let contextBucket: PublicBucket | null = null;
     export let contextRiwayah: string | null = null;
     export let contextStyle: string | null = null;
@@ -79,6 +81,8 @@
         reciterChange: {
             slug: string;
             name: string;
+            nameAr: string | null;
+            country: string | null;
             bucket: PublicBucket;
             riwayah: string;
             style: string;
@@ -279,6 +283,8 @@
         dispatch('reciterChange', {
             slug: delivery.slug,
             name: reciter.name,
+            nameAr: reciter.name_ar ?? null,
+            country: reciter.country ?? null,
             bucket: delivery.bucket,
             riwayah: delivery.riwayah,
             style: delivery.style,
@@ -364,16 +370,19 @@
                 aria-haspopup="dialog"
                 title={hasReciter ? 'Switch reciter' : 'Pick a reciter'}
             >
-                <span class="identity-name">
-                    {contextName ?? (hasReciter ? 'Loading…' : 'Pick a reciter')}
-                </span>
-                {#if chipMeta}
-                    <span class="identity-meta">{chipMeta}</span>
+                {#if hasReciter && contextName}
+                    <ReciterChip
+                        name={contextName}
+                        nameAr={contextNameAr}
+                        country={contextCountry}
+                        subline={chipMeta || null}
+                        bucket={contextBucket}
+                        switchable={true}
+                    />
+                {:else}
+                    <span class="identity-placeholder-label">Pick a reciter</span>
+                    <span class="identity-switch" aria-hidden="true">⇄</span>
                 {/if}
-                {#if contextBucket}
-                    <StatePill state={contextBucket} size="sm" />
-                {/if}
-                <span class="identity-switch" aria-hidden="true">⇄</span>
             </button>
 
             {#if hasReciter && !showSavePreview}
@@ -699,7 +708,11 @@
         gap: var(--s-2);
     }
 
-    /* ---------- Identity ---------- */
+    /* ---------- Identity (chip wrapper) ----------
+       The interactive button hosts the shared `<ReciterChip>` body.
+       Padding + border + hover state live here so the chip itself
+       stays presentation-only and can be reused inside non-button
+       contexts (catalog rows, dashboard meta). */
     .identity {
         display: inline-flex;
         align-items: center;
@@ -707,10 +720,10 @@
         max-width: 100%;
         min-width: 0;
         flex: 0 1 auto;
-        padding: 6px var(--s-3);
+        padding: 5px var(--s-3) 5px 5px;
         background: var(--panel-2);
         border: 1px solid var(--border-quiet);
-        border-radius: var(--r-3);
+        border-radius: 999px;
         color: inherit;
         cursor: pointer;
         font: inherit;
@@ -722,37 +735,25 @@
         background: var(--accent-tint-soft);
         border-color: oklch(0.785 0.130 220 / 0.35);
         color: var(--accent);
+        padding: 8px var(--s-3);
+        gap: var(--s-2);
     }
     .identity.placeholder:hover { background: var(--accent-tint); }
 
-    .identity-name {
-        flex: 0 1 auto;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+    .identity-placeholder-label {
         font-size: var(--fs-row);
-        font-weight: 500;
-        color: var(--text-primary);
-    }
-    .placeholder .identity-name { color: inherit; font-weight: 600; }
-    .identity-meta {
-        flex: 0 1 auto;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: var(--fs-meta);
-        color: var(--text-muted);
+        font-weight: 600;
+        color: inherit;
+        padding-inline-start: var(--s-2);
     }
     .identity-switch {
-        margin-inline-start: auto;
-        padding-inline-start: var(--s-2);
+        margin-inline-start: var(--s-2);
         color: var(--text-faint);
         font-size: var(--fs-meta);
         transition: color var(--t-fast);
     }
     .identity:hover .identity-switch { color: var(--text-secondary); }
+    .identity.placeholder .identity-switch { color: var(--accent); }
 
     /* ---------- Player stack (3×2 grid) ----------
        Row 1 = playback context (play · Surah · Ayah)
@@ -884,7 +885,14 @@
         padding: var(--s-2);
         z-index: 50;
     }
-    .pop-surah { left: 50%; transform: translateX(-50%); }
+    /* Clip the surah popover to the player-stack row width (38 + 96 + 96
+     * + 4*2 gaps = 238px) so the dropup never sprawls beyond the row it
+     * anchors to. The inner SurahPopover is width:100% and clamps to it. */
+    .pop-surah {
+        left: 50%;
+        transform: translateX(-50%);
+        width: 238px;
+    }
     .pop-ayah {
         left: 50%;
         transform: translateX(-50%);

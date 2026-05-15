@@ -27,6 +27,7 @@ from routes._admin_helpers import (
 
 from services import auth as auth_service
 from services import catalog as catalog_service
+from services import permissions as permissions_service
 from services import predicates as predicates_service
 from services import state as state_service
 
@@ -45,24 +46,26 @@ def claim(slug: str):
         return err
 
     # One-claim-per-user policy (application-level; state.py doesn't enforce).
-    other = next(
-        (
-            r.slug for r in state_service.all_rows()
-            if r.state.value == "under_review"
-            and r.assignee_hf_id == user.hf_user_id
-            and r.slug != slug
-        ),
-        None,
-    )
-    if other is not None:
-        other_name = catalog_service.display_name(other)
-        target_name = catalog_service.display_name(slug)
-        return jsonify({
-            "error": f"already holding a claim on {other}",
-            "existing_claim": other,
-            "existing_claim_name": other_name,
-            "target_name": target_name,
-        }), 409
+    # Owners are exempt — they may hold multiple simultaneous claims.
+    if not permissions_service.is_owner(user):
+        other = next(
+            (
+                r.slug for r in state_service.all_rows()
+                if r.state.value == "under_review"
+                and r.assignee_hf_id == user.hf_user_id
+                and r.slug != slug
+            ),
+            None,
+        )
+        if other is not None:
+            other_name = catalog_service.display_name(other)
+            target_name = catalog_service.display_name(slug)
+            return jsonify({
+                "error": f"already holding a claim on {other}",
+                "existing_claim": other,
+                "existing_claim_name": other_name,
+                "target_name": target_name,
+            }), 409
 
     new_row = state_service.transition(
         slug,

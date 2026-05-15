@@ -22,6 +22,7 @@ function makeTask(canClaim: boolean): ReciterTask {
             can_claim: canClaim,
             can_edit: false,
             can_edit_as_admin: false,
+            can_edit_as_owner: false,
             can_mark_ready: false,
             can_unmark_ready: false,
             can_release: false,
@@ -30,12 +31,13 @@ function makeTask(canClaim: boolean): ReciterTask {
 }
 
 describe('ClaimButton', () => {
-    it('renders nothing when user holds another active claim, even if can_claim is true', () => {
+    it('renders nothing when a contributor holds another active claim, even if can_claim is true', () => {
         currentUser.set({
             login: 'me',
             hf_user_id: 'u-1',
             role: 'contributor',
             active_claim: 'some-other-slug',
+            active_claims: ['some-other-slug'],
             dev_mode: false,
         });
 
@@ -51,12 +53,34 @@ describe('ClaimButton', () => {
         expect(container.textContent ?? '').not.toMatch(/Already claiming/);
     });
 
+    it('renders the Claim button for an owner with an existing active claim (multi-claim exempt)', () => {
+        currentUser.set({
+            login: 'me',
+            hf_user_id: 'u-1',
+            role: 'owner',
+            active_claim: 'some-other-slug',
+            active_claims: ['some-other-slug'],
+            dev_mode: false,
+        });
+
+        const { container } = render(ClaimButton, {
+            props: {
+                slug: 'second-target',
+                task: makeTask(true),
+                onClaimed: null,
+            },
+        });
+
+        expect(container.querySelector('button')).not.toBeNull();
+    });
+
     it('renders the Claim button when can_claim is true and no foreign active claim', () => {
         currentUser.set({
             login: 'me',
             hf_user_id: 'u-1',
             role: 'contributor',
             active_claim: null,
+            active_claims: [],
             dev_mode: false,
         });
 

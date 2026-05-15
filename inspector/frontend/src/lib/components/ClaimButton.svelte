@@ -7,8 +7,8 @@
 <script lang="ts">
     import { claim } from '../api/claims-client';
     import type { ReciterTask } from '../api/reciter-task';
-    import { currentUser, isSignedIn } from '../stores/current-user';
     import { SIGN_IN_MESSAGES } from '../sign-in-messages';
+    import { currentUser, isSignedIn } from '../stores/current-user';
     import { openSignInModal } from '../stores/sign-in-modal';
 
     export let slug: string;
@@ -19,13 +19,14 @@
 
     let busy = false;
 
-    $: visible = (
-        $currentUser !== null
-        && isSignedIn($currentUser)
-        && task !== null
-        && task.predicates.can_claim
-        && ($currentUser.active_claim === null || $currentUser.active_claim === slug)
-    );
+    $: visible =
+        $currentUser !== null &&
+        isSignedIn($currentUser) &&
+        task !== null &&
+        task.predicates.can_claim &&
+        ($currentUser.active_claim === null ||
+            $currentUser.active_claim === slug ||
+            $currentUser.role === 'owner');
 
     async function _onClick() {
         if (busy) return;
@@ -46,12 +47,7 @@
 </script>
 
 {#if visible}
-    <button
-        type="button"
-        class="seg-btn primary"
-        disabled={busy}
-        on:click={_onClick}
-    >
+    <button type="button" class="seg-btn primary" disabled={busy} on:click={_onClick}>
         {busy ? 'Claiming…' : 'Claim'}
     </button>
 {/if}

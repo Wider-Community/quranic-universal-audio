@@ -4,7 +4,7 @@
      * Mirrors the design `.state.state-*` classes from
      * `inspector/frontend/design/components.css`.
      */
-    import { PUBLIC_BUCKET_LABELS, type AdminBucket } from '../types/public-state';
+    import { type AdminBucket,PUBLIC_BUCKET_LABELS } from '../types/public-state';
 
     /**
      * Accepts `AdminBucket` which is `PublicBucket | 'discarded'`. The

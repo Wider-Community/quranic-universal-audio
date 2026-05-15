@@ -51,6 +51,7 @@ export interface Predicates {
     can_claim: boolean;
     can_edit: boolean;
     can_edit_as_admin: boolean;
+    can_edit_as_owner: boolean;
     can_mark_ready: boolean;
     can_unmark_ready: boolean;
     can_release: boolean;

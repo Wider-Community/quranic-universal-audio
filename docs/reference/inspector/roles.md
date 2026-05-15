@@ -14,7 +14,7 @@ Defined in [`scripts/lib/schemas/access.py::Role`](../../../scripts/lib/schemas/
 |---|---|---|
 | `contributor` | — | sign in, claim a row, edit own claim, mark/unmark own claim ready, release own claim |
 | `maintainer` | contributor | admin overrides (force-release, reassign, force-set-state on allowed pairs, merge-rejected, unlock-for-revision, publish, dataset publish/remove, unpublish, discard/undiscard); admin activity rail; grant/revoke maintainers; per-user dismiss on admin rail |
-| `owner` | maintainer | grant/revoke other owners; see actor identity on both activity rails; delete cards from the public activity rail |
+| `owner` | maintainer | grant/revoke other owners; see actor identity on both activity rails; delete cards from the public activity rail; **edit any public non-frozen reciter regardless of `ReciterState` (no claim required)**; **hold multiple active claims simultaneously** |
 
 ## Predicates
 
@@ -30,6 +30,18 @@ All predicates live in [`inspector/services/permissions.py`](../../../inspector/
 | `is_claim_holder(obj, row)` | True iff `row.assignee_hf_id == obj.hf_user_id` |
 | `is_claim_holder_or_maintainer(obj, row)` | Composition; the only pre-composed helper |
 | `normalize_reason(raw, min_chars=10)` | Trimmed reason or `None` |
+
+### `services/predicates.py` — reciter-task predicates
+
+| Predicate | Condition |
+|---|---|
+| `can_claim` | `awaiting_review` + `public` + signed in + (owner OR no other active claim) |
+| `can_edit` | `under_review` + not `marked_ready` + `public` + user is assignee |
+| `can_edit_as_admin` | maintainer/owner + `under_review` + not `marked_ready` + `public` |
+| `can_edit_as_owner` | owner + not `marked_ready` + `public` (any `ReciterState`) |
+| `can_mark_ready` | same as `can_edit` + row not already marked |
+| `can_unmark_ready` | `under_review` + `marked_ready` + user is assignee |
+| `can_release` | `under_review` + user is assignee |
 
 Comparisons always use `hf_user_id` (canonical, immutable). Never `login` (mutable on HF).
 
@@ -63,6 +75,22 @@ Admin actions that mutate state require a reason ≥ `permissions.MIN_REASON_CHA
 | `editingMode` | per-reciter (`syncEditingMode(user, task)`) | save/undo gating inside a reciter; emits `kind ∈ {view, editor, maintainer, owner}` |
 
 `isAdmin` and `isOwner` are *global* (driven by the user). `editingMode.isAdmin` is *reciter-scoped* and only true when the row is also in an editable state. Don't conflate.
+
+#### `syncEditingMode` branch order
+
+| Priority | Condition | Result |
+|---|---|---|
+| 1 | user == null or task == null | `view / unauthenticated` |
+| 2 | `visibility == discarded` | `view / discarded` |
+| 3 | role == owner + `marked_ready` | `view / marked_ready` |
+| 4 | role == owner | `owner` (any state, no claim required) |
+| 5 | state == completed | `view / completed` |
+| 6 | state == released | `view / released` |
+| 7 | `under_review` + `marked_ready` + assignee | `view / marked_ready` |
+| 8 | `under_review` + not `marked_ready` + assignee | `editor` |
+| 9 | role == maintainer + `under_review` + not `marked_ready` | `maintainer` |
+| 10 | catalogued / awaiting_* | `view / not-claimable` |
+| 11 | else | `view / wrong-assignee` |
 
 ## Identity resolution: HF Space vs local dev
 
@@ -114,4 +142,3 @@ State-changing events (`reciter.published`, `reciter.unpublished`, `reciter.data
 
 - [`state-machine.md`](state-machine.md) — transition matrix + per-event actor role
 - [`schemas/`](schemas/) — `access/inspector_roles.json`, audit record, activity state
-- Planning rationale: [`inspector-state-management.md`](../../planning/inspector-deploy/v2/inspector-state-management.md) §9

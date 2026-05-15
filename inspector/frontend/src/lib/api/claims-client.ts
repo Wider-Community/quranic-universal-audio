@@ -12,8 +12,8 @@
  * surfaced UX (toast/modal) so the caller usually doesn't need to do more.
  */
 
-import { loadCurrentUser } from '../stores/current-user';
 import { SIGN_IN_MESSAGES } from '../sign-in-messages';
+import { loadCurrentUser } from '../stores/current-user';
 import { openSignInModal } from '../stores/sign-in-modal';
 import { pushToast } from '../stores/toast';
 import type { ReciterRow } from './reciter-task';

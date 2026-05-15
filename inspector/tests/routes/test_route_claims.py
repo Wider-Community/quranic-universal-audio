@@ -267,6 +267,7 @@ def test_reciter_task_predicates_anonymous(flask_client):
         "can_claim": False,
         "can_edit": False,
         "can_edit_as_admin": False,
+        "can_edit_as_owner": False,
         "can_mark_ready": False,
         "can_unmark_ready": False,
         "can_release": False,
@@ -324,3 +325,71 @@ def test_reciter_task_predicates_marked_ready_frozen(signed_in_client):
     assert preds["can_mark_ready"] is False
     assert preds["can_unmark_ready"] is True  # the affordance to thaw
     assert preds["can_release"] is True
+
+
+# ---------------------------------------------------------------------------
+# Owner-only permissions
+# ---------------------------------------------------------------------------
+
+
+def test_owner_can_claim_multiple_reciters(signed_in_client, monkeypatch):
+    """Owner bypasses the one-claim-per-user policy."""
+    _stub_persist(monkeypatch)
+    _replace_state([
+        _row("already_claimed", state="under_review", assignee_hf_id="u-owner"),
+        _row("second_target", state="awaiting_review"),
+    ])
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
+    resp = client.post(
+        "/api/claim/second_target",
+        headers={"Origin": "http://localhost"},
+    )
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    assert body["state"] == "under_review"
+    assert body["assignee_hf_id"] == "u-owner"
+
+
+def test_reciter_task_predicates_owner_can_edit_as_owner(signed_in_client):
+    """Owner gets can_edit_as_owner=True on any public non-frozen row."""
+    # Test with a catalogued row (state that normally blocks all edits)
+    _replace_state([_row("test_slug", state="catalogued")])
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
+    resp = client.get("/api/reciter-task/test_slug")
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_edit_as_owner"] is True
+    assert preds["can_edit"] is False  # not assignee
+    assert preds["can_edit_as_admin"] is False  # not under_review
+
+
+def test_reciter_task_predicates_owner_can_claim_with_other_active(signed_in_client):
+    """Owner's can_claim is True even when they already hold another claim."""
+    _replace_state([
+        _row("held", state="under_review", assignee_hf_id="u-owner"),
+        _row("target", state="awaiting_review"),
+    ])
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
+    resp = client.get("/api/reciter-task/target")
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_claim"] is True
+
+
+def test_reciter_task_predicates_owner_marked_ready_blocked(signed_in_client):
+    """Owner cannot edit a marked_ready row (can_edit_as_owner is False)."""
+    _replace_state([_row(
+        "test_slug", state="under_review", assignee_hf_id="other", marked_ready=True,
+    )])
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
+    resp = client.get("/api/reciter-task/test_slug")
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_edit_as_owner"] is False
+
+
+def test_reciter_task_predicates_non_owner_lacks_can_edit_as_owner(signed_in_client):
+    """Maintainer does not get can_edit_as_owner even on under_review rows."""
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
+    client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
+    resp = client.get("/api/reciter-task/test_slug")
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_edit_as_owner"] is False
+    assert preds["can_edit_as_admin"] is True  # still gets admin edit

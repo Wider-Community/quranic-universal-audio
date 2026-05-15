@@ -19,11 +19,11 @@
 
     import {
         fetchPendingRequest,
+        type PendingRequest,
+        type ProposedEdits,
         rejectRequestHard,
         rejectRequestSoft,
         submitRequest,
-        type PendingRequest,
-        type ProposedEdits,
     } from '../../../lib/api/requests';
     import { isOwner } from '../../../lib/stores/current-user';
     import type {
@@ -299,7 +299,7 @@
 
     {#if mode === 'create'}
         <div class="intro">
-            <p class="intro-heading">Request rules</p>
+            <p class="intro-heading">Request Guidelines</p>
             <ul class="rules">
                 <li>
                     Listen to some quick audio samples and verify the audio

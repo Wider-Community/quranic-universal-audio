@@ -14,6 +14,7 @@
         combinationStandard,
     } from '../../utils/delivery-label';
     import { compareDeliveries } from '../../utils/delivery-sort';
+    import ReciterChip from '../ReciterChip.svelte';
 
     export let reciter: PublicReciter | null;
     export let delivery: PublicDelivery | null;
@@ -53,26 +54,18 @@
         aria-haspopup={hasMany ? 'listbox' : undefined}
     >
         {#if reciter}
-            <div class="body">
-                <div class="name-row">
-                    <span class="name">{reciter.name}</span>
-                    {#if reciter.name_ar}
-                        <span class="name-ar" dir="rtl">{reciter.name_ar}</span>
-                    {/if}
-                </div>
-                <div class="sub">
-                    {#if delivery}
-                        <span>{combinationCompact(delivery)}</span>
-                    {/if}
-                </div>
-            </div>
+            <ReciterChip
+                name={reciter.name}
+                nameAr={reciter.name_ar}
+                country={reciter.country}
+                subline={delivery ? combinationCompact(delivery) : null}
+                bucket={delivery?.bucket ?? null}
+            />
             {#if hasMany}
                 <span class="switch" aria-hidden="true">⌃</span>
             {/if}
         {:else}
-            <div class="body">
-                <div class="name muted">Pick a reciter to start</div>
-            </div>
+            <span class="name muted">Pick a reciter to start</span>
         {/if}
     </button>
 

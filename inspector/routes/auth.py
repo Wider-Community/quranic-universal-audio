@@ -171,7 +171,7 @@ def auth_logout():
 
 @auth_bp.route("/me")
 def auth_me():
-    """Identity + active_claim. Anonymous gets a null-filled shape so the
+    """Identity + active_claim(s). Anonymous gets a null-filled shape so the
     SPA reads a uniform schema regardless of auth state."""
     user = auth_service.current_user()
     dev_mode = auth_service.is_dev_mode()
@@ -181,21 +181,20 @@ def auth_me():
             "hf_user_id": None,
             "role": None,
             "active_claim": None,
+            "active_claims": [],
             "dev_mode": dev_mode,
         })
-    active_claim = next(
-        (
-            r.slug for r in state_service.all_rows()
-            if r.state == ReciterState.UNDER_REVIEW
-            and r.assignee_hf_id == user.hf_user_id
-        ),
-        None,
-    )
+    active_claims = [
+        r.slug for r in state_service.all_rows()
+        if r.state == ReciterState.UNDER_REVIEW
+        and r.assignee_hf_id == user.hf_user_id
+    ]
     role_val = user.role.value if hasattr(user.role, "value") else user.role
     return jsonify({
         "login": user.login,
         "hf_user_id": user.hf_user_id,
         "role": role_val,
-        "active_claim": active_claim,
+        "active_claim": active_claims[0] if active_claims else None,
+        "active_claims": active_claims,
         "dev_mode": dev_mode,
     })

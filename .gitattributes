@@ -1,2 +1,14 @@
-# Husky hooks are POSIX sh; CRLF breaks option parsing (e.g. lint-staged --no-stash).
-.husky/** text eol=lf
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.wav binary
+*.flac binary
+*.pdf binary
+*.zip binary
+*.svg text eol=lf

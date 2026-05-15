@@ -80,8 +80,16 @@
 </div>
 
 <style>
+    /* Inherit the wrapper width from the consumer so the popover never
+     * overflows its anchor (the player-stack row in the segments footer
+     * is ~232px wide; the dashboard's surah-trigger is ~140px). Each call
+     * site sets an explicit width on its `.pop-*` container — we just
+     * fill it. Clamps below cap the popover at a comfortable 320px max
+     * even when the anchor is wider (e.g. the dashboard delivery cluster). */
     .wrap {
-        width: 320px;
+        width: 100%;
+        max-width: 320px;
+        min-width: 180px;
         display: flex;
         flex-direction: column;
         max-height: min(420px, 60vh);

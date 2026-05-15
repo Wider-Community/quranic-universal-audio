@@ -140,3 +140,22 @@ export function countryName(iso2: string | null | undefined): string {
         return iso2.toUpperCase();
     }
 }
+
+/**
+ * Render an ISO-3166-1 alpha-2 country code as its flag emoji using the
+ * Regional Indicator Symbols code-point trick (A=0x1F1E6). Returns an
+ * empty string when the code is missing or not a 2-letter shape, so the
+ * UI can decide whether to fall back to text. */
+export function countryFlag(iso2: string | null | undefined): string {
+    if (!iso2) return '';
+    const code = iso2.trim().toUpperCase();
+    if (code.length !== 2) return '';
+    const A = 0x1F1E6;
+    const baseA = 'A'.charCodeAt(0);
+    if (code.charCodeAt(0) < baseA || code.charCodeAt(0) > baseA + 25) return '';
+    if (code.charCodeAt(1) < baseA || code.charCodeAt(1) > baseA + 25) return '';
+    return String.fromCodePoint(
+        A + code.charCodeAt(0) - baseA,
+        A + code.charCodeAt(1) - baseA,
+    );
+}

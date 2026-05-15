@@ -62,13 +62,15 @@ export function setEditingMode(mode: EditingMode): void {
  *   1. user == null  → view / unauthenticated
  *   2. task == null  → view / unauthenticated (route still loading)
  *   3. row.visibility == discarded → view / discarded
- *   4. row.state == completed → view / completed
- *   5. row.state == released → view / released
- *   6. row.state == under_review && marked_ready && user is assignee → view / marked_ready
- *   7. row.state == under_review && user is assignee → editor
- *   8. admin && row.state == under_review && !marked_ready → user.role
- *   9. row.state in {catalogued, awaiting_alignment, awaiting_timestamps} → view / not-claimable
- *   10. else → view / wrong-assignee
+ *   4. user.role == owner && marked_ready → view / marked_ready
+ *   5. user.role == owner → owner  (any state, no claim required)
+ *   6. row.state == completed → view / completed
+ *   7. row.state == released → view / released
+ *   8. row.state == under_review && marked_ready && user is assignee → view / marked_ready
+ *   9. row.state == under_review && user is assignee → editor
+ *   10. maintainer && row.state == under_review && !marked_ready → maintainer
+ *   11. row.state in {catalogued, awaiting_alignment, awaiting_timestamps} → view / not-claimable
+ *   12. else → view / wrong-assignee
  */
 export function syncEditingMode(
     user: CurrentUser | null,
@@ -82,10 +84,14 @@ export function syncEditingMode(
     }
     const row = task.row;
     const isAssignee = row.assignee_hf_id === user.hf_user_id;
-    const isAdminRole = user.role === 'maintainer' || user.role === 'owner';
 
     if (row.visibility === 'discarded') {
         return { kind: 'view', viewReason: 'discarded' };
+    }
+    // Owner fast-path: can edit any public, non-frozen reciter regardless of state.
+    if (user.role === 'owner') {
+        if (row.marked_ready) return { kind: 'view', viewReason: 'marked_ready' };
+        return { kind: 'owner' };
     }
     if (row.state === 'completed') {
         return { kind: 'view', viewReason: 'completed' };
@@ -100,8 +106,8 @@ export function syncEditingMode(
         if (!row.marked_ready && isAssignee) {
             return { kind: 'editor' };
         }
-        if (!row.marked_ready && isAdminRole) {
-            return { kind: user.role as 'maintainer' | 'owner' };
+        if (!row.marked_ready && user.role === 'maintainer') {
+            return { kind: 'maintainer' };
         }
         return { kind: 'view', viewReason: 'wrong-assignee' };
     }

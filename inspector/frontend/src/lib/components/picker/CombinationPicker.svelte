@@ -1,19 +1,3 @@
-<script context="module" lang="ts">
-    import type { PublicBucket, PublicDelivery, PublicReciter } from '../../types/public-state';
-
-    /** One row in the combination picker — a `(reciter, delivery)` pair. */
-    export interface CombinationSelection {
-        kind: 'combination';
-        reciter: PublicReciter;
-        delivery: PublicDelivery;
-    }
-
-    export interface InitialFilter {
-        bucket?: PublicBucket;
-        search?: string;
-    }
-</script>
-
 <script lang="ts">
     /**
      * CombinationPicker — modal picker keyed on (reciter, delivery) pairs.
@@ -30,17 +14,18 @@
     import { createEventDispatcher, onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
 
+    // Picker subscribes to the shared dashboard catalog store instead of
+    // re-fetching /api/public/reciters. loadCatalog() is idempotent so the
+    // first caller (Dashboard, Segments-tab context resolver, or picker open)
+    // wins and others share the cached snapshot.
+    import { catalogData, loadCatalog } from '../../../tabs/dashboard/stores/catalog-data';
     import {
         type Axis,
         buildSchemaDescriptor,
         type SchemaDescriptor,
     } from '../../catalog/schema-descriptor';
     import { currentUser } from '../../stores/current-user';
-    // Picker subscribes to the shared dashboard catalog store instead of
-    // re-fetching /api/public/reciters. loadCatalog() is idempotent so the
-    // first caller (Dashboard, Segments-tab context resolver, or picker open)
-    // wins and others share the cached snapshot.
-    import { catalogData, loadCatalog } from '../../../tabs/dashboard/stores/catalog-data';
+    import type { PublicBucket, PublicDelivery, PublicReciter } from '../../types/public-state';
     import type { BucketCounts } from '../../types/public-state';
     import { tagLabel } from '../../utils/axis-labels';
     import { compactCoverageLabel, compactHoursLabel } from '../../utils/delivery-label';
@@ -49,6 +34,7 @@
     import Modal from '../Modal.svelte';
     import SearchInput from '../SearchInput.svelte';
     import StatePill from '../StatePill.svelte';
+    import type { CombinationSelection, InitialFilter } from './combination-picker-types';
     import PickerFilterRail from './PickerFilterRail.svelte';
     import PickerFooter from './PickerFooter.svelte';
     import PickerStateTabs from './PickerStateTabs.svelte';
@@ -159,13 +145,12 @@
           )
         : facetVisible;
 
-    // Split into pinned (active claim) + groups by bucket.
-    $: mineSlug = $currentUser?.active_claim ?? null;
-    $: mineRow = mineSlug
-        ? visible.find((c) => c.delivery.slug === mineSlug) ?? null
-        : null;
-    $: restRows = mineRow
-        ? visible.filter((c) => c.delivery.slug !== mineSlug)
+    // Split into pinned (active claims) + groups by bucket.
+    // Owners can hold multiple simultaneous claims — pin all of them.
+    $: mineSlugs = new Set($currentUser?.active_claims ?? ($currentUser?.active_claim ? [$currentUser.active_claim] : []));
+    $: mineRows = visible.filter((c) => mineSlugs.has(c.delivery.slug));
+    $: restRows = mineRows.length > 0
+        ? visible.filter((c) => !mineSlugs.has(c.delivery.slug))
         : visible;
     $: groupedRest = (() => {
         const out: Array<{ bucket: PublicBucket; rows: Combo[] }> = [];
@@ -177,8 +162,8 @@
     })();
 
     // Flat list of all visible rows in display order — drives keyboard nav.
-    $: orderedRows = mineRow
-        ? [mineRow, ...groupedRest.flatMap((g) => g.rows)]
+    $: orderedRows = mineRows.length > 0
+        ? [...mineRows, ...groupedRest.flatMap((g) => g.rows)]
         : groupedRest.flatMap((g) => g.rows);
 
     // Reactive so the tabs re-render the moment `stats` resolves — calling
@@ -264,7 +249,6 @@
 </script>
 
 <Modal {open} {title} on:close={onClose}>
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
     <div
         class="picker modal-shell"
         role="dialog"
@@ -312,36 +296,37 @@
                 {:else if orderedRows.length === 0}
                     <div class="state">No matches. Try a different filter or search.</div>
                 {:else}
-                    {#if mineRow}
+                    {#if mineRows.length > 0}
                         <div class="picker-section-head mine-head">
                             <span class="mine-dot" aria-hidden="true"></span>
-                            Your active claim
+                            {mineRows.length === 1 ? 'Your active claim' : 'Your active claims'}
                         </div>
-                        {@const c = mineRow}
-                        {@const idx = 0}
-                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                        <div
-                            class="combo-row"
-                            class:focused={idx === focusedIdx}
-                            role="button"
-                            tabindex="0"
-                            on:click={() => commit(c)}
-                            on:mouseenter={() => (focusedIdx = idx)}
-                        >
-                            <div class="row-primary">
-                                <span class="name-en">{c.reciter.name}</span>
-                                {#if c.reciter.name_ar}<span class="name-ar">{c.reciter.name_ar}</span>{/if}
-                                {#if c.reciter.country}<span class="country">{c.reciter.country}</span>{/if}
+                        {#each mineRows as c (c.delivery.slug)}
+                            {@const idx = orderedRows.indexOf(c)}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <div
+                                class="combo-row"
+                                class:focused={idx === focusedIdx}
+                                role="button"
+                                tabindex="0"
+                                on:click={() => commit(c)}
+                                on:mouseenter={() => (focusedIdx = idx)}
+                            >
+                                <div class="row-primary">
+                                    <span class="name-en">{c.reciter.name}</span>
+                                    {#if c.reciter.name_ar}<span class="name-ar">{c.reciter.name_ar}</span>{/if}
+                                    {#if c.reciter.country}<span class="country">{c.reciter.country}</span>{/if}
+                                </div>
+                                <div class="row-state">
+                                    <StatePill state={c.delivery.bucket} size="sm" />
+                                </div>
+                                <div class="row-meta">{deliveryMeta(c.delivery)}</div>
+                                <div class="row-figures">
+                                    <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
+                                    <span class="dur">{compactHoursLabel(c.delivery)}</span>
+                                </div>
                             </div>
-                            <div class="row-state">
-                                <StatePill state={c.delivery.bucket} size="sm" />
-                            </div>
-                            <div class="row-meta">{deliveryMeta(c.delivery)}</div>
-                            <div class="row-figures">
-                                <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
-                                <span class="dur">{compactHoursLabel(c.delivery)}</span>
-                            </div>
-                        </div>
+                        {/each}
                     {/if}
                     {#each groupedRest as group (group.bucket)}
                         <div class="picker-section-head">

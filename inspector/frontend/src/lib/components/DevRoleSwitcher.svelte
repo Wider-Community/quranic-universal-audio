@@ -9,7 +9,7 @@
      * `null` role mapping back to "anonymous" so the cookie-less /
      * signed-out case displays correctly.
      */
-    import { DEV_ROLES, setDevRole, type DevRole } from '../api/dev-role';
+    import { DEV_ROLES, type DevRole,setDevRole } from '../api/dev-role';
     import { currentUser } from '../stores/current-user';
 
     let busy = false;

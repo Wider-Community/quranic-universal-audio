@@ -29,8 +29,8 @@ import { savedFilterView } from '../../stores/navigation';
 import { setStats } from '../../stores/stats';
 import { setValidation } from '../../stores/validation';
 import { startHistoryLoad } from '../history/loader';
-import { dkTextForRef } from './references';
 import { clearPerReciterState } from './clear-per-reciter-state';
+import { dkTextForRef } from './references';
 
 /**
  * Hydrate per-segment fields that the server stripped from /seg/all to save

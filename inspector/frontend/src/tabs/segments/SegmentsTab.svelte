@@ -158,6 +158,8 @@
                 const d = r.deliveries.find((x) => x.slug === slug);
                 if (d) {
                     contextName = r.name;
+                    contextNameAr = r.name_ar ?? null;
+                    contextCountry = r.country ?? null;
                     contextBucket = d.bucket;
                     contextRiwayah = d.riwayah;
                     contextStyle = d.style;
@@ -170,6 +172,8 @@
     }
 
     let contextName: string | null = null;
+    let contextNameAr: string | null = null;
+    let contextCountry: string | null = null;
     let contextBucket: import('../../lib/types/public-state').PublicBucket | null = null;
     let contextRiwayah: string | null = null;
     let contextStyle: string | null = null;
