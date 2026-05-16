@@ -25,7 +25,7 @@ from scripts.lib.timestamps_shards import SCHEMA_VERSION, derive_url_template
 from services.storage import data_dir
 from services.state import catalog as catalog_service
 from services.state import state as state_service
-from services.audio.audio_meta import chapter_urls, vbr_chapters_for_reciter
+from services.audio.audio_meta import chapter_numbers, chapter_urls, vbr_chapters_for_reciter
 from utils.formatting import slug_to_name
 
 log = logging.getLogger("inspector")
@@ -71,16 +71,21 @@ def _build_resource_bytes() -> dict[str, bytes]:
     return out
 
 
-def _bucket_completed_reciters() -> list[str]:
-    """Return slugs of reciters that have published timestamps in the bucket."""
-    out: list[str] = []
-    for row in state_service.all_rows():
-        if row.state.value not in ("released", "completed"):
-            continue
-        chapters = data_dir.list_published_timestamps_chapters(row.slug)
-        if chapters:
-            out.append(row.slug)
-    return out
+_PUBLISHED_STATES = frozenset({"released", "completed"})
+
+
+def _published_reciter_slugs() -> list[str]:
+    """Return slugs of reciters in a ``released``/``completed`` lifecycle state.
+
+    State alone — no bucket I/O. The lifecycle gate
+    ``awaiting_timestamps → released`` is what guarantees these slugs have
+    timestamps published; we don't re-verify by walking the bucket dir.
+    """
+    return [
+        row.slug
+        for row in state_service.all_rows()
+        if row.state.value in _PUBLISHED_STATES
+    ]
 
 
 def _url_template(slug: str, audio_category: str) -> str:
@@ -159,9 +164,17 @@ def _ensure_built() -> None:
             return
         catalog = catalog_service.snapshot()
         reciters_block: dict[str, dict] = {}
-        for slug in _bucket_completed_reciters():
-            chapters = data_dir.list_published_timestamps_chapters(slug)
+        for slug in _published_reciter_slugs():
+            chapters = chapter_numbers(slug)
             if not chapters:
+                # No audio_manifest sidecar (or unparseable keys) — skip the
+                # reciter rather than emit a block with an empty chapter list
+                # the FE can't render. Surfaces as "missing from dropdown",
+                # same shape as the pre-fix bucket-empty case.
+                log.warning(
+                    "timestamps: skipping %s — no chapter numbers derivable "
+                    "from audio_manifest sidecar", slug,
+                )
                 continue
             block = _bucket_reciter_block(slug, chapters, catalog)
             if block is not None:

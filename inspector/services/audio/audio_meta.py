@@ -155,3 +155,27 @@ def chapter_urls(reciter: str) -> dict[str, str]:
         if isinstance(entry, dict) and isinstance(entry.get("url"), str):
             out[k] = entry["url"]
     return out
+
+
+def chapter_numbers(reciter: str) -> list[int]:
+    """Sorted unique chapter (surah) numbers derived from the sidecar keys.
+
+    Works for both delivery shapes — by_surah keys are ``"1"``..``"114"`` and
+    map 1:1 to a surah; by_ayah keys are ``"<surah>:<ayah>"`` and collapse to
+    their surah component. Used by the TS manifest builder so the released
+    chapter set is derived from cached sidecar state instead of a per-slug
+    ``list_dir("published/<slug>/timestamps")`` bucket walk.
+
+    The invariant this leans on: ``state == released | completed`` ⇒ every
+    audio chapter has timestamps published. Enforced by the
+    ``awaiting_timestamps → released`` transition. A reciter that violates
+    the invariant degrades to a shard 404 on click; the manifest stays
+    consistent with itself.
+    """
+    out: set[int] = set()
+    for k in _chapters(reciter).keys():
+        try:
+            out.add(int(str(k).split(":", 1)[0]))
+        except (TypeError, ValueError):
+            continue
+    return sorted(out)

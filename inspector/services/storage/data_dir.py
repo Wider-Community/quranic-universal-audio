@@ -154,26 +154,3 @@ def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
         return None
 
 
-def list_published_timestamps_chapters(slug: str) -> list[int]:
-    """Return sorted list of chapters that have a timestamps file in the bucket.
-
-    Returns ``[]`` if the reciter has no published timestamps directory.
-    Used by the bucket-mode timestamps manifest builder.
-    """
-    backend = get_backend()
-    parent = f"published/{slug}/timestamps"
-    try:
-        names = backend.list_dir(parent)
-    except StorageNotFound:
-        return []
-    out: list[int] = []
-    for name in names:
-        # Names come back as the leaf filename, e.g. "1.json".
-        if not name.endswith(".json"):
-            continue
-        stem = name[:-len(".json")]
-        try:
-            out.append(int(stem))
-        except ValueError:
-            continue
-    return sorted(out)
