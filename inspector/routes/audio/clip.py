@@ -82,6 +82,13 @@ def seg_segment_clip(reciter):
         "-ss", f"{start_sec:.3f}",
         "-i", source,
         "-t", f"{duration_sec:.3f}",
+        # Drop any non-audio streams. Most mp3quran/qdc MP3s embed an MJPEG
+        # cover-art stream (ID3v2 APIC). Without -vn, ffmpeg tries to encode
+        # that into the mp3 output via the muxer's default video codec
+        # (png), which isn't compiled into our stripped-down static ffmpeg
+        # — fails with "Default encoder for format mp3 (codec png) is
+        # probably disabled" and the route returns 200 OK / 0 bytes.
+        "-vn",
         "-c:a", "libmp3lame",
         "-b:a", CLIP_BITRATE,
         "-ac", "1",
@@ -131,26 +138,6 @@ def seg_segment_clip(reciter):
                     bytes_yielded, rc, shlex.join(cmd),
                     stderr_tail.decode("utf-8", errors="replace")[-500:],
                 )
-                # One-shot diagnostic: dump the ffmpeg encoder list so we can
-                # see whether libmp3lame is actually compiled into the static
-                # binary. The "(codec png) is probably disabled" error usually
-                # means libmp3lame is missing from the binary entirely.
-                try:
-                    enc = subprocess.run(
-                        ["ffmpeg", "-hide_banner", "-encoders"],
-                        capture_output=True, timeout=5,
-                    )
-                    enc_out = enc.stdout.decode("utf-8", errors="replace")
-                    audio_lines = [
-                        l for l in enc_out.splitlines()
-                        if " A" in l[:8] or "lame" in l.lower() or "mp3" in l.lower()
-                    ]
-                    logger.warning(
-                        "segment_clip ffmpeg audio encoders: %s",
-                        " | ".join(audio_lines)[:600],
-                    )
-                except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-                    logger.warning("ffmpeg -encoders probe failed: %s", e)
 
     headers = {
         "Content-Type": "audio/mpeg",
