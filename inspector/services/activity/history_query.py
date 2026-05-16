@@ -6,10 +6,14 @@ this module is read-only.
 """
 
 from collections import Counter
+import logging
 import threading
 
 from config import RECITATION_SEGMENTS_PATH as _DEFAULT_RECITATION_SEGMENTS_PATH
 from services.storage import cache, data_dir
+from utils.references import chapter_from_ref
+
+logger = logging.getLogger(__name__)
 
 
 # Categories that disappear from the validation accordion once the user
@@ -130,6 +134,84 @@ def load_edit_history(reciter: str) -> dict:
         )
 
 
+def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
+    """Fill ``audio_url`` on snapshots that have it empty/null.
+
+    Only walks if any snapshot is missing an audio_url. Resolves per chapter
+    from ``detailed.json`` (mirrors ``segments_query.get_chapter_data``). The
+    chapter for each snapshot is taken from (in order): ``snapshot.chapter``
+    (post-fix extraction), ``snapshot.matched_ref`` parse for real Quran refs,
+    ``batch.chapter``, then the single value in ``batch.chapters`` if any.
+    Snapshots whose chapter still can't be resolved are left untouched.
+    """
+    def _needs_enrichment() -> bool:
+        for batch in batches:
+            for op in batch.get("operations") or []:
+                for snap in (op.get("targets_before") or []) + (op.get("targets_after") or []):
+                    if isinstance(snap, dict) and not snap.get("audio_url"):
+                        return True
+        return False
+
+    if not _needs_enrichment():
+        return
+
+    # Local import — load_detailed lives in a sibling package and would
+    # otherwise create a top-of-module cycle in some test fixtures.
+    from services.storage.data_loader import load_detailed
+
+    try:
+        entries = load_detailed(reciter) or []
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "history_query: load_detailed failed during audio_url enrichment "
+            "(reciter=%s)", reciter,
+        )
+        return
+
+    by_chapter: dict[int, str] = {}
+    for entry in entries:
+        ch = chapter_from_ref(entry.get("ref", ""))
+        if ch and ch not in by_chapter:
+            audio = entry.get("audio")
+            if isinstance(audio, str) and audio:
+                by_chapter[ch] = audio
+
+    if not by_chapter:
+        return
+
+    def _snap_chapter(snap: dict, batch: dict) -> int | None:
+        ch = snap.get("chapter")
+        if isinstance(ch, int) and ch > 0:
+            return ch
+        ref = snap.get("matched_ref", "")
+        if isinstance(ref, str) and ref and ":" in ref:
+            ch = chapter_from_ref(ref)
+            if ch:
+                return ch
+        bch = batch.get("chapter")
+        if isinstance(bch, int) and bch > 0:
+            return bch
+        bchs = batch.get("chapters") or []
+        if len(bchs) == 1 and isinstance(bchs[0], int):
+            return bchs[0]
+        return None
+
+    for batch in batches:
+        for op in batch.get("operations") or []:
+            for key in ("targets_before", "targets_after"):
+                for snap in op.get(key) or []:
+                    if not isinstance(snap, dict):
+                        continue
+                    if snap.get("audio_url"):
+                        continue
+                    ch = _snap_chapter(snap, batch)
+                    if ch is None:
+                        continue
+                    url = by_chapter.get(ch)
+                    if url:
+                        snap["audio_url"] = url
+
+
 def _load_edit_history_from_records(
     reciter: str,
     raw_records: list[dict],
@@ -188,6 +270,15 @@ def _load_edit_history_from_records(
         batches.append(batch)
 
     batches = _merge_batches_sharing_batch_id(batches)
+
+    # Enrich pipeline-edit snapshots that lack ``audio_url``. Older
+    # ``edit_history.jsonl`` records (written before the extraction fix that
+    # stamps ``audio_url`` from the parent entry) carry ``audio_url: null`` on
+    # every pipeline snapshot, which breaks History-row playback. Look up the
+    # canonical audio URL per chapter from detailed.json once, then patch the
+    # snapshots in place. Cache-friendly because ``load_edit_history`` caches
+    # the post-enrichment result.
+    _enrich_snapshot_audio_urls(reciter, batches)
 
     op_counts = Counter()
     fix_kind_counts = Counter()
