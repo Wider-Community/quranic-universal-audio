@@ -441,17 +441,24 @@ export function confirmSplit(
     if (!resolvedMountId) return;
 
     // Chain ref edits for every piece after the first. Each one shifts the
-    // queue head and seeds `beginRefEdit` with the next segment + its
-    // backend-supplied originalEnd anchor (used for the trailing endpoint
-    // when the user edits the prior piece's ref). For the single-cursor
-    // case the queue has one entry — identical behaviour to today.
-    const origParsed = parseSegRef(seg.matched_ref);
-    const originalEndRef = origParsed
-        ? `${origParsed.surah}:${origParsed.ayah_to}:${origParsed.word_to}`
-        : null;
-    const queue = pieces.slice(1).map((p) => ({
-        seg: p, category: chainCat, originalEndRef,
-    }));
+    // queue head and seeds `beginRefEdit` with the next segment + its own
+    // per-piece originalEnd anchor (used for the trailing endpoint when the
+    // user edits the prior piece's ref).
+    //
+    // Use each piece's OWN matched_ref end as its anchor — not the parent
+    // seg's full end. For binary cross-verse (N+1=2 pieces) the second piece's
+    // ref ends at the parent's end, so the two coincide. For N+1≥3 (auto-split
+    // across 3+ verses), each non-final piece's correct anchor is the end of
+    // its own verse — otherwise the chain prefill spans `verse_i_start -
+    // last_verse_end` instead of `verse_i_start - verse_i_end`, breaking the
+    // per-verse-resolution pattern the binary case already has.
+    const queue = pieces.slice(1).map((p) => {
+        const pParsed = parseSegRef(p.matched_ref);
+        const originalEndRef = pParsed
+            ? `${pParsed.surah}:${pParsed.ayah_to}:${pParsed.word_to}`
+            : null;
+        return { seg: p, category: chainCat, originalEndRef };
+    });
     pendingChainTargets.set(queue);
     beginRefEdit(pieces[0]!, chainCat, resolvedMountId);
 }
