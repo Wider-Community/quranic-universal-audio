@@ -399,10 +399,16 @@
             }
         }
         if (!canvasEl) return;
+        // Capture the canvas reference for the cleanup closure. `canvasEl`
+        // is a `bind:this` binding that Svelte may null out before the
+        // onMount destructor runs (depending on unmount path), which made
+        // `observer.unobserve(canvasEl!)` throw "parameter 1 is not of
+        // type 'Element'" when an accordion card unmounted.
+        const observedCanvas = canvasEl;
         const observer = _ensureWaveformObserver();
-        observer.observe(canvasEl);
+        observer.observe(observedCanvas);
         return () => {
-            observer.unobserve(canvasEl!);
+            observer.unobserve(observedCanvas);
         };
     });
 
