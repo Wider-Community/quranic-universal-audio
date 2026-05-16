@@ -8,7 +8,7 @@
      * pure-function data builder (not a post-render DOM walk).
      */
 
-    import { afterUpdate } from 'svelte';
+    import { afterUpdate, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
     import type { TsWord } from '../../../lib/types/domain';
@@ -351,36 +351,48 @@
 
     // Granularity-change housekeeping: clear highlights + opacity when mode
     // switches. Reactive statement guards re-entry during initial build.
+    //
+    // `untrack` wraps the body so the assignments to `_charsReindexed`,
+    // `_lastWordIdx`, `_lastCharIdx` (top-level `let`s — reactive state in
+    // Svelte 5 legacy mode) don't re-trigger this effect via their own reads.
+    // Without it, `effect_update_depth_exceeded` fires on TS-tab mount.
     $: if (_charsReindexed && rootEl) {
-        rootEl
-            .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
-            .forEach((el) => {
-                el.classList.remove('active', 'reached');
-                el.style.removeProperty('opacity');
-            });
-        _lastWordIdx = -1;
-        _lastCharIdx = -1;
-        // Pick up new position
-        updateHighlights();
-        _charsReindexed = false;
+        untrack(() => {
+            rootEl
+                .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
+                .forEach((el) => {
+                    el.classList.remove('active', 'reached');
+                    el.style.removeProperty('opacity');
+                });
+            _lastWordIdx = -1;
+            _lastCharIdx = -1;
+            // Pick up new position
+            updateHighlights();
+            _charsReindexed = false;
+        });
     }
 
-    // Also watch granularity toggles while the cache is stable (no rebuild)
+    // Also watch granularity toggles while the cache is stable (no rebuild).
+    // `untrack` wraps the body for the same reason as above — `_prevGranularity`
+    // is read in the condition and written in the body, which would otherwise
+    // re-fire the effect on each write.
     let _prevGranularity = get(granularity);
     $: {
         if ($granularity !== _prevGranularity) {
-            _prevGranularity = $granularity;
-            if (rootEl) {
-                rootEl
-                    .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
-                    .forEach((el) => {
-                        el.classList.remove('active', 'reached');
-                        el.style.removeProperty('opacity');
-                    });
-                _lastWordIdx = -1;
-                _lastCharIdx = -1;
-                updateHighlights();
-            }
+            untrack(() => {
+                _prevGranularity = $granularity;
+                if (rootEl) {
+                    rootEl
+                        .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
+                        .forEach((el) => {
+                            el.classList.remove('active', 'reached');
+                            el.style.removeProperty('opacity');
+                        });
+                    _lastWordIdx = -1;
+                    _lastCharIdx = -1;
+                    updateHighlights();
+                }
+            });
         }
     }
 
