@@ -17,7 +17,8 @@ from constants import (
     STANDALONE_WORDS as _STANDALONE_WORDS,
 )
 from services.validation.registry import ALL_CATEGORIES
-from services import cache, data_dir
+from services import cache
+from services.state import catalog as catalog_service
 from services import state as state_service
 from services.data_loader import (
     load_auto_split,
@@ -64,38 +65,23 @@ def seg_config():
 def seg_reciters():
     """List reciters tracked in the state file.
 
-    Reads from ``state_service.all_rows()`` instead of walking
-    ``data/recitation_segments/`` so the segments tab surfaces every
-    lifecycle phase (catalogued / awaiting_alignment / awaiting_review /
-    under_review / awaiting_timestamps / released / completed). The
-    bucket-resident ``segments.json`` is fetched per-row to populate
-    ``audio_source`` (matches the v1 response shape).
+    Joins ``state_service.all_rows()`` (lifecycle + visibility) with the
+    in-memory catalog snapshot (``delivery.source`` → ``audio_source``).
+    Both layers are hydrated at boot and live in process memory, so this
+    endpoint does zero bucket I/O per request.
     """
-    # Lifecycle-volatile (claims, state transitions). Short TTL only so a
-    # client doesn't keep stale "awaiting_review" rows across edits, but
-    # repeat reloads inside ~30 s skip the per-row segments_doc fetch loop.
-    headers = {"Cache-Control": "private, max-age=30"}
-    cached = cache.get_seg_reciters_cache()
-    if cached is not None:
-        return orjson_response(cached, headers=headers)
-    result = []
-    for row in sorted(state_service.all_rows(), key=lambda r: r.slug):
-        slug = row.slug
-        audio_source = ""
-        seg_doc = data_dir.read_segments_doc(slug)
-        if seg_doc is not None:
-            audio_source = seg_doc.get("_meta", {}).get("audio_source", "")
-        result.append(
-            {
-                "slug": slug,
-                "name": slug_to_name(slug),
-                "audio_source": audio_source,
-                "state": row.state.value,
-                "visibility": row.visibility.value,
-            }
-        )
-    cache.set_seg_reciters_cache(result)
-    return orjson_response(result, headers=headers)
+    by_slug = {d.slug: d.source for d in catalog_service.snapshot().deliveries}
+    result = [
+        {
+            "slug": row.slug,
+            "name": slug_to_name(row.slug),
+            "audio_source": by_slug.get(row.slug, ""),
+            "state": row.state.value,
+            "visibility": row.visibility.value,
+        }
+        for row in sorted(state_service.all_rows(), key=lambda r: r.slug)
+    ]
+    return orjson_response(result, headers={"Cache-Control": "private, max-age=30"})
 
 
 @seg_data_bp.route("/chapters/<reciter>")

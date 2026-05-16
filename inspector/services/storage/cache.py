@@ -61,7 +61,6 @@ class _KeyedCache(Generic[_T]):
 # Segments
 _seg: _KeyedCache[list[dict]] = _KeyedCache()
 _seg_meta: _KeyedCache[dict] = _KeyedCache()
-_seg_reciters: _SingletonCache[list[dict]] = _SingletonCache()
 _seg_verses: _KeyedCache[tuple] = _KeyedCache()
 _seg_resolved_by_edit: _KeyedCache[dict[str, set[str]]] = _KeyedCache()
 # Low-Confidence v2 sidecar — uid set + meta dict (or None when sidecar absent).
@@ -91,14 +90,6 @@ def get_seg_meta(reciter: str) -> dict:
 
 def set_seg_meta(reciter: str, meta: dict) -> None:
     _seg_meta.set(reciter, meta)
-
-
-def get_seg_reciters_cache() -> list[dict] | None:
-    return _seg_reciters.get()
-
-
-def set_seg_reciters_cache(reciters: list[dict]) -> None:
-    _seg_reciters.set(reciters)
 
 
 def get_seg_verses_cache(reciter: str):
@@ -177,7 +168,6 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_history_peaks.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
-    _seg_reciters.clear()  # MUST be a full reset — not a per-reciter pop
 
 
 # Peaks (thread-safe — manually coded)
