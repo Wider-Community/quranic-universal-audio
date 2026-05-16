@@ -101,7 +101,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     INSPECTOR_DATA_DIR=/app/data \
     INSPECTOR_QUA_DATA_PATH=/app/data \
-    INSPECTOR_CACHE_DIR=/tmp/inspector-cache \
     INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket \
     INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev \
     INSPECTOR_PARSED_CACHE_BYTES=134217728 \

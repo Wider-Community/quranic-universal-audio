@@ -111,14 +111,15 @@ def seg_peaks(reciter):
 def seg_segment_peaks(reciter):
     """Fetch peaks for individual segments.
 
-    Three sources, in order:
+    Two sources, in order:
 
     1. Slice the prefetched chapter-peaks JSON if present — free, ~O(N) array
        slice. Honours an optional per-segment ``pad_ms`` so split / auto-split
        scrubbers can show neighbour samples beyond the segment boundary
        (clamped to ``[0, duration_ms]``).
-    2. Compute via ffmpeg-on-local-bytes (resolver bucket/disk hit).
-    3. HTTP Range decode against the CDN URL (CBR-correct fallback).
+    2. ffmpeg-decode the segment via ``compute_segment_peaks`` — no caching,
+       per request. ``cached_only=true`` in the body skips this fallback so
+       the client gets only bucket-resident peaks.
     """
     body = request.get_json(silent=True) or {}
     segments = body.get("segments", [])
@@ -144,12 +145,14 @@ def seg_segment_peaks(reciter):
             results[key] = sliced
             continue
 
+        if cached_only:
+            continue
+
         data = compute_segment_peaks(
             url,
             max(0, start_ms - pad_ms),
             end_ms + pad_ms,
             reciter,
-            cached_only=cached_only,
             chapter=chapter,
         )
         if data:

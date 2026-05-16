@@ -5,7 +5,7 @@ functions.  No other module uses ``global`` for cache variables.
 """
 
 import threading
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 _T = TypeVar("_T")
 
@@ -210,30 +210,6 @@ def add_peaks_computing(key: str) -> None:
 
 def discard_peaks_computing(key: str) -> None:
     _PEAKS_COMPUTING.discard(key)
-
-
-# Phonemizer singleton
-_phonemizer: _SingletonCache[Any] = _SingletonCache()
-
-
-def get_phonemizer_singleton() -> Any:
-    return _phonemizer.get()
-
-
-def set_phonemizer_singleton(phonemizer: Any) -> None:
-    _phonemizer.set(phonemizer)
-
-
-# Canonical phonemes
-_canonical_phonemes: _KeyedCache[dict[str, list[str]]] = _KeyedCache()
-
-
-def get_canonical_phonemes_cache(reciter: str):
-    return _canonical_phonemes.get(reciter)
-
-
-def set_canonical_phonemes_cache(reciter: str, data: dict) -> None:
-    _canonical_phonemes.set(reciter, data)
 
 
 # Phoneme substitution pairs (lazy singleton)

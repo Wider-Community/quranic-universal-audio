@@ -25,6 +25,7 @@ from .audio import (
     peaks,
     peaks_backfill,
     peaks_history,
+    peaks_slim,
 )
 from .activity import (
     activity_classification,
@@ -39,7 +40,6 @@ from .segments import (
     auto_detect,
     auto_split,
     phoneme_matching,
-    phonemizer_service,
     qalqala,
     save,
     segments_query,
@@ -85,7 +85,6 @@ _LEGACY_ALIASES = {
     "auto_detect": auto_detect,
     "auto_split": auto_split,
     "phoneme_matching": phoneme_matching,
-    "phonemizer_service": phonemizer_service,
     "qalqala": qalqala,
     "save": save,
     "segments_query": segments_query,

@@ -26,12 +26,11 @@ def _fake_source(*, has_local: bool):
     )
 
 
-def test_local_bytes_route_through_ffmpeg_decode(tmp_path, monkeypatch):
+def test_local_bytes_route_through_ffmpeg_decode(monkeypatch):
     from services import audio_source, peaks
 
     decode_calls: list = []
 
-    monkeypatch.setattr(peaks, "peaks_cache_path", lambda reciter, key: tmp_path / "p.json")
     monkeypatch.setattr(audio_source, "resolve", lambda r, u: _fake_source(has_local=True))
     monkeypatch.setattr(peaks, "_ffmpeg_decode_segment",
                         lambda src, url, s, d: decode_calls.append((src, url, s, d)) or _pcm())
@@ -46,12 +45,11 @@ def test_local_bytes_route_through_ffmpeg_decode(tmp_path, monkeypatch):
     assert dur == 1.0
 
 
-def test_no_local_bytes_falls_back_to_url(tmp_path, monkeypatch):
+def test_no_local_bytes_falls_back_to_url(monkeypatch):
     from services import audio_source, peaks
 
     decode_calls: list = []
 
-    monkeypatch.setattr(peaks, "peaks_cache_path", lambda reciter, key: tmp_path / "p.json")
     monkeypatch.setattr(audio_source, "resolve", lambda r, u: _fake_source(has_local=False))
     monkeypatch.setattr(peaks, "_ffmpeg_decode_segment",
                         lambda src, url, s, d: decode_calls.append((src, url, s, d)) or _pcm())

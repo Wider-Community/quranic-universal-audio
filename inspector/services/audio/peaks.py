@@ -6,14 +6,11 @@ No Flask imports -- all functions accept parameters and return plain dicts.
 from __future__ import annotations
 
 import concurrent.futures
-import hashlib
-import json
 import struct
 import subprocess
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
+from config import (FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     MIN_FULL_PEAK_BUCKETS, MIN_SEG_PEAK_BUCKETS,
                     PEAKS_BUCKETS_PER_SEC, PEAKS_FFMPEG_SAMPLE_RATE,
                     PEAKS_PCM_NORMALIZER, PEAKS_SCHEMA_VERSION,
@@ -26,21 +23,25 @@ if TYPE_CHECKING:
 from utils.references import chapter_from_ref
 
 
-def peaks_cache_path(reciter: str, key: str) -> Path:
-    """Return disk cache path for peaks JSON under the reciter's cache dir."""
-    url_hash = hashlib.sha256(key.encode()).hexdigest()[:32]
-    return CACHE_DIR / reciter / "peaks" / f"{url_hash}.json"
-
-
 def is_current_schema(peaks: dict | None) -> bool:
-    """True iff the peaks dict was produced by the current (fixed) bucketer.
+    """True iff the peaks dict matches the current schema (``PEAKS_SCHEMA_VERSION``).
 
-    Pre-v2 peaks computed `block_size = num_samples // num_buckets`, which
-    truncated the trailing samples and left `peaks.length × block_size`
-    short of `num_samples`. The frontend slices peaks against the advertised
-    `duration_ms`, so the missing tail manifests as a multiplicative
-    time→peak drift on long chapters. Callers treat older versions as
-    cache misses and recompute.
+    History of bumps:
+
+    - v1 → v2: bucketer fencepost fix. v1 computed
+      ``block_size = num_samples // num_buckets``, truncating the trailing
+      samples and leaving ``peaks.length × block_size`` short of
+      ``num_samples``. The FE slices peaks against the advertised
+      ``duration_ms``, so the missing tail manifested as a multiplicative
+      time→peak drift on long chapters.
+    - v2 → v3: on-disk shape change to the slim packed format
+      (``services/audio/peaks_slim.py``). v3 blobs live at
+      ``<chapter>.json.gz`` (not ``.json``) and the reader inflates them via
+      ``unpack_slim`` before this check runs -- so what arrives here is still
+      a dict with ``peaks: list[list[float]]`` plus ``schema_version=3``.
+
+    Older versions return False so the cache miss triggers a re-bake via the
+    prefetch fallback (``audio_fetch.fetch_and_persist_chapter``).
     """
     return isinstance(peaks, dict) and peaks.get("schema_version") == PEAKS_SCHEMA_VERSION
 
@@ -75,27 +76,13 @@ def _bucket_pcm_minmax(samples, num_samples: int, num_buckets: int) -> list[list
     return out
 
 
-def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
-                        reciter: str | None = None, cached_only: bool = False) -> dict | None:
+def compute_audio_peaks(audio_source: str) -> dict | None:
     """Compute waveform peaks for a local file path or URL.
 
-    Returns ``{duration_ms, peaks}`` or ``None``.
+    Returns ``{schema_version, duration_ms, peaks}`` or ``None``. No caching —
+    callers persist to the bucket via ``_persist_recomputed_chapter_peaks``
+    when appropriate; in-memory dedup lives in ``cache.update_peaks_cache``.
     """
-    key = cache_key or audio_source
-    # Disk cache lookup -- stale schemas fall through to recompute.
-    cache_path = peaks_cache_path(reciter, key) if reciter else None
-    if cache_path and cache_path.exists():
-        try:
-            with open(cache_path, encoding="utf-8") as f:
-                cached = json.load(f)
-            if is_current_schema(cached):
-                return cached
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    if cached_only:
-        return None
-
     # Decode to raw mono 16-bit PCM via ffmpeg at the configured peaks sample rate
     try:
         result = subprocess.run(
@@ -120,18 +107,7 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
     num_buckets = max(MIN_FULL_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
     peaks = _bucket_pcm_minmax(samples, num_samples, num_buckets)
 
-    data = {"schema_version": PEAKS_SCHEMA_VERSION, "duration_ms": duration_ms, "peaks": peaks}
-
-    # Write to disk cache
-    if cache_path:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with open(cache_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, separators=(",", ":"))
-        except OSError:
-            pass
-
-    return data
+    return {"schema_version": PEAKS_SCHEMA_VERSION, "duration_ms": duration_ms, "peaks": peaks}
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +119,8 @@ def _ffmpeg_decode_segment(src: AudioSource | None, url: str,
     """VBR-safe segment decode. Picks the cheapest available input for the
     requested window:
 
-    * ``src.path`` (bucket mount or disk cache) → ffmpeg reads a local file.
-    * ``src.data`` (in-memory bytes, local-dev only) → fed through stdin.
+    * ``src.path`` (bucket mount) → ffmpeg reads the local file.
+    * ``src.data`` (in-memory bucket bytes, local-dev no-mount only) → stdin.
     * ``url`` fallback → ffmpeg fetches the chapter via HTTP Range itself
       (frame-aware, VBR-correct). Requires the network-enabled ffmpeg build —
       see ``inspector/Dockerfile`` (``--enable-protocol=…,http,https,tcp,tls``).
@@ -179,28 +155,14 @@ def _ffmpeg_decode_segment(src: AudioSource | None, url: str,
 
 def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
                           reciter: str | None = None,
-                          cached_only: bool = False,
                           chapter: int | str | None = None) -> dict | None:
-    """Compute peaks for a specific segment time range via HTTP Range request.
+    """Compute peaks for a specific segment time range via ffmpeg.
 
-    Returns ``{start_ms, end_ms, duration_ms, peaks}`` or ``None``.
+    Returns ``{schema_version, start_ms, end_ms, duration_ms, peaks}`` or
+    ``None``. No caching — the caller is expected to be a one-shot live
+    request when bucket chapter peaks are missing; bucket peaks themselves
+    are produced offline and treated as the canonical store.
     """
-    cache_key = f"seg:{url}:{start_ms}:{end_ms}"
-    cache_path = peaks_cache_path(reciter, cache_key) if reciter else None
-
-    # Disk cache check -- stale schemas fall through to recompute.
-    if cache_path and cache_path.exists():
-        try:
-            with open(cache_path, encoding="utf-8") as f:
-                cached = json.load(f)
-            if is_current_schema(cached):
-                return cached
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    if cached_only:
-        return None
-
     # Decode via resolver — local bytes / path when prefetched, otherwise
     # ffmpeg fetches the chapter via HTTP Range directly (frame-aware,
     # VBR-correct).
@@ -222,23 +184,13 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     num_buckets = max(MIN_SEG_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
     peaks = _bucket_pcm_minmax(samples, num_samples, num_buckets)
 
-    data = {
+    return {
         "schema_version": PEAKS_SCHEMA_VERSION,
         "start_ms": start_ms,
         "end_ms": end_ms,
         "duration_ms": actual_duration_ms,
         "peaks": peaks,
     }
-
-    if cache_path:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with open(cache_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, separators=(",", ":"))
-        except OSError:
-            pass
-
-    return data
 
 
 def _audio_path_for_url(reciter: str, url: str) -> str | None:
@@ -290,7 +242,7 @@ def get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None) 
             path = _audio_path_for_url(reciter, u)
             if path is None:
                 continue
-            future_to_url[pool.submit(compute_audio_peaks, path, u, reciter)] = u
+            future_to_url[pool.submit(compute_audio_peaks, path)] = u
         for future in concurrent.futures.as_completed(future_to_url):
             url = future_to_url[future]
             try:

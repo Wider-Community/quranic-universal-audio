@@ -38,7 +38,6 @@ state — `/tmp/inspector-cache` survives only as long as the container.
 |---------------------------|-----------------------|---------------------------------------------------------------------------------|
 | `INSPECTOR_DATA_DIR`      | `/app/data` (Space) / `<repo>/data` (local) | Root for static data baked into the image (surah_info + linguistic JSONs) |
 | `INSPECTOR_QUA_DATA_PATH` | mirrors `INSPECTOR_DATA_DIR`               | Path containing `qpc_hafs.json`, `digital_khatt_v2_script.json`, `phoneme_sub_costs.json` |
-| `INSPECTOR_CACHE_DIR`     | `/tmp/inspector-cache` | Peaks + canonical-phoneme + audio-proxy cache. Ephemeral.                        |
 | `INSPECTOR_PARSED_CACHE_BYTES` | `134217728` (128 MB) | Soft cap on the in-memory parsed-segments LRU                                   |
 
 ## Timestamps tab

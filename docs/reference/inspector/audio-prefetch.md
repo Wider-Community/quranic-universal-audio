@@ -69,10 +69,9 @@ Single-worker invariant (`app.py::_assert_single_worker`) guarantees exactly one
 Audio (`routes/audio/proxy.py::seg_audio_proxy`) lookup order:
 
 1. `wip/<slug>/audio/<chapter>.mp3` — bucket prefetch.
-2. `CACHE_DIR/<reciter>/audio/<urlhash>.mp3` — legacy local disk cache (pre-prefetch deployments).
-3. `302` redirect to the upstream CDN.
+2. CDN stream-through for slugs the prefetch hasn't reached yet.
 
-Peaks (`routes/segments/peaks.py::seg_peaks`) checks the in-memory cache, then `wip/<slug>/peaks/<chapter>.json`, then schedules background computation.
+Peaks (`routes/segments/peaks.py::seg_peaks`) checks the in-memory cache, then `wip/<slug>/peaks/<chapter>.json`, then schedules background computation (no disk cache; results land back in the bucket via `_persist_recomputed_chapter_peaks`).
 
 ## Admin re-trigger
 
