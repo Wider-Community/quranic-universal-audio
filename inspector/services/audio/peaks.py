@@ -16,7 +16,8 @@ from typing import TYPE_CHECKING
 from config import (CACHE_DIR, FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     MIN_FULL_PEAK_BUCKETS, MIN_SEG_PEAK_BUCKETS,
                     PEAKS_BUCKETS_PER_SEC, PEAKS_FFMPEG_SAMPLE_RATE,
-                    PEAKS_PCM_NORMALIZER, PEAKS_WORKER_COUNT)
+                    PEAKS_PCM_NORMALIZER, PEAKS_SCHEMA_VERSION,
+                    PEAKS_WORKER_COUNT)
 from services.storage import cache
 from services.storage.data_loader import load_detailed
 
@@ -31,6 +32,49 @@ def peaks_cache_path(reciter: str, key: str) -> Path:
     return CACHE_DIR / reciter / "peaks" / f"{url_hash}.json"
 
 
+def is_current_schema(peaks: dict | None) -> bool:
+    """True iff the peaks dict was produced by the current (fixed) bucketer.
+
+    Pre-v2 peaks computed `block_size = num_samples // num_buckets`, which
+    truncated the trailing samples and left `peaks.length × block_size`
+    short of `num_samples`. The frontend slices peaks against the advertised
+    `duration_ms`, so the missing tail manifests as a multiplicative
+    time→peak drift on long chapters. Callers treat older versions as
+    cache misses and recompute.
+    """
+    return isinstance(peaks, dict) and peaks.get("schema_version") == PEAKS_SCHEMA_VERSION
+
+
+def _bucket_pcm_minmax(samples, num_samples: int, num_buckets: int) -> list[list[float]]:
+    """Bucket a PCM signal into `num_buckets` min/max pairs over `[0, num_samples)`.
+
+    Uses a float stride so the buckets exactly tile the sample range — every
+    sample lands in exactly one bucket and the tail isn't dropped. Returns
+    fewer buckets than requested only when `num_samples < num_buckets` (the
+    per-bucket span rounds to zero), which lets very short clips fall
+    through cleanly.
+    """
+    if num_samples <= 0 or num_buckets <= 0:
+        return []
+    stride = num_samples / num_buckets
+    out: list[list[float]] = []
+    for i in range(num_buckets):
+        start = int(round(i * stride))
+        end = int(round((i + 1) * stride))
+        if start >= num_samples:
+            break
+        if end <= start:
+            continue
+        end = min(end, num_samples)
+        block = samples[start:end]
+        if not block:
+            continue
+        mn = min(block) / PEAKS_PCM_NORMALIZER
+        mx = max(block) / PEAKS_PCM_NORMALIZER
+        out.append([round(mn, 4), round(mx, 4)])
+    return out
+
+
 def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
                         reciter: str | None = None, cached_only: bool = False) -> dict | None:
     """Compute waveform peaks for a local file path or URL.
@@ -38,12 +82,14 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
     Returns ``{duration_ms, peaks}`` or ``None``.
     """
     key = cache_key or audio_source
-    # Disk cache lookup
+    # Disk cache lookup -- stale schemas fall through to recompute.
     cache_path = peaks_cache_path(reciter, key) if reciter else None
     if cache_path and cache_path.exists():
         try:
             with open(cache_path, encoding="utf-8") as f:
-                return json.load(f)
+                cached = json.load(f)
+            if is_current_schema(cached):
+                return cached
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -72,20 +118,9 @@ def compute_audio_peaks(audio_source: str, cache_key: str | None = None,
     duration_ms = int(num_samples / PEAKS_FFMPEG_SAMPLE_RATE * 1000)
     duration_sec = num_samples / PEAKS_FFMPEG_SAMPLE_RATE
     num_buckets = max(MIN_FULL_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
+    peaks = _bucket_pcm_minmax(samples, num_samples, num_buckets)
 
-    block_size = max(1, num_samples // num_buckets)
-    peaks = []
-    for i in range(num_buckets):
-        start = i * block_size
-        end = min(start + block_size, num_samples)
-        if start >= num_samples:
-            break
-        block = samples[start:end]
-        mn = min(block) / PEAKS_PCM_NORMALIZER
-        mx = max(block) / PEAKS_PCM_NORMALIZER
-        peaks.append([round(mn, 4), round(mx, 4)])
-
-    data = {"duration_ms": duration_ms, "peaks": peaks}
+    data = {"schema_version": PEAKS_SCHEMA_VERSION, "duration_ms": duration_ms, "peaks": peaks}
 
     # Write to disk cache
     if cache_path:
@@ -153,11 +188,13 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     cache_key = f"seg:{url}:{start_ms}:{end_ms}"
     cache_path = peaks_cache_path(reciter, cache_key) if reciter else None
 
-    # Disk cache check
+    # Disk cache check -- stale schemas fall through to recompute.
     if cache_path and cache_path.exists():
         try:
             with open(cache_path, encoding="utf-8") as f:
-                return json.load(f)
+                cached = json.load(f)
+            if is_current_schema(cached):
+                return cached
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -183,19 +220,10 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
 
     actual_duration_ms = int(num_samples / PEAKS_FFMPEG_SAMPLE_RATE * 1000)
     num_buckets = max(MIN_SEG_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
-    block_size = max(1, num_samples // num_buckets)
-    peaks = []
-    for i in range(num_buckets):
-        s = i * block_size
-        e = min(s + block_size, num_samples)
-        if s >= num_samples:
-            break
-        block = samples[s:e]
-        mn = min(block) / PEAKS_PCM_NORMALIZER
-        mx = max(block) / PEAKS_PCM_NORMALIZER
-        peaks.append([round(mn, 4), round(mx, 4)])
+    peaks = _bucket_pcm_minmax(samples, num_samples, num_buckets)
 
     data = {
+        "schema_version": PEAKS_SCHEMA_VERSION,
         "start_ms": start_ms,
         "end_ms": end_ms,
         "duration_ms": actual_duration_ms,
@@ -211,6 +239,25 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
             pass
 
     return data
+
+
+def _audio_path_for_url(reciter: str, url: str) -> str | None:
+    """Best local file path for an audio URL — bucket-mount first, then disk
+    cache. Returns ``None`` when neither layer has the bytes; the caller
+    skips compute (it would need to download via CDN, which is the chapter
+    audio-proxy's responsibility, not the peaks worker's).
+    """
+    from . import audio_fetch
+    try:
+        bucket_local = audio_fetch.read_prefetched_audio_local_path(reciter, url)
+    except Exception:  # noqa: BLE001
+        bucket_local = None
+    if bucket_local is not None:
+        return str(bucket_local)
+    disk = cache.audio_cache_path(reciter, url)
+    if disk.exists():
+        return str(disk)
+    return None
 
 
 def get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None) -> dict:
@@ -242,18 +289,43 @@ def get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None) 
     with concurrent.futures.ThreadPoolExecutor(max_workers=PEAKS_WORKER_COUNT) as pool:
         future_to_url = {}
         for u in to_compute:
-            local_path = cache.audio_cache_path(reciter, u)
-            if not local_path.exists():
+            path = _audio_path_for_url(reciter, u)
+            if path is None:
                 continue
-            future_to_url[pool.submit(compute_audio_peaks, str(local_path), u, reciter)] = u
+            future_to_url[pool.submit(compute_audio_peaks, path, u, reciter)] = u
         for future in concurrent.futures.as_completed(future_to_url):
             url = future_to_url[future]
             try:
                 data = future.result()
                 if data:
                     results[url] = data
+                    _persist_recomputed_chapter_peaks(reciter, url, data)
             except Exception:
                 pass
 
     all_cached = cache.update_peaks_cache(reciter, results)
     return {u: all_cached[u] for u in urls if u in all_cached}
+
+
+def _persist_recomputed_chapter_peaks(reciter: str, url: str, peaks: dict) -> None:
+    """Write a freshly-computed chapter-peaks dict back to the bucket if the
+    chapter is prefetched. Skips silently when no bucket entry exists (the
+    reciter isn't prefetched yet) or the write fails (next read falls
+    through to compute again).
+    """
+    from . import audio_fetch, audio_meta
+    from services.storage import storage_paths
+    from services.storage.hf_bucket import get_backend
+    try:
+        chapter = audio_meta.chapter_for_url(reciter, url)
+        if chapter is None:
+            return
+        # Only overwrite when the audio is in the bucket -- writing peaks for
+        # a chapter without prefetched audio would mint a partial state that
+        # `audio_prefetch.is_prefetched` (sentinel-only) doesn't model.
+        if audio_fetch.read_prefetched_audio_local_path(reciter, url) is None:
+            return
+        path = storage_paths.prefetched_peaks_path(reciter, chapter)
+        get_backend().write_json_atomic(path, peaks)
+    except Exception:  # noqa: BLE001
+        pass

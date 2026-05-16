@@ -128,6 +128,14 @@ TEMP_AUDIO_SUFFIX = ".mp3"
 PEAKS_FFMPEG_SAMPLE_RATE = 8000          # Hz — ffmpeg resample target for peak computation
 PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 1] float
 PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parallel peak compute
+# v1 used integer block size (`num_samples // num_buckets`) and dropped the
+# trailing samples that didn't fit, leaving the peaks array advertising
+# `duration_ms` larger than what it actually covered — a 0.25% multiplicative
+# time→peak drift visible as misregistered silences on long chapters
+# (~2 s offset 15 min in, ~17 s offset at end-of-file for a ~115 min surah).
+# v2 uses a float stride so every sample is bucketed; the read path treats
+# missing/old version as a cache miss so existing peaks lazily recompute.
+PEAKS_SCHEMA_VERSION = 2
 
 # Audio-cache background download (routes/audio_proxy.py)
 AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download workers for by_surah cache warmup

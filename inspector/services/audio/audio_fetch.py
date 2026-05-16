@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 from config import FFMPEG_FULL_TIMEOUT
 from . import audio_meta
-from .peaks import compute_audio_peaks
+from .peaks import compute_audio_peaks, is_current_schema
 from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
 
@@ -123,6 +123,72 @@ def _remux_mp3_to_xing(src: str, tmp_dir: str) -> str | None:
         return None
 
 
+def _recompute_peaks_for_existing_audio(
+    slug: str, chapter: str, audio_path: str, peaks_path: str
+) -> ChapterArtifact | None:
+    """Rebuild peaks JSON in-place against the audio already in the bucket.
+
+    Used when the chapter MP3 is current but the sidecar peaks predate the
+    schema bump (v1 had a fencepost in its bucket loop that left chapters
+    with peaks shorter than they advertised). Returns ``None`` on any
+    failure so the caller can fall back to the full re-fetch path.
+    """
+    backend = get_backend()
+    local = None
+    try:
+        local = backend.local_path(audio_path)
+    except Exception:  # noqa: BLE001
+        local = None
+
+    tmp_dir: str | None = None
+    src_path: str | None = None
+    try:
+        if local is not None:
+            src_path = str(local)
+        else:
+            tmp_dir = tempfile.mkdtemp(prefix=f"peaks_recompute_{slug}_")
+            fd, src_path = tempfile.mkstemp(suffix=".mp3", dir=tmp_dir)
+            os.close(fd)
+            try:
+                with open(src_path, "wb") as fh:
+                    fh.write(backend.read_bytes(audio_path))
+            except Exception as e:  # noqa: BLE001
+                logger.warning("peaks recompute: audio read failed for %s/%s: %s",
+                               slug, chapter, e)
+                return None
+
+        peaks = compute_audio_peaks(src_path)
+        if not peaks:
+            return None
+        try:
+            backend.write_json_atomic(peaks_path, peaks)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("peaks recompute: upload failed for %s/%s: %s",
+                           slug, chapter, e)
+            return None
+
+        size = len(backend.read_bytes(audio_path))
+        return ChapterArtifact(
+            chapter=chapter,
+            audio_path=audio_path,
+            peaks_path=peaks_path,
+            bytes_written=size,
+            duration_ms=peaks.get("duration_ms"),
+            ffmpeg_remuxed=False,
+        )
+    finally:
+        if tmp_dir:
+            if src_path:
+                try:
+                    os.unlink(src_path)
+                except OSError:
+                    pass
+            try:
+                os.rmdir(tmp_dir)
+            except OSError:
+                pass
+
+
 def fetch_and_persist_chapter(
     slug: str, chapter: str, url: str, *, force: bool = False
 ) -> ChapterArtifact:
@@ -135,15 +201,29 @@ def fetch_and_persist_chapter(
     peaks_path = storage_paths.prefetched_peaks_path(slug, chapter)
 
     if not force and backend.exists(audio_path) and backend.exists(peaks_path):
-        size = len(backend.read_bytes(audio_path))
-        return ChapterArtifact(
-            chapter=chapter,
-            audio_path=audio_path,
-            peaks_path=peaks_path,
-            bytes_written=size,
-            duration_ms=None,
-            ffmpeg_remuxed=False,
-        )
+        # Audio is fine to keep -- the bytes never went stale. But pre-v2
+        # peaks were bucketed with an integer block size that dropped the
+        # trailing samples and made the FE draw a stretched timeline; when
+        # only peaks are stale, recompute against the existing audio bytes
+        # instead of re-downloading the chapter.
+        try:
+            existing_peaks = backend.read_json(peaks_path)
+        except Exception:  # noqa: BLE001
+            existing_peaks = None
+        if is_current_schema(existing_peaks):
+            size = len(backend.read_bytes(audio_path))
+            return ChapterArtifact(
+                chapter=chapter,
+                audio_path=audio_path,
+                peaks_path=peaks_path,
+                bytes_written=size,
+                duration_ms=None,
+                ffmpeg_remuxed=False,
+            )
+        artifact = _recompute_peaks_for_existing_audio(slug, chapter, audio_path, peaks_path)
+        if artifact is not None:
+            return artifact
+        # Fall through to full re-fetch if the peaks-only recompute failed.
 
     tmp_dir = tempfile.mkdtemp(prefix=f"prefetch_{slug}_")
     raw_path: str | None = None
@@ -272,7 +352,11 @@ def read_prefetched_audio_local_path(slug: str, url: str):
 def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     """Return the prefetched peaks JSON for ``url`` if present in the bucket.
 
-    Same fallthrough semantics as ``read_prefetched_audio_bytes``.
+    Returns ``None`` for missing files AND for entries that predate the
+    current peaks schema -- v1 had a bucketer fencepost that left peaks
+    arrays advertising more duration than they actually covered, so stale
+    files would render visibly drifted on the FE. Falling through to
+    ``None`` lets the route's compute path rebuild a v2 entry on demand.
     """
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
@@ -280,6 +364,9 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     path = storage_paths.prefetched_peaks_path(slug, chapter)
     backend = get_backend()
     try:
-        return backend.read_json(path)  # type: ignore[return-value]
+        peaks = backend.read_json(path)
     except Exception:  # noqa: BLE001
         return None
+    if not is_current_schema(peaks):
+        return None
+    return peaks  # type: ignore[return-value]

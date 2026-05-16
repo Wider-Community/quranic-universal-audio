@@ -17,7 +17,9 @@ from flask import Blueprint, jsonify, request
 
 from services import audio_fetch, audio_source, cache
 from services.data_loader import load_detailed
-from services.peaks import get_peaks_for_reciter, compute_segment_peaks
+from config import PEAKS_SCHEMA_VERSION
+from services.peaks import (compute_segment_peaks, get_peaks_for_reciter,
+                            is_current_schema)
 from services.peaks_history import append_peaks_records, load_peaks_records
 from utils.decorators import require_edit_lock, require_same_origin
 from utils.references import chapter_from_ref
@@ -61,7 +63,11 @@ def seg_peaks(reciter):
     lock = cache.get_peaks_lock()
     with lock:
         cached = cache.get_peaks_cache(reciter)
-    result = {u: cached[u] for u in target_urls if u in cached}
+    # Filter pre-v2 entries out -- the in-memory cache can still hold them
+    # from before a schema bump (long-running process, no restart yet), and
+    # the v1 bucketer's stretched timeline would otherwise leak past the
+    # invalidations in `read_prefetched_peaks`.
+    result = {u: cached[u] for u in target_urls if u in cached and is_current_schema(cached[u])}
 
     # Short-circuit: if the prefetch worker already wrote peaks JSON to the
     # bucket for any of the remaining URLs, hydrate from there. Misses fall
@@ -180,6 +186,7 @@ def _slice_chapter_peaks(chapter_peaks: dict | None, start_ms: int, end_ms: int,
         end_idx = min(n, start_idx + 1)
 
     return {
+        "schema_version": PEAKS_SCHEMA_VERSION,
         "start_ms": lo,
         "end_ms": hi,
         "duration_ms": hi - lo,
