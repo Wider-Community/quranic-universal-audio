@@ -78,7 +78,7 @@
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
-    import { observeRowForWarmup, warmSeg } from '../../utils/playback/warmup';
+    import { warmSeg } from '../../utils/playback/warmup';
     import { getConfClass } from '../../utils/validation/conf-class';
     import { _ensureWaveformObserver } from '../../utils/waveform/utils';
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
@@ -440,21 +440,6 @@
         _prevRegIdx = seg.index;
     }
 
-    // Visibility-driven warmup — fires `warmSeg(seg, reciter)` when the row
-    // scrolls into the viewport (with a 200 px rootMargin so the warmup gets
-    // a head start). Covers the "user scrolls down to seg #50 then clicks"
-    // pattern that chapter-load + hover + play-next-seg can't reach. Skipped
-    // for read-only rows (history / preview) since they don't drive live play.
-    let _unobserveWarmup: (() => void) | null = null;
-    onMount(() => {
-        if (readOnly || !rowEl) return;
-        _unobserveWarmup = observeRowForWarmup(
-            rowEl,
-            () => seg,
-            () => get(selectedReciter),
-        );
-    });
-
     onDestroy(() => {
         // Use the stored prev values rather than the current (potentially
         // shifted) seg.index — otherwise a row that's been reindexed since
@@ -471,8 +456,6 @@
             clearTimeout(_hoverWarmTimer);
             _hoverWarmTimer = null;
         }
-        _unobserveWarmup?.();
-        _unobserveWarmup = null;
     });
 
     // ---------------------------------------------------------------------
