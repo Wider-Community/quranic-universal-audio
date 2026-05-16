@@ -22,7 +22,10 @@ from __future__ import annotations
 import logging
 from typing import Iterable
 
-from services.activity.history_query import parse_history_for_reciter
+from services.activity.history_query import (
+    parse_history_for_reciter,
+    recover_strip_specials_chapter_per_op,
+)
 from services.audio.peaks import compute_segment_peaks
 from services.audio.peaks_history import (
     append_peaks_records,
@@ -67,12 +70,16 @@ def _iter_pipeline_ops(records: Iterable[dict]) -> Iterable[tuple[dict, dict]]:
                 yield batch, op
 
 
-def _resolve_op_chapter(op: dict, batch: dict) -> int | None:
+def _resolve_op_chapter(
+    op: dict, batch: dict, recovered: dict[str, int],
+) -> int | None:
     """Pick the chapter for an op.
 
     Prefer the snapshot's stamped ``chapter`` field (added by the extraction
     fix). Fall back to ``targets_before[0].matched_ref`` chapter parse, then
-    the batch-level ``chapter`` (waqf_sakt is one batch per chapter).
+    the batch-level ``chapter`` (waqf_sakt is one batch per chapter), then
+    the strip_specials per-op recovery map (legacy data — see
+    ``services.activity.history_query.recover_strip_specials_chapter_per_op``).
     """
     snapshots = (op.get("targets_before") or []) + (op.get("targets_after") or [])
     for snap in snapshots:
@@ -88,11 +95,17 @@ def _resolve_op_chapter(op: dict, batch: dict) -> int | None:
             if ch:
                 return ch
     bch = batch.get("chapter")
-    return bch if isinstance(bch, int) and bch > 0 else None
+    if isinstance(bch, int) and bch > 0:
+        return bch
+    op_id = op.get("op_id")
+    if isinstance(op_id, str) and op_id in recovered:
+        return recovered[op_id]
+    return None
 
 
 def _resolve_op_audio_url(
     op: dict, batch: dict, by_chapter: dict[int, str],
+    recovered: dict[str, int],
 ) -> str | None:
     """Pick the audio URL for an op. Snapshot first, then chapter lookup."""
     for snap in (op.get("targets_before") or []) + (op.get("targets_after") or []):
@@ -100,7 +113,7 @@ def _resolve_op_audio_url(
             url = snap.get("audio_url")
             if isinstance(url, str) and url:
                 return url
-    ch = _resolve_op_chapter(op, batch)
+    ch = _resolve_op_chapter(op, batch, recovered)
     if ch is None:
         return None
     return by_chapter.get(ch)
@@ -161,6 +174,18 @@ def backfill_pipeline_peaks(reciter: str) -> int:
 
     by_chapter = _audio_url_by_chapter(reciter)
 
+    # Memo the per-batch strip_specials chapter recovery so we compute it
+    # once per batch (legacy data) — multiple ops in `missing` share batches.
+    recovered_by_batch: dict[str, dict[str, int]] = {}
+
+    def _recovered_for(batch: dict) -> dict[str, int]:
+        bid = batch.get("batch_id")
+        if not isinstance(bid, str):
+            return recover_strip_specials_chapter_per_op(batch)
+        if bid not in recovered_by_batch:
+            recovered_by_batch[bid] = recover_strip_specials_chapter_per_op(batch)
+        return recovered_by_batch[bid]
+
     written_total = 0
     by_batch: dict[str | None, list[dict]] = {}
 
@@ -175,7 +200,8 @@ def backfill_pipeline_peaks(reciter: str) -> int:
                 reciter, op_id,
             )
             continue
-        url = _resolve_op_audio_url(op, batch, by_chapter)
+        recovered = _recovered_for(batch)
+        url = _resolve_op_audio_url(op, batch, by_chapter, recovered)
         if not url:
             logger.warning(
                 "peaks_backfill[%s]: op %s has no resolvable audio_url; skipping",
