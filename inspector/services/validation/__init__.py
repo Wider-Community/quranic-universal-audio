@@ -19,7 +19,10 @@ from config import LOW_CONFIDENCE_THRESHOLD
 from constants import VALIDATION_CATEGORIES
 from services.storage import cache
 from services.storage.data_loader import get_word_counts, load_detailed, load_probe_v2, load_seg_verses
-from services.activity.history_query import build_resolved_by_edit_index
+from services.activity.history_query import (
+    build_resolved_by_edit_index,
+    parse_history_for_reciter,
+)
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic
@@ -138,6 +141,40 @@ def _load_resolved_idx_cached(reciter: str) -> dict:
     return resolved
 
 
+def _deleted_basmala_chapters(reciter: str) -> set[int]:
+    """Collect chapters whose Basmala the alignment pipeline already stripped.
+
+    Walks ``edit_history.jsonl`` once, looking for ``strip_specials`` batches
+    and picking only the operations whose deleted snapshot has
+    ``matched_ref == "Basmala"`` — the batch-level ``chapters`` field is the
+    union across ALL special refs (Basmala + Isti'adha + …) and would
+    over-credit a chapter that lost only an Isti'adha. Per-op chapter is taken
+    from the snapshot's stamped ``chapter`` field (added by the extraction
+    fix); older snapshots fall back to the batch-level ``chapter`` if the
+    batch is single-chapter.
+    """
+    out: set[int] = set()
+    for batch in parse_history_for_reciter(reciter):
+        if batch.get("batch_type") != "strip_specials":
+            continue
+        batch_chapter = batch.get("chapter") if isinstance(batch.get("chapter"), int) else None
+        for op in batch.get("operations") or []:
+            snapshots = op.get("targets_before") or []
+            if not snapshots:
+                continue
+            snap = snapshots[0]
+            if not isinstance(snap, dict):
+                continue
+            if snap.get("matched_ref") != "Basmala":
+                continue
+            ch = snap.get("chapter")
+            if isinstance(ch, int) and ch > 0:
+                out.add(ch)
+            elif batch_chapter is not None:
+                out.add(batch_chapter)
+    return out
+
+
 def validate_reciter_segments(reciter: str) -> dict:
     """Validate all chapters for a reciter, returning issues grouped by category.
 
@@ -188,9 +225,12 @@ def validate_reciter_segments(reciter: str) -> dict:
                     seg["_resolved_by_edit"] = resolved_idx[uid]
                     _injected_segs.append(seg)
 
+    deleted_basmala_chapters = _deleted_basmala_chapters(reciter)
+
     detail = _build_detail_lists(
         entries, is_by_ayah, word_counts, canonical, single_word_verses,
         probe_failed_uids=probe_failed_uids,
+        deleted_basmala_chapters=deleted_basmala_chapters,
     )
     missing_words = _build_missing_words(
         detail["verse_segments"], word_counts, detail["sequence_gaps"]

@@ -32,7 +32,31 @@ from services.validation.registry import PER_SEGMENT_CATEGORIES
 # singleton — a single entry suffices for the lifetime of the dict. Building
 # the table is O(N_verses) once instead of O(ayah) per ``_word_ord`` call,
 # which was ~1.5s self-time in the per-segment classifier loop.
-_SURAH_OFFSETS_CACHE: dict[int, dict[tuple[int, int], int]] = {}
+#
+# The value tuple is ``(offsets, fingerprint)``. ``fingerprint`` is a cheap
+# content signature (length + first/last entry); a stale id hit (Python
+# recycles ids after GC) fails the fingerprint check and we recompute. This
+# matters in tests where each call passes a fresh ``word_counts`` dict and
+# id collisions are routine.
+_SURAH_OFFSETS_CACHE: dict[
+    int, tuple[dict[tuple[int, int], int], tuple]
+] = {}
+
+
+def _wc_fingerprint(word_counts: dict[tuple[int, int], int]) -> tuple:
+    """Return a cheap content signature for ``word_counts``.
+
+    Used to detect ``id``-recycle collisions after GC: two short-lived dicts
+    can share an id but rarely share length + first/last items.
+    """
+    if not word_counts:
+        return (0,)
+    it = iter(word_counts.items())
+    first = next(it)
+    last = first
+    for last in it:
+        pass
+    return (len(word_counts), first, last)
 
 
 def _surah_offsets(word_counts: dict[tuple[int, int], int]) -> dict[tuple[int, int], int]:
@@ -44,9 +68,10 @@ def _surah_offsets(word_counts: dict[tuple[int, int], int]) -> dict[tuple[int, i
     them (matching the prior ``for verse in range(1, ayah)`` behavior).
     """
     key = id(word_counts)
+    fp = _wc_fingerprint(word_counts)
     cached = _SURAH_OFFSETS_CACHE.get(key)
-    if cached is not None:
-        return cached
+    if cached is not None and cached[1] == fp:
+        return cached[0]
     by_surah: dict[int, dict[int, int]] = {}
     for (surah, ayah), wc in word_counts.items():
         by_surah.setdefault(surah, {})[ayah] = wc
@@ -58,7 +83,7 @@ def _surah_offsets(word_counts: dict[tuple[int, int], int]) -> dict[tuple[int, i
             offsets[(surah, ayah)] = running
             running += ayah_to_wc[ayah]
             ayah += 1
-    _SURAH_OFFSETS_CACHE[key] = offsets
+    _SURAH_OFFSETS_CACHE[key] = (offsets, fp)
     return offsets
 
 
@@ -128,6 +153,7 @@ def _build_detail_lists(
     canonical: dict | None,
     single_word_verses: set,
     probe_failed_uids: set | None = None,
+    deleted_basmala_chapters: set[int] | None = None,
 ) -> dict:
     """Iterate entries and build all detail lists + verse_segments map.
 
@@ -139,6 +165,13 @@ def _build_detail_lists(
     ``probe_failed_uids`` is the set of segment UIDs flagged by the
     extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
     the sidecar isn't present and the v2 list should stay empty.
+
+    ``deleted_basmala_chapters`` is the set of chapters from which the
+    alignment pipeline (strip_specials) already deleted a Basmala. When
+    provided, the rule flags the first segment of every other chapter
+    (excluding 1 and 9) as a "possibly missed Basmala" in ``basmala_amin``.
+    Pass ``None`` to skip the augmentation entirely (preserves the legacy
+    per-chapter-counts code path).
     """
     failed: list[dict] = []
     low_confidence: list[dict] = []
@@ -154,6 +187,7 @@ def _build_detail_lists(
     chapter_seg_idx: dict[int, int] = {}
     verse_segments: dict[tuple[int, int], list] = defaultdict(list)
     sequence_gaps: list[dict] = []
+    first_seg_by_chapter: dict[int, dict] = {}
 
     for entry in entries:
         chapter = chapter_from_ref(entry["ref"])
@@ -168,6 +202,18 @@ def _build_detail_lists(
             t_start = seg.get("time_start", 0)
             t_end = seg.get("time_end", 0)
             seg_uid = seg.get("segment_uid") or None
+
+            if i == 0 and chapter not in first_seg_by_chapter:
+                # Capture identity of the first seg of every chapter, regardless
+                # of whether matched_ref is valid — the missed-Basmala rule
+                # below needs this even when the first seg failed to align.
+                first_seg_by_chapter[chapter] = {
+                    "chapter": chapter,
+                    "seg_index": 0,
+                    "segment_uid": seg_uid,
+                    "ref": matched_ref,
+                    "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                }
 
             if not matched_ref:
                 # Respect is_ignored_for so _all / ignored=True suppresses the
@@ -379,6 +425,23 @@ def _build_detail_lists(
                         verse_segments[(surah, ayah)].append((1, wc, i))
             else:
                 verse_segments[(surah, s_ayah)].append((s_word, e_word, i))
+
+    # "Missed Basmala" augmentation. For every chapter (≠1, ≠9) whose Basmala
+    # the alignment pipeline did NOT strip, the first segment is flagged as a
+    # candidate that may need manual handling. Chapter 1 (Al-Fatiha) has
+    # Basmala as its first ayah by design (the canonical 1:1 entry is already
+    # flagged above); chapter 9 (At-Tawbah) traditionally has no Basmala.
+    if deleted_basmala_chapters is not None:
+        for chapter, first_seg in first_seg_by_chapter.items():
+            if chapter in (1, 9):
+                continue
+            if chapter in deleted_basmala_chapters:
+                continue
+            basmala_amin.append({
+                **first_seg,
+                "missed_basmala": True,
+                "classified_issues": ["basmala_amin"],
+            })
 
     combined_basmala_amin: list[dict] = []
     seen_basmala_amin: set[tuple[int, int, str | None]] = set()
