@@ -127,6 +127,47 @@
     border-radius: 6px;
 }
 
+/* Strip-specials disclosure: same boxy footprint as .seg-history-empty so
+   collapse/expand doesn't reflow the row, with hover affordance to make it
+   feel clickable. */
+.seg-history-deleted-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 70px;
+    padding: 24px;
+    background: transparent;
+    color: #aab;
+    font: inherit;
+    font-style: italic;
+    font-size: 0.85rem;
+    border: 1px dashed #333;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.seg-history-deleted-toggle:hover {
+    color: #d4d4f0;
+    border-color: #4a4a6a;
+    background: rgba(255, 255, 255, 0.02);
+}
+.seg-history-deleted-toggle[aria-expanded="true"] {
+    color: #d4d4f0;
+    border-style: solid;
+    border-color: #4a4a6a;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Indented per-op deletion rows, shown only when the toggle is expanded. */
+.seg-history-deleted-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+    padding-left: 24px;
+    border-left: 2px solid #3a3a5a;
+}
+
 /* Batches container — own scroll context so virtualization can map
    scrollTop → window. Toolbar/filters/stats stay pinned above the list. */
 .seg-history-batches {

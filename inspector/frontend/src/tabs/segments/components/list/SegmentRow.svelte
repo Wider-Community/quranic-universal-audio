@@ -245,11 +245,19 @@
     $: bodyRef = previewState?.ref ?? seg.matched_ref;
     $: bodyText = (() => {
         const text = dkTextForRef(bodyRef, $quranRefs?.dk_words, $quranRefs?.verse_word_counts);
-        if (!text) return seg.matched_ref ? '(no text)' : '(no match)';
+        if (!text) {
+            // Special segs (Basmala/Isti'adha/Amin/Takbir/...) carry their
+            // Arabic text on the snapshot but have non-Quran-ref matched_refs,
+            // so the dk_words lookup is empty. Fall back to matched_text.
+            if (seg.matched_text) return seg.matched_text;
+            return seg.matched_ref ? '(no text)' : '(no match)';
+        }
         return _addVerseMarkers(text, bodyRef, $quranRefs?.verse_word_counts) || text;
     })();
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
-    $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
+    $: indexLabel = (showChapter && seg.chapter != null)
+        ? `${seg.chapter}:#${seg.index}`
+        : `#${seg.index}`;
 
     // ---------------------------------------------------------------------
     // Playback highlight + jump target (store-driven)

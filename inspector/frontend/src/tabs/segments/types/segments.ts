@@ -16,6 +16,9 @@ export interface HistorySnapshot {
     index_at_save?: number;
     segment_uid?: string;
     audio_url?: string;
+    /** Chapter (surah) the snapshot belongs to. Stamped by extraction on
+     *  pipeline-op snapshots; may be undefined on legacy records. */
+    chapter?: number;
     time_start: number;
     time_end: number;
     matched_ref?: string;
