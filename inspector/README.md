@@ -58,6 +58,7 @@ Segments are validated automatically and upon every save. Issues appear in colla
 | Low Confidence | Should fix | Ignore, merge, or adjust |
 | Cross-verse | Highly recommended | Ignore or split at pause |
 | Qalqala | Highly recommended | Ignore or adjust boundary |
+| Muqatta'at | Display only | Edit if needed |
 
 > **General tip:** if a flagged segment has no actual error, click **Ignore** to so it disappears from the category and help us know that it is reviewed and correct.
 
@@ -106,6 +107,12 @@ The last word of the segment ends with a qalqala letter (ق ط ب ج د), which 
 This is especially important at verse boundaries — the HuggingFace dataset reconstructs audio clips for every verse, so a missing qalqala means the listener hears a cut-off ending. If the segment is mid-verse, it's less critical but still good to fix. The letter ق tends to have the most issues, but this varies by reciter and the silence thresholds used during segmentation.
 
 <!-- screenshot: qalqala segment with waveform showing the sound -->
+
+#### Muqatta'at
+
+Segments starting with huruf muqatta'at (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if any issues are spotted.
+
+<!-- screenshot: muqatta'at segment -->
 
 <!-- screenshot: editing operations in action -->
 

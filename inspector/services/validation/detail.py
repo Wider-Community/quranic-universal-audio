@@ -1,7 +1,7 @@
 """Per-segment detail-list builder for validate_reciter_segments.
 
 Iterates entries and returns the detail lists (failed, low_confidence,
-boundary_adj, cross_verse, audio_bleeding, repetitions,
+boundary_adj, cross_verse, audio_bleeding, repetitions, muqattaat,
 qalqala, basmala_amin) plus the verse_segments coverage map. Each detail item carries a
 ``classified_issues`` field — the full category list the segment matches
 under the unified classifier (forward-compat for multi-category card
@@ -134,7 +134,7 @@ def _build_detail_lists(
     Returns a dict with keys:
       chapter_seg_idx, verse_segments,
       failed, low_confidence, low_confidence_v2, boundary_adj, cross_verse,
-      audio_bleeding, repetitions, qalqala, basmala_amin.
+      audio_bleeding, repetitions, muqattaat, qalqala, basmala_amin.
 
     ``probe_failed_uids`` is the set of segment UIDs flagged by the
     extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
@@ -147,6 +147,7 @@ def _build_detail_lists(
     cross_verse: list[dict] = []
     audio_bleeding: list[dict] = []
     repetitions: list[dict] = []
+    muqattaat: list[dict] = []
     qalqala: list[dict] = []
     basmala_amin: list[dict] = []
     basmala_amin_17: list[dict] = []
@@ -338,6 +339,13 @@ def _build_detail_lists(
                         item["asr_tail"] = " ".join(tails[1])
                 boundary_adj.append(item)
 
+            if flags["muqattaat"]:
+                muqattaat.append({
+                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "ref": matched_ref,
+                    "classified_issues": classified,
+                })
+
             if flags["qalqala"]:
                 qalqala.append({
                     "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
@@ -392,6 +400,7 @@ def _build_detail_lists(
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
         "repetitions": repetitions,
+        "muqattaat": muqattaat,
         "qalqala": qalqala,
         "basmala_amin": combined_basmala_amin,
     }

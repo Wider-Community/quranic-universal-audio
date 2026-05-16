@@ -220,7 +220,7 @@ def classify_flags(
     Keys:
       - ``failed``, ``audio_bleeding``, ``repetitions``, ``low_confidence``,
         ``low_confidence_detail``, ``low_confidence_v2``, ``cross_verse``,
-        ``boundary_adj``, ``qalqala``: bool.
+        ``boundary_adj``, ``muqattaat``, ``qalqala``: bool.
       - ``qalqala_letter``: ``str | None`` — populated when ``qalqala`` fires.
       - ``end_of_verse``: bool — reserved (callers pass ``word_counts`` to
         compute this themselves).
@@ -239,6 +239,7 @@ def classify_flags(
         "low_confidence_v2": False,
         "cross_verse": False,
         "boundary_adj": False,
+        "muqattaat": False,
         "qalqala": False,
         "qalqala_letter": None,
         "end_of_verse": False,
@@ -278,6 +279,10 @@ def classify_flags(
         result["boundary_adj"] = _check_boundary_adj(
             seg, surah, s_ayah, s_word, e_word, single_word_verses, canonical
         )
+
+    if s_word == 1 and (surah, s_ayah) in MUQATTAAT_VERSES:
+        if not is_ignored_for(seg, "muqattaat"):
+            result["muqattaat"] = True
 
     # Persisted-field short-circuit: ``qalqala_letter`` is stamped at save /
     # extraction time via ``services.qalqala.compute_qalqala_letter`` (the

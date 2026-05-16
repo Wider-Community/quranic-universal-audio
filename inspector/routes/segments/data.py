@@ -11,6 +11,7 @@ from config import (
     ACCORDION_CONTEXT,
 )
 from constants import (
+    MUQATTAAT_VERSES as _MUQATTAAT_VERSES,
     QALQALA_LETTERS as _QALQALA_LETTERS,
     STANDALONE_REFS as _STANDALONE_REFS,
     STANDALONE_WORDS as _STANDALONE_WORDS,
@@ -47,6 +48,7 @@ def seg_config():
             "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
             "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
             "validation_categories": list(ALL_CATEGORIES),
+            "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
             "qalqala_letters": sorted(_QALQALA_LETTERS),
             "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
             "standalone_words": sorted(_STANDALONE_WORDS),

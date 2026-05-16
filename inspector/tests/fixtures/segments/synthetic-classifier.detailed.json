@@ -19,13 +19,14 @@
       "audio_bleeding",
       "boundary_adj",
       "cross_verse",
-      "qalqala"
+      "qalqala",
+      "muqattaat"
     ],
     "segments_by_entry": [
       {
         "ref": "2",
         "segments": [
-          {"index": 0, "expected_categories": [], "notes": "Surah 2 verse 1, s_word=1 — muqattaʼat is no longer an issue type so no categories fire; (2,1) ∈ MUQATTAAT_VERSES still suppresses boundary_adj"}
+          {"index": 0, "expected_categories": ["muqattaat"], "notes": "Surah 2 verse 1 with s_word=1 — muqattaat fires (2,1) ∈ MUQATTAAT_VERSES"}
         ]
       },
       {
@@ -46,7 +47,7 @@
         "notes": "Used as the audio_bleeding's secondary entry with audio differing — irrelevant for classifier-only fixture (single entry per ref keeps fixture small)."
       }
     ],
-    "_classifier_inputs_note": "All segments live under entry ref=1 except the surah-2 segment (ref=2) kept for the boundary_adj allow-list path. entry.audio is irrelevant to classifier rules; only matched_ref vs entry_ref drives audio_bleeding."
+    "_classifier_inputs_note": "All segments live under entry ref=1 except the muqattaat one (ref=2). entry.audio is irrelevant to classifier rules; only matched_ref vs entry_ref drives audio_bleeding."
   },
   "entries": [
     {

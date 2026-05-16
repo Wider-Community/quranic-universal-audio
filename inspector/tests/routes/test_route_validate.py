@@ -29,7 +29,7 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
 
     Walks the per-category arrays at the top of the response (``failed``,
     ``low_confidence``, ``boundary_adj``, ``cross_verse``, ``audio_bleeding``,
-    ``repetitions``, ``qalqala``) plus any nested ``by_*``
+    ``repetitions``, ``muqattaat``, ``qalqala``) plus any nested ``by_*``
     container the response may grow in later phases.
     """
     reciter = "fixture_reciter"
@@ -41,7 +41,7 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
 
     per_segment_array_keys = {
         "failed", "low_confidence", "boundary_adj", "cross_verse",
-        "audio_bleeding", "repetitions", "qalqala",
+        "audio_bleeding", "repetitions", "muqattaat", "qalqala",
     }
 
     issues_lists: list[list] = []

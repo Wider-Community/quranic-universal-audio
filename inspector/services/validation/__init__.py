@@ -111,7 +111,7 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
 
             for cat in ("audio_bleeding", "repetitions", "low_confidence",
                         "low_confidence_v2", "cross_verse", "boundary_adj",
-                        "qalqala"):
+                        "muqattaat", "qalqala"):
                 if flags[cat]:
                     counts[cat] += 1
 
@@ -212,6 +212,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "boundary_adj": len(detail["boundary_adj"]),
         "cross_verse": len(detail["cross_verse"]),
         "qalqala": len(detail["qalqala"]),
+        "muqattaat": len(detail["muqattaat"]),
         "basmala_amin": len(detail["basmala_amin"]),
     }
 
@@ -227,6 +228,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "cross_verse": detail["cross_verse"],
         "audio_bleeding": detail["audio_bleeding"],
         "repetitions": detail["repetitions"],
+        "muqattaat": detail["muqattaat"],
         "qalqala": detail["qalqala"],
         "basmala_amin": detail["basmala_amin"],
         "category_counts": category_counts,

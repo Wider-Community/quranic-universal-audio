@@ -8,8 +8,8 @@ the listed categories without writing to ``ignored_categories``.
 
 Scope: ``boundary_adj``, ``audio_bleeding``, ``repetitions``.
 ``cross_verse`` and chapter/verse-level categories are excluded -- they
-stay until the validator clears them. ``qalqala`` is view-only and is
-also excluded so the flag stays after edits.
+stay until the validator clears them. ``qalqala`` is view-only (mirrors
+``muqattaat``) and is also excluded so the flag stays after edits.
 """
 from __future__ import annotations
 
@@ -57,9 +57,9 @@ def test_is_suppressed_for_combines_ignored_and_resolved():
 def test_resolves_by_edit_set_contains_only_soft_categories():
     """The set must match the user's pick: boundary_adj/audio_bleeding/repetitions.
 
-    ``qalqala`` is intentionally excluded — it's view-only, so editing a
-    qalqala-flagged seg leaves the flag in place for the next validation
-    pass; the edit history still carries the ``qalqala`` pill via
+    ``qalqala`` is intentionally excluded — it's view-only (like ``muqattaat``)
+    so editing a qalqala-flagged seg leaves the flag in place for the next
+    validation pass; the edit history still carries the ``qalqala`` pill via
     ``op_context_category``.
     """
     assert RESOLVES_BY_EDIT_CATEGORIES == frozenset({

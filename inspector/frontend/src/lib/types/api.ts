@@ -215,6 +215,7 @@ export interface SegConfigResponse {
     show_boundary_phonemes: boolean;
     low_conf_default_threshold: number;
     validation_categories: string[];
+    muqattaat_verses: Array<[number, number]>;
     qalqala_letters: string[];
     standalone_refs: Array<[number, number, number]>;
     standalone_words: string[];
@@ -410,6 +411,11 @@ export interface SegValRepetitionItem extends SegValItemBase {
     text: string;
 }
 
+export interface SegValMuqattaatItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+}
+
 export interface SegValQalqalaItem extends SegValItemBase {
     seg_index: number;
     ref: Ref;
@@ -434,6 +440,7 @@ export type SegValAnyItem =
     | SegValCrossVerseItem
     | SegValAudioBleedingItem
     | SegValRepetitionItem
+    | SegValMuqattaatItem
     | SegValQalqalaItem
     | SegValBasmalaAminItem;
 
@@ -452,6 +459,7 @@ export interface SegValidateResponse {
     cross_verse?: SegValCrossVerseItem[];
     audio_bleeding?: SegValAudioBleedingItem[];
     repetitions?: SegValRepetitionItem[];
+    muqattaat?: SegValMuqattaatItem[];
     qalqala?: SegValQalqalaItem[];
     basmala_amin?: SegValBasmalaAminItem[];
     [k: string]: unknown;

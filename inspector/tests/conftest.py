@@ -59,11 +59,11 @@ except Exception:
     ALL_CATEGORIES = [
         "failed", "missing_verses", "missing_words", "structural_errors",
         "low_confidence", "repetitions", "audio_bleeding", "boundary_adj",
-        "cross_verse", "qalqala",
+        "cross_verse", "qalqala", "muqattaat",
     ]
     PER_SEGMENT_CATEGORIES = [
         "failed", "low_confidence", "repetitions", "audio_bleeding",
-        "boundary_adj", "cross_verse", "qalqala",
+        "boundary_adj", "cross_verse", "qalqala", "muqattaat",
     ]
     PER_VERSE_CATEGORIES = ["missing_verses", "missing_words"]
     PER_CHAPTER_CATEGORIES = ["structural_errors"]

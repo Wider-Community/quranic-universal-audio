@@ -1,7 +1,9 @@
 {
   "by_segment_uid": {
     "019d5c88-2222-7000-a000-000000000001": {
-      "categories": [],
+      "categories": [
+        "muqattaat"
+      ],
       "qalqala_letter": null
     },
     "019d5c88-1111-7000-b000-000000000001": {
@@ -51,6 +53,7 @@
     }
   },
   "category_counts": {
+    "muqattaat": 1,
     "failed": 1,
     "low_confidence": 1,
     "boundary_adj": 4,

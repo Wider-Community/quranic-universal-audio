@@ -15,6 +15,7 @@ export const ALL_CATEGORIES = [
   'boundary_adj',
   'cross_verse',
   'qalqala',
+  'muqattaat',
   'basmala_amin',
 ] as const;
 
@@ -29,6 +30,7 @@ export const PER_SEGMENT_CATEGORIES: CategoryName[] = [
   'boundary_adj',
   'cross_verse',
   'qalqala',
+  'muqattaat',
   'basmala_amin',
 ];
 

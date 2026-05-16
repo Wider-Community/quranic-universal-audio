@@ -33,7 +33,7 @@ export interface FilteredItemSummary {
 export const SHORT_LABELS: Record<string, string> = {
     failed: 'fail', low_confidence: 'low conf', low_confidence_v2: 'low conf',
     boundary_adj: 'boundary', cross_verse: 'cross', missing_words: 'gaps',
-    audio_bleeding: 'bleed', repetitions: 'reps',
+    audio_bleeding: 'bleed', repetitions: 'reps', muqattaat: 'muqattaat',
     qalqala: 'qalqala',
 };
 

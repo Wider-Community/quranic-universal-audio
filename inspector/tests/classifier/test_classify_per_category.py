@@ -137,6 +137,23 @@ def test_qalqala_letter_field_populated():
     assert result.get("qalqala_letter") == "د"
 
 
+def test_muqattaat_only_first_word_of_verse():
+    """A muqattaat verse with s_word=2 does NOT classify; s_word=1 does."""
+    base_seg = {
+        "matched_text": "x",
+        "phonemes_asr": "",
+        "confidence": 1.0,
+    }
+    word1 = dict(base_seg, matched_ref="2:1:1-2:1:1")
+    word2 = dict(base_seg, matched_ref="2:1:2-2:1:2")
+
+    r1 = _classify(word1, entry_ref="2", is_by_ayah=False)
+    r2 = _classify(word2, entry_ref="2", is_by_ayah=False)
+
+    assert "muqattaat" in r1
+    assert "muqattaat" not in r2
+
+
 def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
     """Basmala + Amin shows 1:1 plus only the latest card overlapping 1:7."""
     from services.validation.detail import _build_detail_lists  # type: ignore

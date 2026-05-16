@@ -201,10 +201,11 @@
     // ---- Per-category presentation hints (count badge class). ----
     // Severity \u2192 CSS hook for the count pill. The two flag-style classes
     // (val-rep-count, val-cross-count) are used to colour repetition /
-    // cross-verse / qalqala counts in their own palette.
+    // cross-verse / muqattaat / qalqala counts in their own palette.
     const COUNT_CLASS_OVERRIDES: Record<string, string> = {
         repetitions: 'val-rep-count',
         cross_verse: 'val-cross-count',
+        muqattaat: 'val-cross-count',
         qalqala: 'val-cross-count',
         basmala_amin: 'val-cross-count',
     };
