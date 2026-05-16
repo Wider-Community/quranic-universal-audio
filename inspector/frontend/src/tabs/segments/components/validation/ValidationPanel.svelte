@@ -29,7 +29,10 @@
         SegValLowConfidenceItem,
         SegValQalqalaItem,
     } from '../../../../lib/types/api';
+    import { activeTab } from '../../../../lib/utils/active-tab';
+    import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { IssueRegistry } from '../../domain/registry';
+    import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
     import { segAllData } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
@@ -58,6 +61,20 @@
         _prevChapter = chapter;
         openCategory = null;
         cardsScrollTop = 0;
+        clearAccordionPin();
+    }
+
+    // Clear pin when the user leaves the Segments tab (the SegmentsTab DOM
+    // stays mounted, so the accordion's `open` state persists across tab
+    // hides — we MUST explicitly drop the pin so coming back captures a
+    // fresh open-time snapshot against the latest segValidation).
+    let _prevTab: string | null = null;
+    $: {
+        const t = $activeTab;
+        if (_prevTab !== null && _prevTab === TAB_NAMES.SEGMENTS && t !== TAB_NAMES.SEGMENTS) {
+            clearAccordionPin();
+        }
+        _prevTab = t;
     }
 
     // ---- LC slider ----
@@ -384,7 +401,27 @@
 
     // ---- Virtualization window for the open category ----
     $: openCat = categories.find((c) => c.type === openCategory) ?? null;
-    $: openTotal = openCat?.visibleItems.length ?? 0;
+    // Displayed items inside the open accordion: pinned snapshot keys (in
+    // open-time order), each rendered from live `visibleItems` when present,
+    // else from the snapshot. Keeps cards stable across autosave-driven
+    // segValidation refreshes while still letting per-item state (text,
+    // button color) flow through from the live store.
+    $: displayedItems = ((): SegValAnyItem[] => {
+        if (!openCat) return [];
+        const visible = openCat.visibleItems;
+        const pin = $accordionPin;
+        if (!pin || pin.category !== openCategory) return [...visible];
+        const liveByKey = new Map<string, SegValAnyItem>();
+        for (const it of visible) liveByKey.set(issueKey(it, openCat.type), it);
+        const out: SegValAnyItem[] = [];
+        for (const k of pin.keys) {
+            const live = liveByKey.get(k);
+            if (live) out.push(live);
+            else if (pin.items[k]) out.push(pin.items[k]!);
+        }
+        return out;
+    })();
+    $: openTotal = displayedItems.length;
     // Virtualization stays ACTIVE during editMode. To keep the editing row
     // mounted — so scrolling away doesn't evict the edit panel mid-flow —
     // we expand the slice window to include whichever card resolves to the
@@ -409,7 +446,7 @@
     // resolve via filterStaleIssues + resolveIssueSeg uid-first.
     $: editingItemIdx = ((): number => {
         if (!virtualize || !editingCoords || !openCat) return -1;
-        const items = openCat.visibleItems as ReadonlyArray<{
+        const items = displayedItems as ReadonlyArray<{
             chapter?: number;
             seg_index?: number;
             seg_indices?: number[];
@@ -456,7 +493,12 @@
         if (!cat) return;
         const anyShown = Array.from(cardRefMap.values()).some((c) => c?.getIsContextShown());
         const newState = !anyShown;
-        for (let i = 0; i < cat.visibleItems.length; i++) {
+        // The button is only wired on the currently-open accordion. Use the
+        // pin-aware `displayedItems.length` so indices match what the user
+        // actually sees rendered (pin may include cards that have dropped
+        // from the live `visibleItems` since open-time).
+        const total = type === openCategory ? displayedItems.length : cat.visibleItems.length;
+        for (let i = 0; i < total; i++) {
             ctxMap.set(i, newState);
         }
         for (const c of cardRefMap.values()) {
@@ -471,6 +513,33 @@
         const detailsEl = e.currentTarget as HTMLDetailsElement;
         const isOpen = detailsEl.open;
         openCategory = isOpen ? type : (openCategory === type ? null : openCategory);
+    }
+
+    // Capture the open-time snapshot of visible items so autosave-driven
+    // segValidation refreshes don't yank cards out from under the user.
+    // Re-capture when `openCategory` *transitions* (open / close / switch
+    // category) — not on every reactive tick of `categories` (which republishes
+    // on each segValidation refresh).
+    //
+    // Also re-capture when openCategory is non-null but the pin store is
+    // empty: this fires when returning to the Segments tab after a leave
+    // that cleared the pin while the accordion's DOM state remained open.
+    let _prevPinCategory: string | null = null;
+    $: {
+        const next = openCategory;
+        const pinNow = $accordionPin;
+        const onSegments = $activeTab === TAB_NAMES.SEGMENTS;
+        const needsRepin = onSegments && next != null && (pinNow == null || pinNow.category !== next);
+        if (next !== _prevPinCategory || needsRepin) {
+            if (next == null) {
+                clearAccordionPin();
+            } else if (onSegments) {
+                const cat = categories.find((c) => c.type === next);
+                if (cat) pinAccordion(next, cat.visibleItems, issueKey);
+                else clearAccordionPin();
+            }
+            _prevPinCategory = next;
+        }
     }
 
     function openGuide(e: MouseEvent, type: string): void {
@@ -628,7 +697,7 @@
                         {#if topSpacerPx > 0}
                             <div class="val-cards-spacer" style="height: {topSpacerPx}px" aria-hidden="true"></div>
                         {/if}
-                        {#each cat.visibleItems.slice(startIdx, endIdx) as issue, localIdx (issueKey(issue, cat.type))}
+                        {#each displayedItems.slice(startIdx, endIdx) as issue, localIdx (issueKey(issue, cat.type))}
                             <ErrorCard
                                 bind:this={windowCardRefs[localIdx]}
                                 category={cat.type}

@@ -8,6 +8,7 @@
  */
 
 import { clearWaveformCache } from '../../../../lib/utils/waveform-cache';
+import { clearAccordionPin } from '../../stores/accordion-pin';
 import {
     reciterVbrChapters,
     segAllData,
@@ -53,6 +54,7 @@ export function clearPerReciterState(): void {
     clearMergeRedirects();
 
     clearValidation();
+    clearAccordionPin();
     clearStats();
 
     savedChains.set(null);
