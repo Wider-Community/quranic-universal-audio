@@ -351,3 +351,95 @@ def test_apply_and_clear_warns_on_riwayah_style_conflict(seeded_catalog, monkeyp
     events = [c["event"] for c in calls]
     assert "catalog.conflict_warning" in events
     assert svc.get("test_reciter") is None
+
+
+# ---------------------------------------------------------------------------
+# reconcile_with_state
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_with_state_drops_entries_past_awaiting_alignment(
+    fresh_pending, monkeypatch
+):
+    """Entry whose state row already advanced (e.g. crashed clear after
+    state persisted) must be dropped — that's the user-reported bug.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    from scripts.lib.schemas import ReciterRow, ReciterState
+    from services import pending_requests as svc_module
+    from services import state as state_service
+
+    svc, backend = fresh_pending
+    svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments=None)
+
+    fake_row = ReciterRow(
+        slug="test_reciter",
+        state=ReciterState.AWAITING_REVIEW,
+        state_since=_dt.now(_tz.utc),
+    )
+    monkeypatch.setattr(state_service, "get_row", lambda slug: fake_row if slug == "test_reciter" else None)
+
+    dropped = svc_module.reconcile_with_state()
+    assert dropped == 1
+    assert svc.get("test_reciter") is None
+
+    # Persisted to disk, not just in-memory.
+    from services import storage_paths
+    raw = backend.read_json(storage_paths.pending_requests_path())
+    assert "test_reciter" not in raw["by_slug"]
+
+
+def test_reconcile_with_state_keeps_awaiting_alignment_entries(
+    fresh_pending, monkeypatch
+):
+    """Active requests (state == AWAITING_ALIGNMENT) must NOT be touched."""
+    from scripts.lib.schemas import ReciterRow, ReciterState
+    from services import pending_requests as svc_module
+    from services import state as state_service
+
+    svc, _ = fresh_pending
+    svc.submit("active_reciter", requester=_actor(), edits=_edits(), comments=None)
+
+    from datetime import datetime as _dt, timezone as _tz
+
+    fake_row = ReciterRow(
+        slug="active_reciter",
+        state=ReciterState.AWAITING_ALIGNMENT,
+        state_since=_dt.now(_tz.utc),
+    )
+    monkeypatch.setattr(state_service, "get_row", lambda slug: fake_row)
+
+    dropped = svc_module.reconcile_with_state()
+    assert dropped == 0
+    assert svc.get("active_reciter") is not None
+
+
+def test_reconcile_with_state_drops_entries_with_no_state_row(
+    fresh_pending, monkeypatch
+):
+    """No state row at all → orphan (the request was submitted but the row
+    was deleted out from under it somehow). Drop it.
+    """
+    from services import pending_requests as svc_module
+    from services import state as state_service
+
+    svc, _ = fresh_pending
+    svc.submit("ghost_reciter", requester=_actor(), edits=_edits(), comments=None)
+
+    monkeypatch.setattr(state_service, "get_row", lambda slug: None)
+
+    dropped = svc_module.reconcile_with_state()
+    assert dropped == 1
+    assert svc.get("ghost_reciter") is None
+
+
+def test_reconcile_with_state_is_noop_when_clean(fresh_pending, monkeypatch):
+    """No orphans means no disk write."""
+    from services import pending_requests as svc_module
+    from services import state as state_service
+
+    svc, _ = fresh_pending
+    monkeypatch.setattr(state_service, "get_row", lambda slug: None)
+    assert svc_module.reconcile_with_state() == 0
+    assert svc.snapshot().by_slug == {}

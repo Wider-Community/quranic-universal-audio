@@ -23,6 +23,7 @@ from scripts.lib.schemas import (
     PendingRequest,
     PendingRequestsFile,
     ProposedEdits,
+    ReciterState,
 )
 
 from . import audit, catalog as catalog_service
@@ -241,6 +242,64 @@ def apply_and_clear(slug: str, *, actor: Actor) -> None:
     clear(slug)
 
 
+def reconcile_with_state() -> int:
+    """Drop pending entries whose state row is not AWAITING_ALIGNMENT.
+
+    The state row is the source of truth for lifecycle. A pending entry
+    is only meaningful while ``state == AWAITING_ALIGNMENT`` — once
+    ``_h_alignment_completed`` fires the row advances to AWAITING_REVIEW
+    and the entry is cleared inside the same transition (via
+    ``apply_and_clear``).
+
+    Orphans can still accumulate when the clear's atomic write fails
+    after the state row update was already persisted (crash, network
+    blip), or from legacy data persisted before ``apply_and_clear`` was
+    wired into the handler. Without this reconcile, those entries stay
+    visible to admins as "pending review" forever even though the row
+    has long since moved on, which is exactly the report we're fixing.
+
+    Runs once at boot, after both ``state.hydrate`` and
+    ``pending_requests.hydrate`` have completed. Idempotent.
+
+    Returns the number of orphan entries dropped. The proposed edits
+    themselves are NOT re-applied — the original transition may have
+    already applied them, and re-applying could overwrite later admin
+    catalog edits. Operators can recover the edit intent from the audit
+    log's ``reciter.requested`` payload if needed.
+    """
+    # Lazy import: state.py imports pending_requests inside handler
+    # bodies, and the package __init__ imports pending_requests before
+    # state, so a top-level import here would resolve to a half-loaded
+    # module during package import.
+    from . import state as state_service
+
+    global _store
+    with _store_lock:
+        orphans: list[tuple[str, ReciterState | None]] = []
+        for slug in list(_store.by_slug):
+            row = state_service.get_row(slug)
+            current = row.state if row is not None else None
+            if current == ReciterState.AWAITING_ALIGNMENT:
+                continue
+            orphans.append((slug, current))
+        if not orphans:
+            return 0
+        new_store = _store.model_copy(deep=True)
+        for slug, _ in orphans:
+            del new_store.by_slug[slug]
+        _persist(new_store)
+        _store = new_store
+
+    for slug, current in orphans:
+        logger.warning(
+            "pending_requests: dropped orphan entry slug=%s "
+            "(state=%s; expected awaiting_alignment)",
+            slug,
+            current.value if current is not None else "<no row>",
+        )
+    return len(orphans)
+
+
 __all__ = [
     "PendingRequestsError",
     "RequestAlreadyPending",
@@ -248,6 +307,7 @@ __all__ = [
     "clear",
     "get",
     "hydrate",
+    "reconcile_with_state",
     "snapshot",
     "submit",
 ]
