@@ -186,7 +186,11 @@ def _deleted_basmala_chapters(reciter: str) -> set[int]:
             snap = snapshots[0]
             if not isinstance(snap, dict):
                 continue
-            if snap.get("matched_ref") != "Basmala":
+            # Treat the aligner's combined "Isti'adha+Basmala" ref as a
+            # Basmala deletion (safety net for legacy data that wasn't
+            # normalised at extraction time — new extractions rewrite the
+            # snapshot ref to "Basmala" directly).
+            if snap.get("matched_ref") not in ("Basmala", "Isti'adha+Basmala"):
                 continue
             had_basmala_op = True
             ch = snap.get("chapter")
