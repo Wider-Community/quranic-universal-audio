@@ -262,8 +262,12 @@ def _persist_recomputed_chapter_peaks(reciter: str, url: str, peaks: dict) -> No
     chapter is prefetched. Skips silently when no bucket entry exists (the
     reciter isn't prefetched yet) or the write fails (next read falls
     through to compute again).
+
+    Packs to the canonical slim shape (``peaks_slim.pack_slim``) before
+    writing so the bucket file matches the format the reader expects.
     """
     from . import audio_fetch, audio_meta
+    from .peaks_slim import pack_slim
     from services.storage import storage_paths
     from services.storage.hf_bucket import get_backend
     try:
@@ -276,6 +280,6 @@ def _persist_recomputed_chapter_peaks(reciter: str, url: str, peaks: dict) -> No
         if audio_fetch.read_prefetched_audio_local_path(reciter, url) is None:
             return
         path = storage_paths.prefetched_peaks_path(reciter, chapter)
-        get_backend().write_json_atomic(path, peaks)
+        get_backend().write_bytes_atomic(path, pack_slim(peaks))
     except Exception:  # noqa: BLE001
         pass

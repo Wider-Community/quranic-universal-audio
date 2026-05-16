@@ -128,8 +128,31 @@ def prefetched_peaks_dir(slug: str) -> str:
 
 
 def prefetched_peaks_path(slug: str, chapter: str | int) -> str:
-    """Peaks JSON paired with the prefetched audio for fast first paint."""
+    """Slim packed peaks (gzipped) paired with the prefetched audio.
+
+    Schema v3 format produced by ``services/audio/peaks_slim.py::pack_slim``:
+    int8-quantized, decimated to ``PEAKS_SLIM_BPS=10`` bps, JSON-wrapped,
+    gzipped. Reader (``audio_fetch.read_prefetched_peaks``) inflates via
+    ``unpack_slim`` so downstream consumers see a standard
+    ``{duration_ms, peaks: list[list[float]]}`` dict.
+
+    Pre-v3 files (``<chapter>.json``) are migrated to ``.json.gz`` by
+    ``scripts/backfill_peaks_slim.py`` and originals are renamed to
+    ``.json.bak`` for rollback.
+    """
+    return f"wip/{slug}/peaks/{chapter}.json.gz"
+
+
+def prefetched_peaks_legacy_path(slug: str, chapter: str | int) -> str:
+    """Pre-v3 path (``<chapter>.json``). Used only by the backfill + rollback
+    scripts -- runtime reads go through ``prefetched_peaks_path`` (v3 .gz)."""
     return f"wip/{slug}/peaks/{chapter}.json"
+
+
+def prefetched_peaks_backup_path(slug: str, chapter: str | int) -> str:
+    """Backup name used during dev-bucket migration. Originals get renamed
+    here so rollback can restore them. Cleaned up after prod cutover."""
+    return f"wip/{slug}/peaks/{chapter}.json.bak"
 
 
 def prefetch_done_marker_path(slug: str) -> str:

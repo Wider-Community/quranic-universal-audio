@@ -5,6 +5,7 @@ functions.  No other module uses ``global`` for cache variables.
 """
 
 import threading
+from collections import OrderedDict
 from typing import Generic, TypeVar
 
 _T = TypeVar("_T")
@@ -153,7 +154,15 @@ def set_seg_stats_cache(reciter: str, value: dict) -> None:
 
 
 def invalidate_seg_caches(reciter: str) -> None:
-    """Remove all segment-related caches for *reciter* and reset reciters list."""
+    """Remove all segment-related caches for *reciter* and reset reciters list.
+
+    Also evicts every ``/api/seg/peaks`` response cached for this reciter so
+    the next request re-reads the bucket. Peaks files themselves don't change
+    on a typical edit, but the cached *response body* may include URL keys
+    that depend on segment state (boundary hashes affect ``?h=``); cleanest
+    semantics is "any change to this reciter invalidates everything keyed by
+    it".
+    """
     _seg.pop(reciter)
     _seg_meta.pop(reciter)
     _seg_verses.pop(reciter)
@@ -164,6 +173,7 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_history_peaks.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
+    pop_reciter_peaks_response_cache(reciter)
 
 
 # Peaks (thread-safe — manually coded)
@@ -210,6 +220,55 @@ def add_peaks_computing(key: str) -> None:
 
 def discard_peaks_computing(key: str) -> None:
     _PEAKS_COMPUTING.discard(key)
+
+
+# Peaks response cache — bounded-LRU for /api/seg/peaks GET responses.
+#
+# Keyed by (reciter, sorted_chapter_tuple). Value is the already-jsonified
+# response dict ready for Flask to serialize. Eviction is global (not
+# per-reciter) so we cap total RAM regardless of how many reciters a user
+# browses in one session. ~50 entries × avg ~200 KiB = ~10 MiB ceiling.
+#
+# Invalidated by reciter via ``pop_reciter_peaks_response_cache``, which is
+# wired into ``invalidate_seg_caches`` -- save / undo flows drop every cached
+# response for the edited reciter so the next request re-reads the bucket.
+_PEAKS_RESPONSE_CACHE: "OrderedDict[tuple[str, tuple], dict]" = OrderedDict()
+_PEAKS_RESPONSE_MAX = 50
+_PEAKS_RESPONSE_LOCK = threading.Lock()
+
+
+def get_peaks_response_cache(reciter: str, chapters: tuple) -> dict | None:
+    """Return the cached response for ``(reciter, chapters)`` or None."""
+    key = (reciter, chapters)
+    with _PEAKS_RESPONSE_LOCK:
+        if key in _PEAKS_RESPONSE_CACHE:
+            _PEAKS_RESPONSE_CACHE.move_to_end(key)  # LRU touch
+            return _PEAKS_RESPONSE_CACHE[key]
+    return None
+
+
+def set_peaks_response_cache(reciter: str, chapters: tuple, value: dict) -> None:
+    """Store the response under ``(reciter, chapters)``. Evicts oldest when full."""
+    key = (reciter, chapters)
+    with _PEAKS_RESPONSE_LOCK:
+        _PEAKS_RESPONSE_CACHE[key] = value
+        _PEAKS_RESPONSE_CACHE.move_to_end(key)
+        while len(_PEAKS_RESPONSE_CACHE) > _PEAKS_RESPONSE_MAX:
+            _PEAKS_RESPONSE_CACHE.popitem(last=False)
+
+
+def pop_reciter_peaks_response_cache(reciter: str) -> None:
+    """Drop every cached response keyed by ``reciter`` (any chapter set)."""
+    with _PEAKS_RESPONSE_LOCK:
+        stale = [k for k in _PEAKS_RESPONSE_CACHE if k[0] == reciter]
+        for k in stale:
+            _PEAKS_RESPONSE_CACHE.pop(k, None)
+
+
+def clear_peaks_response_cache() -> None:
+    """Drop every cached response. Used by tests to prevent cross-test bleed."""
+    with _PEAKS_RESPONSE_LOCK:
+        _PEAKS_RESPONSE_CACHE.clear()
 
 
 # Phoneme substitution pairs (lazy singleton)

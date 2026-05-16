@@ -247,6 +247,11 @@ def _invalidate_seg_caches(reciter: str | None = None):
             continue
         if hasattr(obj, "clear"):
             obj.clear()
+    # Reset the route-level peaks LRU response cache so successive tests
+    # don't see a stale body from a prior test's request shape.
+    clearer = getattr(_cache, "clear_peaks_response_cache", None)
+    if callable(clearer):
+        clearer()
 
 
 @pytest.fixture
