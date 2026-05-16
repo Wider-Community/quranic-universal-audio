@@ -27,8 +27,22 @@
  * are swallowed.
  */
 
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../../lib/types/domain';
+import { segAllData } from '../../stores/chapter';
 import { cbrKbpsForChapter } from '../../stores/chapter-meta';
+
+/** Main-list segs from `/api/seg/all/<reciter>` deliberately omit `audio_url`
+ *  to save wire bytes; every FE consumer falls back to the top-level
+ *  `audio_by_chapter[chapter]` map. Mirror that here so the hover and
+ *  next-seg triggers don't silently no-op on main-list segs. */
+function _segAudioUrl(seg: Segment): string {
+    if (seg.audio_url) return seg.audio_url;
+    const chapter = seg.chapter;
+    if (chapter == null) return '';
+    return get(segAllData)?.audio_by_chapter?.[String(chapter)] ?? '';
+}
 
 const WARMUP_BYTES = 65536;            // 64 KB
 const DEDUPE_WINDOW_MS = 30_000;
@@ -84,17 +98,21 @@ export function warmSeg(
     reciter: string,
     current?: Segment | null,
 ): void {
-    if (!seg || !reciter || !seg.audio_url) return;
+    if (!seg || !reciter) return;
     const chapter = seg.chapter;
     if (chapter == null) return;
+    const audioUrl = _segAudioUrl(seg);
+    if (!audioUrl) return;
+    const currentUrl = current ? _segAudioUrl(current) : '';
     if (current
-        && current.audio_url === seg.audio_url
+        && currentUrl
+        && currentUrl === audioUrl
         && seg.time_start - current.time_end < PROXIMITY_GAP_MS) return;
     const kbps = cbrKbpsForChapter(chapter);
     if (!kbps) return;
     const bytesPerSec = kbps * 125;
     const byteStart = Math.max(0, Math.floor((seg.time_start / 1000) * bytesPerSec));
-    _warmAtByte(reciter, seg.audio_url, byteStart);
+    _warmAtByte(reciter, audioUrl, byteStart);
 }
 
 /** Warm bytes 0–65535 of a chapter MP3 — used by the chapter-load trigger
@@ -110,6 +128,75 @@ export function warmChapterStart(
     if (!reciter || !audioUrl || chapter == null) return;
     if (!cbrKbpsForChapter(chapter)) return;
     _warmAtByte(reciter, audioUrl, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Visibility-driven warmup (IntersectionObserver)
+// ---------------------------------------------------------------------------
+//
+// Covers the "user scrolls down to seg #50 then clicks play" pattern that
+// the chapter-load + hover + play-next-seg triggers can't reach. Fires
+// `warmSeg(seg, reciter)` when the row scrolls into the viewport (with a
+// generous rootMargin so it fires before the user actually sees it).
+//
+// Single module-scoped observer keeps the per-row cost trivial across the
+// ~11k-row main list. Each row registers on mount via `observeRowForWarmup`
+// and unobserves on destroy. After the first fire we stop observing the
+// element — subsequent visibility changes use the same dedupe map as the
+// other triggers so a row that comes back into view doesn't re-fetch.
+
+interface _WarmupTarget {
+    getSeg: () => Segment | null | undefined;
+    getReciter: () => string;
+}
+
+const _observed = new WeakMap<Element, _WarmupTarget>();
+
+let _io: IntersectionObserver | null = null;
+
+function _getObserver(): IntersectionObserver | null {
+    if (typeof IntersectionObserver === 'undefined') return null;
+    if (_io) return _io;
+    _io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const target = _observed.get(entry.target);
+            if (!target) continue;
+            warmSeg(target.getSeg(), target.getReciter());
+            // One-shot: dedupe map already covers re-entries, but stop
+            // observing this element to keep the observer's tracking set
+            // small under heavy scrolling.
+            _io?.unobserve(entry.target);
+            _observed.delete(entry.target);
+        }
+    }, {
+        // Fire ~200 px before the row scrolls into view so the warmup has
+        // a head start before the user hovers / clicks.
+        rootMargin: '200px 0px',
+        threshold: 0,
+    });
+    return _io;
+}
+
+/** Register `el` for a one-shot warmup fire on first viewport entry.
+ *  Returns an unobserve fn; SegmentRow calls it from onDestroy.
+ *
+ *  Getters (not snapshots) so split / merge / reindex of `seg` is reflected
+ *  in the fire-time payload without needing to re-register the element.
+ */
+export function observeRowForWarmup(
+    el: Element,
+    getSeg: () => Segment | null | undefined,
+    getReciter: () => string,
+): () => void {
+    const io = _getObserver();
+    if (!io) return () => {};
+    _observed.set(el, { getSeg, getReciter });
+    io.observe(el);
+    return () => {
+        io.unobserve(el);
+        _observed.delete(el);
+    };
 }
 
 /** Test-only — reset the dedupe map between cases. */

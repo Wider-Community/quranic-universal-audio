@@ -24,7 +24,7 @@ import { chapterCbrKbps } from '../../stores/chapter-meta';
 import { segPort } from '../../stores/playback';
 import { disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { wrapCbrSrcIfBySurah } from '../playback/source';
-import { warmChapterStart } from '../playback/warmup';
+import { warmChapterStart, warmSeg } from '../playback/warmup';
 import { _fetchChapterPeaksIfNeeded } from '../waveform/utils';
 
 /**
@@ -96,8 +96,16 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
                 vbr: !!chData.vbr,
             });
             // Hide cold-FUSE / cold-CDN play-click stall by warming a 64 KB
-            // Range at byte 0 of the chapter MP3. No-op for VBR + missing-kbps.
-            warmChapterStart(reciter, chData.audio_url, chNum);
+            // Range. Prefer the first seg's byte offset (covers the byte range
+            // the audio element will fetch on "play first seg" — byte 0 alone
+            // misses if seg[0].time_start nudges the start past 65 KB at high
+            // bitrates) and fall back to byte 0 when no segs are loaded yet.
+            // No-op for VBR + missing-kbps chapters.
+            if (chapterSegs.length > 0) {
+                warmSeg(chapterSegs[0], reciter);
+            } else {
+                warmChapterStart(reciter, chData.audio_url, chNum);
+            }
         }
     } catch (e) {
         console.error('Error loading chapter data:', e);
