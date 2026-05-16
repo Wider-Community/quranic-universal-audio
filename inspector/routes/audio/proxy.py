@@ -6,10 +6,7 @@ Single GET route. Lookup order:
    ``services.audio_prefetch`` when the row enters AWAITING_REVIEW. VBR
    chapters have a Xing TOC injected at prefetch time, so direct
    ``<audio>.currentTime`` seek works without the clip-route.
-2. **Legacy local disk cache** — ``CACHE_DIR/<reciter>/audio/<urlhash>.mp3``
-   from the old prepare-audio button. Kept as a second tier until those
-   files age out organically.
-3. **CDN stream-through** — for slugs the prefetch hasn't reached yet
+2. **CDN stream-through** — for slugs the prefetch hasn't reached yet
    (anonymous browsing, in-flight prefetch, by_ayah deliveries we don't
    prefetch today). We stream the upstream response through Flask
    instead of 302-redirecting so the audio bytes always arrive same-

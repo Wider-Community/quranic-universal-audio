@@ -242,9 +242,10 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
 
 
 def _audio_path_for_url(reciter: str, url: str) -> str | None:
-    """Best local file path for an audio URL — bucket-mount first, then disk
-    cache. Returns ``None`` when neither layer has the bytes; the caller
-    skips compute (it would need to download via CDN, which is the chapter
+    """Best local file path for an audio URL — bucket-mount only.
+
+    Returns ``None`` when the bucket doesn't have the bytes; the caller skips
+    compute (it would need to download via CDN, which is the chapter
     audio-proxy's responsibility, not the peaks worker's).
     """
     from . import audio_fetch
@@ -254,9 +255,6 @@ def _audio_path_for_url(reciter: str, url: str) -> str | None:
         bucket_local = None
     if bucket_local is not None:
         return str(bucket_local)
-    disk = cache.audio_cache_path(reciter, url)
-    if disk.exists():
-        return str(disk)
     return None
 
 
