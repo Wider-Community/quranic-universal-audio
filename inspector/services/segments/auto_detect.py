@@ -57,11 +57,18 @@ _background_thread: threading.Thread | None = None
 
 
 def hydrate_initial_seen() -> None:
-    """Boot-time: snapshot current ``wip/`` slugs so the next reconcile pass
-    doesn't re-fire ``alignment_completed`` for folders that were already
-    present before the server started.
+    """Boot-time: snapshot current ``wip/`` slugs into the seen set, AND
+    fire ``alignment_completed`` for any slug that's still in
+    ``AWAITING_ALIGNMENT`` despite having files in ``wip/``.
 
-    Idempotent.
+    The catch-up firing handles the case where a wip/ upload completed
+    while the server was down (or between an upload and a redeploy) —
+    without it, the slug would stay stuck in ``AWAITING_ALIGNMENT`` forever
+    because the seen-set diff in ``reconcile_once`` would never see the
+    folder as "new".
+
+    Idempotent: a second call no-ops because the slugs are already in the
+    seen set and the rows are no longer in ``AWAITING_ALIGNMENT``.
     """
     backend = get_backend()
     try:
@@ -71,8 +78,25 @@ def hydrate_initial_seen() -> None:
         return
     with _seen_lock:
         _seen_wip_slugs.update(slugs)
+
+    fired = 0
+    for slug in slugs:
+        row = state_service.get_row(slug)
+        if row is None or row.state != ReciterState.AWAITING_ALIGNMENT:
+            continue
+        try:
+            state_service.transition(
+                slug, "reciter.alignment_completed", actor=SYSTEM_ACTOR,
+            )
+            fired += 1
+        except state_service.StateError:
+            logger.exception(
+                "auto_detect: catch-up alignment_completed failed for slug=%s",
+                slug,
+            )
     logger.info(
-        "auto_detect: hydrated initial seen set with %d wip/ slugs", len(slugs),
+        "auto_detect: hydrated initial seen set (%d wip/ slugs, %d catch-up "
+        "transition(s) fired)", len(slugs), fired,
     )
 
 

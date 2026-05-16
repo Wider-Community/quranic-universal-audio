@@ -118,6 +118,25 @@ def test_hydrate_initial_seen_seeds_from_wip(auto_detect_env):
     assert fired == 0
 
 
+def test_hydrate_initial_seen_catches_up_stuck_awaiting_alignment(auto_detect_env):
+    """Server restart between upload and boot: wip/ contains a slug that's
+    still in AWAITING_ALIGNMENT. Without catch-up firing at hydrate time
+    the row would stay stuck forever (reconcile_once only sees NEW slugs).
+    """
+    svc, state_service, backend = auto_detect_env
+    _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
+    backend.write_json_atomic("wip/rec_a/segments.json", {"x": 1})
+
+    svc.hydrate_initial_seen()
+
+    # Catch-up should have transitioned the row at hydrate time.
+    row = state_service.get_row("rec_a")
+    assert row.state == ReciterState.AWAITING_REVIEW
+    # And reconcile_once should now be a no-op (slug is in seen set + no
+    # longer in AWAITING_ALIGNMENT).
+    assert svc.reconcile_once() == 0
+
+
 # ---------------------------------------------------------------------------
 # reconcile_once
 # ---------------------------------------------------------------------------
