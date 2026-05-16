@@ -95,20 +95,26 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
                 reciter,
                 vbr: !!chData.vbr,
             });
-            // Hide cold-FUSE / cold-CDN play-click stall by warming TWO
-            // byte ranges:
-            //   1. bytes=0-65535 — the audio element's initial fetch on
-            //      .play() typically starts at byte 0 (ID3 header + first
-            //      MP3 frames). Warming this primes the OS page cache for
-            //      the metadata read that gates `canplay`.
-            //   2. bytes around seg[0].time_start — only fires when seg[0]
-            //      sits past the 64 KB window above (skipped via dedupe
-            //      otherwise). Covers long surahs where the user clicks
-            //      play on the first seg at e.g. t=2min.
-            // No-op for VBR + missing-kbps chapters.
-            warmChapterStart(reciter, chData.audio_url, chNum);
-            if (chapterSegs.length > 0) {
-                warmSeg(chapterSegs[0], reciter);
+            // Pre-warm the audio element so its `el.src = url; el.load()`
+            // canplay event fires BEFORE the user clicks play. Without this,
+            // the first-seg play click visibly stalls while the browser
+            // fetches metadata + parses MP3 header + decoder warms; with it,
+            // the eventual `loadCovering` short-circuits (fast-path 1) and
+            // the play feels as instant as the "seg N → N+1" case.
+            //
+            // VBR is a different story — clip URLs are per-segment so a
+            // chapter-level prewarm is wrong. For VBR we still need the
+            // server-side OS page-cache warmup, since the segment-clip route
+            // reads from the same chapter file. The byte-Range warmup of
+            // seg[0] gets the segment-clip ffmpeg call's first disk read on
+            // a warm page cache.
+            if (chData.vbr) {
+                warmChapterStart(reciter, chData.audio_url, chNum);
+                if (chapterSegs.length > 0) {
+                    warmSeg(chapterSegs[0], reciter);
+                }
+            } else {
+                segPort.prewarm();
             }
         }
     } catch (e) {

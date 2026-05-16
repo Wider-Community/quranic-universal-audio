@@ -337,6 +337,38 @@ export class AudioPort {
         return this._swapTo(desiredUrl, desiredWin);
     }
 
+    /** Pre-warm the audio element for the bound CBR source — sets `el.src`
+     *  and calls `el.load()` so the browser fetches metadata + initial MP3
+     *  frames and fires `canplay` BEFORE the user clicks play.
+     *
+     *  Why this matters: with `preload="none"` the element does no I/O
+     *  until `loadCovering` runs on the play click. The user-perceived
+     *  latency from "click play" to "audio starts" is dominated by:
+     *   - HTTP fetch of the chapter MP3 (~200–500 ms cold)
+     *   - MP3 header parse + decoder warmup (~100–300 ms)
+     *   - `canplay` event firing
+     *
+     *  Pre-warming on chapter-load moves all of that off the play-click
+     *  critical path. The user's subsequent `loadCovering` short-circuits
+     *  via fast-path 1 (reuse) and the play feels as instant as the
+     *  "seg N → seg N+1" case (which never swaps src in the first place).
+     *
+     *  No-op for VBR (clip URLs are per-segment; pre-warming the wrong
+     *  clip would either be wasted or actively wrong) and when no source
+     *  or element is bound. Returns a Promise that resolves on canplay
+     *  (or rejects if a newer load supersedes); callers don't need to
+     *  await it — fire-and-forget is the normal pattern. */
+    prewarm(): Promise<void> {
+        if (!this.el || !this._source) return Promise.resolve();
+        if (this._source.vbr) return Promise.resolve();
+        // loadCovering(0, 0) builds the CBR window {start:0, end:Infinity}
+        // and triggers _swapTo, which writes el.src + el.load() and adds
+        // the canplay listener. After this resolves, _window covers any
+        // future play call → fast path 1.
+        const { ready } = this.loadCovering(0, 0);
+        return ready;
+    }
+
     /** True when the current loaded window covers `[startMs, endMs]` (no
      *  pad). Useful for callers that want to decide whether a fresh
      *  `loadCovering` call is necessary (e.g. trim drag handlers). */
