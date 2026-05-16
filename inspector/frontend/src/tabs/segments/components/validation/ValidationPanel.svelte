@@ -383,16 +383,19 @@
 
     $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter);
     $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
+    // Filter signature: the subset of inputs that truly narrow the item list
+    // (chapter / LC threshold / qalqala letter / end-of-verse). Lifted to
+    // top-level so the re-pin reactive can also react to sig flips while the
+    // same accordion stays open.
+    $: _filterSig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}`;
     $: {
-        // Filter signature: the subset of inputs that truly narrow the item
-        // list (chapter / LC threshold / qalqala letter / end-of-verse).
-        // If none of these change, preserve each type's context-shown map so
-        // structural edits (split/merge) that republish the items array via
-        // identity shift don't reset Show Context toggles mid-edit.
-        const sig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}`;
+        // If the filter sig hasn't changed for a category, preserve its
+        // context-shown map so structural edits (split/merge) that republish
+        // the items array via identity shift don't reset Show Context toggles
+        // mid-edit.
         for (const cat of categories) {
-            if (_lastFilterSig[cat.type] !== sig) {
-                _lastFilterSig[cat.type] = sig;
+            if (_lastFilterSig[cat.type] !== _filterSig) {
+                _lastFilterSig[cat.type] = _filterSig;
                 contextStateByType[cat.type]?.clear();
             }
         }
@@ -540,6 +543,26 @@
             }
             _prevPinCategory = next;
         }
+    }
+
+    // When the user changes a filter (qalqala letter / end-of-verse / LC
+    // threshold), the open accordion's pinned snapshot must be re-captured
+    // against the freshly filtered list — otherwise `displayedItems` would
+    // keep rehydrating filtered-out items via `pin.items[k]`. We piggyback
+    // on `_filterSig`: when it flips, defer one microtask so `categories`
+    // has flushed under Svelte 5's batched reactivity, then re-pin from the
+    // current `cat.visibleItems`. Autosave does not change `_filterSig`, so
+    // the pin's autosave-stability guarantee is unaffected.
+    let _lastPinSig: string | null = null;
+    $: if (openCategory != null && _filterSig !== _lastPinSig) {
+        _lastPinSig = _filterSig;
+        queueMicrotask(() => {
+            const next = openCategory;
+            if (next == null) return;
+            if ($activeTab !== TAB_NAMES.SEGMENTS) return;
+            const cat = categories.find((c) => c.type === next);
+            if (cat) pinAccordion(next, cat.visibleItems, issueKey);
+        });
     }
 
     function openGuide(e: MouseEvent, type: string): void {
