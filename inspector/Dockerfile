@@ -25,14 +25,29 @@ RUN npm run build
 
 # --- Stage 2: compile minimal static ffmpeg (mp3 decode + s16le/wav output) ---
 # Alpine 3.23 is current stable (released Apr 2026, supported until 2028).
-# Note: Alpine dropped the `lame-static` subpackage across all current
-# branches (verified 3.20 / 3.22 / 3.23); the static archive `libmp3lame.a`
-# still ships inside `lame-dev`, so the static ffmpeg link picks it up
-# from /usr/lib without a separate -static package.
+# Note on libmp3lame: Alpine dropped the `lame-static` subpackage across all
+# current branches (verified 3.20 / 3.22 / 3.23) and `lame-dev` ships only the
+# dynamic `.so` — no static archive. ffmpeg's `--extra-ldflags="-static"` link
+# step then silently drops libmp3lame and the resulting binary has the `mp3`
+# muxer but no `libmp3lame` encoder, which makes `segment-clip`'s `-c:a
+# libmp3lame` invocation fail with "Default encoder for format mp3 ... is
+# probably disabled. Error selecting an encoder" and the route returns
+# 200 OK / 0 bytes (browser hangs). Solution: build libmp3lame from source
+# with `--enable-static --disable-shared` so the `.a` is present at link time.
 FROM alpine:3.23 AS ffmpeg-build
 RUN apk add --no-cache build-base yasm nasm curl tar xz \
-                       openssl-dev openssl-libs-static zlib-dev zlib-static \
-                       lame-dev
+                       openssl-dev openssl-libs-static zlib-dev zlib-static
+
+# Build libmp3lame 3.100 statically. Source is ~3 MB; compiles in <30 s. The
+# .a lands at /usr/lib/libmp3lame.a so ffmpeg's `--extra-libs="-lmp3lame"` +
+# `--extra-ldflags="-static"` find it.
+ARG LAME_VERSION=3.100
+RUN curl -fsSL "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz" \
+        | tar -xz -C /tmp && \
+    cd /tmp/lame-${LAME_VERSION} && \
+    ./configure --prefix=/usr --enable-static --disable-shared --disable-frontend && \
+    make -j"$(nproc)" && make install && \
+    cd / && rm -rf /tmp/lame-${LAME_VERSION}
 
 ARG FFMPEG_VERSION=7.1
 RUN curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" | tar -xJ -C /tmp
